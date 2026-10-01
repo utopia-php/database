@@ -30,9 +30,9 @@ use Utopia\Database\Validator\Authorization;
 use Utopia\Query\Schema\ForeignKeyAction;
 
 /**
- * A create whose related documents are all new prepares them instead of reading each one first and back after:
- * with savepoints it writes them together at the end, without them each where it would have been written. Each
- * scenario runs once with the hook relating one by one as it always did, and once where it prepares, and
+ * A create or update whose related documents are all new prepares them instead of reading each one first and back
+ * after: with savepoints it writes them together at the end, without them each where it would have been written.
+ * Each scenario runs once with the hook relating one by one as it always did, and once where it prepares, and
  * everything observable must match: what is stored, what is returned or thrown, the events and write hooks fired,
  * and what the write assigned to the documents handed in.
  */
@@ -72,6 +72,9 @@ final class PreparedCreateTest extends TestCase
         'one collection at several depths',
         'inside a transaction',
         'created through an update',
+        'one to many update',
+        'many to many update',
+        'many to one update',
         'shared tables',
     ];
 
@@ -355,6 +358,77 @@ final class PreparedCreateTest extends TestCase
                 return [new Document([
                     'next' => [
                         new Document(['$id' => 'a', 'name' => 'a', 'next' => [new Document(['$id' => 'a1', 'name' => 'a1']), new Document(['$id' => 'a2', 'name' => 'a2'])]]),
+                    ],
+                ]), static fn (Document $document): Document => $database->updateDocument('level0', 'root', $document)];
+            },
+            'one to many update' => static function (Database $database): array {
+                self::chain($database, RelationType::OneToMany, 2);
+                $database->createDocument('level0', new Document(['$id' => 'root', 'name' => 'root', 'next' => [
+                    new Document(['$id' => 'kept', 'name' => 'kept']),
+                    new Document(['$id' => 'dropped', 'name' => 'dropped']),
+                ]]));
+                $database->createDocument('level1', new Document(['$id' => 'loose', 'name' => 'loose']));
+
+                return [new Document([
+                    'name' => 'renamed',
+                    'next' => [
+                        'kept',
+                        new Document(['$id' => 'a', 'name' => 'a', 'next' => [new Document(['$id' => 'a1', 'name' => 'a1']), new Document(['$id' => 'a2', 'name' => 'a2'])]]),
+                        'loose',
+                        new Document(['$id' => 'b', 'name' => 'b']),
+                    ],
+                ]), static fn (Document $document): Document => $database->updateDocument('level0', 'root', $document)];
+            },
+            'many to many update' => static function (Database $database): array {
+                self::chain($database, RelationType::ManyToMany, 2);
+                $database->createDocument('level0', new Document(['$id' => 'root', 'name' => 'root', 'next' => [
+                    new Document(['$id' => 'kept', 'name' => 'kept']),
+                    new Document(['$id' => 'dropped', 'name' => 'dropped']),
+                ]]));
+                $database->createDocument('level1', new Document(['$id' => 'loose', 'name' => 'loose']));
+
+                return [new Document([
+                    'next' => [
+                        'kept',
+                        new Document(['$id' => 'a', 'name' => 'a', 'next' => [new Document(['$id' => 'a1', 'name' => 'a1'])]]),
+                        'loose',
+                        new Document(['$id' => 'b', 'name' => 'b']),
+                    ],
+                ]), static fn (Document $document): Document => $database->updateDocument('level0', 'root', $document)];
+            },
+            'many to one update' => static function (Database $database): array {
+                self::chain($database, RelationType::ManyToOne, 2);
+                $database->createDocument('level1', new Document(['$id' => 'shared', 'name' => 'shared']));
+                $database->createDocument('level0', new Document(['$id' => 'old', 'name' => 'old', 'next' => 'shared']));
+
+                return [new Document([
+                    'prev' => [
+                        'old',
+                        new Document(['$id' => 'p1', 'name' => 'p1']),
+                        new Document(['$id' => 'p2', 'name' => 'p2']),
+                    ],
+                ]), static fn (Document $document): Document => $database->updateDocument('level1', 'shared', $document)];
+            },
+            'update with an existing related document' => static function (Database $database): array {
+                self::chain($database, RelationType::OneToMany, 2);
+                $database->createDocument('level0', new Document(['$id' => 'root', 'name' => 'root']));
+                $database->createDocument('level1', new Document(['$id' => 'loose', 'name' => 'before']));
+
+                return [new Document([
+                    'next' => [
+                        new Document(['$id' => 'a', 'name' => 'a']),
+                        new Document(['$id' => 'loose', 'name' => 'after']),
+                    ],
+                ]), static fn (Document $document): Document => $database->updateDocument('level0', 'root', $document)];
+            },
+            'update with an invalid related document' => static function (Database $database): array {
+                self::chain($database, RelationType::ManyToMany, 2);
+                $database->createDocument('level0', new Document(['$id' => 'root', 'name' => 'root']));
+
+                return [new Document([
+                    'next' => [
+                        new Document(['$id' => 'a', 'name' => 'a', 'next' => [new Document(['$id' => 'a1', 'name' => 'a1'])]]),
+                        new Document(['$id' => 'b', 'score' => 'many']),
                     ],
                 ]), static fn (Document $document): Document => $database->updateDocument('level0', 'root', $document)];
             },

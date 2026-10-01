@@ -297,35 +297,17 @@ class Relationships implements Hook
     public function afterDocumentCreate(Document $collection, Document $document): Document
     {
         $coroutine = $this->coroutine();
+        $relate = fn (?PreparedCreate $prepared): Document => $this->relate($collection, $document, $coroutine, $prepared);
 
-        if (
-            isset($this->prepared[$coroutine])
-            || isset($this->replays[$coroutine])
-            || ! $this->canPrepare($collection, $document)
-        ) {
-            return $this->relate($collection, $document, $coroutine, null);
+        if (! $this->canPrepare($coroutine) || ! $this->hasRelatedDocuments($collection, $document)) {
+            return $relate(null);
         }
 
-        return $this->relatePrepared($collection, $document, $coroutine);
-    }
-
-    /**
-     * Relate a new document's related documents the way relate() does, without reading each related document
-     * before creating it and reading it back after, when none of them is stored yet. Where the adapter has
-     * savepoints, the new related documents and their junction documents are prepared without being written,
-     * then written in the order they would have been written one by one, and any failure rolls the attempt
-     * back, restores every document it changed and relates them one by one instead, so a failing write fails
-     * the way it always has. Elsewhere each is written where it would have been written on its own, and a
-     * failure restores every document it changed, so a transaction that retries the write starts over from
-     * the documents it was given.
-     */
-    private function relatePrepared(Document $collection, Document $document, int $coroutine): Document
-    {
-        $prepared = new PreparedCreate($this->db->getAdapter()->supports(Capability::NestedTransactions));
+        $prepared = $this->createPrepared();
         $created = [];
         $visited = [];
         if (! $this->collectCreated($prepared, $collection, $document, $this->writeStacks[$coroutine] ?? [], $created, $visited)) {
-            return $this->relateOneByOne($collection, $document, $coroutine);
+            return $this->relateOneByOne($coroutine, $relate);
         }
 
         if ($this->isReferencedBack($collection, $document)) {
@@ -333,57 +315,109 @@ class Relationships implements Hook
             $prepared->preparing[$collection->getId()][$document->getId()] = true;
         }
 
+        return $this->relatePrepared($prepared, $coroutine, $created, [$document], $relate);
+    }
+
+    /**
+     * Relate new related documents through $relate without reading each before creating it and reading it back
+     * after, when none of them is stored yet. Where the adapter has savepoints, the new related documents and
+     * their junction documents are prepared without being written, then written in the order they would have
+     * been written one by one, and any failure rolls the attempt back, restores every document it changed and
+     * relates them one by one instead, so a failing write fails the way it always has. Elsewhere each is written
+     * where it would have been written on its own, and a failure restores every document it changed, so a
+     * transaction that retries the write starts over from the documents it was given.
+     *
+     * @template T
+     *
+     * @param  array<string, array<string, string>>  $created  The ids of the related documents to create, by collection
+     * @param  list<Document>  $documents  The documents the relating changes
+     * @param  Closure(?PreparedCreate): T  $relate  Relates the documents, prepared or, given null, one by one
+     * @return T
+     */
+    private function relatePrepared(PreparedCreate $prepared, int $coroutine, array $created, array $documents, Closure $relate): mixed
+    {
         if ($this->anyStored($created)) {
-            return $this->relateOneByOne($collection, $document, $coroutine);
+            return $this->relateOneByOne($coroutine, $relate);
         }
 
         $copies = [];
-        $this->copy($document, $copies);
+        foreach ($documents as $document) {
+            $this->copy($document, $copies);
+        }
 
-        if (! $prepared->deferred) {
+        $attempt = function () use ($prepared, $coroutine, $relate): mixed {
             $this->prepared[$coroutine] = $prepared;
 
             try {
-                return $this->relate($collection, $document, $coroutine, $prepared);
+                $result = $relate($prepared);
+                $this->writePrepared($prepared);
+
+                return $result;
+            } finally {
+                unset($this->prepared[$coroutine]);
+            }
+        };
+
+        if (! $prepared->deferred) {
+            try {
+                return $attempt();
             } catch (Throwable $error) {
                 $this->restore($copies);
 
                 throw $error;
-            } finally {
-                unset($this->prepared[$coroutine]);
             }
         }
 
-        return $this->db->withSavepoint(
-            function () use ($collection, $document, $coroutine, $prepared): Document {
-                $this->prepared[$coroutine] = $prepared;
+        return $this->db->withSavepoint($attempt, function () use ($coroutine, $relate, $copies): mixed {
+            $this->restore($copies);
 
-                try {
-                    $document = $this->relate($collection, $document, $coroutine, $prepared);
-                    $this->writePrepared($prepared);
-                } finally {
-                    unset($this->prepared[$coroutine]);
-                }
-
-                return $document;
-            },
-            function () use ($collection, $document, $coroutine, $copies): Document {
-                $this->restore($copies);
-
-                return $this->relateOneByOne($collection, $document, $coroutine);
-            },
-        );
+            return $this->relateOneByOne($coroutine, $relate);
+        });
     }
 
     /**
-     * Relate a new document's related documents, and theirs, one document at a time.
+     * Relate an updated document's new related documents through $relate, prepared when none of them is stored.
+     *
+     * @param  list<Document>  $documents
+     * @param  Closure(?PreparedCreate): void  $relate  Relates the documents, prepared or, given null, one by one
      */
-    private function relateOneByOne(Document $collection, Document $document, int $coroutine): Document
+    private function relateUpdated(int $coroutine, Document $relatedCollection, array $documents, Closure $relate): void
+    {
+        if ($documents === [] || ! $this->canPrepare($coroutine)) {
+            $relate(null);
+
+            return;
+        }
+
+        $prepared = $this->createPrepared();
+        $created = [];
+        $visited = [];
+        if (! $this->collectRelated($prepared, $relatedCollection, $documents, $this->writeStacks[$coroutine] ?? [], $created, $visited)) {
+            $this->relateOneByOne($coroutine, $relate);
+
+            return;
+        }
+
+        $this->relatePrepared($prepared, $coroutine, $created, $documents, $relate);
+    }
+
+    private function createPrepared(): PreparedCreate
+    {
+        return new PreparedCreate($this->db->getAdapter()->supports(Capability::NestedTransactions));
+    }
+
+    /**
+     * @template T
+     *
+     * @param  Closure(?PreparedCreate): T  $relate
+     * @return T
+     */
+    private function relateOneByOne(int $coroutine, Closure $relate): mixed
     {
         $this->replays[$coroutine] = ($this->replays[$coroutine] ?? 0) + 1;
 
         try {
-            return $this->relate($collection, $document, $coroutine, null);
+            return $relate(null);
         } finally {
             if (--$this->replays[$coroutine] === 0) {
                 unset($this->replays[$coroutine]);
@@ -392,19 +426,22 @@ class Relationships implements Hook
     }
 
     /**
-     * Whether a new document carries related documents to create, inside the transaction of its write.
+     * Whether this coroutine's write may prepare its new related documents: none of its writes is preparing or
+     * relating one by one already, and it runs in a transaction.
      */
-    private function canPrepare(Document $collection, Document $document): bool
+    private function canPrepare(int $coroutine): bool
     {
-        if (! $this->prepare) {
+        if (! $this->prepare || isset($this->prepared[$coroutine]) || isset($this->replays[$coroutine])) {
             return false;
         }
 
         $adapter = $this->db->getAdapter();
-        if (! $adapter->inTransaction() || $adapter->getTenantPerDocument()) {
-            return false;
-        }
 
+        return $adapter->inTransaction() && ! $adapter->getTenantPerDocument();
+    }
+
+    private function hasRelatedDocuments(Document $collection, Document $document): bool
+    {
         foreach ($this->relationships($collection) as $relationship) {
             /** @var string $key */
             $key = $relationship->getAttribute('key', $relationship->getId());
@@ -442,10 +479,10 @@ class Relationships implements Hook
             /** @var string $key */
             $key = $relationship->getAttribute('key', $relationship->getId());
             $value = $document->getAttribute($key);
-            $related = \array_filter(
+            $related = \array_values(\array_filter(
                 $value instanceof Document ? [$value] : (\is_array($value) ? $value : []),
                 static fn (mixed $item): bool => $item instanceof Document,
-            );
+            ));
             if ($related === []) {
                 continue;
             }
@@ -459,25 +496,42 @@ class Relationships implements Hook
                 continue;
             }
 
-            foreach ($related as $item) {
-                $object = \spl_object_id($item);
-                if (isset($visited[$object])) {
+            if (! $this->collectRelated($prepared, $relatedCollection, $related, [...$writeStack, $collection->getId()], $created, $visited)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Collect the ids of related documents, and of the related documents they would create in turn.
+     *
+     * @param  list<Document>  $documents
+     * @param  list<string>  $writeStack  The write stack relating each of them sees
+     * @param  array<string, array<string, string>>  $created
+     * @param  array<int, true>  $visited
+     */
+    private function collectRelated(PreparedCreate $prepared, Document $relatedCollection, array $documents, array $writeStack, array &$created, array &$visited): bool
+    {
+        foreach ($documents as $document) {
+            $object = \spl_object_id($document);
+            if (isset($visited[$object])) {
+                return false;
+            }
+            $visited[$object] = true;
+
+            $id = $document->getId();
+            if ($id !== '') {
+                $lowered = \strtolower($id);
+                if (isset($created[$relatedCollection->getId()][$lowered])) {
                     return false;
                 }
-                $visited[$object] = true;
+                $created[$relatedCollection->getId()][$lowered] = $id;
+            }
 
-                $id = $item->getId();
-                if ($id !== '') {
-                    $lowered = \strtolower($id);
-                    if (isset($created[$relatedCollection->getId()][$lowered])) {
-                        return false;
-                    }
-                    $created[$relatedCollection->getId()][$lowered] = $id;
-                }
-
-                if (! $this->collectCreated($prepared, $relatedCollection, $item, [...$writeStack, $collection->getId()], $created, $visited)) {
-                    return false;
-                }
+            if (! $this->collectCreated($prepared, $relatedCollection, $document, $writeStack, $created, $visited)) {
+                return false;
             }
         }
 
@@ -1030,27 +1084,38 @@ class Relationships implements Hook
                                 $this->linkRelatedDocuments($relatedCollection, $twoWayKey, $document->getId(), $unlinkedIds);
                             }
 
-                            foreach ($documentRelations as $relation) {
-                                $related = $this->db->skipRelationships(
-                                    fn () => $this->db->getDocument($relatedCollection->getId(), $relation->getId(), [Query::select([Document::ID])])
-                                );
+                            $this->relateUpdated($coroutine, $relatedCollection, $documentRelations, function (?PreparedCreate $prepared) use ($documentRelations, $relatedCollection, $document, $twoWayKey, $coroutine): void {
+                                foreach ($documentRelations as $relation) {
+                                    if ($prepared !== null) {
+                                        if (! isset($relation[Document::PERMISSIONS])) {
+                                            $relation->setAttribute(Document::PERMISSIONS, $document->getAttribute(Document::PERMISSIONS));
+                                        }
+                                        $this->prepare($prepared, $relatedCollection, $relation->setAttribute($twoWayKey, $document->getId()), $coroutine);
 
-                                if ($related->isEmpty()) {
-                                    if (! isset($relation[Document::PERMISSIONS])) {
-                                        $relation->setAttribute(Document::PERMISSIONS, $document->getAttribute(Document::PERMISSIONS));
+                                        continue;
                                     }
-                                    $this->db->createDocument(
-                                        $relatedCollection->getId(),
-                                        $relation->setAttribute($twoWayKey, $document->getId())
+
+                                    $related = $this->db->skipRelationships(
+                                        fn () => $this->db->getDocument($relatedCollection->getId(), $relation->getId(), [Query::select([Document::ID])])
                                     );
-                                } else {
-                                    $this->db->updateDocument(
-                                        $relatedCollection->getId(),
-                                        $related->getId(),
-                                        $relation->setAttribute($twoWayKey, $document->getId())
-                                    );
+
+                                    if ($related->isEmpty()) {
+                                        if (! isset($relation[Document::PERMISSIONS])) {
+                                            $relation->setAttribute(Document::PERMISSIONS, $document->getAttribute(Document::PERMISSIONS));
+                                        }
+                                        $this->db->createDocument(
+                                            $relatedCollection->getId(),
+                                            $relation->setAttribute($twoWayKey, $document->getId())
+                                        );
+                                    } else {
+                                        $this->db->updateDocument(
+                                            $relatedCollection->getId(),
+                                            $related->getId(),
+                                            $relation->setAttribute($twoWayKey, $document->getId())
+                                        );
+                                    }
                                 }
-                            }
+                            });
 
                             $document->removeAttribute($key);
                             break;
@@ -1156,56 +1221,78 @@ class Relationships implements Hook
                             }
                         }
 
-                        foreach ($value as $relation) {
-                            if (\is_string($relation)) {
-                                if (\in_array($relation, $oldIds)) {
-                                    continue;
-                                }
+                        $relatedDocuments = \array_values(\array_filter($value, static fn (mixed $relation): bool => $relation instanceof Document));
+                        $this->relateUpdated($coroutine, $relatedCollection, $relatedDocuments, function (?PreparedCreate $prepared) use ($value, $oldIds, $collection, $relatedCollection, $document, $key, $twoWayKey, $side, $coroutine): void {
+                            foreach ($value as $relation) {
+                                if ($prepared !== null) {
+                                    if ($relation instanceof Document) {
+                                        if (! isset($relation[Document::PERMISSIONS])) {
+                                            $relation->setAttribute(Document::PERMISSIONS, $document->getAttribute(Document::PERMISSIONS));
+                                        }
+                                        $relatedId = $this->prepare($prepared, $relatedCollection, $relation, $coroutine);
+                                        $this->prepare(
+                                            $prepared,
+                                            $this->collection($prepared, $this->getJunctionCollection($collection, $relatedCollection, $side)),
+                                            $this->junctionDocument($key, $relatedId, $twoWayKey, $document->getId()),
+                                            $coroutine,
+                                        );
 
-                                $related = $this->db->getDocument($relatedCollection->getId(), $relation, [Query::select([Document::ID])]);
-
-                                if ($related->isEmpty()) {
-                                    continue;
-                                }
-
-                                $this->authorizeLink($relatedCollection, $related);
-                            } elseif ($relation instanceof Document) {
-                                $related = $this->db->getDocument($relatedCollection->getId(), $relation->getId(), [Query::select([Document::ID])]);
-
-                                if (! $related->isEmpty() && ! \in_array($relation->getId(), $oldIds)) {
-                                    $this->authorizeLink($relatedCollection, $related);
-                                }
-
-                                if ($related->isEmpty()) {
-                                    if (! isset($relation[Document::PERMISSIONS])) {
-                                        $relation->setAttribute(Document::PERMISSIONS, $document->getAttribute(Document::PERMISSIONS));
+                                        continue;
                                     }
-                                    $related = $this->db->createDocument(
-                                        $relatedCollection->getId(),
-                                        $relation
-                                    );
-                                } elseif ($related->getAttributes() != $relation->getAttributes()) {
-                                    $related = $this->db->updateDocument(
-                                        $relatedCollection->getId(),
-                                        $related->getId(),
-                                        $relation
-                                    );
+
+                                    $this->writePrepared($prepared);
                                 }
 
-                                if (\in_array($relation->getId(), $oldIds)) {
-                                    continue;
+                                if (\is_string($relation)) {
+                                    if (\in_array($relation, $oldIds)) {
+                                        continue;
+                                    }
+
+                                    $related = $this->db->getDocument($relatedCollection->getId(), $relation, [Query::select([Document::ID])]);
+
+                                    if ($related->isEmpty()) {
+                                        continue;
+                                    }
+
+                                    $this->authorizeLink($relatedCollection, $related);
+                                } elseif ($relation instanceof Document) {
+                                    $related = $this->db->getDocument($relatedCollection->getId(), $relation->getId(), [Query::select([Document::ID])]);
+
+                                    if (! $related->isEmpty() && ! \in_array($relation->getId(), $oldIds)) {
+                                        $this->authorizeLink($relatedCollection, $related);
+                                    }
+
+                                    if ($related->isEmpty()) {
+                                        if (! isset($relation[Document::PERMISSIONS])) {
+                                            $relation->setAttribute(Document::PERMISSIONS, $document->getAttribute(Document::PERMISSIONS));
+                                        }
+                                        $related = $this->db->createDocument(
+                                            $relatedCollection->getId(),
+                                            $relation
+                                        );
+                                    } elseif ($related->getAttributes() != $relation->getAttributes()) {
+                                        $related = $this->db->updateDocument(
+                                            $relatedCollection->getId(),
+                                            $related->getId(),
+                                            $relation
+                                        );
+                                    }
+
+                                    if (\in_array($relation->getId(), $oldIds)) {
+                                        continue;
+                                    }
+
+                                    $relation = $related->getId();
+                                } else {
+                                    throw new RelationshipException('Invalid relationship value. Must be either a document or document ID.');
                                 }
 
-                                $relation = $related->getId();
-                            } else {
-                                throw new RelationshipException('Invalid relationship value. Must be either a document or document ID.');
+                                $this->db->skipRelationships(fn () => $this->db->createDocument(
+                                    $this->getJunctionCollection($collection, $relatedCollection, $side),
+                                    $this->junctionDocument($key, $relation, $twoWayKey, $document->getId()),
+                                ));
                             }
-
-                            $this->db->skipRelationships(fn () => $this->db->createDocument(
-                                $this->getJunctionCollection($collection, $relatedCollection, $side),
-                                $this->junctionDocument($key, $relation, $twoWayKey, $document->getId()),
-                            ));
-                        }
+                        });
 
                         $document->removeAttribute($key);
                         break;

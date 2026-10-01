@@ -164,6 +164,34 @@ final class IndexSchemaReconciliationTest extends TestCase
         $this->assertSame(['existing'], $this->indexKeys($database));
     }
 
+    public function testARenameTheAdapterDoesNotRedoAfterReversingItFails(): void
+    {
+        $adapter = new class () extends Memory {
+            /**
+             * @var list<string>
+             */
+            public array $renames = [];
+
+            public function renameIndex(string $collection, string $old, string $new): bool
+            {
+                $this->renames[] = "{$old}->{$new}";
+
+                return \count($this->renames) === 2;
+            }
+        };
+        $database = $this->database($adapter);
+
+        try {
+            $database->renameIndex(self::COLLECTION, 'existing', 'renamed');
+            $this->fail('a rename the adapter does not redo must fail');
+        } catch (DatabaseException $error) {
+            $this->assertSame("Failed to rename index 'existing' to 'renamed': Failed to rename index", $error->getMessage());
+        }
+
+        $this->assertSame(['existing->renamed', 'renamed->existing', 'existing->renamed'], $adapter->renames);
+        $this->assertSame(['existing'], $this->indexKeys($database));
+    }
+
     public function testDeletingAnIndexTheSchemaNoLongerHasSucceeds(): void
     {
         $database = $this->database(new class () extends Memory {

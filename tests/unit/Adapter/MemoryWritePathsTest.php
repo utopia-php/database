@@ -178,7 +178,10 @@ final class MemoryWritePathsTest extends TestCase
             $this->storeAddress($adapter, $id, 'x');
         }
         $cursor = ['$sequence' => $adapter->getDocument($this->collection(), 'second')->getSequence()];
-        $ids = static fn (array $documents): array => \array_map(static fn (Document $document): string => $document->getId(), $documents);
+        $ids = static function (array $documents): array {
+            /** @var array<Document> $documents */
+            return \array_map(static fn (Document $document): string => $document->getId(), $documents);
+        };
 
         $this->assertSame(['third'], $ids($adapter->find($this->collection(), cursor: $cursor)));
         $this->assertSame(['first'], $ids($adapter->find($this->collection(), cursor: $cursor, cursorDirection: CursorDirection::Before)));

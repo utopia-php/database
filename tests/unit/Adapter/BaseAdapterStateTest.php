@@ -3,6 +3,8 @@
 namespace Tests\Unit\Adapter;
 
 use PDO;
+use PHPUnit\Framework\Attributes\PreserveGlobalState;
+use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\Cache\Cache;
@@ -39,6 +41,8 @@ final class BaseAdapterStateTest extends TestCase
         $this->assertSame([], $adapter->getDebug());
     }
 
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
     public function testAKeyThePatternEngineCannotFilterIsAnError(): void
     {
         $adapter = new SQLite(new PDO('sqlite::memory:'));

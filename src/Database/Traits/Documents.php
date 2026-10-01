@@ -589,6 +589,20 @@ trait Documents
             }
         }
 
+        $transactionDefinition = $cacheable && $definition && $inTransaction && $queries === [];
+        $transactionDefinitionKey = \strtolower($documentKey);
+        $readInTransaction = $transactionDefinition
+            ? ($this->transactionDefinitions[$this->getEventContext()][$transactionDefinitionKey] ?? null)
+            : null;
+        if ($readInTransaction !== null) {
+            $collectionState = $this->loadDocumentCacheState($this->getCacheBaseKeys($id)[0]);
+            $document = $this->decorateDocument(Event::DocumentRead, $collection, clone $readInTransaction);
+            $this->trigger(Event::DocumentRead, $document);
+            $this->attachCollectionCacheEpoch($document, $collectionState->value);
+
+            return $document;
+        }
+
         $collectionGranted = $this->authorization->isValid(new Input(PermissionType::Read, $collection->getRead()));
         $skipAuth = empty($joins)
             && $collection->getId() !== self::METADATA
@@ -696,6 +710,10 @@ trait Documents
             }
         } catch (Exception $e) {
             Console::warning('Failed to save document to cache: '.$e->getMessage());
+        }
+
+        if ($transactionDefinition) {
+            $this->transactionDefinitions[$this->getEventContext()][$transactionDefinitionKey] = clone $document;
         }
 
         $document = $this->decorateDocument(Event::DocumentRead, $collection, $document);
@@ -2905,6 +2923,7 @@ trait Documents
         }
         if (isset($this->transactionWrites[$context])) {
             $this->transactionWrites[$context][\strtolower($documentKey)] = true;
+            unset($this->transactionDefinitions[$context][\strtolower($documentKey)]);
         }
 
         $this->cache->purge($documentKey);

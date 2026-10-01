@@ -485,6 +485,18 @@ final class UpdateAttributeValidationTest extends TestCase
         $this->assertSame($before, $this->definitions($database));
     }
 
+    public function testAValidVectorUpdateIsStored(): void
+    {
+        $database = $this->database($this->vectorMemory());
+        $database->createAttribute(self::COLLECTION, Attribute::vector(key: 'embedding', size: 3));
+
+        $updated = $database->updateAttribute(self::COLLECTION, 'embedding', default: [0.5, 1.5, 2.5]);
+
+        $this->assertSame(ColumnType::Vector->value, $updated->getAttribute('type'));
+        $this->assertSame([0.5, 1.5, 2.5], $updated->getAttribute('default'));
+        $this->assertSame([0.5, 1.5, 2.5], $this->definitions($database)['embedding']['default']);
+    }
+
     private function vectorMemory(): Memory
     {
         return new class () extends Memory {

@@ -4358,6 +4358,16 @@ trait Documents
     {
         /** @var array<Document> $attributes */
         $attributes = $collection->getAttribute('attributes', []);
+
+        foreach ($attributes as $declared) {
+            if ($declared->getAttribute('key', $declared->getId()) === $attribute) {
+                if (isset(Aggregate::numericTypes([$declared])[$attribute])) {
+                    return;
+                }
+                break;
+            }
+        }
+
         $supportForAttributes = $this->adapter->supports(Capability::DefinedAttributes);
 
         if (! \str_contains($attribute, '.') && $this->declaresSumAttribute($collection, $attribute)) {

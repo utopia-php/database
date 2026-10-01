@@ -1730,6 +1730,20 @@ class MirrorTest extends TestCase
         $this->assertSame([], $errors->getArrayCopy());
     }
 
+    public function testUpdateCollectionWithoutDestinationReturnsTheSourceCollection(): void
+    {
+        $source = new Database(new Memory(), new Cache(new None()));
+        $mirror = $this->seed(new Mirror($source));
+        $errors = self::errors($mirror);
+
+        $updated = $mirror->updateCollection(self::COLLECTION, [Permission::read(Role::users())], false);
+
+        $this->assertSame([Permission::read(Role::users())], $updated->getPermissions());
+        $this->assertFalse($updated->getAttribute('documentSecurity'));
+        $this->assertSame([Permission::read(Role::users())], $source->getCollection(self::COLLECTION)->getPermissions());
+        $this->assertSame([], $errors->getArrayCopy());
+    }
+
     private static function storedTitle(Database $database, string $id): ?string
     {
         $title = $database->getDocument(self::COLLECTION, $id)->getAttribute('title');

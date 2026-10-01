@@ -130,4 +130,17 @@ final class UpsertNewDocumentOperatorTest extends TestCase
 
         $this->assertTrue($this->database->getDocument('accounts', 'second')->isEmpty());
     }
+
+    public function testNowSetOnANewDocumentIsTheTimeOfTheWrite(): void
+    {
+        $before = new \DateTimeImmutable('-1 second');
+        $this->database->upsertDocument('tasks', new Document(['$id' => 'created', 'reminder' => Operator::dateSetNow()]));
+        $after = new \DateTimeImmutable('+1 second');
+
+        $reminder = $this->database->getDocument('tasks', 'created')->getAttribute('reminder');
+        $this->assertIsString($reminder);
+        $written = new \DateTimeImmutable($reminder);
+        $this->assertGreaterThanOrEqual($before, $written);
+        $this->assertLessThanOrEqual($after, $written);
+    }
 }

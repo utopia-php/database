@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Adapter;
 
+use ArrayObject;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -57,45 +58,54 @@ final class PoolCapabilityTest extends TestCase
 
     public function testAWarmValidatedReadChecksOutOnlyForDefinedAttributes(): void
     {
-        $memory = $this->askedMemory();
+        /** @var ArrayObject<int, string> $asked */
+        $asked = new ArrayObject();
+        $memory = $this->askedMemory($asked);
         $database = $this->database($this->connections($memory));
         $selection = [Query::select(['title'])];
         $database->getDocument('posts', 'first', $selection);
 
         $this->checkouts = 0;
-        $memory->asked = [];
+        $asked->exchangeArray([]);
         $database->getDocument('posts', 'first', $selection);
 
-        $this->assertSame(['DefinedAttributes', 'DefinedAttributes'], $memory->asked);
+        $this->assertSame(['DefinedAttributes', 'DefinedAttributes'], $asked->getArrayCopy());
         $this->assertSame(2, $this->checkouts);
     }
 
     public function testAWarmValidatedReadWithoutQueriesChecksOutNoConnection(): void
     {
-        $memory = $this->askedMemory();
+        /** @var ArrayObject<int, string> $asked */
+        $asked = new ArrayObject();
+        $memory = $this->askedMemory($asked);
         $database = $this->database($this->connections($memory));
         $database->getDocument('posts', 'first');
 
         $this->checkouts = 0;
-        $memory->asked = [];
+        $asked->exchangeArray([]);
         $database->getDocument('posts', 'first');
 
-        $this->assertSame([], $memory->asked);
+        $this->assertSame([], $asked->getArrayCopy());
         $this->assertSame(0, $this->checkouts);
     }
 
     /**
-     * @return Memory&object{asked: list<string>}
+     * @param  ArrayObject<int, string>  $asked
      */
-    private function askedMemory(): Memory
+    private function askedMemory(ArrayObject $asked): Memory
     {
-        return new class () extends Memory {
-            /** @var list<string> */
-            public array $asked = [];
+        return new class ($asked) extends Memory {
+            /**
+             * @param  ArrayObject<int, string>  $asked
+             */
+            public function __construct(private readonly ArrayObject $asked)
+            {
+                parent::__construct();
+            }
 
             public function supports(Capability $feature): bool
             {
-                $this->asked[] = $feature->name;
+                $this->asked->append($feature->name);
 
                 return parent::supports($feature);
             }

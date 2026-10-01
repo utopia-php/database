@@ -35,7 +35,8 @@ final class DefinitionModelCacheTest extends TestCase
         $this->assertSame(['title', 'length'], $this->cachedRead($database, $adapter)['attributes']);
 
         $database->createIndex(self::COLLECTION, Index::key(key: 'by_length', attributes: ['length']));
-        $this->assertSame(['by_length'], $this->cachedRead($database, $adapter)['indexes']);
+        $read = $this->cachedRead($database, $adapter);
+        $this->assertSame(['by_length'], $read['indexes']);
 
         $database->deleteIndex(self::COLLECTION, 'by_length');
         $database->deleteAttribute(self::COLLECTION, 'length');
@@ -78,7 +79,7 @@ final class DefinitionModelCacheTest extends TestCase
     /**
      * Reads the definition twice and checks the second read was served by the cache.
      *
-     * @return array{attributes: list<string>, sizes: array<string, int>, indexes: list<string>, name: string}
+     * @return array{attributes: array<string>, sizes: array<string, int>, indexes: array<string>, name: string}
      */
     private function cachedRead(Database $database, CountingMemory $adapter): array
     {

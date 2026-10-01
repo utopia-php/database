@@ -514,6 +514,85 @@ final class JoinCursorTest extends TestCase
         $this->assertSame($keys, $paged);
     }
 
+    /**
+     * @return iterable<string, array{Method, list<Query>, list<string>}>
+     */
+    public static function joinedTieKeysBySelection(): iterable
+    {
+        foreach (['inner join' => Method::Join, 'left join' => Method::LeftJoin] as $joinName => $join) {
+            yield "{$joinName}, no select" => [$join, [], ['_id', 'n._uid']];
+            yield "{$joinName}, select of everything" => [$join, [Query::select(['*'])], ['_id', 'n._uid']];
+            yield "{$joinName}, select of a joined attribute" => [$join, [Query::select(['name', 'n.label'])], ['_id', 'n._uid']];
+            yield "{$joinName}, select of every joined attribute" => [$join, [Query::select(['name', 'n.*'])], ['_id', 'n._uid']];
+            yield "{$joinName}, select of main attributes" => [$join, [Query::select(['name', '$id', '$sequence'])], ['_id']];
+            yield "{$joinName}, select of main attributes, ordered by a joined one" => [$join, [Query::select(['name']), Query::orderAsc('n.rank')], ['n.rank', '_id']];
+        }
+    }
+
+    /**
+     * @param  list<Query>  $queries
+     * @param  list<string>  $columns
+     */
+    #[DataProvider('joinedTieKeysBySelection')]
+    public function testJoinedIdBreaksTiesOnlyWhereTheRowsShowTheJoin(Method $join, array $queries, array $columns): void
+    {
+        $queries = [new Query($join, 'notes', ['$id', '=', 'author', 'n']), ...$queries];
+
+        $this->database->enableProfiling();
+        $this->database->getProfiler()?->reset();
+        $rows = $this->database->find('authors', $queries);
+
+        $this->assertSame($columns, $this->orderedColumns());
+
+        $paged = [];
+        for ($offset = 0; $offset < \count($rows); $offset++) {
+            \array_push($paged, ...$this->database->find('authors', [...$queries, Query::limit(1), Query::offset($offset)]));
+        }
+        $this->assertSame(
+            \array_map(static fn (Document $row): array => $row->getArrayCopy(), $rows),
+            \array_map(static fn (Document $row): array => $row->getArrayCopy(), $paged),
+            'Paging by offset returns the rows of the read at once, in its order',
+        );
+    }
+
+    public function testCursorFromARowThatShowsNoJoinedIdIsRefusedAsBefore(): void
+    {
+        $queries = [Query::leftJoin('notes', '$id', 'author', '=', 'n'), Query::select(['name'])];
+        $cursor = $this->database->find('authors', [...$queries, Query::limit(1)])[0];
+
+        $this->database->enableProfiling();
+        $this->database->getProfiler()?->reset();
+
+        try {
+            $this->database->find('authors', [...$queries, Query::cursorAfter($cursor)]);
+            $this->fail('A row without the joined $id cannot name a joined row');
+        } catch (OrderException $exception) {
+            $this->assertSame('n.$id', $exception->getAttribute());
+        }
+    }
+
+    /**
+     * The columns of the last read's ORDER BY, unquoted, without their direction.
+     *
+     * @return list<string>
+     */
+    private function orderedColumns(): array
+    {
+        $selects = \array_values(\array_filter(
+            $this->database->getProfiler()?->getLogs() ?? [],
+            static fn (QueryLog $log): bool => \str_starts_with($log->query, 'SELECT') && \str_contains($log->query, 'ORDER BY'),
+        ));
+        $this->assertNotSame([], $selects);
+        $query = $selects[\count($selects) - 1]->query;
+        $order = \substr($query, (int) \strrpos($query, 'ORDER BY') + \strlen('ORDER BY '));
+        $order = \explode(' LIMIT ', $order)[0];
+
+        return \array_map(
+            static fn (string $column): string => \preg_replace('/^table_main\\.| (ASC|DESC)$/', '', \str_replace(['`', '"'], '', \trim($column))) ?? $column,
+            \explode(',', $order),
+        );
+    }
+
     private function useDatabase(SQLite $adapter): void
     {
         $this->database = new Database($adapter, new Cache(new NoCache()));

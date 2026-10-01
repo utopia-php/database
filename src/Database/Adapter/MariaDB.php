@@ -1124,14 +1124,6 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
     }
 
     /**
-     * Get the SQL function for random ordering.
-     */
-    protected function getRandomOrder(): string
-    {
-        return 'RAND()';
-    }
-
-    /**
      * Get Schema Attributes
      *
      * @return array<Document>

@@ -314,8 +314,13 @@ have to make, with the 7.x and 8.0 forms side by side.
   [Capabilities and feature interfaces](UPGRADE.md#capabilities-and-feature-interfaces).
 - The SQL adapters' string query builders and the hooks behind them (`getSQLConditions()`, `getSQLCondition()`,
   `getSQLPermissionsCondition()`, `getFulltextValue()`, `getTenantQuery()`, `getLikeOperator()`,
-  `getRegexOperator()`, `getAttributeProjection()`, the insert and upsert statement hooks, and others). See
-  [Removed adapter methods](UPGRADE.md#removed-adapter-methods).
+  `getRegexOperator()`, `getAttributeProjection()`, `getRandomOrder()`, the insert and upsert statement hooks, and
+  others). See [Removed adapter methods](UPGRADE.md#removed-adapter-methods).
+- `Mongo::getTenantQuery()`, which returned an empty string, and `SQL::getSpatialTypeFromWKT()`. Nothing in the
+  library calls either. See [Removed adapter methods](UPGRADE.md#removed-adapter-methods).
+- The protected adapter methods nothing called: `getSQLIndexType()` on `SQL` and `SQLite`,
+  `Postgres::getSQLSchema()`, `Postgres::encodeArray()`, `Postgres::decodeArray()` and
+  `Memory::unregisterRelationshipField()`. See [Removed adapter methods](UPGRADE.md#removed-adapter-methods).
 
 ### Fixed
 

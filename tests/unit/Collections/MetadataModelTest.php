@@ -30,7 +30,9 @@ final class MetadataModelTest extends TestCase
         $second = $database->getCollection(Database::METADATA);
         $this->assertSame($expected, $second->getArrayCopy());
         $this->assertNotSame($first, $second);
-        $this->assertNotSame($attributes[0], $second->getAttribute('attributes')[0]);
+        /** @var list<Attribute> $secondAttributes */
+        $secondAttributes = $second->getAttribute('attributes');
+        $this->assertNotSame($attributes[0], $secondAttributes[0]);
     }
 
     public function testMetadataDefinitionReadsAreIndependentCopies(): void
@@ -48,6 +50,8 @@ final class MetadataModelTest extends TestCase
 
         $second = $database->getDocument(Database::METADATA, Database::METADATA);
         $this->assertSame($expected, $second->getArrayCopy());
-        $this->assertNotSame($attributes[0], $second->getAttribute('attributes')[0]);
+        /** @var list<Attribute> $secondAttributes */
+        $secondAttributes = $second->getAttribute('attributes');
+        $this->assertNotSame($attributes[0], $secondAttributes[0]);
     }
 }

@@ -941,7 +941,6 @@ trait Attributes
                 throw $this->unknownType($type);
         }
 
-        /** Ensure required filters for the attribute are passed */
         $requiredFilters = $this->getRequiredFilters($type);
         if (! empty(array_diff($requiredFilters, (array) $filters))) {
             throw new DatabaseException("Attribute of type: $type requires the following filters: ".implode(',', $requiredFilters));
@@ -954,10 +953,6 @@ trait Attributes
         }
 
         if (! \is_null($default)) {
-            if ($required) {
-                throw new DatabaseException('Cannot set a default value on a required attribute');
-            }
-
             $this->validateDefaultTypes($type, $default, $signed);
         }
 

@@ -893,25 +893,6 @@ class Memory extends Adapter implements Feature\Relationships
     }
 
     /**
-     * Unregister a relationship field from the collection's attribute list.
-     */
-    protected function unregisterRelationshipField(string $collection, string $field): void
-    {
-        $key = $this->key($collection);
-        if (! isset($this->data[$key])) {
-            return;
-        }
-        $field = $this->filter($field);
-        $previous = $this->data[$key]['attributes'][$field] ?? null;
-        unset($this->data[$key]['attributes'][$field]);
-        if ($previous !== null) {
-            $this->journal(function () use ($key, $field, $previous): void {
-                $this->data[$key]['attributes'][$field] = $previous;
-            });
-        }
-    }
-
-    /**
      * Rename a field across every document in a collection, preserving null
      * entries so subsequent reads that join on the new key still resolve.
      */

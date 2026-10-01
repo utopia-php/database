@@ -11,7 +11,6 @@ use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Collection;
-use Utopia\Database\Document;
 
 final class LockedDocumentReadTest extends TestCase
 {

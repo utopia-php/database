@@ -290,4 +290,13 @@ class FilterTest extends TestCase
         ])));
         $this->assertSame('Or queries can only contain filter queries', $this->validator->getDescription());
     }
+
+    public function test_exists_without_attributes_is_rejected(): void
+    {
+        $this->assertFalse($this->validator->isValid(Query::exists([])));
+        $this->assertSame('Exists queries require at least one value.', $this->validator->getDescription());
+
+        $this->assertFalse($this->validator->isValid(Query::notExists([])));
+        $this->assertSame('NotExists queries require at least one value.', $this->validator->getDescription());
+    }
 }

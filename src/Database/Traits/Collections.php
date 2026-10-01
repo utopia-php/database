@@ -33,6 +33,9 @@ use Utopia\Query\Schema\IndexType;
  */
 trait Collections
 {
+    /** The metadata collection's model, built once per process; every read gets a deep clone. */
+    private static ?Collection $metadataCollection = null;
+
     /**
      * Create Collection
      *
@@ -305,6 +308,13 @@ trait Collections
      */
     public function getCollection(string $id): Collection
     {
+        if ($id === self::METADATA) {
+            $collection = clone (self::$metadataCollection ??= $this->hydrateCollectionModels(new Document(self::collectionMeta())));
+            $this->trigger(Event::CollectionRead, $collection);
+
+            return $collection;
+        }
+
         $definition = $this->silent(fn () => $this->getDocument(self::METADATA, $id));
 
         if (

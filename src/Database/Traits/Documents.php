@@ -98,6 +98,14 @@ trait Documents
     /** @var array<int, array<string, string>> Definition keys of the collections the open invalidation scope wrote, by coroutine id and collection key. */
     private array $documentCacheDefinitions = [];
 
+    /** The metadata collection's definition, built once per process; every read gets a deep clone. */
+    private static ?Document $metadataDefinition = null;
+
+    /** @var array<string, array{source: array<string, mixed>, model: Document}> The model built from each definition's cached copy, by its cache key. */
+    private static array $definitionModels = [];
+
+    private const int DEFINITION_MODELS_LIMIT = 256;
+
     /** @var WeakMap<Document, string>|null The document-cache epoch each collection definition was read with, until the definition is let go. */
     private static ?WeakMap $collectionCacheEpochs = null;
 
@@ -254,6 +262,9 @@ trait Documents
 
     private const int DOCUMENTS_VALIDATOR_CACHE_LIMIT = 256;
 
+    /** @var array<string, Aggregate> Aggregate validators of sums of declared attributes, by collection schema. */
+    private array $sumValidatorCache = [];
+
     /**
      * Return a DocumentsValidator for the given collection, building it on
      * first request and caching the instance for subsequent calls. The cache
@@ -323,14 +334,21 @@ trait Documents
      */
     private function documentsValidatorCacheKey(Document $collection, string $context, bool $supportForJoins, bool $supportForAggregations): string
     {
-        $fingerprint = \hash('sha256', \serialize([
-            'attributes' => $this->normalizeQueryCacheQueryValue($collection->getAttribute('attributes', [])),
-            'indexes' => $this->normalizeQueryCacheQueryValue($collection->getAttribute('indexes', [])),
-            'permissions' => $this->normalizeQueryCacheQueryValue($collection->getAttribute(Document::PERMISSIONS, [])),
+        return $context.'::'.$this->maxQueryValues.'::'.(int) $supportForJoins.(int) $supportForAggregations.(int) $this->adapter->getSharedTables().'::'.$this->collectionFingerprint($collection);
+    }
+
+    /**
+     * A hash of everything a query validator is built from: the collection's attributes, indexes,
+     * permissions and document security.
+     */
+    private function collectionFingerprint(Document $collection): string
+    {
+        return \hash('xxh128', \serialize([
+            'attributes' => $collection->getAttribute('attributes', []),
+            'indexes' => $collection->getAttribute('indexes', []),
+            'permissions' => $collection->getAttribute(Document::PERMISSIONS, []),
             'documentSecurity' => (bool) $collection->getAttribute('documentSecurity', false),
         ]));
-
-        return $context.'::'.$this->maxQueryValues.'::'.(int) $supportForJoins.(int) $supportForAggregations.(int) $this->adapter->getSharedTables().'::'.$fingerprint;
     }
 
     /**
@@ -414,7 +432,7 @@ trait Documents
     public function getDocument(string $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
         if ($collection === self::METADATA && $id === self::METADATA) {
-            return new Document(self::collectionMeta());
+            return clone (self::$metadataDefinition ??= new Document(self::collectionMeta()));
         }
 
         if (empty($collection)) {
@@ -438,7 +456,7 @@ trait Documents
 
         $joinedCollections = null;
 
-        if ($this->validate) {
+        if ($this->validate && $queries !== []) {
             $joinedCollections = $this->resolveJoinedCollections($queries);
             $supportForAttributes = $this->adapter->supports(Capability::DefinedAttributes);
             $supportForJoins = $this->adapter->supports(Capability::Joins);
@@ -544,7 +562,9 @@ trait Documents
 
         if ($cached) {
             /** @var array<string, mixed> $cached */
-            $document = $this->createDocumentInstance($collection->getId(), $cached);
+            $document = $definition
+                ? $this->createDefinitionInstance($documentKey, $cached)
+                : $this->createDocumentInstance($collection->getId(), $cached);
             $document = $this->casting($collection, $document);
 
             if ($collection->getId() !== self::METADATA) {
@@ -577,6 +597,20 @@ trait Documents
             } catch (Exception $e) {
                 Console::warning('Warning: Failed to get cache generation: '.$e->getMessage());
             }
+        }
+
+        $transactionDefinition = $cacheable && $definition && $inTransaction && $queries === [];
+        $transactionDefinitionKey = \strtolower($documentKey);
+        $readInTransaction = $transactionDefinition
+            ? ($this->transactionDefinitions[$this->getEventContext()][$transactionDefinitionKey] ?? null)
+            : null;
+        if ($readInTransaction !== null) {
+            $collectionState = $this->loadDocumentCacheState($this->getCacheBaseKeys($id)[0]);
+            $document = $this->decorateDocument(Event::DocumentRead, $collection, clone $readInTransaction);
+            $this->trigger(Event::DocumentRead, $document);
+            $this->attachCollectionCacheEpoch($document, $collectionState->value);
+
+            return $document;
         }
 
         $collectionGranted = $this->authorization->isValid(new Input(PermissionType::Read, $collection->getRead()));
@@ -688,6 +722,10 @@ trait Documents
             Console::warning('Failed to save document to cache: '.$e->getMessage());
         }
 
+        if ($transactionDefinition) {
+            $this->transactionDefinitions[$this->getEventContext()][$transactionDefinitionKey] = clone $document;
+        }
+
         $document = $this->decorateDocument(Event::DocumentRead, $collection, $document);
 
         $this->trigger(Event::DocumentRead, $document);
@@ -752,6 +790,35 @@ trait Documents
             self::DOCUMENT_CACHE_FIELD => $field,
             self::DOCUMENT_CACHE_VALUE => $document,
         ], $field, $generation);
+    }
+
+    /**
+     * The Collection model of a collection definition's cached copy, as a deep clone of the one built
+     * the last time this copy was read: it is built again whenever the copy read differs in any value.
+     * A custom document type for the metadata collection is built on every read, as its constructor
+     * may do more than copy the data.
+     *
+     * @param  array<string, mixed>  $cached
+     */
+    private function createDefinitionInstance(string $documentKey, array $cached): Document
+    {
+        if (($this->documentTypes[self::METADATA] ?? null) !== Collection::class) {
+            return $this->createDocumentInstance(self::METADATA, $cached);
+        }
+
+        $entry = self::$definitionModels[$documentKey] ?? null;
+        if ($entry !== null && $entry['source'] === $cached) {
+            return clone $entry['model'];
+        }
+
+        $model = $this->createDocumentInstance(self::METADATA, $cached);
+
+        if (\count(self::$definitionModels) >= self::DEFINITION_MODELS_LIMIT) {
+            self::$definitionModels = [];
+        }
+        self::$definitionModels[$documentKey] = ['source' => $cached, 'model' => clone $model];
+
+        return $model;
     }
 
     /**
@@ -2866,6 +2933,7 @@ trait Documents
         }
         if (isset($this->transactionWrites[$context])) {
             $this->transactionWrites[$context][\strtolower($documentKey)] = true;
+            unset($this->transactionDefinitions[$context][\strtolower($documentKey)]);
         }
 
         $this->cache->purge($documentKey);
@@ -4288,9 +4356,12 @@ trait Documents
     {
         /** @var array<Document> $attributes */
         $attributes = $collection->getAttribute('attributes', []);
-        $validator = new Aggregate($attributes, $this->adapter->supports(Capability::DefinedAttributes), $this->adapter->getSharedTables());
+        $supportForAttributes = $this->adapter->supports(Capability::DefinedAttributes);
 
-        if (\str_contains($attribute, '.') || ! $this->declaresSumAttribute($collection, $attribute)) {
+        if (! \str_contains($attribute, '.') && $this->declaresSumAttribute($collection, $attribute)) {
+            $validator = $this->getSumValidator($collection, $attributes, $supportForAttributes);
+        } else {
+            $validator = new Aggregate($attributes, $supportForAttributes, $this->adapter->getSharedTables());
             $joins = [];
             foreach ($this->aliasedJoinCollections($queries, $joinedCollections) as $alias => $joined) {
                 $joins[] = JoinedCollection::of($alias, $joined);
@@ -4301,6 +4372,30 @@ trait Documents
         if (! $validator->isValid(Query::sum($attribute))) {
             throw new QueryException('Invalid query: '.$validator->getDescription());
         }
+    }
+
+    /**
+     * The aggregate validator of a sum of an attribute the collection declares, built once per
+     * collection schema like the documents validators. It is never handed joins, so no state of
+     * one sum reaches the next.
+     *
+     * @param  array<Document>  $attributes
+     */
+    private function getSumValidator(Document $collection, array $attributes, bool $supportForAttributes): Aggregate
+    {
+        $key = $this->getCollectionMetadataCacheKey($collection->getId())
+            .'::'.(int) $supportForAttributes.(int) $this->adapter->getSharedTables()
+            .'::'.$this->collectionFingerprint($collection);
+
+        if (isset($this->sumValidatorCache[$key])) {
+            return $this->sumValidatorCache[$key];
+        }
+
+        if (\count($this->sumValidatorCache) >= self::DOCUMENTS_VALIDATOR_CACHE_LIMIT) {
+            $this->sumValidatorCache = [];
+        }
+
+        return $this->sumValidatorCache[$key] = new Aggregate($attributes, $supportForAttributes, $this->adapter->getSharedTables());
     }
 
     /**

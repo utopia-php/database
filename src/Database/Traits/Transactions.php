@@ -5,6 +5,7 @@ namespace Utopia\Database\Traits;
 use Closure;
 use Throwable;
 use Utopia\Database\Capability;
+use Utopia\Database\Document;
 use Utopia\Database\Event;
 use WeakMap;
 
@@ -18,6 +19,9 @@ trait Transactions
 
     /** @var array<int, array<string, true>> Lower-cased keys of the documents written in the open invalidation scope, by coroutine id, kept only while that scope owns the adapter's transaction. */
     protected array $transactionWrites = [];
+
+    /** @var array<int, array<string, Document>> Collection definitions read inside the transaction the open invalidation scope owns, by coroutine id and lower-cased definition key. */
+    protected array $transactionDefinitions = [];
 
     /** @var array<int, list<Closure(): void>> Document purge events of the open invalidation scope, by coroutine id, fired once its outermost transaction has committed. */
     protected array $documentPurgeEvents = [];
@@ -168,6 +172,7 @@ trait Transactions
                     $this->documentCacheMutations[$context],
                     $this->documentCachePurges[$context],
                     $this->transactionWrites[$context],
+                    $this->transactionDefinitions[$context],
                     $this->documentPurgeEvents[$context],
                 );
                 try {
@@ -200,6 +205,7 @@ trait Transactions
                 $this->documentCacheMutations[$context],
                 $this->documentCachePurges[$context],
                 $this->transactionWrites[$context],
+                $this->transactionDefinitions[$context],
                 $this->documentPurgeEvents[$context],
             );
 

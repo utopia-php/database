@@ -646,28 +646,41 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $selections = $this->getAttributeSelections($queries);
         $alias = Query::DEFAULT_ALIAS;
 
-        // Fast path: single-row lookup by primary key with no projection,
-        // no shared-tenant filter, no joins, and no row lock. This is by far
-        // the most common shape (metadata fetch, primary cache miss, etc.);
-        // skip the builder pipeline and go directly to a parameterised SELECT.
+        // Fast path: single-row lookup by primary key with no projection and
+        // no joins. This is by far the most common shape (metadata fetch,
+        // primary cache miss, the locked read of every update); skip the
+        // builder pipeline and go directly to a parameterised SELECT, filtered
+        // by tenant and locked the way the builder's TenantFilter and lock
+        // clause do it.
         if (
             empty($selections)
-            && ! $forUpdate
-            && ! $this->sharedTables
             && ! $this->queriesHaveJoins($queries)
         ) {
             $tableExpr = $this->getSQLTable($name);
             $aliasQuoted = $this->quote($alias);
             $uidQuoted = $this->quote(Storage::UID);
             $sql = "SELECT * FROM {$tableExpr} AS {$aliasQuoted} WHERE {$this->collateDocumentId($uidQuoted)} = " . ':'.Storage::UID;
+            $bindings = [':'.Storage::UID => $id];
+            if ($this->sharedTables) {
+                $tenantColumn = $aliasQuoted.'.'.Storage::TENANT;
+                $sql .= $name === Database::METADATA || $name === Storage::permissionsTable(Database::METADATA)
+                    ? " AND ({$tenantColumn} IN (:".Storage::TENANT.") OR {$tenantColumn} IS NULL)"
+                    : " AND {$tenantColumn} IN (:".Storage::TENANT.')';
+                $bindings[':'.Storage::TENANT] = $this->currentTenant();
+            }
+            if ($forUpdate && $this->supports(Capability::UpdateLock)) {
+                $sql .= ' FOR UPDATE';
+            }
             $stmt = null;
             $row = false;
             $exception = null;
 
             try {
                 $stmt = $this->prepareStatement($sql, Event::DocumentRead);
-                $stmt->bindValue(':'.Storage::UID, $id, PDO::PARAM_STR);
-                $this->describeStatement($stmt, [':'.Storage::UID => $id], $name);
+                foreach ($bindings as $parameter => $value) {
+                    $stmt->bindValue($parameter, $value, $this->getPDOType($value));
+                }
+                $this->describeStatement($stmt, $bindings, $name);
                 $this->execute($stmt);
                 /** @var array<string, mixed>|false $row */
                 $row = $stmt->fetch(PDO::FETCH_ASSOC);

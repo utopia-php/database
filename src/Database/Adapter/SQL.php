@@ -5686,7 +5686,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         $page = $this->newBuilder($name, $alias);
         $page->select([$alias.'.*']);
-        $this->applyFilters($page, $filters, $name, $alias);
+        $page->filter($filters);
 
         if (
             $this->authorization->getStatus()

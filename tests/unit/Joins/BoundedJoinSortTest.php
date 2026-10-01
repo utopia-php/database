@@ -238,6 +238,7 @@ final class BoundedJoinSortTest extends TestCase
             $this->assertCount(4, $expected);
             $this->assertSame($expected, $this->rows($bounding, $queries, []));
             foreach ($expected as $row) {
+                $this->assertIsString($row['name']);
                 $this->assertStringStartsWith($tenant === 1 ? 'one ' : 'two ', $row['name']);
             }
         }
@@ -318,7 +319,14 @@ final class BoundedJoinSortTest extends TestCase
 
     private function key(Document $row): string
     {
-        return ($row->getId() ?: '-').'/'.($row->getAttribute('n.$id') ?? '-').'/'.($row->getAttribute('t.$id') ?? '-');
+        return ($row->getId() ?: '-').'/'.$this->joinedId($row, 'n').'/'.$this->joinedId($row, 't');
+    }
+
+    private function joinedId(Document $row, string $alias): string
+    {
+        $id = $row->getAttribute($alias.'.$id');
+
+        return \is_string($id) ? $id : '-';
     }
 
     /**

@@ -145,6 +145,37 @@ final class RelationshipHookCoverageTest extends TestCase
     }
 
     /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testARelationshipChangeNestedPastTheMaximumDepthIsDropped(Closure $adapter): void
+    {
+        $database = $this->library($adapter());
+        $database->createCollection(new Collection(id: 'countries', attributes: [Attribute::string(key: 'name', size: 64)], permissions: $this->permissions()));
+        $database->createRelationship(Relationship::manyToOne(collection: 'publishers', relatedCollection: 'countries', twoWay: true, key: 'country', twoWayKey: 'publishers'));
+        $database->createDocument('countries', new Document([Document::ID => 'home', 'name' => 'Home']));
+        $database->createDocument('countries', new Document([Document::ID => 'away', 'name' => 'Away']));
+        $database->updateDocument('publishers', 'acme', new Document(['country' => 'home']));
+
+        $database->updateDocument('books', 'notes', new Document([
+            'author' => new Document([
+                Document::ID => 'ada',
+                'name' => 'Ada Lovelace',
+                'publisher' => new Document([
+                    Document::ID => 'acme',
+                    'name' => 'Acme Press',
+                    'country' => new Document([Document::ID => 'away', 'name' => 'Abroad']),
+                ]),
+            ]),
+        ]));
+
+        $this->assertSame('Ada Lovelace', $database->getDocument('authors', 'ada')->getAttribute('name'));
+        $this->assertSame('Acme Press', $database->getDocument('publishers', 'acme')->getAttribute('name'));
+        $this->assertSame(['acme'], $this->ids($database->find('publishers', [Query::equal('country', ['home'])])), 'the link three levels down is past the maximum depth and stays');
+        $this->assertSame('Away', $database->getDocument('countries', 'away')->getAttribute('name'), 'so is the nested document, which is not written');
+    }
+
+    /**
      * @return list<string>
      */
     private function ids(mixed $documents): array

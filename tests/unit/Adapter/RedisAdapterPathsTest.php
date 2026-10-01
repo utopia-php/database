@@ -27,6 +27,7 @@ use Utopia\Database\Relationship;
 use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Query\CursorDirection;
 use Utopia\Query\Method;
 
 #[RequiresPhpExtension('redis')]
@@ -411,6 +412,19 @@ final class RedisAdapterPathsTest extends TestCase
 
         $database->updateDocument(self::NOTES, 'counter', new Document(['big' => Operator::increment(10, 9.0e18)]));
         $this->assertSame(PHP_INT_MAX - 5, $database->getDocument(self::NOTES, 'counter')->getAttribute('big'));
+    }
+
+    public function testACursorWithoutAnOrderPagesBySequence(): void
+    {
+        $adapter = $this->adapter();
+        $this->createNotes($adapter);
+        foreach (['first', 'second', 'third'] as $id) {
+            $adapter->createDocument($this->notes(), new Document(['$id' => $id, '$permissions' => [], 'title' => $id]));
+        }
+        $cursor = ['$sequence' => $adapter->getDocument($this->notes(), 'second')->getSequence()];
+
+        $this->assertSame(['third'], $this->idsOf($adapter->find($this->notes(), cursor: $cursor)));
+        $this->assertSame(['first'], $this->idsOf($adapter->find($this->notes(), cursor: $cursor, cursorDirection: CursorDirection::Before)));
     }
 
     private function petsDatabase(RelationType $type, string $key, string $twoWayKey, string $from = 'owners', string $to = 'pets'): Database

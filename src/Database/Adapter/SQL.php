@@ -11,6 +11,8 @@ use Swoole\Database\PDOStatementProxy;
 use Throwable;
 use Utopia\Console;
 use Utopia\Database\Adapter;
+use Utopia\Database\Adapter\SQL\BoundedPage;
+use Utopia\Database\Adapter\SQL\PageJoin;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Change;
@@ -1739,15 +1741,19 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $this->applyFindPage($left, $orderAttributes, $orderTypes, $limit, $offset, $cursorDirection, afterUnion: true);
             $results = $this->executeSelect($left, Event::DocumentFind, $name);
         } else {
+            $bound = $hasJoins && ! $hasAggregation && ! $hasDistinct && $vectorQueries === [] && $this->boundsJoinedSort()
+                ? $this->boundedPage($collectionDoc, $queries, $adapterFilterQueries, $joinTablePrefixes, $orderAttributes, $orderTypes, $limit, $offset, $cursor)
+                : null;
+
             $builder = $this->newBuilder($name, $alias, $hasPreservingOuterJoin);
             $hasSelectionProjection = $this->configureFindBuilder(
                 $builder,
                 $collectionDoc,
-                $queries,
+                $bound?->withoutSearches($queries) ?? $queries,
                 $joinTablePrefixes,
                 $hasAggregation,
                 $hasDistinct,
-                $adapterFilterQueries,
+                $bound?->withoutSearches($adapterFilterQueries) ?? $adapterFilterQueries,
                 $name,
                 $alias,
                 $roles,
@@ -1818,17 +1824,11 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 );
             }
 
-            if ($hasJoins && ! $hasAggregation && ! $hasDistinct && $vectorQueries === [] && $this->boundsJoinedSort()) {
-                $this->boundJoinedSortToPage(
+            if ($bound !== null) {
+                $this->joinFromBoundedPage(
                     $builder,
                     $collectionDoc,
-                    $queries,
-                    $adapterFilterQueries,
-                    $joinAliases,
-                    $orderAttributes,
-                    $orderTypes,
-                    $limit,
-                    $offset,
+                    $bound,
                     $cursor,
                     $cursorDirection,
                     $resolveInternalKey,
@@ -1836,6 +1836,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     $alias,
                     $roles,
                     $forPermission,
+                    \count($joinTablePrefixes),
                 );
             }
 
@@ -5600,9 +5601,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
-     * Whether a read whose rows are its left-joined rows picks the main rows its page can reach before it joins
-     * them (boundJoinedSortToPage()). An engine that cannot read an order over two tables from an index sorts the
-     * whole join before the limit otherwise.
+     * Whether a joined read picks the main rows its page can reach before it joins them (boundedPage()). An engine
+     * that cannot read an order over two tables from an index sorts the whole join before the limit otherwise.
      */
     protected function boundsJoinedSort(): bool
     {
@@ -5611,32 +5611,160 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
     /**
      * A read ordered by main attributes up to a unique one, then by joined ones, returns every joined row of one main
-     * document together. Without inner joins and without conditions on joined attributes, every main document it
-     * matches gives at least one row, so its page of `limit` rows after `offset` rows (and after the cursor) comes
-     * from the first `offset + limit` main documents in that order after the cursor's own, plus the cursor's own.
-     * The read joins from a derived table of those main rows (an index can serve its order up to its limit), so the
-     * join and its sort only see their rows. The rows, their order and the page are those of the read without it.
-     * A fulltext search needs the main table itself, so a read with one keeps the whole join.
+     * document together, so its page of `limit` rows after `offset` rows (and after the cursor) comes from the first
+     * `offset + limit` main documents in that order that give the read a row, after the cursor's own, plus the
+     * cursor's own. A main document gives a row when it meets the main conditions and searches and holds a match in
+     * every join that drops the main documents without one: an inner join, a left join under a condition a missing
+     * joined row fails, and the join such a join reaches the main table through. The match meets that join's ON,
+     * its permissions, its tenant and the read's conditions on its attributes. Any other left join keeps every main
+     * document.
+     *
+     * Right, full outer and cross joins keep rows without a main document, which have no place in the main order.
+     * Neither can a condition that names a main and a joined attribute, or two joins, be checked on one join's
+     * rows, nor a condition a missing row meets on a left join nothing else needs a match from. Such reads, and
+     * those ordered by a joined attribute first or by main attributes that are not unique, are not bounded.
      *
      * @param  array<BaseQuery>  $queries
      * @param  array<Query>  $adapterFilterQueries
-     * @param  array<string>  $joinAliases
+     * @param  list<array{table: string, alias: string}>  $joinTablePrefixes
      * @param  array<string>  $orderAttributes
      * @param  array<OrderDirection>  $orderTypes
      * @param  array<string, mixed>  $cursor
-     * @param  callable(string): string  $resolveInternalKey
-     * @param  array<string>  $roles
      */
-    private function boundJoinedSortToPage(
-        SQLBuilder $builder,
+    private function boundedPage(
         Document $collection,
         array $queries,
         array $adapterFilterQueries,
-        array $joinAliases,
+        array $joinTablePrefixes,
         array $orderAttributes,
         array $orderTypes,
         ?int $limit,
         ?int $offset,
+        array $cursor,
+    ): ?BoundedPage {
+        if ($limit === null) {
+            return null;
+        }
+
+        $reach = (int) $offset + ($cursor === [] ? 0 : 1);
+        if ($limit > PHP_INT_MAX - $reach) {
+            return null;
+        }
+
+        $joinAliases = \array_column($joinTablePrefixes, 'alias');
+        $mainOrder = $this->mainOrderPrefix($orderAttributes, $orderTypes, $joinAliases);
+        if ($mainOrder === null) {
+            return null;
+        }
+
+        $joins = [];
+        $required = [];
+        $conditions = [];
+        $searches = [];
+        $joinedConditions = [];
+        foreach ($queries as $query) {
+            $method = $query->getMethod();
+            if ($method === Method::Select) {
+                continue;
+            }
+
+            if ($method->isJoin()) {
+                if ($method !== Method::Join && $method !== Method::LeftJoin) {
+                    return null;
+                }
+
+                $alias = $query->getJoinAlias();
+                $comparisons = $this->joinComparisons($query);
+                $parent = $comparisons === null ? null : $this->joinParent($comparisons, $alias, [Query::DEFAULT_ALIAS, ...\array_keys($joins)]);
+                if ($comparisons === null || $parent === null) {
+                    return null;
+                }
+
+                $joins[$alias] = [$query, $parent, $comparisons];
+                if ($method === Method::Join) {
+                    $required[$alias] = true;
+                }
+
+                continue;
+            }
+
+            if ($this->isMainSearch($query, $joinAliases)) {
+                $conditions[] = clone $query;
+                $searches[] = $query;
+
+                continue;
+            }
+
+            foreach ($this->conjuncts($query) as $condition) {
+                if ($this->isMainRowCondition($condition, $joinAliases)) {
+                    $conditions[] = clone $condition;
+
+                    continue;
+                }
+
+                $alias = $this->joinedConditionAlias($condition, $joinAliases);
+                if ($alias === null) {
+                    return null;
+                }
+
+                $joinedConditions[$alias][] = clone $condition;
+                if ($this->rejectsMissingRow($condition)) {
+                    $required[$alias] = true;
+                }
+            }
+        }
+
+        $adapterConditions = [];
+        foreach ($adapterFilterQueries as $query) {
+            if (! $this->isMainSearch($query, $joinAliases)) {
+                return null;
+            }
+
+            $adapterConditions[] = clone $query;
+            $searches[] = $query;
+        }
+
+        foreach (\array_keys($required) as $alias) {
+            for ($walk = $alias; isset($joins[$walk]); $walk = $joins[$walk][1]) {
+                $required[$walk] = true;
+            }
+        }
+
+        foreach (\array_keys($joinedConditions) as $alias) {
+            if (! isset($required[$alias])) {
+                return null;
+            }
+        }
+
+        $this->remapDottedQueryAttributes([...$conditions, ...\array_merge(...\array_values($joinedConditions))], $joinTablePrefixes, $collection);
+
+        [$mainAttributes, $mainTypes] = $mainOrder;
+
+        return new BoundedPage(
+            orderAttributes: $mainAttributes,
+            orderTypes: $mainTypes,
+            rows: $limit + $reach,
+            conditions: $conditions,
+            adapterConditions: $adapterConditions,
+            searches: $searches,
+            joins: $this->pageJoins(Query::DEFAULT_ALIAS, $joins, $required, $joinedConditions, \array_column($joinTablePrefixes, 'table', 'alias')),
+        );
+    }
+
+    /**
+     * The read joins from a derived table of the main rows its page can come from (an index can serve its order up
+     * to its limit), so the join and its sort only see their rows. The derived table holds every main row the page
+     * needs, so the rows, their order and the page are those of the read without it. The searches run there only: a
+     * derived table has no fulltext index.
+     *
+     * @param  array<string, mixed>  $cursor
+     * @param  callable(string): string  $resolveInternalKey
+     * @param  array<string>  $roles
+     */
+    private function joinFromBoundedPage(
+        SQLBuilder $builder,
+        Document $collection,
+        BoundedPage $bound,
         array $cursor,
         CursorDirection $cursorDirection,
         callable $resolveInternalKey,
@@ -5644,49 +5772,12 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         string $alias,
         array $roles,
         PermissionType $forPermission,
+        int $joins,
     ): void {
-        if ($limit === null) {
-            return;
-        }
-
-        $reach = (int) $offset + ($cursor === [] ? 0 : 1);
-        if ($limit > PHP_INT_MAX - $reach) {
-            return;
-        }
-
-        $mainOrder = $this->mainOrderPrefix($orderAttributes, $orderTypes, $joinAliases);
-        if ($mainOrder === null) {
-            return;
-        }
-
-        $filters = [];
-        foreach ($queries as $query) {
-            $method = $query->getMethod();
-            if ($method === Method::Select) {
-                continue;
-            }
-            if ($method->isJoin()) {
-                if ($method !== Method::LeftJoin) {
-                    return;
-                }
-
-                continue;
-            }
-            if (! $this->isMainRowCondition($query, $joinAliases)) {
-                return;
-            }
-            $filters[] = clone $query;
-        }
-
-        if ($adapterFilterQueries !== []) {
-            return;
-        }
-
-        [$mainAttributes, $mainTypes] = $mainOrder;
-
         $page = $this->newBuilder($name, $alias);
         $page->select([$alias.'.*']);
-        $this->applyFilters($page, $filters, $name, $alias);
+        $page->filter($bound->conditions);
+        $this->applyFilters($page, $bound->adapterConditions, $name, $alias);
 
         if (
             $this->authorization->getStatus()
@@ -5696,19 +5787,245 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $page->addHook($this->newPermissionHook($name, $roles, $forPermission->value, $alias.'.'.Storage::UID));
         }
 
+        $joinDocumentSecurity = $collection->getAttribute(Database::JOIN_DOCUMENT_SECURITY, []);
+        /** @var array<string, mixed> $joinDocumentSecurity */
+        $joinDocumentSecurity = \is_array($joinDocumentSecurity) ? $joinDocumentSecurity : [];
+        foreach ($bound->joins as $join) {
+            $page->filterExists($this->pageJoinMatch($join, $roles, $forPermission, $joinDocumentSecurity, $joins));
+        }
+
         if ($cursor !== []) {
-            $conditions = $this->cursorConditions($mainAttributes, $mainTypes, $cursor, $cursorDirection, $resolveInternalKey, nullable: true);
+            $conditions = $this->cursorConditions($bound->orderAttributes, $bound->orderTypes, $cursor, $cursorDirection, $resolveInternalKey, nullable: true);
             $equalities = [];
-            foreach ($mainAttributes as $attribute) {
+            foreach ($bound->orderAttributes as $attribute) {
                 $equalities[] = $this->cursorEquality($attribute, $cursor, $resolveInternalKey, nullable: true);
             }
             $conditions[] = $this->allOf($equalities);
             $page->filter([$this->anyOf($conditions)]);
         }
 
-        $this->applyFindPage($page, $mainAttributes, $mainTypes, $limit + $reach, null, $cursorDirection);
+        $this->applyFindPage($page, $bound->orderAttributes, $bound->orderTypes, $bound->rows, null, $cursorDirection);
 
         $builder->fromSub($page, $alias);
+    }
+
+    /**
+     * The rows of a join that match one row of the table its ON compares, as the join matches them.
+     *
+     * @param  array<string>  $roles
+     * @param  array<string, mixed>  $joinDocumentSecurity
+     */
+    private function pageJoinMatch(PageJoin $join, array $roles, PermissionType $forPermission, array $joinDocumentSecurity, int $joins): SQLBuilder
+    {
+        $this->attributeMap ??= new AttributeMap(Storage::attributeMap());
+        $match = $this->createBuilder()
+            ->from($join->table, $join->alias)
+            ->addHook($this->attributeMap)
+            ->selectRaw('1');
+
+        foreach ($join->comparisons as [$left, $operator, $right]) {
+            $match->whereColumn($left, $operator, $right);
+        }
+
+        if ($this->sharedTables) {
+            $tenant = (new TenantFilter($this->currentTenant(), quoteChar: $this->getIdentifierQuoteChar()))->joined($join->alias);
+            $match->whereRaw($tenant->expression, $tenant->bindings);
+        }
+
+        if ($this->authorization->getStatus() && $this->joinDocumentSecurityEnabled($joinDocumentSecurity, $join->collection)) {
+            $match->addHook($this->newJoinPermissionHook(
+                $this->filter($join->collection),
+                $roles,
+                $forPermission->value,
+                $join->alias.'.'.Storage::UID,
+                $joins,
+                $join->type,
+            ));
+        }
+
+        $match->filter($join->conditions);
+
+        foreach ($join->joins as $child) {
+            $match->filterExists($this->pageJoinMatch($child, $roles, $forPermission, $joinDocumentSecurity, $joins));
+        }
+
+        return $match;
+    }
+
+    /**
+     * @param  array<string, array{BaseQuery, string, non-empty-list<array{string, string, string}>}>  $joins  Each join by alias: the join, the alias its ON compares, the comparisons
+     * @param  array<string, true>  $required
+     * @param  array<string, list<BaseQuery>>  $conditions
+     * @param  array<string, string>  $collections
+     * @return list<PageJoin>
+     */
+    private function pageJoins(string $parent, array $joins, array $required, array $conditions, array $collections): array
+    {
+        $pageJoins = [];
+        foreach ($joins as $alias => [$join, $joinParent, $comparisons]) {
+            if ($joinParent !== $parent || ! isset($required[$alias])) {
+                continue;
+            }
+
+            $pageJoins[] = new PageJoin(
+                table: $join->getAttribute(),
+                collection: $collections[$alias],
+                alias: $alias,
+                type: $join->getMethod() === Method::Join ? JoinType::Inner : JoinType::Left,
+                comparisons: $comparisons,
+                conditions: $conditions[$alias] ?? [],
+                joins: $this->pageJoins($alias, $joins, $required, $conditions, $collections),
+            );
+        }
+
+        return $pageJoins;
+    }
+
+    /**
+     * @return non-empty-list<array{string, string, string}>|null
+     */
+    private function joinComparisons(BaseQuery $join): ?array
+    {
+        if (! $join->isNestedJoin()) {
+            $comparison = $this->joinComparison($join->getValues());
+
+            return $comparison === null ? null : [$comparison];
+        }
+
+        $comparisons = [];
+        foreach ($join->getJoinOnQueries() as $on) {
+            $comparison = $on->getMethod() === Method::On ? $this->joinComparison($on->getValues()) : null;
+            if ($comparison === null) {
+                return null;
+            }
+            $comparisons[] = $comparison;
+        }
+
+        return $comparisons === [] ? null : $comparisons;
+    }
+
+    /**
+     * @param  array<mixed>  $values
+     * @return array{string, string, string}|null
+     */
+    private function joinComparison(array $values): ?array
+    {
+        [$left, $operator, $right] = [$values[0] ?? null, $values[1] ?? null, $values[2] ?? null];
+        if (! \is_string($left) || ! \is_string($operator) || ! \is_string($right)) {
+            return null;
+        }
+
+        return [$left, $operator, $right];
+    }
+
+    /**
+     * The one alias, among those joined before, that a join's ON compares its own columns with.
+     *
+     * @param  non-empty-list<array{string, string, string}>  $comparisons
+     * @param  list<string>  $earlier
+     */
+    private function joinParent(array $comparisons, string $alias, array $earlier): ?string
+    {
+        $parent = null;
+        foreach ($comparisons as [$left, , $right]) {
+            $sides = [\strstr($left, '.', true), \strstr($right, '.', true)];
+            $own = \array_keys($sides, $alias, true);
+            if (\count($own) !== 1) {
+                return null;
+            }
+
+            $other = $sides[1 - $own[0]];
+            if (! \in_array($other, $earlier, true) || ($parent !== null && $parent !== $other)) {
+                return null;
+            }
+            $parent = $other;
+        }
+
+        return $parent;
+    }
+
+    /**
+     * @return list<BaseQuery>
+     */
+    private function conjuncts(BaseQuery $query): array
+    {
+        if ($query->getMethod() !== Method::And) {
+            return [$query];
+        }
+
+        $conjuncts = [];
+        foreach ($query->getValues() as $value) {
+            if (! $value instanceof BaseQuery) {
+                return [$query];
+            }
+            \array_push($conjuncts, ...$this->conjuncts($value));
+        }
+
+        return $conjuncts;
+    }
+
+    /**
+     * @param  array<string>  $joinAliases
+     */
+    private function isMainSearch(BaseQuery $query, array $joinAliases): bool
+    {
+        $method = $query->getMethod();
+
+        return ($method === Method::Search || $method === Method::NotSearch)
+            && $this->joinAliasOf($query->getAttribute(), $joinAliases) === null;
+    }
+
+    /**
+     * The one join whose attributes a condition reads, when it reads no other attribute.
+     *
+     * @param  array<string>  $joinAliases
+     */
+    private function joinedConditionAlias(BaseQuery $query, array $joinAliases): ?string
+    {
+        $method = $query->getMethod();
+        if ($method === Method::And || $method === Method::Or) {
+            $alias = null;
+            foreach ($query->getValues() as $value) {
+                $child = $value instanceof BaseQuery ? $this->joinedConditionAlias($value, $joinAliases) : null;
+                if ($child === null || ($alias !== null && $alias !== $child)) {
+                    return null;
+                }
+                $alias = $child;
+            }
+
+            return $alias;
+        }
+
+        if (! $method->isFilter() || \in_array($method, [Method::Search, Method::NotSearch, Method::Exists, Method::NotExists], true)) {
+            return null;
+        }
+
+        return $this->joinAliasOf($query->getAttribute(), $joinAliases);
+    }
+
+    /**
+     * Whether a condition on joined attributes fails the row a left join gives a main document it matches nothing
+     * for, where every joined column is null.
+     */
+    private function rejectsMissingRow(BaseQuery $query): bool
+    {
+        $children = \array_filter($query->getValues(), static fn (mixed $value): bool => $value instanceof BaseQuery);
+
+        return match ($query->getMethod()) {
+            Method::And => \array_filter($children, $this->rejectsMissingRow(...)) !== [],
+            Method::Or => $children !== [] && \array_filter($children, fn (BaseQuery $child): bool => ! $this->rejectsMissingRow($child)) === [],
+            Method::Equal,
+            Method::NotEqual,
+            Method::LessThan,
+            Method::LessThanEqual,
+            Method::GreaterThan,
+            Method::GreaterThanEqual,
+            Method::Between,
+            Method::StartsWith,
+            Method::EndsWith,
+            Method::IsNotNull => true,
+            default => false,
+        };
     }
 
     /**

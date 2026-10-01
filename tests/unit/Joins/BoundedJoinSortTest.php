@@ -23,10 +23,11 @@ use Utopia\Database\Validator\Authorization;
 use Utopia\Query\Method;
 
 /**
- * A left-joined read ordered by main attributes up to a unique one picks the main rows its page can reach before it
- * joins them, so MariaDB and MySQL sort the joined rows of those main rows only. The read returns the rows, the order
- * and the pages of the read that sorts the whole join: every read here runs on both and has to agree row for row,
- * through offsets, cursors in both directions, iterate(), hidden documents and a second tenant's rows.
+ * A joined read ordered by main attributes up to a unique one picks the main rows its page can reach before it joins
+ * them, so MariaDB and MySQL sort the joined rows of those main rows only: with left joins every main row it matches,
+ * with inner joins and conditions on joined attributes those with a matching joined row. The read returns the rows,
+ * the order and the pages of the read that sorts the whole join: every read here runs on both and has to agree row
+ * for row, through offsets, cursors in both directions, iterate(), hidden documents and a second tenant's rows.
  */
 final class BoundedJoinSortTest extends TestCase
 {
@@ -53,8 +54,8 @@ final class BoundedJoinSortTest extends TestCase
     ];
 
     /**
-     * author, rank, readable: authors with no note, with hidden notes only, with ties on the rank, and a note
-     * without an author.
+     * author, rank, readable: authors with no note, with hidden notes only, with ties on the rank, a note without an
+     * author, and a note naming its author in another case, which SQLite matches in the collation of the id index.
      */
     private const array NOTES = [
         'n01' => ['a01', 1, true],
@@ -72,6 +73,7 @@ final class BoundedJoinSortTest extends TestCase
         'n13' => ['a09', 1, true],
         'n14' => ['a09', 4, true],
         'n15' => ['zz', 1, true],
+        'n16' => ['A10', 2, true],
     ];
 
     /**
@@ -99,10 +101,15 @@ final class BoundedJoinSortTest extends TestCase
     public static function reads(): iterable
     {
         $notes = Query::leftJoin('notes', '$id', 'author', '=', 'n');
+        $innerNotes = Query::join('notes', '$id', 'author', '=', 'n');
         $joins = [
             'notes' => [$notes],
             'notes and their tags' => [$notes, Query::leftJoin('tags', 'n.$id', 'note', '=', 't')],
             'notes and the author\'s tags' => [$notes, Query::leftJoin('tags', '$id', 'author', '=', 't')],
+            'inner notes' => [$innerNotes],
+            'inner notes and their inner tags' => [$innerNotes, Query::join('tags', 'n.$id', 'note', '=', 't')],
+            'notes and their inner tags' => [$notes, Query::join('tags', 'n.$id', 'note', '=', 't')],
+            'notes and the author\'s inner tags' => [$notes, Query::join('tags', '$id', 'author', '=', 't')],
         ];
         $orders = [
             'default order' => [],
@@ -112,6 +119,15 @@ final class BoundedJoinSortTest extends TestCase
             '$id descending' => [Query::orderDesc('$id')],
             'rank, $sequence, then the joined rank' => [Query::orderAsc('rank'), Query::orderAsc('$sequence'), Query::orderDesc('n.rank')],
         ];
+        $joinedConditions = [
+            'a joined attribute that is set' => [Query::isNotNull('n.rank')],
+            'a joined attribute equal to a value' => [Query::equal('n.rank', [1])],
+            'a joined attribute in a range' => [Query::between('n.rank', 1, 2)],
+            'a joined attribute above a value, grouped with one below' => [Query::or([Query::greaterThan('n.rank', 2), Query::lessThan('n.rank', 2)])],
+            'a main and a joined condition grouped with and' => [Query::and([Query::lessThan('rank', 4), Query::greaterThanEqual('n.rank', 1)])],
+            'a condition on the tags of the notes' => [Query::leftJoin('tags', 'n.$id', 'note', '=', 't'), Query::isNotNull('t.$id')],
+            'a condition on the notes and on the author\'s tags' => [Query::leftJoin('tags', '$id', 'author', '=', 't'), Query::lessThanEqual('n.rank', 3), Query::startsWith('t.note', 'n0')],
+        ];
 
         foreach ([self::PLAIN, self::GRANTED, self::SHARED] as $mode) {
             foreach ($joins as $joinName => $join) {
@@ -120,19 +136,37 @@ final class BoundedJoinSortTest extends TestCase
                 }
             }
 
+            foreach ($joinedConditions as $conditionName => $conditions) {
+                foreach (['default order' => [], 'rank descending' => [Query::orderDesc('rank')]] as $orderName => $order) {
+                    yield "{$mode}: notes, {$conditionName}, {$orderName}" => [$mode, [$notes, ...$conditions, ...$order], true];
+                    yield "{$mode}: inner notes, {$conditionName}, {$orderName}" => [$mode, [$innerNotes, ...$conditions, ...$order], true];
+                }
+            }
+
             yield "{$mode}: notes, joined attributes selected" => [$mode, [$notes, Query::orderAsc('rank'), Query::select(['name', 'rank', 'n.rank', 'n.$id'])], true];
+            yield "{$mode}: inner notes, joined attributes selected" => [$mode, [$innerNotes, Query::orderAsc('rank'), Query::select(['name', 'rank', 'n.rank', 'n.$id'])], true];
             yield "{$mode}: notes, every attribute selected" => [$mode, [$notes, Query::orderDesc('rank'), Query::select(['*'])], true];
             yield "{$mode}: notes, a main condition" => [$mode, [$notes, Query::notEqual('name', 'cedar'), Query::orderAsc('rank')], true];
             yield "{$mode}: notes, main conditions grouped" => [$mode, [$notes, Query::or([Query::lessThan('rank', 2), Query::isNull('rank')])], true];
-            yield "{$mode}: notes, a condition on the joined rows" => [$mode, [$notes, Query::isNotNull('n.rank'), Query::orderAsc('rank')], false];
-            yield "{$mode}: notes, a grouped condition naming a joined attribute" => [$mode, [$notes, Query::or([Query::equal('n.rank', [1]), Query::isNull('rank')])], false];
+            yield "{$mode}: inner notes, a main and a joined condition" => [$mode, [$innerNotes, Query::notEqual('name', 'cedar'), Query::lessThan('n.rank', 3), Query::orderAsc('rank')], true];
+            yield "{$mode}: inner notes, a joined attribute that is not set" => [$mode, [$innerNotes, Query::isNull('n.rank')], true];
+            yield "{$mode}: notes and their inner tags, a joined condition that keeps notes without a rank" => [$mode, [$notes, Query::join('tags', 'n.$id', 'note', '=', 't'), Query::or([Query::isNull('n.rank'), Query::lessThan('n.rank', 4)])], true];
+            yield "{$mode}: notes, a search on a main attribute" => [$mode, [$notes, Query::search('name', 'amber')], true];
+            yield "{$mode}: notes, a search matching every author" => [$mode, [$notes, Query::search('name', 'one'), Query::orderAsc('rank')], true];
+            yield "{$mode}: inner notes, a search and a joined condition" => [$mode, [$innerNotes, Query::search('name', 'one'), Query::isNotNull('n.rank'), Query::orderDesc('rank')], true];
+            yield "{$mode}: notes, a search that excludes authors" => [$mode, [$notes, Query::notSearch('name', 'amber')], true];
+            yield "{$mode}: notes, a joined attribute that is not set" => [$mode, [$notes, Query::isNull('n.rank'), Query::orderAsc('rank')], false];
+            yield "{$mode}: notes, a joined attribute other than a value" => [$mode, [$notes, Query::notEqual('n.rank', 1)], true];
+            yield "{$mode}: notes, a joined attribute that is not set or below a value" => [$mode, [$notes, Query::or([Query::isNull('n.rank'), Query::lessThan('n.rank', 2)])], false];
+            yield "{$mode}: notes, a grouped condition naming a joined and a main attribute" => [$mode, [$notes, Query::or([Query::equal('n.rank', [1]), Query::isNull('rank')])], false];
+            yield "{$mode}: inner notes, a grouped condition naming a joined and a main attribute" => [$mode, [$innerNotes, Query::or([Query::equal('n.rank', [1]), Query::isNull('rank')])], false];
+            yield "{$mode}: notes and their tags, a grouped condition naming both" => [$mode, [$notes, Query::leftJoin('tags', 'n.$id', 'note', '=', 't'), Query::or([Query::equal('n.rank', [1]), Query::isNotNull('t.$id')])], false];
             yield "{$mode}: notes, ordered by a joined attribute first" => [$mode, [$notes, Query::orderAsc('n.rank')], false];
+            yield "{$mode}: inner notes, ordered by a joined attribute first" => [$mode, [$innerNotes, Query::orderAsc('n.rank')], false];
             yield "{$mode}: notes, ordered by a main attribute that is not unique, then a joined one" => [$mode, [$notes, Query::orderAsc('rank'), Query::orderAsc('n.rank')], false];
-            yield "{$mode}: notes, inner join" => [$mode, [Query::join('notes', '$id', 'author', '=', 'n'), Query::orderAsc('rank')], false];
-            yield "{$mode}: notes, inner join behind a left join" => [$mode, [$notes, Query::join('tags', '$id', 'author', '=', 't')], false];
             yield "{$mode}: notes, right join" => [$mode, [Query::rightJoin('notes', '$id', 'author', '=', 'n'), Query::orderAsc('rank')], false];
+            yield "{$mode}: notes, right join behind an inner join" => [$mode, [$innerNotes, Query::rightJoin('tags', '$id', 'author', '=', 't')], false];
             yield "{$mode}: notes, full outer join" => [$mode, [Query::fullOuterJoin('notes', '$id', 'author', '=', 'n')], false];
-            yield "{$mode}: notes, a search on a main attribute" => [$mode, [$notes, Query::search('name', 'amber')], false];
             yield "{$mode}: notes, main attributes selected" => [$mode, [$notes, Query::orderAsc('rank'), Query::select(['name', 'rank'])], false];
         }
     }
@@ -238,6 +272,7 @@ final class BoundedJoinSortTest extends TestCase
             $this->assertCount(4, $expected);
             $this->assertSame($expected, $this->rows($bounding, $queries, []));
             foreach ($expected as $row) {
+                $this->assertIsString($row['name']);
                 $this->assertStringStartsWith($tenant === 1 ? 'one ' : 'two ', $row['name']);
             }
         }
@@ -318,7 +353,10 @@ final class BoundedJoinSortTest extends TestCase
 
     private function key(Document $row): string
     {
-        return ($row->getId() ?: '-').'/'.($row->getAttribute('n.$id') ?? '-').'/'.($row->getAttribute('t.$id') ?? '-');
+        $note = $row->getAttribute('n.$id');
+        $tag = $row->getAttribute('t.$id');
+
+        return ($row->getId() ?: '-').'/'.(\is_string($note) ? $note : '-').'/'.(\is_string($tag) ? $tag : '-');
     }
 
     /**

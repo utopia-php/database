@@ -15,6 +15,56 @@ use Utopia\Database\Query;
 
 trait PermissionTests
 {
+    public function testQueryContainsOnPermissions(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $collection = __FUNCTION__;
+        $database->createCollection($collection);
+
+        $readAny = Permission::read(Role::any());
+        $updateAny = Permission::update(Role::any());
+        $updateUser = Permission::update(Role::user('user1'));
+        $updateSimilarUser = Permission::update(Role::user('user10'));
+
+        $database->createDocument($collection, new Document([
+            '$id' => 'document1',
+            '$permissions' => [$readAny, $updateAny],
+        ]));
+        $database->createDocument($collection, new Document([
+            '$id' => 'document2',
+            '$permissions' => [$readAny, $updateUser],
+        ]));
+        $database->createDocument($collection, new Document([
+            '$id' => 'document3',
+            '$permissions' => [$readAny, $updateSimilarUser],
+        ]));
+
+        $documents = $database->find($collection, [
+            Query::contains('$permissions', [$updateAny]),
+        ]);
+
+        $this->assertCount(1, $documents);
+        $this->assertSame('document1', $documents[0]->getId());
+
+        $documents = $database->find($collection, [
+            Query::containsAny('$permissions', [$updateAny, $updateUser]),
+        ]);
+
+        $this->assertCount(2, $documents);
+
+        $documents = $database->find($collection, [
+            Query::notContains('$permissions', [$updateUser]),
+        ]);
+
+        $this->assertCount(2, $documents);
+        $this->assertSame(['document1', 'document3'], \array_map(
+            fn (Document $document) => $document->getId(),
+            $documents
+        ));
+    }
+
     public function testUpdatingASharedDefinitionKeepsItsPermissionRowsTenantless(): void
     {
         /** @var Database $database */

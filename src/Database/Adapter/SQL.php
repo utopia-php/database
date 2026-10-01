@@ -221,14 +221,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
-     * Configure float precision for parameter binding/logging.
-     */
-    public function setFloatPrecision(int $precision): void
-    {
-        $this->floatPrecision = $precision;
-    }
-
-    /**
      * Helper to format a float value according to configured precision for binding/logging.
      */
     protected function getFloatPrecision(float $value): string

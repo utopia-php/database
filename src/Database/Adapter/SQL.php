@@ -6013,7 +6013,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $values = $operator->getValues();
 
         switch ($method) {
-            // Numeric operators with optional limits
             case OperatorType::Increment:
             case OperatorType::Decrement:
             case OperatorType::Multiply:
@@ -6023,7 +6022,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $stmt->bindValue(':'.$bindKey, $value, $this->getPDOType($value));
                 $bindIndex++;
 
-                // Bind limit if provided
                 if (isset($values[1])) {
                     $limitKey = "op_{$bindIndex}";
                     $limit = self::exactLimit($values[1]);
@@ -6045,7 +6043,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $stmt->bindValue(':'.$bindKey, $value, $this->getPDOType($value));
                 $bindIndex++;
 
-                // Bind max limit if provided
                 if (isset($values[1])) {
                     $maxKey = "op_{$bindIndex}";
                     $limit = self::exactLimit($values[1]);
@@ -6054,7 +6051,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 }
                 break;
 
-                // String operators
             case OperatorType::StringConcat:
                 $value = $values[0] ?? '';
                 $bindKey = "op_{$bindIndex}";
@@ -6073,12 +6069,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $bindIndex++;
                 break;
 
-                // Boolean operators
-            case OperatorType::Toggle:
-                // No parameters to bind
-                break;
-
-                // Date operators
             case OperatorType::DateAddDays:
             case OperatorType::DateSubDays:
                 $days = $values[0] ?? 0;
@@ -6087,19 +6077,12 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $bindIndex++;
                 break;
 
-            case OperatorType::DateSetNow:
-                // No parameters to bind
-                break;
-
-                // Array operators
             case OperatorType::ArrayAppend:
             case OperatorType::ArrayPrepend:
-                // PERFORMANCE: Validate array size to prevent memory exhaustion
                 if (\count($values) > Operator::MAX_ARRAY_OPERATOR_SIZE) {
                     throw new DatabaseException('Array size '.\count($values).' exceeds maximum allowed size of '.Operator::MAX_ARRAY_OPERATOR_SIZE.' for array operations');
                 }
 
-                // Bind JSON array
                 $arrayValue = json_encode($values);
                 $bindKey = "op_{$bindIndex}";
                 $stmt->bindValue(':'.$bindKey, $arrayValue, PDO::PARAM_STR);
@@ -6116,11 +6099,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $bindIndex++;
                 break;
 
-            case OperatorType::ArrayUnique:
-                // No parameters to bind
-                break;
-
-                // Complex array operators
             case OperatorType::ArrayInsert:
                 $index = $values[0] ?? 0;
                 $value = $values[1] ?? null;
@@ -6134,7 +6112,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
             case OperatorType::ArrayIntersect:
             case OperatorType::ArrayDiff:
-                // PERFORMANCE: Validate array size to prevent memory exhaustion
                 if (\count($values) > Operator::MAX_ARRAY_OPERATOR_SIZE) {
                     throw new DatabaseException('Array size '.\count($values).' exceeds maximum allowed size of '.Operator::MAX_ARRAY_OPERATOR_SIZE.' for array operations');
                 }
@@ -6142,31 +6119,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $arrayValue = json_encode($values);
                 $bindKey = "op_{$bindIndex}";
                 $stmt->bindValue(':'.$bindKey, $arrayValue, PDO::PARAM_STR);
-                $bindIndex++;
-                break;
-
-            case OperatorType::ArrayFilter:
-                $condition = \is_string($values[0] ?? null) ? $values[0] : 'equal';
-                $value = $values[1] ?? null;
-
-                $validConditions = [
-                    'equal', 'notEqual',  // Comparison
-                    'greaterThan', 'greaterThanEqual', 'lessThan', 'lessThanEqual',  // Numeric
-                    'isNull', 'isNotNull',  // Null checks
-                ];
-                if (! in_array($condition, $validConditions, true)) {
-                    throw new DatabaseException("Invalid filter condition: {$condition}. Must be one of: ".implode(', ', $validConditions));
-                }
-
-                $conditionKey = "op_{$bindIndex}";
-                $stmt->bindValue(':'.$conditionKey, $condition, PDO::PARAM_STR);
-                $bindIndex++;
-                $valueKey = "op_{$bindIndex}";
-                if ($value !== null) {
-                    $stmt->bindValue(':'.$valueKey, json_encode($value), PDO::PARAM_STR);
-                } else {
-                    $stmt->bindValue(':'.$valueKey, null, PDO::PARAM_NULL);
-                }
                 $bindIndex++;
                 break;
         }

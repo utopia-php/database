@@ -4,10 +4,12 @@ namespace Tests\Unit;
 
 use ArrayObject;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 use stdClass;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Document;
 use Utopia\Database\Storage;
+use Utopia\Database\Validator\Authorization;
 use Utopia\Mongo\Client;
 
 /**
@@ -41,6 +43,20 @@ final class MongoCursorTest extends TestCase
         $this->assertSame(['getMore'], $calls->getArrayCopy());
     }
 
+    public function testAFindKeepsItsResultsWhenTheOpenCursorCannotBeKilled(): void
+    {
+        /** @var ArrayObject<int, string> $calls */
+        $calls = new ArrayObject();
+        $adapter = new Mongo($this->client($calls, firstBatch: [self::row('first', 'sequence-first')], nextBatches: [[]]));
+        $adapter->setNamespace('cursor');
+        $adapter->setAuthorization(new Authorization());
+
+        $documents = $adapter->find(new Document([Document::ID => self::COLLECTION]));
+
+        $this->assertSame(['first'], \array_map(static fn (Document $document): string => $document->getId(), $documents));
+        $this->assertSame(['getMore', 'killCursors'], $calls->getArrayCopy(), 'the cursor left open by an empty batch is killed, and the failure to kill it is ignored');
+    }
+
     private static function row(string $id, string $sequence): stdClass
     {
         return (object) [Storage::UID => $id, Storage::SEQUENCE => $sequence];
@@ -48,7 +64,7 @@ final class MongoCursorTest extends TestCase
 
     /**
      * A client whose find opens a cursor over $firstBatch and whose getMore hands out $nextBatches in turn, each in a
-     * reply without a cursor id. Every getMore is recorded in $calls.
+     * reply without a cursor id. Every getMore and killCursors is recorded in $calls; killCursors fails.
      *
      * @param  ArrayObject<int, string>  $calls
      * @param  list<stdClass>  $firstBatch
@@ -94,6 +110,17 @@ final class MongoCursorTest extends TestCase
                 $this->calls[] = 'getMore';
 
                 return (object) ['cursor' => (object) ['nextBatch' => $batch]];
+            }
+
+            /**
+             * @param  array<mixed>  $command
+             */
+            #[\Override]
+            public function query(array $command, ?string $db = null): stdClass
+            {
+                $this->calls[] = \array_key_first($command) === 'killCursors' ? 'killCursors' : 'query';
+
+                throw new RuntimeException('the cursor could not be killed');
             }
         };
     }

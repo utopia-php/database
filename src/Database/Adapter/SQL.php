@@ -743,7 +743,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         } else {
             $builder = $this->newBuilder($name, $alias);
 
-            if (! empty($selections) && ! \in_array('*', $selections)) {
+            if (! \in_array('*', $selections)) {
                 $builder->select($this->mapSelectionsToColumns($selections, joinAliases: []));
             }
 

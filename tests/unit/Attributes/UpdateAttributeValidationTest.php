@@ -159,6 +159,24 @@ final class UpdateAttributeValidationTest extends TestCase
     }
 
     /**
+     * @param  \Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testAStructureUpdateDropsTheDefaultOfARequiredAttribute(\Closure $adapter): void
+    {
+        $database = $this->database($adapter());
+
+        $database->updateAttribute(self::COLLECTION, 'name', default: 'x');
+        $database->updateAttribute(self::COLLECTION, 'label', required: true, default: 'x');
+
+        $definitions = $this->definitions($database);
+        foreach (['name', 'label'] as $key) {
+            $this->assertTrue($definitions[$key]['required'], "{$key} must stay required");
+            $this->assertNull($definitions[$key]['default'], "{$key} must have no default");
+        }
+    }
+
+    /**
      * @return array<string, array{\Closure(): Adapter, string, mixed, string}>
      */
     public static function mismatchedDefaults(): array

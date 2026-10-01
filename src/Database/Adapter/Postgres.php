@@ -1675,18 +1675,6 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
     }
 
     /**
-     * Get SQL schema
-     */
-    protected function getSQLSchema(): string
-    {
-        if (! $this->supports(Capability::Schemas)) {
-            return '';
-        }
-
-        return "\"{$this->getDatabase()}\".";
-    }
-
-    /**
      * Get PDO Type
      *
      *
@@ -2223,47 +2211,6 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         }
     }
 
-    /**
-     * Bind operator parameters to statement
-     * Override to handle PostgreSQL-specific JSON binding
-     */
-    protected function bindOperatorParams(PDOStatement|DatabasePDOStatement|PDOStatementProxy $stmt, Operator $operator, int &$bindIndex): void
-    {
-        $method = $operator->getMethod();
-        $values = $operator->getValues();
-
-        switch ($method) {
-            case OperatorType::ArrayAppend:
-            case OperatorType::ArrayPrepend:
-                $arrayValue = json_encode($values);
-                $bindKey = "op_{$bindIndex}";
-                $stmt->bindValue(':'.$bindKey, $arrayValue, PDO::PARAM_STR);
-                $bindIndex++;
-                break;
-
-            case OperatorType::ArrayRemove:
-                $value = $values[0] ?? null;
-                $bindKey = "op_{$bindIndex}";
-                // Always JSON encode for PostgreSQL jsonb comparison
-                $stmt->bindValue(':'.$bindKey, json_encode($value), PDO::PARAM_STR);
-                $bindIndex++;
-                break;
-
-            case OperatorType::ArrayIntersect:
-            case OperatorType::ArrayDiff:
-                $arrayValue = json_encode($values);
-                $bindKey = "op_{$bindIndex}";
-                $stmt->bindValue(':'.$bindKey, $arrayValue, PDO::PARAM_STR);
-                $bindIndex++;
-                break;
-
-            default:
-                // Use parent implementation for other operators
-                parent::bindOperatorParams($stmt, $operator, $bindIndex);
-                break;
-        }
-    }
-
     protected function getOperatorBuilderExpression(string $column, Operator $operator): array
     {
         if ($operator->getMethod() === OperatorType::ArrayRemove) {
@@ -2278,40 +2225,6 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         }
 
         return parent::getOperatorBuilderExpression($column, $operator);
-    }
-
-    /**
-     * Encode array
-     *
-     *
-     * @return array<string>
-     */
-    protected function encodeArray(string $value): array
-    {
-        $string = substr($value, 1, -1);
-        if (empty($string)) {
-            return [];
-        } else {
-            return explode(',', $string);
-        }
-    }
-
-    /**
-     * Decode array
-     *
-     * @param  array<string>  $value
-     */
-    protected function decodeArray(array $value): string
-    {
-        if (empty($value)) {
-            return '{}';
-        }
-
-        foreach ($value as $index => $item) {
-            $value[$index] = '"'.str_replace(['"', '(', ')'], ['\"', '\(', '\)'], $item).'"';
-        }
-
-        return '{'.implode(',', $value).'}';
     }
 
     /**

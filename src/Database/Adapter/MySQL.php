@@ -142,6 +142,12 @@ class MySQL extends MariaDB
      */
     private const int LARGE_JOIN = 5;
 
+    #[\Override]
+    protected function boundsMatchedJoins(): bool
+    {
+        return true;
+    }
+
     /**
      * Inside an outer join's ON clause MySQL runs a semi-joined check by scanning its materialised
      * rows once per outer row, so an outer-joined table's check always stays a subquery.

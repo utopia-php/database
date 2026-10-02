@@ -5610,6 +5610,16 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
+     * Whether a bounded page may keep only the main rows with a matching joined row (inner joins, conditions on
+     * joined attributes). Such a page reads the matching joined rows once to pick its main rows and again to join
+     * them, which only pays where the engine plans that well.
+     */
+    protected function boundsMatchedJoins(): bool
+    {
+        return false;
+    }
+
+    /**
      * A read ordered by main attributes up to a unique one, then by joined ones, returns every joined row of one main
      * document together, so its page of `limit` rows after `offset` rows (and after the cursor) comes from the first
      * `offset + limit` main documents in that order that give the read a row, after the cursor's own, plus the
@@ -5734,6 +5744,10 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             if (! isset($required[$alias])) {
                 return null;
             }
+        }
+
+        if ($required !== [] && ! $this->boundsMatchedJoins()) {
+            return null;
         }
 
         $this->remapDottedQueryAttributes([...$conditions, ...\array_merge(...\array_values($joinedConditions))], $joinTablePrefixes, $collection);

@@ -16,4 +16,10 @@ final class BoundedJoinSortSQLite extends SQLite
     {
         return true;
     }
+
+    #[Override]
+    protected function boundsMatchedJoins(): bool
+    {
+        return true;
+    }
 }

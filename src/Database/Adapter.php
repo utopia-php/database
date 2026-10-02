@@ -56,6 +56,11 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
 
     protected int $inTransaction = 0;
 
+    /**
+     * withTransaction() calls in progress on this adapter. The outermost one owns the retries.
+     */
+    private int $transactionCalls = 0;
+
     protected bool $alterLocks = false;
 
     protected bool $skipDuplicates {
@@ -671,9 +676,12 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
 
     /**
      * Run the callback in a transaction, retrying an attempt that failed transiently up to twice (see isRetryable());
-     * any other failure is rethrown at once. A nested call whose enclosing transaction is gone is never retried: it
-     * throws `Exception\Transaction`, or the `Exception\Contention` that made the engine roll the transaction back,
-     * which the outermost call retries because nothing of that attempt is stored.
+     * any other failure is rethrown at once. Only the outermost call retries: a call nested in another
+     * withTransaction() rolls back to its savepoint and rethrows, and the outermost call runs the whole unit again, so
+     * the retries do not multiply. A call nested in a transaction begun with startTransaction() retries in its
+     * savepoint. A nested call whose enclosing transaction is gone throws `Exception\Transaction`, or the
+     * `Exception\Contention` that made the engine roll the transaction back, which the outermost call retries because
+     * nothing of that attempt is stored.
      *
      * @template T
      *
@@ -687,55 +695,61 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
         $sleep = 50_000; // 50 milliseconds
         $retries = 2;
         $depth = $this->inTransaction;
+        $enclosed = $this->transactionCalls > 0;
+        $this->transactionCalls++;
 
-        for ($attempts = 0; $attempts <= $retries; $attempts++) {
-            $started = false;
-            try {
-                $this->startTransaction();
-                $started = true;
-                $result = $callback();
-                $this->commitTransaction();
+        try {
+            for ($attempts = 0; $attempts <= $retries; $attempts++) {
+                $started = false;
+                try {
+                    $this->startTransaction();
+                    $started = true;
+                    $result = $callback();
+                    $this->commitTransaction();
 
-                return $result;
-            } catch (Throwable $action) {
-                $rollback = null;
-                $lost = $started && $this->inTransaction <= $depth;
-                if (! $lost) {
-                    try {
-                        $this->rollbackTransaction();
-                    } catch (Throwable $rollbackError) {
-                        $rollback = $rollbackError;
-                        $this->inTransaction = 0;
+                    return $result;
+                } catch (Throwable $action) {
+                    $rollback = null;
+                    $lost = $started && $this->inTransaction <= $depth;
+                    if (! $lost) {
+                        try {
+                            $this->rollbackTransaction();
+                        } catch (Throwable $rollbackError) {
+                            $rollback = $rollbackError;
+                            $this->inTransaction = 0;
+                        }
+
+                        $lost = $this->inTransaction < $depth;
                     }
 
-                    $lost = $this->inTransaction < $depth;
-                }
+                    if ($lost) {
+                        if (! $action instanceof ContentionException) {
+                            throw new TransactionException('Failed to execute transaction: the transaction was lost before it could commit', previous: $action);
+                        }
 
-                if ($lost) {
-                    if (! $action instanceof ContentionException) {
-                        throw new TransactionException('Failed to execute transaction: the transaction was lost before it could commit', previous: $action);
+                        if ($depth > 0) {
+                            throw $action;
+                        }
                     }
 
-                    if ($depth > 0) {
+                    if ($enclosed || ! $this->isRetryable($action)) {
                         throw $action;
                     }
+
+                    if ($attempts < $retries) {
+                        \usleep($sleep * ($attempts + 1));
+
+                        continue;
+                    }
+
+                    throw $rollback ?? $action;
                 }
-
-                if (! $this->isRetryable($action)) {
-                    throw $action;
-                }
-
-                if ($attempts < $retries) {
-                    \usleep($sleep * ($attempts + 1));
-
-                    continue;
-                }
-
-                throw $rollback ?? $action;
             }
-        }
 
-        throw new TransactionException('Failed to execute transaction');
+            throw new TransactionException('Failed to execute transaction');
+        } finally {
+            $this->transactionCalls--;
+        }
     }
 
     /**

@@ -279,8 +279,9 @@ have to make, with the 7.x and 8.0 forms side by side.
   example `InvalidArgumentException`) run the callback once and are rethrown without sleeping, also in a nested call.
   Only a failure that can succeed on another attempt is still retried twice with 7.x's backoff: an
   `Exception\Transaction` (including `Contention`), a lost connection, an engine lock conflict the adapter did not
-  map, or a MongoDB error labelled transient, a network error or a command that was never sent. See
-  [Errors](UPGRADE.md#errors).
+  map, or a MongoDB error labelled transient, a network error or a command that was never sent. Only the outermost
+  `withTransaction()` retries it: a nested call rolls back to its savepoint and rethrows, so a lock conflict that
+  keeps failing runs a nested callback 3 times instead of 9. See [Errors](UPGRADE.md#errors).
 - `createCollection()`, `createAttribute()`, `createAttributes()`, `createIndex()` and their update, rename and
   delete siblings keep the table, column or index when only the cache invalidation after their committed definition
   failed, and do not repeat the write. `createRelationship()` keeps a committed relationship and still creates its

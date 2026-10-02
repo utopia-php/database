@@ -286,7 +286,11 @@ class TransactionRetryTest extends TestCase
         $this->assertFalse($adapter->inTransaction());
     }
 
-    public function testTransientFailureInANestedCallRunsAgainInsideTheOuterTransaction(): void
+    /**
+     * Only the outermost call retries: a nested call rolls a lock conflict back to its savepoint
+     * and rethrows it, and the outermost call runs the whole unit again.
+     */
+    public function testTransientFailureInANestedCallRunsTheOuterTransactionAgain(): void
     {
         $adapter = new DatabaseMemory();
         $outer = 0;
@@ -308,8 +312,54 @@ class TransactionRetryTest extends TestCase
 
         $this->assertSame($stored, $result);
         $this->assertSame(2, $nested);
-        $this->assertSame(1, $outer);
+        $this->assertSame(2, $outer);
         $this->assertFalse($adapter->inTransaction());
+    }
+
+    /**
+     * A lock conflict that keeps failing runs the nested callback once per attempt of the
+     * outermost call, on every entry point, instead of once per attempt of each call.
+     */
+    #[DataProvider('entries')]
+    public function testEveryEntryPointRunsAPersistentNestedLockConflictOncePerAttempt(string $entry): void
+    {
+        [$transaction, $adapter] = $this->entry($entry);
+        $failure = new ContentionException('Lock wait timeout exceeded');
+        $outer = 0;
+        $nested = 0;
+
+        $thrown = $this->capture(function () use ($transaction, $failure, &$outer, &$nested): void {
+            $transaction(function () use ($transaction, $failure, &$outer, &$nested): void {
+                $outer++;
+                $transaction(function () use ($failure, &$nested): never {
+                    $nested++;
+
+                    throw $failure;
+                });
+            });
+        });
+
+        $this->assertSame($failure, $thrown);
+        $this->assertSame(self::ATTEMPTS, $outer, "{$entry} must retry the outermost call");
+        $this->assertSame(self::ATTEMPTS, $nested, "{$entry} must run the nested call once per attempt");
+        $this->assertFalse($adapter->inTransaction());
+    }
+
+    /**
+     * The count of enclosing calls unwinds with every call, so a later top-level call owns its
+     * retries again.
+     */
+    public function testATopLevelCallAfterANestedFailureRetriesAgain(): void
+    {
+        $adapter = new DatabaseMemory();
+        $this->capture(fn () => $adapter->withTransaction(fn () => $adapter->withTransaction(static function (): never {
+            throw new ContentionException('Lock not available');
+        })));
+
+        [$thrown, $attempts] = $this->attempt($adapter->withTransaction(...), new ContentionException('Lock not available'));
+
+        $this->assertInstanceOf(ContentionException::class, $thrown);
+        $this->assertSame(self::ATTEMPTS, $attempts);
     }
 
     /**

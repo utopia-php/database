@@ -8,6 +8,7 @@ use PHPUnit\Framework\TestCase;
 use Tests\Unit\Support\EngineError;
 use Throwable;
 use Utopia\Database\Adapter\MariaDB;
+use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Exception\Contention as ContentionException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
@@ -16,6 +17,8 @@ use Utopia\Database\Exception\Transaction as TransactionException;
 
 final class TransactionStateTest extends TestCase
 {
+    private const int ATTEMPTS = 3;
+
     /**
      * The server ends the session after the outer callback wrote A. The nested SAVEPOINT
      * finds the connection gone, the connection reconnects and rethrows, and rolling back
@@ -115,30 +118,113 @@ final class TransactionStateTest extends TestCase
     }
 
     /**
-     * While the enclosing transaction holds, a nested attempt that failed transiently rolls
-     * back to its savepoint and runs again inside the same outer transaction. A lock wait
-     * timeout rolls back only the statement, so the savepoint holds.
+     * A lock wait timeout rolls back only the statement, so the nested call's savepoint holds.
+     * The nested call rolls back to it and rethrows, and the outermost call, which owns the
+     * retries, runs the whole unit again: the nested call never runs twice in one attempt.
      */
-    public function testNestedTransactionRetriesWhileTheOuterTransactionHolds(): void
+    public function testNestedLockWaitTimeoutRunsTheOutermostTransactionAgain(): void
     {
         $connection = $this->createConnection();
         $adapter = new MariaDB($connection);
-        $attempts = 0;
+        $outer = 0;
+        /** @var list<int> $nested */
+        $nested = [];
+        /** @var list<Throwable> $failures */
+        $failures = [];
         $stored = \uniqid();
 
-        $result = $adapter->withTransaction(function () use ($adapter, &$attempts, $stored): string {
-            return $adapter->withTransaction(function () use (&$attempts, $stored): string {
-                $attempts++;
-                if ($attempts === 1) {
-                    throw new ContentionException('Lock wait timeout exceeded');
-                }
+        $result = $adapter->withTransaction(function () use ($adapter, $connection, &$outer, &$nested, &$failures, $stored): string {
+            $outer++;
+            $attempt = $outer;
 
-                return $stored;
-            });
+            try {
+                return $adapter->withTransaction(function () use ($adapter, $connection, $attempt, &$nested, $stored): string {
+                    $nested[] = $attempt;
+                    if ($attempt === 1) {
+                        $connection->lockWaitTimeout();
+                    }
+                    $adapter->exists('database', 'aggregations');
+
+                    return $stored;
+                });
+            } catch (Throwable $error) {
+                $failures[] = $error;
+
+                throw $error;
+            }
         });
 
         $this->assertSame($stored, $result);
-        $this->assertSame(2, $attempts);
+        $this->assertSame(2, $outer);
+        $this->assertSame([1, 2], $nested, 'The nested call must not run again inside the same attempt');
+        $this->assertCount(1, $failures);
+        $this->assertInstanceOf(ContentionException::class, $failures[0]);
+        $this->assertSame(2, $connection->begins);
+        $this->assertSame(1, $connection->commits);
+        $this->assertFalse($adapter->inTransaction());
+    }
+
+    /**
+     * A lock that stays held fails every attempt: the nested call runs once per attempt of the
+     * outermost call, three times in all, not three times per attempt.
+     */
+    public function testPersistentNestedLockWaitTimeoutRunsTheNestedCallOncePerAttempt(): void
+    {
+        $connection = $this->createConnection();
+        $adapter = new MariaDB($connection);
+
+        [$error, $outer, $nested] = $this->lockedNestedCall($adapter, $connection->lockWaitTimeout(...));
+
+        $this->assertInstanceOf(ContentionException::class, $error);
+        $this->assertSame('Lock wait timeout exceeded', $error->getMessage());
+        $this->assertSame(self::ATTEMPTS, $outer);
+        $this->assertSame(self::ATTEMPTS, $nested);
+        $this->assertSame(self::ATTEMPTS, $connection->begins);
+        $this->assertSame(0, $connection->commits);
+        $this->assertFalse($adapter->inTransaction());
+    }
+
+    public function testPersistentNestedLockNotAvailableRunsTheNestedCallOncePerAttempt(): void
+    {
+        $connection = $this->createConnection();
+        $adapter = new Postgres($connection);
+
+        [$error, $outer, $nested] = $this->lockedNestedCall($adapter, $connection->lockNotAvailable(...));
+
+        $this->assertInstanceOf(ContentionException::class, $error);
+        $this->assertSame('Lock not available', $error->getMessage());
+        $this->assertSame(self::ATTEMPTS, $outer);
+        $this->assertSame(self::ATTEMPTS, $nested);
+        $this->assertSame(self::ATTEMPTS, $connection->begins);
+        $this->assertSame(0, $connection->commits);
+        $this->assertFalse($adapter->inTransaction());
+    }
+
+    /**
+     * No withTransaction() encloses a call nested in a transaction begun by hand, so the nested
+     * call owns its retries and runs again in its savepoint.
+     */
+    public function testNestedCallInATransactionBegunByHandRetriesInItsSavepoint(): void
+    {
+        $connection = $this->createConnection();
+        $adapter = new MariaDB($connection);
+        $nested = 0;
+        $stored = \uniqid();
+
+        $adapter->startTransaction();
+        $result = $adapter->withTransaction(function () use ($adapter, $connection, &$nested, $stored): string {
+            $nested++;
+            if ($nested === 1) {
+                $connection->lockWaitTimeout();
+            }
+            $adapter->exists('database', 'aggregations');
+
+            return $stored;
+        });
+        $adapter->commitTransaction();
+
+        $this->assertSame($stored, $result);
+        $this->assertSame(2, $nested);
         $this->assertSame(1, $connection->begins);
         $this->assertSame(1, $connection->commits);
         $this->assertFalse($adapter->inTransaction());
@@ -422,6 +508,32 @@ final class TransactionStateTest extends TestCase
         $this->assertSame(2, $connection->begins);
         $this->assertSame(1, $connection->commits);
         $this->assertFalse($adapter->inTransaction());
+    }
+
+    /**
+     * Run a nested call whose statement fails on the lock $lock arms, inside an outer call.
+     *
+     * @param  callable(): void  $lock
+     * @return array{?Throwable, int, int} What the outer call threw, and how many times the outer and the nested
+     *                                     callbacks ran
+     */
+    private function lockedNestedCall(MariaDB|Postgres $adapter, callable $lock): array
+    {
+        $outer = 0;
+        $nested = 0;
+
+        $error = $this->capture(function () use ($adapter, $lock, &$outer, &$nested): void {
+            $adapter->withTransaction(function () use ($adapter, $lock, &$outer, &$nested): void {
+                $outer++;
+                $adapter->withTransaction(function () use ($adapter, $lock, &$nested): void {
+                    $nested++;
+                    $lock();
+                    $adapter->exists('database', 'aggregations');
+                });
+            });
+        });
+
+        return [$error, $outer, $nested];
     }
 
     /**

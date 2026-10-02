@@ -60,23 +60,70 @@ trait Transactions
     protected function withMutation(Event $event, mixed $data, callable $callback): mixed
     {
         return $this->withInvalidationScope(fn () => $this->withAdapterTransaction(function () use ($event, $data, $callback) {
-            $tokens = $this->getInvalidationTokens($event, $data);
-            $context = $this->getEventContext();
-            $pending = [];
-            foreach ($tokens as $key => $token) {
-                if (isset($this->queryCacheMutations[$context][$key])) {
-                    continue;
-                }
-
-                $pending[$key] = $token;
-            }
-            $this->blockInvalidation($pending);
-            foreach ($pending as $key => $token) {
-                $this->queryCacheMutations[$context][$key] = $token;
-            }
+            $this->blockMutation($event, $data);
 
             return $callback();
         }));
+    }
+
+    /**
+     * Run the callback in a savepoint of the open transaction, which the adapter must support, without
+     * retrying it. When the callback throws, the savepoint is rolled back and the fallback's result is
+     * returned instead.
+     *
+     * @template T
+     *
+     * @param  callable(): T  $callback
+     * @param  callable(Throwable): T  $fallback
+     * @return T
+     *
+     * @throws Throwable When the savepoint cannot be started, committed or rolled back
+     */
+    public function withSavepoint(callable $callback, callable $fallback): mixed
+    {
+        $context = $this->getEventContext();
+        $queued = \count($this->documentPurgeEvents[$context] ?? []);
+
+        $this->adapter->startTransaction();
+
+        try {
+            $result = $callback();
+        } catch (Throwable $error) {
+            if (! $this->adapter->rollbackTransaction()) {
+                throw $error;
+            }
+
+            if (isset($this->documentPurgeEvents[$context])) {
+                \array_splice($this->documentPurgeEvents[$context], $queued);
+            }
+
+            return $fallback($error);
+        }
+
+        $this->adapter->commitTransaction();
+
+        return $result;
+    }
+
+    /**
+     * Block the query cache of the collections a mutation writes, once per invalidation scope.
+     */
+    private function blockMutation(Event $event, mixed $data): void
+    {
+        $tokens = $this->getInvalidationTokens($event, $data);
+        $context = $this->getEventContext();
+        $pending = [];
+        foreach ($tokens as $key => $token) {
+            if (isset($this->queryCacheMutations[$context][$key])) {
+                continue;
+            }
+
+            $pending[$key] = $token;
+        }
+        $this->blockInvalidation($pending);
+        foreach ($pending as $key => $token) {
+            $this->queryCacheMutations[$context][$key] = $token;
+        }
     }
 
     /**

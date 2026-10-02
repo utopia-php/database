@@ -142,14 +142,6 @@ class Mirror extends Database
     }
 
     /**
-     * @return array<Filter>
-     */
-    public function getWriteFilters(): array
-    {
-        return $this->writeFilters;
-    }
-
-    /**
      * @param  callable(string, Throwable): void  $callback
      */
     public function onError(callable $callback): void

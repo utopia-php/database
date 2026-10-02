@@ -17,6 +17,7 @@ to 8.0. [CHANGELOG.md](CHANGELOG.md) lists everything that is new in 8.0.
 - [Adapters](#adapters)
 - [Mirror](#mirror)
 - [Validators and helpers](#validators-and-helpers)
+- [Removed unused public methods](#removed-unused-public-methods)
 - [Rules for features new in 8.0](#rules-for-features-new-in-80)
 - [Known limitations](#known-limitations)
 
@@ -1160,6 +1161,18 @@ in 7.x, ahead of the registered `Transform` hooks.
   filters on `alias.attribute`, the filters of join ON lists and `having()` conditions in the list are converted
   too; aggregates and selects in the list are left as they are. Without it the method converts as before.
 - `Utopia\Database\Storage::joinAlias()` returns the alias an undeclared join is read under (`j0`, `j1`, ...).
+
+## Removed unused public methods
+
+Nothing in the library, Appwrite, Appwrite Cloud or utopia-php/migration calls these 7.x methods.
+
+| Removed | Replacement |
+|---|---|
+| `Adapter\SQL::setFloatPrecision(int $precision)` | Floats are bound with 17 digits. A subclass can set the protected `$floatPrecision` property |
+| `Adapter\SQLite::getEmulateMySQL()` | `setEmulateMySQL()` is kept. A subclass reads the protected `$emulateMySQL` property |
+| `Database::getInstanceFilters()` | The `$filters` given to the constructor. A subclass reads the protected `$instanceFilters` property |
+| `Mirror::getWriteFilters()` | The `$filters` given to the constructor. A subclass reads the protected `$writeFilters` property |
+| `Validator\Structure::getFormats()` | `Structure::hasFormat($name, $type)` and `Structure::getFormat($name, $type)` |
 
 ## Rules for features new in 8.0
 

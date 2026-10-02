@@ -1053,6 +1053,101 @@ trait Documents
      */
     public function createDocument(string $collection, Document $document): Document
     {
+        $this->assertCreateTenancy($collection);
+
+        $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        $document = $this->prepareDocument($collection, $document);
+
+        $document = $this->withMutation(Event::DocumentCreate, $document, function () use ($collection, $document) {
+            $hook = $this->relationshipHook;
+            if ($hook?->isEnabled()) {
+                $document = $this->silent(fn () => $hook->afterDocumentCreate($collection, $document));
+            }
+
+            $document = $this->adapter->createDocument($collection, $document);
+            $this->withDocumentTenant(
+                $document,
+                fn () => $this->purgeCachedDocumentInternal($collection->getId(), $document->getId())
+            );
+
+            return $document;
+        });
+
+        $hook = $this->relationshipHook;
+        if ($hook !== null && ! $hook->isInBatchPopulation() && $hook->isEnabled()) {
+            $fetchDepth = $hook->getWriteStackCount();
+            $documents = $this->silent(fn () => $hook->populateDocuments([$document], $collection, $fetchDepth));
+            $document = $documents[0];
+        }
+
+        $document = $this->castingAfter($collection, $document);
+        $document = $this->casting($collection, $document);
+        $document = $this->decode($collection, $document);
+
+        if (isset($this->documentTypes[$collection->getId()])) {
+            $document = $this->createDocumentInstance($collection->getId(), $document->getArrayCopy());
+        }
+
+        $document = $this->decorateDocument(Event::DocumentCreate, $collection, $document);
+
+        $this->triggerHooks(Event::DocumentCreate, $document);
+
+        return $document;
+    }
+
+    /**
+     * Apply to a document everything createDocument() does before it writes the document: the tenancy and
+     * permission checks, the generated attributes, encoding and validation. The relationship hook prepares
+     * the related documents of a write this way and writes them through createPrepared().
+     *
+     * @throws AuthorizationException
+     * @throws DatabaseException
+     * @throws StructureException
+     */
+    public function prepareCreate(Document $collection, Document $document): Document
+    {
+        $this->assertCreateTenancy($collection->getId());
+
+        return $this->prepareDocument($collection, $document);
+    }
+
+    /**
+     * Write documents prepared by prepareCreate() one at a time in the order given, each the way
+     * createDocument() writes it, under one invalidation scope.
+     *
+     * @param  list<array{Document, Document}>  $documents  Each prepared document after its collection
+     *
+     * @throws DuplicateException
+     * @throws DatabaseException
+     */
+    public function createPrepared(array $documents): void
+    {
+        $this->withInvalidationScope(function () use ($documents): void {
+            $collections = [];
+            foreach ($documents as [$collection, $document]) {
+                $collections[$collection->getId()][] = $document;
+            }
+
+            foreach ($collections as $created) {
+                $this->blockMutation(Event::DocumentCreate, $created);
+            }
+
+            foreach ($documents as [$collection, $document]) {
+                $document = $this->adapter->createDocument($collection, $document);
+                $this->withDocumentTenant(
+                    $document,
+                    fn () => $this->purgeCachedDocumentInternal($collection->getId(), $document->getId())
+                );
+            }
+        });
+    }
+
+    /**
+     * @throws DatabaseException
+     */
+    private function assertCreateTenancy(string $collection): void
+    {
         if (
             $collection !== self::METADATA
             && $this->adapter->getSharedTables()
@@ -1068,9 +1163,15 @@ trait Documents
         ) {
             throw new DatabaseException('Shared tables must be enabled if tenant per document is enabled.');
         }
+    }
 
-        $collection = $this->silent(fn () => $this->getCollection($collection));
-
+    /**
+     * @throws AuthorizationException
+     * @throws DatabaseException
+     * @throws StructureException
+     */
+    private function prepareDocument(Document $collection, Document $document): Document
+    {
         if ($collection->getId() !== self::METADATA) {
             $isValid = $this->authorization->isValid(new Input(PermissionType::Create, $collection->getCreate()));
             if (! $isValid) {
@@ -1130,44 +1231,7 @@ trait Documents
             }
         }
 
-        $document = $this->castingBefore($collection, $document);
-
-        $document = $this->withMutation(Event::DocumentCreate, $document, function () use ($collection, $document) {
-            $hook = $this->relationshipHook;
-            if ($hook?->isEnabled()) {
-                $document = $this->silent(fn () => $hook->afterDocumentCreate($collection, $document));
-            }
-
-            $document = $this->adapter->createDocument($collection, $document);
-            $this->withDocumentTenant(
-                $document,
-                fn () => $this->purgeCachedDocumentInternal($collection->getId(), $document->getId())
-            );
-
-            return $document;
-        });
-
-        $hook = $this->relationshipHook;
-        if ($hook !== null && ! $hook->isInBatchPopulation() && $hook->isEnabled()) {
-            $fetchDepth = $hook->getWriteStackCount();
-            $documents = $this->silent(fn () => $hook->populateDocuments([$document], $collection, $fetchDepth));
-            $document = $documents[0];
-        }
-
-        $document = $this->castingAfter($collection, $document);
-        $document = $this->casting($collection, $document);
-        $document = $this->decode($collection, $document);
-
-        // Convert to custom document type if mapped
-        if (isset($this->documentTypes[$collection->getId()])) {
-            $document = $this->createDocumentInstance($collection->getId(), $document->getArrayCopy());
-        }
-
-        $document = $this->decorateDocument(Event::DocumentCreate, $collection, $document);
-
-        $this->triggerHooks(Event::DocumentCreate, $document);
-
-        return $document;
+        return $this->castingBefore($collection, $document);
     }
 
     /**

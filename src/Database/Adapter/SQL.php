@@ -233,14 +233,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
-     * Configure float precision for parameter binding/logging.
-     */
-    public function setFloatPrecision(int $precision): void
-    {
-        $this->floatPrecision = $precision;
-    }
-
-    /**
      * Helper to format a float value according to configured precision for binding/logging.
      */
     protected function getFloatPrecision(float $value): string
@@ -1835,6 +1827,27 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $builder->selectRaw(
                     $this->getSQLReadableDistance($vectorDistance['expression']).' AS '.$this->quote(Storage::DISTANCE),
                     $vectorDistance['bindings']
+                );
+            }
+
+            if ($hasJoins && ! $hasAggregation && ! $hasDistinct && $vectorQueries === [] && $this->boundsJoinedSort()) {
+                $this->boundJoinedSortToPage(
+                    $builder,
+                    $collectionDoc,
+                    $queries,
+                    $adapterFilterQueries,
+                    $joinAliases,
+                    $orderAttributes,
+                    $orderTypes,
+                    $limit,
+                    $offset,
+                    $cursor,
+                    $cursorDirection,
+                    $resolveInternalKey,
+                    $name,
+                    $alias,
+                    $roles,
+                    $forPermission,
                 );
             }
 
@@ -5558,6 +5571,33 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             return;
         }
 
+        $cursorConditions = $this->cursorConditions($orderAttributes, $orderTypes, $cursor, $cursorDirection, $resolveInternalKey, $nullable);
+
+        if ($cursorConditions === []) {
+            return;
+        }
+
+        $builder->filter([$this->anyOf($cursorConditions)]);
+    }
+
+    /**
+     * One condition per order position: the rows equal to the cursor before it and after the cursor in it. A row
+     * follows the cursor when it meets any of them.
+     *
+     * @param  array<string>  $orderAttributes
+     * @param  array<OrderDirection>  $orderTypes
+     * @param  array<string, mixed>  $cursor
+     * @param  callable(string): string  $resolveInternalKey
+     * @return list<BaseQuery>
+     */
+    private function cursorConditions(
+        array $orderAttributes,
+        array $orderTypes,
+        array $cursor,
+        CursorDirection $cursorDirection,
+        callable $resolveInternalKey,
+        bool $nullable,
+    ): array {
         $cursorConditions = [];
 
         foreach ($orderAttributes as $i => $originalAttribute) {
@@ -5590,16 +5630,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $andConditions = [];
 
             for ($j = 0; $j < $i; $j++) {
-                $prevOriginal = $orderAttributes[$j];
-                $prevAttr = $resolveInternalKey($prevOriginal);
-                if ($nullable && $cursor[$prevOriginal] === null) {
-                    $andConditions[] = BaseQuery::isNull($prevAttr);
-
-                    continue;
-                }
-                /** @var array<array<mixed>|bool|float|int|string|null> $prevCursorVals */
-                $prevCursorVals = [$cursor[$prevOriginal]];
-                $andConditions[] = BaseQuery::equal($prevAttr, $prevCursorVals);
+                $andConditions[] = $this->cursorEquality($orderAttributes[$j], $cursor, $resolveInternalKey, $nullable);
             }
 
             if ($nullable) {
@@ -5620,22 +5651,229 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 }
             }
 
-            if (count($andConditions) === 1) {
-                $cursorConditions[] = $andConditions[0];
-            } else {
-                $cursorConditions[] = BaseQuery::and($andConditions);
-            }
+            $cursorConditions[] = $this->allOf($andConditions);
         }
 
-        if ($cursorConditions === []) {
+        return $cursorConditions;
+    }
+
+    /**
+     * @param  array<string, mixed>  $cursor
+     * @param  callable(string): string  $resolveInternalKey
+     */
+    private function cursorEquality(string $attribute, array $cursor, callable $resolveInternalKey, bool $nullable): BaseQuery
+    {
+        $column = $resolveInternalKey($attribute);
+        if ($nullable && $cursor[$attribute] === null) {
+            return BaseQuery::isNull($column);
+        }
+
+        /** @var array<array<mixed>|bool|float|int|string|null> $values */
+        $values = [$cursor[$attribute]];
+
+        return BaseQuery::equal($column, $values);
+    }
+
+    /**
+     * Whether a read whose rows are its left-joined rows picks the main rows its page can reach before it joins
+     * them (boundJoinedSortToPage()). An engine that cannot read an order over two tables from an index sorts the
+     * whole join before the limit otherwise.
+     */
+    protected function boundsJoinedSort(): bool
+    {
+        return false;
+    }
+
+    /**
+     * A read ordered by main attributes up to a unique one, then by joined ones, returns every joined row of one main
+     * document together. Without inner joins and without conditions on joined attributes, every main document it
+     * matches gives at least one row, so its page of `limit` rows after `offset` rows (and after the cursor) comes
+     * from the first `offset + limit` main documents in that order after the cursor's own, plus the cursor's own.
+     * The read joins from a derived table of those main rows (an index can serve its order up to its limit), so the
+     * join and its sort only see their rows. The rows, their order and the page are those of the read without it.
+     * A fulltext search needs the main table itself, so a read with one keeps the whole join.
+     *
+     * @param  array<BaseQuery>  $queries
+     * @param  array<Query>  $adapterFilterQueries
+     * @param  array<string>  $joinAliases
+     * @param  array<string>  $orderAttributes
+     * @param  array<OrderDirection>  $orderTypes
+     * @param  array<string, mixed>  $cursor
+     * @param  callable(string): string  $resolveInternalKey
+     * @param  array<string>  $roles
+     */
+    private function boundJoinedSortToPage(
+        SQLBuilder $builder,
+        Document $collection,
+        array $queries,
+        array $adapterFilterQueries,
+        array $joinAliases,
+        array $orderAttributes,
+        array $orderTypes,
+        ?int $limit,
+        ?int $offset,
+        array $cursor,
+        CursorDirection $cursorDirection,
+        callable $resolveInternalKey,
+        string $name,
+        string $alias,
+        array $roles,
+        PermissionType $forPermission,
+    ): void {
+        if ($limit === null) {
             return;
         }
 
-        if (count($cursorConditions) === 1) {
-            $builder->filter($cursorConditions);
-        } else {
-            $builder->filter([BaseQuery::or($cursorConditions)]);
+        $reach = (int) $offset + ($cursor === [] ? 0 : 1);
+        if ($limit > PHP_INT_MAX - $reach) {
+            return;
         }
+
+        $mainOrder = $this->mainOrderPrefix($orderAttributes, $orderTypes, $joinAliases);
+        if ($mainOrder === null) {
+            return;
+        }
+
+        $filters = [];
+        foreach ($queries as $query) {
+            $method = $query->getMethod();
+            if ($method === Method::Select) {
+                continue;
+            }
+            if ($method->isJoin()) {
+                if ($method !== Method::LeftJoin) {
+                    return;
+                }
+
+                continue;
+            }
+            if (! $this->isMainRowCondition($query, $joinAliases)) {
+                return;
+            }
+            $filters[] = clone $query;
+        }
+
+        if ($adapterFilterQueries !== []) {
+            return;
+        }
+
+        [$mainAttributes, $mainTypes] = $mainOrder;
+
+        $page = $this->newBuilder($name, $alias);
+        $page->select([$alias.'.*']);
+        $page->filter($filters);
+
+        if (
+            $this->authorization->getStatus()
+            && $collection->getAttribute(Database::COLLECTION_GRANTED, false) !== true
+            && $this->filtersPerDocument($collection)
+        ) {
+            $page->addHook($this->newPermissionHook($name, $roles, $forPermission->value, $alias.'.'.Storage::UID));
+        }
+
+        if ($cursor !== []) {
+            $conditions = $this->cursorConditions($mainAttributes, $mainTypes, $cursor, $cursorDirection, $resolveInternalKey, nullable: true);
+            $equalities = [];
+            foreach ($mainAttributes as $attribute) {
+                $equalities[] = $this->cursorEquality($attribute, $cursor, $resolveInternalKey, nullable: true);
+            }
+            $conditions[] = $this->allOf($equalities);
+            $page->filter([$this->anyOf($conditions)]);
+        }
+
+        $this->applyFindPage($page, $mainAttributes, $mainTypes, $limit + $reach, null, $cursorDirection);
+
+        $builder->fromSub($page, $alias);
+    }
+
+    /**
+     * The leading main attributes of an order, when they hold a unique one and joined attributes follow them: the
+     * order a read returns the joined rows of one main document together in.
+     *
+     * @param  array<string>  $orderAttributes
+     * @param  array<OrderDirection>  $orderTypes
+     * @param  array<string>  $joinAliases
+     * @return array{non-empty-list<string>, list<OrderDirection>}|null
+     */
+    private function mainOrderPrefix(array $orderAttributes, array $orderTypes, array $joinAliases): ?array
+    {
+        $attributes = [];
+        $types = [];
+        $unique = false;
+        $joined = false;
+        foreach (\array_values($orderAttributes) as $position => $attribute) {
+            $type = $orderTypes[$position] ?? OrderDirection::Asc;
+            if ($type === OrderDirection::Random) {
+                return null;
+            }
+            if ($this->joinAliasOf($attribute, $joinAliases) !== null) {
+                $joined = true;
+                break;
+            }
+            $attributes[] = $attribute;
+            $types[] = $type;
+            $unique = $unique || $attribute === Document::SEQUENCE || $attribute === Document::ID;
+        }
+
+        if (! $unique || ! $joined || $attributes === []) {
+            return null;
+        }
+
+        return [$attributes, $types];
+    }
+
+    /**
+     * Whether a condition reads only main attributes, so it keeps or drops a main document with all its joined rows.
+     *
+     * @param  array<string>  $joinAliases
+     */
+    private function isMainRowCondition(BaseQuery $query, array $joinAliases): bool
+    {
+        $method = $query->getMethod();
+        if (
+            $method === Method::Search
+            || $method === Method::NotSearch
+            || (! $method->isFilter()
+            && ! $method->isSpatial()
+            && ! $method->isJson()
+            && ! \in_array($method, self::ROW_CONDITION_GROUPS, true))
+        ) {
+            return false;
+        }
+
+        if ($this->joinAliasOf($query->getAttribute(), $joinAliases) !== null) {
+            return false;
+        }
+
+        foreach ($query->getValues() as $value) {
+            if ($value instanceof BaseQuery && ! $this->isMainRowCondition($value, $joinAliases)) {
+                return false;
+            }
+            if (
+                \is_string($value)
+                && \in_array($method, [Method::Exists, Method::NotExists], true)
+                && $this->joinAliasOf($value, $joinAliases) !== null
+            ) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * @param  array<string>  $joinAliases
+     */
+    private function joinAliasOf(string $attribute, array $joinAliases): ?string
+    {
+        $dot = \strpos($attribute, '.');
+        if ($dot === false) {
+            return null;
+        }
+
+        $prefix = \substr($attribute, 0, $dot);
+
+        return \in_array($prefix, $joinAliases, true) ? $prefix : null;
     }
 
     /**

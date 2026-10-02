@@ -132,9 +132,9 @@ trait Documents
     {
         $current ??= 0;
 
-        if (Attribute::isIntegerType($attribute->type)) {
-            if (! $attribute->signed
-                && $attribute->type === ColumnType::BigInteger
+        if (Attribute::isIntegerType($attribute->getType())) {
+            if (! $attribute->isSigned()
+                && $attribute->getType() === ColumnType::BigInteger
                 && ! $this->adapter->supports(Capability::UnsignedBigInt)) {
                 throw new TypeException('Unsigned 64-bit arithmetic is not supported by this adapter.');
             }
@@ -148,7 +148,7 @@ trait Documents
             $result = $increase
                 ? BigInt::add($current, $value)
                 : BigInt::subtract($current, $value);
-            $bounds = Attribute::getNumericBounds($attribute->type, $attribute->signed);
+            $bounds = Attribute::getNumericBounds($attribute->getType(), $attribute->isSigned());
             if ($bounds === null) {
                 throw new TypeException('Attribute value must be numeric.');
             }
@@ -168,7 +168,7 @@ trait Documents
 
         $current = $this->getNativeNumber($current);
         $value = $this->getNativeNumber($value);
-        $bounds = Attribute::getNumericBounds($attribute->type, $attribute->signed);
+        $bounds = Attribute::getNumericBounds($attribute->getType(), $attribute->isSigned());
 
         if ($bounds === null || (\is_float($current) && ! \is_finite($current))) {
             throw new TypeException('Attribute value must be a finite numeric value.');
@@ -222,8 +222,8 @@ trait Documents
 
     private function declaredAttribute(Collection $collection, string $key): ?Attribute
     {
-        foreach ($collection->attributes as $attribute) {
-            if ($attribute->key === $key) {
+        foreach ($collection->getDeclaredAttributes() as $attribute) {
+            if ($attribute->getKey() === $key) {
                 return $attribute;
             }
         }
@@ -233,7 +233,7 @@ trait Documents
 
     private function isDeclaredInteger(?Attribute $attribute): bool
     {
-        return $attribute !== null && ! $attribute->array && Attribute::isIntegerType($attribute->type);
+        return $attribute !== null && ! $attribute->isArray() && Attribute::isIntegerType($attribute->getType());
     }
 
     private function assertIntegerChange(int|float|string $value): void
@@ -502,7 +502,7 @@ trait Documents
 
         $joinedCollections = null;
 
-        if ($this->validate && $queries !== []) {
+        if ($this->validation()->get() && $queries !== []) {
             $joinedCollections = $this->resolveJoinedCollections($queries);
             $supportForAttributes = $this->adapter->supports(Capability::DefinedAttributes);
             $supportForJoins = $this->adapter->supports(Capability::Joins);
@@ -970,11 +970,11 @@ trait Documents
         /** @var array<IndexModel> $indexes */
         $indexes = $collection->getAttribute('indexes', []);
         foreach ($indexes as $index) {
-            if ($index->type !== IndexType::Ttl) {
+            if ($index->getType() !== IndexType::Ttl) {
                 continue;
             }
-            $ttlSeconds = $index->ttl;
-            $ttlAttr = $index->attributes[0] ?? null;
+            $ttlSeconds = $index->getTtl();
+            $ttlAttr = $index->getIndexedAttributes()[0] ?? null;
             if ($ttlSeconds <= 0 || ! $ttlAttr) {
                 return false;
             }
@@ -1188,8 +1188,8 @@ trait Documents
         $document
             ->setAttribute(Document::ID, empty($id) ? ID::unique() : $id)
             ->setAttribute(Document::COLLECTION, $collection->getId())
-            ->setAttribute(Document::CREATED_AT, ($createdAt === null || ! $this->preserveDates) ? $time : $createdAt)
-            ->setAttribute(Document::UPDATED_AT, ($updatedAt === null || ! $this->preserveDates) ? $time : $updatedAt);
+            ->setAttribute(Document::CREATED_AT, ($createdAt === null || ! $this->datePreservation()->get()) ? $time : $createdAt)
+            ->setAttribute(Document::UPDATED_AT, ($updatedAt === null || ! $this->datePreservation()->get()) ? $time : $updatedAt);
 
         if (empty($document->getPermissions())) {
             $document->setAttribute(Document::PERMISSIONS, []);
@@ -1210,14 +1210,14 @@ trait Documents
 
         $document = $this->encode($collection, $document);
 
-        if ($this->validate) {
+        if ($this->validation()->get()) {
             $validator = new Permissions();
             if (! $validator->isValid($document->getPermissions())) {
                 throw new DatabaseException($validator->getDescription());
             }
         }
 
-        if ($this->validate) {
+        if ($this->validation()->get()) {
             $structure = new Structure(
                 collection: $collection,
                 idAttributeType: $this->adapter->getIdAttributeType(),
@@ -1283,15 +1283,15 @@ trait Documents
         $time = DateTime::now();
         $modified = 0;
         $hasRelationships = ! empty(\array_filter(
-            $collection->attributes,
-            static fn (Attribute $attribute): bool => $attribute->type === ColumnType::Relationship,
+            $collection->getDeclaredAttributes(),
+            static fn (Attribute $attribute): bool => $attribute->getType() === ColumnType::Relationship,
         ));
 
         // Hoisted: validator only depends on the collection + adapter properties,
         // both stable for this call. Allocating once and reusing across all
         // documents avoids per-document construction and (with the in-class
         // memo) per-document `array_merge` of the attribute list.
-        $validator = $this->validate
+        $validator = $this->validation()->get()
             ? new Structure(
                 collection: $collection,
                 idAttributeType: $this->adapter->getIdAttributeType(),
@@ -1309,8 +1309,8 @@ trait Documents
             $document
                 ->setAttribute(Document::ID, empty($document->getId()) ? ID::unique() : $document->getId())
                 ->setAttribute(Document::COLLECTION, $collection->getId())
-                ->setAttribute(Document::CREATED_AT, ($createdAt === null || ! $this->preserveDates) ? $time : $createdAt)
-                ->setAttribute(Document::UPDATED_AT, ($updatedAt === null || ! $this->preserveDates) ? $time : $updatedAt);
+                ->setAttribute(Document::CREATED_AT, ($createdAt === null || ! $this->datePreservation()->get()) ? $time : $createdAt)
+                ->setAttribute(Document::UPDATED_AT, ($updatedAt === null || ! $this->datePreservation()->get()) ? $time : $updatedAt);
 
             if (empty($document->getPermissions())) {
                 $document->setAttribute(Document::PERMISSIONS, []);
@@ -1358,7 +1358,7 @@ trait Documents
                     return $batch;
                 }
             );
-            $batch = $this->skipDuplicates
+            $batch = $this->duplicateSkipping()->get()
                 ? $this->adapter->skipDuplicates($insert)
                 : $insert();
 
@@ -1459,7 +1459,7 @@ trait Documents
             if ($document[Document::ID] !== $old->getId()) {
                 $skipPermissionsUpdate = false;
             }
-            $document[Document::CREATED_AT] = ($createdAt === null || ! $this->preserveDates) ? $old->getCreatedAt() : $createdAt;
+            $document[Document::CREATED_AT] = ($createdAt === null || ! $this->datePreservation()->get()) ? $old->getCreatedAt() : $createdAt;
 
             if ($this->adapter->getSharedTables()) {
                 $document[Document::TENANT] = $old->getTenant(); // Make sure user doesn't switch tenant
@@ -1503,8 +1503,8 @@ trait Documents
 
                     if (\array_key_exists($key, $relationships)) {
                         $rel = Relationship::fromArray(['collection' => $collection->getId()] + $relationships[$key]->getArrayCopy());
-                        $relationType = $rel->type;
-                        $side = $rel->side;
+                        $relationType = $rel->getType();
+                        $side = $rel->getSide();
                         $storesKey = $relationType === RelationType::OneToOne
                             || ($relationType === RelationType::ManyToOne && $side === RelationSide::Parent)
                             || ($relationType === RelationType::OneToMany && $side === RelationSide::Child);
@@ -1616,17 +1616,18 @@ trait Documents
             }
 
             if ($shouldUpdate) {
-                $document->setAttribute(Document::UPDATED_AT, ($newUpdatedAt === null || ! $this->preserveDates) ? $time : $newUpdatedAt);
+                $document->setAttribute(Document::UPDATED_AT, ($newUpdatedAt === null || ! $this->datePreservation()->get()) ? $time : $newUpdatedAt);
             }
 
             // Check if document was updated after the request timestamp
             $oldUpdatedAt = new PhpDateTime($old->getUpdatedAt() ?? 'now');
-            if (! is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+            $requestTimestamp = $this->requestTimestamp()->get();
+            if ($requestTimestamp !== null && $oldUpdatedAt > $requestTimestamp) {
                 throw new ConflictException('Document was updated after the request timestamp');
             }
 
             $storedAttributes = [];
-            if ($this->validate && $collection->getId() !== self::METADATA) {
+            if ($this->validation()->get() && $collection->getId() !== self::METADATA) {
                 foreach ($document as $key => $value) {
                     if ($old->offsetExists($key) && self::valuesEqual($value, $old->getAttribute($key))) {
                         $storedAttributes[] = $key;
@@ -1636,7 +1637,7 @@ trait Documents
 
             $document = $this->encode($collection, $document);
 
-            if ($this->validate) {
+            if ($this->validation()->get()) {
                 $structureValidator = new Structure(
                     collection: $collection,
                     idAttributeType: $this->adapter->getIdAttributeType(),
@@ -1769,7 +1770,7 @@ trait Documents
 
         $this->checkQueryTypes($queries);
 
-        if ($this->validate) {
+        if ($this->validation()->get()) {
             $validator = $this->getQueriesValidator($collection, $queries);
 
             if (! $validator->isValid($queries)) {
@@ -1788,7 +1789,7 @@ trait Documents
         unset($updates[Document::ID]);
         unset($updates[Document::TENANT]);
 
-        if (($updates->getCreatedAt() === null || ! $this->preserveDates)) {
+        if (($updates->getCreatedAt() === null || ! $this->datePreservation()->get())) {
             unset($updates[Document::CREATED_AT]);
         } else {
             $updates[Document::CREATED_AT] = $updates->getCreatedAt();
@@ -1799,7 +1800,7 @@ trait Documents
         }
 
         $updatedAt = $updates->getUpdatedAt();
-        $updates[Document::UPDATED_AT] = ($updatedAt === null || ! $this->preserveDates) ? DateTime::now() : $updatedAt;
+        $updates[Document::UPDATED_AT] = ($updatedAt === null || ! $this->datePreservation()->get()) ? DateTime::now() : $updatedAt;
 
         $decodedUpdates = clone $updates;
         $updates = $this->encode(
@@ -1808,7 +1809,7 @@ trait Documents
             applyDefaults: false
         );
 
-        if ($this->validate) {
+        if ($this->validation()->get()) {
             $validator = new PartialStructure(
                 collection: $collection,
                 idAttributeType: $this->adapter->getIdAttributeType(),
@@ -1909,7 +1910,8 @@ trait Documents
                         throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
                     }
 
-                    if (! is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+                    $requestTimestamp = $this->requestTimestamp()->get();
+                    if ($requestTimestamp !== null && $oldUpdatedAt > $requestTimestamp) {
                         throw new ConflictException('Document was updated after the request timestamp');
                     }
 
@@ -2096,8 +2098,8 @@ trait Documents
         $operatorIds = [];
         $seenIds = [];
         $hasRelationships = ! empty(\array_filter(
-            $collection->attributes,
-            static fn (Attribute $attribute): bool => $attribute->type === ColumnType::Relationship,
+            $collection->getDeclaredAttributes(),
+            static fn (Attribute $attribute): bool => $attribute->getType() === ColumnType::Relationship,
         ));
         $existing = $this->findDocumentsToUpsert($collection->getId(), $documents);
 
@@ -2113,7 +2115,7 @@ trait Documents
             $regularUpdates = $extracted['updates'];
 
             $internalKeys = \array_map(
-                fn (Attribute $attr) => $attr->key,
+                fn (Attribute $attr) => $attr->getKey(),
                 self::internalAttributes()
             );
 
@@ -2153,7 +2155,7 @@ trait Documents
                 // Also check if old document has attributes that new document doesn't
                 if (! $hasChanges) {
                     $internalKeys = \array_map(
-                        fn (Attribute $attr) => $attr->key,
+                        fn (Attribute $attr) => $attr->getKey(),
                         self::internalAttributes()
                     );
 
@@ -2196,14 +2198,14 @@ trait Documents
             $document
                 ->setAttribute(Document::ID, empty($document->getId()) ? ID::unique() : $document->getId())
                 ->setAttribute(Document::COLLECTION, $collection->getId())
-                ->setAttribute(Document::UPDATED_AT, ($updatedAt === null || ! $this->preserveDates) ? $time : $updatedAt);
+                ->setAttribute(Document::UPDATED_AT, ($updatedAt === null || ! $this->datePreservation()->get()) ? $time : $updatedAt);
 
-            if (! $this->preserveSequence) {
+            if (! $this->sequencePreservation()->get()) {
                 $document->removeAttribute(Document::SEQUENCE);
             }
 
             $createdAt = $document->getCreatedAt();
-            if ($createdAt === null || ! $this->preserveDates) {
+            if ($createdAt === null || ! $this->datePreservation()->get()) {
                 $document->setAttribute(Document::CREATED_AT, $old->isEmpty() ? $time : $old->getCreatedAt());
             } else {
                 $document->setAttribute(Document::CREATED_AT, $createdAt);
@@ -2241,7 +2243,7 @@ trait Documents
 
             $document = $this->encode($collection, $document);
 
-            if ($this->validate) {
+            if ($this->validation()->get()) {
                 $validator = new Structure(
                     collection: $collection,
                     idAttributeType: $this->adapter->getIdAttributeType(),
@@ -2265,7 +2267,8 @@ trait Documents
                     throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
                 }
 
-                if (! \is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+                $requestTimestamp = $this->requestTimestamp()->get();
+                if ($requestTimestamp !== null && $oldUpdatedAt > $requestTimestamp) {
                     throw new ConflictException('Document was updated after the request timestamp');
                 }
             }
@@ -2494,7 +2497,7 @@ trait Documents
             /** @var array<Attribute> $allAttrs */
             $allAttrs = $collection->getAttribute('attributes', []);
             $matchedAttrs = \array_filter($allAttrs, function (Attribute $a) use ($attribute) {
-                return $a->key === $attribute;
+                return $a->getKey() === $attribute;
             });
 
             if (empty($matchedAttrs)) {
@@ -2503,7 +2506,7 @@ trait Documents
 
             /** @var Attribute $matchedAttr */
             $matchedAttr = \end($matchedAttrs);
-            if (! Attribute::isNumericType($matchedAttr->type) || $matchedAttr->array) {
+            if (! Attribute::isNumericType($matchedAttr->getType()) || $matchedAttr->isArray()) {
                 throw new TypeException('Attribute must be an integer or float and can not be an array.');
             }
             $numericAttribute = $matchedAttr;
@@ -2552,7 +2555,7 @@ trait Documents
                 $result = $currentVal + $this->getNativeNumber($value);
             }
             $exceedsMaximum = ! \is_null($max) && (
-                $numericAttribute instanceof Attribute && Attribute::isIntegerType($numericAttribute->type)
+                $numericAttribute instanceof Attribute && Attribute::isIntegerType($numericAttribute->getType())
                     ? BigInt::compare($result, $max) > 0
                     : $result > $max
             );
@@ -2562,9 +2565,9 @@ trait Documents
 
             $time = DateTime::nowAfter($document->getUpdatedAt());
             $updatedAt = $document->getUpdatedAt();
-            $updatedAt = (empty($updatedAt) || ! $this->preserveDates) ? $time : DateTime::setTimezone($updatedAt);
+            $updatedAt = (empty($updatedAt) || ! $this->datePreservation()->get()) ? $time : DateTime::setTimezone($updatedAt);
             if ($max !== null) {
-                $max = $numericAttribute instanceof Attribute && Attribute::isIntegerType($numericAttribute->type)
+                $max = $numericAttribute instanceof Attribute && Attribute::isIntegerType($numericAttribute->getType())
                     ? BigInt::subtract($max, $value)
                     : $this->getNativeNumber($max) - $this->getNativeNumber($value);
             }
@@ -2573,7 +2576,7 @@ trait Documents
                 $collection->getId(),
                 $id,
                 $attribute,
-                $numericAttribute instanceof Attribute && Attribute::isIntegerType($numericAttribute->type)
+                $numericAttribute instanceof Attribute && Attribute::isIntegerType($numericAttribute->getType())
                     ? BigInt::toNative($value)
                     : $this->getNativeNumber($value),
                 $updatedAt,
@@ -2624,7 +2627,7 @@ trait Documents
             /** @var array<Attribute> $decAllAttrs */
             $decAllAttrs = $collection->getAttribute('attributes', []);
             $matchedDecAttrs = \array_filter($decAllAttrs, function (Attribute $a) use ($attribute) {
-                return $a->key === $attribute;
+                return $a->getKey() === $attribute;
             });
 
             if (empty($matchedDecAttrs)) {
@@ -2633,7 +2636,7 @@ trait Documents
 
             /** @var Attribute $matchedDecAttr */
             $matchedDecAttr = \end($matchedDecAttrs);
-            if (! Attribute::isNumericType($matchedDecAttr->type) || $matchedDecAttr->array) {
+            if (! Attribute::isNumericType($matchedDecAttr->getType()) || $matchedDecAttr->isArray()) {
                 throw new TypeException('Attribute must be an integer or float and can not be an array.');
             }
             $numericAttribute = $matchedDecAttr;
@@ -2682,7 +2685,7 @@ trait Documents
                 $result = $currentDecVal - $this->getNativeNumber($value);
             }
             $belowMinimum = ! \is_null($min) && (
-                $numericAttribute instanceof Attribute && Attribute::isIntegerType($numericAttribute->type)
+                $numericAttribute instanceof Attribute && Attribute::isIntegerType($numericAttribute->getType())
                     ? BigInt::compare($result, $min) < 0
                     : $result < $min
             );
@@ -2692,9 +2695,9 @@ trait Documents
 
             $time = DateTime::nowAfter($document->getUpdatedAt());
             $updatedAt = $document->getUpdatedAt();
-            $updatedAt = (empty($updatedAt) || ! $this->preserveDates) ? $time : DateTime::setTimezone($updatedAt);
+            $updatedAt = (empty($updatedAt) || ! $this->datePreservation()->get()) ? $time : DateTime::setTimezone($updatedAt);
             if ($min !== null) {
-                $min = $numericAttribute instanceof Attribute && Attribute::isIntegerType($numericAttribute->type)
+                $min = $numericAttribute instanceof Attribute && Attribute::isIntegerType($numericAttribute->getType())
                     ? BigInt::add($min, $value)
                     : $this->getNativeNumber($min) + $this->getNativeNumber($value);
             }
@@ -2703,7 +2706,7 @@ trait Documents
                 $collection->getId(),
                 $id,
                 $attribute,
-                $numericAttribute instanceof Attribute && Attribute::isIntegerType($numericAttribute->type)
+                $numericAttribute instanceof Attribute && Attribute::isIntegerType($numericAttribute->getType())
                     ? BigInt::negate($value)
                     : $this->getNativeNumber($value) * -1,
                 $updatedAt,
@@ -2774,7 +2777,8 @@ trait Documents
                 throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
             }
 
-            if (! \is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+            $requestTimestamp = $this->requestTimestamp()->get();
+            if ($requestTimestamp !== null && $oldUpdatedAt > $requestTimestamp) {
                 throw new ConflictException('Document was updated after the request timestamp');
             }
 
@@ -2882,7 +2886,7 @@ trait Documents
 
         $this->checkQueryTypes($queries);
 
-        if ($this->validate) {
+        if ($this->validation()->get()) {
             $validator = $this->getQueriesValidator($collection, $queries);
 
             if (! $validator->isValid($queries)) {
@@ -2959,7 +2963,8 @@ trait Documents
                         throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
                     }
 
-                    if (! \is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+                    $requestTimestamp = $this->requestTimestamp()->get();
+                    if ($requestTimestamp !== null && $oldUpdatedAt > $requestTimestamp) {
                         throw new ConflictException('Document was updated after the request timestamp');
                     }
                 }
@@ -3809,7 +3814,7 @@ trait Documents
 
         $joinedCollectionsById = null;
 
-        if ($this->validate) {
+        if ($this->validation()->get()) {
             $joinedCollectionsById = $this->resolveJoinedCollections($queries);
             $this->validateDocumentsQueries($collection, $queries, $joinedCollectionsById);
         }
@@ -3896,7 +3901,7 @@ trait Documents
                 throw new QueryException('Cursor pagination is not supported with aggregation queries');
             }
 
-            if ($joins === [] && ! $distinct && $this->validate && $cursor->getId() === '') {
+            if ($joins === [] && ! $distinct && $this->validation()->get() && $cursor->getId() === '') {
                 throw new QueryException('Invalid query: Invalid cursor: '.(new UID($this->adapter->getMaxUIDLength()))->getDescription());
             }
 
@@ -4271,7 +4276,7 @@ trait Documents
 
         $joinedCollections = null;
 
-        if ($this->validate && $queries !== []) {
+        if ($this->validation()->get() && $queries !== []) {
             $joinedCollections = $this->resolveJoinedCollections($queries);
             $this->validateDocumentsQueries($collection, $queries, $joinedCollections);
         }
@@ -4334,7 +4339,7 @@ trait Documents
 
         $joinedCollections = null;
 
-        if ($this->validate) {
+        if ($this->validation()->get()) {
             $joinedCollections = $this->resolveJoinedCollections($queries);
             if ($queries !== []) {
                 $this->validateDocumentsQueries($collection, $queries, $joinedCollections);
@@ -4447,7 +4452,7 @@ trait Documents
     private function declaresSumAttribute(Document $collection, string $attribute): bool
     {
         foreach (self::internalAttributes() as $internal) {
-            if ($internal->key === $attribute) {
+            if ($internal->getKey() === $attribute) {
                 return true;
             }
         }

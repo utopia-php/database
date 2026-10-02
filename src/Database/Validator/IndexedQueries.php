@@ -179,8 +179,8 @@ class IndexedQueries extends Queries
 
                 foreach ($indexes as $index) {
                     if (
-                        $index->type === IndexType::Fulltext
-                        && $index->attributes === [$column]
+                        $index->getType() === IndexType::Fulltext
+                        && $index->getIndexedAttributes() === [$column]
                     ) {
                         $matched = true;
                     }

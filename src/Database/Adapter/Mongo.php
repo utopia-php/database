@@ -467,7 +467,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         }
 
         // upsert + $setOnInsert hits WriteConflict (E112) under txn snapshot isolation.
-        if ($this->skipDuplicates) {
+        if ($this->skippingDuplicates()) {
             return $callback();
         }
 
@@ -1455,7 +1455,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         }
 
         // insertMany aborts the txn on any duplicate; upsert + $setOnInsert no-ops instead.
-        if ($this->skipDuplicates) {
+        if ($this->skippingDuplicates()) {
             if (empty($records)) {
                 return [];
             }

@@ -55,47 +55,79 @@ class Index extends Document
      */
     public function __get(string $name): mixed
     {
-        switch ($name) {
-            case 'key':
-                /** @var string $key */
-                $key = $this->getAttribute('key', $this->getId());
+        return match ($name) {
+            'key' => $this->getKey(),
+            'type' => $this->getType(),
+            'attributes' => $this->getIndexedAttributes(),
+            'lengths' => $this->getLengths(),
+            'orders' => $this->getOrders(),
+            'ttl' => $this->getTtl(),
+            default => $this->getAttribute($name),
+        };
+    }
 
-                return $key;
-            case 'type':
-                $type = $this->getAttribute('type', IndexType::Key->value);
-                if ($type instanceof IndexType) {
-                    return $type;
-                }
+    public function getKey(): string
+    {
+        /** @var string $key */
+        $key = $this->getAttribute('key', $this->getId());
 
-                return IndexType::from(\is_string($type) ? $type : IndexType::Key->value);
-            case 'attributes':
-                $attributes = $this->getAttribute('attributes', []);
-                if (! \is_array($attributes)) {
-                    return [];
-                }
-                /** @var array<string> $attributes */
+        return $key;
+    }
 
-                return $attributes;
-            case 'lengths':
-                $lengths = $this->getAttribute('lengths', []);
-                if (! \is_array($lengths)) {
-                    return [];
-                }
-                /** @var array<int|null> $lengths */
-
-                return $lengths;
-            case 'orders':
-                $stored = $this->getAttribute('orders', []);
-
-                return self::decodeOrders(\is_array($stored) ? $stored : []);
-            case 'ttl':
-                /** @var int $ttl */
-                $ttl = $this->getAttribute('ttl', 1);
-
-                return $ttl;
-            default:
-                return $this->getAttribute($name);
+    public function getType(): IndexType
+    {
+        $type = $this->getAttribute('type', IndexType::Key->value);
+        if ($type instanceof IndexType) {
+            return $type;
         }
+
+        return IndexType::from(\is_string($type) ? $type : IndexType::Key->value);
+    }
+
+    /**
+     * @return array<string>
+     */
+    public function getIndexedAttributes(): array
+    {
+        $attributes = $this->getAttribute('attributes', []);
+        if (! \is_array($attributes)) {
+            return [];
+        }
+        /** @var array<string> $attributes */
+
+        return $attributes;
+    }
+
+    /**
+     * @return array<int|null>
+     */
+    public function getLengths(): array
+    {
+        $lengths = $this->getAttribute('lengths', []);
+        if (! \is_array($lengths)) {
+            return [];
+        }
+        /** @var array<int|null> $lengths */
+
+        return $lengths;
+    }
+
+    /**
+     * @return array<Order|null>
+     */
+    public function getOrders(): array
+    {
+        $stored = $this->getAttribute('orders', []);
+
+        return self::decodeOrders(\is_array($stored) ? $stored : []);
+    }
+
+    public function getTtl(): int
+    {
+        /** @var int $ttl */
+        $ttl = $this->getAttribute('ttl', 1);
+
+        return $ttl;
     }
 
     public function __set(string $name, mixed $value): void
@@ -368,14 +400,16 @@ class Index extends Document
      */
     public function toDocument(): Document
     {
+        $key = $this->getKey();
+
         return new Document([
-            Document::ID => ID::custom($this->key),
-            'key' => $this->key,
-            'type' => $this->type->value,
-            'attributes' => $this->attributes,
-            'lengths' => $this->lengths,
+            Document::ID => ID::custom($key),
+            'key' => $key,
+            'type' => $this->getType()->value,
+            'attributes' => $this->getIndexedAttributes(),
+            'lengths' => $this->getLengths(),
             'orders' => $this->getAttribute('orders', []),
-            'ttl' => $this->ttl,
+            'ttl' => $this->getTtl(),
         ]);
     }
 

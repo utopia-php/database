@@ -125,9 +125,9 @@ class Collection extends Document
 
                 return $value;
             case 'attributes':
-                return self::castAttributes($this->getArray('attributes'));
+                return $this->getDeclaredAttributes();
             case 'indexes':
-                return self::castIndexes($this->getArray('indexes'));
+                return $this->getIndexes();
             case 'permissions':
                 return $this->offsetExists(self::PERMISSIONS) ? $this->getPermissions() : null;
             case 'documentSecurity':
@@ -135,6 +135,22 @@ class Collection extends Document
             default:
                 return $this->getAttribute($name);
         }
+    }
+
+    /**
+     * @return array<Attribute>
+     */
+    public function getDeclaredAttributes(): array
+    {
+        return self::castAttributes($this->getArray('attributes'));
+    }
+
+    /**
+     * @return array<Index>
+     */
+    public function getIndexes(): array
+    {
+        return self::castIndexes($this->getArray('indexes'));
     }
 
     public function __set(string $name, mixed $value): void

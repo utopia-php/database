@@ -181,8 +181,8 @@ trait JoinedAttributes
     {
         $columns = [];
         foreach (Database::internalAttributes() as $attribute) {
-            if ($attribute->key !== Document::COLLECTION && ($sharedTables || $attribute->key !== Document::TENANT)) {
-                $columns[$attribute->key] = true;
+            if ($attribute->getKey() !== Document::COLLECTION && ($sharedTables || $attribute->getKey() !== Document::TENANT)) {
+                $columns[$attribute->getKey()] = true;
             }
         }
 

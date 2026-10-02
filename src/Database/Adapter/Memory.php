@@ -1213,7 +1213,7 @@ class Memory extends Adapter implements Feature\Relationships
 
         $docKey = $this->documentKey($document->getId(), $document->getTenant());
         if (isset($this->data[$key]['documents'][$docKey])) {
-            if ($this->skipDuplicates) {
+            if ($this->skippingDuplicates()) {
                 // Mirrors MariaDB's `INSERT IGNORE` — duplicate primary key is
                 // silently dropped and the existing row's sequence is returned.
                 $existing = $this->data[$key]['documents'][$docKey];
@@ -1229,7 +1229,7 @@ class Memory extends Adapter implements Feature\Relationships
         try {
             $this->checkUniqueSignatures($key, $signatures, $docKey);
         } catch (DuplicateException $e) {
-            if ($this->skipDuplicates) {
+            if ($this->skippingDuplicates()) {
                 return null;
             }
             throw $e;

@@ -249,8 +249,8 @@ class Select extends Base
     {
         $keys = [];
         foreach (Database::internalAttributes() as $attribute) {
-            if ($this->sharedTables || $attribute->key !== Document::TENANT) {
-                $keys[] = $attribute->key;
+            if ($this->sharedTables || $attribute->getKey() !== Document::TENANT) {
+                $keys[] = $attribute->getKey();
             }
         }
 

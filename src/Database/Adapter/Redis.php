@@ -789,7 +789,7 @@ class Redis extends Adapter implements
 
         return $this->tx(function (RedisClient $redis) use ($col, $id, $document, $docKey, $idxKey, $seqKey, $permDocKey): ?Document {
             if ((bool) $redis->exists($docKey)) {
-                if ($this->skipDuplicates) {
+                if ($this->skippingDuplicates()) {
                     $existingPayload = $redis->get($docKey);
                     if (\is_string($existingPayload) && $existingPayload !== '') {
                         $existing = $this->decode($existingPayload);
@@ -804,7 +804,7 @@ class Redis extends Adapter implements
             try {
                 $this->enforceUniqueIndexes($redis, $col, $document);
             } catch (DuplicateException $e) {
-                if ($this->skipDuplicates) {
+                if ($this->skippingDuplicates()) {
                     return null;
                 }
                 throw $e;

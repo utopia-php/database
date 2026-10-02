@@ -56,53 +56,83 @@ class Relationship extends Document
      */
     public function __get(string $name): mixed
     {
-        switch ($name) {
-            case 'collection':
-                /** @var string $collection */
-                $collection = $this->getAttribute('collection', '');
+        return match ($name) {
+            'collection' => $this->getSourceCollection(),
+            'relatedCollection' => $this->getRelatedCollection(),
+            'type' => $this->getType(),
+            'twoWay' => $this->isTwoWay(),
+            'key' => $this->getKey(),
+            'twoWayKey' => $this->getTwoWayKey(),
+            'onDelete' => $this->getOnDelete(),
+            'side' => $this->getSide(),
+            default => $this->getAttribute($name),
+        };
+    }
 
-                return $collection;
-            case 'relatedCollection':
-                /** @var string $relatedCollection */
-                $relatedCollection = $this->getAttribute('relatedCollection', '');
+    public function getSourceCollection(): string
+    {
+        return $this->getStringAttribute('collection');
+    }
 
-                return $relatedCollection;
-            case 'type':
-                $type = $this->getAttribute('relationType', RelationType::OneToOne->value);
-                if ($type instanceof RelationType) {
-                    return $type;
-                }
+    public function getRelatedCollection(): string
+    {
+        return $this->getStringAttribute('relatedCollection');
+    }
 
-                return RelationType::from(\is_string($type) ? $type : RelationType::OneToOne->value);
-            case 'twoWay':
-                return (bool) $this->getAttribute('twoWay', false);
-            case 'key':
-                /** @var string $key */
-                $key = $this->getAttribute('key', $this->getId());
-
-                return $key;
-            case 'twoWayKey':
-                /** @var string $twoWayKey */
-                $twoWayKey = $this->getAttribute('twoWayKey', '');
-
-                return $twoWayKey;
-            case 'onDelete':
-                $onDelete = $this->getAttribute('onDelete', ForeignKeyAction::Restrict->value);
-                if ($onDelete instanceof ForeignKeyAction) {
-                    return $onDelete;
-                }
-
-                return ForeignKeyAction::from(\is_string($onDelete) ? $onDelete : ForeignKeyAction::Restrict->value);
-            case 'side':
-                $side = $this->getAttribute('side', RelationSide::Parent->value);
-                if ($side instanceof RelationSide) {
-                    return $side;
-                }
-
-                return RelationSide::from(\is_string($side) ? $side : RelationSide::Parent->value);
-            default:
-                return $this->getAttribute($name);
+    public function getType(): RelationType
+    {
+        $type = $this->getAttribute('relationType', RelationType::OneToOne->value);
+        if ($type instanceof RelationType) {
+            return $type;
         }
+
+        return RelationType::from(\is_string($type) ? $type : RelationType::OneToOne->value);
+    }
+
+    public function isTwoWay(): bool
+    {
+        return (bool) $this->getAttribute('twoWay', false);
+    }
+
+    public function getKey(): string
+    {
+        /** @var string $key */
+        $key = $this->getAttribute('key', $this->getId());
+
+        return $key;
+    }
+
+    public function getTwoWayKey(): string
+    {
+        return $this->getStringAttribute('twoWayKey');
+    }
+
+    public function getOnDelete(): ForeignKeyAction
+    {
+        $onDelete = $this->getAttribute('onDelete', ForeignKeyAction::Restrict->value);
+        if ($onDelete instanceof ForeignKeyAction) {
+            return $onDelete;
+        }
+
+        return ForeignKeyAction::from(\is_string($onDelete) ? $onDelete : ForeignKeyAction::Restrict->value);
+    }
+
+    public function getSide(): RelationSide
+    {
+        $side = $this->getAttribute('side', RelationSide::Parent->value);
+        if ($side instanceof RelationSide) {
+            return $side;
+        }
+
+        return RelationSide::from(\is_string($side) ? $side : RelationSide::Parent->value);
+    }
+
+    private function getStringAttribute(string $name): string
+    {
+        /** @var string $value */
+        $value = $this->getAttribute($name, '');
+
+        return $value;
     }
 
     public function __set(string $name, mixed $value): void
@@ -218,12 +248,12 @@ class Relationship extends Document
     public function toDocument(): Document
     {
         return new Document([
-            'relatedCollection' => $this->relatedCollection,
-            'relationType' => $this->type->value,
-            'twoWay' => $this->twoWay,
-            'twoWayKey' => $this->twoWayKey,
-            'onDelete' => $this->onDelete->value,
-            'side' => $this->side->value,
+            'relatedCollection' => $this->getRelatedCollection(),
+            'relationType' => $this->getType()->value,
+            'twoWay' => $this->isTwoWay(),
+            'twoWayKey' => $this->getTwoWayKey(),
+            'onDelete' => $this->getOnDelete()->value,
+            'side' => $this->getSide()->value,
         ]);
     }
 

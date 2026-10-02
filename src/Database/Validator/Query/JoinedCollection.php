@@ -116,10 +116,10 @@ final readonly class JoinedCollection
 
     private static function storesRelatedId(Relationship $relationship): bool
     {
-        return match ($relationship->type) {
-            RelationType::OneToOne => $relationship->side === RelationSide::Parent || $relationship->twoWay,
-            RelationType::OneToMany => $relationship->side === RelationSide::Child,
-            RelationType::ManyToOne => $relationship->side === RelationSide::Parent,
+        return match ($relationship->getType()) {
+            RelationType::OneToOne => $relationship->getSide() === RelationSide::Parent || $relationship->isTwoWay(),
+            RelationType::OneToMany => $relationship->getSide() === RelationSide::Child,
+            RelationType::ManyToOne => $relationship->getSide() === RelationSide::Parent,
             RelationType::ManyToMany => false,
         };
     }

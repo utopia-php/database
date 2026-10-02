@@ -120,65 +120,121 @@ class Attribute extends Document
      */
     public function __get(string $name): mixed
     {
-        switch ($name) {
-            case 'key':
-                /** @var string $key */
-                $key = $this->getAttribute('key', $this->getId());
+        return match ($name) {
+            'key' => $this->getKey(),
+            'type' => $this->getType(),
+            'size' => $this->getSize(),
+            'required' => $this->isRequired(),
+            'default' => $this->getDefault(),
+            'signed' => $this->isSigned(),
+            'array' => $this->isArray(),
+            'format' => $this->getFormat(),
+            'formatOptions' => $this->getFormatOptions(),
+            'filters' => $this->getFilters(),
+            'status' => $this->getStatus(),
+            'options' => $this->getOptions(),
+            default => $this->getAttribute($name),
+        };
+    }
 
-                return $key;
-            case 'type':
-                /** @var ColumnType|string $type */
-                $type = $this->getAttribute('type', ColumnType::String->value);
+    public function getKey(): string
+    {
+        /** @var string $key */
+        $key = $this->getAttribute('key', $this->getId());
 
-                return self::normalizeType($type);
-            case 'size':
-                /** @var int $size */
-                $size = $this->getAttribute('size', 0);
+        return $key;
+    }
 
-                return $size;
-            case 'required':
-                return (bool) $this->getAttribute('required', false);
-            case 'default':
-                return $this->getAttribute('default');
-            case 'signed':
-                return (bool) $this->getAttribute('signed', true);
-            case 'array':
-                return (bool) $this->getAttribute('array', false);
-            case 'format':
-                $format = $this->getAttribute('format');
+    public function getType(): ColumnType
+    {
+        /** @var ColumnType|string $type */
+        $type = $this->getAttribute('type', ColumnType::String->value);
 
-                return \is_string($format) && $format !== '' ? $format : null;
-            case 'formatOptions':
-                $formatOptions = $this->getAttribute('formatOptions', []);
-                if (! \is_array($formatOptions)) {
-                    return [];
-                }
-                /** @var array<string, mixed> $formatOptions */
+        return self::normalizeType($type);
+    }
 
-                return $formatOptions;
-            case 'filters':
-                $filters = $this->getAttribute('filters', []);
-                if (! \is_array($filters)) {
-                    return [];
-                }
-                /** @var array<string> $filters */
+    public function getSize(): int
+    {
+        /** @var int $size */
+        $size = $this->getAttribute('size', 0);
 
-                return $filters;
-            case 'status':
-                $status = $this->getAttribute('status');
+        return $size;
+    }
 
-                return \is_string($status) ? $status : null;
-            case 'options':
-                $options = $this->getAttribute('options');
-                if (! \is_array($options)) {
-                    return null;
-                }
-                /** @var array<string, mixed> $options */
+    public function isRequired(): bool
+    {
+        return (bool) $this->getAttribute('required', false);
+    }
 
-                return $options;
-            default:
-                return $this->getAttribute($name);
+    public function getDefault(): mixed
+    {
+        return $this->getAttribute('default');
+    }
+
+    public function isSigned(): bool
+    {
+        return (bool) $this->getAttribute('signed', true);
+    }
+
+    public function isArray(): bool
+    {
+        return (bool) $this->getAttribute('array', false);
+    }
+
+    public function getFormat(): ?string
+    {
+        $format = $this->getAttribute('format');
+
+        return \is_string($format) && $format !== '' ? $format : null;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function getFormatOptions(): array
+    {
+        $formatOptions = $this->getAttribute('formatOptions', []);
+        if (! \is_array($formatOptions)) {
+            return [];
         }
+        /** @var array<string, mixed> $formatOptions */
+
+        return $formatOptions;
+    }
+
+    /**
+     * @return array<string>
+     */
+    public function getFilters(): array
+    {
+        $filters = $this->getAttribute('filters', []);
+        if (! \is_array($filters)) {
+            return [];
+        }
+        /** @var array<string> $filters */
+
+        return $filters;
+    }
+
+    public function getStatus(): ?string
+    {
+        $status = $this->getAttribute('status');
+
+        return \is_string($status) ? $status : null;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    public function getOptions(): ?array
+    {
+        $options = $this->getAttribute('options');
+        if (! \is_array($options)) {
+            return null;
+        }
+        /** @var array<string, mixed> $options */
+
+        return $options;
     }
 
     public function __set(string $name, mixed $value): void
@@ -326,15 +382,16 @@ class Attribute extends Document
      */
     public function resolvedSize(): int
     {
-        if ($this->size > 0) {
-            return $this->size;
+        $size = $this->getSize();
+        if ($size > 0) {
+            return $size;
         }
 
-        return match ($this->type) {
+        return match ($this->getType()) {
             ColumnType::Text => Database::MAX_TEXT_BYTES,
             ColumnType::MediumText => Database::MAX_MEDIUMTEXT_BYTES,
             ColumnType::LongText => Database::MAX_LONGTEXT_BYTES,
-            default => $this->size,
+            default => $size,
         };
     }
 
@@ -939,26 +996,29 @@ class Attribute extends Document
      */
     public function toDocument(): Document
     {
+        $key = $this->getKey();
         $data = [
-            Document::ID => ID::custom($this->key),
-            'key' => $this->key,
-            'type' => self::persistedType($this->type),
-            'size' => $this->size,
-            'required' => $this->required,
-            'default' => $this->default,
-            'signed' => $this->signed,
-            'array' => $this->array,
-            'format' => $this->format,
-            'formatOptions' => $this->formatOptions,
-            'filters' => $this->filters,
+            Document::ID => ID::custom($key),
+            'key' => $key,
+            'type' => self::persistedType($this->getType()),
+            'size' => $this->getSize(),
+            'required' => $this->isRequired(),
+            'default' => $this->getDefault(),
+            'signed' => $this->isSigned(),
+            'array' => $this->isArray(),
+            'format' => $this->getFormat(),
+            'formatOptions' => $this->getFormatOptions(),
+            'filters' => $this->getFilters(),
         ];
 
-        if ($this->status !== null) {
-            $data['status'] = $this->status;
+        $status = $this->getStatus();
+        if ($status !== null) {
+            $data['status'] = $status;
         }
 
-        if ($this->options !== null) {
-            $data['options'] = $this->options;
+        $options = $this->getOptions();
+        if ($options !== null) {
+            $data['options'] = $options;
         }
 
         return new Document($data);
@@ -1030,7 +1090,7 @@ class Attribute extends Document
             return false;
         }
 
-        return $attribute->type === ColumnType::Relationship;
+        return $attribute->getType() === ColumnType::Relationship;
     }
 
     /**

@@ -799,7 +799,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $name = $this->filter($collection);
             $hasSequence = $this->batchHasSequence($documents);
 
-            if ($this->skipDuplicates) {
+            if ($this->skippingDuplicates()) {
                 $documents = $this->firstCopies($documents);
                 $documents = $this->supportsInsertReturning()
                     ? $this->insertReturning($name, $documents, $spatialAttributes, $hasSequence)
@@ -3687,7 +3687,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             decorateRow: fn (array $row, array $metadata) => $this->decorateRow($row, $metadata),
             createBuilder: fn () => $this->createBuilder(),
             getTableRaw: fn (string $table) => $this->getSQLTableRaw($table),
-            skipDuplicates: $this->skipDuplicates,
+            skipDuplicates: $this->skippingDuplicates(),
             lookupId: $lookupId,
         );
     }
@@ -4820,7 +4820,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         if ($hasAggregation && ! empty($joinTablePrefixes)) {
             $mainAttributes = [];
             foreach (Database::internalAttributes() as $attribute) {
-                $mainAttributes[$attribute->key] = true;
+                $mainAttributes[$attribute->getKey()] = true;
             }
             /** @var array<Document> $collectionAttributes */
             $collectionAttributes = $collection->getAttribute('attributes', []);
@@ -6125,7 +6125,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     {
         $main = [];
         foreach (Database::internalAttributes() as $attribute) {
-            $main[$attribute->key] = true;
+            $main[$attribute->getKey()] = true;
         }
         /** @var array<Document> $attributes */
         $attributes = $collection->getAttribute('attributes', []);
@@ -6319,7 +6319,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     private function attributeKeyAndType(mixed $attr): array
     {
         if ($attr instanceof Attribute) {
-            return [$attr->key, $attr->type->value];
+            return [$attr->getKey(), $attr->getType()->value];
         }
 
         if ($attr instanceof Document) {

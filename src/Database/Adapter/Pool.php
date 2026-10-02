@@ -131,7 +131,7 @@ class Pool extends Adapter
             throw new DatabaseException($this->unsupportedFeatureMessage($feature));
         }
 
-        if ($this->skipDuplicates) {
+        if ($this->skippingDuplicates()) {
             return $adapter->skipDuplicates(
                 fn () => $adapter->{$method}(...$args)
             );
@@ -476,7 +476,7 @@ class Pool extends Adapter
                 $this->syncBorrowedAdapter($adapter);
 
                 return $this->pinned()->with($adapter, function () use ($adapter, $callback): mixed {
-                    if ($this->skipDuplicates) {
+                    if ($this->skippingDuplicates()) {
                         return $adapter->skipDuplicates(
                             fn () => $adapter->withTransaction($callback)
                         );

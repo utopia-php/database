@@ -667,6 +667,15 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     }
 
     /**
+     * Whether the calling coroutine runs under skipDuplicates(). The adapters read it through this method rather
+     * than the `$skipDuplicates` property hook, for the same tracing JIT crash (php/php-src#22084) as {@see self::currentTenant()}.
+     */
+    protected function skippingDuplicates(): bool
+    {
+        return $this->duplicateSkipping()->get();
+    }
+
+    /**
      * @return Value<bool>
      */
     private function duplicateSkipping(): Value

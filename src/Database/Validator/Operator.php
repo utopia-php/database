@@ -45,7 +45,7 @@ class Operator extends Validator
         $collectionAttributes = $collection->getAttribute('attributes', []);
         foreach ($collectionAttributes as $attribute) {
             $typed = $attribute instanceof AttributeVO ? $attribute : AttributeVO::fromDocument($attribute);
-            $this->attributes[$typed->key] = $typed;
+            $this->attributes[$typed->getKey()] = $typed;
         }
     }
 
@@ -62,7 +62,7 @@ class Operator extends Validator
      */
     private function isRelationshipArray(AttributeVO $attribute): bool
     {
-        $options = $attribute->options ?? [];
+        $options = $attribute->getOptions() ?? [];
 
         /** @var array<string, mixed> $options */
 
@@ -99,7 +99,7 @@ class Operator extends Validator
      */
     private function getNumericBounds(AttributeVO $attribute): ?array
     {
-        return AttributeVO::getNumericBounds($attribute->type, $attribute->signed);
+        return AttributeVO::getNumericBounds($attribute->getType(), $attribute->isSigned());
     }
 
     private function isNumericValueInBounds(mixed $value, AttributeVO $attribute): bool
@@ -109,7 +109,7 @@ class Operator extends Validator
             return false;
         }
 
-        if (AttributeVO::isIntegerType($attribute->type)) {
+        if (AttributeVO::isIntegerType($attribute->getType())) {
             $integer = $this->getIntegerValue($value);
 
             return $integer !== null
@@ -134,7 +134,7 @@ class Operator extends Validator
         $methodName = $operator->getMethod()->value;
         $finite = \is_int($limit) || (\is_float($limit) && \is_finite($limit)) || (\is_string($limit) && \is_numeric($limit));
 
-        if (! AttributeVO::isIntegerType($attribute->type) || ! $finite) {
+        if (! AttributeVO::isIntegerType($attribute->getType()) || ! $finite) {
             if ($this->isNumericValueInBounds($limit, $attribute)) {
                 return true;
             }
@@ -203,7 +203,7 @@ class Operator extends Validator
             return false;
         }
 
-        $aboveMaximum = AttributeVO::isIntegerType($attribute->type)
+        $aboveMaximum = AttributeVO::isIntegerType($attribute->getType())
             ? BigInt::compare($result, $bounds['max']) > 0
             : $result > $bounds['max'];
         if ($aboveMaximum) {
@@ -212,7 +212,7 @@ class Operator extends Validator
             return false;
         }
 
-        $belowMinimum = AttributeVO::isIntegerType($attribute->type)
+        $belowMinimum = AttributeVO::isIntegerType($attribute->getType())
             ? BigInt::compare($result, $bounds['min']) < 0
             : $result < $bounds['min'];
         if ($belowMinimum) {
@@ -279,8 +279,8 @@ class Operator extends Validator
         $methodName = $method->value;
         $values = $operator->getValues();
 
-        $type = $attribute->type;
-        $isArray = $attribute->array;
+        $type = $attribute->getType();
+        $isArray = $attribute->isArray();
 
         // Array operators that carry a caller-supplied value list are capped to guard against
         // memory exhaustion. Enforced here so every adapter rejects an oversized list the same way.
@@ -316,7 +316,7 @@ class Operator extends Validator
                     return false;
                 }
 
-                if (! $attribute->signed
+                if (! $attribute->isSigned()
                     && $type === ColumnType::BigInteger
                     && ! $this->supportUnsignedBigInt) {
                     $this->message = "Cannot apply {$methodName} operator: unsigned 64-bit arithmetic is not supported by this adapter";
@@ -618,7 +618,7 @@ class Operator extends Validator
                     $concatValue = $values[0];
                     $predictedLength = strlen($currentString) + strlen((string) $concatValue);
 
-                    $maxSize = $attribute->size;
+                    $maxSize = $attribute->getSize();
 
                     if ($maxSize > 0 && $predictedLength > $maxSize) {
                         $this->message = "Cannot apply {$methodName} operator: result would exceed maximum length of {$maxSize} characters";

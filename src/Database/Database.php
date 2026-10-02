@@ -1189,7 +1189,7 @@ class Database
      */
     public function getPreserveDates(): bool
     {
-        return $this->preserveDates;
+        return $this->datePreservation()->get();
     }
 
     /**
@@ -1237,7 +1237,7 @@ class Database
      */
     public function getPreserveSequence(): bool
     {
-        return $this->preserveSequence;
+        return $this->sequencePreservation()->get();
     }
 
     /**
@@ -1437,7 +1437,7 @@ class Database
      */
     public function isValidationEnabled(): bool
     {
-        return $this->validate;
+        return $this->validation()->get();
     }
 
     /**
@@ -1636,13 +1636,13 @@ class Database
             silenced: $this->areEventsSilenced(),
             silencedListeners: $this->silencedListeners()->get(),
             tenant: $this->adapter->getTenant(),
-            filters: $this->filter,
-            disabledFilters: $this->disabledFilters,
-            validation: $this->validate,
-            preserveDates: $this->preserveDates,
-            preserveSequence: $this->preserveSequence,
-            skipDuplicates: $this->skipDuplicates,
-            requestTimestamp: $this->timestamp,
+            filters: $this->filtering()->get(),
+            disabledFilters: $this->filterExclusions()->get(),
+            validation: $this->validation()->get(),
+            preserveDates: $this->datePreservation()->get(),
+            preserveSequence: $this->sequencePreservation()->get(),
+            skipDuplicates: $this->duplicateSkipping()->get(),
+            requestTimestamp: $this->requestTimestamp()->get(),
         );
     }
 
@@ -1849,7 +1849,7 @@ class Database
         }
 
         return $this->filtering()->with(
-            $this->filter,
+            $this->filtering()->get(),
             fn (): mixed => $this->filterExclusions()->with(\array_fill_keys($filters, true), $callback),
         );
     }
@@ -1874,10 +1874,10 @@ class Database
 
         foreach ($attributes as $attribute) {
             if ($attribute instanceof Attribute) {
-                $key = $attribute->key;
-                $array = $attribute->array;
-                $default = $attribute->default;
-                $filters = $attribute->filters;
+                $key = $attribute->getKey();
+                $array = $attribute->isArray();
+                $default = $attribute->getDefault();
+                $filters = $attribute->getFilters();
             } elseif ($attribute instanceof Document) {
                 $key = $attribute->getId();
                 $array = (bool) $attribute->getAttribute('array', false);
@@ -1972,7 +1972,7 @@ class Database
             $declared = $collection->getAttribute('attributes', []);
             foreach (\is_array($declared) ? $declared : [] as $attribute) {
                 $key = match (true) {
-                    $attribute instanceof Attribute => $attribute->key,
+                    $attribute instanceof Attribute => $attribute->getKey(),
                     $attribute instanceof Document => $attribute->getId(),
                     \is_array($attribute) => \is_string($attribute[Document::ID] ?? null) ? $attribute[Document::ID] : '',
                     default => '',
@@ -2124,8 +2124,8 @@ class Database
             $filterCount = \count($filters);
 
             if ($filterCount > 0 && ($selected || $hasRelationshipSelections)) {
-                $filtering ??= $this->filter;
-                $disabledFilters ??= $this->disabledFilters ?? [];
+                $filtering ??= $this->filtering()->get();
+                $disabledFilters ??= $this->filterExclusions()->get() ?? [];
 
                 if ($filtering) {
                     foreach ($value as $index => $node) {
@@ -3051,7 +3051,7 @@ class Database
      */
     private function getActiveFilterSignatures(): array
     {
-        if (! $this->filter) {
+        if (! $this->filtering()->get()) {
             return [];
         }
 
@@ -3069,7 +3069,7 @@ class Database
             $signatures[$name] = $callbacks['signature'];
         }
 
-        $signatures = \array_diff_key($signatures, $this->disabledFilters ?? []);
+        $signatures = \array_diff_key($signatures, $this->filterExclusions()->get() ?? []);
         \ksort($signatures);
 
         return $signatures;

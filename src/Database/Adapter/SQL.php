@@ -1754,7 +1754,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $results = $this->executeSelect($left, Event::DocumentFind, $name);
         } else {
             $bound = $hasJoins && ! $hasAggregation && ! $hasDistinct && $vectorQueries === [] && $this->boundsJoinedSort()
-                ? $this->boundedPage($queries, $adapterFilterQueries, $joinTablePrefixes, $orderAttributes, $orderTypes, $limit, $offset, $cursor)
+                ? $this->boundedPage($collectionDoc, $queries, $adapterFilterQueries, $joinTablePrefixes, $orderAttributes, $orderTypes, $limit, $offset, $cursor)
                 : null;
 
             $builder = $this->newBuilder($name, $alias, $hasPreservingOuterJoin);
@@ -5699,6 +5699,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      * @param  array<string, mixed>  $cursor
      */
     private function boundedPage(
+        Document $collection,
         array $queries,
         array $adapterFilterQueries,
         array $joinTablePrefixes,
@@ -5757,6 +5758,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $adapterConditions[] = clone $query;
             $searches[] = $query;
         }
+
+        $this->remapDottedQueryAttributes($conditions, $joinTablePrefixes, $collection);
 
         [$mainAttributes, $mainTypes] = $mainOrder;
 

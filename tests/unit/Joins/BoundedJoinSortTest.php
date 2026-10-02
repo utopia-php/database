@@ -151,6 +151,8 @@ final class BoundedJoinSortTest extends TestCase
             yield "{$mode}: inner notes, joined attributes selected" => [$mode, [$innerNotes, Query::orderAsc('rank'), Query::select(['name', 'rank', 'n.rank', 'n.$id'])], false];
             yield "{$mode}: notes, every attribute selected" => [$mode, [$notes, Query::orderDesc('rank'), Query::select(['*'])], true];
             yield "{$mode}: notes, a main condition" => [$mode, [$notes, Query::notEqual('name', 'cedar'), Query::orderAsc('rank')], true];
+            yield "{$mode}: notes, a condition on a main attribute whose name holds a dot" => [$mode, [$notes, Query::equal('rev.score', [1, 2])], true];
+            yield "{$mode}: notes, ordered by a main attribute whose name holds a dot" => [$mode, [$notes, Query::orderDesc('rev.score'), Query::greaterThan('rev.score', 0)], true];
             yield "{$mode}: notes, main conditions grouped" => [$mode, [$notes, Query::or([Query::lessThan('rank', 2), Query::isNull('rank')])], true];
             yield "{$mode}: inner notes, a main and a joined condition" => [$mode, [$innerNotes, Query::notEqual('name', 'cedar'), Query::lessThan('n.rank', 3), Query::orderAsc('rank')], false];
             yield "{$mode}: inner notes, a joined attribute that is not set" => [$mode, [$innerNotes, Query::isNull('n.rank')], false];
@@ -427,7 +429,7 @@ final class BoundedJoinSortTest extends TestCase
             ? [Permission::create(Role::any()), Permission::read(Role::user('reader'))]
             : [Permission::create(Role::any())];
         foreach ([
-            'authors' => [Attribute::string(key: 'name', size: 32), Attribute::integer(key: 'rank', required: false)],
+            'authors' => [Attribute::string(key: 'name', size: 32), Attribute::integer(key: 'rank', required: false), Attribute::integer(key: 'rev.score', required: false)],
             'notes' => [Attribute::string(key: 'author', size: 16), Attribute::integer(key: 'rank', required: false)],
             'tags' => [Attribute::string(key: 'author', size: 16), Attribute::string(key: 'note', size: 16)],
         ] as $id => $attributes) {
@@ -456,7 +458,7 @@ final class BoundedJoinSortTest extends TestCase
                         $database->setTenant($tenant);
                     }
                     $attributes = match ($collection) {
-                        'authors' => ['name' => $prefix.' '.$values[0], 'rank' => $values[1]],
+                        'authors' => ['name' => $prefix.' '.$values[0], 'rank' => $values[1], 'rev.score' => $values[1]],
                         'notes' => ['author' => $tenant === 2 && $id === 'n15' ? 'a05' : $values[0], 'rank' => $values[1]],
                         default => ['author' => $values[0], 'note' => $values[1]],
                     };

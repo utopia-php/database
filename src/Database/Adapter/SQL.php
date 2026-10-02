@@ -20,6 +20,7 @@ use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Contention as ContentionException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
@@ -6968,6 +6969,17 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     protected function processException(PDOException $e): Exception
     {
         return $e;
+    }
+
+    /**
+     * A driver error the adapter maps to a lock conflict is transient too, even when it reached the transaction
+     * without being mapped.
+     */
+    #[\Override]
+    protected function isTransient(Throwable $error): bool
+    {
+        return parent::isTransient($error)
+            || ($error instanceof PDOException && $this->processException($error) instanceof ContentionException);
     }
 
     protected function processSelectException(PDOException $e, Statement $statement): Exception

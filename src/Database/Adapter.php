@@ -7,13 +7,8 @@ use Exception;
 use Throwable;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Exception\Authorization as AuthorizationException;
-use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Contention as ContentionException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
-use Utopia\Database\Exception\Limit as LimitException;
-use Utopia\Database\Exception\Relationship as RelationshipException;
-use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Hook\Transform;
@@ -675,9 +670,10 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     }
 
     /**
-     * Run the callback in a transaction, retrying a failed attempt up to twice. A nested call whose enclosing
-     * transaction is gone is never retried: it throws `Exception\Transaction`, or the `Exception\Contention` that made
-     * the engine roll the transaction back, which the outermost call retries because nothing of that attempt is stored.
+     * Run the callback in a transaction, retrying an attempt that failed transiently up to twice (see isRetryable());
+     * any other failure is rethrown at once. A nested call whose enclosing transaction is gone is never retried: it
+     * throws `Exception\Transaction`, or the `Exception\Contention` that made the engine roll the transaction back,
+     * which the outermost call retries because nothing of that attempt is stored.
      *
      * @template T
      *
@@ -725,15 +721,7 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
                     }
                 }
 
-                if (
-                    $action instanceof DuplicateException ||
-                    $action instanceof RestrictedException ||
-                    $action instanceof AuthorizationException ||
-                    $action instanceof RelationshipException ||
-                    $action instanceof ConflictException ||
-                    $action instanceof LimitException ||
-                    $action instanceof TimeoutException
-                ) {
+                if (! $this->isRetryable($action)) {
                     throw $action;
                 }
 
@@ -748,6 +736,38 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
         }
 
         throw new TransactionException('Failed to execute transaction');
+    }
+
+    /**
+     * Whether a failed transaction attempt can succeed when it runs again. The transaction itself failing (a lock
+     * conflict, or a failed begin, commit or rollback) or a transient driver failure anywhere in the chain can; a
+     * typed failure of this library, or any other failure, would fail the same way again.
+     */
+    protected function isRetryable(Throwable $failure): bool
+    {
+        for ($cause = $failure; $cause !== null; $cause = $cause->getPrevious()) {
+            if ($cause instanceof TransactionException) {
+                return true;
+            }
+
+            if ($cause instanceof DatabaseException && $cause::class !== DatabaseException::class) {
+                return false;
+            }
+
+            if ($this->isTransient($cause)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Whether the driver raised the error for a condition that can clear on its own, such as a lost connection.
+     */
+    protected function isTransient(Throwable $error): bool
+    {
+        return Connection::hasError($error);
     }
 
     /**

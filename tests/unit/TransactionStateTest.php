@@ -2,13 +2,16 @@
 
 namespace Tests\Unit;
 
+use PDOException;
 use PDOStatement;
 use PHPUnit\Framework\TestCase;
-use RuntimeException;
+use Tests\Unit\Support\EngineError;
 use Throwable;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Exception\Contention as ContentionException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 
 final class TransactionStateTest extends TestCase
@@ -112,8 +115,9 @@ final class TransactionStateTest extends TestCase
     }
 
     /**
-     * While the enclosing transaction holds, a failed nested attempt rolls back to its
-     * savepoint and runs again inside the same outer transaction.
+     * While the enclosing transaction holds, a nested attempt that failed transiently rolls
+     * back to its savepoint and runs again inside the same outer transaction. A lock wait
+     * timeout rolls back only the statement, so the savepoint holds.
      */
     public function testNestedTransactionRetriesWhileTheOuterTransactionHolds(): void
     {
@@ -126,7 +130,7 @@ final class TransactionStateTest extends TestCase
             return $adapter->withTransaction(function () use (&$attempts, $stored): string {
                 $attempts++;
                 if ($attempts === 1) {
-                    throw new RuntimeException('Transient failure');
+                    throw new ContentionException('Lock wait timeout exceeded');
                 }
 
                 return $stored;
@@ -280,6 +284,140 @@ final class TransactionStateTest extends TestCase
             $adapter->exists('database', 'aggregations');
         });
 
+        $this->assertSame(2, $attempts);
+        $this->assertSame(2, $connection->begins);
+        $this->assertSame(1, $connection->commits);
+        $this->assertFalse($adapter->inTransaction());
+    }
+
+    /**
+     * An invalid write fails the same way however often it runs: the call rethrows it at
+     * once without beginning another transaction.
+     */
+    public function testDeterministicFailureIsNotRetried(): void
+    {
+        $connection = $this->createConnection();
+        $adapter = new MariaDB($connection);
+        $failure = new StructureException('Invalid document structure');
+        $attempts = 0;
+
+        $error = $this->capture(function () use ($adapter, $failure, &$attempts): void {
+            $adapter->withTransaction(function () use ($failure, &$attempts): never {
+                $attempts++;
+
+                throw $failure;
+            });
+        });
+
+        $this->assertSame($failure, $error);
+        $this->assertSame(1, $attempts);
+        $this->assertSame(1, $connection->begins);
+        $this->assertSame(0, $connection->commits);
+        $this->assertFalse($adapter->inTransaction());
+    }
+
+    /**
+     * A nested call rolls a deterministic failure back to its savepoint without running it
+     * again, and the outermost call does not run the whole unit again for it either.
+     */
+    public function testDeterministicFailureInANestedCallIsNotRetried(): void
+    {
+        $connection = $this->createConnection();
+        $adapter = new MariaDB($connection);
+        $failure = new NotFoundException('Collection not found');
+        $outer = 0;
+        $nested = 0;
+
+        $error = $this->capture(function () use ($adapter, $failure, &$outer, &$nested): void {
+            $adapter->withTransaction(function () use ($adapter, $failure, &$outer, &$nested): void {
+                $outer++;
+                $adapter->withTransaction(function () use ($failure, &$nested): never {
+                    $nested++;
+
+                    throw $failure;
+                });
+            });
+        });
+
+        $this->assertSame($failure, $error);
+        $this->assertSame(1, $outer);
+        $this->assertSame(1, $nested);
+        $this->assertSame(1, $connection->begins);
+        $this->assertSame(0, $connection->commits);
+        $this->assertFalse($adapter->inTransaction());
+    }
+
+    /**
+     * A deadlock the driver raised without the adapter mapping it is still a lock conflict,
+     * and the call runs again.
+     */
+    public function testUnmappedDeadlockIsRetried(): void
+    {
+        $connection = $this->createConnection();
+        $adapter = new MariaDB($connection);
+        $failure = EngineError::create('40001', 1213, 'SQLSTATE[40001]: Serialization failure: 1213 Deadlock found when trying to get lock');
+        $attempts = 0;
+
+        $error = $this->capture(function () use ($adapter, $failure, &$attempts): void {
+            $adapter->withTransaction(function () use ($failure, &$attempts): never {
+                $attempts++;
+
+                throw $failure;
+            });
+        });
+
+        $this->assertSame($failure, $error);
+        $this->assertSame(3, $attempts);
+        $this->assertSame(3, $connection->begins);
+        $this->assertSame(0, $connection->commits);
+        $this->assertFalse($adapter->inTransaction());
+    }
+
+    public function testUnmappedDeterministicDriverErrorIsNotRetried(): void
+    {
+        $connection = $this->createConnection();
+        $adapter = new MariaDB($connection);
+        $failure = EngineError::create('42000', 1064, 'SQLSTATE[42000]: Syntax error or access violation: 1064');
+        $attempts = 0;
+
+        $error = $this->capture(function () use ($adapter, $failure, &$attempts): void {
+            $adapter->withTransaction(function () use ($failure, &$attempts): never {
+                $attempts++;
+
+                throw $failure;
+            });
+        });
+
+        $this->assertSame($failure, $error);
+        $this->assertSame(1, $attempts);
+        $this->assertSame(1, $connection->begins);
+        $this->assertFalse($adapter->inTransaction());
+    }
+
+    /**
+     * A top-level callback that lost its connection stored nothing, so it runs again on a
+     * fresh transaction, as it did in 7.x, even though rolling back the lost transaction
+     * fails.
+     */
+    public function testTopLevelTransactionRetriesAfterTheCallbackLostTheConnection(): void
+    {
+        $connection = $this->createConnection();
+        $adapter = new MariaDB($connection);
+        $attempts = 0;
+        $stored = \uniqid();
+
+        $result = $adapter->withTransaction(function () use ($connection, &$attempts, $stored): string {
+            $attempts++;
+            if ($attempts === 1) {
+                $connection->reconnectSilently();
+
+                throw new PDOException('SQLSTATE[HY000]: General error: 2006 MySQL server has gone away');
+            }
+
+            return $stored;
+        });
+
+        $this->assertSame($stored, $result);
         $this->assertSame(2, $attempts);
         $this->assertSame(2, $connection->begins);
         $this->assertSame(1, $connection->commits);

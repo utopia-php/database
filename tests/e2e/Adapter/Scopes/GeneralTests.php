@@ -22,6 +22,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
+use Utopia\Database\Exception\Contention as ContentionException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Query as QueryException;
@@ -958,10 +959,7 @@ trait GeneralTests
 
     /**
      * Test that withTransaction correctly resets inTransaction state
-     * when retries are exhausted for a generic exception.
-     *
-     * MongoDB's withTransaction has no retry logic, so this test
-     * only applies to SQL-based adapters.
+     * when retries are exhausted for a lock conflict.
      */
     public function testTransactionStateAfterRetriesExhausted(): void
     {
@@ -979,20 +977,59 @@ trait GeneralTests
         try {
             $database->withTransaction(function () use (&$attempts) {
                 $attempts++;
-                throw new \RuntimeException('Persistent failure');
+                throw new ContentionException('Deadlock detected');
             });
-        } catch (\RuntimeException $e) {
-            $this->assertEquals('Persistent failure', $e->getMessage());
+        } catch (ContentionException $e) {
+            $this->assertSame('Deadlock detected', $e->getMessage());
         }
 
-        // Should have attempted 3 times (initial + 2 retries)
-        $this->assertEquals(3, $attempts, 'Should have exhausted all retry attempts');
+        $this->assertSame(3, $attempts, 'Should have exhausted all retry attempts');
 
-        // inTransaction must be false after retries exhausted
         $this->assertFalse(
             $database->getAdapter()->inTransaction(),
             'Adapter should not be in transaction after retries exhausted'
         );
+    }
+
+    /**
+     * An invalid document fails the same way on every attempt, so the transaction
+     * rethrows it at once instead of running the callback again.
+     */
+    public function testInvalidDocumentInATransactionIsNotRetried(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::DefinedAttributes)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'txInvalidDocument';
+        $database->createCollection(new Collection(id: $collection, attributes: [
+            Attribute::string(key: 'title', size: 128, required: true),
+        ], permissions: [
+            Permission::create(Role::any()),
+        ]));
+
+        $attempts = 0;
+        $error = null;
+
+        try {
+            $database->withTransaction(function () use ($database, $collection, &$attempts): void {
+                $attempts++;
+                $database->createDocument($collection, new Document(['$id' => 'invalid']));
+            });
+        } catch (StructureException $caught) {
+            $error = $caught;
+        } finally {
+            $database->deleteCollection($collection);
+        }
+
+        $this->assertInstanceOf(StructureException::class, $error);
+        $this->assertSame(1, $attempts, 'A deterministic failure must not run again');
+        $this->assertFalse($database->getAdapter()->inTransaction());
     }
 
     /**

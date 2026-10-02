@@ -6013,7 +6013,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         return match ($query->getMethod()) {
             Method::And => \array_filter($children, $this->rejectsMissingRow(...)) !== [],
-            Method::Or => $children !== [] && \array_filter($children, fn (BaseQuery $child): bool => ! $this->rejectsMissingRow($child)) === [],
+            Method::Or => \array_filter($children, fn (BaseQuery $child): bool => ! $this->rejectsMissingRow($child)) === [],
             Method::Equal,
             Method::NotEqual,
             Method::LessThan,

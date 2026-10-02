@@ -4,6 +4,7 @@ namespace Tests\Unit\Validator;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Tests\Unit\CountingAttribute;
 use Utopia\Database\Attribute;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -256,6 +257,22 @@ final class OperatorValidatorTest extends TestCase
         $this->assertStringStartsWith('Cannot apply increment operator: value must be numeric', $validator->getDescription());
         $this->assertFalse($validator->isValid(new Operator(OperatorType::Divide, 'count', [0.0])));
         $this->assertSame('Cannot apply divide operator: division by zero', $validator->getDescription());
+    }
+
+    public function testValidationReadsAttributesWithoutMagicProperties(): void
+    {
+        $count = new CountingAttribute(key: 'count', type: ColumnType::Integer, size: 4);
+        $name = new CountingAttribute(key: 'name', type: ColumnType::String, size: 16);
+        $validator = new OperatorValidator(
+            $this->collection([$count, $name]),
+            new Document(['count' => 1, 'name' => 'demo']),
+        );
+
+        $this->assertTrue($validator->isValid(new Operator(OperatorType::Increment, 'count', [1, 10])), $validator->getDescription());
+        $this->assertTrue($validator->isValid(new Operator(OperatorType::StringConcat, 'name', ['-1'])), $validator->getDescription());
+        $this->assertFalse($validator->isValid(new Operator(OperatorType::StringConcat, 'name', [\str_repeat('a', 16)])));
+        $this->assertSame([], $count->magicReads, 'Operator validation read "count" through Attribute::__get, which the PHP 8.5 tracing JIT crashes on (php/php-src#22084)');
+        $this->assertSame([], $name->magicReads, 'Operator validation read "name" through Attribute::__get, which the PHP 8.5 tracing JIT crashes on (php/php-src#22084)');
     }
 
     private function doubleValidator(): OperatorValidator

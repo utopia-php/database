@@ -3,6 +3,7 @@
 namespace Tests\Unit\Validator;
 
 use PHPUnit\Framework\TestCase;
+use Tests\Unit\CountingAttribute;
 use Tests\Unit\Format;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -1333,5 +1334,45 @@ class StructureTest extends TestCase
 
         $this->assertFalse($validator->isValid(new Document($base + ['text' => \str_repeat('📝', 20000)])), '20,000 emoji are 80,000 bytes and must be rejected by byte length');
         $this->assertSame('Invalid document structure: Attribute "text" has invalid type. Value must be a valid string no longer than 65535 bytes', $validator->getDescription());
+    }
+
+    public function testValidationReadsAttributesWithoutMagicProperties(): void
+    {
+        $attributes = [
+            new CountingAttribute(key: 'title', type: ColumnType::String, size: 128, required: true),
+            new CountingAttribute(key: 'feedback', type: ColumnType::String, size: 55, format: 'email'),
+            new CountingAttribute(key: 'rating', type: ColumnType::Integer, size: 4, signed: false),
+            new CountingAttribute(key: 'reviews', type: ColumnType::BigInteger, array: true),
+            new CountingAttribute(key: 'price', type: ColumnType::Double),
+            new CountingAttribute(key: 'published', type: ColumnType::Boolean),
+            new CountingAttribute(key: 'releasedAt', type: ColumnType::Datetime),
+            new CountingAttribute(key: 'tags', type: ColumnType::Varchar, size: 32, array: true),
+        ];
+        $validator = new Structure(new Document([
+            '$id' => ID::custom('posts'),
+            '$collection' => ID::custom(Database::METADATA),
+            'attributes' => $attributes,
+            'indexes' => [],
+        ]), ColumnType::Integer->value);
+
+        $valid = $validator->isValid(new Document([
+            '$collection' => ID::custom('posts'),
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
+            '$permissions' => ['read("any")'],
+            'title' => 'Demo',
+            'feedback' => 'team@appwrite.io',
+            'rating' => 5,
+            'reviews' => [1, '9007199254740993'],
+            'price' => 1.99,
+            'published' => true,
+            'releasedAt' => '2000-04-01T12:00:00.000+00:00',
+            'tags' => ['a', 'b'],
+        ]));
+
+        $this->assertTrue($valid, $validator->getDescription());
+        foreach ($attributes as $attribute) {
+            $this->assertSame([], $attribute->magicReads, 'Structure validation read "'.$attribute->getKey().'" through Attribute::__get, which the PHP 8.5 tracing JIT crashes on (php/php-src#22084)');
+        }
     }
 }

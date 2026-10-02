@@ -8718,10 +8718,11 @@ trait JoinTests
     }
 
     /**
-     * An inner-joined read, and a left-joined one filtered on joined attributes, ordered by main attributes up to a
-     * unique one return every window and every cursor page of the unpaged read: MariaDB and MySQL pick the main rows
-     * a page can reach, those with a matching readable note, before they join them, through authors whose notes are
-     * all hidden or fail the filter, hidden authors, ties and nulls in the main order, and a fulltext search.
+     * Inner-joined reads, left-joined reads filtered on joined attributes and searched reads, ordered by main
+     * attributes up to a unique one, return every window and every cursor page of the unpaged read, through authors
+     * whose notes are all hidden or fail the filter, hidden authors, and ties and nulls in the main order. MariaDB and
+     * MySQL pick the main rows a left-joined searched page can reach before they join them, running the search there
+     * only; the other reads keep the whole join.
      */
     public function testInnerAndFilteredJoinedPagesMatchTheUnpagedRead(): void
     {

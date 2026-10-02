@@ -7,8 +7,8 @@ use Utopia\Query\OrderDirection;
 use Utopia\Query\Query as BaseQuery;
 
 /**
- * The main rows a joined read's page can come from: the first `rows` main documents in the main order of the read
- * that meet its main conditions and its searches and hold a match in each of `joins`.
+ * The main rows a left-joined read's page can come from: the first `rows` main documents in the main order of the
+ * read that meet its main conditions and its searches.
  */
 final readonly class BoundedPage
 {
@@ -18,7 +18,6 @@ final readonly class BoundedPage
      * @param  list<BaseQuery>  $conditions  The read's conditions on main attributes, its searches included
      * @param  list<Query>  $adapterConditions  The read's searches the adapter compiles itself
      * @param  list<BaseQuery>  $searches  The read's own searches, which only the page applies
-     * @param  list<PageJoin>  $joins  The joins whose ON compares a main column
      */
     public function __construct(
         public array $orderAttributes,
@@ -27,7 +26,6 @@ final readonly class BoundedPage
         public array $conditions,
         public array $adapterConditions,
         public array $searches,
-        public array $joins,
     ) {
     }
 

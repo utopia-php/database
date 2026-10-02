@@ -6,7 +6,6 @@ use PDO;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Tests\Unit\Support\BoundedJoinSortSQLite;
-use Tests\Unit\Support\MatchLimitedBoundedJoinSortSQLite;
 use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\SQLite;
@@ -24,11 +23,11 @@ use Utopia\Database\Validator\Authorization;
 use Utopia\Query\Method;
 
 /**
- * A joined read ordered by main attributes up to a unique one picks the main rows its page can reach before it joins
- * them, so MariaDB and MySQL sort the joined rows of those main rows only: with left joins every main row it matches,
- * with inner joins and conditions on joined attributes those with a matching joined row. The read returns the rows,
- * the order and the pages of the read that sorts the whole join: every read here runs on both and has to agree row
- * for row, through offsets, cursors in both directions, iterate(), hidden documents and a second tenant's rows.
+ * A left-joined read ordered by main attributes up to a unique one picks the main rows its page can reach before it
+ * joins them, so MariaDB and MySQL sort the joined rows of those main rows only, searches on main attributes included.
+ * The read returns the rows, the order and the pages of the read that sorts the whole join: every read here runs on
+ * both and has to agree row for row, through offsets, cursors in both directions, iterate(), hidden documents and a
+ * second tenant's rows. Inner joins and conditions on joined attributes keep the whole join.
  */
 final class BoundedJoinSortTest extends TestCase
 {
@@ -94,7 +93,7 @@ final class BoundedJoinSortTest extends TestCase
     ];
 
     /**
-     * @var array<string, array{Database, Database, Database, Database}>
+     * @var array<string, array{Database, Database}>
      */
     private array $databases = [];
 
@@ -136,31 +135,33 @@ final class BoundedJoinSortTest extends TestCase
         foreach ([self::PLAIN, self::GRANTED, self::SHARED] as $mode) {
             foreach ($joins as $joinName => $join) {
                 foreach ($orders as $orderName => $order) {
-                    yield "{$mode}: {$joinName}, {$orderName}" => [$mode, [...$join, ...$order], true];
+                    $bounded = \array_filter($join, static fn (Query $query): bool => $query->getMethod() === Method::Join) === [];
+                    yield "{$mode}: {$joinName}, {$orderName}" => [$mode, [...$join, ...$order], $bounded];
                 }
             }
 
             foreach ($joinedConditions as $conditionName => $conditions) {
                 foreach (['default order' => [], 'rank descending' => [Query::orderDesc('rank')]] as $orderName => $order) {
-                    yield "{$mode}: notes, {$conditionName}, {$orderName}" => [$mode, [$notes, ...$conditions, ...$order], true];
-                    yield "{$mode}: inner notes, {$conditionName}, {$orderName}" => [$mode, [$innerNotes, ...$conditions, ...$order], true];
+                    yield "{$mode}: notes, {$conditionName}, {$orderName}" => [$mode, [$notes, ...$conditions, ...$order], false];
+                    yield "{$mode}: inner notes, {$conditionName}, {$orderName}" => [$mode, [$innerNotes, ...$conditions, ...$order], false];
                 }
             }
 
             yield "{$mode}: notes, joined attributes selected" => [$mode, [$notes, Query::orderAsc('rank'), Query::select(['name', 'rank', 'n.rank', 'n.$id'])], true];
-            yield "{$mode}: inner notes, joined attributes selected" => [$mode, [$innerNotes, Query::orderAsc('rank'), Query::select(['name', 'rank', 'n.rank', 'n.$id'])], true];
+            yield "{$mode}: inner notes, joined attributes selected" => [$mode, [$innerNotes, Query::orderAsc('rank'), Query::select(['name', 'rank', 'n.rank', 'n.$id'])], false];
             yield "{$mode}: notes, every attribute selected" => [$mode, [$notes, Query::orderDesc('rank'), Query::select(['*'])], true];
             yield "{$mode}: notes, a main condition" => [$mode, [$notes, Query::notEqual('name', 'cedar'), Query::orderAsc('rank')], true];
             yield "{$mode}: notes, main conditions grouped" => [$mode, [$notes, Query::or([Query::lessThan('rank', 2), Query::isNull('rank')])], true];
-            yield "{$mode}: inner notes, a main and a joined condition" => [$mode, [$innerNotes, Query::notEqual('name', 'cedar'), Query::lessThan('n.rank', 3), Query::orderAsc('rank')], true];
-            yield "{$mode}: inner notes, a joined attribute that is not set" => [$mode, [$innerNotes, Query::isNull('n.rank')], true];
-            yield "{$mode}: notes and their inner tags, a joined condition that keeps notes without a rank" => [$mode, [$notes, Query::join('tags', 'n.$id', 'note', '=', 't'), Query::or([Query::isNull('n.rank'), Query::lessThan('n.rank', 4)])], true];
+            yield "{$mode}: inner notes, a main and a joined condition" => [$mode, [$innerNotes, Query::notEqual('name', 'cedar'), Query::lessThan('n.rank', 3), Query::orderAsc('rank')], false];
+            yield "{$mode}: inner notes, a joined attribute that is not set" => [$mode, [$innerNotes, Query::isNull('n.rank')], false];
+            yield "{$mode}: notes and their inner tags, a joined condition that keeps notes without a rank" => [$mode, [$notes, Query::join('tags', 'n.$id', 'note', '=', 't'), Query::or([Query::isNull('n.rank'), Query::lessThan('n.rank', 4)])], false];
             yield "{$mode}: notes, a search on a main attribute" => [$mode, [$notes, Query::search('name', 'amber')], true];
             yield "{$mode}: notes, a search matching every author" => [$mode, [$notes, Query::search('name', 'one'), Query::orderAsc('rank')], true];
-            yield "{$mode}: inner notes, a search and a joined condition" => [$mode, [$innerNotes, Query::search('name', 'one'), Query::isNotNull('n.rank'), Query::orderDesc('rank')], true];
+            yield "{$mode}: inner notes, a search and a joined condition" => [$mode, [$innerNotes, Query::search('name', 'one'), Query::isNotNull('n.rank'), Query::orderDesc('rank')], false];
             yield "{$mode}: notes, a search that excludes authors" => [$mode, [$notes, Query::notSearch('name', 'amber')], true];
+            yield "{$mode}: notes, a search on a joined attribute" => [$mode, [$notes, Query::search('n.author', 'a01')], false];
             yield "{$mode}: notes, a joined attribute that is not set" => [$mode, [$notes, Query::isNull('n.rank'), Query::orderAsc('rank')], false];
-            yield "{$mode}: notes, a joined attribute other than a value" => [$mode, [$notes, Query::notEqual('n.rank', 1)], true];
+            yield "{$mode}: notes, a joined attribute other than a value" => [$mode, [$notes, Query::notEqual('n.rank', 1)], false];
             yield "{$mode}: notes, a joined attribute that is not set or below a value" => [$mode, [$notes, Query::or([Query::isNull('n.rank'), Query::lessThan('n.rank', 2)])], false];
             yield "{$mode}: notes, a grouped condition naming a joined and a main attribute" => [$mode, [$notes, Query::or([Query::equal('n.rank', [1]), Query::isNull('rank')])], false];
             yield "{$mode}: inner notes, a grouped condition naming a joined and a main attribute" => [$mode, [$innerNotes, Query::or([Query::equal('n.rank', [1]), Query::isNull('rank')])], false];
@@ -181,13 +182,10 @@ final class BoundedJoinSortTest extends TestCase
     #[DataProvider('reads')]
     public function testEveryWindowOfTheReadMatchesTheReadThatSortsTheWholeJoin(string $mode, array $queries, bool $bounded): void
     {
-        [$sorted, $bounding, $leftBounding, $oneMatchBounding] = $this->databases($mode);
+        [$sorted, $bounding] = $this->databases($mode);
         $all = $this->rows($sorted, $queries, [Query::limit(100)]);
         $this->assertNotSame([], $all);
         $this->assertSame($all, $this->rows($bounding, $queries, [Query::limit(100)]));
-        $matched = \count($this->matchedJoins($queries));
-        $leftBounded = $bounded && $matched === 0;
-        $oneMatchBounded = $bounded && $matched <= 1;
 
         foreach ([1, 2, 3] as $limit) {
             for ($offset = 0; $offset <= \count($all); $offset++) {
@@ -196,10 +194,6 @@ final class BoundedJoinSortTest extends TestCase
                 $this->assertSame($expected, $this->rows($sorted, $queries, $page), "limit {$limit}, offset {$offset}: the read that sorts the whole join");
                 $this->assertSame($expected, $this->rows($bounding, $queries, $page), "limit {$limit}, offset {$offset}");
                 $this->assertSame($bounded ? $offset + $limit : null, $this->boundedMainRows($bounding), "limit {$limit}, offset {$offset}: main rows the join sees");
-                $this->assertSame($expected, $this->rows($leftBounding, $queries, $page), "limit {$limit}, offset {$offset}: bounding left joins only");
-                $this->assertSame($leftBounded ? $offset + $limit : null, $this->boundedMainRows($leftBounding), "limit {$limit}, offset {$offset}: main rows the join sees, bounding left joins only");
-                $this->assertSame($expected, $this->rows($oneMatchBounding, $queries, $page), "limit {$limit}, offset {$offset}: bounding one matched join at most");
-                $this->assertSame($oneMatchBounded ? $offset + $limit : null, $this->boundedMainRows($oneMatchBounding), "limit {$limit}, offset {$offset}: main rows the join sees, bounding one matched join at most");
             }
         }
     }
@@ -303,61 +297,6 @@ final class BoundedJoinSortTest extends TestCase
     }
 
     /**
-     * The joins a read needs a match from: its inner joins, the joins its conditions name, and the notes a tags join
-     * on a note reaches the authors through.
-     *
-     * @param  array<Query>  $queries
-     * @return array<string, true>
-     */
-    private function matchedJoins(array $queries): array
-    {
-        $matched = [];
-        $parents = [];
-        foreach ($queries as $query) {
-            $method = $query->getMethod();
-            if ($method->isJoin()) {
-                $alias = $query->getJoinAlias();
-                $left = $query->getValues()[0] ?? '';
-                $parents[$alias] = \is_string($left) && \str_starts_with($left, 'n.') ? 'n' : null;
-                if ($method === Method::Join) {
-                    $matched[$alias] = true;
-                }
-            } elseif (! \in_array($method, [Method::Select, Method::OrderAsc, Method::OrderDesc], true)) {
-                foreach ($this->conditionAliases($query) as $alias) {
-                    $matched[$alias] = true;
-                }
-            }
-        }
-
-        foreach (\array_keys($matched) as $alias) {
-            for ($parent = $parents[$alias] ?? null; $parent !== null; $parent = $parents[$parent] ?? null) {
-                $matched[$parent] = true;
-            }
-        }
-
-        return $matched;
-    }
-
-    /**
-     * @return list<string>
-     */
-    private function conditionAliases(Query $query): array
-    {
-        $aliases = [];
-        $dot = \strpos($query->getAttribute(), '.');
-        if ($dot !== false) {
-            $aliases[] = \substr($query->getAttribute(), 0, $dot);
-        }
-        foreach ($query->getValues() as $value) {
-            if ($value instanceof Query) {
-                \array_push($aliases, ...$this->conditionAliases($value));
-            }
-        }
-
-        return $aliases;
-    }
-
-    /**
      * @param  list<Document>  $rows
      * @param  list<Query>  $queries
      */
@@ -450,19 +389,15 @@ final class BoundedJoinSortTest extends TestCase
     }
 
     /**
-     * The same documents in a database that sorts the whole join, one that bounds it, one that bounds only reads
-     * whose left joins keep every main row (MariaDB) and one that bounds reads needing one matched join at most
-     * (MySQL).
+     * The same documents in a database that sorts the whole join and one that bounds it.
      *
-     * @return array{Database, Database, Database, Database}
+     * @return array{Database, Database}
      */
     private function databases(string $mode): array
     {
         return $this->databases[$mode] ??= [
             $this->database(new SQLite(new PDO('sqlite::memory:')), $mode),
             $this->database(new BoundedJoinSortSQLite(new PDO('sqlite::memory:')), $mode),
-            $this->database(new MatchLimitedBoundedJoinSortSQLite(new PDO('sqlite::memory:'), 0), $mode),
-            $this->database(new MatchLimitedBoundedJoinSortSQLite(new PDO('sqlite::memory:'), 1), $mode),
         ];
     }
 
@@ -495,7 +430,11 @@ final class BoundedJoinSortTest extends TestCase
             $database->createCollection(new Collection(
                 id: $id,
                 attributes: $attributes,
-                indexes: $id === 'authors' ? [Index::fullText(key: 'name_search', attributes: ['name'])] : [],
+                indexes: match ($id) {
+                    'authors' => [Index::fullText(key: 'name_search', attributes: ['name'])],
+                    'notes' => [Index::fullText(key: 'author_search', attributes: ['author'])],
+                    default => [],
+                },
                 permissions: $permissions,
                 documentSecurity: true,
             ));

@@ -51,16 +51,6 @@ class SQLite extends Base
         return $sql;
     }
 
-    #[\Override]
-    public function whereColumn(string $left, string $operator, string $right): static
-    {
-        if (! \in_array($operator, self::EQUALITY_OPERATORS, true) || (! $this->isCollated($left) && ! $this->isCollated($right))) {
-            return parent::whereColumn($left, $operator, $right);
-        }
-
-        return $this->whereRaw($this->resolveAndWrap($left).self::COLLATE.' '.$operator.' '.$this->resolveAndWrap($right));
-    }
-
     /**
      * @param  array<mixed>  $values
      */

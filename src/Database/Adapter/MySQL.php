@@ -143,16 +143,6 @@ class MySQL extends MariaDB
     private const int LARGE_JOIN = 5;
 
     /**
-     * With two EXISTS checks in one page MySQL 8.0 plans them unstably (100k: 1.7-2.7x the unbounded read in half
-     * the runs), so a page needs a match from one join at most.
-     */
-    #[\Override]
-    protected function pageMatchedJoins(): int
-    {
-        return 1;
-    }
-
-    /**
      * Inside an outer join's ON clause MySQL runs a semi-joined check by scanning its materialised
      * rows once per outer row, so an outer-joined table's check always stays a subquery.
      */

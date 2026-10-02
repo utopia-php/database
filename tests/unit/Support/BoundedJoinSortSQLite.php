@@ -6,8 +6,8 @@ use Override;
 use Utopia\Database\Adapter\SQLite;
 
 /**
- * SQLite that picks the main rows a joined page can reach before it joins them, as MariaDB and MySQL do, so the host
- * exercises that statement.
+ * SQLite that picks the main rows a left-joined page can reach before it joins them, as MariaDB and MySQL do, so the
+ * host exercises that statement.
  */
 final class BoundedJoinSortSQLite extends SQLite
 {
@@ -15,11 +15,5 @@ final class BoundedJoinSortSQLite extends SQLite
     protected function boundsJoinedSort(): bool
     {
         return true;
-    }
-
-    #[Override]
-    protected function pageMatchedJoins(): int
-    {
-        return PHP_INT_MAX;
     }
 }

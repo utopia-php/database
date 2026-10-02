@@ -130,12 +130,6 @@ class MySQL extends MariaDB
     }
 
     #[\Override]
-    protected function boundsMatchedJoins(): bool
-    {
-        return true;
-    }
-
-    #[\Override]
     protected function supportsInsertReturning(): bool
     {
         return false;

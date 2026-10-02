@@ -89,8 +89,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
     private const string FOJ_ROWS_ALIAS = 'foj_rows';
 
-    private const string BOUNDED_PAGE_ROWS = '_boundedPageRows';
-
     /**
      * MariaDB, MySQL and SQLite accept OFFSET only after a LIMIT; this one bounds nothing on any engine.
      */
@@ -1653,7 +1651,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         };
 
         $emulatesFullOuterJoin = $this->needsFullOuterJoinEmulation($this->createBuilder(), $queries);
-        $checked = false;
 
         if ($emulatesFullOuterJoin && $hasAggregation) {
             $results = $this->findFullOuterJoinAggregate(
@@ -1759,109 +1756,103 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $bound = $hasJoins && ! $hasAggregation && ! $hasDistinct && $vectorQueries === [] && $this->boundsJoinedSort()
                 ? $this->boundedPage($collectionDoc, $queries, $adapterFilterQueries, $joinTablePrefixes, $orderAttributes, $orderTypes, $limit, $offset, $cursor)
                 : null;
-            $checked = $bound?->exact === false;
 
-            do {
-                $builder = $this->newBuilder($name, $alias, $hasPreservingOuterJoin);
-                $hasSelectionProjection = $this->configureFindBuilder(
+            $builder = $this->newBuilder($name, $alias, $hasPreservingOuterJoin);
+            $hasSelectionProjection = $this->configureFindBuilder(
+                $builder,
+                $collectionDoc,
+                $bound?->withoutSearches($queries) ?? $queries,
+                $joinTablePrefixes,
+                $hasAggregation,
+                $hasDistinct,
+                $bound?->withoutSearches($adapterFilterQueries) ?? $adapterFilterQueries,
+                $name,
+                $alias,
+                $roles,
+                $forPermission,
+            );
+
+            $vectorDistance = null;
+            $vectorQuery = $vectorQueries[0] ?? null;
+            if ($vectorQuery !== null) {
+                $vectorDistance = $this->getVectorOrderRaw($vectorQuery, $alias);
+            }
+
+            if ($vectorDistance !== null && $vectorQuery !== null) {
+                $vectorAttribute = $this->quote($this->filter($vectorQuery->getAttribute()));
+                $builder->whereRaw($this->quote($alias).".{$vectorAttribute} IS NOT NULL");
+            }
+
+            // Cursor pagination - build nested Query objects for complex multi-attribute cursor conditions
+            if (! empty($cursor) && $vectorDistance !== null && ! $hasDistinct) {
+                $distance = $cursor[Document::DISTANCE] ?? null;
+                if (! \is_numeric($distance)) {
+                    throw new QueryException('Vector cursor is missing its distance');
+                }
+                if (empty($orderAttributes)) {
+                    throw new QueryException('Vector cursor requires a unique order attribute');
+                }
+
+                $vectorCursor = $this->getVectorCursorCondition(
+                    $vectorDistance,
+                    (float) $distance,
+                    \array_values($orderAttributes),
+                    \array_values($orderTypes),
+                    $cursor,
+                    $cursorDirection,
+                    $alias,
+                    $resolveInternalKey,
+                    nullable: $hasJoins,
+                );
+                $builder->whereRaw($vectorCursor['expression'], $vectorCursor['bindings']);
+            }
+
+            if ($vectorDistance === null || $hasDistinct) {
+                $this->applyFindCursor(
+                    $builder,
+                    $orderAttributes,
+                    $orderTypes,
+                    $cursor,
+                    $cursorDirection,
+                    $resolveInternalKey,
+                    nullable: $hasJoins,
+                );
+            }
+
+            // Vector ordering (comes first for similarity search)
+            if ($vectorDistance !== null && ! $hasAggregation && ! $hasDistinct) {
+                $vectorOrder = $vectorDistance['expression'];
+                if (! empty($cursor) && $cursorDirection === CursorDirection::Before) {
+                    $vectorOrder .= ' DESC';
+                }
+                $builder->orderByRaw($vectorOrder, $vectorDistance['bindings']);
+
+                if (! $hasSelectionProjection) {
+                    $builder->select(['*']);
+                }
+                $builder->selectRaw(
+                    $this->getSQLReadableDistance($vectorDistance['expression']).' AS '.$this->quote(Storage::DISTANCE),
+                    $vectorDistance['bindings']
+                );
+            }
+
+            if ($bound !== null) {
+                $this->joinFromBoundedPage(
                     $builder,
                     $collectionDoc,
-                    $bound?->withoutSearches($queries) ?? $queries,
-                    $joinTablePrefixes,
-                    $hasAggregation,
-                    $hasDistinct,
-                    $bound?->withoutSearches($adapterFilterQueries) ?? $adapterFilterQueries,
+                    $bound,
+                    $cursor,
+                    $cursorDirection,
+                    $resolveInternalKey,
                     $name,
                     $alias,
                     $roles,
                     $forPermission,
                 );
+            }
 
-                $vectorDistance = null;
-                $vectorQuery = $vectorQueries[0] ?? null;
-                if ($vectorQuery !== null) {
-                    $vectorDistance = $this->getVectorOrderRaw($vectorQuery, $alias);
-                }
-
-                if ($vectorDistance !== null && $vectorQuery !== null) {
-                    $vectorAttribute = $this->quote($this->filter($vectorQuery->getAttribute()));
-                    $builder->whereRaw($this->quote($alias).".{$vectorAttribute} IS NOT NULL");
-                }
-
-                // Cursor pagination - build nested Query objects for complex multi-attribute cursor conditions
-                if (! empty($cursor) && $vectorDistance !== null && ! $hasDistinct) {
-                    $distance = $cursor[Document::DISTANCE] ?? null;
-                    if (! \is_numeric($distance)) {
-                        throw new QueryException('Vector cursor is missing its distance');
-                    }
-                    if (empty($orderAttributes)) {
-                        throw new QueryException('Vector cursor requires a unique order attribute');
-                    }
-
-                    $vectorCursor = $this->getVectorCursorCondition(
-                        $vectorDistance,
-                        (float) $distance,
-                        \array_values($orderAttributes),
-                        \array_values($orderTypes),
-                        $cursor,
-                        $cursorDirection,
-                        $alias,
-                        $resolveInternalKey,
-                        nullable: $hasJoins,
-                    );
-                    $builder->whereRaw($vectorCursor['expression'], $vectorCursor['bindings']);
-                }
-
-                if ($vectorDistance === null || $hasDistinct) {
-                    $this->applyFindCursor(
-                        $builder,
-                        $orderAttributes,
-                        $orderTypes,
-                        $cursor,
-                        $cursorDirection,
-                        $resolveInternalKey,
-                        nullable: $hasJoins,
-                    );
-                }
-
-                // Vector ordering (comes first for similarity search)
-                if ($vectorDistance !== null && ! $hasAggregation && ! $hasDistinct) {
-                    $vectorOrder = $vectorDistance['expression'];
-                    if (! empty($cursor) && $cursorDirection === CursorDirection::Before) {
-                        $vectorOrder .= ' DESC';
-                    }
-                    $builder->orderByRaw($vectorOrder, $vectorDistance['bindings']);
-
-                    if (! $hasSelectionProjection) {
-                        $builder->select(['*']);
-                    }
-                    $builder->selectRaw(
-                        $this->getSQLReadableDistance($vectorDistance['expression']).' AS '.$this->quote(Storage::DISTANCE),
-                        $vectorDistance['bindings']
-                    );
-                }
-
-                if ($bound !== null) {
-                    $this->joinFromBoundedPage(
-                        $builder,
-                        $collectionDoc,
-                        $bound,
-                        $cursor,
-                        $cursorDirection,
-                        $resolveInternalKey,
-                        $name,
-                        $alias,
-                        $roles,
-                        $forPermission,
-                    );
-                }
-
-                $this->applyFindPage($builder, $orderAttributes, $orderTypes, $limit, $offset, $cursorDirection, joinAliases: $joinAliases);
-                $results = $this->executeSelect($builder, Event::DocumentFind, $name);
-
-                $unfilled = $bound !== null && ! $bound->exact && ! $this->fillsBoundedPage($results, $bound, (int) $limit);
-                $bound = null;
-            } while ($unfilled);
+            $this->applyFindPage($builder, $orderAttributes, $orderTypes, $limit, $offset, $cursorDirection, joinAliases: $joinAliases);
+            $results = $this->executeSelect($builder, Event::DocumentFind, $name);
         }
 
         $documents = [];
@@ -1878,9 +1869,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         foreach ($results as $row) {
             /** @var array<string, mixed> $row */
-            if ($checked) {
-                unset($row[self::BOUNDED_PAGE_ROWS]);
-            }
             $this->remapRow($row);
             $documents[] = Document::fromRow($row);
         }
@@ -5697,25 +5685,11 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
-     * Whether a read bounded by boundsJoinedSort() also bounds inner joins and conditions on joined attributes, whose
-     * main documents may give no row: it reads the page from the first main documents and reads again without them
-     * when they do not fill it.
-     */
-    protected function boundsMatchedJoins(): bool
-    {
-        return false;
-    }
-
-    /**
      * A read ordered by main attributes up to a unique one, then by joined ones, returns every joined row of one main
      * document together. Without inner joins and without conditions on joined attributes, every main document it
      * matches gives at least one row, so its page of `limit` rows after `offset` rows (and after the cursor) comes
      * from the first `offset + limit` main documents in that order after the cursor's own, plus the cursor's own.
      * A search on main attributes only keeps or drops main documents, so it joins the main conditions.
-     *
-     * With inner joins or conditions on joined attributes (where the engine bounds those), a main document may give
-     * no row: the rows of the first main documents are still the first rows of the read, so the page those main
-     * documents give is the read's page whenever it is full (find() checks it and reads again otherwise).
      *
      * @param  array<BaseQuery>  $queries
      * @param  array<Query>  $adapterFilterQueries
@@ -5750,8 +5724,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             return null;
         }
 
-        $matched = $this->boundsMatchedJoins();
-        $exact = true;
         $conditions = [];
         $searches = [];
         foreach ($queries as $query) {
@@ -5761,9 +5733,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             }
 
             if ($method->isJoin()) {
-                if ($method === Method::Join && $matched) {
-                    $exact = false;
-                } elseif ($method !== Method::LeftJoin) {
+                if ($method !== Method::LeftJoin) {
                     return null;
                 }
 
@@ -5773,13 +5743,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             if ($this->isMainSearch($query, $joinAliases)) {
                 $searches[] = $query;
             } elseif (! $this->isMainRowCondition($query, $joinAliases)) {
-                if (! $matched || ! $this->isRowCondition($query)) {
-                    return null;
-                }
-
-                $exact = false;
-
-                continue;
+                return null;
             }
 
             $conditions[] = clone $query;
@@ -5788,13 +5752,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $adapterConditions = [];
         foreach ($adapterFilterQueries as $query) {
             if (! $this->isMainSearch($query, $joinAliases)) {
-                if (! $matched) {
-                    return null;
-                }
-
-                $exact = false;
-
-                continue;
+                return null;
             }
 
             $adapterConditions[] = clone $query;
@@ -5812,7 +5770,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             conditions: $conditions,
             adapterConditions: $adapterConditions,
             searches: $searches,
-            exact: $exact,
         );
     }
 
@@ -5863,37 +5820,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         $this->applyFindPage($page, $bound->orderAttributes, $bound->orderTypes, $bound->rows, null, $cursorDirection);
 
-        if ($bound->exact) {
-            $builder->fromSub($page, $alias);
-
-            return;
-        }
-
-        $counted = $this->createBuilder()
-            ->fromSub($page, $alias)
-            ->select([$alias.'.*'])
-            ->selectWindow('COUNT(*)', self::BOUNDED_PAGE_ROWS);
-
-        $builder
-            ->fromSub($counted, $alias)
-            ->selectRaw($this->quote($alias).'.'.$this->quote(self::BOUNDED_PAGE_ROWS));
-    }
-
-    /**
-     * Whether the rows a matched page gave are the read's: it filled the page, or it held every main document the
-     * read matches after the cursor (fewer than it could hold).
-     *
-     * @param  array<int, array<string, mixed>>  $rows
-     */
-    private function fillsBoundedPage(array $rows, BoundedPage $bound, int $limit): bool
-    {
-        if (\count($rows) >= $limit) {
-            return true;
-        }
-
-        $held = $rows[0][self::BOUNDED_PAGE_ROWS] ?? null;
-
-        return \is_numeric($held) && (int) $held < $bound->rows;
+        $builder->fromSub($page, $alias);
     }
 
     /**
@@ -5951,7 +5878,14 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     private function isMainRowCondition(BaseQuery $query, array $joinAliases): bool
     {
         $method = $query->getMethod();
-        if ($method === Method::Search || $method === Method::NotSearch || ! $this->isRowCondition($query)) {
+        if (
+            $method === Method::Search
+            || $method === Method::NotSearch
+            || (! $method->isFilter()
+            && ! $method->isSpatial()
+            && ! $method->isJson()
+            && ! \in_array($method, self::ROW_CONDITION_GROUPS, true))
+        ) {
             return false;
         }
 
@@ -5973,19 +5907,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         return true;
-    }
-
-    /**
-     * Whether a query keeps or drops rows of the read, searches included.
-     */
-    private function isRowCondition(BaseQuery $query): bool
-    {
-        $method = $query->getMethod();
-
-        return $method->isFilter()
-            || $method->isSpatial()
-            || $method->isJson()
-            || \in_array($method, self::ROW_CONDITION_GROUPS, true);
     }
 
     /**

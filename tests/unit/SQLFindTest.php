@@ -7,8 +7,10 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
+use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\Postgres;
+use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -447,6 +449,75 @@ final class SQLFindTest extends TestCase
         $this->assertStringContainsString('`orders`.`email` IN (?)', $sql);
         $this->assertStringContainsString('`orders`.`_uid` IN (?)', $sql);
         $this->assertStringContainsString('`profile`.`user`.`email` IN (?)', $sql);
+    }
+
+    /**
+     * @return iterable<string, array{class-string<SQL>, Query, int, list<string>}>
+     */
+    public static function matchedPageReads(): iterable
+    {
+        $inner = Query::join('orders', '$id', 'customerId', '=', 'o');
+        $left = Query::leftJoin('orders', '$id', 'customerId', '=', 'o');
+
+        yield 'mysql, an inner join whose first main rows give no row' => [MySQL::class, $inner, 0, ['counted page', 'whole join']];
+        yield 'mysql, an inner join whose first main rows fill the page' => [MySQL::class, $inner, 25, ['counted page']];
+        yield 'mysql, a left join' => [MySQL::class, $left, 0, ['page']];
+        yield 'mariadb, an inner join' => [MariaDB::class, $inner, 0, ['whole join']];
+        yield 'postgres, an inner join' => [Postgres::class, $inner, 0, ['whole join']];
+    }
+
+    /**
+     * MySQL reads an inner-joined page from the first main rows it can reach and reads the whole join only when their
+     * rows do not fill it; MariaDB and PostgreSQL read the whole join.
+     *
+     * @param  class-string<SQL>  $adapterClass
+     * @param  list<string>  $expected
+     */
+    #[DataProvider('matchedPageReads')]
+    public function testOnlyMySQLReadsAMatchedPageFromItsFirstMainRows(string $adapterClass, Query $join, int $rows, array $expected): void
+    {
+        $fetched = [];
+        for ($row = 1; $row <= $rows; $row++) {
+            $fetched[] = ['_uid' => "c{$row}", '_id' => $row, 'o._uid' => "o{$row}", '_boundedPageRows' => $rows];
+        }
+        $statement = $this->statement();
+        $statement->method('execute')->willReturn(true);
+        $statement->method('fetchAll')->willReturn($fetched);
+        $statement->method('closeCursor')->willReturn(true);
+
+        $statements = [];
+        $pdo = self::createStub(\PDO::class);
+        $pdo->method('prepare')->willReturnCallback(function (string $query) use (&$statements, $statement): \PDOStatement {
+            $statements[] = match (true) {
+                \str_contains($query, 'COUNT(*) OVER ()') => 'counted page',
+                \preg_match('/FROM \(SELECT/', $query) === 1 => 'page',
+                default => 'whole join',
+            };
+
+            return $statement;
+        });
+
+        $adapter = new $adapterClass($pdo);
+        $adapter->setDatabase('database');
+        $adapter->setNamespace('namespace');
+        $authorization = new Authorization();
+        $authorization->disable();
+        $adapter->setAuthorization($authorization);
+
+        $documents = $adapter->find(
+            new Document(['$id' => 'collection']),
+            [$join],
+            limit: 25,
+            orderAttributes: [Document::SEQUENCE, 'o.$id'],
+            orderTypes: [OrderDirection::Asc, OrderDirection::Asc],
+        );
+
+        $this->assertSame($expected, $statements);
+        $this->assertCount($rows, $documents);
+        foreach ($documents as $document) {
+            $this->assertFalse($document->isSet('_boundedPageRows'));
+            $this->assertSame('c'.$document->getSequence(), $document->getId());
+        }
     }
 
     /**

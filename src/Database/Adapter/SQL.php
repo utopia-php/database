@@ -5610,13 +5610,13 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
-     * Whether a bounded page may keep only the main rows with a matching joined row (inner joins, conditions on
-     * joined attributes). Such a page reads the matching joined rows once to pick its main rows and again to join
-     * them, which only pays where the engine plans that well.
+     * How many joins a bounded page may need a match from (inner joins, joins under conditions on their attributes,
+     * and the joins those reach the main table through). Such a page reads the matching joined rows once to pick its
+     * main rows and again to join them, which only pays as far as the engine plans its EXISTS checks well.
      */
-    protected function boundsMatchedJoins(): bool
+    protected function pageMatchedJoins(): int
     {
-        return false;
+        return 0;
     }
 
     /**
@@ -5746,7 +5746,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             }
         }
 
-        if ($required !== [] && ! $this->boundsMatchedJoins()) {
+        if (\count($required) > $this->pageMatchedJoins()) {
             return null;
         }
 

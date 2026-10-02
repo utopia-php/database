@@ -18,8 +18,8 @@ final class BoundedJoinSortSQLite extends SQLite
     }
 
     #[Override]
-    protected function boundsMatchedJoins(): bool
+    protected function pageMatchedJoins(): int
     {
-        return true;
+        return PHP_INT_MAX;
     }
 }

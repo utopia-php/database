@@ -6,7 +6,7 @@ use PDO;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Tests\Unit\Support\BoundedJoinSortSQLite;
-use Tests\Unit\Support\LeftBoundedJoinSortSQLite;
+use Tests\Unit\Support\MatchLimitedBoundedJoinSortSQLite;
 use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\SQLite;
@@ -94,7 +94,7 @@ final class BoundedJoinSortTest extends TestCase
     ];
 
     /**
-     * @var array<string, array{Database, Database, Database}>
+     * @var array<string, array{Database, Database, Database, Database}>
      */
     private array $databases = [];
 
@@ -181,11 +181,13 @@ final class BoundedJoinSortTest extends TestCase
     #[DataProvider('reads')]
     public function testEveryWindowOfTheReadMatchesTheReadThatSortsTheWholeJoin(string $mode, array $queries, bool $bounded): void
     {
-        [$sorted, $bounding, $leftBounding] = $this->databases($mode);
+        [$sorted, $bounding, $leftBounding, $oneMatchBounding] = $this->databases($mode);
         $all = $this->rows($sorted, $queries, [Query::limit(100)]);
         $this->assertNotSame([], $all);
         $this->assertSame($all, $this->rows($bounding, $queries, [Query::limit(100)]));
-        $leftBounded = $bounded && ! $this->needsMatches($queries);
+        $matched = \count($this->matchedJoins($queries));
+        $leftBounded = $bounded && $matched === 0;
+        $oneMatchBounded = $bounded && $matched <= 1;
 
         foreach ([1, 2, 3] as $limit) {
             for ($offset = 0; $offset <= \count($all); $offset++) {
@@ -196,6 +198,8 @@ final class BoundedJoinSortTest extends TestCase
                 $this->assertSame($bounded ? $offset + $limit : null, $this->boundedMainRows($bounding), "limit {$limit}, offset {$offset}: main rows the join sees");
                 $this->assertSame($expected, $this->rows($leftBounding, $queries, $page), "limit {$limit}, offset {$offset}: bounding left joins only");
                 $this->assertSame($leftBounded ? $offset + $limit : null, $this->boundedMainRows($leftBounding), "limit {$limit}, offset {$offset}: main rows the join sees, bounding left joins only");
+                $this->assertSame($expected, $this->rows($oneMatchBounding, $queries, $page), "limit {$limit}, offset {$offset}: bounding one matched join at most");
+                $this->assertSame($oneMatchBounded ? $offset + $limit : null, $this->boundedMainRows($oneMatchBounding), "limit {$limit}, offset {$offset}: main rows the join sees, bounding one matched join at most");
             }
         }
     }
@@ -299,31 +303,58 @@ final class BoundedJoinSortTest extends TestCase
     }
 
     /**
-     * Whether a read keeps only the main rows with a matching joined row: an inner join, or a condition on a joined
-     * attribute.
+     * The joins a read needs a match from: its inner joins, the joins its conditions name, and the notes a tags join
+     * on a note reaches the authors through.
      *
      * @param  array<Query>  $queries
+     * @return array<string, true>
      */
-    private function needsMatches(array $queries): bool
+    private function matchedJoins(array $queries): array
     {
+        $matched = [];
+        $parents = [];
         foreach ($queries as $query) {
             $method = $query->getMethod();
-            if ($method === Method::Join) {
-                return true;
-            }
-            if ($method->isJoin() || \in_array($method, [Method::Select, Method::OrderAsc, Method::OrderDesc], true)) {
-                continue;
-            }
-            if (\str_contains($query->getAttribute(), '.')) {
-                return true;
-            }
-            $children = \array_values(\array_filter($query->getValues(), static fn (mixed $value): bool => $value instanceof Query));
-            if ($children !== [] && $this->needsMatches($children)) {
-                return true;
+            if ($method->isJoin()) {
+                $alias = $query->getJoinAlias();
+                $left = $query->getValues()[0] ?? '';
+                $parents[$alias] = \is_string($left) && \str_starts_with($left, 'n.') ? 'n' : null;
+                if ($method === Method::Join) {
+                    $matched[$alias] = true;
+                }
+            } elseif (! \in_array($method, [Method::Select, Method::OrderAsc, Method::OrderDesc], true)) {
+                foreach ($this->conditionAliases($query) as $alias) {
+                    $matched[$alias] = true;
+                }
             }
         }
 
-        return false;
+        foreach (\array_keys($matched) as $alias) {
+            for ($parent = $parents[$alias] ?? null; $parent !== null; $parent = $parents[$parent] ?? null) {
+                $matched[$parent] = true;
+            }
+        }
+
+        return $matched;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function conditionAliases(Query $query): array
+    {
+        $aliases = [];
+        $dot = \strpos($query->getAttribute(), '.');
+        if ($dot !== false) {
+            $aliases[] = \substr($query->getAttribute(), 0, $dot);
+        }
+        foreach ($query->getValues() as $value) {
+            if ($value instanceof Query) {
+                \array_push($aliases, ...$this->conditionAliases($value));
+            }
+        }
+
+        return $aliases;
     }
 
     /**
@@ -419,17 +450,19 @@ final class BoundedJoinSortTest extends TestCase
     }
 
     /**
-     * The same documents in a database that sorts the whole join, one that bounds it and one that bounds only reads
-     * whose left joins keep every main row.
+     * The same documents in a database that sorts the whole join, one that bounds it, one that bounds only reads
+     * whose left joins keep every main row (MariaDB) and one that bounds reads needing one matched join at most
+     * (MySQL).
      *
-     * @return array{Database, Database, Database}
+     * @return array{Database, Database, Database, Database}
      */
     private function databases(string $mode): array
     {
         return $this->databases[$mode] ??= [
             $this->database(new SQLite(new PDO('sqlite::memory:')), $mode),
             $this->database(new BoundedJoinSortSQLite(new PDO('sqlite::memory:')), $mode),
-            $this->database(new LeftBoundedJoinSortSQLite(new PDO('sqlite::memory:')), $mode),
+            $this->database(new MatchLimitedBoundedJoinSortSQLite(new PDO('sqlite::memory:'), 0), $mode),
+            $this->database(new MatchLimitedBoundedJoinSortSQLite(new PDO('sqlite::memory:'), 1), $mode),
         ];
     }
 

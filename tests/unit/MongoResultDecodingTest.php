@@ -15,6 +15,7 @@ use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Operator;
 use Utopia\Database\Query;
+use Utopia\Database\Validator\Authorization;
 use Utopia\Mongo\Client;
 use Utopia\Query\Schema\ColumnType;
 
@@ -328,6 +329,71 @@ final class MongoResultDecodingTest extends TestCase
         \sort($keys);
 
         return $keys;
+    }
+
+    public function testFoundRecordsTurnNestedObjectsIntoArrays(): void
+    {
+        $empty = new stdClass();
+        $nestedEmpty = new stdClass();
+        $listedEmpty = new stdClass();
+        $record = (object) [
+            '_uid' => 'movie1',
+            '_id' => '17',
+            '_permissions' => ['read("any")'],
+            'meta' => (object) ['a' => 1, 'b' => (object) ['c' => [1, (object) ['d' => 'x']]], 'e' => $nestedEmpty],
+            'list' => [1, 'two', (object) ['k' => true], [3, $listedEmpty], null],
+            'keyed' => ['x' => (object) ['y' => 2], 'z' => 1.5],
+            'empty' => $empty,
+            'none' => null,
+            'score' => 4,
+        ];
+
+        $client = new class ([$record]) extends Client {
+            /**
+             * @param  list<stdClass>  $records
+             */
+            public function __construct(private readonly array $records)
+            {
+            }
+
+            #[\Override]
+            public function connect(): self
+            {
+                return $this;
+            }
+
+            #[\Override]
+            public function close(): void
+            {
+            }
+
+            /**
+             * @param  array<mixed>  $filters
+             * @param  array<mixed>  $options
+             */
+            #[\Override]
+            public function find(string $collection, array $filters = [], array $options = []): stdClass
+            {
+                return (object) ['cursor' => (object) ['firstBatch' => $this->records, 'id' => 0]];
+            }
+        };
+
+        $adapter = new Mongo($client);
+        $adapter->setAuthorization(new Authorization());
+        $found = $adapter->find(new Document(['$id' => 'movies']));
+
+        $this->assertCount(1, $found);
+        $this->assertSame([
+            'meta' => ['a' => 1, 'b' => ['c' => [1, ['d' => 'x']]], 'e' => $nestedEmpty],
+            'list' => [1, 'two', ['k' => true], [3, $listedEmpty], null],
+            'keyed' => ['x' => ['y' => 2], 'z' => 1.5],
+            'empty' => $empty,
+            'none' => null,
+            'score' => 4,
+            '$permissions' => ['read("any")'],
+            '$sequence' => '17',
+            '$id' => 'movie1',
+        ], $found[0]->getArrayCopy());
     }
 
     public function testProjectionSkipsInternalAttributes(): void

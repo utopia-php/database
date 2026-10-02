@@ -4282,17 +4282,29 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         if (is_object($value) && get_class($value) === stdClass::class) {
             $properties = get_object_vars($value);
 
-            return $properties === [] ? $value : array_map($this->convertStdClassToArray(...), $properties);
+            return $properties === [] ? $value : $this->convertStdClassValues($properties);
         }
 
         if (is_array($value)) {
-            return array_map(
-                fn ($v) => $this->convertStdClassToArray($v),
-                $value
-            );
+            return $this->convertStdClassValues($value);
         }
 
         return $value;
+    }
+
+    /**
+     * @param  array<mixed>  $values
+     * @return array<mixed>
+     */
+    private function convertStdClassValues(array $values): array
+    {
+        foreach ($values as $key => $value) {
+            if (\is_array($value) || \is_object($value)) {
+                $values[$key] = $this->convertStdClassToArray($value);
+            }
+        }
+
+        return $values;
     }
 
     /**

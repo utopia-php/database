@@ -739,11 +739,11 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     }
 
     /**
-     * Whether a failed transaction attempt can succeed when it runs again. The transaction itself failing (a lock
-     * conflict, or a failed begin, commit or rollback) or a transient driver failure anywhere in the chain can; a
-     * typed failure of this library, or any other failure, would fail the same way again.
+     * Whether withTransaction() runs an attempt that failed with this again: it can succeed when it runs again. The
+     * transaction itself failing (a lock conflict, or a failed begin, commit or rollback) or a transient driver failure
+     * anywhere in the chain can; a typed failure of this library, or any other failure, would fail the same way again.
      */
-    protected function isRetryable(Throwable $failure): bool
+    public function isRetryable(Throwable $failure): bool
     {
         for ($cause = $failure; $cause !== null; $cause = $cause->getPrevious()) {
             if ($cause instanceof TransactionException) {

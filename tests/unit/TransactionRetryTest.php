@@ -135,6 +135,17 @@ class TransactionRetryTest extends TestCase
     }
 
     /**
+     * @return array<string, array{string}>
+     */
+    public static function pools(): array
+    {
+        return [
+            self::POOL => [self::POOL],
+            self::READ_WRITE_POOL => [self::READ_WRITE_POOL],
+        ];
+    }
+
+    /**
      * Running the attempt again fails the same way: the caller gets the failure at once.
      */
     #[DataProvider('deterministicFailures')]
@@ -227,6 +238,24 @@ class TransactionRetryTest extends TestCase
         $this->assertSame($failure, $thrown);
         $this->assertSame(1, $attempts);
         $this->assertFalse($adapter->inTransaction());
+    }
+
+    /**
+     * A pool answers whether a failure is retried as the adapters it lends out do.
+     */
+    #[DataProvider('pools')]
+    public function testPoolClassifiesFailuresAsItsAdapterDoes(string $entry): void
+    {
+        $adapter = new SQLite(new PDO('sqlite::memory:'));
+        $pool = $entry === self::POOL
+            ? new Pool($this->connections($adapter))
+            : new ReadWritePool($this->connections($adapter), $this->connections(new DatabaseMemory()));
+        $pool->setAuthorization(new Authorization());
+
+        $this->assertTrue($pool->isRetryable(EngineError::create('HY000', 5, 'SQLSTATE[HY000]: General error: 5 database is locked')));
+        $this->assertFalse($pool->isRetryable(EngineError::create('HY000', 1, 'SQLSTATE[HY000]: General error: 1 no such table: missing')));
+        $this->assertTrue($pool->isRetryable(new ContentionException('Deadlock detected')));
+        $this->assertFalse($pool->isRetryable(new StructureException('Invalid document structure')));
     }
 
     /**

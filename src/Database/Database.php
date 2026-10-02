@@ -16,14 +16,20 @@ use Utopia\Database\Cache\Scope;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Character as CharacterException;
+use Utopia\Database\Exception\Conflict as ConflictException;
+use Utopia\Database\Exception\Dependency as DependencyException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Order as OrderException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Structure as StructureException;
+use Utopia\Database\Exception\Timeout as TimeoutException;
+use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
@@ -100,21 +106,29 @@ class Database
     private const CACHE_EMPTY_MARKER = '$empty';
 
     /**
-     * Failures that fail the same way on every attempt, so withRetries() rethrows them at once.
+     * Failures that fail the same way on every attempt, so withRetries() rethrows them at once: every typed failure
+     * of this library except Transaction (and Contention), which another attempt can clear. Mismatch and Unique are
+     * Duplicates.
      *
      * @var list<class-string<Throwable>>
      */
     private const array DETERMINISTIC_FAILURES = [
         AuthorizationException::class,
         CharacterException::class,
+        ConflictException::class,
+        DependencyException::class,
         DuplicateException::class,
+        IndexException::class,
         LimitException::class,
         NotFoundException::class,
+        OperatorException::class,
         OrderException::class,
         QueryException::class,
         RelationshipException::class,
         RestrictedException::class,
         StructureException::class,
+        TimeoutException::class,
+        TruncateException::class,
         TypeException::class,
     ];
 
@@ -3477,7 +3491,7 @@ class Database
 
     private function isRetryable(Throwable $error): bool
     {
-        if ($this->failedAfterCommit($error)) {
+        if ($this->failedAfterCommit($error) || $this->retriedByTransaction($error)) {
             return false;
         }
 

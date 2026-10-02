@@ -602,9 +602,11 @@ coroutine that opened it and the coroutines it starts; see [Pools and profiling]
   index to ignore and, as in 7.x, skip such a row without error.
 - **Retries of metadata writes.** Schema calls that persist a collection definition (`createAttribute()`,
   `createIndex()`, their update, rename and delete siblings, `createRelationship()`) no longer retry a failure that
-  fails the same way every time: `Authorization`, `Character`, `Duplicate` (and `Unique`), `Limit`, `NotFound`,
-  `Order`, `Query`, `Relationship`, `Restricted`, `Structure` and `Type` are thrown on the first attempt. Other
-  failures are still attempted up to three times.
+  fails the same way every time: `Authorization`, `Character`, `Conflict`, `Dependency`, `Duplicate` (and `Unique`
+  and `Mismatch`), `Index`, `Limit`, `NotFound`, `Operator`, `Order`, `Query`, `Relationship`, `Restricted`,
+  `Structure`, `Timeout`, `Truncate` and `Type` are thrown on the first attempt. A failure the metadata write's
+  transaction retries itself (see [Transaction retries](#errors)) is not run again by the schema call, so its
+  retries do not multiply. Other failures, such as an unavailable cache, are still attempted up to three times.
 - **Transaction retries.** `withTransaction()` runs the callback again only after a failure that can succeed on
   another attempt: an `Exception\Transaction` (a lock conflict, which is `Exception\Contention`, or a failed begin,
   commit or rollback), a lost connection (also as the cause of another failure), an engine lock conflict the adapter

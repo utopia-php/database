@@ -23,14 +23,22 @@ use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Character as CharacterException;
+use Utopia\Database\Exception\Conflict as ConflictException;
+use Utopia\Database\Exception\Contention as ContentionException;
+use Utopia\Database\Exception\Dependency as DependencyException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Mismatch as MismatchException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Order as OrderException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Structure as StructureException;
+use Utopia\Database\Exception\Timeout as TimeoutException;
+use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Helpers\Permission;
@@ -44,6 +52,8 @@ use Utopia\Query\Schema\ColumnType;
 
 final class CoreMinorsTest extends TestCase
 {
+    private const int TRANSACTION_ATTEMPTS = 3;
+
     /**
      * @return array<string, array{Throwable}>
      */
@@ -61,6 +71,14 @@ final class CoreMinorsTest extends TestCase
             'restricted' => [new RestrictedException('restricted')],
             'structure' => [new StructureException('structure')],
             'type' => [new TypeException('type')],
+            'conflict' => [new ConflictException('conflict')],
+            'dependency' => [new DependencyException('dependency')],
+            'index' => [new IndexException('index')],
+            'operator' => [new OperatorException('operator')],
+            'timeout' => [new TimeoutException('timeout')],
+            'truncate' => [new TruncateException('truncate')],
+            'mismatch' => [new MismatchException('mismatch')],
+            'unique' => [new UniqueException(UniqueException::MESSAGE)],
         ];
     }
 
@@ -88,6 +106,88 @@ final class CoreMinorsTest extends TestCase
         $this->assertInstanceOf(DatabaseException::class, $error);
         $this->assertSame($failure, $error->getPrevious());
         $this->assertSame(3, $writes, 'An unknown failure must still be retried');
+    }
+
+    /**
+     * A failure the metadata write's transaction does not retry, such as an unavailable cache,
+     * is still attempted up to three times by the schema call.
+     */
+    public function testAFailureTheTransactionDoesNotRetryIsRetriedByTheSchemaCall(): void
+    {
+        $failure = new RuntimeException('cache unavailable');
+        $writes = 0;
+        $database = $this->metadataFailing($failure, $writes, inTransaction: true);
+
+        $error = $this->attempt(fn (): bool => $database->createAttribute('logs', Attribute::integer(key: 'count')));
+
+        $this->assertInstanceOf(DatabaseException::class, $error);
+        $this->assertSame($failure, $error->getPrevious());
+        $this->assertSame(3, $writes, 'The schema call must retry a failure its transaction did not');
+    }
+
+    /**
+     * A contended metadata write is retried by its transaction; the schema call must not run
+     * that transaction, with all its retries, again.
+     */
+    public function testAContendedMetadataWriteRunsOnlyItsTransactionsAttempts(): void
+    {
+        $begins = 0;
+        $contended = false;
+        $database = $this->contendedDatabase($begins, $contended);
+        $database->createCollection(new Collection(id: 'logs'));
+
+        $contended = true;
+        $error = $this->attempt(fn (): bool => $database->createAttribute('logs', Attribute::integer(key: 'count')));
+        $contended = false;
+
+        $this->assertInstanceOf(DatabaseException::class, $error);
+        $this->assertInstanceOf(ContentionException::class, $error->getPrevious());
+        $this->assertSame(self::TRANSACTION_ATTEMPTS, $begins);
+    }
+
+    public function testAContendedRelationshipDefinitionRunsOnlyItsTransactionsAttempts(): void
+    {
+        $begins = 0;
+        $contended = false;
+        $database = $this->contendedDatabase($begins, $contended);
+        $database->createCollection(new Collection(id: 'profiles'));
+        $database->createCollection(new Collection(id: 'accounts'));
+
+        $contended = true;
+        $error = $this->attempt(fn (): bool => $database->createRelationship($this->profileAccount()));
+        $contended = false;
+
+        $this->assertInstanceOf(DatabaseException::class, $error);
+        $this->assertInstanceOf(ContentionException::class, $error->getPrevious());
+        $this->assertSame(self::TRANSACTION_ATTEMPTS, $begins);
+        $this->assertSame([], $this->attributeKeys($database, 'profiles'), 'The failed relationship must be rolled back');
+    }
+
+    public function testAContendedRelationshipDeletionRunsOnlyItsTransactionsAttempts(): void
+    {
+        $begins = 0;
+        $contended = false;
+        $database = $this->contendedDatabase(
+            $begins,
+            $contended,
+            afterDeleteRelationship: function () use (&$contended): void {
+                $contended = true;
+            },
+            beforeCreateRelationship: function () use (&$contended): void {
+                $contended = false;
+            },
+        );
+        $database->createCollection(new Collection(id: 'profiles'));
+        $database->createCollection(new Collection(id: 'accounts'));
+        $database->createRelationship($this->profileAccount());
+
+        $error = $this->attempt(fn (): bool => $database->deleteRelationship('profiles', 'account'));
+        $contended = false;
+
+        $this->assertInstanceOf(DatabaseException::class, $error);
+        $this->assertInstanceOf(ContentionException::class, $error->getPrevious());
+        $this->assertSame(self::TRANSACTION_ATTEMPTS, $begins);
+        $this->assertSame(['account'], $this->attributeKeys($database, 'profiles'), 'The failed deletion must keep the relationship');
     }
 
     public function testMetadataFailureKeepsThePersistenceErrorFirst(): void
@@ -577,13 +677,14 @@ final class CoreMinorsTest extends TestCase
     }
 
     /**
-     * A database with a `logs` collection whose later metadata writes count into $writes and throw $failure.
+     * A database with a `logs` collection whose later metadata writes count into $writes and throw $failure,
+     * before their transaction begins or, with $inTransaction, inside it.
      */
-    private function metadataFailing(Throwable $failure, int &$writes): Database
+    private function metadataFailing(Throwable $failure, int &$writes, bool $inTransaction = false): Database
     {
         /** @var bool $failing */
         $failing = false;
-        $database = $this->interceptingMetadataWrites(function () use (&$failing, &$writes, $failure): void {
+        $intercept = function () use (&$failing, &$writes, $failure): void {
             if (! $failing) {
                 return;
             }
@@ -591,12 +692,60 @@ final class CoreMinorsTest extends TestCase
             $writes++;
 
             throw $failure;
-        });
+        };
+        $database = $inTransaction
+            ? $this->interceptingMetadataWrites(static function (): void {
+            }, $this->interceptingAdapter(beforeMetadataWrite: $intercept))
+            : $this->interceptingMetadataWrites($intercept);
         $this->configure($database);
         $database->createCollection(new Collection(id: 'logs'));
         $failing = true;
 
         return $database;
+    }
+
+    /**
+     * A configured database whose outermost transactions fail to begin with a lock conflict while
+     * $contended holds, counting each such attempt into $begins.
+     *
+     * @param  (Closure(): void)|null  $afterDeleteRelationship
+     * @param  (Closure(): void)|null  $beforeCreateRelationship
+     */
+    private function contendedDatabase(
+        int &$begins,
+        bool &$contended,
+        ?Closure $afterDeleteRelationship = null,
+        ?Closure $beforeCreateRelationship = null,
+    ): Database {
+        $adapter = $this->interceptingAdapter(
+            beforeTransaction: function () use (&$begins, &$contended): void {
+                if (! $contended) {
+                    return;
+                }
+
+                $begins++;
+
+                throw new ContentionException('Database is locked');
+            },
+            afterDeleteRelationship: $afterDeleteRelationship,
+            beforeCreateRelationship: $beforeCreateRelationship,
+        );
+        $database = new Database($adapter, new Cache(new None()));
+        $this->configure($database);
+
+        return $database;
+    }
+
+    private function profileAccount(): Relationship
+    {
+        return new Relationship(
+            collection: 'profiles',
+            relatedCollection: 'accounts',
+            type: RelationType::OneToOne,
+            twoWay: true,
+            key: 'account',
+            twoWayKey: 'profile',
+        );
     }
 
     /**
@@ -629,7 +778,8 @@ final class CoreMinorsTest extends TestCase
 
     /**
      * An adapter that runs the given hooks ahead of each index creation and deletion, ahead of
-     * each outermost transaction and after each outermost commit.
+     * each outermost transaction, after each outermost commit, ahead of each metadata write inside
+     * its transaction, after each relationship deletion and ahead of each relationship creation.
      *
      * @param  (Closure(): void)|null  $beforeCreateIndex
      * @param  (Closure(): void)|null  $beforeDeleteIndex
@@ -641,13 +791,19 @@ final class CoreMinorsTest extends TestCase
         ?Closure $beforeDeleteIndex = null,
         ?Closure $beforeTransaction = null,
         ?Closure $afterCommit = null,
+        ?Closure $beforeMetadataWrite = null,
+        ?Closure $afterDeleteRelationship = null,
+        ?Closure $beforeCreateRelationship = null,
     ): SQLite {
-        return new class (new PDO('sqlite::memory:'), $beforeCreateIndex, $beforeDeleteIndex, $beforeTransaction, $afterCommit) extends SQLite {
+        return new class (new PDO('sqlite::memory:'), $beforeCreateIndex, $beforeDeleteIndex, $beforeTransaction, $afterCommit, $beforeMetadataWrite, $afterDeleteRelationship, $beforeCreateRelationship) extends SQLite {
             /**
              * @param  (Closure(): void)|null  $beforeCreateIndex
              * @param  (Closure(): void)|null  $beforeDeleteIndex
              * @param  (Closure(): void)|null  $beforeTransaction
              * @param  (Closure(): void)|null  $afterCommit
+             * @param  (Closure(): void)|null  $beforeMetadataWrite
+             * @param  (Closure(): void)|null  $afterDeleteRelationship
+             * @param  (Closure(): void)|null  $beforeCreateRelationship
              */
             public function __construct(
                 PDO $pdo,
@@ -655,8 +811,38 @@ final class CoreMinorsTest extends TestCase
                 private readonly ?Closure $beforeDeleteIndex,
                 private readonly ?Closure $beforeTransaction,
                 private readonly ?Closure $afterCommit,
+                private readonly ?Closure $beforeMetadataWrite,
+                private readonly ?Closure $afterDeleteRelationship,
+                private readonly ?Closure $beforeCreateRelationship,
             ) {
                 parent::__construct($pdo);
+            }
+
+            #[\Override]
+            public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
+            {
+                if ($collection->getId() === Database::METADATA) {
+                    $this->beforeMetadataWrite?->__invoke();
+                }
+
+                return parent::updateDocument($collection, $id, $document, $skipPermissions);
+            }
+
+            #[\Override]
+            public function deleteRelationship(Relationship $relationship): bool
+            {
+                $deleted = parent::deleteRelationship($relationship);
+                $this->afterDeleteRelationship?->__invoke();
+
+                return $deleted;
+            }
+
+            #[\Override]
+            public function createRelationship(Relationship $relationship): bool
+            {
+                $this->beforeCreateRelationship?->__invoke();
+
+                return parent::createRelationship($relationship);
             }
 
             #[\Override]

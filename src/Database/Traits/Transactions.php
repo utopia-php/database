@@ -29,6 +29,9 @@ trait Transactions
     /** @var WeakMap<Throwable, true>|null Failures raised after their outermost transaction committed. */
     private ?WeakMap $committedFailures = null;
 
+    /** @var WeakMap<Throwable, true>|null Failures an adapter transaction let through. */
+    private ?WeakMap $transactionFailures = null;
+
     /**
      * Run a callback inside a transaction.
      *
@@ -155,6 +158,9 @@ trait Transactions
             if ($this->adapter->supports(Capability::NestedTransactions)) {
                 $discard();
             }
+
+            $this->transactionFailures ??= new WeakMap();
+            $this->transactionFailures[$error] = true;
 
             throw $error;
         }
@@ -294,5 +300,15 @@ trait Transactions
     private function failedAfterCommit(Throwable $error): bool
     {
         return isset($this->committedFailures[$error]);
+    }
+
+    /**
+     * Whether an adapter transaction let the error through although it retries such a failure: it already spent its
+     * attempts on it, or left it to the outermost transaction that encloses it. Running that transaction again would
+     * multiply its retries.
+     */
+    private function retriedByTransaction(Throwable $error): bool
+    {
+        return isset($this->transactionFailures[$error]) && $this->adapter->isRetryable($error);
     }
 }

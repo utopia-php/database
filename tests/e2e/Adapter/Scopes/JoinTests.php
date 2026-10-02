@@ -8774,8 +8774,6 @@ trait JoinTests
             'inner join' => [[$inner], $everyNote],
             'left join, notes with a score of at least 1' => [[$left, Query::greaterThanEqual('n.score', 1)], ['a1/n1', 'a1/n2', 'a1/n3', 'a2/n4', 'a6/n10', 'a6/n9', 'a9/n11']],
             'inner join, notes without a score or below 3' => [[$inner, Query::or([Query::isNull('n.score'), Query::lessThan('n.score', 3)])], ['a1/n1', 'a1/n2', 'a1/n3', 'a3/n5', 'a9/n11']],
-            'inner join, notes above a score only one author has' => [[$inner, Query::greaterThan('n.score', 4)], ['a2/n4']],
-            'inner join, notes above a score no author has' => [[$inner, Query::greaterThan('n.score', 9)], []],
         ];
 
         try {

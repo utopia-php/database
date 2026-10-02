@@ -5,7 +5,8 @@ namespace Tests\Unit\Support;
 use Utopia\Mongo\Client;
 
 /**
- * A MongoDB replica set client that needs no server and tallies the sessions and transactions an adapter runs.
+ * A MongoDB client that needs no server, a replica set unless told otherwise, and tallies the sessions and
+ * transactions an adapter runs.
  */
 final class ReplicaSetClient extends Client
 {
@@ -15,7 +16,7 @@ final class ReplicaSetClient extends Client
 
     public int $aborts = 0;
 
-    public function __construct()
+    public function __construct(private readonly bool $replicaSet = true)
     {
     }
 
@@ -33,7 +34,7 @@ final class ReplicaSetClient extends Client
     #[\Override]
     public function isReplicaSet(): bool
     {
-        return true;
+        return $this->replicaSet;
     }
 
     /**

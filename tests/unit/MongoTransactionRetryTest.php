@@ -117,6 +117,23 @@ final class MongoTransactionRetryTest extends TestCase
     }
 
     /**
+     * A standalone server has no transactions, so withTransaction() runs the callback once and retries nothing: a
+     * caller that retries on its own must not take a transient failure for one the transaction already retried.
+     */
+    public function testAStandaloneServerRetriesNothing(): void
+    {
+        $adapter = new Mongo(new ReplicaSetClient(replicaSet: false));
+        $failure = new ContentionException('Write conflict');
+
+        [$thrown, $attempts] = $this->attempt($adapter, $failure);
+
+        $this->assertSame($failure, $thrown);
+        $this->assertSame(1, $attempts);
+        $this->assertFalse($adapter->isRetryable($failure));
+        $this->assertTrue((new Mongo(new ReplicaSetClient()))->isRetryable($failure));
+    }
+
+    /**
      * Without savepoints a nested call runs inside the caller's transaction, so only the outermost call decides.
      */
     public function testDeterministicFailureInANestedCallRunsOnce(): void

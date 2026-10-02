@@ -516,6 +516,15 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     }
 
     /**
+     * A standalone server has no transactions, so withTransaction() runs the callback once and retries nothing.
+     */
+    #[\Override]
+    public function isRetryable(Throwable $failure): bool
+    {
+        return $this->client->isReplicaSet() && parent::isRetryable($failure);
+    }
+
+    /**
      * A MongoDB error is transient when the server labels it so, when it is a network error, when the command was
      * never sent, or when the adapter maps it to an aborted transaction.
      */

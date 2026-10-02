@@ -26,4 +26,13 @@ interface InternalCasting
      * @return Document The document with cast values.
      */
     public function castingAfter(Document $collection, Document $document): Document;
+
+    /**
+     * Cast the attribute values of documents read from the database, as castingAfter() does for each of them.
+     *
+     * @param Document $collection The collection document.
+     * @param array<Document> $documents The documents to cast.
+     * @return array<Document> The documents with cast values, under the keys they were given with.
+     */
+    public function castingAfterDocuments(Document $collection, array $documents): array;
 }

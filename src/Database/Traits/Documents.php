@@ -1373,15 +1373,8 @@ trait Documents
 
             /** @var array<Document> $batch */
             $batch = \array_map(
-                fn (Document $document) =>
-                $this->decode(
-                    $collection,
-                    $this->casting(
-                        $collection,
-                        $this->castingAfter($collection, $document)
-                    )
-                ),
-                $batch
+                fn (Document $document) => $this->decode($collection, $this->casting($collection, $document)),
+                $this->castingAfterDocuments($collection, $batch)
             );
 
             $batch = $this->decorateDocuments(Event::DocumentsCreate, $collection, $batch);
@@ -1944,12 +1937,13 @@ trait Documents
             // The operator refetch goes through find(), which already decoded every document;
             // decoding again would run each decode filter twice.
             /** @var array<Document> $batch */
-            $batch = \array_map(
-                fn (Document $doc) => $hasOperators
-                    ? $this->castingAfter($collection, $doc)
-                    : $this->decode($collection, $this->castingAfter($collection, $doc), $decodedKeys),
-                $batch
-            );
+            $batch = $this->castingAfterDocuments($collection, $batch);
+            if (! $hasOperators) {
+                $batch = \array_map(
+                    fn (Document $doc) => $this->decode($collection, $doc, $decodedKeys),
+                    $batch
+                );
+            }
 
             $batch = $this->decorateDocuments(Event::DocumentsUpdate, $collection, $batch);
 
@@ -2365,12 +2359,13 @@ trait Documents
             }
 
             /** @var array<Document> $batch */
-            $batch = \array_map(
-                fn (Document $doc) => $hasOperators
-                ? $this->castingAfter($collection, $doc)
-                : $this->decode($collection, $this->castingAfter($collection, $doc)),
-                $batch
-            );
+            $batch = $this->castingAfterDocuments($collection, $batch);
+            if (! $hasOperators) {
+                $batch = \array_map(
+                    fn (Document $doc) => $this->decode($collection, $doc),
+                    $batch
+                );
+            }
 
             $batch = $this->decorateDocuments(Event::DocumentsUpsert, $collection, $batch);
 
@@ -4077,14 +4072,10 @@ trait Documents
             }
         }
 
-        // Hoist invariants out of the per-document loop. Collection id and
-        // documentType lookup don't change per result row, but were being
-        // re-evaluated for every document on every find.
         $collectionId = $collection->getId();
         $hasCustomType = isset($this->documentTypes[$collectionId]);
 
-        foreach ($results as $index => $node) {
-            $node = $this->castingAfter($collection, $node);
+        foreach ($this->castingAfterDocuments($collection, $results) as $index => $node) {
             $node = $this->casting($collection, $node);
             $node = $this->decode($collection, $node, $selections);
             if ($joinedCollections !== []) {
@@ -4094,7 +4085,6 @@ trait Documents
                 }
             }
 
-            // Convert to custom document type if mapped
             if ($hasCustomType) {
                 $node = $this->createDocumentInstance($collectionId, $node->getArrayCopy());
             }
@@ -5291,5 +5281,18 @@ trait Documents
         }
 
         return $document;
+    }
+
+    /**
+     * @param  array<Document>  $documents
+     * @return array<Document>
+     */
+    private function castingAfterDocuments(Document $collection, array $documents): array
+    {
+        if ($documents !== [] && $this->adapter->hasFeature(Feature\InternalCasting::class)) {
+            return $this->adapter->castingAfterDocuments($collection, $documents);
+        }
+
+        return $documents;
     }
 }

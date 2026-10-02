@@ -43,6 +43,7 @@ class ReadWritePool extends Pool
         'decodePolygon',
         'castingBefore',
         'castingAfter',
+        'castingAfterDocuments',
         'setUTCDatetime',
         'quote',
         'getDocumentSizeLimit',

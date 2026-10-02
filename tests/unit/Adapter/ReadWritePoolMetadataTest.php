@@ -71,6 +71,7 @@ final class ReadWritePoolMetadataTest extends TestCase
             'decodePolygon' => ['POLYGON((1 2, 3 4, 5 6, 1 2))'],
             'castingBefore' => [new Document(), new Document()],
             'castingAfter' => [new Document(), new Document()],
+            'castingAfterDocuments' => [new Document(), [new Document()]],
             'setUTCDatetime' => ['2026-09-23 00:00:00'],
             'quote' => ['posts'],
         ];

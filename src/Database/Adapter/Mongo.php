@@ -3125,33 +3125,74 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             return $document;
         }
 
+        return $this->castRead($this->getReadCasts($collection), $this->supports(Capability::DefinedAttributes), $document);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function castingAfterDocuments(Document $collection, array $documents): array
+    {
+        $casts = $this->getReadCasts($collection);
+        $defined = $this->supports(Capability::DefinedAttributes);
+
+        foreach ($documents as $index => $document) {
+            $documents[$index] = $this->castRead($casts, $defined, $document);
+        }
+
+        return $documents;
+    }
+
+    /**
+     * The key, type and array flag of every collection attribute, then of every internal attribute.
+     *
+     * @return list<array{0: string, 1: ColumnType|null, 2: bool}>
+     */
+    private function getReadCasts(Document $collection): array
+    {
         $rawCollectionAttributes = $collection->getAttribute('attributes', []);
         /** @var array<int, array<string, mixed>> $collectionAttributes */
         $collectionAttributes = \is_array($rawCollectionAttributes) ? $rawCollectionAttributes : [];
 
-        $internalAttributeArrays = self::getInternalAttributeArrays();
+        $casts = [];
+        foreach ([$collectionAttributes, self::getInternalAttributeArrays()] as $attributes) {
+            foreach ($attributes as $attribute) {
+                /** @var array<string, mixed> $attribute */
+                $rawId = $attribute[Document::ID] ?? null;
+                $rawType = $attribute['type'] ?? null;
+                $casts[] = [
+                    \is_string($rawId) ? $rawId : '',
+                    $rawType instanceof ColumnType
+                        ? $rawType
+                        : (\is_string($rawType) ? Attribute::tryNormalizeType($rawType) : null),
+                    (bool) ($attribute['array'] ?? false),
+                ];
+            }
+        }
 
-        /** @var array<int, array<string, mixed>> $attributes */
-        $attributes = \array_merge($collectionAttributes, $internalAttributeArrays);
+        return $casts;
+    }
 
-        foreach ($attributes as $attribute) {
-            /** @var array<string, mixed> $attribute */
-            $rawId = $attribute[Document::ID] ?? null;
-            $key = \is_string($rawId) ? $rawId : '';
-            $rawType = $attribute['type'] ?? null;
-            $type = $rawType instanceof ColumnType
-                ? $rawType
-                : (\is_string($rawType) ? Attribute::tryNormalizeType($rawType) : null);
-            $array = (bool) ($attribute['array'] ?? false);
-            $value = $document->getAttribute($key);
-            if (is_null($value)) {
+    /**
+     * @param  list<array{0: string, 1: ColumnType|null, 2: bool}>  $casts
+     */
+    private function castRead(array $casts, bool $defined, Document $document): Document
+    {
+        if ($document->isEmpty()) {
+            return $document;
+        }
+
+        foreach ($casts as [$key, $type, $array]) {
+            $stored = $document->getAttribute($key);
+            if (is_null($stored)) {
                 continue;
             }
 
-            if (Operator::isOperator($value)) {
+            if (Operator::isOperator($stored)) {
                 continue;
             }
 
+            $value = $stored;
             if ($array) {
                 if (is_string($value)) {
                     $decoded = json_decode($value, true);
@@ -3169,44 +3210,33 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
             /** @var array<mixed> $value */
             foreach ($value as $index => $node) {
-                switch ($type) {
-                    case ColumnType::BigInteger:
-                    case ColumnType::Integer:
-                        $node = \is_int($node)
-                            ? $node
-                            : ($node instanceof Int64
-                                ? (int) (string) $node
-                                : (\is_numeric($node) ? (int) $node : 0));
-                        break;
-                    case ColumnType::String:
-                    case ColumnType::Id:
-                        $node = \is_string($node) ? $node : (\is_scalar($node) ? (string) $node : $node);
-                        break;
-                    case ColumnType::Float:
-                    case ColumnType::Double:
-                        $node = \is_float($node) ? $node : (\is_numeric($node) ? (float) $node : 0.0);
-                        break;
-                    case ColumnType::Boolean:
-                        $node = \is_scalar($node) ? (bool) $node : $node;
-                        break;
-                    case ColumnType::Datetime:
-                        $node = $this->convertUTCDateToString($node);
-                        break;
-                    case ColumnType::Object:
-                        // Convert stdClass objects to arrays for object attributes
-                        if (is_object($node) && get_class($node) === stdClass::class) {
-                            $node = $this->convertStdClassToArray($node);
-                        }
-                        break;
-                    default:
-                        break;
+                $cast = match ($type) {
+                    ColumnType::BigInteger, ColumnType::Integer => \is_int($node)
+                        ? $node
+                        : ($node instanceof Int64
+                            ? (int) (string) $node
+                            : (\is_numeric($node) ? (int) $node : 0)),
+                    ColumnType::String, ColumnType::Id => \is_string($node) ? $node : (\is_scalar($node) ? (string) $node : $node),
+                    ColumnType::Float, ColumnType::Double => \is_float($node) ? $node : (\is_numeric($node) ? (float) $node : 0.0),
+                    ColumnType::Boolean => \is_scalar($node) ? (bool) $node : $node,
+                    ColumnType::Datetime => $this->convertUTCDateToString($node),
+                    ColumnType::Object => is_object($node) && get_class($node) === stdClass::class
+                        ? $this->convertStdClassToArray($node)
+                        : $node,
+                    default => $node,
+                };
+                if ($cast !== $node) {
+                    $value[$index] = $cast;
                 }
-                $value[$index] = $node;
             }
-            $document->setAttribute($key, ($array) ? $value : $value[0]);
+
+            $value = $array ? $value : $value[0];
+            if ($value !== $stored || $key === Document::PERMISSIONS) {
+                $document->setAttribute($key, $value);
+            }
         }
 
-        if (! $this->supports(Capability::DefinedAttributes)) {
+        if (! $defined) {
             foreach ($document->getArrayCopy() as $key => $value) {
                 // mongodb results out a stdclass for objects
                 if (is_object($value) && get_class($value) === stdClass::class) {

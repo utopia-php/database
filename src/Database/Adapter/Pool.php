@@ -1193,6 +1193,19 @@ class Pool extends Adapter
 
     /**
      * {@inheritDoc}
+     *
+     * @param  array<Document>  $documents
+     * @return array<Document>
+     */
+    public function castingAfterDocuments(Document $collection, array $documents): array
+    {
+        /** @var array<Document> $result */
+        $result = $this->delegateFeature(Feature\InternalCasting::class, __FUNCTION__, \func_get_args());
+        return $result;
+    }
+
+    /**
+     * {@inheritDoc}
      */
     public function setUTCDatetime(string $value): mixed
     {

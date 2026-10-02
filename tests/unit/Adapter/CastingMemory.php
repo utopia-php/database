@@ -19,6 +19,11 @@ final class CastingMemory extends Memory implements Feature\InternalCasting, Fea
         return $document;
     }
 
+    public function castingAfterDocuments(Document $collection, array $documents): array
+    {
+        return $documents;
+    }
+
     public function setUTCDatetime(string $value): mixed
     {
         return DateTime::setTimezone($value);

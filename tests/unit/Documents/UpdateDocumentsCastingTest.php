@@ -53,6 +53,11 @@ final class UpdateDocumentsCastingTest extends TestCase
                 return $document;
             }
 
+            public function castingAfterDocuments(Document $collection, array $documents): array
+            {
+                return $documents;
+            }
+
             #[\Override]
             public function updateDocuments(Document $collection, Document $updates, array $documents): int
             {

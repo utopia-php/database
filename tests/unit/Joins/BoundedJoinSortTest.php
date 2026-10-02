@@ -56,6 +56,8 @@ final class BoundedJoinSortTest extends TestCase
     /**
      * author, rank, readable: authors with no note, with hidden notes only, with ties on the rank, a note without an
      * author, and a note naming its author in another case, which SQLite matches in the collation of the id index.
+     * The second tenant's n15 belongs to a05, whose own notes are hidden: read from the first tenant, it must not
+     * count as a05's note.
      */
     private const array NOTES = [
         'n01' => ['a01', 1, true],
@@ -126,6 +128,7 @@ final class BoundedJoinSortTest extends TestCase
             'a joined attribute above a value, grouped with one below' => [Query::or([Query::greaterThan('n.rank', 2), Query::lessThan('n.rank', 2)])],
             'a main and a joined condition grouped with and' => [Query::and([Query::lessThan('rank', 4), Query::greaterThanEqual('n.rank', 1)])],
             'a condition on the tags of the notes' => [Query::leftJoin('tags', 'n.$id', 'note', '=', 't'), Query::isNotNull('t.$id')],
+            'a joined condition grouped with and inside or' => [Query::or([Query::and([Query::lessThan('n.rank', 2), Query::or([Query::isNull('n.rank'), Query::equal('n.rank', [1])])]), Query::greaterThan('n.rank', 3)])],
             'a condition on the notes and on the author\'s tags' => [Query::leftJoin('tags', '$id', 'author', '=', 't'), Query::lessThanEqual('n.rank', 3), Query::startsWith('t.note', 'n0')],
         ];
 
@@ -444,7 +447,7 @@ final class BoundedJoinSortTest extends TestCase
                     }
                     $attributes = match ($collection) {
                         'authors' => ['name' => $prefix.' '.$values[0], 'rank' => $values[1]],
-                        'notes' => ['author' => $values[0], 'rank' => $values[1]],
+                        'notes' => ['author' => $tenant === 2 && $id === 'n15' ? 'a05' : $values[0], 'rank' => $values[1]],
                         default => ['author' => $values[0], 'note' => $values[1]],
                     };
                     $readable = $values[2] && ! ($tenant === 2 && $id === 'a06');

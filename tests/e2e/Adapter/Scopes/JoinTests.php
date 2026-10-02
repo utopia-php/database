@@ -8755,7 +8755,8 @@ trait JoinTests
             'a1' => [2, true], 'a2' => [1, true], 'a3' => [null, true], 'a4' => [2, false], 'a5' => [3, true],
             'a6' => [1, true], 'a7' => [null, false], 'a8' => [2, true], 'a9' => [4, true],
         ] as $id => [$score, $visible]) {
-            $database->createDocument($authors, new Document(['$id' => $id, 'name' => 'author '.$id, 'score' => $score, '$permissions' => $visible ? $readable : $hidden]));
+            $metal = \in_array($id, ['a1', 'a3', 'a4', 'a6', 'a9'], true) ? 'gold' : 'iron';
+            $database->createDocument($authors, new Document(['$id' => $id, 'name' => "author {$id} {$metal}", 'score' => $score, '$permissions' => $visible ? $readable : $hidden]));
         }
         foreach ([
             'n1' => ['a1', 1, true], 'n2' => ['a1', 2, true], 'n3' => ['a1', 1, true], 'n4' => ['a2', 5, true],
@@ -8777,7 +8778,8 @@ trait JoinTests
         try {
             if ($database->getAdapter()->supports(Capability::Fulltext)) {
                 $database->createIndex($authors, Index::fullText(key: 'j67_name', attributes: ['name']));
-                $reads['inner join, searched'] = [[$inner, Query::search('name', 'author')], $everyNote];
+                $reads['inner join, searched'] = [[$inner, Query::search('name', 'gold')], ['a1/n1', 'a1/n2', 'a1/n3', 'a3/n5', 'a6/n10', 'a6/n9', 'a9/n11']];
+                $reads['left join, searched'] = [[$left, Query::search('name', 'iron')], ['a2/n4', 'a5/-', 'a8/-']];
             }
 
             foreach ($reads as $read => [$queries, $expected]) {
@@ -8792,7 +8794,7 @@ trait JoinTests
                     $keys = \array_map($this->joinCursorKey(...), $all);
                     $sorted = $keys;
                     \sort($sorted);
-                    $this->assertSame($expected, $sorted, "{$label}: every visible author with each matching visible note");
+                    $this->assertSame($expected, $sorted, "{$label}: every matching visible author with each matching visible note");
 
                     foreach ([1, 2, 3] as $limit) {
                         for ($offset = 0; $offset <= \count($keys); $offset++) {

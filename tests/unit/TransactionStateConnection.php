@@ -5,12 +5,13 @@ namespace Tests\Unit;
 use PDO;
 use PDOException;
 use PDOStatement;
+use Tests\Unit\Support\EngineError;
 
 /**
  * A MySQL connection as a reconnecting driver presents it to the adapter: the first
  * statement that finds the session ended reconnects and rethrows, and the new session
  * holds no transaction. Prepared statements run through executeStatement(), which can
- * lose a deadlock.
+ * lose a deadlock or a lock.
  */
 final class TransactionStateConnection extends PDO
 {
@@ -23,6 +24,8 @@ final class TransactionStateConnection extends PDO
     private bool $ended = false;
 
     private bool $deadlocked = false;
+
+    private ?PDOException $failure = null;
 
     /**
      * @var array<string>
@@ -52,8 +55,33 @@ final class TransactionStateConnection extends PDO
         $this->deadlocked = true;
     }
 
+    /**
+     * Make the next statement time out waiting for a lock, as MariaDB and MySQL report it by
+     * default: only the statement is rolled back, and the transaction and its savepoints hold.
+     */
+    public function lockWaitTimeout(): void
+    {
+        $this->failure = EngineError::create('HY000', 1205, 'SQLSTATE[HY000]: General error: 1205 Lock wait timeout exceeded; try restarting transaction');
+    }
+
+    /**
+     * Make the next statement find its lock taken, as PostgreSQL reports a NOWAIT lock or a
+     * lock timeout: rolling back to a savepoint recovers the transaction.
+     */
+    public function lockNotAvailable(): void
+    {
+        $this->failure = EngineError::create('55P03', 7, 'SQLSTATE[55P03]: Lock not available: 7 ERROR:  could not obtain lock on row in relation "aggregations"');
+    }
+
     public function executeStatement(): bool
     {
+        if ($this->failure !== null) {
+            $failure = $this->failure;
+            $this->failure = null;
+
+            throw $failure;
+        }
+
         if (! $this->deadlocked) {
             return true;
         }
@@ -61,17 +89,7 @@ final class TransactionStateConnection extends PDO
         $this->deadlocked = false;
         $this->discardTransaction();
 
-        $message = 'SQLSTATE[40001]: Serialization failure: 1213 Deadlock found when trying to get lock; try restarting transaction';
-        $error = new class ($message) extends PDOException {
-            public function __construct(string $message)
-            {
-                parent::__construct($message);
-                $this->code = '40001';
-            }
-        };
-        $error->errorInfo = ['40001', 1213, $message];
-
-        throw $error;
+        throw EngineError::create('40001', 1213, 'SQLSTATE[40001]: Serialization failure: 1213 Deadlock found when trying to get lock; try restarting transaction');
     }
 
     public function beginTransaction(): bool

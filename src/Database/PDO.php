@@ -40,11 +40,11 @@ class PDO
     private ?string $hostname = null;
 
     /**
-     * Whether a reconnect dropped the caller's open transaction and the caller has not
-     * rolled it back yet. Until then every statement is refused, so none of them runs
-     * in autocommit on the new connection.
+     * The lost connection that dropped the caller's open transaction, while the caller has
+     * not rolled it back yet. Until then every statement is refused, so none of them runs
+     * in autocommit on the new connection; each refusal carries it as its previous error.
      */
-    private bool $lostTransaction = false;
+    private ?Throwable $lostTransaction = null;
 
     /**
      * Statements that set session state, keyed by the setting each one sets.
@@ -131,8 +131,8 @@ class PDO
      */
     public function __call(string $method, array $args): mixed
     {
-        if ($this->lostTransaction && \strcasecmp($method, 'rollBack') === 0) {
-            $this->lostTransaction = false;
+        if ($this->lostTransaction !== null && \strcasecmp($method, 'rollBack') === 0) {
+            $this->lostTransaction = null;
 
             return true;
         }
@@ -157,7 +157,7 @@ class PDO
                     return $this->pdo->{$method}(...$args);
                 }
 
-                $this->lostTransaction = true;
+                $this->lostTransaction = $e;
             }
 
             throw $e;
@@ -221,7 +221,7 @@ class PDO
         }
 
         $this->pdo = $pdo;
-        $this->lostTransaction = false;
+        $this->lostTransaction = null;
     }
 
     /**
@@ -232,17 +232,17 @@ class PDO
      */
     private function guard(string $statement): void
     {
-        if (! $this->lostTransaction) {
+        if ($this->lostTransaction === null) {
             return;
         }
 
         if (\strcasecmp(\trim($statement), self::ROLLBACK) === 0) {
-            $this->lostTransaction = false;
+            $this->lostTransaction = null;
 
             return;
         }
 
-        throw new PDOException('The transaction was lost with the connection: roll it back before running another statement');
+        throw new PDOException('The transaction was lost with the connection: roll it back before running another statement', previous: $this->lostTransaction);
     }
 
     private function connect(): PhpPDO
@@ -266,7 +266,7 @@ class PDO
 
     public function inTransaction(): bool
     {
-        return $this->lostTransaction || $this->pdo->inTransaction();
+        return $this->lostTransaction !== null || $this->pdo->inTransaction();
     }
 
     /**

@@ -19,13 +19,9 @@ use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Exception\Authorization as AuthorizationException;
-use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Query as QueryException;
-use Utopia\Database\Exception\Relationship as RelationshipException;
-use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Type as TypeException;
@@ -45,6 +41,7 @@ use Utopia\Database\Storage;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Mongo\Client;
 use Utopia\Mongo\Exception as MongoException;
+use Utopia\Mongo\UnsentException;
 use Utopia\Query\CursorDirection;
 use Utopia\Query\Method;
 use Utopia\Query\OrderDirection;
@@ -501,15 +498,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                     $this->session = null;
                 }
 
-                if (
-                    $action instanceof AuthorizationException
-                    || $action instanceof ConflictException
-                    || $action instanceof DuplicateException
-                    || $action instanceof LimitException
-                    || $action instanceof RelationshipException
-                    || $action instanceof RestrictedException
-                    || $action instanceof TimeoutException
-                ) {
+                if (! $this->isRetryable($action)) {
                     throw $action;
                 }
 
@@ -524,6 +513,36 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         }
 
         throw new TransactionException('Transaction retry loop exited unexpectedly');
+    }
+
+    /**
+     * A standalone server has no transactions, so withTransaction() runs the callback once and retries nothing.
+     */
+    #[\Override]
+    public function isRetryable(Throwable $failure): bool
+    {
+        return $this->client->isReplicaSet() && parent::isRetryable($failure);
+    }
+
+    /**
+     * A MongoDB error is transient when the server labels it so, when it is a network error, when the command was
+     * never sent, or when the adapter maps it to an aborted transaction.
+     */
+    #[\Override]
+    protected function isTransient(Throwable $error): bool
+    {
+        if (
+            $error instanceof MongoException
+            && (
+                $error instanceof UnsentException
+                || $error->isTransientError()
+                || $this->processException($error) instanceof TransactionException
+            )
+        ) {
+            return true;
+        }
+
+        return parent::isTransient($error);
     }
 
     /**

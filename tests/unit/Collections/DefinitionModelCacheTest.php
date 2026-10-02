@@ -76,6 +76,26 @@ final class DefinitionModelCacheTest extends TestCase
         $this->assertSame($expected, $this->cachedRead($database, $adapter));
     }
 
+    public function testTheCachedDefinitionServesItsCurrentPermissions(): void
+    {
+        $adapter = new CountingMemory();
+        $database = $this->database($adapter, new Cache(new MemoryCache()));
+        $this->cachedRead($database, $adapter);
+
+        $this->assertSame(['any'], $database->getCollection(self::COLLECTION)->getRead());
+
+        $database->updateCollection(self::COLLECTION, [Permission::read(Role::users()), Permission::update(Role::any())], false);
+        $this->cachedRead($database, $adapter);
+        $collection = $database->getCollection(self::COLLECTION);
+        $this->assertSame(['users'], $collection->getRead());
+        $this->assertSame(['any'], $collection->getUpdate());
+
+        $collection->setAttribute('$permissions', [Permission::read(Role::guests())]);
+        $this->assertSame(['guests'], $collection->getRead());
+        $this->assertSame([], $collection->getUpdate());
+        $this->assertSame(['users'], $database->getCollection(self::COLLECTION)->getRead());
+    }
+
     /**
      * Reads the definition twice and checks the second read was served by the cache.
      *

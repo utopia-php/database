@@ -7,13 +7,8 @@ use Exception;
 use Throwable;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Exception\Authorization as AuthorizationException;
-use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Contention as ContentionException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
-use Utopia\Database\Exception\Limit as LimitException;
-use Utopia\Database\Exception\Relationship as RelationshipException;
-use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Hook\Transform;
@@ -60,6 +55,11 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     protected array $timeouts = [];
 
     protected int $inTransaction = 0;
+
+    /**
+     * withTransaction() calls in progress on this adapter. The outermost one owns the retries.
+     */
+    private int $transactionCalls = 0;
 
     protected bool $alterLocks = false;
 
@@ -675,9 +675,13 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     }
 
     /**
-     * Run the callback in a transaction, retrying a failed attempt up to twice. A nested call whose enclosing
-     * transaction is gone is never retried: it throws `Exception\Transaction`, or the `Exception\Contention` that made
-     * the engine roll the transaction back, which the outermost call retries because nothing of that attempt is stored.
+     * Run the callback in a transaction, retrying an attempt that failed transiently up to twice (see isRetryable());
+     * any other failure is rethrown at once. Only the outermost call retries: a call nested in another
+     * withTransaction() rolls back to its savepoint and rethrows, and the outermost call runs the whole unit again, so
+     * the retries do not multiply. A call nested in a transaction begun with startTransaction() retries in its
+     * savepoint. A nested call whose enclosing transaction is gone throws `Exception\Transaction`, or the
+     * `Exception\Contention` that made the engine roll the transaction back, which the outermost call retries because
+     * nothing of that attempt is stored.
      *
      * @template T
      *
@@ -691,63 +695,93 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
         $sleep = 50_000; // 50 milliseconds
         $retries = 2;
         $depth = $this->inTransaction;
+        $enclosed = $this->transactionCalls > 0;
+        $this->transactionCalls++;
 
-        for ($attempts = 0; $attempts <= $retries; $attempts++) {
-            $started = false;
-            try {
-                $this->startTransaction();
-                $started = true;
-                $result = $callback();
-                $this->commitTransaction();
+        try {
+            for ($attempts = 0; $attempts <= $retries; $attempts++) {
+                $started = false;
+                try {
+                    $this->startTransaction();
+                    $started = true;
+                    $result = $callback();
+                    $this->commitTransaction();
 
-                return $result;
-            } catch (Throwable $action) {
-                $rollback = null;
-                $lost = $started && $this->inTransaction <= $depth;
-                if (! $lost) {
-                    try {
-                        $this->rollbackTransaction();
-                    } catch (Throwable $rollbackError) {
-                        $rollback = $rollbackError;
-                        $this->inTransaction = 0;
+                    return $result;
+                } catch (Throwable $action) {
+                    $rollback = null;
+                    $lost = $started && $this->inTransaction <= $depth;
+                    if (! $lost) {
+                        try {
+                            $this->rollbackTransaction();
+                        } catch (Throwable $rollbackError) {
+                            $rollback = $rollbackError;
+                            $this->inTransaction = 0;
+                        }
+
+                        $lost = $this->inTransaction < $depth;
                     }
 
-                    $lost = $this->inTransaction < $depth;
-                }
+                    if ($lost) {
+                        if (! $action instanceof ContentionException) {
+                            throw new TransactionException('Failed to execute transaction: the transaction was lost before it could commit', previous: $action);
+                        }
 
-                if ($lost) {
-                    if (! $action instanceof ContentionException) {
-                        throw new TransactionException('Failed to execute transaction: the transaction was lost before it could commit', previous: $action);
+                        if ($depth > 0) {
+                            throw $action;
+                        }
                     }
 
-                    if ($depth > 0) {
+                    if ($enclosed || ! $this->isRetryable($action)) {
                         throw $action;
                     }
+
+                    if ($attempts < $retries) {
+                        \usleep($sleep * ($attempts + 1));
+
+                        continue;
+                    }
+
+                    throw $rollback ?? $action;
                 }
+            }
 
-                if (
-                    $action instanceof DuplicateException ||
-                    $action instanceof RestrictedException ||
-                    $action instanceof AuthorizationException ||
-                    $action instanceof RelationshipException ||
-                    $action instanceof ConflictException ||
-                    $action instanceof LimitException ||
-                    $action instanceof TimeoutException
-                ) {
-                    throw $action;
-                }
+            throw new TransactionException('Failed to execute transaction');
+        } finally {
+            $this->transactionCalls--;
+        }
+    }
 
-                if ($attempts < $retries) {
-                    \usleep($sleep * ($attempts + 1));
+    /**
+     * Whether withTransaction() runs an attempt that failed with this again: it can succeed when it runs again. The
+     * transaction itself failing (a lock conflict, or a failed begin, commit or rollback) or a transient driver failure
+     * anywhere in the chain can; a typed failure of this library, or any other failure, would fail the same way again.
+     */
+    public function isRetryable(Throwable $failure): bool
+    {
+        for ($cause = $failure; $cause !== null; $cause = $cause->getPrevious()) {
+            if ($cause instanceof TransactionException) {
+                return true;
+            }
 
-                    continue;
-                }
+            if ($cause instanceof DatabaseException && $cause::class !== DatabaseException::class) {
+                return false;
+            }
 
-                throw $rollback ?? $action;
+            if ($this->isTransient($cause)) {
+                return true;
             }
         }
 
-        throw new TransactionException('Failed to execute transaction');
+        return false;
+    }
+
+    /**
+     * Whether the driver raised the error for a condition that can clear on its own, such as a lost connection.
+     */
+    protected function isTransient(Throwable $error): bool
+    {
+        return Connection::hasError($error);
     }
 
     /**

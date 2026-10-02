@@ -13,6 +13,7 @@ use Utopia\Console;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\SQL\BoundedPage;
 use Utopia\Database\Attribute;
+use Utopia\Database\Builder\Filtering;
 use Utopia\Database\Capability;
 use Utopia\Database\Change;
 use Utopia\Database\Database;
@@ -20,6 +21,7 @@ use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Contention as ContentionException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
@@ -50,6 +52,7 @@ use Utopia\Database\RelationType;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Database\Validator\Query\Join as JoinValidator;
+use Utopia\Query\Builder\Condition;
 use Utopia\Query\Builder\Feature\FullOuterJoins as FullOuterJoinsFeature;
 use Utopia\Query\Builder\Feature\InsertOrIgnore as InsertOrIgnoreFeature;
 use Utopia\Query\Builder\Feature\MariaDB\Returning as MariaDBReturning;
@@ -126,6 +129,16 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      * @var \WeakMap<object, Event>|null
      */
     private ?\WeakMap $statementEvents = null;
+
+    /**
+     * The metadata the comments ahead of every statement were last written for, when every value is
+     * scalar or null, so the same metadata yields the same comments.
+     *
+     * @var array<string, mixed>|null
+     */
+    private ?array $commentedMetadata = null;
+
+    private string $comments = '';
 
     /**
      * @var \WeakMap<object, array<mixed>>|null
@@ -1938,30 +1951,17 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             return $this->executeWrappedCount($innerBuilder, $name);
         }
 
-        if (
-            empty($otherQueries)
-            && $max === null
-            && ! $this->authorization->getStatus()
-            && ! $this->sharedTables
-        ) {
-            $sql = "SELECT COUNT(1) AS {$this->quote('sum')} FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}";
-
-            try {
-                $stmt = $this->prepareStatement($sql, Event::DocumentCount);
-                $this->describeStatement($stmt, [], $name);
-                $this->execute($stmt);
-            } catch (PDOException $e) {
-                throw $this->processException($e);
-            }
-
-            /** @var array<string, mixed>|false $row */
-            $row = $stmt->fetch();
-            $stmt->closeCursor();
-
-            return $this->countOf(\is_array($row) ? $row : []);
+        if ($otherQueries === []) {
+            return $this->countOf($this->fetchAggregate($collectionDoc, $name, $roles, 'COUNT(1)', '1', $max, Event::DocumentCount));
         }
 
         $builder = $this->newBuilder($name, $alias);
+
+        $filters = $this->compileRowFilters($builder, $otherQueries);
+        if ($filters !== null) {
+            return $this->countOf($this->fetchAggregate($collectionDoc, $name, $roles, 'COUNT(1)', '1', $max, Event::DocumentCount, $filters));
+        }
+
         $this->applyFilters($builder, $otherQueries, $name, $alias);
 
         if ($this->authorization->getStatus() && $this->filtersPerDocument($collectionDoc)) {
@@ -2026,30 +2026,19 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         $attribute = $this->filter($attribute);
 
-        if (
-            empty($otherQueries)
-            && $max === null
-            && ! $this->authorization->getStatus()
-            && ! $this->sharedTables
-        ) {
-            $sql = "SELECT SUM({$this->quote($attribute)}) AS {$this->quote('sum')} FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}";
+        $column = $this->quote($attribute);
 
-            try {
-                $stmt = $this->prepareStatement($sql, Event::DocumentSum);
-                $this->describeStatement($stmt, [], $name);
-                $this->execute($stmt);
-            } catch (PDOException $e) {
-                throw $this->processException($e);
-            }
-
-            /** @var array<string, mixed>|false $row */
-            $row = $stmt->fetch();
-            $stmt->closeCursor();
-
-            return $this->sumOf(\is_array($row) ? $row : []);
+        if ($otherQueries === []) {
+            return $this->sumOf($this->fetchAggregate($collectionDoc, $name, $roles, "SUM({$column})", $column, $max, Event::DocumentSum));
         }
 
         $builder = $this->newBuilder($name, $alias);
+
+        $filters = $this->compileRowFilters($builder, $otherQueries);
+        if ($filters !== null) {
+            return $this->sumOf($this->fetchAggregate($collectionDoc, $name, $roles, "SUM({$column})", $column, $max, Event::DocumentSum, $filters));
+        }
+
         $this->applyFilters($builder, $otherQueries, $name, $alias);
 
         if ($this->authorization->getStatus() && $this->filtersPerDocument($collectionDoc)) {
@@ -2199,6 +2188,54 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         return $quote.$prefix.$quote.'.'.$quote.$name.$quote;
     }
 
+    /**
+     * The row of a count() or sum(), written out instead of built: the same statement the builder
+     * makes, with the filters as the builder compiles them, the tenant condition newBuilder() adds
+     * and the permission condition of the permission hook, each from the hook itself, in the order
+     * the builder writes them.
+     *
+     * @param  array<string>  $roles
+     * @return array<string, mixed>
+     */
+    private function fetchAggregate(Document $collection, string $name, array $roles, string $aggregate, string $column, ?int $max, Event $event, ?Condition $filters = null): array
+    {
+        $alias = Query::DEFAULT_ALIAS;
+        $conditions = [];
+        $bindings = [];
+
+        if ($filters !== null) {
+            $conditions[] = $filters->expression;
+            \array_push($bindings, ...$filters->bindings);
+        }
+
+        if ($this->sharedTables) {
+            $tenant = (new TenantFilter($this->currentTenant(), Database::METADATA, $name, quoteChar: $this->getIdentifierQuoteChar()))->filter($alias);
+            $conditions[] = $tenant->expression;
+            \array_push($bindings, ...$tenant->bindings);
+        }
+
+        if ($this->authorization->getStatus() && $this->filtersPerDocument($collection)) {
+            $permission = $this->newPermissionHook($name, $roles)->filter($alias);
+            $conditions[] = $permission->expression;
+            \array_push($bindings, ...$permission->bindings);
+        }
+
+        $rows = $this->getSQLTable($name).' AS '.$this->quote($alias);
+        if ($conditions !== []) {
+            $rows .= ' WHERE '.\implode(' AND ', $conditions);
+        }
+
+        $sum = $this->quote('sum');
+        if ($max === null) {
+            $sql = "SELECT {$aggregate} AS {$sum} FROM {$rows}";
+        } else {
+            $sql = "SELECT {$aggregate} AS {$sum} FROM (SELECT {$column} FROM {$rows} LIMIT ?) AS {$this->quote('table_count')}";
+            $bindings[] = $max;
+        }
+
+        return $this->runSelect(new Statement($sql, $bindings), $event, $name)[0] ?? [];
+    }
+
     private function executeWrappedCount(SQLBuilder $innerBuilder, string $collection): int
     {
         $outerBuilder = $this->createBuilder();
@@ -2239,6 +2276,34 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         return 0;
+    }
+
+    /**
+     * The queries of a count() or sum() as the builder compiles them into its WHERE clause, when
+     * every one only narrows the rows and the builder compiles filters on their own; null when the
+     * statement has to be built.
+     *
+     * @param  array<Query>  $queries
+     *
+     * @throws QueryException
+     */
+    private function compileRowFilters(SQLBuilder $builder, array $queries): ?Condition
+    {
+        if (! $builder instanceof Filtering || ! $this->onlyNarrowsRows($queries)) {
+            return null;
+        }
+
+        foreach ($queries as $query) {
+            if ($this->isAdapterFilterQuery($query)) {
+                return null;
+            }
+        }
+
+        try {
+            return $builder->compileFilters(\array_values($queries));
+        } catch (ValidationException|UnsupportedException $e) {
+            throw new QueryException($e->getMessage(), $e->getCode(), $e);
+        }
     }
 
     /**
@@ -3744,9 +3809,20 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
     private function comments(): string
     {
+        if ($this->commentedMetadata === $this->metadata) {
+            return $this->comments;
+        }
+
         $comments = '';
+        $scalar = true;
         foreach ($this->metadata as $key => $value) {
             $comments .= '/* '.$this->commentText($key).': '.$this->commentText($value).' */'."\n";
+            $scalar = $scalar && ($value === null || \is_scalar($value));
+        }
+
+        if ($scalar) {
+            $this->commentedMetadata = $this->metadata;
+            $this->comments = $comments;
         }
 
         return $comments;
@@ -5980,6 +6056,16 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             throw new QueryException($e->getMessage(), $e->getCode(), $e);
         }
 
+        return $this->runSelect($result, $event, $collection);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     *
+     * @throws Exception
+     */
+    private function runSelect(Statement $result, Event $event, string $collection): array
+    {
         $stmt = null;
         $results = [];
         $exception = null;
@@ -6927,6 +7013,17 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     protected function processException(PDOException $e): Exception
     {
         return $e;
+    }
+
+    /**
+     * A driver error the adapter maps to a lock conflict is transient too, even when it reached the transaction
+     * without being mapped.
+     */
+    #[\Override]
+    protected function isTransient(Throwable $error): bool
+    {
+        return parent::isTransient($error)
+            || ($error instanceof PDOException && $this->processException($error) instanceof ContentionException);
     }
 
     protected function processSelectException(PDOException $e, Statement $statement): Exception

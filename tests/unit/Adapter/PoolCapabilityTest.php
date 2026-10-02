@@ -170,6 +170,39 @@ final class PoolCapabilityTest extends TestCase
         $this->assertTrue($mongo->supports(Capability::DefinedAttributes), "A handle that never set the schema mode must leave the connection's own");
     }
 
+    public function testDefinedAttributesIsAskedOncePerModeTheHandleSet(): void
+    {
+        $mongo = new class () extends Mongo {
+            public function __construct()
+            {
+            }
+        };
+        $connections = $this->connections($mongo);
+        $pool = $this->pool($connections);
+
+        $pool->setSupportForAttributes(false);
+        $this->checkouts = 0;
+        $this->assertFalse($pool->supports(Capability::DefinedAttributes));
+        $this->assertFalse($pool->supports(Capability::DefinedAttributes));
+        $this->assertSame(1, $this->checkouts, 'A schema mode the handle set is asked of a connection once');
+
+        $mongo->setSupportForAttributes(true);
+        $this->assertFalse($pool->supports(Capability::DefinedAttributes), 'Every connection the handle borrows is put in its mode first');
+
+        $pool->setSupportForAttributes(true);
+        $this->checkouts = 0;
+        $this->assertTrue($pool->supports(Capability::DefinedAttributes));
+        $this->assertTrue($pool->supports(Capability::DefinedAttributes));
+        $this->assertSame(1, $this->checkouts, 'Each mode is answered by a connection in that mode');
+
+        $other = $this->pool($connections);
+        $other->setSupportForAttributes(false);
+        $this->checkouts = 0;
+        $this->assertFalse($other->supports(Capability::DefinedAttributes));
+        $this->assertTrue($pool->supports(Capability::DefinedAttributes));
+        $this->assertSame(0, $this->checkouts, 'Handles over one pool share the answer of each mode');
+    }
+
     public function testAFailedFirstCheckoutAnswersNothingAndTheNextOneFillsTheAnswers(): void
     {
         $pool = $this->pool($this->connections(new Memory()));

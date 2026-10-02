@@ -21,6 +21,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
@@ -264,17 +265,47 @@ final class DatabaseQueryCacheTest extends TestCase
         ], permissions: $this->permissions(), documentSecurity: false));
         $database->getCollection('users');
 
+        $byName = static fn (string $name): array => [Query::select(['name']), Query::equal('name', [$name])];
+
         $adapter->observeValidators(
             fn () => $database->createAttribute('users', Attribute::integer(key: 'age')),
         );
-        $database->find('users', [Query::equal('name', ['first'])]);
+        $database->find('users', $byName('first'));
         $straddled = $adapter->getObservedValidators();
 
-        $database->find('users', [Query::equal('name', ['second'])]);
+        $database->find('users', $byName('second'));
         $this->assertSame($straddled + 1, $adapter->getObservedValidators(), 'The build that straddled the purge must not be published');
 
-        $database->find('users', [Query::equal('name', ['third'])]);
+        $database->find('users', $byName('third'));
         $this->assertSame($straddled + 1, $adapter->getObservedValidators(), 'The build after the purge must be published and reused');
+    }
+
+    public function testANarrowValidationStraddlingAPurgeKeepsNothing(): void
+    {
+        $adapter = new ObservedMemory();
+        [$database] = $this->createDatabase($adapter, queryCache: false);
+        $database->createCollection(new Collection(id: 'users', attributes: [
+            Attribute::string(key: 'name'),
+        ], permissions: $this->permissions(), documentSecurity: false));
+
+        $adapter->observeMetadata('users', fn () => $database->createAttribute('users', Attribute::integer(key: 'age')));
+        $this->assertSame([], $database->find('users', [Query::equal('name', ['first'])]));
+        $this->assertGreaterThan(0, $adapter->getObservedMetadataReads(), 'The purge must land while the first read holds the old schema');
+
+        $adapter->observeValidators(static fn (): null => null);
+        $this->assertSame([], $database->find('users', [Query::equal('age', [5]), Query::limit(5)]), 'A narrow list must see the schema the purge published');
+        $this->assertSame([], $database->find('users', [Query::equal('name', ['second']), Query::orderAsc('age')]));
+        $this->assertSame(0, $adapter->getObservedValidators(), 'A narrow list builds no documents validator, so it has none to publish');
+        $database->find('users', [Query::select(['name']), Query::equal('age', [5])]);
+        $this->assertSame(1, $adapter->getObservedValidators(), 'Any other list builds the documents validator of the current schema');
+
+        $database->deleteAttribute('users', 'age');
+        try {
+            $database->find('users', [Query::equal('age', [5])]);
+            $this->fail('A narrow list accepted an attribute the schema no longer has');
+        } catch (QueryException $exception) {
+            $this->assertSame('Invalid query: Attribute not found in schema: age', $exception->getMessage());
+        }
     }
 
     public function testMemoryCacheSeparatesRolesAndExecutionShapes(): void

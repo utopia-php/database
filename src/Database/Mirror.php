@@ -109,6 +109,18 @@ class Mirror extends Database
     }
 
     /**
+     * Delegate to the source database, so a narrow list is checked under the source's adapter and
+     * query limits like every other list.
+     *
+     * @param  array<mixed>  $queries
+     * @param  array<Document>  $joinedCollections
+     */
+    protected function getQueriesValidator(Document $collection, array $queries, array $joinedCollections = []): Validator\Queries
+    {
+        return $this->source->getQueriesValidator($collection, $queries, $joinedCollections);
+    }
+
+    /**
      * Delegate metadata reads to the source database. Mirror's schema mutator
      * overrides forward writes to source and destination directly, so routing
      * reads through the source keeps its view of attributes and relationships

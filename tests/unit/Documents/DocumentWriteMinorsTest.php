@@ -16,6 +16,7 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Conflict as ConflictException;
+use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
@@ -140,7 +141,7 @@ final class DocumentWriteMinorsTest extends TestCase
                 if ($this->commitFailures > 0) {
                     $this->commitFailures--;
 
-                    throw new RuntimeException('Commit failed');
+                    throw new TransactionException('Failed to commit transaction: Commit failed');
                 }
 
                 return parent::commitTransaction();

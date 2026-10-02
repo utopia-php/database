@@ -358,10 +358,14 @@ final class BoundedJoinSortTest extends TestCase
 
     private function key(Document $row): string
     {
-        $note = $row->getAttribute('n.$id');
-        $tag = $row->getAttribute('t.$id');
+        return ($row->getId() ?: '-').'/'.$this->joinedId($row, 'n').'/'.$this->joinedId($row, 't');
+    }
 
-        return ($row->getId() ?: '-').'/'.(\is_string($note) ? $note : '-').'/'.(\is_string($tag) ? $tag : '-');
+    private function joinedId(Document $row, string $alias): string
+    {
+        $id = $row->getAttribute($alias.'.$id');
+
+        return \is_string($id) ? $id : '-';
     }
 
     /**

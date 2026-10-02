@@ -602,9 +602,25 @@ coroutine that opened it and the coroutines it starts; see [Pools and profiling]
   index to ignore and, as in 7.x, skip such a row without error.
 - **Retries of metadata writes.** Schema calls that persist a collection definition (`createAttribute()`,
   `createIndex()`, their update, rename and delete siblings, `createRelationship()`) no longer retry a failure that
-  fails the same way every time: `Authorization`, `Character`, `Duplicate` (and `Unique`), `Limit`, `NotFound`,
-  `Order`, `Query`, `Relationship`, `Restricted`, `Structure` and `Type` are thrown on the first attempt. Other
-  failures are still attempted up to three times.
+  fails the same way every time: `Authorization`, `Character`, `Conflict`, `Dependency`, `Duplicate` (and `Unique`
+  and `Mismatch`), `Index`, `Limit`, `NotFound`, `Operator`, `Order`, `Query`, `Relationship`, `Restricted`,
+  `Structure`, `Timeout`, `Truncate` and `Type` are thrown on the first attempt. A failure the metadata write's
+  transaction retries itself (see [Transaction retries](#errors)) is not run again by the schema call, so its
+  retries do not multiply. Other failures, such as an unavailable cache, are still attempted up to three times.
+- **Transaction retries.** `withTransaction()` runs the callback again only after a failure that can succeed on
+  another attempt: an `Exception\Transaction` (a lock conflict, which is `Exception\Contention`, or a failed begin,
+  commit or rollback), a lost connection (also as the cause of another failure), an engine lock conflict the adapter
+  did not map, or, on MongoDB, an error labelled `TransientTransactionError` or `UnknownTransactionCommitResult`, a
+  network error or a command that was never sent. Every other failure runs the callback once and is rethrown at once,
+  in a nested call too: every typed library failure (`Structure`, `NotFound`, `Query`, `Type`, `Index`,
+  `Dependency`, `Truncate`, `Duplicate`, `Timeout`, ...) and any other exception. 7.x retried everything but
+  `Duplicate`, `Restricted`, `Authorization`, `Relationship`, `Conflict`, `Limit` and `Timeout` twice, sleeping 50 ms
+  and 100 ms, before rethrowing the same failure. A callback that throws its own exception to have the transaction
+  run again must throw `Exception\Transaction` (or `Exception\Contention`) instead. Only the outermost
+  `withTransaction()` retries: a call nested in another rolls back to its savepoint and rethrows, and the outermost
+  call runs the whole unit again, releasing its locks between attempts. A lock conflict that keeps failing therefore
+  runs a nested callback 3 times, not 9 (7.x retried in the savepoint too). A call nested in a transaction begun
+  with `startTransaction()` still retries in its savepoint.
 - **Failed rollbacks of metadata writes.** When a definition cannot be persisted and the schema change's rollback
   fails too, the thrown `Utopia\Database\Exception` names the persistence error first and the rollback's after
   `| Cleanup error:`, and its `getPrevious()` is always the persistence error. In 7.x the message labelled the two the
@@ -929,8 +945,9 @@ as wildcards and a backslash as a literal character.
 - **Lost transactions.** When the connection loses a transaction that `withTransaction()` calls are nested in, the
   nested call and every enclosing call throw `Utopia\Database\Exception\Transaction` (`Failed to execute
   transaction: the transaction was lost before it could commit`) and are not retried. Nothing written in the lost
-  transaction is committed. A nested call that fails while its enclosing transaction holds is still rolled back to
-  its savepoint and retried, and a top-level call that failed to begin, or whose work failed, is still retried. A
+  transaction is committed. A nested call that fails transiently while its enclosing transaction holds is rolled
+  back to its savepoint and rethrown, and the outermost call runs again; a top-level call that failed to begin, or
+  whose work failed transiently, is still retried (see [Transaction retries](#errors)). A
   top-level commit that finds the connection no longer holds the transaction (a reconnect the callback did not
   surface) throws `Exception\Transaction` too, and the callback is not run again: statements after such a reconnect
   may already have run on their own. Code that catches an expected exception (for example `Duplicate`) from a
@@ -943,9 +960,10 @@ as wildcards and a backslash as a literal character.
 - **Statements after a lost transaction.** When `Utopia\Database\PDO` reconnects because a statement inside a
   transaction found the connection gone, it rethrows and then refuses every statement (`exec()`, `query()`,
   `prepare()`, `beginTransaction()`, `commit()`) with a `PDOException` until the transaction is ended with
-  `rollBack()`, a `ROLLBACK` statement or `reconnect()`. `inTransaction()` reports the transaction until then. Code
-  that catches the connection error inside `withTransaction()` and carries on no longer writes on the new connection
-  in autocommit: the transaction fails and is rolled back instead.
+  `rollBack()`, a `ROLLBACK` statement or `reconnect()`. `inTransaction()` reports the transaction until then, and
+  each refusal's `getPrevious()` is the lost connection error. Code that catches the connection error inside
+  `withTransaction()` and carries on no longer writes on the new connection in autocommit: the transaction is rolled
+  back and, at the top level, runs again.
 
 ### MongoDB: rebuild key and unique indexes
 

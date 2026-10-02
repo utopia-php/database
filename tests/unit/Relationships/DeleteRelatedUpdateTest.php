@@ -21,6 +21,7 @@ use Utopia\Database\Event;
 use Utopia\Database\Event\DispatcherHook;
 use Utopia\Database\Event\Document\Deleted as DocumentDeleted;
 use Utopia\Database\Event\Document\Updated as DocumentUpdated;
+use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
@@ -385,7 +386,7 @@ final class DeleteRelatedUpdateTest extends TestCase
                 if ($this->failNextCommit && $this->inTransaction === 1) {
                     $this->failNextCommit = false;
 
-                    throw new RuntimeException('commit failed');
+                    throw new TransactionException('Failed to commit transaction: commit failed');
                 }
 
                 return parent::commitTransaction();

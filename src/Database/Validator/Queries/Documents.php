@@ -25,6 +25,37 @@ use Utopia\Query\Schema\ColumnType;
 class Documents extends IndexedQueries
 {
     /**
+     * The attributes every collection holds besides its own, by key: the document id, sequence and
+     * timestamps. Queries may name them like the collection's attributes.
+     */
+    public const array INTERNAL_ATTRIBUTES = [
+        Document::ID => [
+            Document::ID => Document::ID,
+            'key' => Document::ID,
+            'type' => ColumnType::String->value,
+            'array' => false,
+        ],
+        Document::SEQUENCE => [
+            Document::ID => Document::SEQUENCE,
+            'key' => Document::SEQUENCE,
+            'type' => ColumnType::Id->value,
+            'array' => false,
+        ],
+        Document::CREATED_AT => [
+            Document::ID => Document::CREATED_AT,
+            'key' => Document::CREATED_AT,
+            'type' => ColumnType::Datetime->value,
+            'array' => false,
+        ],
+        Document::UPDATED_AT => [
+            Document::ID => Document::UPDATED_AT,
+            'key' => Document::UPDATED_AT,
+            'type' => ColumnType::Datetime->value,
+            'array' => false,
+        ],
+    ];
+
+    /**
      * @param  array<Document>  $attributes
      * @param  array<Document>  $indexes
      * @param  bool  $sharedTables  Whether the tables hold `$tenant`, as they do under shared tables
@@ -47,30 +78,9 @@ class Documents extends IndexedQueries
         bool $sharedTables = false,
         bool $supportForOrderRandom = true,
     ) {
-        $attributes[] = new Document([
-            Document::ID => Document::ID,
-            'key' => Document::ID,
-            'type' => ColumnType::String->value,
-            'array' => false,
-        ]);
-        $attributes[] = new Document([
-            Document::ID => Document::SEQUENCE,
-            'key' => Document::SEQUENCE,
-            'type' => ColumnType::Id->value,
-            'array' => false,
-        ]);
-        $attributes[] = new Document([
-            Document::ID => Document::CREATED_AT,
-            'key' => Document::CREATED_AT,
-            'type' => ColumnType::Datetime->value,
-            'array' => false,
-        ]);
-        $attributes[] = new Document([
-            Document::ID => Document::UPDATED_AT,
-            'key' => Document::UPDATED_AT,
-            'type' => ColumnType::Datetime->value,
-            'array' => false,
-        ]);
+        foreach (self::INTERNAL_ATTRIBUTES as $definition) {
+            $attributes[] = new Document($definition);
+        }
 
         $validators = [
             new Limit(),

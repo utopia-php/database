@@ -26,6 +26,9 @@ class Attribute extends Document
 {
     private const string PERSISTED_BIG_INTEGER = 'bigint';
 
+    /** @var array<string, true>|null */
+    private static ?array $storedTypes = null;
+
     /**
      * The column types an attribute can be stored as. Object, spatial and vector attributes also need
      * the adapter to support them.
@@ -1017,17 +1020,35 @@ class Attribute extends Document
      */
     public static function isRelationship(self|Document $attribute): bool
     {
-        if ($attribute instanceof self) {
-            return $attribute->type === ColumnType::Relationship;
-        }
-
         $type = $attribute->getAttribute('type');
 
-        if ($type instanceof ColumnType) {
-            return $type === ColumnType::Relationship;
+        if ($type === ColumnType::Relationship->value || $type === ColumnType::Relationship) {
+            return true;
         }
 
-        return $type === ColumnType::Relationship->value;
+        if (! $attribute instanceof self || $type instanceof ColumnType || (\is_string($type) && isset(self::storedTypes()[$type]))) {
+            return false;
+        }
+
+        return $attribute->type === ColumnType::Relationship;
+    }
+
+    /**
+     * Every type string an attribute can be stored with, as keys.
+     *
+     * @return array<string, true>
+     */
+    private static function storedTypes(): array
+    {
+        if (self::$storedTypes === null) {
+            $types = [self::PERSISTED_BIG_INTEGER => true];
+            foreach (ColumnType::cases() as $case) {
+                $types[$case->value] = true;
+            }
+            self::$storedTypes = $types;
+        }
+
+        return self::$storedTypes;
     }
 
     /**

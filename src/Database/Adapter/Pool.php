@@ -59,6 +59,11 @@ class Pool extends Adapter
     private static ?\WeakMap $features = null;
 
     /**
+     * @var \WeakMap<UtopiaPool<covariant Adapter>, array<int, bool>>|null
+     */
+    private static ?\WeakMap $definedAttributes = null;
+
+    /**
      * @param  UtopiaPool<covariant Adapter>  $pool  The pool to use for connections. Must contain instances of Adapter.
      */
     public function __construct(UtopiaPool $pool)
@@ -207,7 +212,9 @@ class Pool extends Adapter
      * Check if a specific capability is supported by the pooled adapter.
      *
      * Answered from the capabilities the pool's connections reported when first asked, except
-     * DefinedAttributes: it reflects the schema mode a connection is in, so it is asked every time.
+     * DefinedAttributes: it reflects the schema mode a connection is in. Once this handle has set
+     * that mode, every connection it borrows is put in it first, so the answer is kept per pool
+     * and mode; before that, a connection keeps its own mode and is asked every time.
      *
      * @param Capability $feature The capability to check
      * @return bool
@@ -215,13 +222,35 @@ class Pool extends Adapter
     public function supports(Capability $feature): bool
     {
         if ($feature === Capability::DefinedAttributes) {
+            return $this->supportsDefinedAttributes();
+        }
+
+        return \in_array($feature, $this->capabilities(), true);
+    }
+
+    private function supportsDefinedAttributes(): bool
+    {
+        $mode = $this->supportForAttributes;
+        if ($mode === null) {
             /** @var bool $result */
-            $result = $this->delegate(__FUNCTION__, \func_get_args());
+            $result = $this->delegate('supports', [Capability::DefinedAttributes]);
 
             return $result;
         }
 
-        return \in_array($feature, $this->capabilities(), true);
+        $known = self::$definedAttributes[$this->pool][(int) $mode] ?? null;
+        if ($known !== null) {
+            return $known;
+        }
+
+        /** @var bool $result */
+        $result = $this->delegate('supports', [Capability::DefinedAttributes]);
+        self::$definedAttributes ??= new \WeakMap();
+        $answers = self::$definedAttributes[$this->pool] ?? [];
+        $answers[(int) $mode] = $result;
+        self::$definedAttributes[$this->pool] = $answers;
+
+        return $result;
     }
 
     /**
@@ -534,6 +563,14 @@ class Pool extends Adapter
      * {@inheritDoc}
      */
     public function ping(): bool
+    {
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
+    }
+
+    #[\Override]
+    public function isRetryable(Throwable $failure): bool
     {
         /** @var bool $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());

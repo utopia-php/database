@@ -4,6 +4,7 @@ namespace Utopia\Database\Adapter;
 
 use Exception;
 use PDOException;
+use Utopia\Database\Builder\MySQL as MySQLBuilder;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Event;
@@ -17,7 +18,6 @@ use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
 use Utopia\Database\Storage;
 use Utopia\Query\Builder\JoinType;
-use Utopia\Query\Builder\MySQL as MySQLBuilder;
 use Utopia\Query\Builder\SQL as SQLBuilder;
 use Utopia\Query\Schema\ColumnType;
 

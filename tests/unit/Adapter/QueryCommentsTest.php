@@ -264,6 +264,42 @@ final class QueryCommentsTest extends TestCase
         ], $this->statements);
     }
 
+    public function testEachStatementCarriesTheMetadataAsItIsThen(): void
+    {
+        $stringable = new class () implements Stringable {
+            public string $text = 'first';
+
+            public function __toString(): string
+            {
+                return $this->text;
+            }
+        };
+
+        $this->database->setMetadata('user', 'user-1');
+        $this->assertTrue($this->database->ping());
+        $this->assertTrue($this->database->ping());
+        $this->database->setMetadata('user', 'user-2');
+        $this->assertTrue($this->database->ping());
+        $this->database->setMetadata('user', 2);
+        $this->assertTrue($this->database->ping());
+        $this->database->resetMetadata();
+        $this->assertTrue($this->database->ping());
+        $this->database->setMetadata('region', $stringable);
+        $this->assertTrue($this->database->ping());
+        $stringable->text = 'second';
+        $this->assertTrue($this->database->ping());
+
+        $this->assertSame([
+            "/* user: user-1 */\nSELECT 1",
+            "/* user: user-1 */\nSELECT 1",
+            "/* user: user-2 */\nSELECT 1",
+            "/* user: 2 */\nSELECT 1",
+            'SELECT 1',
+            "/* region: first */\nSELECT 1",
+            "/* region: second */\nSELECT 1",
+        ], $this->statements);
+    }
+
     public function testPooledConnectionCarriesOnlyTheCurrentHandlesMetadata(): void
     {
         $first = $this->open($this->pool());

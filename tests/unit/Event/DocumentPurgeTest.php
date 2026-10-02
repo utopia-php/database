@@ -21,6 +21,7 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
+use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Lifecycle;
@@ -236,7 +237,7 @@ final class DocumentPurgeTest extends TestCase
                 if ($this->commitFailures > 0) {
                     $this->commitFailures--;
 
-                    throw new RuntimeException('commit lost');
+                    throw new TransactionException('Failed to commit transaction: commit lost');
                 }
 
                 return parent::commitTransaction();
@@ -469,7 +470,7 @@ final class DocumentPurgeTest extends TestCase
                 if ($this->inTransaction === 1 && $this->commitFailures > 0) {
                     $this->commitFailures--;
 
-                    throw new RuntimeException('commit lost');
+                    throw new TransactionException('Failed to commit transaction: commit lost');
                 }
 
                 return parent::commitTransaction();

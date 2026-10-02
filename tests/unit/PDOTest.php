@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use Closure;
 use PDOException;
 use PHPUnit\Framework\TestCase;
+use Utopia\Database\Connection;
 use Utopia\Database\PDO;
 use Utopia\Database\PDOStatement;
 
@@ -272,6 +273,34 @@ class PDOTest extends TestCase
 
         $pdo->exec('INSERT INTO items VALUES (5)');
         $this->assertSame([5], $this->values($path));
+    }
+
+    public function testARefusedStatementCarriesTheLostConnection(): void
+    {
+        $path = $this->createDatabaseFile();
+        [$pdo, $endSession] = $this->createLosableConnection($path);
+        $pdo->exec('CREATE TABLE items (value INTEGER)');
+        $pdo->beginTransaction();
+        $endSession();
+
+        $lost = null;
+        try {
+            $pdo->exec('INSERT INTO items VALUES (1)');
+        } catch (PDOException $error) {
+            $lost = $error;
+        }
+
+        $refusal = null;
+        try {
+            $pdo->exec('INSERT INTO items VALUES (2)');
+        } catch (PDOException $error) {
+            $refusal = $error;
+        }
+
+        $this->assertInstanceOf(PDOException::class, $lost);
+        $this->assertInstanceOf(PDOException::class, $refusal);
+        $this->assertSame($lost, $refusal->getPrevious(), 'A refusal must carry the lost connection that caused it');
+        $this->assertFalse(Connection::hasError($refusal), 'A refusal must not be taken for a lost connection itself');
     }
 
     public function testARollbackStatementEndsALostTransaction(): void

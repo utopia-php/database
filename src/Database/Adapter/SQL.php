@@ -5848,7 +5848,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             && $collection->getAttribute(Database::COLLECTION_GRANTED, false) !== true
             && $this->filtersPerDocument($collection)
         ) {
-            $page->addHook($this->newPermissionHook($name, $roles, $forPermission->value, $alias.'.'.Storage::UID));
+            $hook = $this->newPermissionHook($name, $roles, $forPermission->value, $alias.'.'.Storage::UID);
+            $page->addHook($bound->exact ? $hook : $hook->withoutSemiJoin());
         }
 
         if ($cursor !== []) {

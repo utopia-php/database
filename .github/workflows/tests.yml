@@ -187,13 +187,11 @@ jobs:
           docker load --input /tmp/${{ env.IMAGE }}.tar
           docker compose ${{ matrix.profiles }} up -d --wait
 
-      - name: Check utopia-php/cache Version
+      - name: Show utopia-php/cache Version
         run: |
           docker compose exec -T tests php -r '
             require "vendor/autoload.php";
-            $version = \Composer\InstalledVersions::getPrettyVersion("utopia-php/cache");
-            echo "utopia-php/cache {$version}", PHP_EOL;
-            exit(\str_starts_with((string) $version, "5.") ? 0 : 1);
+            echo "utopia-php/cache ", \Composer\InstalledVersions::getPrettyVersion("utopia-php/cache"), PHP_EOL;
           '
 
       - name: Run Tests

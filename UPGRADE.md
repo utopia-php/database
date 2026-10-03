@@ -678,9 +678,9 @@ coroutine that opened it and the coroutines it starts; see [Pools and profiling]
   reads or invalidates the other's entries. During a rolling upgrade on one cache this holds in both directions: a
   7.x process keeps serving documents, permissions and collection definitions that an 8.0 process has changed, and
   an 8.0 process keeps serving what a 7.x process has changed (a revoked permission included), until the entry
-  expires after the cache TTL (`Database::TTL`, 24 hours). Deploy without overlap, or run one side without a cache
-  during the overlap (for example with `Utopia\Cache\Adapter\None`), and flush the cache once the last 7.x process
-  has stopped.
+  expires after the cache TTL (`Database::TTL`, 24 hours). Deploy without overlap, or run both sides without a cache
+  during the overlap (for example with `Utopia\Cache\Adapter\None`; a write from an uncached side cannot invalidate
+  the other side's entries), and flush the cache once the last 7.x process has stopped.
 - **Invalidation.** A single-document write (`createDocument()`, `updateDocument()`, `increaseDocumentAttribute()`,
   `decreaseDocumentAttribute()`, `deleteDocument()`) and `purgeCachedDocument()` purge only that document, inside the
   transaction and again after the outermost commit or rollback; other cached documents of the collection stay cached.
@@ -810,10 +810,16 @@ The methods that went with a feature moved to its interface: `getConnectionId()`
 `setTimeout()` and `clearTimeout()` (`Feature\Timeouts`), `createRelationship()`, `updateRelationship()` and
 `deleteRelationship()` (`Feature\Relationships`), `upsertDocuments()` (`Feature\Upserts`), `getColumnType()`
 (`Feature\ColumnTypes`), `decodePoint()`, `decodeLinestring()` and `decodePolygon()` (`Feature\Spatial`),
-`castingBefore()` and `castingAfter()` (`Feature\InternalCasting`), and `setUTCDatetime()` (`Feature\UTCCasting`).
+`castingBefore()`, `castingAfter()` and `castingAfterDocuments()` (`Feature\InternalCasting`), and `setUTCDatetime()`
+(`Feature\UTCCasting`).
 An adapter that does not support a feature no longer declares its methods: for example, only MongoDB implements
 `Feature\InternalCasting` and `Feature\UTCCasting`, so the SQL, Memory and Redis adapters no longer have
-`castingBefore()`, `castingAfter()` or `setUTCDatetime()`. The SQL adapters also implement `Feature\RawQuery`
+`castingBefore()`, `castingAfter()`, `castingAfterDocuments()` or `setUTCDatetime()`. A custom adapter that implements
+`Feature\InternalCasting` has to implement `castingAfterDocuments(Document $collection, array $documents): array`, which
+casts a page of read documents as `castingAfter()` casts one and returns them under the keys they were given with;
+`Database` calls it once per page or batch in `find()`, `createDocuments()`, `updateDocuments()` and
+`upsertDocuments()`. `Adapter\Pool` and `Adapter\ReadWritePool` delegate it in one connection checkout, the latter as a
+read that opens no sticky window. The SQL adapters also implement `Feature\RawQuery`
 (`rawQuery()`, `rawMutation()`) and `Feature\QueryBuilder` (`getBuilder()`, `getSchema()`). To list what an adapter
 reports, call `$adapter->capabilities()`.
 
@@ -1242,7 +1248,19 @@ API might expect. [CHANGELOG.md](CHANGELOG.md) describes the features themselves
   timeout (observed on MariaDB and MySQL shared tables).
 - On MySQL, a joined collection's permission check is kept out of the optimizer's semi-join search (`NO_SEMIJOIN`)
   when the collection is left, right or full outer joined, and for every joined collection from five joins. Inner
-  joins below five keep semi-joins.
+  joins below five keep semi-joins. Right after a collection is created or bulk-loaded, until InnoDB's automatic
+  statistics recalculation has run (seconds, with the default `STATS_AUTO_RECALC`), a left join on a joined
+  collection's own `$id` can be slow. Run `ANALYZE TABLE` after a bulk load to avoid that window.
+- On MariaDB and MySQL, a one-to-many joined read is ordered by the joined `$id` behind the main `$sequence` only when
+  its rows show the join (no `select()`, `*`, or a joined attribute) or it pages with a cursor; see
+  [Paging a joined read](#paging-a-joined-read). Without a bound, the engine sorts the whole join before applying the
+  limit. A read bounds the sort when every join is a left join, no filter or search names a joined attribute, the order
+  starts with main attributes (the main `$sequence` or `$id` among them) and it has a limit: the read first picks the
+  main documents its page can reach (`offset + limit`, plus the cursor's own), including those matched by a fulltext
+  search on main attributes, and joins only those. Inner, right and full outer one-to-many joins, filters and searches
+  on joined attributes and orders that start with a joined attribute still sort the whole join on MariaDB and MySQL.
+  PostgreSQL is not affected. Index the join keys, and for a large one-to-many read select main attributes only or use
+  left joins.
 - `Database::updateDocuments()` and `Database::deleteDocuments()` do not accept join queries. They throw
   `Utopia\Database\Exception\Query` with `Join queries are not supported for bulk updates` or
   `Join queries are not supported for bulk deletes`.

@@ -185,9 +185,10 @@ have to make, with the 7.x and 8.0 forms side by side.
   `Capability`, and from utopia-php/query `Method`, `ColumnType`, `IndexType`, `Order`, `OrderDirection`,
   `ForeignKeyAction` and `CursorDirection`.
 - **Adapter capabilities.** `Adapter::supports(Capability)`, `capabilities()` and `hasFeature()`, and the
-  `Adapter\Feature` interfaces. `Adapter::relaxAttributeRequired()` and the protected
-  `Adapter\SQL::getSpatialColumnSrid(): ?int` (the SRID written into spatial column definitions, or `null` for a
-  dialect that cannot declare one, such as MariaDB).
+  `Adapter\Feature` interfaces. `Feature\InternalCasting` has
+  `castingAfterDocuments()`, which an adapter implementing it has to provide. `Adapter::relaxAttributeRequired()` and
+  the protected `Adapter\SQL::getSpatialColumnSrid(): ?int` (the SRID written into spatial column definitions, or
+  `null` for a dialect that cannot declare one, such as MariaDB).
 - **Custom types.** Implement `Utopia\Database\Type\Custom` (`name()`, `encode()`, `decode()`) and register the type
   on a `Utopia\Database\Type\TypeRegistry`. Give the registry to a `Database` with `setTypeRegistry()`, and list the
   type's name in an attribute's `filters`. The type applies only to handles that share that registry. On those
@@ -748,6 +749,14 @@ not change anything for an upgrade from 7.x.
     `SELECT last_insert_rowid()` statement: one statement fewer per document, as in 7.x.
   - MongoDB: `find()` reads the internal attribute definitions once per process instead of once per returned row, and
     skips list keys when it restores stored field names.
+  - MongoDB: `find()`, `createDocuments()`, `updateDocuments()` and `upsertDocuments()` cast a page or batch of
+    documents in one `castingAfterDocuments()` call, one pool checkout instead of one per document.
+  - MariaDB and MySQL: a one-to-many joined read breaks ties on the joined `$id` only when its rows show the join or a
+    cursor is used. A left-joined read with a limit, no filter or search on a joined attribute and a main order
+    (`$sequence` or `$id` among them) joins only the page of main documents it can reach, fulltext searches on main
+    attributes included, instead of sorting the whole join. Inner, right and full outer one-to-many joins, filters and
+    searches on joined attributes and orders that start with a joined attribute still sort the whole join. See
+    [Joins](UPGRADE.md#joins).
 - **Tooling:**
   - The `bin/` tasks (`load`, `index`, `query`, `relationships`, `operators`) start again: `bin/cli.php` no longer
     registers a resource with a class the locked `utopia-php/di` does not have, and it loads the autoloader relative
@@ -760,6 +769,9 @@ not change anything for an upgrade from 7.x.
   `withTransaction()`.
 - A join on an unindexed attribute is accepted, but on a large collection it can exceed the statement timeout
   (observed on MariaDB and MySQL shared tables): index the attributes your join conditions compare.
+- On MySQL, left joins on a joined collection's own `$id` can be slow right after the collection is created or
+  bulk-loaded, until InnoDB's automatic statistics recalculation has run (seconds, with the default
+  `STATS_AUTO_RECALC`). Run `ANALYZE TABLE` after a bulk load.
 
 ### Dependencies
 

@@ -86,8 +86,10 @@ docker compose exec tests vendor/bin/phpunit --configuration phpunit.xml tests/u
 To run tests for a single file, use the following Docker command structure:
 
 ```bash
-docker compose exec tests vendor/bin/phpunit --configuration phpunit.xml tests/[unit|e2e]/[FILE_PATH]
+docker compose exec tests vendor/bin/phpunit --configuration phpunit.xml tests/[FILE_PATH]
 ```
+
+`FILE_PATH` is relative to `tests/` and starts with `unit/` or `e2e/`.
 
 To run static code analysis, use the following phpstan command:
 

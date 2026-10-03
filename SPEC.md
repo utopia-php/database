@@ -54,7 +54,7 @@ Each database adapter should support the following action for fast storing and r
 **Documents** (Table rows columns for MariaDB)
 * getDocument(Document $collection, string $id)
 * createDocument(Document $collection, Document $document)
-* updateDocument(Document $collection, string $id, Document $document)
+* updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions)
 * deleteDocument(string $collection, string $id)
 
 ## Queries

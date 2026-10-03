@@ -909,6 +909,8 @@ $database->find('movies', [
 ]);
 ```
 
+Index the attributes your join conditions compare. On MariaDB and MySQL, a one-to-many join can sort the whole join before the limit; see [Joins](UPGRADE.md#joins) in the upgrade guide for when it does not.
+
 ## System Requirements
 
 Utopia Framework requires PHP 8.5 or later. We recommend using the latest PHP version whenever possible.

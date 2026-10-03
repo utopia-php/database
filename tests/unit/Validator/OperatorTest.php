@@ -3,16 +3,16 @@
 namespace Tests\Unit\Validator;
 
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Operator;
 use Utopia\Database\Validator\Operator as OperatorValidator;
+use Utopia\Query\Schema\ColumnType;
 
 class OperatorTest extends TestCase
 {
     protected Document $collection;
 
-    public function setUp(): void
+    protected function setUp(): void
     {
         $this->collection = new Document([
             '$id' => 'test_collection',
@@ -20,50 +20,50 @@ class OperatorTest extends TestCase
                 new Document([
                     '$id' => 'count',
                     'key' => 'count',
-                    'type' => Database::VAR_INTEGER,
+                    'type' => ColumnType::Integer->value,
                     'array' => false,
                 ]),
                 new Document([
                     '$id' => 'score',
                     'key' => 'score',
-                    'type' => Database::VAR_FLOAT,
+                    'type' => ColumnType::Double->value,
                     'array' => false,
                 ]),
                 new Document([
                     '$id' => 'title',
                     'key' => 'title',
-                    'type' => Database::VAR_STRING,
+                    'type' => ColumnType::String->value,
                     'array' => false,
                     'size' => 100,
                 ]),
                 new Document([
                     '$id' => 'tags',
                     'key' => 'tags',
-                    'type' => Database::VAR_STRING,
+                    'type' => ColumnType::String->value,
                     'array' => true,
                 ]),
                 new Document([
                     '$id' => 'active',
                     'key' => 'active',
-                    'type' => Database::VAR_BOOLEAN,
+                    'type' => ColumnType::Boolean->value,
                     'array' => false,
                 ]),
                 new Document([
                     '$id' => 'createdAt',
                     'key' => 'createdAt',
-                    'type' => Database::VAR_DATETIME,
+                    'type' => ColumnType::Datetime->value,
                     'array' => false,
                 ]),
             ],
         ]);
     }
 
-    public function tearDown(): void
+    protected function tearDown(): void
     {
     }
 
     // Test parsing string operators (new functionality)
-    public function testParseStringOperator(): void
+    public function test_parse_string_operator(): void
     {
         $validator = new OperatorValidator($this->collection);
 
@@ -76,7 +76,7 @@ class OperatorTest extends TestCase
         $this->assertTrue($validator->isValid($json), $validator->getDescription());
     }
 
-    public function testParseInvalidStringOperator(): void
+    public function test_parse_invalid_string_operator(): void
     {
         $validator = new OperatorValidator($this->collection);
 
@@ -85,7 +85,7 @@ class OperatorTest extends TestCase
         $this->assertStringContainsString('Invalid operator:', $validator->getDescription());
     }
 
-    public function testParseStringOperatorWithInvalidMethod(): void
+    public function test_parse_string_operator_with_invalid_method(): void
     {
         $validator = new OperatorValidator($this->collection);
 
@@ -93,7 +93,7 @@ class OperatorTest extends TestCase
         $invalidOperator = json_encode([
             'method' => 'invalidMethod',
             'attribute' => 'count',
-            'values' => [1]
+            'values' => [1],
         ]);
 
         $this->assertFalse($validator->isValid($invalidOperator));
@@ -101,7 +101,7 @@ class OperatorTest extends TestCase
     }
 
     // Test numeric operators
-    public function testIncrementOperator(): void
+    public function test_increment_operator(): void
     {
         $validator = new OperatorValidator($this->collection);
 
@@ -111,7 +111,7 @@ class OperatorTest extends TestCase
         $this->assertTrue($validator->isValid($operator), $validator->getDescription());
     }
 
-    public function testIncrementOnNonNumeric(): void
+    public function test_increment_on_non_numeric(): void
     {
         $validator = new OperatorValidator($this->collection);
 
@@ -122,7 +122,7 @@ class OperatorTest extends TestCase
         $this->assertStringContainsString('Cannot apply increment operator to non-numeric field', $validator->getDescription());
     }
 
-    public function testDecrementOperator(): void
+    public function test_decrement_operator(): void
     {
         $validator = new OperatorValidator($this->collection);
 
@@ -132,7 +132,7 @@ class OperatorTest extends TestCase
         $this->assertTrue($validator->isValid($operator), $validator->getDescription());
     }
 
-    public function testMultiplyOperator(): void
+    public function test_multiply_operator(): void
     {
         $validator = new OperatorValidator($this->collection);
 
@@ -142,7 +142,7 @@ class OperatorTest extends TestCase
         $this->assertTrue($validator->isValid($operator), $validator->getDescription());
     }
 
-    public function testDivideByZero(): void
+    public function test_divide_by_zero(): void
     {
         $validator = new OperatorValidator($this->collection);
 
@@ -153,7 +153,7 @@ class OperatorTest extends TestCase
         $operator = Operator::divide(0);
     }
 
-    public function testModuloByZero(): void
+    public function test_modulo_by_zero(): void
     {
         $validator = new OperatorValidator($this->collection);
 
@@ -165,7 +165,7 @@ class OperatorTest extends TestCase
     }
 
     // Test array operators
-    public function testArrayAppend(): void
+    public function test_array_append(): void
     {
         $validator = new OperatorValidator($this->collection);
 
@@ -175,7 +175,7 @@ class OperatorTest extends TestCase
         $this->assertTrue($validator->isValid($operator), $validator->getDescription());
     }
 
-    public function testArrayAppendOnNonArray(): void
+    public function test_array_append_on_non_array(): void
     {
         $validator = new OperatorValidator($this->collection);
 
@@ -186,7 +186,7 @@ class OperatorTest extends TestCase
         $this->assertStringContainsString('Cannot apply arrayAppend operator to non-array field', $validator->getDescription());
     }
 
-    public function testArrayUnique(): void
+    public function test_array_unique(): void
     {
         $validator = new OperatorValidator($this->collection);
 
@@ -196,7 +196,7 @@ class OperatorTest extends TestCase
         $this->assertTrue($validator->isValid($operator), $validator->getDescription());
     }
 
-    public function testArrayUniqueOnNonArray(): void
+    public function test_array_unique_on_non_array(): void
     {
         $validator = new OperatorValidator($this->collection);
 
@@ -207,7 +207,7 @@ class OperatorTest extends TestCase
         $this->assertStringContainsString('Cannot apply arrayUnique operator to non-array field', $validator->getDescription());
     }
 
-    public function testArrayIntersect(): void
+    public function test_array_intersect(): void
     {
         $validator = new OperatorValidator($this->collection);
 
@@ -217,7 +217,7 @@ class OperatorTest extends TestCase
         $this->assertTrue($validator->isValid($operator), $validator->getDescription());
     }
 
-    public function testArrayIntersectWithEmptyArray(): void
+    public function test_array_intersect_with_empty_array(): void
     {
         $validator = new OperatorValidator($this->collection);
 
@@ -228,7 +228,7 @@ class OperatorTest extends TestCase
         $this->assertStringContainsString('requires a non-empty array value', $validator->getDescription());
     }
 
-    public function testArrayDiff(): void
+    public function test_array_diff(): void
     {
         $validator = new OperatorValidator($this->collection);
 
@@ -238,7 +238,7 @@ class OperatorTest extends TestCase
         $this->assertTrue($validator->isValid($operator), $validator->getDescription());
     }
 
-    public function testArrayFilter(): void
+    public function test_array_filter(): void
     {
         $validator = new OperatorValidator($this->collection);
 
@@ -248,7 +248,7 @@ class OperatorTest extends TestCase
         $this->assertTrue($validator->isValid($operator), $validator->getDescription());
     }
 
-    public function testArrayFilterInvalidCondition(): void
+    public function test_array_filter_invalid_condition(): void
     {
         $validator = new OperatorValidator($this->collection);
 
@@ -260,7 +260,7 @@ class OperatorTest extends TestCase
     }
 
     // Test string operators
-    public function testStringConcat(): void
+    public function test_string_concat(): void
     {
         $validator = new OperatorValidator($this->collection);
 
@@ -270,7 +270,7 @@ class OperatorTest extends TestCase
         $this->assertTrue($validator->isValid($operator), $validator->getDescription());
     }
 
-    public function testStringConcatOnNonString(): void
+    public function test_string_concat_on_non_string(): void
     {
         $validator = new OperatorValidator($this->collection);
 
@@ -281,7 +281,7 @@ class OperatorTest extends TestCase
         $this->assertStringContainsString('Cannot apply stringConcat operator to non-string field', $validator->getDescription());
     }
 
-    public function testStringReplace(): void
+    public function test_string_replace(): void
     {
         $validator = new OperatorValidator($this->collection);
 
@@ -292,7 +292,7 @@ class OperatorTest extends TestCase
     }
 
     // Test boolean operators
-    public function testToggle(): void
+    public function test_toggle(): void
     {
         $validator = new OperatorValidator($this->collection);
 
@@ -302,7 +302,7 @@ class OperatorTest extends TestCase
         $this->assertTrue($validator->isValid($operator), $validator->getDescription());
     }
 
-    public function testToggleOnNonBoolean(): void
+    public function test_toggle_on_non_boolean(): void
     {
         $validator = new OperatorValidator($this->collection);
 
@@ -314,7 +314,7 @@ class OperatorTest extends TestCase
     }
 
     // Test date operators
-    public function testDateAddDays(): void
+    public function test_date_add_days(): void
     {
         $validator = new OperatorValidator($this->collection);
 
@@ -324,7 +324,7 @@ class OperatorTest extends TestCase
         $this->assertTrue($validator->isValid($operator), $validator->getDescription());
     }
 
-    public function testDateAddDaysOnNonDateTime(): void
+    public function test_date_add_days_on_non_date_time(): void
     {
         $validator = new OperatorValidator($this->collection);
 
@@ -335,7 +335,7 @@ class OperatorTest extends TestCase
         $this->assertStringContainsString('Cannot apply dateAddDays operator to non-datetime field', $validator->getDescription());
     }
 
-    public function testDateSubDays(): void
+    public function test_date_sub_days(): void
     {
         $validator = new OperatorValidator($this->collection);
 
@@ -345,7 +345,7 @@ class OperatorTest extends TestCase
         $this->assertTrue($validator->isValid($operator), $validator->getDescription());
     }
 
-    public function testDateSubDaysOnNonDateTime(): void
+    public function test_date_sub_days_on_non_date_time(): void
     {
         $validator = new OperatorValidator($this->collection);
 
@@ -356,7 +356,7 @@ class OperatorTest extends TestCase
         $this->assertStringContainsString('Cannot apply dateSubDays operator to non-datetime field', $validator->getDescription());
     }
 
-    public function testDateSetNow(): void
+    public function test_date_set_now(): void
     {
         $validator = new OperatorValidator($this->collection);
 
@@ -367,7 +367,7 @@ class OperatorTest extends TestCase
     }
 
     // Test attribute validation
-    public function testNonExistentAttribute(): void
+    public function test_non_existent_attribute(): void
     {
         $validator = new OperatorValidator($this->collection);
 
@@ -379,7 +379,7 @@ class OperatorTest extends TestCase
     }
 
     // Test multiple operators as strings (like Query validator does)
-    public function testMultipleStringOperators(): void
+    public function test_multiple_string_operators(): void
     {
         $validator = new OperatorValidator($this->collection);
 
@@ -397,7 +397,7 @@ class OperatorTest extends TestCase
         foreach ($operators as $index => $operator) {
             $operator->setAttribute($attributes[$index]);
             $json = $operator->toString();
-            $this->assertTrue($validator->isValid($json), "Failed for operator {$attributes[$index]}: " . $validator->getDescription());
+            $this->assertTrue($validator->isValid($json), "Failed for operator {$attributes[$index]}: ".$validator->getDescription());
         }
     }
 }

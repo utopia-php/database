@@ -2,14 +2,20 @@
 
 namespace Utopia\Database\Helpers;
 
+use Exception;
 use Utopia\Database\Exception as DatabaseException;
 
+/**
+ * Helper class for generating and creating document identifiers.
+ */
 class ID
 {
     /**
-     * Create a new unique ID
+     * Create a new unique ID using uniqid with optional random padding.
      *
-     * @throws DatabaseException
+     * @param int $padding Number of random hex characters to append for uniqueness
+     * @return string The generated unique identifier
+     * @throws DatabaseException If random bytes generation fails
      */
     public static function unique(int $padding = 7): string
     {
@@ -17,8 +23,8 @@ class ID
 
         if ($padding > 0) {
             try {
-                $bytes = \random_bytes(\max(1, (int)\ceil(($padding / 2)))); // one byte expands to two chars
-            } catch (\Exception $e) {
+                $bytes = \random_bytes(\max(1, (int) \ceil(($padding / 2)))); // one byte expands to two chars
+            } catch (Exception $e) {
                 throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
             }
 
@@ -29,7 +35,10 @@ class ID
     }
 
     /**
-     * Create a new ID from a string
+     * Create an ID from a custom string value.
+     *
+     * @param string $id The custom identifier string
+     * @return string The provided identifier
      */
     public static function custom(string $id): string
     {

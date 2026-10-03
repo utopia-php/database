@@ -21,7 +21,7 @@ class HashAwareMemoryCache extends Memory
      * @param  array<int|string, mixed>|string  $data
      * @return bool|string|array<int|string, mixed>
      */
-    public function save(string $key, array|string $data, string $hash = ''): bool|string|array
+    public function save(string $key, array|string $data, string $hash = '', int $ttl = 0): bool|string|array
     {
         return parent::save($this->field($key, $hash), $data);
     }

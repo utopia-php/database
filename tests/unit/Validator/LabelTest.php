@@ -7,21 +7,18 @@ use Utopia\Database\Validator\Label;
 
 class LabelTest extends TestCase
 {
-    /**
-     * @var Label
-     */
-    protected ?Label $object = null;
+    protected Label $object;
 
-    public function setUp(): void
+    protected function setUp(): void
     {
         $this->object = new Label();
     }
 
-    public function tearDown(): void
+    protected function tearDown(): void
     {
     }
 
-    public function testValues(): void
+    public function test_values(): void
     {
         // Must be strings
         $this->assertEquals(false, $this->object->isValid(false));
@@ -61,5 +58,15 @@ class LabelTest extends TestCase
         // At most 255 chars
         $this->assertEquals(true, $this->object->isValid(str_repeat('a', 36)));
         $this->assertEquals(false, $this->object->isValid(str_repeat('a', 256)));
+    }
+
+    public function test_non_string_values_rejected(): void
+    {
+        $this->assertFalse($this->object->isValid(42));
+        $this->assertFalse($this->object->isValid(null));
+        $this->assertFalse($this->object->isValid(['abc']));
+        $this->assertFalse($this->object->isValid(true));
+        $this->assertFalse($this->object->isValid(3.14));
+        $this->assertFalse($this->object->isValid(new \stdClass()));
     }
 }

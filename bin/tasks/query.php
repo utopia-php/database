@@ -1,10 +1,5 @@
 <?php
 
-/**
- * @var CLI $cli
- */
-global $cli;
-
 use Faker\Factory;
 use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\Cache\Cache;
@@ -14,6 +9,7 @@ use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Database;
+use Utopia\Database\PDO;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Validator\Boolean;
@@ -21,10 +17,14 @@ use Utopia\Validator\Integer;
 use Utopia\Validator\Text;
 
 /**
+ * @var CLI $cli
+ */
+global $cli;
+
+/**
  * @Example
  * docker compose exec tests bin/query --adapter=mariadb --limit=1000 --name=testing
  */
-
 $cli
     ->task('query')
     ->desc('Query mock data')
@@ -38,15 +38,13 @@ $cli
             for ($i = 0; $i < $count; $i++) {
                 $authorization->addRole($faker->numerify('user####'));
             }
+
             return \count($authorization->getRoles());
         };
 
         $namespace = '_ns';
         $cache = new Cache(new NoCache());
 
-        // ------------------------------------------------------------------
-        // Adapter configuration
-        // ------------------------------------------------------------------
         $dbAdapters = [
             'mariadb' => [
                 'host' => 'mariadb',
@@ -77,8 +75,9 @@ $cli
             ],
         ];
 
-        if (!isset($dbAdapters[$adapter])) {
+        if (! isset($dbAdapters[$adapter])) {
             Console::error("Adapter '{$adapter}' not supported");
+
             return;
         }
 
@@ -104,38 +103,38 @@ $cli
         Console::info("\nRunning queries with {$count} authorization roles:");
         $report[] = [
             'roles' => $count,
-            'results' => runQueries($database, $limit)
+            'results' => runQueries($database, $limit),
         ];
 
         $count = $setRoles($database->getAuthorization(), $faker, 100);
         Console::info("\nRunning queries with {$count} authorization roles:");
         $report[] = [
             'roles' => $count,
-            'results' => runQueries($database, $limit)
+            'results' => runQueries($database, $limit),
         ];
 
         $count = $setRoles($database->getAuthorization(), $faker, 400);
         Console::info("\nRunning queries with {$count} authorization roles:");
         $report[] = [
             'roles' => $count,
-            'results' => runQueries($database, $limit)
+            'results' => runQueries($database, $limit),
         ];
 
         $count = $setRoles($database->getAuthorization(), $faker, 500);
         Console::info("\nRunning queries with {$count} authorization roles:");
         $report[] = [
             'roles' => $count,
-            'results' => runQueries($database, $limit)
+            'results' => runQueries($database, $limit),
         ];
 
         $count = $setRoles($database->getAuthorization(), $faker, 1000);
         Console::info("\nRunning queries with {$count} authorization roles:");
         $report[] = [
             'roles' => $count,
-            'results' => runQueries($database, $limit)
+            'results' => runQueries($database, $limit),
         ];
 
-        if (!file_exists('bin/view/results')) {
+        if (! file_exists('bin/view/results')) {
             \mkdir('bin/view/results', 0777, true);
         }
 
@@ -145,40 +144,39 @@ $cli
         \fclose($results);
     });
 
-
 function runQueries(Database $database, int $limit): array
 {
     $results = [];
 
     // Recent travel blogs
-    $results["Querying greater than, equal[1] and limit"] = runQuery([
+    $results['Querying greater than, equal[1] and limit'] = runQuery([
         Query::greaterThan('created', '2010-01-01 05:00:00'),
         Query::equal('genre', ['travel']),
-        Query::limit($limit)
+        Query::limit($limit),
     ], $database);
 
     // Favorite genres
-    $results["Querying equal[3] and limit"] = runQuery([
+    $results['Querying equal[3] and limit'] = runQuery([
         Query::equal('genre', ['fashion', 'finance', 'sports']),
-        Query::limit($limit)
+        Query::limit($limit),
     ], $database);
 
     // Popular posts
     $results["Querying greaterThan, limit({$limit})"] = runQuery([
         Query::greaterThan('views', 100000),
-        Query::limit($limit)
+        Query::limit($limit),
     ], $database);
 
     // Fulltext search
     $results["Query search, limit({$limit})"] = runQuery([
         Query::search('text', 'Alice'),
-        Query::limit($limit)
+        Query::limit($limit),
     ], $database);
 
     // Tags contain query
     $results["Querying contains[1], limit({$limit})"] = runQuery([
         Query::contains('tags', ['tag1']),
-        Query::limit($limit)
+        Query::limit($limit),
     ], $database);
 
     return $results;
@@ -187,13 +185,14 @@ function runQueries(Database $database, int $limit): array
 function runQuery(array $query, Database $database)
 {
     $info = array_map(function (Query $q) {
-        return $q->getAttribute() . ': ' . $q->getMethod() . ' = ' . implode(',', $q->getValues());
+        return $q->getAttribute().': '.$q->getMethod()->value.' = '.implode(',', $q->getValues());
     }, $query);
 
-    Console::info("Running query: [" . implode(', ', $info) . "]");
+    Console::info('Running query: ['.implode(', ', $info).']');
     $start = microtime(true);
     $database->find('articles', $query);
     $time = microtime(true) - $start;
     Console::success("Query executed in {$time} seconds");
+
     return $time;
 }

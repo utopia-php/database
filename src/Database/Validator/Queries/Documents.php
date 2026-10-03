@@ -2,26 +2,65 @@
 
 namespace Utopia\Database\Validator\Queries;
 
-use Utopia\Database\Database;
+use DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Validator\IndexedQueries;
+use Utopia\Database\Validator\Query\Aggregate;
 use Utopia\Database\Validator\Query\Cursor;
+use Utopia\Database\Validator\Query\Distinct;
 use Utopia\Database\Validator\Query\Filter;
+use Utopia\Database\Validator\Query\GroupBy;
+use Utopia\Database\Validator\Query\Having;
+use Utopia\Database\Validator\Query\Join;
 use Utopia\Database\Validator\Query\Limit;
 use Utopia\Database\Validator\Query\Offset;
 use Utopia\Database\Validator\Query\Order;
 use Utopia\Database\Validator\Query\Select;
+use Utopia\Query\Schema\ColumnType;
 
+/**
+ * Validates queries for document listing: filters, ordering, selection and pagination, plus joins
+ * and aggregations (aggregate functions, group by, having and distinct) when enabled.
+ */
 class Documents extends IndexedQueries
 {
     /**
-     * @param array<mixed> $attributes
-     * @param array<mixed> $indexes
-     * @param string $idAttributeType
-     * @param int $maxValuesCount
-     * @param \DateTime $minAllowedDate
-     * @param \DateTime $maxAllowedDate
-     * @param bool $supportForAttributes
+     * The attributes every collection holds besides its own, by key: the document id, sequence and
+     * timestamps. Queries may name them like the collection's attributes.
+     */
+    public const array INTERNAL_ATTRIBUTES = [
+        Document::ID => [
+            Document::ID => Document::ID,
+            'key' => Document::ID,
+            'type' => ColumnType::String->value,
+            'array' => false,
+        ],
+        Document::SEQUENCE => [
+            Document::ID => Document::SEQUENCE,
+            'key' => Document::SEQUENCE,
+            'type' => ColumnType::Id->value,
+            'array' => false,
+        ],
+        Document::CREATED_AT => [
+            Document::ID => Document::CREATED_AT,
+            'key' => Document::CREATED_AT,
+            'type' => ColumnType::Datetime->value,
+            'array' => false,
+        ],
+        Document::UPDATED_AT => [
+            Document::ID => Document::UPDATED_AT,
+            'key' => Document::UPDATED_AT,
+            'type' => ColumnType::Datetime->value,
+            'array' => false,
+        ],
+    ];
+
+    /**
+     * @param  array<Document>  $attributes
+     * @param  array<Document>  $indexes
+     * @param  bool  $sharedTables  Whether the tables hold `$tenant`, as they do under shared tables
+     * @param  bool  $supportForOrderRandom  Whether the adapter can order by random (Capability::OrderRandom)
+     *
      * @throws \Utopia\Database\Exception
      */
     public function __construct(
@@ -30,35 +69,18 @@ class Documents extends IndexedQueries
         string $idAttributeType,
         int $maxValuesCount = 5000,
         int $maxUIDLength = 36,
-        \DateTime $minAllowedDate = new \DateTime('0000-01-01'),
-        \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
+        DateTime $minAllowedDate = new DateTime('0000-01-01'),
+        DateTime $maxAllowedDate = new DateTime('9999-12-31'),
         bool $supportForAttributes = true,
-        bool $supportUnsignedBigInt = true
+        bool $supportUnsignedBigInt = true,
+        bool $supportForJoins = false,
+        bool $supportForAggregations = false,
+        bool $sharedTables = false,
+        bool $supportForOrderRandom = true,
     ) {
-        $attributes[] = new Document([
-            '$id' => '$id',
-            'key' => '$id',
-            'type' => Database::VAR_STRING,
-            'array' => false,
-        ]);
-        $attributes[] = new Document([
-            '$id' => '$sequence',
-            'key' => '$sequence',
-            'type' => Database::VAR_ID,
-            'array' => false,
-        ]);
-        $attributes[] = new Document([
-            '$id' => '$createdAt',
-            'key' => '$createdAt',
-            'type' => Database::VAR_DATETIME,
-            'array' => false,
-        ]);
-        $attributes[] = new Document([
-            '$id' => '$updatedAt',
-            'key' => '$updatedAt',
-            'type' => Database::VAR_DATETIME,
-            'array' => false,
-        ]);
+        foreach (self::INTERNAL_ATTRIBUTES as $definition) {
+            $attributes[] = new Document($definition);
+        }
 
         $validators = [
             new Limit(),
@@ -73,9 +95,23 @@ class Documents extends IndexedQueries
                 $supportForAttributes,
                 $supportUnsignedBigInt
             ),
-            new Order($attributes, $supportForAttributes),
-            new Select($attributes, $supportForAttributes),
+            new Order($attributes, $supportForAttributes, $supportForOrderRandom),
+            new Select($attributes, $supportForAttributes, $sharedTables),
         ];
+
+        if ($supportForJoins) {
+            $validators[] = new Join($attributes, $supportForAttributes);
+        }
+
+        if ($supportForAggregations) {
+            \array_push(
+                $validators,
+                new Aggregate($attributes, $supportForAttributes, $sharedTables),
+                new GroupBy($attributes, $supportForAttributes, $sharedTables),
+                new Having(),
+                new Distinct(),
+            );
+        }
 
         parent::__construct($attributes, $indexes, $validators);
     }

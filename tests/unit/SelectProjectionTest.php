@@ -2,16 +2,20 @@
 
 namespace Tests\Unit;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\Memory as CacheMemory;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
+use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
+use Utopia\Query\Method;
 
 /**
  * Drives Database::find(), the entry point the HTTP layer calls, rather than the
@@ -34,8 +38,8 @@ class SelectProjectionTest extends TestCase
             ->setNamespace('select_' . \uniqid());
 
         $this->database->create();
-        $this->database->createCollection('widgets');
-        $this->database->createAttribute('widgets', 'sku', Database::VAR_STRING, 255, false);
+        $this->database->createCollection(new Collection(id: 'widgets'));
+        $this->database->createAttribute('widgets', Attribute::string(key: 'sku'));
         $this->database->createDocument('widgets', new Document([
             '$id' => 'widget',
             '$permissions' => [Permission::read(Role::any())],
@@ -43,17 +47,14 @@ class SelectProjectionTest extends TestCase
         ]));
     }
 
-    /**
-     * @param array<mixed> $values
-     *
-     * @dataProvider malformedSelections
-     */
+    /** @param array<mixed> $values */
+    #[DataProvider('malformedSelections')]
     public function testAMalformedSelectionIsRefusedRatherThanFatal(array $values): void
     {
         $this->expectException(QueryException::class);
         $this->expectExceptionMessage('Attribute selection must be a string, got');
 
-        $this->database->find('widgets', [Query::select($values)]);
+        $this->database->find('widgets', [new Query(Method::Select, values: $values)]);
     }
 
     /**
@@ -74,15 +75,14 @@ class SelectProjectionTest extends TestCase
      * catching Exception — as the HTTP layer does — never sees it and returns a 500.
      *
      * @param array<mixed> $values
-     *
-     * @dataProvider malformedSelections
      */
+    #[DataProvider('malformedSelections')]
     public function testTheRefusalIsCatchableAsAnException(array $values): void
     {
         $caught = null;
 
         try {
-            $this->database->find('widgets', [Query::select($values)]);
+            $this->database->find('widgets', [new Query(Method::Select, values: $values)]);
         } catch (\Exception $exception) {
             $caught = $exception;
         }

@@ -2,25 +2,71 @@
 
 namespace Utopia\Database;
 
+use Exception;
 use InvalidArgumentException;
+use PDO as PhpPDO;
+use Pdo\Sqlite as PdoSqlite;
+use PDOException;
+use PDOStatement as PhpPDOStatement;
+use Throwable;
 use Utopia\Console;
 
 /**
  * A PDO wrapper that forwards method calls to the internal PDO instance.
  *
- * @mixin \PDO
+ * @mixin PhpPDO
+ *
+ * @method int|false exec(string $statement)
+ * @method bool beginTransaction()
+ * @method bool commit()
+ * @method bool rollBack()
+ * @method bool inTransaction()
+ * @method string|false quote(string $string, int $type = PhpPDO::PARAM_STR)
+ * @method mixed getAttribute(int $attribute)
+ * @method string|false lastInsertId(?string $name = null)
+ * @method \PDOStatement|false query(string $query, ?int $fetchMode = null, mixed ...$fetchModeArgs)
  */
 class PDO
 {
-    protected \PDO $pdo;
+    protected PhpPDO $pdo;
+
+    /**
+     * Methods that send a statement, lowercased as PHP compares method names.
+     */
+    private const array STATEMENTS = ['begintransaction', 'commit', 'exec', 'query'];
+
+    private const string ROLLBACK = 'ROLLBACK';
 
     private ?string $hostname = null;
 
     /**
-     * @param string $dsn
-     * @param ?string $username
-     * @param ?string $password
-     * @param array<mixed> $config
+     * The lost connection that dropped the caller's open transaction, while the caller has
+     * not rolled it back yet. Until then every statement is refused, so none of them runs
+     * in autocommit on the new connection; each refusal carries it as its previous error.
+     */
+    private ?Throwable $lostTransaction = null;
+
+    /**
+     * Statements that set session state, keyed by the setting each one sets.
+     *
+     * @var array<string, string>
+     */
+    private array $session = [];
+
+    /**
+     * Attributes set after connecting, replayed on every connection a reconnect opens.
+     *
+     * @var array<int, mixed>
+     */
+    private array $attributes = [];
+
+    /**
+     * Create a new PDO wrapper instance.
+     *
+     * @param string $dsn The Data Source Name
+     * @param string|null $username The database username
+     * @param string|null $password The database password
+     * @param  array<mixed>  $config PDO driver options
      */
     public function __construct(
         protected string $dsn,
@@ -28,23 +74,16 @@ class PDO
         protected ?string $password,
         protected array $config = []
     ) {
-        $this->config[\PDO::ATTR_ERRMODE] ??= \PDO::ERRMODE_EXCEPTION;
+        $this->config[PhpPDO::ATTR_ERRMODE] ??= PhpPDO::ERRMODE_EXCEPTION;
 
-        $this->pdo = new \PDO(
-            $this->dsn,
-            $this->username,
-            $this->password,
-            $this->config
-        );
+        $this->pdo = $this->connect();
     }
 
     /**
-     * Prepare a statement, returning a wrapper that transparently re-prepares
-     * itself on the underlying connection if that connection is lost before the
-     * statement is executed.
+     * Prepare a statement that can re-prepare itself after connection recovery.
      *
-     * @param array<mixed> $options
-     * @throws \Throwable
+     * @param  array<mixed>  $options
+     * @throws Throwable
      */
     public function prepare(string $query, array $options = []): PDOStatement
     {
@@ -61,14 +100,16 @@ class PDO
      * with native prepares the server is contacted here, so a lost connection
      * outside a transaction is reconnected and retried, matching __call().
      *
-     * @param array<mixed> $options
-     * @throws \Throwable
+     * @param  array<mixed>  $options
+     * @throws Throwable
      */
-    public function prepareNative(string $query, array $options = []): \PDOStatement
+    public function prepareNative(string $query, array $options = []): PhpPDOStatement
     {
+        $this->guard($query);
+
         try {
             $statement = $this->pdo->prepare($query, $options);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             if (!Connection::hasError($e) || $this->pdo->inTransaction()) {
                 throw $e;
             }
@@ -78,37 +119,45 @@ class PDO
         }
 
         if ($statement === false) {
-            throw new \PDOException("Failed to prepare statement: {$query}");
+            throw new PDOException("Failed to prepare statement: {$query}");
         }
 
         return $statement;
     }
 
     /**
-     * @param string $method
-     * @param array<mixed> $args
-     * @return mixed
-     * @throws \Throwable
+     * @param  array<mixed>  $args
+     * @throws Throwable
      */
     public function __call(string $method, array $args): mixed
     {
+        if ($this->lostTransaction !== null && \strcasecmp($method, 'rollBack') === 0) {
+            $this->lostTransaction = null;
+
+            return true;
+        }
+
+        if (\in_array(\strtolower($method), self::STATEMENTS, true)) {
+            $statement = $args[0] ?? null;
+            $this->guard(\is_string($statement) ? $statement : $method);
+        }
+
         try {
             return $this->pdo->{$method}(...$args);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             if (Connection::hasError($e)) {
-                Console::warning('[Database] ' . $e->getMessage());
+                Console::warning('[Database] '.$e->getMessage());
                 Console::warning('[Database] Lost connection detected. Reconnecting...');
 
                 $inTransaction = $this->pdo->inTransaction();
 
-                // Attempt to reconnect
                 $this->reconnect();
 
-                // If we weren't in a transaction, also retry the query
-                // In a transaction we can't retry as the state is attached to the previous connection
-                if (!$inTransaction) {
+                if (! $inTransaction) {
                     return $this->pdo->{$method}(...$args);
                 }
+
+                $this->lostTransaction = $e;
             }
 
             throw $e;
@@ -116,13 +165,98 @@ class PDO
     }
 
     /**
-     * Create a new connection to the database
+     * Set an attribute on the connection and on every connection a reconnect opens.
+     */
+    public function setAttribute(int $attribute, mixed $value): bool
+    {
+        if (! $this->pdo->setAttribute($attribute, $value)) {
+            return false;
+        }
+
+        $this->attributes[$attribute] = $value;
+
+        return true;
+    }
+
+    /**
+     * Run a statement that sets session state and replay it on every connection a
+     * reconnect opens, before a call that lost the old connection is retried. A later
+     * statement for the same setting replaces the earlier one.
      *
-     * @return void
+     * @throws Throwable
+     */
+    public function configure(string $setting, string $statement): void
+    {
+        if ($this->exec($statement) === false) {
+            throw new PDOException("Failed to configure session: {$statement}");
+        }
+
+        $this->session[$setting] = $statement;
+    }
+
+    /**
+     * Create a new connection to the database with the attributes set after connecting
+     * and the configured session.
+     *
+     * It replaces the current connection only once both are replayed: after a failed
+     * replay the lost connection stays, so the next call reconnects again instead of
+     * running without them.
+     *
+     * @throws Throwable
      */
     public function reconnect(): void
     {
-        $this->pdo = new \PDO(
+        $pdo = $this->connect();
+
+        foreach ($this->attributes as $attribute => $value) {
+            if (! $pdo->setAttribute($attribute, $value)) {
+                throw new PDOException("Failed to restore attribute {$attribute}");
+            }
+        }
+
+        foreach ($this->session as $statement) {
+            if ($pdo->exec($statement) === false) {
+                throw new PDOException("Failed to configure session: {$statement}");
+            }
+        }
+
+        $this->pdo = $pdo;
+        $this->lostTransaction = null;
+    }
+
+    /**
+     * Refuse a statement while a lost transaction is not rolled back. A bare ROLLBACK is
+     * the caller ending that transaction, so it is let through and ends the refusal.
+     *
+     * @throws PDOException
+     */
+    private function guard(string $statement): void
+    {
+        if ($this->lostTransaction === null) {
+            return;
+        }
+
+        if (\strcasecmp(\trim($statement), self::ROLLBACK) === 0) {
+            $this->lostTransaction = null;
+
+            return;
+        }
+
+        throw new PDOException('The transaction was lost with the connection: roll it back before running another statement', previous: $this->lostTransaction);
+    }
+
+    private function connect(): PhpPDO
+    {
+        if (\str_starts_with($this->dsn, 'sqlite:')) {
+            return PdoSqlite::connect(
+                $this->dsn,
+                $this->username,
+                $this->password,
+                $this->config
+            );
+        }
+
+        return new PhpPDO(
             $this->dsn,
             $this->username,
             $this->password,
@@ -130,11 +264,15 @@ class PDO
         );
     }
 
+    public function inTransaction(): bool
+    {
+        return $this->lostTransaction !== null || $this->pdo->inTransaction();
+    }
+
     /**
      * Get the hostname from the DSN.
      *
-     * @return string
-     * @throws \Exception
+     * @throws Exception
      */
     public function getHostname(): string
     {
@@ -144,7 +282,7 @@ class PDO
             /**
              * @var string $host
              */
-            $host = $parts['host'] ?? throw new \Exception('No host found in DSN');
+            $host = $parts['host'] ?? throw new Exception('No host found in DSN');
 
             $this->hostname = $host;
         }
@@ -156,11 +294,12 @@ class PDO
      * Parse a PDO-style DSN string.
      *
      * @return array<string, string|int|float|bool|null>
+     *
      * @throws InvalidArgumentException If the DSN is malformed.
      */
     private function parseDsn(string $dsn): array
     {
-        if ($dsn === '' || !\str_contains($dsn, ':')) {
+        if ($dsn === '' || ! \str_contains($dsn, ':')) {
             throw new InvalidArgumentException('Malformed DSN: missing driver separator.');
         }
 
@@ -171,6 +310,7 @@ class PDO
         // Handle “path only” DSNs like sqlite:/path/to.db
         if (\in_array($driver, ['sqlite'], true) && $parameterString !== '') {
             $parsed['path'] = \ltrim($parameterString, '/');
+
             return $parsed;
         }
 
@@ -179,7 +319,7 @@ class PDO
         foreach ($parameterSegments as $segment) {
             [$name, $rawValue] = \array_pad(\explode('=', $segment, 2), 2, null);
 
-            $name  = \trim($name);
+            $name = \trim((string) $name);
             $value = $rawValue !== null ? \trim($rawValue) : null;
 
             // Casting for scalars

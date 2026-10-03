@@ -3,8 +3,12 @@
 namespace Utopia\Database\Validator;
 
 use Utopia\Database\Database;
+use Utopia\Database\Document;
 use Utopia\Validator;
 
+/**
+ * Validates key strings ensuring they contain only alphanumeric chars, periods, hyphens, and underscores.
+ */
 class Key extends Validator
 {
     protected string $message;
@@ -13,8 +17,6 @@ class Key extends Validator
      * Get Description.
      *
      * Returns validator description
-     *
-     * @return string
      */
     public function getDescription(): string
     {
@@ -28,20 +30,17 @@ class Key extends Validator
         protected readonly bool $allowInternal = false,
         protected readonly int $maxLength = Database::MAX_UID_DEFAULT_LENGTH,
     ) {
-        $this->message = 'Parameter must contain at most ' . $this->maxLength . ' chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char';
+        $this->message = 'Parameter must contain at most '.$this->maxLength.' chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char';
     }
 
     /**
      * Is valid.
      *
      * Returns true if valid or false if not.
-     *
-     * @param $value
-     * @return bool
      */
     public function isValid($value): bool
     {
-        if (!\is_string($value)) {
+        if (! \is_string($value)) {
             return false;
         }
 
@@ -57,12 +56,12 @@ class Key extends Validator
 
         $isInternal = $leading === '$';
 
-        if ($isInternal && !$this->allowInternal) {
+        if ($isInternal && ! $this->allowInternal) {
             return false;
         }
 
         if ($isInternal) {
-            $allowList = [ '$id', '$createdAt', '$updatedAt' ];
+            $allowList = [Document::ID, Document::CREATED_AT, Document::UPDATED_AT];
 
             // If exact match, no need for any further checks
             return \in_array($value, $allowList);
@@ -85,8 +84,6 @@ class Key extends Validator
      * Is array
      *
      * Function will return true if object is array.
-     *
-     * @return bool
      */
     public function isArray(): bool
     {
@@ -97,8 +94,6 @@ class Key extends Validator
      * Get Type
      *
      * Returns validator type.
-     *
-     * @return string
      */
     public function getType(): string
     {

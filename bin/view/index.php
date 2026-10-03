@@ -38,12 +38,12 @@
 const results = <?php
 
 $directory = './results';
-$scanned_directory = \array_diff(\scandir($directory), array('..', '.'));
+$scanned_directory = \array_diff(\scandir($directory), ['..', '.']);
 $results = [];
 foreach ($scanned_directory as $path) {
     $results[] = [
         'name' => $path,
-        'data' => \json_decode(\file_get_contents("{$directory}/{$path}"), true)
+        'data' => \json_decode(\file_get_contents("{$directory}/{$path}"), true),
     ];
 }
 

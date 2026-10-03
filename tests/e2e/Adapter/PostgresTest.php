@@ -6,17 +6,22 @@ use Redis;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Postgres;
+use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Index;
 use Utopia\Database\PDO;
 use Utopia\Database\Query;
 
 class PostgresTest extends Base
 {
     public static ?Database $database = null;
+
     protected static ?PDO $pdo = null;
+
     protected static string $namespace;
 
     /**
@@ -24,7 +29,7 @@ class PostgresTest extends Base
      */
     public function getDatabase(): Database
     {
-        if (!is_null(self::$database)) {
+        if (! is_null(self::$database)) {
             return self::$database;
         }
 
@@ -36,14 +41,15 @@ class PostgresTest extends Base
         $pdo = new PDO("pgsql:host={$dbHost};port={$dbPort};", $dbUser, $dbPass, Postgres::getPDOAttributes());
         $redis = new Redis();
         $redis->connect('redis', 6379);
-        $redis->flushAll();
-        $cache = new Cache(new RedisAdapter($redis));
+        $redis->select(2);
+        $cache = new Cache((new RedisAdapter($redis))->setMaxRetries(3));
 
         $database = new Database(new Postgres($pdo), $cache);
+        assert(self::$authorization !== null);
         $database
             ->setAuthorization(self::$authorization)
-            ->setDatabase('utopiaTests')
-            ->setNamespace(static::$namespace = 'myapp_' . uniqid());
+            ->setDatabase($this->testDatabase)
+            ->setNamespace(static::$namespace = 'myapp_'.uniqid());
 
         if ($database->exists()) {
             $database->delete();
@@ -52,14 +58,16 @@ class PostgresTest extends Base
         $database->create();
 
         self::$pdo = $pdo;
+
         return self::$database = $database;
     }
 
     protected function deleteColumn(string $collection, string $column): bool
     {
-        $sqlTable = '"' . $this->getDatabase()->getDatabase(). '"."' . $this->getDatabase()->getNamespace() . '_' . $collection . '"';
+        $sqlTable = '"'.$this->getDatabase()->getDatabase().'"."'.$this->getDatabase()->getNamespace().'_'.$collection.'"';
         $sql = "ALTER TABLE {$sqlTable} DROP COLUMN \"{$column}\"";
 
+        assert(self::$pdo !== null);
         self::$pdo->exec($sql);
 
         return true;
@@ -67,13 +75,47 @@ class PostgresTest extends Base
 
     protected function deleteIndex(string $collection, string $index): bool
     {
-        $key = "\"".$this->getDatabase()->getNamespace()."_".$this->getDatabase()->getTenant()."_{$collection}_{$index}\"";
+        $key = '"'.$this->getDatabase()->getNamespace().'_'.$this->getDatabase()->getTenant()."_{$collection}_{$index}\"";
 
-        $sql = "DROP INDEX \"".$this->getDatabase()->getDatabase()."\".{$key}";
+        $sql = 'DROP INDEX "'.$this->getDatabase()->getDatabase()."\".{$key}";
 
+        assert(self::$pdo !== null);
         self::$pdo->exec($sql);
 
         return true;
+    }
+
+    public function testCreateCollectionWithMongoSequenceShapedId(): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'database_507f1f77bcf86cd799439012_collection_507f1f77bcf86cd799439013';
+
+        $this->assertGreaterThan(
+            Postgres::MAX_IDENTIFIER_NAME,
+            \strlen($database->getNamespace().'_'.$collection),
+            'The fixture must exceed the Postgres identifier limit, or this test no longer covers long table names'
+        );
+
+        $database->createCollection(new Collection(id: $collection, attributes: [
+            Attribute::string(key: 'name', size: 128, required: true),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+        ]));
+
+        $document = $database->createDocument($collection, new Document([
+            '$id' => 'vector-doc',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'name' => 'embeddings',
+        ]));
+
+        $this->assertSame('vector-doc', $document->getId());
+        $this->assertSame('embeddings', $database->getDocument($collection, 'vector-doc')->getAttribute('name'));
+        $this->assertTrue($database->exists($database->getDatabase(), $collection));
+        $this->assertTrue($database->deleteCollection($collection));
     }
 
     /**
@@ -85,13 +127,14 @@ class PostgresTest extends Base
     public function testReadDoesNotTouchThePermissionsTable(): void
     {
         $database = $this->getDatabase();
+        $pdo = self::$pdo;
+        $this->assertNotNull($pdo);
 
-        // no collection level read, so the permission is enforced per document
-        $database->createCollection('permsPlan', permissions: [
+        $database->createCollection(new Collection(id: 'permsPlan', attributes: [
+            Attribute::string(key: 'title', size: 64, required: true),
+        ], permissions: [
             Permission::create(Role::any()),
-        ], documentSecurity: true);
-
-        $database->createAttribute('permsPlan', 'title', Database::VAR_STRING, 64, true);
+        ], documentSecurity: true));
 
         foreach (['visible' => Role::any(), 'hidden' => Role::user('nobody')] as $title => $role) {
             $database->createDocument('permsPlan', new Document([
@@ -100,16 +143,16 @@ class PostgresTest extends Base
             ]));
         }
 
-        $table = $database->getNamespace() . '_permsPlan_perms';
+        $table = $database->getNamespace().'_permsPlan_perms';
 
-        $scans = function () use ($table): int {
-            self::$pdo->query('SELECT pg_stat_force_next_flush()');
-            self::$pdo->query('SELECT pg_stat_clear_snapshot()');
+        $scans = function () use ($pdo, $table): int {
+            $pdo->query('SELECT pg_stat_force_next_flush()');
+            $pdo->query('SELECT pg_stat_clear_snapshot()');
 
-            $statement = self::$pdo->prepare('SELECT COALESCE(SUM(seq_scan + COALESCE(idx_scan, 0)), 0) FROM pg_stat_user_tables WHERE relname = :table');
+            $statement = $pdo->prepare('SELECT COALESCE(SUM(seq_scan + COALESCE(idx_scan, 0)), 0) FROM pg_stat_user_tables WHERE relname = :table');
             $statement->execute([':table' => $table]);
 
-            return (int)$statement->fetchColumn();
+            return (int) $statement->fetchColumn();
         };
 
         $before = $scans();
@@ -140,14 +183,17 @@ class PostgresTest extends Base
     public function testVectorSearchUsesTheIndex(): void
     {
         $database = $this->getDatabase();
+        $pdo = self::$pdo;
+        $this->assertNotNull($pdo);
 
-        $database->createCollection('vectorPlan', permissions: [
+        $database->createCollection(new Collection(id: 'vectorPlan', attributes: [
+            Attribute::vector(key: 'embedding', size: 3, required: true),
+        ], indexes: [
+            Index::hnswCosine(key: 'idx_cosine', attributes: ['embedding']),
+        ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
-        ], documentSecurity: false);
-
-        $database->createAttribute('vectorPlan', 'embedding', Database::VAR_VECTOR, 3, true);
-        $database->createIndex('vectorPlan', 'idx_cosine', Database::INDEX_HNSW_COSINE, ['embedding']);
+        ], documentSecurity: false));
 
         for ($i = 0; $i < 50; $i++) {
             $database->createDocument('vectorPlan', new Document([
@@ -156,21 +202,21 @@ class PostgresTest extends Base
             ]));
         }
 
-        $index = $database->getNamespace() . '_' . $database->getTenant() . '_vectorPlan_idx_cosine';
+        $index = $database->getNamespace().'_'.$database->getTenant().'_vectorPlan_idx_cosine';
 
-        $scans = function () use ($index): int {
-            self::$pdo->query('SELECT pg_stat_force_next_flush()');
-            self::$pdo->query('SELECT pg_stat_clear_snapshot()');
+        $scans = function () use ($pdo, $index): int {
+            $pdo->query('SELECT pg_stat_force_next_flush()');
+            $pdo->query('SELECT pg_stat_clear_snapshot()');
 
-            $statement = self::$pdo->prepare('SELECT COALESCE(SUM(idx_scan), 0) FROM pg_stat_user_indexes WHERE indexrelname = :index');
+            $statement = $pdo->prepare('SELECT COALESCE(SUM(idx_scan), 0) FROM pg_stat_user_indexes WHERE indexrelname = :index');
             $statement->execute([':index' => $index]);
 
-            return (int)$statement->fetchColumn();
+            return (int) $statement->fetchColumn();
         };
 
         $before = $scans();
 
-        self::$pdo->exec('SET enable_seqscan = off');
+        $pdo->exec('SET enable_seqscan = off');
 
         try {
             $results = $database->find('vectorPlan', [
@@ -178,11 +224,11 @@ class PostgresTest extends Base
                 Query::limit(10),
             ]);
         } finally {
-            self::$pdo->exec('RESET enable_seqscan');
+            $pdo->exec('RESET enable_seqscan');
         }
 
         $this->assertCount(10, $results);
-        $this->assertEqualsWithDelta(0.0, $results[0]->getAttribute(Database::VECTOR_DISTANCE), 0.001);
+        $this->assertEqualsWithDelta(0.0, $results[0]->getAttribute(Document::DISTANCE), 0.001);
 
         $this->assertGreaterThan(
             $before,

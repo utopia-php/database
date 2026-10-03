@@ -1,6 +1,6 @@
 <?php
 
-require_once '/usr/src/code/vendor/autoload.php';
+require_once __DIR__.'/../vendor/autoload.php';
 
 use Utopia\CLI\CLI;
 use Utopia\Console;
@@ -9,11 +9,11 @@ ini_set('memory_limit', '-1');
 
 $cli = new CLI();
 
-include 'tasks/load.php';
-include 'tasks/index.php';
-include 'tasks/query.php';
-include 'tasks/relationships.php';
-include 'tasks/operators.php';
+include __DIR__.'/tasks/load.php';
+include __DIR__.'/tasks/index.php';
+include __DIR__.'/tasks/query.php';
+include __DIR__.'/tasks/relationships.php';
+include __DIR__.'/tasks/operators.php';
 
 $cli
     ->error()

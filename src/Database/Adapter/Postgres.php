@@ -2363,19 +2363,84 @@ class Postgres extends SQL
         return "ON CONFLICT {$conflictTarget} DO NOTHING";
     }
 
-    protected function getInsertPermissionsSuffix(): string
+    protected function getInsertPermissionsSuffix(string $name): string
     {
         if (!$this->skipDuplicates) {
             return '';
         }
 
-        // No conflict target on purpose. The unique index on _perms is widening to
-        // include _column, so tables created before the migration and tables created
-        // after it carry different index shapes, and an explicit target has to match
-        // one exactly (SQLSTATE 42P10 otherwise). A bare DO NOTHING matches whichever
-        // unique index the table actually has; _perms only ever has the one, so the
-        // effect is identical for both shapes.
-        return 'ON CONFLICT DO NOTHING';
+        // Postgres infers which index to arbitrate on by matching these columns against
+        // one exactly (as a set -- order is irrelevant), so the target has to describe
+        // the index this particular table actually has. Tables created from here carry
+        // _column in the permissions index; tables created before it, and ones the
+        // migration has not reached, do not. Naming the wrong shape raises 42P10 and the
+        // statement fails, so the shape is read rather than assumed.
+        //
+        // Deliberately not a bare ON CONFLICT DO NOTHING, which would sidestep the
+        // question: with no target Postgres infers every unique constraint including the
+        // primary key on _id, so a sequence desync would silently drop a permission row
+        // instead of raising.
+        $columns = ['"_type"', '"_permission"', '"_document"'];
+
+        if ($this->sharedTables) {
+            $columns[] = '"_tenant"';
+        }
+
+        if ($this->permissionsIndexHasColumn($name)) {
+            $columns[] = '"_column"';
+        }
+
+        $conflictTarget = '(' . \implode(', ', $columns) . ')';
+
+        return "ON CONFLICT {$conflictTarget} DO NOTHING";
+    }
+
+    /**
+     * Does this collection's permissions table carry _column in its unique index?
+     *
+     * Read fresh every time, on purpose. Caching it would mean a process could hold a
+     * stale answer while the migration reshapes the table underneath, and a stale answer
+     * here is a failed write, not a slow one -- so the migration would have to keep both
+     * index shapes alive until every cache drained. Reading the catalog instead costs one
+     * round trip and lets the index change whenever it likes.
+     *
+     * The cost is only paid when duplicates are being skipped, which is imports and
+     * mirroring rather than ordinary document writes, and it is one probe per batch.
+     *
+     * @param string $name Collection name, already filtered.
+     * @return bool
+     * @throws DatabaseException
+     */
+    protected function permissionsIndexHasColumn(string $name): bool
+    {
+        // Resolved through to_regclass on the same qualified name the INSERT builds,
+        // rather than by reconstructing the table name here. Postgres truncates
+        // identifiers at 63 bytes, so a long namespace and collection name together
+        // produce a table whose real name is shorter than the one it was created with --
+        // and a lookup by the untruncated name finds nothing, reports the index as narrow
+        // and sends a narrow target at a wide index. to_regclass performs the same
+        // truncation as every other statement, so it cannot disagree with the insert.
+        //
+        // indisunique excludes the index over _documentInternalId, which also covers
+        // _column but can never arbitrate a conflict. The primary key on _id is unique
+        // but does not cover _column, so it drops out on its own.
+        $stmt = $this->getPDO()->prepare("
+            SELECT 1
+            FROM pg_index i
+            JOIN pg_attribute a
+              ON a.attrelid = i.indrelid
+             AND a.attnum = ANY(i.indkey)
+            WHERE i.indrelid = to_regclass(:table)
+              AND i.indisunique
+              AND a.attname = '_column'
+            LIMIT 1
+        ");
+
+        $stmt->bindValue(':table', $this->getSQLTable($name . '_perms'));
+
+        $this->execute($stmt);
+
+        return $stmt->fetchColumn() !== false;
     }
 
     public function decodePoint(string $wkb): array

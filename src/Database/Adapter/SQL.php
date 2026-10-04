@@ -1149,8 +1149,11 @@ abstract class SQL extends Adapter
     /**
      * Returns a suffix for the permissions INSERT statement when ignoring duplicates.
      * Override in adapter subclasses for DB-specific syntax.
+     *
+     * @param string $name Collection name, already filtered. Adapters that have to
+     *                     inspect the permissions table need it to resolve the table.
      */
-    protected function getInsertPermissionsSuffix(): string
+    protected function getInsertPermissionsSuffix(string $name): string
     {
         return '';
     }
@@ -2589,7 +2592,7 @@ abstract class SQL extends Adapter
                 $sqlPermissions = "
                     {$this->getInsertKeyword()} {$this->getSQLTable($name . '_perms')} (_type, _permission, _document {$tenantColumn})
                     VALUES {$permissions}
-                    {$this->getInsertPermissionsSuffix()}
+                    {$this->getInsertPermissionsSuffix($name)}
                 ";
 
                 $stmtPermissions = $this->getPDO()->prepare($sqlPermissions);

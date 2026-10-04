@@ -195,18 +195,31 @@ class MariaDB extends SQL
                 _type VARCHAR(12) NOT NULL,
                 _permission VARCHAR(255) NOT NULL,
                 _document VARCHAR(255) NOT NULL,
+                -- Structure only. Nothing reads or writes either column yet: they are
+                -- here so the schema a table is created with already matches what
+                -- column permissions will need, and the fleet-wide migration that adds
+                -- them to existing tables can run at its own pace.
+                --
+                -- An empty _column is the sentinel for \"every column\", which is what
+                -- every grant means today. NOT NULL rather than nullable because the
+                -- unique index below has to treat two grants differing only by column
+                -- as different rows, and SQL considers NULLs distinct.
+                _column VARCHAR(" . static::PERMISSIONS_COLUMN_LENGTH . ") NOT NULL DEFAULT '',
+                _documentInternalId BIGINT UNSIGNED NOT NULL DEFAULT 0,
                 PRIMARY KEY (_id),
         ";
 
         if ($this->sharedTables) {
             $permissions .= "
                 _tenant INT(11) UNSIGNED DEFAULT NULL,
-                UNIQUE INDEX _index1 (_document, _tenant, _type, _permission),
+                UNIQUE INDEX " . static::PERMISSIONS_INDEX . " (_document, _tenant, _type, _permission, _column),
+                INDEX " . static::PERMISSIONS_INDEX_DOCUMENT . " (_documentInternalId, _tenant, _type, _permission, _column),
                 INDEX _permission (_tenant, _permission, _type)
             ";
         } else {
             $permissions .= "
-                UNIQUE INDEX _index1 (_document, _type, _permission),
+                UNIQUE INDEX " . static::PERMISSIONS_INDEX . " (_document, _type, _permission, _column),
+                INDEX " . static::PERMISSIONS_INDEX_DOCUMENT . " (_documentInternalId, _type, _permission, _column),
                 INDEX _permission (_permission, _type)
             ";
         }
@@ -935,7 +948,7 @@ class MariaDB extends SQL
                     $isOrphanedPermission = $e->getCode() === '23000'
                         && isset($e->errorInfo[1])
                         && $e->errorInfo[1] === 1062
-                        && \str_contains($e->getMessage(), '_index1');
+                        && $this->isPermissionsIndex($this->getViolatedKey($e->getMessage()));
 
                     if (!$isOrphanedPermission) {
                         throw $e;
@@ -1771,6 +1784,20 @@ class MariaDB extends SQL
         return true;
     }
 
+    /**
+     * Is this the unique index on a permissions table, under either name?
+     *
+     * A duplicate-key error has to be recognised on tables the column-permissions
+     * migration has reached and on ones it has not, so both spellings count.
+     *
+     * @param string|null $key
+     * @return bool
+     */
+    protected function isPermissionsIndex(?string $key): bool
+    {
+        return $key === static::PERMISSIONS_INDEX || $key === static::PERMISSIONS_INDEX_LEGACY;
+    }
+
     public function getSupportForSchemaAttributes(): bool
     {
         return true;
@@ -1896,7 +1923,7 @@ class MariaDB extends SQL
         // Duplicate row
         if ($e->getCode() === '23000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1062) {
             $key = $this->getViolatedKey($e->getMessage());
-            if ($key === '_index1') {
+            if ($this->isPermissionsIndex($key)) {
                 return new DuplicateException('Duplicate permissions for document', $e->getCode(), $e);
             }
             if ($key !== null && $key !== '_uid' && $key !== 'PRIMARY') {

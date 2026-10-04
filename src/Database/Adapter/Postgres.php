@@ -256,25 +256,39 @@ class Postgres extends SQL
                 _tenant INTEGER DEFAULT NULL,
                 _type VARCHAR(12) NOT NULL,
                 _permission VARCHAR(255) NOT NULL,
-                _document VARCHAR(255) NOT NULL
+                -- Structure only; nothing reads or writes either column yet. An empty
+                -- _column is the sentinel for \"every column\", which is what every grant
+                -- means today, and NOT NULL keeps the unique index below able to tell
+                -- two grants apart by column (SQL considers NULLs distinct).
+                _column VARCHAR(" . static::PERMISSIONS_COLUMN_LENGTH . ") NOT NULL DEFAULT '',
+                _document VARCHAR(255) NOT NULL,
+                -- Quoted: Postgres folds an unquoted identifier to lower case, and every
+                -- read of this column quotes it the same way.
+                \"_documentInternalId\" BIGINT NOT NULL DEFAULT 0
             );
         ";
 
         if ($this->sharedTables) {
             $uniquePermissionIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_ukey");
             $permissionIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_permission");
+            $documentIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_docint");
             $permissions .= "
                 CREATE UNIQUE INDEX \"{$uniquePermissionIndex}\" 
-                    ON {$this->getSQLTable($id . '_perms')} USING btree (_tenant,_document,_type,_permission);
+                    ON {$this->getSQLTable($id . '_perms')} USING btree (_tenant,_document,_type,_permission,_column);
+                CREATE INDEX \"{$documentIndex}\" 
+                    ON {$this->getSQLTable($id . '_perms')} USING btree (\"_documentInternalId\",_tenant,_type,_permission,_column);
                 CREATE INDEX \"{$permissionIndex}\" 
                     ON {$this->getSQLTable($id . '_perms')} USING btree (_tenant,_permission,_type); 
             ";
         } else {
             $uniquePermissionIndex = $this->getShortKey("{$namespace}_{$id}_ukey");
             $permissionIndex = $this->getShortKey("{$namespace}_{$id}_permission");
+            $documentIndex = $this->getShortKey("{$namespace}_{$id}_docint");
             $permissions .= "
                 CREATE UNIQUE INDEX \"{$uniquePermissionIndex}\" 
-                    ON {$this->getSQLTable($id . '_perms')} USING btree (_document COLLATE utf8_ci_ai,_type,_permission);
+                    ON {$this->getSQLTable($id . '_perms')} USING btree (_document COLLATE utf8_ci_ai,_type,_permission,_column);
+                CREATE INDEX \"{$documentIndex}\" 
+                    ON {$this->getSQLTable($id . '_perms')} USING btree (\"_documentInternalId\",_type,_permission,_column);
                 CREATE INDEX \"{$permissionIndex}\" 
                     ON {$this->getSQLTable($id . '_perms')} USING btree (_permission,_type); 
             ";
@@ -2355,11 +2369,13 @@ class Postgres extends SQL
             return '';
         }
 
-        $conflictTarget = $this->sharedTables
-            ? '("_type", "_permission", "_document", "_tenant")'
-            : '("_type", "_permission", "_document")';
-
-        return "ON CONFLICT {$conflictTarget} DO NOTHING";
+        // No conflict target on purpose. The unique index on _perms is widening to
+        // include _column, so tables created before the migration and tables created
+        // after it carry different index shapes, and an explicit target has to match
+        // one exactly (SQLSTATE 42P10 otherwise). A bare DO NOTHING matches whichever
+        // unique index the table actually has; _perms only ever has the one, so the
+        // effect is identical for both shapes.
+        return 'ON CONFLICT DO NOTHING';
     }
 
     public function decodePoint(string $wkb): array

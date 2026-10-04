@@ -371,6 +371,21 @@ class Database
                 'signed' => true,
                 'array' => false,
                 'filters' => []
+            ],
+            [
+                // Structure only; nothing reads or writes it yet. Optional, unlike
+                // documentSecurity above: a collection row written before this existed
+                // carries no value, and a required attribute would make the next write
+                // of that row invalid. Absent reads as falsy, which is the right answer
+                // for every collection until column permissions ship.
+                '$id' => 'columnSecurity',
+                'key' => 'columnSecurity',
+                'type' => self::VAR_BOOLEAN,
+                'size' => 0,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => []
             ]
         ],
         'indexes' => [],

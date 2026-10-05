@@ -48,6 +48,43 @@ final class DeleteRelatedUpdateTest extends TestCase
     }
 
     /**
+     * Adapters that hand every bulk update to $watch, along with the write itself.
+     *
+     * @return iterable<string, array{Closure(Closure(Document, array<Document>, Closure(): int): int): Adapter}>
+     */
+    public static function watchedAdapters(): iterable
+    {
+        yield 'memory' => [static fn (Closure $watch): Adapter => new class ($watch) extends Memory {
+            /**
+             * @param  Closure(Document, array<Document>, Closure(): int): int  $watch
+             */
+            public function __construct(private readonly Closure $watch)
+            {
+                parent::__construct();
+            }
+
+            public function updateDocuments(Document $collection, Document $updates, array $documents): int
+            {
+                return ($this->watch)($collection, $documents, fn (): int => parent::updateDocuments($collection, $updates, $documents));
+            }
+        }];
+        yield 'sqlite' => [static fn (Closure $watch): Adapter => new class (new PDO('sqlite::memory:'), $watch) extends SQLite {
+            /**
+             * @param  Closure(Document, array<Document>, Closure(): int): int  $watch
+             */
+            public function __construct(PDO $pdo, private readonly Closure $watch)
+            {
+                parent::__construct($pdo);
+            }
+
+            public function updateDocuments(Document $collection, Document $updates, array $documents): int
+            {
+                return ($this->watch)($collection, $documents, fn (): int => parent::updateDocuments($collection, $updates, $documents));
+            }
+        }];
+    }
+
+    /**
      * @param  Closure(): Adapter  $adapter
      */
     #[DataProvider('adapters')]
@@ -376,6 +413,83 @@ final class DeleteRelatedUpdateTest extends TestCase
         $this->assertSame(['child1'], $this->reported($recorder));
     }
 
+    /**
+     * @param  Closure(Closure(Document, array<Document>, Closure(): int): int): Adapter  $adapter
+     */
+    #[DataProvider('watchedAdapters')]
+    public function testASetNullDeleteNobodyHearsKeepsNoEarlierChunkOfPeers(Closure $adapter): void
+    {
+        $peers = new DeleteRelatedUpdateRetention('child');
+        $database = $this->database($adapter($peers->watch(...)));
+        $this->relateParentToChildren($database, ForeignKeyAction::SetNull);
+        $this->createFamily($database, 'parent1', ['child1', 'child2', 'child3']);
+        $dispatcher = new DispatcherHook();
+        $deleted = [];
+        $dispatcher->on(DocumentDeleted::class, static function (DocumentDeleted $event) use (&$deleted): void {
+            $deleted[] = $event->documentId;
+        });
+        $database->addHook($dispatcher);
+        $database->setMaxQueryValues(1);
+        $this->assertSame(['child1', 'child2', 'child3'], $this->childIds($database, 'parent1'));
+
+        $peers->reset();
+        $this->assertTrue($database->deleteDocument('parent', 'parent1'));
+
+        $this->assertSame(3, $peers->written, 'Every child must be cleared');
+        $this->assertSame(0, $peers->mostAlive, 'A delete nobody hears must let each chunk of cleared children go before writing the next');
+        $this->assertSame(['parent1'], $deleted);
+        foreach (['child1', 'child2', 'child3'] as $childId) {
+            $this->assertNull($database->getDocument('child', $childId)->getAttribute('parent'), $childId);
+        }
+    }
+
+    /**
+     * @param  Closure(Closure(Document, array<Document>, Closure(): int): int): Adapter  $adapter
+     */
+    #[DataProvider('watchedAdapters')]
+    public function testASetNullBulkDeleteKeepsNoEarlierChunkOfPeers(Closure $adapter): void
+    {
+        $peers = new DeleteRelatedUpdateRetention('child');
+        $database = $this->database($adapter($peers->watch(...)));
+        $this->relateParentToChildren($database, ForeignKeyAction::SetNull);
+        $this->createFamily($database, 'parent1', ['child1', 'child2', 'child3']);
+        $this->record($database);
+        $database->setMaxQueryValues(1);
+
+        $peers->reset();
+        $this->assertSame(1, $database->deleteDocuments('parent', [Query::equal(Document::ID, ['parent1'])]));
+
+        $this->assertSame(3, $peers->written, 'Every child must be cleared');
+        $this->assertSame(0, $peers->mostAlive, 'A bulk delete reports no related updates, so it must let each chunk of cleared children go');
+        foreach (['child1', 'child2', 'child3'] as $childId) {
+            $this->assertNull($database->getDocument('child', $childId)->getAttribute('parent'), $childId);
+        }
+    }
+
+    /**
+     * @param  Closure(Closure(Document, array<Document>, Closure(): int): int): Adapter  $adapter
+     */
+    #[DataProvider('watchedAdapters')]
+    public function testASetNullDeleteSomeoneHearsReportsEveryChunksPeers(Closure $adapter): void
+    {
+        $peers = new DeleteRelatedUpdateRetention('child');
+        $database = $this->database($adapter($peers->watch(...)));
+        $this->relateParentToChildren($database, ForeignKeyAction::SetNull);
+        $this->createFamily($database, 'parent1', ['child1', 'child2', 'child3']);
+        $recorder = $this->record($database);
+        $database->setMaxQueryValues(1);
+
+        $peers->reset();
+        $this->assertTrue($database->deleteDocument('parent', 'parent1'));
+
+        $this->assertSame(3, $peers->written, 'Every child must be cleared');
+        $this->assertSame(['child1', 'child2', 'child3'], $this->reported($recorder));
+        foreach ($recorder->getPayloads(Event::DocumentUpdate) as $related) {
+            $this->assertInstanceOf(Document::class, $related);
+            $this->assertNull($related->getAttribute('parent'));
+        }
+    }
+
     public function testACommitThatFailsAndRetriesReportsEachPeerOnce(): void
     {
         $adapter = new class () extends Memory {
@@ -446,6 +560,24 @@ final class DeleteRelatedUpdateTest extends TestCase
         }
 
         $database->createDocument('parent', new Document(['$id' => $parent, '$permissions' => $this->documentPermissions(), 'children' => $children]));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function childIds(Database $database, string $parent): array
+    {
+        $children = $database->getDocument('parent', $parent)->getAttribute('children', []);
+        $this->assertIsArray($children);
+
+        $ids = [];
+        foreach ($children as $child) {
+            $this->assertInstanceOf(Document::class, $child);
+            $ids[] = $child->getId();
+        }
+        \sort($ids);
+
+        return $ids;
     }
 
     private function record(Database $database): RecordingLifecycle

@@ -1358,12 +1358,10 @@ class Relationships implements Hook
                     $unwritten = true;
                     break;
                 case ForeignKeyAction::SetNull:
-                    $written = $this->deleteSetNull($collection, $relatedCollection, $document, $relationType, $twoWay, $twoWayKey, $side);
+                    $written = $this->deleteSetNull($collection, $relatedCollection, $document, $relationType, $twoWay, $twoWayKey, $side, $report && $twoWay);
 
-                    if ($twoWay) {
-                        foreach ($written as $related) {
-                            $changed[$relatedCollection->getId()][$related->getId()] = $related;
-                        }
+                    foreach ($written as $related) {
+                        $changed[$relatedCollection->getId()][$related->getId()] = $related;
                     }
 
                     $unwritten = $holdsKey || $relationType === RelationType::ManyToMany;
@@ -2705,9 +2703,9 @@ class Relationships implements Hook
     /**
      * Clear the foreign key on every document referencing $document.
      *
-     * @return list<Document> The documents as the write left them
+     * @return list<Document> The documents as the write left them, or none unless $report is set
      */
-    private function clearReferences(Document $relatedCollection, Document $document, string $twoWayKey): array
+    private function clearReferences(Document $relatedCollection, Document $document, string $twoWayKey, bool $report): array
     {
         $relations = $this->findReferencingDocuments($relatedCollection, $document, $twoWayKey);
 
@@ -2727,7 +2725,7 @@ class Relationships implements Hook
                 $relatedCollection->getId(),
                 new Document([$twoWayKey => null]),
                 [Query::equal(Document::ID, $chunk)],
-                onNext: $collect,
+                onNext: $report ? $collect : null,
             )));
         }
 
@@ -2735,9 +2733,9 @@ class Relationships implements Hook
     }
 
     /**
-     * @return list<Document> The documents the delete wrote, as the write left them
+     * @return list<Document> The documents the delete wrote, as the write left them, or none unless $report is set
      */
-    private function deleteSetNull(Document $collection, Document $relatedCollection, Document $document, RelationType $relationType, bool $twoWay, string $twoWayKey, RelationSide $side): array
+    private function deleteSetNull(Document $collection, Document $relatedCollection, Document $document, RelationType $relationType, bool $twoWay, string $twoWayKey, RelationSide $side, bool $report): array
     {
         switch ($relationType) {
             case RelationType::OneToOne:
@@ -2764,21 +2762,21 @@ class Relationships implements Hook
                     ));
                 });
 
-                return $written === null || $written->isEmpty() ? [] : [$written];
+                return ! $report || $written === null || $written->isEmpty() ? [] : [$written];
 
             case RelationType::OneToMany:
                 if ($side === RelationSide::Child) {
                     return [];
                 }
 
-                return $this->clearReferences($relatedCollection, $document, $twoWayKey);
+                return $this->clearReferences($relatedCollection, $document, $twoWayKey, $report);
 
             case RelationType::ManyToOne:
                 if ($side === RelationSide::Parent) {
                     return [];
                 }
 
-                return $this->clearReferences($relatedCollection, $document, $twoWayKey);
+                return $this->clearReferences($relatedCollection, $document, $twoWayKey, $report);
 
             case RelationType::ManyToMany:
                 $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);

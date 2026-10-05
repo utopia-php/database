@@ -322,6 +322,206 @@ final class ValueTest extends TestCase
         $this->assertSame('handle', $value->get());
     }
 
+    public function testAWriteInACoroutineWhoseStarterHasReturnedStaysInThatCoroutine(): void
+    {
+        $value = new Value('handle');
+        $seen = [];
+
+        $this->inCoroutine(function () use ($value, &$seen): void {
+            $value->with('override', function () use ($value, &$seen): void {
+                $done = new Channel(1);
+
+                $this->startDetached(function () use ($value, &$seen, $done): void {
+                    $seen['before'] = $value->get();
+                    $value->set('first');
+                    $value->set('second');
+                    $seen['after'] = $value->get();
+
+                    $childDone = new Channel(1);
+                    Coroutine::create(function () use ($value, &$seen, $childDone): void {
+                        $seen['child'] = $value->get();
+                        $childDone->push(true);
+                    });
+                    $childDone->pop();
+                    $done->push(true);
+                });
+
+                $done->pop();
+                $seen['owner'] = $value->get();
+            });
+
+            $unrelatedDone = new Channel(1);
+            Coroutine::create(function () use ($value, &$seen, $unrelatedDone): void {
+                $seen['unrelated'] = $value->get();
+                $unrelatedDone->push(true);
+            });
+            $unrelatedDone->pop();
+        });
+
+        $this->assertSame([
+            'before' => 'handle',
+            'after' => 'second',
+            'child' => 'second',
+            'owner' => 'override',
+            'unrelated' => 'handle',
+        ], $seen);
+        $this->assertSame('handle', $value->get());
+    }
+
+    public function testAWriteInACoroutineWhoseStarterHasReturnedEndsWithThatCoroutine(): void
+    {
+        $value = new Value('handle');
+        $seen = [];
+
+        $this->inCoroutine(function () use ($value, &$seen): void {
+            $value->with('override', function () use ($value, &$seen): void {
+                $exited = new Channel(1);
+
+                $this->startDetached(function () use ($value, $exited): void {
+                    Coroutine::defer(static fn () => $exited->push(true));
+                    $value->set('detached');
+                });
+
+                $exited->pop();
+
+                $childDone = new Channel(1);
+                Coroutine::create(function () use ($value, &$seen, $childDone): void {
+                    $seen['child'] = $value->get();
+                    $childDone->push(true);
+                });
+                $childDone->pop();
+            });
+
+            $seen['afterScope'] = $value->get();
+
+            $written = new Channel(1);
+            Coroutine::create(function () use ($value, $written): void {
+                $value->set('later');
+                $written->push(true);
+            });
+            $written->pop();
+        });
+
+        $this->assertSame(['child' => 'override', 'afterScope' => 'handle'], $seen);
+        $this->assertSame('later', $value->get());
+    }
+
+    public function testAWriteInACoroutineWhoseStarterHasReturnedKeepsItsValueAcrossItsOwnOverride(): void
+    {
+        $value = new Value('handle');
+        $seen = [];
+
+        $this->inCoroutine(function () use ($value, &$seen): void {
+            $value->with('override', function () use ($value, &$seen): void {
+                $done = new Channel(1);
+
+                $this->startDetached(function () use ($value, &$seen, $done): void {
+                    $value->set('detached');
+                    $seen['inner'] = $value->with('inner', static fn (): string => $value->get());
+                    $seen['afterInner'] = $value->get();
+                    $done->push(true);
+                });
+
+                $done->pop();
+            });
+        });
+
+        $this->assertSame(['inner' => 'inner', 'afterInner' => 'detached'], $seen);
+        $this->assertSame('handle', $value->get());
+    }
+
+    public function testADetachedWriteAfterEveryOverrideEndedChangesTheSharedValueWhileAnOrphanKeepsItsOwn(): void
+    {
+        $value = new Value('handle');
+        $seen = [];
+
+        $this->inCoroutine(function () use ($value, &$seen): void {
+            $written = new Channel(1);
+            $released = new Channel(1);
+            $done = new Channel(1);
+
+            $value->with('override', function () use ($value, &$seen, $written, $released, $done): void {
+                $this->startDetached(function () use ($value, &$seen, $written, $released, $done): void {
+                    $value->set('orphan');
+                    $written->push(true);
+                    $released->pop();
+                    $seen['orphan'] = $value->get();
+                    $done->push(true);
+                });
+
+                $written->pop();
+            });
+
+            $shared = new Channel(1);
+            $this->startDetached(function () use ($value, $shared): void {
+                $value->set('shared');
+                $shared->push(true);
+            });
+            $shared->pop();
+            $seen['owner'] = $value->get();
+
+            $released->push(true);
+            $done->pop();
+        });
+
+        $this->assertSame(['owner' => 'shared', 'orphan' => 'orphan'], $seen);
+        $this->assertSame('shared', $value->get());
+    }
+
+    public function testAWriteInACoroutineWhoseStarterHasReturnedUnderAnOverrideOpenedOutsideCoroutinesStaysInThatCoroutine(): void
+    {
+        $value = new Value('handle');
+        $seen = [];
+
+        $value->with('override', function () use ($value, &$seen): void {
+            $this->inCoroutine(function () use ($value, &$seen): void {
+                $done = new Channel(1);
+
+                $this->startDetached(function () use ($value, &$seen, $done): void {
+                    $seen['before'] = $value->get();
+                    $value->set('child');
+                    $seen['after'] = $value->get();
+                    $done->push(true);
+                });
+
+                $done->pop();
+                $seen['parent'] = $value->get();
+            });
+
+            $seen['outside'] = $value->get();
+        });
+
+        $this->assertSame(
+            ['before' => 'override', 'after' => 'child', 'parent' => 'override', 'outside' => 'override'],
+            $seen,
+        );
+        $this->assertSame('handle', $value->get());
+    }
+
+    public function testAWriteInACoroutineWhoseStarterHasReturnedWithoutAnyOverrideChangesTheHandleWideValue(): void
+    {
+        $value = new Value('handle');
+
+        $this->inCoroutine(function () use ($value): void {
+            $this->startDetached(static fn () => $value->set('changed'));
+        });
+
+        $this->assertSame('changed', $value->get());
+    }
+
+    /**
+     * Runs the work in a coroutine whose parent has already returned.
+     */
+    private function startDetached(Closure $work): void
+    {
+        Coroutine::create(static function () use ($work): void {
+            Coroutine::create(static function () use ($work): void {
+                Coroutine::sleep(0.01);
+                $work();
+            });
+        });
+    }
+
     private function inCoroutine(Closure $test): void
     {
         if (! \extension_loaded('swoole')) {

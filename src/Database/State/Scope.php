@@ -3,8 +3,8 @@
 namespace Utopia\Database\State;
 
 /**
- * One open override of a {@see Value}: the value its owner and the coroutines it starts see, and what the
- * coroutines that inherited it wrote while it is open.
+ * One open override of a {@see Value}, or the write kept by a coroutine that cannot reach the open overrides: the
+ * value its owner and the coroutines it starts see, and what the coroutines that inherited it wrote while it is open.
  *
  * @internal
  *
@@ -18,7 +18,7 @@ final class Scope
     public array $writes = [];
 
     /**
-     * @param  int  $coroutine  The coroutine that opened the override, or -1 outside coroutines
+     * @param  int  $coroutine  The coroutine that opened the override or kept the write, or -1 outside coroutines
      * @param  T  $value
      * @param  Scope<T>|null  $outer  The override it is nested in, opened by the same coroutine
      */

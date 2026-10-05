@@ -211,6 +211,109 @@ final class CoroutineRolesTest extends TestCase
         $this->assertSame(['any'], $this->authorization->getRoles());
     }
 
+    public function testChangesInACoroutineWhoseStarterHasReturnedStayInThatCoroutine(): void
+    {
+        $this->skipWithoutCoroutines();
+        $seen = [];
+
+        $this->inCoroutine(function () use (&$seen): void {
+            $this->authorization->withRoles([self::ALICE], function () use (&$seen): void {
+                $done = new Channel(1);
+
+                Coroutine::create(function () use (&$seen, $done): void {
+                    Coroutine::create(function () use (&$seen, $done): void {
+                        Coroutine::sleep(0.01);
+                        $this->authorization->addRole('team:admins');
+                        $this->authorization->disable();
+                        $seen['detached'] = [$this->authorization->getRoles(), $this->authorization->getStatus()];
+                        $done->push(true);
+                    });
+                });
+
+                $done->pop();
+                $seen['owner'] = [$this->authorization->getRoles(), $this->authorization->getStatus()];
+            });
+
+            $unrelatedDone = new Channel(1);
+            Coroutine::create(function () use (&$seen, $unrelatedDone): void {
+                $seen['unrelated'] = [
+                    $this->authorization->getRoles(),
+                    $this->authorization->getStatus(),
+                    $this->authorization->isValid(new Input(PermissionType::Read, ['team:admins'])),
+                ];
+                $unrelatedDone->push(true);
+            });
+            $unrelatedDone->pop();
+        });
+
+        $this->assertSame([
+            'detached' => [['any', 'team:admins'], false],
+            'owner' => [[self::ALICE], true],
+            'unrelated' => [['any'], true, false],
+        ], $seen);
+        $this->assertSame(['any'], $this->authorization->getRoles());
+        $this->assertTrue($this->authorization->getStatus());
+    }
+
+    public function testDisableByTheOwnerOfWithRolesChangesTheSharedStatus(): void
+    {
+        $this->skipWithoutCoroutines();
+        $seen = [];
+
+        $this->inCoroutine(function () use (&$seen): void {
+            $disabled = new Channel(1);
+            $released = new Channel(1);
+            $closed = new Channel(1);
+
+            Coroutine::create(function () use ($disabled, $released, $closed): void {
+                $this->authorization->withRoles([self::ALICE], function () use ($disabled, $released): void {
+                    $this->authorization->disable();
+                    $disabled->push(true);
+                    $released->pop();
+                });
+                $closed->push(true);
+            });
+
+            $disabled->pop();
+            $siblingDone = new Channel(1);
+            Coroutine::create(function () use (&$seen, $siblingDone): void {
+                $seen['sibling'] = $this->authorization->getStatus();
+                $siblingDone->push(true);
+            });
+            $siblingDone->pop();
+
+            $released->push(true);
+            $closed->pop();
+            $seen['after'] = $this->authorization->getStatus();
+        });
+
+        $this->assertSame(['sibling' => false, 'after' => false], $seen);
+
+        $this->authorization->enable();
+        $this->assertTrue($this->authorization->getStatus());
+    }
+
+    public function testDisableByALiveChildInsideWithRolesChangesTheSharedStatus(): void
+    {
+        $this->skipWithoutCoroutines();
+
+        $this->inCoroutine(function (): void {
+            $this->authorization->withRoles([self::ALICE], function (): void {
+                $done = new Channel(1);
+
+                Coroutine::create(function () use ($done): void {
+                    Coroutine::sleep(0.001);
+                    $this->authorization->disable();
+                    $done->push(true);
+                });
+
+                $done->pop();
+            });
+        });
+
+        $this->assertFalse($this->authorization->getStatus());
+    }
+
     public function testACloneStartsFromTheCurrentRolesAndKeepsItsOwn(): void
     {
         $clone = $this->authorization->withRoles([self::ALICE], fn (): Authorization => clone $this->authorization);

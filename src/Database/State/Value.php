@@ -16,6 +16,11 @@ use Swoole\Coroutine;
  * override ends: the override itself when the writer opened it, else the writer's own view of it. A write outside
  * every override changes the handle-wide value.
  *
+ * A coroutine that cannot reach an override's owner, because a coroutine between them has returned, does not inherit
+ * that override: it reads the handle-wide value, or an override opened outside coroutines. While any override of the
+ * value's {@see Group} is open, its writes stay with it and the coroutines it starts until it ends; otherwise they
+ * change the handle-wide value.
+ *
  * @template T
  */
 final class Value
@@ -34,8 +39,10 @@ final class Value
     /**
      * @param  T  $value
      */
-    public function __construct(private mixed $value)
-    {
+    public function __construct(
+        private mixed $value,
+        private readonly Group $group = new Group(),
+    ) {
         self::$coroutines ??= \extension_loaded('swoole');
     }
 
@@ -74,7 +81,7 @@ final class Value
      */
     public function set(mixed $value): void
     {
-        if ($this->open === 0) {
+        if ($this->group->open === 0) {
             $this->value = $value;
 
             return;
@@ -82,14 +89,26 @@ final class Value
 
         $writer = self::coroutine();
         $coroutine = $writer;
+        $detached = false;
         while (! isset($this->scopes[$coroutine])) {
             if ($coroutine === self::OUTSIDE) {
-                $this->value = $value;
+                if ($detached && $this->group->overrides > 0) {
+                    $this->detach($writer, $value);
+                } else {
+                    $this->value = $value;
+                }
 
                 return;
             }
 
-            $coroutine = self::parent($coroutine);
+            /** @var int|false $parent */
+            $parent = Coroutine::getPcid($coroutine);
+            if ($parent === false) {
+                $detached = true;
+                $coroutine = self::OUTSIDE;
+            } else {
+                $coroutine = $parent;
+            }
         }
 
         $scope = $this->scopes[$coroutine];
@@ -123,11 +142,15 @@ final class Value
         $scope = new Scope($coroutine, $value, $this->scopes[$coroutine] ?? null);
         $this->scopes[$coroutine] = $scope;
         $this->open++;
+        $this->group->open++;
+        $this->group->overrides++;
 
         try {
             return $callback();
         } finally {
             $this->open--;
+            $this->group->open--;
+            $this->group->overrides--;
 
             if ($scope->outer === null) {
                 unset($this->scopes[$coroutine]);
@@ -153,6 +176,28 @@ final class Value
         }
 
         return $scope->value;
+    }
+
+    /**
+     * Keep the write of a coroutine that cannot reach the open overrides as its own scope until it ends.
+     *
+     * @param  T  $value
+     */
+    private function detach(int $writer, mixed $value): void
+    {
+        $scope = new Scope($writer, $value, null);
+        $this->scopes[$writer] = $scope;
+        $this->open++;
+        $this->group->open++;
+
+        Coroutine::defer(function () use ($writer, $scope): void {
+            if (($this->scopes[$writer] ?? null) === $scope) {
+                unset($this->scopes[$writer]);
+            }
+
+            $this->open--;
+            $this->group->open--;
+        });
     }
 
     private static function coroutine(): int

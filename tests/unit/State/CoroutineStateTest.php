@@ -163,6 +163,41 @@ final class CoroutineStateTest extends TestCase
         $this->assertTrue($destinationHook->shouldCheckExist());
     }
 
+    public function testSetTenantInACoroutineWhoseStarterHasReturnedStaysInThatCoroutine(): void
+    {
+        $this->database->setTenant(1);
+        $seen = [];
+
+        $this->inCoroutine(function () use (&$seen): void {
+            $this->database->withTenant(2, function () use (&$seen): void {
+                $done = new Channel(1);
+
+                Coroutine::create(function () use (&$seen, $done): void {
+                    Coroutine::create(function () use (&$seen, $done): void {
+                        Coroutine::sleep(0.01);
+                        $seen['detachedBefore'] = $this->database->getTenant();
+                        $this->database->setTenant(3);
+                        $seen['detachedAfter'] = $this->database->getTenant();
+                        $done->push(true);
+                    });
+                });
+
+                $done->pop();
+                $seen['owner'] = $this->database->getTenant();
+            });
+
+            $unrelatedDone = new Channel(1);
+            Coroutine::create(function () use (&$seen, $unrelatedDone): void {
+                $seen['unrelated'] = $this->database->getTenant();
+                $unrelatedDone->push(true);
+            });
+            $unrelatedDone->pop();
+        });
+
+        $this->assertSame(['detachedBefore' => 1, 'detachedAfter' => 3, 'owner' => 2, 'unrelated' => 1], $seen);
+        $this->assertSame(1, $this->database->getTenant());
+    }
+
     /**
      * Opens a scope in one coroutine and reads the state from inside it, from the parent and from a sibling while
      * the scope is open, and from the parent after it closed.

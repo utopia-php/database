@@ -2,6 +2,7 @@
 
 namespace Utopia\Database\Validator;
 
+use Utopia\Database\State\Group;
 use Utopia\Database\State\Value;
 use Utopia\Database\Validator\Authorization\Input;
 use Utopia\Validator;
@@ -10,7 +11,9 @@ use Utopia\Validator;
  * Validates authorization by checking if any of the current roles match the required permissions.
  *
  * The status and the roles are shared by every caller, except inside skip(), withStatus() and withRoles(): those
- * scopes belong to the calling coroutine and the coroutines it starts (see {@see Value}).
+ * scopes belong to the calling coroutine and the coroutines it starts (see {@see Value}). The status and the roles
+ * share one {@see Group}, so any of those scopes keeps the status and role changes of a coroutine whose starter has
+ * returned local to it.
  */
 class Authorization extends Validator
 {
@@ -34,17 +37,19 @@ class Authorization extends Validator
 
     public function __construct()
     {
-        $this->status = new Value(true);
+        $group = new Group();
+        $this->status = new Value(true, $group);
 
         /** @var Value<array<string, bool>> $roles */
-        $roles = new Value(['any' => true]);
+        $roles = new Value(['any' => true], $group);
         $this->roles = $roles;
     }
 
     public function __clone()
     {
-        $this->status = new Value($this->status->get());
-        $this->roles = new Value($this->roles->get());
+        $group = new Group();
+        $this->status = new Value($this->status->get(), $group);
+        $this->roles = new Value($this->roles->get(), $group);
     }
 
     /**

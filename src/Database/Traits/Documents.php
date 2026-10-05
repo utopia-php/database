@@ -1101,6 +1101,8 @@ trait Documents
      * permission checks, the generated attributes, encoding and validation. The relationship hook prepares
      * the related documents of a write this way and writes them through createPrepared().
      *
+     * @internal
+     *
      * @throws AuthorizationException
      * @throws DatabaseException
      * @throws StructureException
@@ -1115,6 +1117,8 @@ trait Documents
     /**
      * Write documents prepared by prepareCreate() one at a time in the order given, each the way
      * createDocument() writes it, under one invalidation scope.
+     *
+     * @internal
      *
      * @param  list<array{Document, Document}>  $documents  Each prepared document after its collection
      *

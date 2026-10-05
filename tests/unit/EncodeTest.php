@@ -14,6 +14,8 @@ use Utopia\Query\Schema\ColumnType;
 
 final class EncodeTest extends TestCase
 {
+    use MagicAccessAssertions;
+
     public function testExplicitNullUsesDeclaredDefault(): void
     {
         $database = new Database(new Memory(), new Cache(new None()));
@@ -30,10 +32,12 @@ final class EncodeTest extends TestCase
     public function testEncodeReadsAttributesWithoutMagicProperties(): void
     {
         $database = new Database(new Memory(), new Cache(new None()));
+        $recorder = new MagicAccessRecorder();
+        $recorder->start();
         $attributes = [
-            new CountingAttribute(key: 'status', default: 'pending'),
-            new CountingAttribute(key: 'tags', type: ColumnType::Varchar, size: 32, array: true, default: ['new']),
-            new CountingAttribute(key: 'title'),
+            CountingAttribute::of(new Attribute(key: 'status', default: 'pending'), $recorder),
+            CountingAttribute::of(new Attribute(key: 'tags', type: ColumnType::Varchar, size: 32, array: true, default: ['new']), $recorder),
+            CountingAttribute::of(new Attribute(key: 'title'), $recorder),
         ];
 
         $encoded = $database->encode(
@@ -44,8 +48,6 @@ final class EncodeTest extends TestCase
         $this->assertSame('pending', $encoded->getAttribute('status'));
         $this->assertSame(['new'], $encoded->getAttribute('tags'));
         $this->assertSame('Demo', $encoded->getAttribute('title'));
-        foreach ($attributes as $attribute) {
-            $this->assertSame([], $attribute->magicReads, 'encode() read "'.$attribute->getKey().'" through Attribute::__get, which the PHP 8.5 tracing JIT crashes on (php/php-src#22084)');
-        }
+        $this->assertNoMagicAccess($recorder, 'encode()');
     }
 }

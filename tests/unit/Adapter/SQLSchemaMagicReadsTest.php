@@ -45,7 +45,11 @@ final class SQLSchemaMagicReadsTest extends TestCase
 
     private const string AUTHORS = 'authors';
 
-    private const string JUNCTION = '_1_2';
+    private const string BOOKS_SEQUENCE = '1';
+
+    private const string AUTHORS_SEQUENCE = '2';
+
+    private const string JUNCTION = '_' . self::BOOKS_SEQUENCE . '_' . self::AUTHORS_SEQUENCE;
 
     /**
      * @return iterable<string, array{string}>
@@ -330,7 +334,7 @@ final class SQLSchemaMagicReadsTest extends TestCase
         $adapter->setNamespace('namespace');
         $adapter->define(new Document([
             '$id' => self::BOOKS,
-            '$sequence' => '1',
+            '$sequence' => self::BOOKS_SEQUENCE,
             'attributes' => \json_encode([
                 ['$id' => 'title', 'type' => ColumnType::String->value, 'size' => 64, 'array' => false],
                 ['$id' => 'pages', 'type' => ColumnType::Integer->value, 'size' => 4, 'array' => false],
@@ -338,7 +342,7 @@ final class SQLSchemaMagicReadsTest extends TestCase
         ]));
         $adapter->define(new Document([
             '$id' => self::AUTHORS,
-            '$sequence' => '2',
+            '$sequence' => self::AUTHORS_SEQUENCE,
             'attributes' => \json_encode([['$id' => 'name', 'type' => ColumnType::String->value, 'size' => 64, 'array' => false]]),
         ]));
 

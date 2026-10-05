@@ -804,8 +804,8 @@ final class DocumentPurgeTest extends TestCase
      */
     private function unconfirmed(bool $savepoints, array $ids, int $commitFailures = 0, bool $confirmed = false): array
     {
-        $adapter = $savepoints
-            ? new class (new PDO('sqlite::memory:')) extends SQLite {
+        if ($savepoints) {
+            $adapter = new class (new PDO('sqlite::memory:')) extends SQLite {
                 public bool $unconfirmed = false;
 
                 public int $commitFailures = 0;
@@ -837,8 +837,9 @@ final class DocumentPurgeTest extends TestCase
 
                     return parent::commitTransaction();
                 }
-            }
-            : new class () extends Memory {
+            };
+        } else {
+            $adapter = new class () extends Memory {
                 public bool $unconfirmed = false;
 
                 public int $commitFailures = 0;
@@ -880,6 +881,8 @@ final class DocumentPurgeTest extends TestCase
                     return parent::commitTransaction();
                 }
             };
+        }
+
         $seeded = $this->seeded(HookFixture::database($adapter), $ids);
 
         $adapter->unconfirmed = ! $confirmed;

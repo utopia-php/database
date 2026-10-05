@@ -589,13 +589,23 @@ scope, as in 7.x.
 A coroutine sees a scope only while every coroutine between it and the scope's owner is still running, because
 Swoole cannot report the parent of a coroutine that has finished. In a coroutine cut off this way:
 
-- reads see the shared values (the handle's tenant, status and roles, never the scope's), and on `Adapter\Pool` it
-  borrows a connection of its own outside the scope's transaction;
+- reads see the shared values, or a scope opened outside every coroutine, but never a scope opened in a coroutine
+  (not the owner's tenant, status or roles), and on `Adapter\Pool` it borrows a connection of its own outside the
+  scope's transaction;
 - writes stay its own: while a scope over that state is open on the handle, even one another coroutine opened, a
   setter changes only what that coroutine and the coroutines it starts see, until it ends, and never the shared
   value. For `Authorization`, `skip()`, `withStatus()` and `withRoles()` each count as a scope over both the status
   and the roles;
 - with no such scope open, a setter changes the shared value, as in 7.x.
+
+A connected coroutine and a cut-off one treat a setter differently on purpose. A connected coroutine knows the scopes
+it runs under, so a write to a state none of them covers follows the 7.x rule: a grandchild's `disable()` inside
+`withRoles()` turns authorization off for every coroutine. A cut-off coroutine cannot tell which scope it ran under,
+so it keeps the write local: the same `disable()` there applies only to it and the coroutines it starts.
+
+While a cut-off coroutine holding such a local write is alive, reads of that state take the slower scoped path in
+every coroutine sharing the handle, as they do while any scope over it is open, so a long-lived coroutine should open
+its own scope with `withSnapshot()` around the work that needs it rather than call setters.
 
 To inherit the caller's state, work that can outlive the coroutine that started it has to take `snapshot()` before it
 starts and open the scope itself, inside the child, with `withSnapshot()`; a snapshot does not carry a transaction.

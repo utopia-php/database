@@ -558,6 +558,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             return $callback();
         }
 
+        // An upsert with $setOnInsert hits WriteConflict (112) under the transaction's snapshot isolation.
         if ($this->skippingDuplicates()) {
             return $callback();
         }
@@ -576,6 +577,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 try {
                     $this->rollbackTransaction();
                 } catch (Throwable) {
+                    // The attempt's failure is the one retried or thrown.
                 } finally {
                     $this->endSession();
                     $this->inTransaction = 0;

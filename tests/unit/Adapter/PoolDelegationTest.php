@@ -7,13 +7,18 @@ use PDO;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
+use Utopia\Cache\Adapter\None as NoCache;
+use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\Pool;
 use Utopia\Database\Adapter\SQLite;
-use Utopia\Database\Builder\SQLite as SQLiteBuilder;
+use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
+use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationType;
 use Utopia\Database\Validator\Authorization;
@@ -82,9 +87,29 @@ final class PoolDelegationTest extends TestCase
         $this->assertFalse($pool->rollbackTransaction());
     }
 
-    public function testQueryBuilderIsServedByTheBorrowedAdapter(): void
+    public function testQueryBuilderReadsTheRowsOfTheBorrowedAdapter(): void
     {
-        $this->assertInstanceOf(SQLiteBuilder::class, $this->pool(new SQLite(new PDO('sqlite::memory:')))->getBuilder('books'));
+        $database = new Database($this->pool(new SQLite(new PDO('sqlite::memory:'))), new Cache(new NoCache()));
+        $database
+            ->setDatabase('library')
+            ->setNamespace('library')
+            ->setAuthorization(new Authorization());
+
+        $rows = $database->getAuthorization()->skip(static function () use ($database): array|int {
+            $database->create();
+            $database->createCollection(new Collection(
+                id: 'books',
+                attributes: [Attribute::string('title', size: 64)],
+                documentSecurity: false,
+            ));
+            $database->createDocument('books', new Document(['$id' => 'dune', 'title' => 'Dune']));
+            $database->createDocument('books', new Document(['$id' => 'emma', 'title' => 'Emma']));
+
+            return $database->execute($database->from('books')->select(['title'])->filter([Query::equal('$id', ['emma'])]));
+        });
+
+        $this->assertIsArray($rows);
+        $this->assertSame(['Emma'], \array_map(static fn (Document $row): mixed => $row->getAttribute('title'), $rows));
     }
 
     private function pool(Adapter $adapter): Pool

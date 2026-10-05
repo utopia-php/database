@@ -33,6 +33,18 @@ class Postgres extends SQL
     public const MAX_IDENTIFIER_NAME = 63;
 
     /**
+     * Function that tests a row's permissions against a set of roles with jsonb's ?| operator.
+     */
+    protected const PERMISSIONS_FUNCTION = '_permissions_any';
+
+    /**
+     * Schemas known to have the permissions function, per connection.
+     *
+     * @var \WeakMap<object, array<string, bool>>|null
+     */
+    protected static ?\WeakMap $permissionsFunctions = null;
+
+    /**
      * @inheritDoc
      */
     public function rollbackTransaction(): bool
@@ -141,6 +153,9 @@ class Postgres extends SQL
             )
         ";
         $this->getPDO()->prepare($collation)->execute();
+
+        $this->ensurePermissionsFunction($name);
+
         return $dbCreation;
     }
 
@@ -158,6 +173,10 @@ class Postgres extends SQL
 
         $sql = "DROP SCHEMA IF EXISTS \"{$name}\" CASCADE";
         $sql = $this->trigger(Database::EVENT_DATABASE_DELETE, $sql);
+
+        if (self::$permissionsFunctions !== null) {
+            unset(self::$permissionsFunctions[$this->getPDO()]);
+        }
 
         return $this->getPDO()->prepare($sql)->execute();
     }
@@ -1831,22 +1850,86 @@ class Postgres extends SQL
             throw new DatabaseException('Unknown permission type: ' . $type);
         }
 
+        if ($roles === []) {
+            return 'FALSE';
+        }
+
         $column = "{$this->quote($alias)}.{$this->quote('_permissions')}";
 
-        // Containment rather than jsonb's ?| key operator: PDO reads a lone ? as a positional
-        // placeholder, and doubling it to escape breaks once a named placeholder is repeated,
-        // which the cursor conditions do. Each role is its own @> so the index can answer them
-        // as a BitmapOr; jsonb_exists_any would express it in one call but is not indexable.
+        // One ?| for all roles keeps the estimate flat however many roles there are; a @> per
+        // role adds up until the planner gives up on the GIN index. The operator goes through
+        // the inlined function because PDO reads a lone ? as a positional placeholder, and
+        // doubling it to escape breaks once a named placeholder is repeated, which the cursor
+        // conditions do. jsonb_exists_any would avoid both but is not indexable.
+        if ($this->ensurePermissionsFunction($this->getDatabase())) {
+            $permissions = \array_map(
+                fn ($role) => $this->getPDO()->quote("{$type}(\"{$role}\")"),
+                $roles
+            );
+
+            return "{$this->getSQLSchema()}{$this->quote(self::PERMISSIONS_FUNCTION)}({$column}, ARRAY[" . \implode(', ', $permissions) . ']::text[])';
+        }
+
         $permissions = \array_map(
             fn ($role) => "{$column} @> {$this->getPDO()->quote(\json_encode(["{$type}(\"{$role}\")"]))}::jsonb",
             $roles
         );
 
-        if ($permissions === []) {
-            return 'FALSE';
+        return '(' . \implode(' OR ', $permissions) . ')';
+    }
+
+    /**
+     * Make sure the schema has the function permission checks are written against.
+     *
+     * Databases created before it existed get it on first use. Where it can't be created
+     * (inside a transaction that may yet roll back, or without the rights to), the caller
+     * falls back to one containment check per role.
+     *
+     * @param string $schema
+     * @return bool
+     */
+    protected function ensurePermissionsFunction(string $schema): bool
+    {
+        $pdo = $this->getPDO();
+        $schema = $this->filter($schema);
+
+        $known = self::$permissionsFunctions ??= new \WeakMap();
+
+        if (isset($known[$pdo][$schema])) {
+            return true;
         }
 
-        return '(' . \implode(' OR ', $permissions) . ')';
+        $function = "\"{$schema}\".\"" . self::PERMISSIONS_FUNCTION . '"';
+
+        try {
+            $stmt = $pdo->prepare('SELECT to_regprocedure(:function) IS NOT NULL');
+            $stmt->bindValue(':function', "{$function}(jsonb, text[])");
+            $stmt->execute();
+            $exists = (bool) $stmt->fetchColumn();
+
+            if (!$exists) {
+                if ($pdo->inTransaction()) {
+                    return false;
+                }
+
+                // Run through exec, which does not look for placeholders. A concurrent
+                // creation of the same function is not an error.
+                $pdo->exec("
+                    DO \$\$ BEGIN
+                        CREATE FUNCTION {$function}(jsonb, text[]) RETURNS boolean
+                            LANGUAGE sql IMMUTABLE PARALLEL SAFE
+                            AS 'SELECT \$1 OPERATOR(pg_catalog.?|) \$2';
+                    EXCEPTION WHEN duplicate_function OR unique_violation THEN NULL;
+                    END \$\$
+                ");
+            }
+        } catch (PDOException) {
+            return false;
+        }
+
+        $known[$pdo] = [...($known[$pdo] ?? []), $schema => true];
+
+        return true;
     }
 
     /**

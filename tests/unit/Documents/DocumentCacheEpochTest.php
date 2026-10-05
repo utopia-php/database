@@ -7,9 +7,9 @@ use PHPUnit\Framework\TestCase;
 use Tests\Unit\Cache\RacedReleaseCache;
 use Tests\Unit\Cache\RedisLeasableCache;
 use Tests\Unit\Support\CountingMemory;
+use Tests\Unit\Support\UncachedTwin;
 use Utopia\Cache\Adapter as CacheAdapter;
 use Utopia\Cache\Adapter\Memory as MemoryCache;
-use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Cache\Feature\Leasable;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
@@ -57,7 +57,7 @@ final class DocumentCacheEpochTest extends TestCase
         ]));
         $this->assertSame('original', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
 
-        $this->changeBehindTheCache($database, 'webhooks', 'hook', 'changed');
+        UncachedTwin::of($database)->updateDocument('webhooks', 'hook', new Document(['name' => 'changed']));
         $this->assertSame('original', $database->getDocument('webhooks', 'hook')->getAttribute('name'), 'A document written without this cache leaves the cached copy in place');
 
         $this->assertTrue($database->purgeCachedCollection('webhooks'));
@@ -105,7 +105,7 @@ final class DocumentCacheEpochTest extends TestCase
         }
 
         $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
-        $this->changeBehindTheCache($database, 'webhooks', 'hook', 'changed');
+        UncachedTwin::of($database)->updateDocument('webhooks', 'hook', new Document(['name' => 'changed']));
         $this->assertSame('changed', $database->getDocument('webhooks', 'hook')->getAttribute('name'), 'A collection whose activation failed stays uncached');
     }
 
@@ -144,7 +144,7 @@ final class DocumentCacheEpochTest extends TestCase
         }
 
         $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
-        $this->changeBehindTheCache($database, 'webhooks', 'hook', 'changed');
+        UncachedTwin::of($database)->updateDocument('webhooks', 'hook', new Document(['name' => 'changed']));
         $this->assertSame('changed', $database->getDocument('webhooks', 'hook')->getAttribute('name'), 'The collection whose activation failed stays uncached');
 
         $this->assertSame('updated', $database->getDocument('logs', 'log')->getAttribute('name'));
@@ -310,7 +310,7 @@ final class DocumentCacheEpochTest extends TestCase
 
         $cache->corruptFieldWrites(false);
         $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
-        $this->changeBehindTheCache($database, 'webhooks', 'hook', 'changed');
+        UncachedTwin::of($database)->updateDocument('webhooks', 'hook', new Document(['name' => 'changed']));
         $this->assertSame('changed', $database->getDocument('webhooks', 'hook')->getAttribute('name'), 'A collection whose activation was refused stays uncached');
     }
 
@@ -332,23 +332,13 @@ final class DocumentCacheEpochTest extends TestCase
         }
 
         $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
-        $this->changeBehindTheCache($database, 'webhooks', 'hook', 'changed');
+        UncachedTwin::of($database)->updateDocument('webhooks', 'hook', new Document(['name' => 'changed']));
         $this->assertSame('changed', $database->getDocument('webhooks', 'hook')->getAttribute('name'), 'A collection whose owner release failed stays uncached');
     }
 
     private function renameDocument(Database $database, string $collection, string $id, string $name): int
     {
         return $database->updateDocuments($collection, new Document(['name' => $name]), [Query::equal('$id', [$id])]);
-    }
-
-    private function changeBehindTheCache(Database $database, string $collection, string $id, string $name): void
-    {
-        $uncached = new Database($database->getAdapter(), new Cache(new None()));
-        $uncached
-            ->setAuthorization($database->getAuthorization())
-            ->setDatabase($database->getDatabase())
-            ->setNamespace($database->getNamespace());
-        $uncached->updateDocument($collection, $id, new Document(['name' => $name]));
     }
 
     private function createDatabaseWithCache(CacheAdapter $cache, ?string $namespace = null, DatabaseMemory $adapter = new DatabaseMemory()): Database
@@ -439,7 +429,7 @@ final class DocumentCacheEpochTest extends TestCase
         }
 
         $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
-        $this->changeBehindTheCache($database, 'webhooks', 'hook', 'changed');
+        UncachedTwin::of($database)->updateDocument('webhooks', 'hook', new Document(['name' => 'changed']));
         $this->assertSame('changed', $database->getDocument('webhooks', 'hook')->getAttribute('name'), 'A collection whose write has not activated stays uncached while the write is younger than the writer timeout');
 
         $database->setCacheWriterTimeout(0);
@@ -467,7 +457,7 @@ final class DocumentCacheEpochTest extends TestCase
 
         $this->renameDocument($database, 'webhooks', 'hook', 'second');
         $this->assertSame('second', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
-        $this->changeBehindTheCache($database, 'webhooks', 'hook', 'changed');
+        UncachedTwin::of($database)->updateDocument('webhooks', 'hook', new Document(['name' => 'changed']));
         $this->assertSame('changed', $database->getDocument('webhooks', 'hook')->getAttribute('name'), 'A write younger than the writer timeout counts as in flight, so the next write leaves the collection uncached');
 
         $database->setCacheWriterTimeout(0);

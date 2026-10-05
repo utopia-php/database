@@ -5,8 +5,8 @@ namespace Tests\Unit\Documents;
 use DomainException;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
+use Tests\Unit\Support\UncachedTwin;
 use Utopia\Cache\Adapter\Memory as MemoryCache;
-use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Attribute;
@@ -57,12 +57,7 @@ final class InvalidationRestoreFailureTest extends TestCase
 
         $this->assertSame('kept', $database->getDocument(self::COLLECTION, 'kept')->getAttribute('entry'));
 
-        $uncached = new Database($database->getAdapter(), new Cache(new None()));
-        $uncached
-            ->setAuthorization($database->getAuthorization())
-            ->setDatabase($database->getDatabase())
-            ->setNamespace($database->getNamespace());
-        $uncached->updateDocument(self::COLLECTION, 'kept', new Document(['entry' => 'changed']));
+        UncachedTwin::of($database)->updateDocument(self::COLLECTION, 'kept', new Document(['entry' => 'changed']));
         $this->assertSame('changed', $database->getDocument(self::COLLECTION, 'kept')->getAttribute('entry'), 'a restore that failed leaves the document cache fail-closed');
     }
 

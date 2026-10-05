@@ -8,7 +8,7 @@ use PHPUnit\Framework\TestCase;
 use Tests\Unit\Cache\CountingCache;
 use Tests\Unit\Cache\RedisLeasableCache;
 use Tests\Unit\Support\CountingMemory;
-use Utopia\Cache\Adapter\None;
+use Tests\Unit\Support\UncachedTwin;
 use Utopia\Cache\Cache;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
@@ -255,12 +255,12 @@ final class DocumentCacheRoundTripTest extends TestCase
 
     public function testPurgingTheMetadataCollectionRetiresEveryCachedDefinition(): void
     {
-        [$database, $adapter] = $this->createDatabase();
+        [$database] = $this->createDatabase();
         $database->createCollection(new Collection(id: 'logs', permissions: [Permission::read(Role::any())]));
         $this->assertTrue($database->getCollection('webhooks')->getAttribute('documentSecurity'));
         $this->assertTrue($database->getCollection('logs')->getAttribute('documentSecurity'));
 
-        $uncached = $this->createUncachedTwin($database, $adapter);
+        $uncached = UncachedTwin::of($database);
         $uncached->updateCollection('webhooks', [Permission::read(Role::any())], false);
         $uncached->updateCollection('logs', [Permission::read(Role::any())], false);
         $this->assertTrue($database->getCollection('webhooks')->getAttribute('documentSecurity'), 'A definition written without this cache leaves the cached definition in place');
@@ -273,10 +273,10 @@ final class DocumentCacheRoundTripTest extends TestCase
 
     public function testPurgingTheMetadataCollectionRetiresACachedMissingCollection(): void
     {
-        [$database, $adapter] = $this->createDatabase();
+        [$database] = $this->createDatabase();
         $this->assertTrue($database->getCollection('logs')->isEmpty());
 
-        $uncached = $this->createUncachedTwin($database, $adapter);
+        $uncached = UncachedTwin::of($database);
         $uncached->createCollection(new Collection(id: 'logs', permissions: [Permission::read(Role::any())]));
         $this->assertTrue($database->getCollection('logs')->isEmpty(), 'A definition written without this cache leaves the cached miss in place');
 
@@ -305,14 +305,6 @@ final class DocumentCacheRoundTripTest extends TestCase
         ]));
 
         return [$database, $adapter, $cache];
-    }
-
-    private function createUncachedTwin(Database $database, CountingMemory $adapter): Database
-    {
-        return (new Database($adapter, new Cache(new None())))
-            ->setAuthorization($database->getAuthorization())
-            ->setDatabase($database->getDatabase())
-            ->setNamespace($database->getNamespace());
     }
 
     private function hook(string $id): Document

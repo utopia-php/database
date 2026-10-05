@@ -6,9 +6,9 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Tests\Unit\Cache\LeasableHashCache;
 use Tests\Unit\Support\CountingMemory;
+use Tests\Unit\Support\UncachedTwin;
 use Utopia\Cache\Adapter as CacheAdapter;
 use Utopia\Cache\Adapter\Memory as MemoryCache;
-use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
@@ -56,7 +56,7 @@ final class DocumentCacheActivationTest extends TestCase
             });
 
             $this->assertSame('first', $first->getDocument(self::COLLECTION, 'hook')->getAttribute('name'));
-            $this->changeBehindTheCache($first, 'changed');
+            UncachedTwin::of($first)->updateDocument(self::COLLECTION, 'hook', new Document(['name' => 'changed']));
             $this->assertSame('changed', $first->getDocument(self::COLLECTION, 'hook')->getAttribute('name'), 'no read is cached while the second writer is in flight');
         });
 
@@ -64,16 +64,6 @@ final class DocumentCacheActivationTest extends TestCase
         $firstAdapter->reset();
         $this->assertSame('changed', $first->getDocument(self::COLLECTION, 'hook')->getAttribute('name'));
         $this->assertSame(0, $firstAdapter->documentReads, 'caching resumes once no writer is in flight');
-    }
-
-    private function changeBehindTheCache(Database $database, string $name): void
-    {
-        $uncached = new Database($database->getAdapter(), new Cache(new None()));
-        $uncached
-            ->setAuthorization($database->getAuthorization())
-            ->setDatabase($database->getDatabase())
-            ->setNamespace($database->getNamespace());
-        $uncached->updateDocument(self::COLLECTION, 'hook', new Document(['name' => $name]));
     }
 
     private function database(CountingMemory $adapter, Cache $cache, string $namespace): Database

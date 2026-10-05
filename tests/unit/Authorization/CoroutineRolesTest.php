@@ -255,6 +255,96 @@ final class CoroutineRolesTest extends TestCase
         $this->assertTrue($this->authorization->getStatus());
     }
 
+    public function testRoleChangesInACoroutineWhoseStarterHasReturnedStayInThatCoroutineWhileASkipIsOpen(): void
+    {
+        $this->skipWithoutCoroutines();
+        $seen = [];
+
+        $this->inCoroutine(function () use (&$seen): void {
+            $this->authorization->skip(function () use (&$seen): void {
+                $done = new Channel(1);
+
+                Coroutine::create(function () use (&$seen, $done): void {
+                    Coroutine::create(function () use (&$seen, $done): void {
+                        Coroutine::sleep(0.01);
+                        $this->authorization->addRole('team:admins');
+                        $seen['detached'] = $this->authorization->getRoles();
+                        $done->push(true);
+                    });
+                });
+
+                $done->pop();
+                $seen['owner'] = [$this->authorization->getRoles(), $this->authorization->getStatus()];
+            });
+
+            $unrelatedDone = new Channel(1);
+            Coroutine::create(function () use (&$seen, $unrelatedDone): void {
+                $seen['unrelated'] = [
+                    $this->authorization->getRoles(),
+                    $this->authorization->isValid(new Input(PermissionType::Read, ['team:admins'])),
+                ];
+                $unrelatedDone->push(true);
+            });
+            $unrelatedDone->pop();
+        });
+
+        $this->assertSame([
+            'detached' => ['any', 'team:admins'],
+            'owner' => [['any'], false],
+            'unrelated' => [['any'], false],
+        ], $seen);
+        $this->assertSame(['any'], $this->authorization->getRoles());
+    }
+
+    public function testACloneTakenInACoroutineWhoseStarterHasReturnedKeepsItsOwnState(): void
+    {
+        $this->skipWithoutCoroutines();
+        $seen = [];
+        $clone = null;
+
+        $this->inCoroutine(function () use (&$seen, &$clone): void {
+            $this->authorization->withRoles([self::ALICE], function () use (&$seen, &$clone): void {
+                $done = new Channel(1);
+
+                Coroutine::create(function () use (&$seen, &$clone, $done): void {
+                    Coroutine::create(function () use (&$seen, &$clone, $done): void {
+                        Coroutine::sleep(0.01);
+                        $this->authorization->addRole('team:admins');
+                        $this->authorization->disable();
+                        $clone = clone $this->authorization;
+                        $seen['cloneAtStart'] = [$clone->getRoles(), $clone->getStatus()];
+
+                        $clone->addRole('team:blue');
+                        $clone->enable();
+                        $this->authorization->removeRole('any');
+                        $seen['clone'] = [$clone->getRoles(), $clone->getStatus()];
+                        $seen['detached'] = [$this->authorization->getRoles(), $this->authorization->getStatus()];
+                        $done->push(true);
+                    });
+                });
+
+                $done->pop();
+                $seen['owner'] = $this->authorization->getRoles();
+            });
+        });
+
+        $this->assertInstanceOf(Authorization::class, $clone);
+        $this->assertSame([
+            'cloneAtStart' => [['any', 'team:admins'], false],
+            'clone' => [['any', 'team:admins', 'team:blue'], true],
+            'detached' => [['team:admins'], false],
+            'owner' => [self::ALICE],
+        ], $seen);
+        $this->assertSame([['any', 'team:admins', 'team:blue'], true], [$clone->getRoles(), $clone->getStatus()]);
+        $this->assertSame([['any'], true], [$this->authorization->getRoles(), $this->authorization->getStatus()]);
+
+        $clone->cleanRoles();
+        $this->authorization->addRole('team:red');
+
+        $this->assertSame([], $clone->getRoles());
+        $this->assertSame(['any', 'team:red'], $this->authorization->getRoles());
+    }
+
     public function testDisableByTheOwnerOfWithRolesChangesTheSharedStatus(): void
     {
         $this->skipWithoutCoroutines();

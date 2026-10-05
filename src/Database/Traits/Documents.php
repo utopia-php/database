@@ -648,7 +648,7 @@ trait Documents
         $transactionDefinition = $cacheable && $definition && $inTransaction && $queries === [];
         $transactionDefinitionKey = \strtolower($documentKey);
         $readInTransaction = $transactionDefinition
-            ? ($this->transactionDefinitions[$this->getEventContext()][$transactionDefinitionKey] ?? null)
+            ? ($this->transactionDefinitions[$this->getEventContext()][$transactionDefinitionKey][$field] ?? null)
             : null;
         if ($readInTransaction !== null) {
             $collectionState = $this->loadDocumentCacheState($this->getCacheBaseKeys($id)[0]);
@@ -769,7 +769,7 @@ trait Documents
         }
 
         if ($transactionDefinition) {
-            $this->transactionDefinitions[$this->getEventContext()][$transactionDefinitionKey] = clone $document;
+            $this->transactionDefinitions[$this->getEventContext()][$transactionDefinitionKey][$field] = clone $document;
         }
 
         $document = $this->decorateDocument(Event::DocumentRead, $collection, $document);

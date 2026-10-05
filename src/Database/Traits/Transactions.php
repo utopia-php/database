@@ -20,7 +20,7 @@ trait Transactions
     /** @var array<int, array<string, true>> Lower-cased keys of the documents written in the open invalidation scope, by coroutine id, kept only while that scope owns the adapter's transaction. */
     protected array $transactionWrites = [];
 
-    /** @var array<int, array<string, Document>> Collection definitions read inside the transaction the open invalidation scope owns, by coroutine id and lower-cased definition key. */
+    /** @var array<int, array<string, array<string, Document>>> Collection definitions read inside the transaction the open invalidation scope owns, by coroutine id, lower-cased definition key and cache field. */
     protected array $transactionDefinitions = [];
 
     /** @var array<int, list<Closure(): void>> Document purge events of the open invalidation scope, by coroutine id, fired once its outermost transaction has committed. */

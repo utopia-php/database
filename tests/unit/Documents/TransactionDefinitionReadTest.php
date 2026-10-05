@@ -2,10 +2,14 @@
 
 namespace Tests\Unit\Documents;
 
+use PDO;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Tests\Unit\Cache\RedisLeasableCache;
 use Tests\Unit\Support\CountingMemory;
 use Utopia\Cache\Cache;
+use Utopia\Database\Adapter;
+use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
@@ -98,7 +102,50 @@ final class TransactionDefinitionReadTest extends TestCase
         $this->assertSame(0, $second->attributes[0]->size);
     }
 
-    private function database(CountingMemory $adapter): Database
+    /**
+     * @return array<string, array{Adapter}>
+     */
+    public static function adapters(): array
+    {
+        return [
+            'memory' => [new CountingMemory()],
+            'sqlite' => [new SQLite(new PDO('sqlite::memory:'))],
+        ];
+    }
+
+    #[DataProvider('adapters')]
+    public function testARawDefinitionReadInATransactionLeavesLaterWritesWorking(Adapter $adapter): void
+    {
+        $database = $this->database($adapter);
+        $database->purgeCachedDocument(Database::METADATA, self::COLLECTION);
+
+        [$raw, $created] = $database->withTransaction(fn (): array => [
+            $database->skipFilters(fn (): Document => $database->getDocument(Database::METADATA, self::COLLECTION)),
+            $database->createDocument(self::COLLECTION, new Document([Document::ID => 'grace', 'balance' => 5])),
+        ]);
+
+        $this->assertIsString($raw->getAttribute('attributes'));
+        $this->assertSame(5, $created->getAttribute('balance'));
+        $this->assertSame(5, $database->getDocument(self::COLLECTION, 'grace')->getAttribute('balance'));
+    }
+
+    #[DataProvider('adapters')]
+    public function testAFilteredDefinitionReadInATransactionLeavesLaterRawReadsRaw(Adapter $adapter): void
+    {
+        $database = $this->database($adapter);
+        $database->purgeCachedDocument(Database::METADATA, self::COLLECTION);
+
+        [$collection, $raw] = $database->withTransaction(fn (): array => [
+            $database->getCollection(self::COLLECTION),
+            $database->skipFilters(fn (): Document => $database->getDocument(Database::METADATA, self::COLLECTION)),
+        ]);
+
+        $this->assertSame('balance', $collection->attributes[0]->key);
+        $this->assertIsString($raw->getAttribute('attributes'));
+        $this->assertSame('balance', \json_decode($raw->getAttribute('attributes'), true)[0]['key']);
+    }
+
+    private function database(Adapter $adapter): Database
     {
         $database = new Database($adapter, new Cache(new RedisLeasableCache()));
         $database->setDatabase('transactions')->setNamespace('transactions_'.\uniqid());

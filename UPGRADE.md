@@ -574,7 +574,8 @@ A plain setter is scoped only by a scope over the same state:
 - `Authorization::addRole()`, `removeRole()` and `cleanRoles()` by `Authorization::withRoles()`;
 - `setTenant()` by `withTenant()`;
 - `enableValidation()` and `disableValidation()` by `skipValidation()`;
-- `enableFilters()` and `disableFilters()` by `skipFilters()`;
+- `enableFilters()` and `disableFilters()` by `skipFilters()`, with or without filter names;
+- `Hook\Relationships::setEnabled()` by `Hook\Relationships::withEnabled()` and `skipRelationships()`;
 - `setPreserveDates()` by `withPreserveDates()`, and `setPreserveSequence()` by `withPreserveSequence()`.
 
 `withSnapshot()` opens a scope over each of them. Outside every scope over its state, a setter changes the shared

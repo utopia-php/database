@@ -5,6 +5,8 @@ namespace Tests\Unit\Validator;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Tests\Unit\CountingAttribute;
+use Tests\Unit\MagicAccessAssertions;
+use Tests\Unit\MagicAccessRecorder;
 use Utopia\Database\Attribute;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -17,6 +19,8 @@ use Utopia\Query\Schema\ColumnType;
 
 final class OperatorValidatorTest extends TestCase
 {
+    use MagicAccessAssertions;
+
     private const string RELATION = 'related';
 
     private const string SINGLE_VALUE = 'single-value relationship';
@@ -261,8 +265,10 @@ final class OperatorValidatorTest extends TestCase
 
     public function testValidationReadsAttributesWithoutMagicProperties(): void
     {
-        $count = new CountingAttribute(key: 'count', type: ColumnType::Integer, size: 4);
-        $name = new CountingAttribute(key: 'name', type: ColumnType::String, size: 16);
+        $recorder = new MagicAccessRecorder();
+        $recorder->start();
+        $count = CountingAttribute::of(new Attribute(key: 'count', type: ColumnType::Integer, size: 4), $recorder);
+        $name = CountingAttribute::of(new Attribute(key: 'name', type: ColumnType::String, size: 16), $recorder);
         $validator = new OperatorValidator(
             $this->collection([$count, $name]),
             new Document(['count' => 1, 'name' => 'demo']),
@@ -271,8 +277,7 @@ final class OperatorValidatorTest extends TestCase
         $this->assertTrue($validator->isValid(new Operator(OperatorType::Increment, 'count', [1, 10])), $validator->getDescription());
         $this->assertTrue($validator->isValid(new Operator(OperatorType::StringConcat, 'name', ['-1'])), $validator->getDescription());
         $this->assertFalse($validator->isValid(new Operator(OperatorType::StringConcat, 'name', [\str_repeat('a', 16)])));
-        $this->assertSame([], $count->magicReads, 'Operator validation read "count" through Attribute::__get, which the PHP 8.5 tracing JIT crashes on (php/php-src#22084)');
-        $this->assertSame([], $name->magicReads, 'Operator validation read "name" through Attribute::__get, which the PHP 8.5 tracing JIT crashes on (php/php-src#22084)');
+        $this->assertNoMagicAccess($recorder, 'Operator validation');
     }
 
     private function doubleValidator(): OperatorValidator

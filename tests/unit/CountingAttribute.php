@@ -6,11 +6,6 @@ use Utopia\Database\Attribute;
 
 final class CountingAttribute extends Attribute
 {
-    /**
-     * @var list<string>
-     */
-    public array $magicReads = [];
-
     private ?MagicAccessRecorder $recorder = null;
 
     public static function of(Attribute $attribute, MagicAccessRecorder $recorder): self
@@ -25,7 +20,6 @@ final class CountingAttribute extends Attribute
     #[\Override]
     public function __get(string $name): mixed
     {
-        $this->magicReads[] = $name;
         $this->recorder?->read('Attribute "'.$this->getKey().'"', $name);
 
         return parent::__get($name);

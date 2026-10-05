@@ -1,6 +1,6 @@
 <?php
 
-namespace Tests\Unit\PHPStan\Data\Source;
+namespace Tests\Unit\PHPStan\Data\Outside;
 
 use Utopia\Database\Attribute;
 use Utopia\Database\Attribute\Integer;
@@ -84,4 +84,9 @@ function wrappedStatement(PDOStatement $statement): mixed
 function dynamicName(Attribute $attribute, string $name): mixed
 {
     return $attribute->{$name};
+}
+
+function constantDynamicName(Attribute $attribute): mixed
+{
+    return $attribute->{'key'};
 }

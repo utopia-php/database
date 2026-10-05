@@ -5,6 +5,9 @@ namespace Tests\Unit\Validator;
 use PHPUnit\Framework\TestCase;
 use Tests\Unit\CountingAttribute;
 use Tests\Unit\Format;
+use Tests\Unit\MagicAccessAssertions;
+use Tests\Unit\MagicAccessRecorder;
+use Utopia\Database\Attribute;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception;
@@ -15,6 +18,8 @@ use Utopia\Query\Schema\ColumnType;
 
 class StructureTest extends TestCase
 {
+    use MagicAccessAssertions;
+
     /**
      * @var array<string, mixed>
      */
@@ -1338,15 +1343,17 @@ class StructureTest extends TestCase
 
     public function testValidationReadsAttributesWithoutMagicProperties(): void
     {
+        $recorder = new MagicAccessRecorder();
+        $recorder->start();
         $attributes = [
-            new CountingAttribute(key: 'title', type: ColumnType::String, size: 128, required: true),
-            new CountingAttribute(key: 'feedback', type: ColumnType::String, size: 55, format: 'email'),
-            new CountingAttribute(key: 'rating', type: ColumnType::Integer, size: 4, signed: false),
-            new CountingAttribute(key: 'reviews', type: ColumnType::BigInteger, array: true),
-            new CountingAttribute(key: 'price', type: ColumnType::Double),
-            new CountingAttribute(key: 'published', type: ColumnType::Boolean),
-            new CountingAttribute(key: 'releasedAt', type: ColumnType::Datetime),
-            new CountingAttribute(key: 'tags', type: ColumnType::Varchar, size: 32, array: true),
+            CountingAttribute::of(new Attribute(key: 'title', type: ColumnType::String, size: 128, required: true), $recorder),
+            CountingAttribute::of(new Attribute(key: 'feedback', type: ColumnType::String, size: 55, format: 'email'), $recorder),
+            CountingAttribute::of(new Attribute(key: 'rating', type: ColumnType::Integer, size: 4, signed: false), $recorder),
+            CountingAttribute::of(new Attribute(key: 'reviews', type: ColumnType::BigInteger, array: true), $recorder),
+            CountingAttribute::of(new Attribute(key: 'price', type: ColumnType::Double), $recorder),
+            CountingAttribute::of(new Attribute(key: 'published', type: ColumnType::Boolean), $recorder),
+            CountingAttribute::of(new Attribute(key: 'releasedAt', type: ColumnType::Datetime), $recorder),
+            CountingAttribute::of(new Attribute(key: 'tags', type: ColumnType::Varchar, size: 32, array: true), $recorder),
         ];
         $validator = new Structure(new Document([
             '$id' => ID::custom('posts'),
@@ -1371,8 +1378,6 @@ class StructureTest extends TestCase
         ]));
 
         $this->assertTrue($valid, $validator->getDescription());
-        foreach ($attributes as $attribute) {
-            $this->assertSame([], $attribute->magicReads, 'Structure validation read "'.$attribute->getKey().'" through Attribute::__get, which the PHP 8.5 tracing JIT crashes on (php/php-src#22084)');
-        }
+        $this->assertNoMagicAccess($recorder, 'Structure validation');
     }
 }

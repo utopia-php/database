@@ -397,22 +397,22 @@ class Memory extends Adapter implements Feature\Relationships
         }
 
         foreach ($attributes as $attribute) {
-            $attrId = $this->filter($attribute->key);
-            $this->data[$key]['attributes'][$attrId] = [
-                'type' => $attribute->type->value,
-                'size' => $attribute->size,
-                'signed' => $attribute->signed,
-                'array' => $attribute->array,
-                'required' => $attribute->required,
+            $attributeId = $this->filter($attribute->getKey());
+            $this->data[$key]['attributes'][$attributeId] = [
+                'type' => $attribute->getType()->value,
+                'size' => $attribute->getSize(),
+                'signed' => $attribute->isSigned(),
+                'array' => $attribute->isArray(),
+                'required' => $attribute->isRequired(),
             ];
         }
 
         foreach ($indexes as $index) {
-            $indexId = $this->filter($index->key);
+            $indexId = $this->filter($index->getKey());
             $this->data[$key]['indexes'][$indexId] = [
-                'type' => $index->type->value,
-                'attributes' => $index->attributes,
-                'lengths' => $index->lengths,
+                'type' => $index->getType()->value,
+                'attributes' => $index->getIndexedAttributes(),
+                'lengths' => $index->getLengths(),
                 'orders' => $index->getAttribute('orders', []),
             ];
         }
@@ -494,14 +494,14 @@ class Memory extends Adapter implements Feature\Relationships
             throw new NotFoundException('Collection not found');
         }
 
-        $id = $this->filter($attribute->key);
+        $id = $this->filter($attribute->getKey());
         $previous = $this->data[$key]['attributes'][$id] ?? null;
         $this->data[$key]['attributes'][$id] = [
-            'type' => $attribute->type->value,
-            'size' => $attribute->size,
-            'signed' => $attribute->signed,
-            'array' => $attribute->array,
-            'required' => $attribute->required,
+            'type' => $attribute->getType()->value,
+            'size' => $attribute->getSize(),
+            'signed' => $attribute->isSigned(),
+            'array' => $attribute->isArray(),
+            'required' => $attribute->isRequired(),
         ];
 
         $this->journal(function () use ($key, $id, $previous): void {
@@ -531,7 +531,7 @@ class Memory extends Adapter implements Feature\Relationships
             throw new NotFoundException('Collection not found');
         }
 
-        $id = $this->filter($attribute->key);
+        $id = $this->filter($attribute->getKey());
         if (! empty($newKey) && $newKey !== $id) {
             $this->renameAttribute($collection, $id, $newKey);
             $id = $this->filter($newKey);
@@ -539,11 +539,11 @@ class Memory extends Adapter implements Feature\Relationships
 
         $previous = $this->data[$key]['attributes'][$id] ?? null;
         $this->data[$key]['attributes'][$id] = [
-            'type' => $attribute->type->value,
-            'size' => $attribute->size,
-            'signed' => $attribute->signed,
-            'array' => $attribute->array,
-            'required' => $attribute->required,
+            'type' => $attribute->getType()->value,
+            'size' => $attribute->getSize(),
+            'signed' => $attribute->isSigned(),
+            'array' => $attribute->isArray(),
+            'required' => $attribute->isRequired(),
         ];
 
         $this->journal(function () use ($key, $id, $previous): void {
@@ -730,13 +730,13 @@ class Memory extends Adapter implements Feature\Relationships
         // which selects the column even when no rows have a value.
         // The M2M junction collection itself is created by the wrapper through
         // the standard createCollection path.
-        $collection = $relationship->collection;
-        $relatedCollection = $relationship->relatedCollection;
-        $id = $relationship->key;
-        $twoWayKey = $relationship->twoWayKey;
-        $twoWay = $relationship->twoWay;
+        $collection = $relationship->getSourceCollection();
+        $relatedCollection = $relationship->getRelatedCollection();
+        $id = $relationship->getKey();
+        $twoWayKey = $relationship->getTwoWayKey();
+        $twoWay = $relationship->isTwoWay();
 
-        switch ($relationship->type) {
+        switch ($relationship->getType()) {
             case RelationType::OneToOne:
                 $this->registerRelationshipField($collection, $id);
                 if ($twoWay) {
@@ -761,16 +761,16 @@ class Memory extends Adapter implements Feature\Relationships
     #[\Override]
     public function updateRelationship(Relationship $relationship, ?string $newKey = null, ?string $newTwoWayKey = null): bool
     {
-        $collection = $relationship->collection;
-        $relatedCollection = $relationship->relatedCollection;
-        $key = $this->filter($relationship->key);
-        $twoWayKey = $this->filter($relationship->twoWayKey);
+        $collection = $relationship->getSourceCollection();
+        $relatedCollection = $relationship->getRelatedCollection();
+        $key = $this->filter($relationship->getKey());
+        $twoWayKey = $this->filter($relationship->getTwoWayKey());
         $newKey = $newKey !== null ? $this->filter($newKey) : null;
         $newTwoWayKey = $newTwoWayKey !== null ? $this->filter($newTwoWayKey) : null;
-        $side = $relationship->side;
-        $twoWay = $relationship->twoWay;
+        $side = $relationship->getSide();
+        $twoWay = $relationship->isTwoWay();
 
-        switch ($relationship->type) {
+        switch ($relationship->getType()) {
             case RelationType::OneToOne:
                 if ($newKey !== null && $newKey !== $key) {
                     $this->renameDocumentField($collection, $key, $newKey);
@@ -820,14 +820,14 @@ class Memory extends Adapter implements Feature\Relationships
     #[\Override]
     public function deleteRelationship(Relationship $relationship): bool
     {
-        $collection = $relationship->collection;
-        $relatedCollection = $relationship->relatedCollection;
-        $key = $this->filter($relationship->key);
-        $twoWayKey = $this->filter($relationship->twoWayKey);
-        $twoWay = $relationship->twoWay;
-        $side = $relationship->side;
+        $collection = $relationship->getSourceCollection();
+        $relatedCollection = $relationship->getRelatedCollection();
+        $key = $this->filter($relationship->getKey());
+        $twoWayKey = $this->filter($relationship->getTwoWayKey());
+        $twoWay = $relationship->isTwoWay();
+        $side = $relationship->getSide();
 
-        switch ($relationship->type) {
+        switch ($relationship->getType()) {
             case RelationType::OneToOne:
                 if ($side === RelationSide::Parent) {
                     $this->dropDocumentField($collection, $key);
@@ -1038,10 +1038,10 @@ class Memory extends Adapter implements Feature\Relationships
             throw new NotFoundException('Collection not found');
         }
 
-        $id = $index->key;
-        $type = $index->type->value;
-        $attributes = $index->attributes;
-        $lengths = $index->lengths;
+        $id = $index->getKey();
+        $type = $index->getType()->value;
+        $attributes = $index->getIndexedAttributes();
+        $lengths = $index->getLengths();
         $orders = $index->getAttribute('orders', []);
 
         $hashTable = [];

@@ -501,17 +501,17 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         $attributeStrings = [];
 
         foreach ($attributes as $key => $attribute) {
-            $attrId = $this->filter($attribute->key);
+            $attributeId = $this->filter($attribute->getKey());
 
-            $attrType = $this->getSQLType(
-                $attribute->type,
-                $attribute->size,
-                $attribute->signed,
-                $attribute->array,
-                $attribute->required
+            $attributeType = $this->getSQLType(
+                $attribute->getType(),
+                $attribute->getSize(),
+                $attribute->isSigned(),
+                $attribute->isArray(),
+                $attribute->isRequired()
             );
 
-            $attributeStrings[$key] = "`{$attrId}` {$attrType}, ";
+            $attributeStrings[$key] = "`{$attributeId}` {$attributeType}, ";
         }
 
         // SQLite stores integers regardless of declared type, but
@@ -565,12 +565,12 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
 
             foreach ($indexes as $index) {
                 $this->createIndex($id, new Index(
-                    key: $this->filter($index->key),
-                    type: $index->type,
-                    attributes: $index->attributes,
-                    lengths: $index->lengths,
-                    orders: $index->orders,
-                    ttl: $index->ttl,
+                    key: $this->filter($index->getKey()),
+                    type: $index->getType(),
+                    attributes: $index->getIndexedAttributes(),
+                    lengths: $index->getLengths(),
+                    orders: $index->getOrders(),
+                    ttl: $index->getTtl(),
                 ), event: Event::CollectionCreate);
             }
         } catch (Throwable $e) {
@@ -704,8 +704,8 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
      */
     public function updateAttribute(string $collection, Attribute $attribute, ?string $newKey = null): bool
     {
-        if (! empty($newKey) && $newKey !== $attribute->key) {
-            return $this->renameAttribute($collection, $attribute->key, $newKey);
+        if (! empty($newKey) && $newKey !== $attribute->getKey()) {
+            return $this->renameAttribute($collection, $attribute->getKey(), $newKey);
         }
 
         // SQLite is dynamically typed — `ALTER TABLE ... MODIFY COLUMN` is
@@ -714,9 +714,9 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         // raise the same TruncateException MariaDB throws. Off-
         // emulation the declared size is metadata-only, so skip the
         // scan and let the rename branch (if any) handle the rest.
-        if ($this->emulateMySQL && $attribute->type === ColumnType::String && $attribute->size > 0 && ! $attribute->array) {
+        if ($this->emulateMySQL && $attribute->getType() === ColumnType::String && $attribute->getSize() > 0 && ! $attribute->isArray()) {
             $name = $this->filter($collection);
-            $column = $this->filter($attribute->key);
+            $column = $this->filter($attribute->getKey());
 
             // Under shared tables the underlying table is shared across
             // tenants; scoping the scan by `_tenant` keeps tenant A's
@@ -725,21 +725,21 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             $tenantClause = $this->sharedTables ? ' AND '.$this->quote(Storage::TENANT).' = :'.Storage::TENANT : '';
             $sql = "SELECT 1 FROM {$this->getSQLTable($name)} WHERE LENGTH(`{$column}`) > :max{$tenantClause} LIMIT 1";
 
-            $stmt = $this->prepare($sql, event: Event::AttributeUpdate);
-            $stmt->bindValue(':max', $attribute->size, PDO::PARAM_INT);
+            $statement = $this->prepare($sql, event: Event::AttributeUpdate);
+            $statement->bindValue(':max', $attribute->getSize(), PDO::PARAM_INT);
             if ($this->sharedTables) {
-                $stmt->bindValue(':'.Storage::TENANT, $this->currentTenant(), \is_int($this->currentTenant()) ? PDO::PARAM_INT : PDO::PARAM_STR);
+                $statement->bindValue(':'.Storage::TENANT, $this->currentTenant(), \is_int($this->currentTenant()) ? PDO::PARAM_INT : PDO::PARAM_STR);
             }
 
             try {
-                $this->execute($stmt);
-                $exceeds = $stmt->fetchColumn() !== false;
+                $this->execute($statement);
+                $exceeds = $statement->fetchColumn() !== false;
             } finally {
-                $stmt->closeCursor();
+                $statement->closeCursor();
             }
 
             if ($exceeds) {
-                throw new TruncateException("Attribute '{$attribute->key}' has values exceeding new size {$attribute->size}");
+                throw new TruncateException("Attribute '{$attribute->getKey()}' has values exceeding new size {$attribute->getSize()}");
             }
         }
 
@@ -816,23 +816,23 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         Event $event = Event::IndexCreate,
     ): bool {
         $name = $this->filter($collection);
-        $id = $this->filter($index->key);
-        $type = $index->type;
-        $attributes = $index->attributes;
+        $id = $this->filter($index->getKey());
+        $type = $index->getType();
+        $attributes = $index->getIndexedAttributes();
 
         if ($type === IndexType::Fulltext) {
             return $this->createFulltextIndex($name, $id, $attributes, $event);
         }
 
         // Workaround for no support for CREATE INDEX IF NOT EXISTS
-        $stmt = $this->prepare("
+        $statement = $this->prepare("
 			SELECT name
 			FROM sqlite_master
 			WHERE type='index' AND name=:_index;
 			", event: $event);
-        $stmt->bindValue(':_index', "{$this->getNamespace()}_{$this->getTenantSegment()}_{$name}_{$id}");
-        $this->execute($stmt);
-        $existingIndex = $stmt->fetch();
+        $statement->bindValue(':_index', "{$this->getNamespace()}_{$this->getTenantSegment()}_{$name}_{$id}");
+        $this->execute($statement);
+        $existingIndex = $statement->fetch();
         if (! empty($existingIndex)) {
             return true;
         }
@@ -2572,16 +2572,16 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
      */
     public function createRelationship(Relationship $relationship): bool
     {
-        $name = $this->filter($relationship->collection);
-        $relatedName = $this->filter($relationship->relatedCollection);
+        $name = $this->filter($relationship->getSourceCollection());
+        $relatedName = $this->filter($relationship->getRelatedCollection());
         $table = $this->getSQLTable($name);
         $relatedTable = $this->getSQLTable($relatedName);
-        $id = $this->filter($relationship->key);
-        $twoWayKey = $this->filter($relationship->twoWayKey);
+        $id = $this->filter($relationship->getKey());
+        $twoWayKey = $this->filter($relationship->getTwoWayKey());
         $sqlType = $this->getSQLType(ColumnType::Relationship, 0, false, false, false);
-        $twoWay = $relationship->twoWay;
+        $twoWay = $relationship->isTwoWay();
 
-        $statements = match ($relationship->type) {
+        $statements = match ($relationship->getType()) {
             RelationType::OneToOne => $twoWay
                 ? [
                     "ALTER TABLE {$table} ADD COLUMN `{$id}` {$sqlType} DEFAULT NULL",
@@ -2593,8 +2593,8 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             RelationType::ManyToMany => [],
         };
 
-        foreach ($statements as $stmt) {
-            $this->execute($this->prepare($stmt, event: Event::AttributeCreate));
+        foreach ($statements as $statement) {
+            $this->execute($this->prepare($statement, event: Event::AttributeCreate));
         }
 
         return true;
@@ -2605,16 +2605,16 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         ?string $newKey = null,
         ?string $newTwoWayKey = null,
     ): bool {
-        $collection = $relationship->collection;
-        $relatedCollection = $relationship->relatedCollection;
+        $collection = $relationship->getSourceCollection();
+        $relatedCollection = $relationship->getRelatedCollection();
         $name = $this->filter($collection);
         $relatedName = $this->filter($relatedCollection);
         $table = $this->getSQLTable($name);
         $relatedTable = $this->getSQLTable($relatedName);
-        $key = $this->filter($relationship->key);
-        $twoWayKey = $this->filter($relationship->twoWayKey);
-        $twoWay = $relationship->twoWay;
-        $side = $relationship->side;
+        $key = $this->filter($relationship->getKey());
+        $twoWayKey = $this->filter($relationship->getTwoWayKey());
+        $twoWay = $relationship->isTwoWay();
+        $side = $relationship->getSide();
 
         if ($newKey !== null) {
             $newKey = $this->filter($newKey);
@@ -2625,7 +2625,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
 
         $statements = [];
 
-        switch ($relationship->type) {
+        switch ($relationship->getType()) {
             case RelationType::OneToOne:
                 if ($newKey !== null && $key !== $newKey) {
                     $statements[] = "ALTER TABLE {$table} RENAME COLUMN `{$key}` TO `{$newKey}`";
@@ -2658,10 +2658,10 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
                 break;
             case RelationType::ManyToMany:
                 $metadataCollection = new Document([Document::ID => Database::METADATA]);
-                $collectionDoc = $this->getDocument($metadataCollection, $collection);
-                $relatedCollectionDoc = $this->getDocument($metadataCollection, $relatedCollection);
+                $collectionDocument = $this->getDocument($metadataCollection, $collection);
+                $relatedCollectionDocument = $this->getDocument($metadataCollection, $relatedCollection);
 
-                $junction = $this->getSQLTable('_' . $collectionDoc->getSequence() . '_' . $relatedCollectionDoc->getSequence());
+                $junction = $this->getSQLTable('_' . $collectionDocument->getSequence() . '_' . $relatedCollectionDocument->getSequence());
 
                 if ($newKey !== null) {
                     $statements[] = "ALTER TABLE {$junction} RENAME COLUMN `{$key}` TO `{$newKey}`";
@@ -2672,8 +2672,8 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
                 break;
         }
 
-        foreach ($statements as $stmt) {
-            $this->execute($this->prepare($stmt, event: Event::AttributeUpdate));
+        foreach ($statements as $statement) {
+            $this->execute($this->prepare($statement, event: Event::AttributeUpdate));
         }
 
         return true;
@@ -2681,20 +2681,20 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
 
     public function deleteRelationship(Relationship $relationship): bool
     {
-        $collection = $relationship->collection;
-        $relatedCollection = $relationship->relatedCollection;
+        $collection = $relationship->getSourceCollection();
+        $relatedCollection = $relationship->getRelatedCollection();
         $name = $this->filter($collection);
         $relatedName = $this->filter($relatedCollection);
         $table = $this->getSQLTable($name);
         $relatedTable = $this->getSQLTable($relatedName);
-        $key = $this->filter($relationship->key);
-        $twoWayKey = $this->filter($relationship->twoWayKey);
-        $twoWay = $relationship->twoWay;
-        $side = $relationship->side;
+        $key = $this->filter($relationship->getKey());
+        $twoWayKey = $this->filter($relationship->getTwoWayKey());
+        $twoWay = $relationship->isTwoWay();
+        $side = $relationship->getSide();
 
         $statements = [];
 
-        switch ($relationship->type) {
+        switch ($relationship->getType()) {
             case RelationType::OneToOne:
                 if ($side === RelationSide::Parent) {
                     $statements[] = "ALTER TABLE {$table} DROP COLUMN `{$key}`";
@@ -2720,20 +2720,20 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
                 break;
             case RelationType::ManyToMany:
                 $metadataCollection = new Document([Document::ID => Database::METADATA]);
-                $collectionDoc = $this->getDocument($metadataCollection, $collection);
-                $relatedCollectionDoc = $this->getDocument($metadataCollection, $relatedCollection);
+                $collectionDocument = $this->getDocument($metadataCollection, $collection);
+                $relatedCollectionDocument = $this->getDocument($metadataCollection, $relatedCollection);
 
                 $junctionBase = $side === RelationSide::Parent
-                    ? '_' . $collectionDoc->getSequence() . '_' . $relatedCollectionDoc->getSequence()
-                    : '_' . $relatedCollectionDoc->getSequence() . '_' . $collectionDoc->getSequence();
+                    ? '_' . $collectionDocument->getSequence() . '_' . $relatedCollectionDocument->getSequence()
+                    : '_' . $relatedCollectionDocument->getSequence() . '_' . $collectionDocument->getSequence();
 
                 $statements[] = "DROP TABLE {$this->getSQLTable($junctionBase)}";
                 $statements[] = "DROP TABLE {$this->getSQLTable(Storage::permissionsTable($junctionBase))}";
                 break;
         }
 
-        foreach ($statements as $stmt) {
-            $this->execute($this->prepare($stmt, event: Event::AttributeDelete));
+        foreach ($statements as $statement) {
+            $this->execute($this->prepare($statement, event: Event::AttributeDelete));
         }
 
         return true;

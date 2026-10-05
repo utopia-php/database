@@ -241,24 +241,24 @@ class Redis extends Adapter implements
         $attributePayload = [];
         foreach ($attributes as $attribute) {
             $attributePayload[] = [
-                Document::ID => $attribute->key,
-                'key' => $attribute->key,
-                'type' => Attribute::persistedType($attribute->type),
-                'size' => $attribute->size,
-                'signed' => $attribute->signed,
-                'array' => $attribute->array,
-                'required' => $attribute->required,
+                Document::ID => $attribute->getKey(),
+                'key' => $attribute->getKey(),
+                'type' => Attribute::persistedType($attribute->getType()),
+                'size' => $attribute->getSize(),
+                'signed' => $attribute->isSigned(),
+                'array' => $attribute->isArray(),
+                'required' => $attribute->isRequired(),
             ];
         }
 
         $indexPayload = [];
         foreach ($indexes as $index) {
             $indexPayload[] = [
-                Document::ID => $index->key,
-                'key' => $index->key,
-                'type' => $index->type->value,
-                'attributes' => $index->attributes,
-                'lengths' => $index->lengths,
+                Document::ID => $index->getKey(),
+                'key' => $index->getKey(),
+                'type' => $index->getType()->value,
+                'attributes' => $index->getIndexedAttributes(),
+                'lengths' => $index->getLengths(),
                 'orders' => $index->getAttribute('orders', []),
             ];
         }
@@ -318,7 +318,7 @@ class Redis extends Adapter implements
     public function createAttribute(string $collection, Attribute $attribute): bool
     {
         $collection = $this->filter($collection);
-        $id = $this->filter($attribute->key);
+        $id = $this->filter($attribute->getKey());
         $metaKey = $this->key($this->ns(), 'meta', $collection);
 
         if ((bool) $this->client->exists($metaKey) === false) {
@@ -328,11 +328,11 @@ class Redis extends Adapter implements
         $record = [
             Document::ID => $id,
             'key' => $id,
-            'type' => Attribute::persistedType($attribute->type),
-            'size' => $attribute->size,
-            'signed' => $attribute->signed,
-            'array' => $attribute->array,
-            'required' => $attribute->required,
+            'type' => Attribute::persistedType($attribute->getType()),
+            'size' => $attribute->getSize(),
+            'signed' => $attribute->isSigned(),
+            'array' => $attribute->isArray(),
+            'required' => $attribute->isRequired(),
         ];
 
         $this->tx(function (RedisClient $client) use ($metaKey, $record): void {
@@ -356,7 +356,7 @@ class Redis extends Adapter implements
     public function updateAttribute(string $collection, Attribute $attribute, ?string $newKey = null): bool
     {
         $collection = $this->filter($collection);
-        $id = $this->filter($attribute->key);
+        $id = $this->filter($attribute->getKey());
         $metaKey = $this->key($this->ns(), 'meta', $collection);
 
         if ((bool) $this->client->exists($metaKey) === false) {
@@ -371,11 +371,11 @@ class Redis extends Adapter implements
         $record = [
             Document::ID => $id,
             'key' => $id,
-            'type' => Attribute::persistedType($attribute->type),
-            'size' => $attribute->size,
-            'signed' => $attribute->signed,
-            'array' => $attribute->array,
-            'required' => $attribute->required,
+            'type' => Attribute::persistedType($attribute->getType()),
+            'size' => $attribute->getSize(),
+            'signed' => $attribute->isSigned(),
+            'array' => $attribute->isArray(),
+            'required' => $attribute->isRequired(),
         ];
 
         $this->tx(function (RedisClient $client) use ($metaKey, $record): void {
@@ -453,13 +453,13 @@ class Redis extends Adapter implements
     #[\Override]
     public function createRelationship(Relationship $relationship): bool
     {
-        $collection = $relationship->collection;
-        $relatedCollection = $relationship->relatedCollection;
-        $id = $relationship->key;
-        $twoWayKey = $relationship->twoWayKey;
-        $twoWay = $relationship->twoWay;
+        $collection = $relationship->getSourceCollection();
+        $relatedCollection = $relationship->getRelatedCollection();
+        $id = $relationship->getKey();
+        $twoWayKey = $relationship->getTwoWayKey();
+        $twoWay = $relationship->isTwoWay();
 
-        switch ($relationship->type) {
+        switch ($relationship->getType()) {
             case RelationType::OneToOne:
                 $this->registerRelationshipField($collection, $id);
                 if ($twoWay) {
@@ -484,16 +484,16 @@ class Redis extends Adapter implements
     #[\Override]
     public function updateRelationship(Relationship $relationship, ?string $newKey = null, ?string $newTwoWayKey = null): bool
     {
-        $collection = $relationship->collection;
-        $relatedCollection = $relationship->relatedCollection;
-        $key = $this->filter($relationship->key);
-        $twoWayKey = $this->filter($relationship->twoWayKey);
+        $collection = $relationship->getSourceCollection();
+        $relatedCollection = $relationship->getRelatedCollection();
+        $key = $this->filter($relationship->getKey());
+        $twoWayKey = $this->filter($relationship->getTwoWayKey());
         $newKey = $newKey !== null ? $this->filter($newKey) : null;
         $newTwoWayKey = $newTwoWayKey !== null ? $this->filter($newTwoWayKey) : null;
-        $side = $relationship->side;
-        $twoWay = $relationship->twoWay;
+        $side = $relationship->getSide();
+        $twoWay = $relationship->isTwoWay();
 
-        switch ($relationship->type) {
+        switch ($relationship->getType()) {
             case RelationType::OneToOne:
                 if ($newKey !== null && $newKey !== $key) {
                     $this->renameAttribute($collection, $key, $newKey);
@@ -545,14 +545,14 @@ class Redis extends Adapter implements
     #[\Override]
     public function deleteRelationship(Relationship $relationship): bool
     {
-        $collection = $relationship->collection;
-        $relatedCollection = $relationship->relatedCollection;
-        $key = $this->filter($relationship->key);
-        $twoWayKey = $this->filter($relationship->twoWayKey);
-        $twoWay = $relationship->twoWay;
-        $side = $relationship->side;
+        $collection = $relationship->getSourceCollection();
+        $relatedCollection = $relationship->getRelatedCollection();
+        $key = $this->filter($relationship->getKey());
+        $twoWayKey = $this->filter($relationship->getTwoWayKey());
+        $twoWay = $relationship->isTwoWay();
+        $side = $relationship->getSide();
 
-        switch ($relationship->type) {
+        switch ($relationship->getType()) {
             case RelationType::OneToOne:
                 if ($side === RelationSide::Parent) {
                     $this->deleteAttribute($collection, $key);
@@ -592,16 +592,16 @@ class Redis extends Adapter implements
     public function createIndex(string $collection, Index $index, array $indexAttributeTypes = [], array $collation = []): bool
     {
         $collection = $this->filter($collection);
-        $id = $this->filter($index->key);
+        $id = $this->filter($index->getKey());
         $metaKey = $this->key($this->ns(), 'meta', $collection);
 
         if ((bool) $this->client->exists($metaKey) === false) {
             throw new NotFoundException('Collection not found');
         }
 
-        $type = $index->type->value;
-        $attributes = $index->attributes;
-        $lengths = $index->lengths;
+        $type = $index->getType()->value;
+        $attributes = $index->getIndexedAttributes();
+        $lengths = $index->getLengths();
         $orders = $index->getAttribute('orders', []);
 
         $this->tx(function (RedisClient $client) use ($metaKey, $collection, $id, $type, $attributes, $lengths, $orders): void {

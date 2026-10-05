@@ -226,28 +226,36 @@ To turn stored 7.x metadata into models, use `Attribute::fromDocument()`, `Index
 `Relationship::fromDocument()` and `Collection::fromArray()`. `Attribute::normalizeType()` turns a stored type
 string into a `ColumnType` case.
 
+Read model values through the typed getters, such as `Attribute::getType()`, `isArray()` and `getFormat()`,
+`Index::getIndexedAttributes()`, `Relationship::getSourceCollection()` and `Collection::getDeclaredAttributes()`,
+`getName()`, `getDeclaredPermissions()` and `hasDocumentSecurity()`. Change them with `Attribute::setFilters()`,
+`Index::setLengths()` and `Index::setOrders()`. The magic properties (`$attribute->type`, `$index->attributes`, ...)
+remain for compatibility, but PHP 8.5's tracing JIT can miscompile magic `__get()` and `__set()` calls in
+long-running processes (php/php-src#22084), so the library itself no longer uses them.
+
 ### Attribute types
 
 - `Database::VAR_BIGINT` is replaced by `ColumnType::BigInteger`, whose value is `'biginteger'`. The type stored in
   collection metadata is still `'bigint'`, exactly as in 7.x: existing rows need no migration and new bigint
   attributes are written as `'bigint'` too. Do not compare or write stored type strings against
-  `ColumnType::BigInteger->value`. Use the typed model (`$attribute->type === ColumnType::BigInteger`), normalise a
-  raw string with `Attribute::normalizeType($type)` or `Attribute::tryNormalizeType($type)` (both accept `'bigint'`
-  and `'biginteger'`), and write a stored type with `Attribute::persistedType($type)` (it returns `'bigint'` for
-  `ColumnType::BigInteger` and the enum value for every other type). Error messages that name a type use the stored
-  spelling too: a bigint default mismatch reads `Default value … does not match given type bigint`, as in 7.x.
+  `ColumnType::BigInteger->value`. Use the typed model (`$attribute->getType() === ColumnType::BigInteger`),
+  normalise a raw string with `Attribute::normalizeType($type)` or `Attribute::tryNormalizeType($type)` (both accept
+  `'bigint'` and `'biginteger'`), and write a stored type with `Attribute::persistedType($type)` (it returns
+  `'bigint'` for `ColumnType::BigInteger` and the enum value for every other type). Error messages that name a type
+  use the stored spelling too: a bigint default mismatch reads `Default value … does not match given type bigint`, as
+  in 7.x.
 - `Attribute::toDocument()`, `getAttribute('type')` on an `Attribute` model, the `attribute_create`,
   `attributes_create` and `attribute_update` event payloads and the documents returned by `updateAttribute*()` report
   bigint attributes as `'bigint'`.
 - `Database::ATTRIBUTE_FILTER_TYPES` is renamed `Database::ATTRIBUTE_FILTER_COLUMN_TYPES` and holds `ColumnType`
   cases instead of type strings. Compare with the typed model
-  (`in_array($attribute->type, Database::ATTRIBUTE_FILTER_COLUMN_TYPES, true)`), or normalise a stored string first
-  with `Attribute::normalizeType()`.
+  (`in_array($attribute->getType(), Database::ATTRIBUTE_FILTER_COLUMN_TYPES, true)`), or normalise a stored string
+  first with `Attribute::normalizeType()`.
 - The column types an attribute can use are listed in `Attribute::TYPES`. `Attribute::availableTypes(objects:,
   spatial:, vectors:)` narrows the list to what an adapter supports.
 - An empty `format` means no format. `Attribute` models store and report `null` for `format: ''`, including
   attributes read from metadata written by 7.x, which stored `''`. Compare a stored attribute's format with `null`.
-  `$attribute->format` and `toDocument()` never return `''`.
+  `$attribute->getFormat()` and `toDocument()` never return `''`.
 
 ### Collections and attributes
 
@@ -948,6 +956,10 @@ reports, call `$adapter->capabilities()`.
 - Declare `Capability::NestedTransactions` only when a failed nested transaction rolls back to its savepoint and
   leaves the enclosing transaction open. `Database` drops the `document_purge` events of a failed nested call only
   on such adapters; without it they fire with the enclosing commit.
+- `Adapter::skippingDuplicates(): bool` and `Database::skippingDuplicates(): bool` (protected) report whether the
+  calling coroutine runs under `skipDuplicates()`. Read them instead of the `$skipDuplicates` property hook.
+- `Utopia\Database\PDOStatement::getQueryString(): string` returns the wrapped statement's `queryString` without
+  going through the magic `__get()`.
 - `Adapter::withTenant($tenant, $callback)` scopes the tenant to the calling coroutine. `Database::withTenant()` uses
   it and no longer calls `setTenant()`, so an adapter that overrides `setTenant()` to react to tenant changes has to
   key such state by `getTenant()` instead.

@@ -785,9 +785,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             return false;
         }
 
-        // Since attributes are not used by this adapter
-        // Only act when $indexes is provided
-
         if (! empty($indexes)) {
             /**
              * Each new index has format ['key' => [$attribute => $order], 'name' => $name, 'unique' => $unique]
@@ -796,15 +793,12 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
             $collectionAttributes = $attributes;
 
-            // using $i and $j as counters to distinguish from $key
             foreach ($indexes as $i => $index) {
-
                 $key = [];
                 $unique = false;
-                $attributes = $index->attributes;
-                $orders = $index->orders;
+                $attributes = $index->getIndexedAttributes();
+                $orders = $index->getOrders();
 
-                // If sharedTables, always add _tenant as the first key
                 if ($this->shouldAddTenantToIndex($index)) {
                     $key[Storage::TENANT] = $this->getOrder(OrderDirection::Asc);
                 }
@@ -812,12 +806,11 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 foreach ($attributes as $j => $attribute) {
                     $attribute = $this->filter($this->getInternalKeyForAttribute((string) $attribute));
 
-                    switch ($index->type) {
+                    switch ($index->getType()) {
                         case IndexType::Key:
                             $order = $this->getOrder(OrderDirection::tryFrom(Index::direction($orders[$j] ?? null)) ?? OrderDirection::Asc);
                             break;
                         case IndexType::Fulltext:
-                            // MongoDB fulltext index is just 'text'
                             $order = 'text';
                             break;
                         case IndexType::Unique:
@@ -828,7 +821,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                             $order = $this->getOrder(OrderDirection::tryFrom(Index::direction($orders[$j] ?? null)) ?? OrderDirection::Asc);
                             break;
                         default:
-                            // index not supported
                             return false;
                     }
 
@@ -837,37 +829,36 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
                 $newIndexes[$i] = [
                     'key' => $key,
-                    'name' => $this->filter($index->key),
+                    'name' => $this->filter($index->getKey()),
                     'unique' => $unique,
                 ];
 
-                if ($index->type === IndexType::Fulltext) {
+                if ($index->getType() === IndexType::Fulltext) {
                     $newIndexes[$i]['default_language'] = 'none';
                 }
 
-                // Handle TTL indexes
-                if ($index->type === IndexType::Ttl) {
-                    $ttl = $index->ttl;
+                if ($index->getType() === IndexType::Ttl) {
+                    $ttl = $index->getTtl();
                     if ($ttl > 0) {
                         $newIndexes[$i]['expireAfterSeconds'] = $ttl;
                     }
                 }
 
-                if (in_array($index->type, [IndexType::Unique, IndexType::Key])) {
+                if (in_array($index->getType(), [IndexType::Unique, IndexType::Key])) {
                     $fields = [];
-                    foreach ($attributes as $attr) {
+                    foreach ($attributes as $indexedAttribute) {
                         $attributeType = ColumnType::String;
-                        foreach ($collectionAttributes as $collectionAttr) {
-                            if ($collectionAttr->key === $attr) {
-                                $attributeType = $collectionAttr->type;
+                        foreach ($collectionAttributes as $collectionAttribute) {
+                            if ($collectionAttribute->getKey() === $indexedAttribute) {
+                                $attributeType = $collectionAttribute->getType();
                                 break;
                             }
                         }
 
-                        $fields[$this->filter($this->getInternalKeyForAttribute($attr))] = $attributeType;
+                        $fields[$this->filter($this->getInternalKeyForAttribute($indexedAttribute))] = $attributeType;
                     }
                     if (! empty($fields)) {
-                        $newIndexes[$i]['partialFilterExpression'] = $this->getPartialFilterExpression($index->type, $fields);
+                        $newIndexes[$i]['partialFilterExpression'] = $this->getPartialFilterExpression($index->getType(), $fields);
                     }
                 }
             }
@@ -957,8 +948,8 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      */
     public function updateAttribute(string $collection, Attribute $attribute, ?string $newKey = null): bool
     {
-        if (! empty($newKey) && $newKey !== $attribute->key) {
-            return $this->renameAttribute($collection, $attribute->key, $newKey);
+        if (! empty($newKey) && $newKey !== $attribute->getKey()) {
+            return $this->renameAttribute($collection, $attribute->getKey(), $newKey);
         }
 
         return true;
@@ -1030,12 +1021,12 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         ?string $newKey = null,
         ?string $newTwoWayKey = null
     ): bool {
-        $collectionName = $this->getNamespace().'_'.$this->filter($relationship->collection);
-        $relatedCollectionName = $this->getNamespace().'_'.$this->filter($relationship->relatedCollection);
+        $collectionName = $this->getNamespace().'_'.$this->filter($relationship->getSourceCollection());
+        $relatedCollectionName = $this->getNamespace().'_'.$this->filter($relationship->getRelatedCollection());
 
-        $escapedKey = $this->escapeMongoFieldName($relationship->key);
+        $escapedKey = $this->escapeMongoFieldName($relationship->getKey());
         $escapedNewKey = ! \is_null($newKey) ? $this->escapeMongoFieldName($newKey) : null;
-        $escapedTwoWayKey = $this->escapeMongoFieldName($relationship->twoWayKey);
+        $escapedTwoWayKey = $this->escapeMongoFieldName($relationship->getTwoWayKey());
         $escapedNewTwoWayKey = ! \is_null($newTwoWayKey) ? $this->escapeMongoFieldName($newTwoWayKey) : null;
 
         $renameKey = [
@@ -1050,42 +1041,42 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             ],
         ];
 
-        switch ($relationship->type) {
+        switch ($relationship->getType()) {
             case RelationType::OneToOne:
-                if (! \is_null($newKey) && $relationship->key !== $newKey) {
+                if (! \is_null($newKey) && $relationship->getKey() !== $newKey) {
                     $this->getClient()->update($collectionName, updates: $renameKey, multi: true);
                 }
-                if ($relationship->twoWay && ! \is_null($newTwoWayKey) && $relationship->twoWayKey !== $newTwoWayKey) {
+                if ($relationship->isTwoWay() && ! \is_null($newTwoWayKey) && $relationship->getTwoWayKey() !== $newTwoWayKey) {
                     $this->getClient()->update($relatedCollectionName, updates: $renameTwoWayKey, multi: true);
                 }
                 break;
             case RelationType::OneToMany:
-                if ($relationship->twoWay && ! \is_null($newTwoWayKey) && $relationship->twoWayKey !== $newTwoWayKey) {
+                if ($relationship->isTwoWay() && ! \is_null($newTwoWayKey) && $relationship->getTwoWayKey() !== $newTwoWayKey) {
                     $this->getClient()->update($relatedCollectionName, updates: $renameTwoWayKey, multi: true);
                 }
                 break;
             case RelationType::ManyToOne:
-                if (! \is_null($newKey) && $relationship->key !== $newKey) {
+                if (! \is_null($newKey) && $relationship->getKey() !== $newKey) {
                     $this->getClient()->update($collectionName, updates: $renameKey, multi: true);
                 }
                 break;
             case RelationType::ManyToMany:
                 $metadataCollection = new Document([Document::ID => Database::METADATA]);
-                $collectionDoc = $this->getDocument($metadataCollection, $relationship->collection);
-                $relatedCollectionDoc = $this->getDocument($metadataCollection, $relationship->relatedCollection);
+                $collectionDocument = $this->getDocument($metadataCollection, $relationship->getSourceCollection());
+                $relatedCollectionDocument = $this->getDocument($metadataCollection, $relationship->getRelatedCollection());
 
-                if ($collectionDoc->isEmpty() || $relatedCollectionDoc->isEmpty()) {
+                if ($collectionDocument->isEmpty() || $relatedCollectionDocument->isEmpty()) {
                     throw new DatabaseException('Collection or related collection not found');
                 }
 
-                $junction = $relationship->side === RelationSide::Parent
-                    ? $this->getNamespace().'_'.$this->filter('_'.$collectionDoc->getSequence().'_'.$relatedCollectionDoc->getSequence())
-                    : $this->getNamespace().'_'.$this->filter('_'.$relatedCollectionDoc->getSequence().'_'.$collectionDoc->getSequence());
+                $junction = $relationship->getSide() === RelationSide::Parent
+                    ? $this->getNamespace().'_'.$this->filter('_'.$collectionDocument->getSequence().'_'.$relatedCollectionDocument->getSequence())
+                    : $this->getNamespace().'_'.$this->filter('_'.$relatedCollectionDocument->getSequence().'_'.$collectionDocument->getSequence());
 
-                if (! \is_null($newKey) && $relationship->key !== $newKey) {
+                if (! \is_null($newKey) && $relationship->getKey() !== $newKey) {
                     $this->getClient()->update($junction, updates: $renameKey, multi: true);
                 }
-                if ($relationship->twoWay && ! \is_null($newTwoWayKey) && $relationship->twoWayKey !== $newTwoWayKey) {
+                if ($relationship->isTwoWay() && ! \is_null($newTwoWayKey) && $relationship->getTwoWayKey() !== $newTwoWayKey) {
                     $this->getClient()->update($junction, updates: $renameTwoWayKey, multi: true);
                 }
                 break;
@@ -1101,34 +1092,34 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     public function deleteRelationship(
         Relationship $relationship
     ): bool {
-        $collectionName = $this->getNamespace().'_'.$this->filter($relationship->collection);
-        $relatedCollectionName = $this->getNamespace().'_'.$this->filter($relationship->relatedCollection);
-        $escapedKey = $this->escapeMongoFieldName($relationship->key);
-        $escapedTwoWayKey = $this->escapeMongoFieldName($relationship->twoWayKey);
+        $collectionName = $this->getNamespace().'_'.$this->filter($relationship->getSourceCollection());
+        $relatedCollectionName = $this->getNamespace().'_'.$this->filter($relationship->getRelatedCollection());
+        $escapedKey = $this->escapeMongoFieldName($relationship->getKey());
+        $escapedTwoWayKey = $this->escapeMongoFieldName($relationship->getTwoWayKey());
 
-        switch ($relationship->type) {
+        switch ($relationship->getType()) {
             case RelationType::OneToOne:
-                if ($relationship->side === RelationSide::Parent) {
+                if ($relationship->getSide() === RelationSide::Parent) {
                     $this->getClient()->update($collectionName, [], ['$unset' => [$escapedKey => '']], multi: true);
-                    if ($relationship->twoWay) {
+                    if ($relationship->isTwoWay()) {
                         $this->getClient()->update($relatedCollectionName, [], ['$unset' => [$escapedTwoWayKey => '']], multi: true);
                     }
-                } elseif ($relationship->side === RelationSide::Child) {
+                } elseif ($relationship->getSide() === RelationSide::Child) {
                     $this->getClient()->update($relatedCollectionName, [], ['$unset' => [$escapedTwoWayKey => '']], multi: true);
-                    if ($relationship->twoWay) {
+                    if ($relationship->isTwoWay()) {
                         $this->getClient()->update($collectionName, [], ['$unset' => [$escapedKey => '']], multi: true);
                     }
                 }
                 break;
             case RelationType::OneToMany:
-                if ($relationship->side === RelationSide::Parent) {
+                if ($relationship->getSide() === RelationSide::Parent) {
                     $this->getClient()->update($relatedCollectionName, [], ['$unset' => [$escapedTwoWayKey => '']], multi: true);
                 } else {
                     $this->getClient()->update($collectionName, [], ['$unset' => [$escapedKey => '']], multi: true);
                 }
                 break;
             case RelationType::ManyToOne:
-                if ($relationship->side === RelationSide::Parent) {
+                if ($relationship->getSide() === RelationSide::Parent) {
                     $this->getClient()->update($collectionName, [], ['$unset' => [$escapedKey => '']], multi: true);
                 } else {
                     $this->getClient()->update($relatedCollectionName, [], ['$unset' => [$escapedTwoWayKey => '']], multi: true);
@@ -1136,16 +1127,16 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 break;
             case RelationType::ManyToMany:
                 $metadataCollection = new Document([Document::ID => Database::METADATA]);
-                $collectionDoc = $this->getDocument($metadataCollection, $relationship->collection);
-                $relatedCollectionDoc = $this->getDocument($metadataCollection, $relationship->relatedCollection);
+                $collectionDocument = $this->getDocument($metadataCollection, $relationship->getSourceCollection());
+                $relatedCollectionDocument = $this->getDocument($metadataCollection, $relationship->getRelatedCollection());
 
-                if ($collectionDoc->isEmpty() || $relatedCollectionDoc->isEmpty()) {
+                if ($collectionDocument->isEmpty() || $relatedCollectionDocument->isEmpty()) {
                     throw new DatabaseException('Collection or related collection not found');
                 }
 
-                $junction = $relationship->side === RelationSide::Parent
-                    ? $this->getNamespace().'_'.$this->filter('_'.$collectionDoc->getSequence().'_'.$relatedCollectionDoc->getSequence())
-                    : $this->getNamespace().'_'.$this->filter('_'.$relatedCollectionDoc->getSequence().'_'.$collectionDoc->getSequence());
+                $junction = $relationship->getSide() === RelationSide::Parent
+                    ? $this->getNamespace().'_'.$this->filter('_'.$collectionDocument->getSequence().'_'.$relatedCollectionDocument->getSequence())
+                    : $this->getNamespace().'_'.$this->filter('_'.$relatedCollectionDocument->getSequence().'_'.$collectionDocument->getSequence());
 
                 $this->getClient()->dropCollection($junction);
                 break;
@@ -1165,11 +1156,12 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     public function createIndex(string $collection, Index $index, array $indexAttributeTypes = [], array $collation = []): bool
     {
         $name = $this->getNamespace().'_'.$this->filter($collection);
-        $id = $this->filter($index->key);
-        $type = $index->type;
-        $attributes = $index->attributes;
-        $orders = $index->orders;
-        $ttl = $index->ttl;
+        $id = $this->filter($index->getKey());
+        $type = $index->getType();
+        $indexedAttributes = $index->getIndexedAttributes();
+        $attributes = $indexedAttributes;
+        $orders = $index->getOrders();
+        $ttl = $index->getTtl();
         /** @var array<string, mixed> $indexes */
         $indexes = [];
         $options = [];
@@ -1178,7 +1170,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         /** @var array<string, int|string> $indexKey */
         $indexKey = [];
 
-        // If sharedTables, always add _tenant as the first key
         if ($this->shouldAddTenantToIndex($type)) {
             $indexKey[Storage::TENANT] = $this->getOrder(OrderDirection::Asc);
         }
@@ -1188,7 +1179,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
             if (isset($indexAttributeTypes[$attribute]) && \str_contains($attribute, '.') && $indexAttributeTypes[$attribute] === ColumnType::Object->value) {
                 $dottedAttributes = \explode('.', $attribute);
-                $expandedAttributes = array_map(fn ($attr) => $this->filter($attr), $dottedAttributes);
+                $expandedAttributes = array_map(fn (string $part): string => $this->filter($part), $dottedAttributes);
                 $attributes[$i] = implode('.', $expandedAttributes);
             } else {
                 $attributes[$i] = $this->filter($this->getInternalKeyForAttribute($attribute));
@@ -1238,15 +1229,14 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             $indexes['default_language'] = 'none';
         }
 
-        // Handle TTL indexes
         if ($type === IndexType::Ttl && $ttl > 0) {
             $indexes['expireAfterSeconds'] = $ttl;
         }
 
         if (in_array($type, [IndexType::Unique, IndexType::Key])) {
             $fields = [];
-            foreach ($attributes as $i => $attr) {
-                $fields[$attr] = Attribute::tryNormalizeType($indexAttributeTypes[$index->attributes[$i]] ?? '') ?? ColumnType::String;
+            foreach ($attributes as $i => $filteredAttribute) {
+                $fields[$filteredAttribute] = Attribute::tryNormalizeType($indexAttributeTypes[$indexedAttributes[$i]] ?? '') ?? ColumnType::String;
             }
             if (! empty($fields)) {
                 $indexes['partialFilterExpression'] = $this->getPartialFilterExpression($type, $fields);
@@ -3342,7 +3332,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     private static function getInternalAttributeArrays(): array
     {
         return self::$internalAttributeArrays ??= \array_values(\array_map(
-            fn (Attribute $attribute): array => [Document::ID => $attribute->key, 'type' => $attribute->type, 'array' => $attribute->array],
+            fn (Attribute $attribute): array => [Document::ID => $attribute->getKey(), 'type' => $attribute->getType(), 'array' => $attribute->isArray()],
             Database::internalAttributes()
         ));
     }
@@ -3847,7 +3837,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         }
 
         if ($indexOrType instanceof Index) {
-            $indexType = $indexOrType->type;
+            $indexType = $indexOrType->getType();
         } elseif ($indexOrType instanceof Document) {
             $rawIndexType = $indexOrType->getAttribute('type');
             $indexTypeVal = \is_string($rawIndexType) ? $rawIndexType : (\is_scalar($rawIndexType) ? (string) $rawIndexType : '');

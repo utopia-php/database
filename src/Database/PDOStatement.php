@@ -132,6 +132,11 @@ class PDOStatement implements \IteratorAggregate
         return $this->statement;
     }
 
+    public function getQueryString(): string
+    {
+        return $this->statement->queryString;
+    }
+
     public function setAttribute(int $attribute, mixed $value): bool
     {
         $this->attributes[$attribute] = $value;

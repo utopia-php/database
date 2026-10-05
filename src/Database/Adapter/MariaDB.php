@@ -131,11 +131,10 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         $schema = $this->createSchemaBuilder();
         $sharedTables = $this->sharedTables;
 
-        // Pre-build attribute hash for array lookups during index construction
         $hash = [];
         foreach ($attributes as $attribute) {
-            $attrId = $this->filter($attribute->key);
-            $hash[$attrId] = $attribute;
+            $attributeId = $this->filter($attribute->getKey());
+            $hash[$attributeId] = $attribute;
         }
 
         $table = $schema->table($this->getSQLTableRaw($id));
@@ -146,10 +145,10 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         $table->mediumText(Storage::PERMISSIONS)->nullable()->default(null);
 
         foreach ($attributes as $attribute) {
-            $attrId = $this->filter($attribute->key);
+            $attributeId = $this->filter($attribute->getKey());
 
-            if ($attribute->type === ColumnType::Relationship) {
-                $options = $attribute->options ?? [];
+            if ($attribute->getType() === ColumnType::Relationship) {
+                $options = $attribute->getOptions() ?? [];
                 $relationType = $options['relationType'] ?? null;
                 $twoWay = $options['twoWay'] ?? false;
                 $side = $options['side'] ?? null;
@@ -164,23 +163,23 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
                 }
             }
 
-            $attrType = $this->getSQLType(
-                $attribute->type,
-                $attribute->size,
-                $attribute->signed,
-                $attribute->array,
-                $attribute->required
+            $sqlType = $this->getSQLType(
+                $attribute->getType(),
+                $attribute->getSize(),
+                $attribute->isSigned(),
+                $attribute->isArray(),
+                $attribute->isRequired()
             );
-            $table->rawColumn("`{$attrId}` {$attrType}");
+            $table->rawColumn('`'.$attributeId.'` '.$sqlType);
         }
 
         foreach ($indexes as $index) {
-            $indexId = $this->filter($index->key);
-            $indexType = $index->type;
+            $indexId = $this->filter($index->getKey());
+            $indexType = $index->getType();
             $indexColumns = [];
 
-            foreach ($index->attributes as $nested => $attribute) {
-                $indexOrder = Index::direction($index->orders[$nested] ?? null);
+            foreach ($index->getIndexedAttributes() as $nested => $attribute) {
+                $indexOrder = Index::direction($index->getOrders()[$nested] ?? null);
 
                 if ($indexType === IndexType::Spatial && ! $this->supports(Capability::SpatialIndexOrder) && ! empty($indexOrder)) {
                     throw new DatabaseException('Spatial indexes with explicit orders are not supported. Remove the orders to create this index.');
@@ -190,8 +189,8 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
 
                 $indexColumns[] = $this->compileIndexColumn(
                     $indexAttribute,
-                    ! empty($hash[$indexAttribute]->array),
-                    (int) ($index->lengths[$nested] ?? 0),
+                    isset($hash[$indexAttribute]) && $hash[$indexAttribute]->isArray(),
+                    (int) ($index->getLengths()[$nested] ?? 0),
                     $indexType === IndexType::Fulltext ? '' : $indexOrder,
                 );
             }
@@ -405,9 +404,9 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
     public function updateAttribute(string $collection, Attribute $attribute, ?string $newKey = null): bool
     {
         $name = $this->filter($collection);
-        $id = $this->filter($attribute->key);
+        $id = $this->filter($attribute->getKey());
         $newKey = empty($newKey) ? null : $this->filter($newKey);
-        $sqlType = $this->getSQLType($attribute->type, $attribute->size, $attribute->signed, $attribute->array, $attribute->required);
+        $sqlType = $this->getSQLType($attribute->getType(), $attribute->getSize(), $attribute->isSigned(), $attribute->isArray(), $attribute->isRequired());
         $schema = $this->createSchemaBuilder();
         $tableRaw = $this->getSQLTableRaw($name);
 
@@ -451,11 +450,11 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         $storedAttributes = $collection->getAttribute('attributes', []);
         /** @var array<int, array<string, mixed>> $collectionAttributes */
         $collectionAttributes = \is_string($storedAttributes) ? (\json_decode($storedAttributes, true) ?? []) : [];
-        $id = $this->filter($index->key);
-        $type = $index->type;
-        $attributes = $index->attributes;
-        $lengths = $index->lengths;
-        $orders = $index->orders;
+        $id = $this->filter($index->getKey());
+        $type = $index->getType();
+        $attributes = $index->getIndexedAttributes();
+        $lengths = $index->getLengths();
+        $orders = $index->getOrders();
 
         $schema = $this->createSchemaBuilder();
         $tableName = $this->getSQLTableRaw($collection->getId());

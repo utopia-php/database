@@ -879,7 +879,7 @@ class QueryCacheTest extends TestCase
     {
         $queryCache = new QueryCache(new class (new RedisLeasableCache()) extends Cache {
             #[\Override]
-            public function save(string $key, mixed $data, string $hash = ''): bool|string|array
+            public function save(string $key, mixed $data, string $hash = '', int $ttl = 0): bool|string|array
             {
                 return $hash === '' ? false : parent::save($key, $data, $hash);
             }
@@ -963,7 +963,7 @@ class QueryCacheTest extends TestCase
     {
         $queryCache = new QueryCache(new class (new RedisLeasableCache()) extends Cache {
             #[\Override]
-            public function save(string $key, mixed $data, string $hash = ''): bool|string|array
+            public function save(string $key, mixed $data, string $hash = '', int $ttl = 0): bool|string|array
             {
                 return $hash === '' ? parent::save($key, $data, $hash) : false;
             }

@@ -15,6 +15,7 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Order as OrderException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
@@ -8700,6 +8701,17 @@ class Database
             } else {
                 $orderAttributes[] = '$sequence';
                 $orderTypes[] = Database::ORDER_ASC;
+            }
+        }
+
+        if (!empty($cursor)) {
+            foreach ($orderAttributes as $order) {
+                if (!$cursor->offsetExists($order)) {
+                    throw new OrderException(
+                        message: "Order attribute '{$order}' is missing from the cursor",
+                        attribute: $order
+                    );
+                }
             }
         }
 

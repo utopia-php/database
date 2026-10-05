@@ -672,11 +672,11 @@ coroutine that opened it and the coroutines it starts; see [Pools and profiling]
   session gone: only a commit that failed with a primary change, shutdown, time limit or label is sent again, and a
   retry the client could not send is tried once more. If the commit still cannot be confirmed, `withTransaction()`
   throws `Utopia\Database\Exception\Unconfirmed`, whose `getPrevious()` is the first commit error, and does not run
-  the callback again: treat the work as possibly committed and re-read before acting on it. The
-  transaction's queued `document_purge` events still fire, because its writes may be stored. 7.x ran the whole callback
-  again, which could store its writes twice. A schema call whose definition write ends in `Unconfirmed` rethrows it
-  unchanged and keeps the table, column or index, as after a failure once the definition is stored (see below). On a
-  sharded cluster (`mongos`) the adapter runs without transactions, as on a standalone server.
+  the callback again: treat the work as possibly committed and re-read before acting on it. The queued
+  `document_purge` events of its last attempt still fire, because its writes may be stored. 7.x ran the whole
+  callback again, which could store its writes twice. A schema call whose definition write ends in `Unconfirmed`
+  rethrows it unchanged and keeps the table, column or index, as after a failure once the definition is stored (see
+  below). On a sharded cluster (`mongos`) the adapter runs without transactions, as on a standalone server.
 - **Commits the server reports aborted.** On MongoDB, a commit that the server reports aborted (`NoSuchTransaction`
   (251) or `WriteConflict` (112)) stored nothing, so `withTransaction()` runs the callback again, within its usual 2
   retries, whether it was the first commit or a retry; when the retries run out it throws `Utopia\Database\Exception`

@@ -1260,7 +1260,7 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
      */
     abstract protected function quote(string $string): string;
 
-    abstract protected function execute(mixed $stmt): bool;
+    abstract protected function execute(mixed $statement): bool;
 
     /**
      * @return mixed

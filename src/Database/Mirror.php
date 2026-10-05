@@ -162,8 +162,8 @@ class Mirror extends Database
 
         try {
             $this->destination->{$method}(...$args);
-        } catch (Throwable $err) {
-            $this->logError($method, $err);
+        } catch (Throwable $error) {
+            $this->logError($method, $error);
         }
 
         return $sourceResult;
@@ -757,8 +757,8 @@ class Mirror extends Database
                     'status' => 'upgraded',
                 ]));
             });
-        } catch (Throwable $err) {
-            $this->logError('createCollection', $err);
+        } catch (Throwable $error) {
+            $this->logError('createCollection', $error);
         }
 
         return $result instanceof Collection ? $result : Collection::fromArray($result->getArrayCopy());
@@ -794,8 +794,8 @@ class Mirror extends Database
             $result = $filtered;
 
             $destination->updateCollection($id, $permissions, $documentSecurity);
-        } catch (Throwable $err) {
-            $this->logError('updateCollection', $err);
+        } catch (Throwable $error) {
+            $this->logError('updateCollection', $error);
         }
 
         return $result;
@@ -825,8 +825,8 @@ class Mirror extends Database
                     collectionId: $id,
                 );
             }
-        } catch (Throwable $err) {
-            $this->logError('deleteCollection', $err);
+        } catch (Throwable $error) {
+            $this->logError('deleteCollection', $error);
         }
 
         return $result;
@@ -848,13 +848,14 @@ class Mirror extends Database
 
         try {
             $document = $attribute->toDocument();
+            $attributeId = $attribute->getKey();
 
             foreach ($this->writeFilters as $filter) {
                 $document = $filter->beforeCreateAttribute(
                     source: $this->source,
                     destination: $destination,
                     collectionId: $collection,
-                    attributeId: $attribute->getKey(),
+                    attributeId: $attributeId,
                     attribute: $document,
                 );
                 if ($document === null) {
@@ -866,8 +867,8 @@ class Mirror extends Database
                 $filteredAttribute = Attribute::fromDocument($document);
                 $result = $destination->createAttribute($collection, $filteredAttribute);
             }
-        } catch (Throwable $err) {
-            $this->logError('createAttribute', $err);
+        } catch (Throwable $error) {
+            $this->logError('createAttribute', $error);
         }
 
         return $result;
@@ -891,13 +892,14 @@ class Mirror extends Database
             $filteredAttributes = [];
             foreach ($attributes as $attribute) {
                 $document = $attribute->toDocument();
+                $attributeId = $attribute->getKey();
 
                 foreach ($this->writeFilters as $filter) {
                     $document = $filter->beforeCreateAttribute(
                         source: $this->source,
                         destination: $destination,
                         collectionId: $collection,
-                        attributeId: $attribute->getKey(),
+                        attributeId: $attributeId,
                         attribute: $document,
                     );
                     if ($document === null) {
@@ -916,8 +918,8 @@ class Mirror extends Database
                     $filteredAttributes,
                 );
             }
-        } catch (Throwable $err) {
-            $this->logError('createAttributes', $err);
+        } catch (Throwable $error) {
+            $this->logError('createAttributes', $error);
         }
 
         return $result;
@@ -982,8 +984,8 @@ class Mirror extends Database
                 $typedAttribute->getFilters() ?: null,
                 $newKey,
             );
-        } catch (Throwable $err) {
-            $this->logError('updateAttribute', $err);
+        } catch (Throwable $error) {
+            $this->logError('updateAttribute', $error);
         }
 
         return $document;
@@ -1014,8 +1016,8 @@ class Mirror extends Database
             }
 
             $destination->deleteAttribute($collection, $id);
-        } catch (Throwable $err) {
-            $this->logError('deleteAttribute', $err);
+        } catch (Throwable $error) {
+            $this->logError('deleteAttribute', $error);
         }
 
         return $result;
@@ -1037,13 +1039,14 @@ class Mirror extends Database
 
         try {
             $document = $index->toDocument();
+            $indexId = $index->getKey();
 
             foreach ($this->writeFilters as $filter) {
                 $document = $filter->beforeCreateIndex(
                     source: $this->source,
                     destination: $destination,
                     collectionId: $collection,
-                    indexId: $index->getKey(),
+                    indexId: $indexId,
                     index: $document,
                 );
                 if ($document === null) {
@@ -1055,8 +1058,8 @@ class Mirror extends Database
                 $filteredIndex = Index::fromDocument($document);
                 $result = $destination->createIndex($collection, $filteredIndex);
             }
-        } catch (Throwable $err) {
-            $this->logError('createIndex', $err);
+        } catch (Throwable $error) {
+            $this->logError('createIndex', $error);
         }
 
         return $result;
@@ -1087,8 +1090,8 @@ class Mirror extends Database
                     indexId: $id,
                 );
             }
-        } catch (Throwable $err) {
-            $this->logError('deleteIndex', $err);
+        } catch (Throwable $error) {
+            $this->logError('deleteIndex', $error);
         }
 
         return $result;
@@ -1137,8 +1140,8 @@ class Mirror extends Database
                     document: $clone,
                 );
             }
-        } catch (Throwable $err) {
-            $this->logError('createDocument', $err);
+        } catch (Throwable $error) {
+            $this->logError('createDocument', $error);
         }
 
         return $this->decorate(Event::DocumentCreate, $collection, $document);
@@ -1191,8 +1194,8 @@ class Mirror extends Database
 
                 $clones[] = $clone;
             }
-        } catch (Throwable $err) {
-            $this->logError('createDocuments', $err);
+        } catch (Throwable $error) {
+            $this->logError('createDocuments', $error);
 
             return $modified;
         }
@@ -1279,8 +1282,8 @@ class Mirror extends Database
                     document: $clone,
                 );
             }
-        } catch (Throwable $err) {
-            $this->logError('updateDocument', $err);
+        } catch (Throwable $error) {
+            $this->logError('updateDocument', $error);
         }
 
         return $this->decorate(Event::DocumentUpdate, $collection, $document);
@@ -1332,8 +1335,8 @@ class Mirror extends Database
                     queries: $queries,
                 );
             }
-        } catch (Throwable $err) {
-            $this->logError('updateDocuments', $err);
+        } catch (Throwable $error) {
+            $this->logError('updateDocuments', $error);
 
             return $modified;
         }
@@ -1417,8 +1420,8 @@ class Mirror extends Database
 
                 $clones[] = $clone;
             }
-        } catch (Throwable $err) {
-            $this->logError($action, $err);
+        } catch (Throwable $error) {
+            $this->logError($action, $error);
 
             return $modified;
         }
@@ -1476,8 +1479,8 @@ class Mirror extends Database
                     documentId: $id,
                 );
             }
-        } catch (Throwable $err) {
-            $this->logError('deleteDocument', $err);
+        } catch (Throwable $error) {
+            $this->logError('deleteDocument', $error);
 
             return $result;
         }
@@ -1538,8 +1541,8 @@ class Mirror extends Database
                     queries: $queries,
                 );
             }
-        } catch (Throwable $err) {
-            $this->logError('deleteDocuments', $err);
+        } catch (Throwable $error) {
+            $this->logError('deleteDocuments', $error);
 
             return $modified;
         }
@@ -1934,10 +1937,10 @@ class Mirror extends Database
         return \array_map(static fn (Document $document): string => $document->getId(), $documents);
     }
 
-    protected function logError(string $action, Throwable $err): void
+    protected function logError(string $action, Throwable $error): void
     {
         foreach ($this->errorCallbacks as $callback) {
-            $callback($action, $err);
+            $callback($action, $error);
         }
     }
 

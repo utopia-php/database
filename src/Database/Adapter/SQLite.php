@@ -306,11 +306,11 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
     }
 
     /**
-     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $stmt
+     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $statement
      */
-    protected function execute(mixed $stmt, ?Event $event = null): bool
+    protected function execute(mixed $statement, ?Event $event = null): bool
     {
-        return $this->executeAndProfile($stmt);
+        return $this->executeAndProfile($statement);
     }
 
     /**
@@ -503,7 +503,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         foreach ($attributes as $key => $attribute) {
             $attributeId = $this->filter($attribute->getKey());
 
-            $attributeType = $this->getSQLType(
+            $sqlType = $this->getSQLType(
                 $attribute->getType(),
                 $attribute->getSize(),
                 $attribute->isSigned(),
@@ -511,7 +511,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
                 $attribute->isRequired()
             );
 
-            $attributeStrings[$key] = "`{$attributeId}` {$attributeType}, ";
+            $attributeStrings[$key] = '`'.$attributeId.'` '.$sqlType.', ';
         }
 
         // SQLite stores integers regardless of declared type, but
@@ -573,16 +573,16 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
                     ttl: $index->getTtl(),
                 ), event: Event::CollectionCreate);
             }
-        } catch (Throwable $e) {
-            if ($e instanceof PDOException) {
-                $e = $this->processException($e);
+        } catch (Throwable $error) {
+            if ($error instanceof PDOException) {
+                $error = $this->processException($error);
             }
 
-            if ($created && ! $e instanceof DuplicateException) {
+            if ($created && ! $error instanceof DuplicateException) {
                 $this->discardCreatedCollection($id);
             }
 
-            throw $e;
+            throw $error;
         }
 
         return true;
@@ -1065,9 +1065,9 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
 
         $old = $this->filter($old);
         $new = $this->filter($new);
-        $rawIdxs = $collection->getAttribute('indexes', '[]');
+        $storedIndexes = $collection->getAttribute('indexes', '[]');
         /** @var array<int, array<string, mixed>> $indexes */
-        $indexes = \json_decode(\is_string($rawIdxs) ? $rawIdxs : '[]', true) ?? [];
+        $indexes = \json_decode(\is_string($storedIndexes) ? $storedIndexes : '[]', true) ?? [];
         /** @var array<string, mixed>|null $index */
         $index = null;
 
@@ -1086,8 +1086,8 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
                 Index::fromArray([
                     'key' => $new,
                     'type' => \is_string($index['type'] ?? null) ? (string) $index['type'] : '',
-                    'attributes' => \array_map(fn (mixed $v): string => \is_scalar($v) ? (string) $v : '', \is_array($index['attributes'] ?? null) ? $index['attributes'] : []),
-                    'lengths' => \array_map(fn (mixed $v): int => \is_numeric($v) ? (int) $v : 0, \is_array($index['lengths'] ?? null) ? $index['lengths'] : []),
+                    'attributes' => \array_map(fn (mixed $value): string => \is_scalar($value) ? (string) $value : '', \is_array($index['attributes'] ?? null) ? $index['attributes'] : []),
+                    'lengths' => \array_map(fn (mixed $value): int => \is_numeric($value) ? (int) $value : 0, \is_array($index['lengths'] ?? null) ? $index['lengths'] : []),
                     'orders' => \is_array($index['orders'] ?? null) ? $index['orders'] : [],
                 ]),
                 event: Event::IndexRename,

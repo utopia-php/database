@@ -177,9 +177,11 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
             $indexId = $this->filter($index->getKey());
             $indexType = $index->getType();
             $indexColumns = [];
+            $indexOrders = $index->getOrders();
+            $indexLengths = $index->getLengths();
 
             foreach ($index->getIndexedAttributes() as $nested => $attribute) {
-                $indexOrder = Index::direction($index->getOrders()[$nested] ?? null);
+                $indexOrder = Index::direction($indexOrders[$nested] ?? null);
 
                 if ($indexType === IndexType::Spatial && ! $this->supports(Capability::SpatialIndexOrder) && ! empty($indexOrder)) {
                     throw new DatabaseException('Spatial indexes with explicit orders are not supported. Remove the orders to create this index.');
@@ -190,7 +192,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
                 $indexColumns[] = $this->compileIndexColumn(
                     $indexAttribute,
                     isset($hash[$indexAttribute]) && $hash[$indexAttribute]->isArray(),
-                    (int) ($index->getLengths()[$nested] ?? 0),
+                    (int) ($indexLengths[$nested] ?? 0),
                     $indexType === IndexType::Fulltext ? '' : $indexOrder,
                 );
             }
@@ -217,23 +219,23 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         $collectionResult = $table->create();
         $collection = $collectionResult->query;
 
-        $permsTable = $schema->table($this->getSQLTableRaw(Storage::permissionsTable($id)));
-        $permsTable->id(Storage::SEQUENCE);
-        $permsTable->string(Storage::PERM_TYPE, 12);
-        $permsTable->string(Storage::PERM_PERMISSION, 255);
-        $permsTable->string(Storage::PERM_DOCUMENT, 255);
+        $permissionsTable = $schema->table($this->getSQLTableRaw(Storage::permissionsTable($id)));
+        $permissionsTable->id(Storage::SEQUENCE);
+        $permissionsTable->string(Storage::PERM_TYPE, 12);
+        $permissionsTable->string(Storage::PERM_PERMISSION, 255);
+        $permissionsTable->string(Storage::PERM_DOCUMENT, 255);
 
         if ($sharedTables) {
-            $permsTable->integer(Storage::TENANT)->unsigned()->nullable()->default(null);
-            $permsTable->uniqueIndex([Storage::PERM_DOCUMENT, Storage::TENANT, Storage::PERM_TYPE, Storage::PERM_PERMISSION], Storage::INDEX_1);
-            $permsTable->index([Storage::TENANT, Storage::PERM_PERMISSION, Storage::PERM_TYPE], Storage::PERM_PERMISSION);
+            $permissionsTable->integer(Storage::TENANT)->unsigned()->nullable()->default(null);
+            $permissionsTable->uniqueIndex([Storage::PERM_DOCUMENT, Storage::TENANT, Storage::PERM_TYPE, Storage::PERM_PERMISSION], Storage::INDEX_1);
+            $permissionsTable->index([Storage::TENANT, Storage::PERM_PERMISSION, Storage::PERM_TYPE], Storage::PERM_PERMISSION);
         } else {
-            $permsTable->uniqueIndex([Storage::PERM_DOCUMENT, Storage::PERM_TYPE, Storage::PERM_PERMISSION], Storage::INDEX_1);
-            $permsTable->index([Storage::PERM_PERMISSION, Storage::PERM_TYPE], Storage::PERM_PERMISSION);
+            $permissionsTable->uniqueIndex([Storage::PERM_DOCUMENT, Storage::PERM_TYPE, Storage::PERM_PERMISSION], Storage::INDEX_1);
+            $permissionsTable->index([Storage::PERM_PERMISSION, Storage::PERM_TYPE], Storage::PERM_PERMISSION);
         }
 
-        $permsResult = $permsTable->create();
-        $permissions = $permsResult->query;
+        $permissionsResult = $permissionsTable->create();
+        $permissions = $permissionsResult->query;
 
         $created = false;
 
@@ -241,8 +243,8 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
             $this->executeStatement($collection, Event::CollectionCreate);
             $created = true;
             $this->executeStatement($permissions, Event::CollectionCreate);
-        } catch (PDOException $e) {
-            $error = $this->processException($e);
+        } catch (PDOException $exception) {
+            $error = $this->processException($exception);
 
             if ($created && ! $error instanceof DuplicateException) {
                 $this->discardCreatedCollection($id);
@@ -425,8 +427,8 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
 
         try {
             return $this->executeStatement($sql, Event::AttributeUpdate);
-        } catch (PDOException $e) {
-            throw $this->processException($e);
+        } catch (PDOException $error) {
+            throw $this->processException($error);
         }
     }
 
@@ -460,7 +462,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         $tableName = $this->getSQLTableRaw($collection->getId());
 
         $columns = [];
-        foreach ($attributes as $i => $key) {
+        foreach ($attributes as $position => $key) {
             $attribute = null;
             foreach ($collectionAttributes as $collectionAttribute) {
                 $attributeId = $collectionAttribute[Document::ID] ?? '';
@@ -473,8 +475,8 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
             $columns[] = $this->compileIndexColumn(
                 $this->filter($this->getInternalKeyForAttribute($key)),
                 ! empty($attribute['array']),
-                (int) ($lengths[$i] ?? 0),
-                $type === IndexType::Fulltext ? '' : Index::direction($orders[$i] ?? null),
+                (int) ($lengths[$position] ?? 0),
+                $type === IndexType::Fulltext ? '' : Index::direction($orders[$position] ?? null),
             );
         }
 
@@ -502,8 +504,8 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
 
         try {
             return $this->executeStatement($sql, Event::IndexCreate);
-        } catch (PDOException $e) {
-            throw $this->processException($e);
+        } catch (PDOException $error) {
+            throw $this->processException($error);
         }
     }
 
@@ -1011,18 +1013,18 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
     private int $appliedRound = 0;
 
     /**
-     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $stmt
+     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $statement
      */
-    protected function execute(mixed $stmt, ?Event $event = null): bool
+    protected function execute(mixed $statement, ?Event $event = null): bool
     {
-        $event ??= $this->getStatementEvent($stmt);
+        $event ??= $this->getStatementEvent($statement);
         $baseline = $this->getTimeout();
         $timeout = $event === null ? $baseline : $this->getTimeout($event);
         $this->applyTimeout($timeout);
 
         $exception = null;
         try {
-            return parent::execute($stmt, $event);
+            return parent::execute($statement, $event);
         } catch (Throwable $error) {
             $exception = $error;
             throw $error;

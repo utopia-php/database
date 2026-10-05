@@ -106,8 +106,8 @@ trait Attributes
                 $filters,
                 $schemaAttributes
             );
-        } catch (DuplicateException $e) {
-            $existsInSchema = $this->reconcileSchemaOnlyColumn($collection, $attribute, $schemaAttributes, $e);
+        } catch (DuplicateException $error) {
+            $existsInSchema = $this->reconcileSchemaOnlyColumn($collection, $attribute, $schemaAttributes, $error);
         }
 
         $created = false;
@@ -119,8 +119,8 @@ trait Attributes
                 if (! $created) {
                     throw new DatabaseException('Failed to create attribute');
                 }
-            } catch (MismatchException $e) {
-                throw $e;
+            } catch (MismatchException $error) {
+                throw $error;
             } catch (DuplicateException) {
                 // Attribute not in metadata (orphan detection above confirmed this).
                 // A DuplicateException from the adapter means the column exists only
@@ -216,8 +216,8 @@ trait Attributes
                     $attribute->getFilters(),
                     $schemaAttributes
                 );
-            } catch (DuplicateException $e) {
-                $existsInSchema = $this->reconcileSchemaOnlyColumn($collection, $attribute, $schemaAttributes, $e);
+            } catch (DuplicateException $error) {
+                $existsInSchema = $this->reconcileSchemaOnlyColumn($collection, $attribute, $schemaAttributes, $error);
             }
 
             $attributeModels[] = $attribute;
@@ -234,20 +234,20 @@ trait Attributes
                     throw new DatabaseException('Failed to create attributes');
                 }
                 $createdAttributes = $attributesToCreate;
-            } catch (MismatchException $e) {
-                throw $e;
+            } catch (MismatchException $error) {
+                throw $error;
             } catch (DuplicateException) {
                 // Batch failed because at least one column already exists.
                 // Fallback to per-attribute creation so non-duplicates still land in schema.
-                foreach ($attributesToCreate as $attr) {
+                foreach ($attributesToCreate as $attributeToCreate) {
                     try {
                         $this->adapter->createAttribute(
                             $collection->getId(),
-                            $attr
+                            $attributeToCreate
                         );
-                        $createdAttributes[] = $attr;
-                    } catch (MismatchException $e) {
-                        throw $e;
+                        $createdAttributes[] = $attributeToCreate;
+                    } catch (MismatchException $error) {
+                        throw $error;
                     } catch (DuplicateException) {
                         // Column already exists in schema — skip
                     }
@@ -308,8 +308,9 @@ trait Attributes
     ): bool {
         /** @var array<Attribute> $attributes */
         $attributes = $collection->getAttribute('attributes', []);
+        $key = \strtolower($attribute->getKey());
         foreach ($attributes as $existing) {
-            if (\strtolower($existing->getKey()) === \strtolower($attribute->getKey())) {
+            if (\strtolower($existing->getKey()) === $key) {
                 throw $duplicate;
             }
         }
@@ -755,14 +756,14 @@ trait Attributes
     public function updateAttribute(string $collection, string $id, ColumnType|string|null $type = null, ?int $size = null, ?bool $required = null, mixed $default = null, ?bool $signed = null, ?bool $array = null, ?string $format = null, ?array $formatOptions = null, ?array $filters = null, ?string $newKey = null): Document
     {
         $type = $type === null ? null : Attribute::normalizeType($type)->value;
-        $collectionDoc = $this->silent(fn () => $this->getCollection($collection));
+        $collectionDocument = $this->silent(fn () => $this->getCollection($collection));
 
-        if ($collectionDoc->getId() === self::METADATA) {
+        if ($collectionDocument->getId() === self::METADATA) {
             throw new DatabaseException('Cannot update metadata attributes');
         }
 
         /** @var array<Attribute> $attributes */
-        $attributes = $collectionDoc->getAttribute('attributes', []);
+        $attributes = $collectionDocument->getAttribute('attributes', []);
         $attributeIndex = \array_search($id, \array_map(fn (Attribute $attribute) => $attribute->getKey(), $attributes), true);
 
         if ($attributeIndex === false) {
@@ -786,7 +787,7 @@ trait Attributes
 
         $originalIndexes = [];
         /** @var array<Document> $collectionIndexes */
-        $collectionIndexes = $collectionDoc->getAttribute('indexes', []);
+        $collectionIndexes = $collectionDocument->getAttribute('indexes', []);
         foreach ($collectionIndexes as $index) {
             $originalIndexes[] = clone $index;
         }
@@ -969,13 +970,13 @@ trait Attributes
             ->setAttribute('default', $default);
 
         /** @var array<Attribute> $attributes */
-        $attributes = $collectionDoc->getAttribute('attributes', []);
+        $attributes = $collectionDocument->getAttribute('attributes', []);
         $attributes[$attributeIndex] = $attribute;
-        $collectionDoc->setAttribute('attributes', $attributes, SetType::Assign);
+        $collectionDocument->setAttribute('attributes', $attributes, SetType::Assign);
 
         if (
             $this->adapter->getDocumentSizeLimit() > 0 &&
-            $this->adapter->getAttributeWidth($collectionDoc) >= $this->adapter->getDocumentSizeLimit()
+            $this->adapter->getAttributeWidth($collectionDocument) >= $this->adapter->getDocumentSizeLimit()
         ) {
             throw new LimitException('Row width limit reached. Cannot update attribute.');
         }
@@ -988,7 +989,7 @@ trait Attributes
             }
 
             /** @var array<Index> $spatialIndexes */
-            $spatialIndexes = $collectionDoc->getAttribute('indexes', []);
+            $spatialIndexes = $collectionDocument->getAttribute('indexes', []);
             foreach ($spatialIndexes as $typedIndex) {
                 if ($typedIndex->getType() !== IndexType::Spatial) {
                     continue;
@@ -1011,24 +1012,20 @@ trait Attributes
 
         if ($altering) {
             /** @var array<Document> $indexes */
-            $indexes = $collectionDoc->getAttribute('indexes', []);
+            $indexes = $collectionDocument->getAttribute('indexes', []);
 
             if (! \is_null($newKey) && $id !== $newKey) {
                 foreach ($indexes as $index) {
-                    /** @var array<string> $indexAttrList */
-                    $indexAttrList = (array) $index['attributes'];
-                    if (in_array($id, $indexAttrList)) {
-                        $index['attributes'] = array_map(fn ($attribute) => $attribute === $id ? $newKey : $attribute, $indexAttrList);
+                    /** @var array<string> $indexAttributes */
+                    $indexAttributes = (array) $index['attributes'];
+                    if (in_array($id, $indexAttributes)) {
+                        $index['attributes'] = array_map(fn ($attribute) => $attribute === $id ? $newKey : $attribute, $indexAttributes);
                     }
                 }
-
-                /**
-                 * Check index dependency if we are changing the key
-                 */
-                /** @var array<Index> $depIndexes */
-                $depIndexes = $collectionDoc->getAttribute('indexes', []);
+                /** @var array<Index> $dependentIndexes */
+                $dependentIndexes = $collectionDocument->getAttribute('indexes', []);
                 $validator = new IndexDependencyValidator(
-                    $depIndexes,
+                    $dependentIndexes,
                     $this->adapter->supports(Capability::CastIndexArray),
                 );
 
@@ -1070,7 +1067,7 @@ trait Attributes
                 }
             }
 
-            $updateAttrModel = new Attribute(
+            $updatedAttribute = new Attribute(
                 key: $id,
                 type: Attribute::normalizeType($type),
                 size: $size,
@@ -1082,7 +1079,7 @@ trait Attributes
                 formatOptions: $formatOptions ?? [],
                 filters: $filters ?? [],
             );
-            $updated = $this->adapter->updateAttribute($collection, $updateAttrModel, $newKey);
+            $updated = $this->adapter->updateAttribute($collection, $updatedAttribute, $newKey);
 
             if (! $updated) {
                 throw new DatabaseException('Failed to update attribute');
@@ -1095,9 +1092,9 @@ trait Attributes
             }
         }
 
-        $collectionDoc->setAttribute('attributes', $attributes);
+        $collectionDocument->setAttribute('attributes', $attributes);
 
-        $rollbackAttrModel = new Attribute(
+        $rollbackAttribute = new Attribute(
             key: $newKey ?? $id,
             type: Attribute::normalizeType($originalType),
             size: $originalSize,
@@ -1106,10 +1103,10 @@ trait Attributes
             array: $originalArray,
         );
         $this->updateMetadata(
-            collection: $collectionDoc,
+            collection: $collectionDocument,
             rollbackOperation: fn () => $this->adapter->updateAttribute(
                 $collection,
-                $rollbackAttrModel,
+                $rollbackAttribute,
                 $originalKey
             ),
             shouldRollback: $updated,
@@ -1207,10 +1204,10 @@ trait Attributes
         }
 
         if ($this->validation()->get()) {
-            /** @var array<Index> $depIndexes */
-            $depIndexes = $collection->getAttribute('indexes', []);
+            /** @var array<Index> $dependentIndexes */
+            $dependentIndexes = $collection->getAttribute('indexes', []);
             $validator = new IndexDependencyValidator(
-                $depIndexes,
+                $dependentIndexes,
                 $this->adapter->supports(Capability::CastIndexArray),
             );
 
@@ -1223,7 +1220,7 @@ trait Attributes
             /** @var array<string> $indexAttributes */
             $indexAttributes = $index->getAttribute('attributes', []);
 
-            $indexAttributes = \array_filter($indexAttributes, fn ($attr) => $attr !== $id);
+            $indexAttributes = \array_filter($indexAttributes, fn ($indexAttribute) => $indexAttribute !== $id);
 
             if (empty($indexAttributes)) {
                 unset($indexes[$indexKey]);
@@ -1245,16 +1242,16 @@ trait Attributes
             // Ignore
         }
 
-        $rawAttrTypeForRollback = $attribute->getAttribute('type');
-        $rawAttrSizeForRollback = $attribute->getAttribute('size');
-        /** @var string $rollbackAttrType */
-        $rollbackAttrType = \is_string($rawAttrTypeForRollback) ? $rawAttrTypeForRollback : '';
-        /** @var int $rollbackAttrSize */
-        $rollbackAttrSize = \is_int($rawAttrSizeForRollback) ? $rawAttrSizeForRollback : 0;
-        $rollbackAttr = new Attribute(
+        $storedType = $attribute->getAttribute('type');
+        $storedSize = $attribute->getAttribute('size');
+        /** @var string $rollbackType */
+        $rollbackType = \is_string($storedType) ? $storedType : '';
+        /** @var int $rollbackSize */
+        $rollbackSize = \is_int($storedSize) ? $storedSize : 0;
+        $rollbackAttribute = new Attribute(
             key: $id,
-            type: Attribute::normalizeType($rollbackAttrType),
-            size: $rollbackAttrSize,
+            type: Attribute::normalizeType($rollbackType),
+            size: $rollbackSize,
             required: (bool) ($attribute->getAttribute('required') ?? false),
             signed: (bool) ($attribute->getAttribute('signed') ?? true),
             array: (bool) ($attribute->getAttribute('array') ?? false),
@@ -1263,7 +1260,7 @@ trait Attributes
             collection: $collection,
             rollbackOperation: fn () => $this->adapter->createAttribute(
                 $collection->getId(),
-                $rollbackAttr
+                $rollbackAttribute
             ),
             shouldRollback: $shouldRollback,
             operationDescription: "attribute deletion '{$id}'",
@@ -1327,10 +1324,10 @@ trait Attributes
         }
 
         if ($this->validation()->get()) {
-            /** @var array<Index> $renameDepIndexes */
-            $renameDepIndexes = $collection->getAttribute('indexes', []);
+            /** @var array<Index> $dependentIndexes */
+            $dependentIndexes = $collection->getAttribute('indexes', []);
             $validator = new IndexDependencyValidator(
-                $renameDepIndexes,
+                $dependentIndexes,
                 $this->adapter->supports(Capability::CastIndexArray),
             );
 
@@ -1346,7 +1343,7 @@ trait Attributes
             /** @var array<string> $indexAttributes */
             $indexAttributes = $index->getAttribute('attributes', []);
 
-            $indexAttributes = \array_map(fn ($attr) => ($attr === $old) ? $new : $attr, $indexAttributes);
+            $indexAttributes = \array_map(fn ($indexAttribute) => ($indexAttribute === $old) ? $new : $indexAttribute, $indexAttributes);
 
             $index->setAttribute('attributes', $indexAttributes);
         }
@@ -1357,10 +1354,10 @@ trait Attributes
             if (! $renamed) {
                 throw new DatabaseException('Failed to rename attribute');
             }
-        } catch (DuplicateException $e) {
-            throw $e;
-        } catch (Throwable $e) {
-            throw new DatabaseException("Failed to rename attribute '{$old}' to '{$new}': ".$e->getMessage(), previous: $e);
+        } catch (DuplicateException $error) {
+            throw $error;
+        } catch (Throwable $error) {
+            throw new DatabaseException("Failed to rename attribute '{$old}' to '{$new}': ".$error->getMessage(), previous: $error);
         }
 
         $collection->setAttribute('attributes', $attributes);

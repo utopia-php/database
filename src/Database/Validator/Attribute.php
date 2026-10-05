@@ -403,7 +403,6 @@ class Attribute extends Validator
                     throw new DatabaseException($this->message);
                 }
 
-                // Validate default value if provided
                 if ($default !== null) {
                     if (! is_array($default)) {
                         $this->message = 'Vector default value must be an array';

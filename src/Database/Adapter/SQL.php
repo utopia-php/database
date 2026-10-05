@@ -516,8 +516,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         try {
             return $this->executeStatement($sql, $event);
-        } catch (PDOException $e) {
-            throw $this->processException($e);
+        } catch (PDOException $error) {
+            throw $this->processException($error);
         }
     }
 
@@ -553,8 +553,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         try {
             return $this->executeStatement($sql, Event::AttributesCreate);
-        } catch (PDOException $e) {
-            throw $this->processException($e);
+        } catch (PDOException $error) {
+            throw $this->processException($error);
         }
     }
 
@@ -2584,16 +2584,16 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                      */
                     $total += match (true) {
                         $attributeSize > $this->getMaxVarcharLength() => 20,
-                        $attributeSize > 255 => $attributeSize * 4 + 2, //  VARCHAR(>255) + 2 length
-                        default => $attributeSize * 4 + 1, //  VARCHAR(<=255) + 1 length
+                        $attributeSize > 255 => $attributeSize * 4 + 2,
+                        default => $attributeSize * 4 + 1,
                     };
 
                     break;
 
                 case ColumnType::Varchar->value:
                     $total += match (true) {
-                        $attributeSize > 255 => $attributeSize * 4 + 2, //  VARCHAR(>255) + 2 length
-                        default => $attributeSize * 4 + 1, //  VARCHAR(<=255) + 1 length
+                        $attributeSize > 255 => $attributeSize * 4 + 2,
+                        default => $attributeSize * 4 + 1,
                     };
                     break;
 
@@ -3721,18 +3721,18 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
-     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $stmt
+     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $statement
      */
-    protected function execute(mixed $stmt, ?Event $event = null): bool
+    protected function execute(mixed $statement, ?Event $event = null): bool
     {
-        return $this->executeAndProfile($stmt);
+        return $this->executeAndProfile($statement);
     }
 
     /**
      * Run a prepared statement and hand it to the profiler when one is attached.
      *
      * Subclasses that wrap execute() with engine-specific timeout handling call
-     * this instead of $stmt->execute(), so the statement is still counted.
+     * this instead of $statement->execute(), so the statement is still counted.
      *
      * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $statement
      */

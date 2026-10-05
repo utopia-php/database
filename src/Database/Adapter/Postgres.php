@@ -327,16 +327,16 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
                     event: Event::CollectionCreate,
                 );
             }
-        } catch (Throwable $e) {
-            if ($e instanceof PDOException) {
-                $e = $this->processException($e);
+        } catch (Throwable $error) {
+            if ($error instanceof PDOException) {
+                $error = $this->processException($error);
             }
 
-            if ($created && ! ($e instanceof DuplicateException)) {
+            if ($created && ! ($error instanceof DuplicateException)) {
                 $this->discardCreatedCollection($id);
             }
 
-            throw $e;
+            throw $error;
         }
 
         return true;
@@ -470,8 +470,8 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
 
         try {
             return $this->executeStatement($sql, Event::AttributeCreate);
-        } catch (PDOException $e) {
-            throw $this->processException($e);
+        } catch (PDOException $error) {
+            throw $this->processException($error);
         }
     }
 
@@ -511,8 +511,8 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             /** @var array<string, string> $columns */
             $columns = $statement->fetchAll(PDO::FETCH_KEY_PAIR);
             $statement->closeCursor();
-        } catch (PDOException $e) {
-            throw $this->processException($e);
+        } catch (PDOException $error) {
+            throw $this->processException($error);
         }
 
         foreach ($attributes as $attribute) {
@@ -572,8 +572,8 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
 
             try {
                 $result = $this->executeStatement($sql, Event::AttributeUpdate);
-            } catch (PDOException $e) {
-                throw $this->processException($e);
+            } catch (PDOException $error) {
+                throw $this->processException($error);
             }
 
             if (! $result) {
@@ -608,8 +608,8 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             }
 
             return $ok;
-        } catch (PDOException $e) {
-            throw $this->processException($e);
+        } catch (PDOException $error) {
+            throw $this->processException($error);
         }
     }
 
@@ -751,12 +751,12 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         };
 
         $columns = [];
-        foreach ($attributes as $i => $attribute) {
+        foreach ($attributes as $position => $attribute) {
             $isNestedPath = isset($indexAttributeTypes[$attribute]) && \str_contains($attribute, '.') && $indexAttributeTypes[$attribute] === ColumnType::Object->value;
             $column = $isNestedPath
                 ? $this->buildJsonbPath($attribute, true)
                 : $this->quote($this->filter($this->getInternalKeyForAttribute($attribute)));
-            $order = $type === IndexType::Fulltext ? '' : Index::direction($orders[$i] ?? null);
+            $order = $type === IndexType::Fulltext ? '' : Index::direction($orders[$position] ?? null);
 
             $columns[] = $column
                 .($operatorClass !== '' ? ' '.$operatorClass : '')
@@ -790,8 +790,8 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
 
         try {
             return $this->executeStatement($sql, $event);
-        } catch (PDOException $e) {
-            throw $this->processException($e);
+        } catch (PDOException $error) {
+            throw $this->processException($error);
         }
     }
 
@@ -1379,23 +1379,23 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
     }
 
     /**
-     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $stmt
+     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $statement
      */
-    protected function execute(mixed $stmt, ?Event $event = null): bool
+    protected function execute(mixed $statement, ?Event $event = null): bool
     {
-        $event ??= $this->getStatementEvent($stmt);
+        $event ??= $this->getStatementEvent($statement);
         $timeout = $event === null ? $this->getTimeout() : $this->getTimeout($event);
 
         if ($this->inTransaction > 0) {
             $this->applyLocalTimeout($timeout);
 
-            return $this->executeAndProfile($stmt);
+            return $this->executeAndProfile($statement);
         }
 
         $this->localTimeout = 0;
 
         if ($timeout === 0) {
-            return $this->executeAndProfile($stmt);
+            return $this->executeAndProfile($statement);
         }
 
         $pdo = $this->getPDO();
@@ -1403,7 +1403,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
 
         $exception = null;
         try {
-            return $this->executeAndProfile($stmt);
+            return $this->executeAndProfile($statement);
         } catch (Throwable $error) {
             $exception = $error;
             throw $error;

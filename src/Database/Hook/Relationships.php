@@ -314,10 +314,10 @@ class Relationships implements Hook
      * Relate new related documents through $relate without reading each before creating it and reading it back
      * after, when none of them is stored yet. Where the adapter has savepoints, the new related documents and
      * their junction documents are prepared without being written, then written in the order they would have
-     * been written one by one, and any failure rolls the attempt back, restores every document it changed and
-     * relates them one by one instead, so a failing write fails the way it always has. Elsewhere each is written
-     * where it would have been written on its own, and a failure restores every document it changed, so a
-     * transaction that retries the write starts over from the documents it was given.
+     * been written one by one, and any failure rolls the attempt back and relates them one by one instead, so a
+     * failing write fails the way it always has. Elsewhere each is written where it would have been written on its
+     * own. Either way a failure restores every document it changed, so relating one by one, or a transaction that
+     * retries the write after the engine rolled it back, starts over from the documents it was given.
      *
      * @template T
      *
@@ -337,7 +337,7 @@ class Relationships implements Hook
             $this->copy($document, $copies);
         }
 
-        $attempt = function () use ($prepared, $coroutine, $relate): mixed {
+        $attempt = function () use ($prepared, $coroutine, $relate, $copies): mixed {
             $this->prepared[$coroutine] = $prepared;
 
             try {
@@ -345,26 +345,20 @@ class Relationships implements Hook
                 $this->writePrepared($prepared);
 
                 return $result;
+            } catch (Throwable $error) {
+                $this->restore($copies);
+
+                throw $error;
             } finally {
                 unset($this->prepared[$coroutine]);
             }
         };
 
         if (! $prepared->deferred) {
-            try {
-                return $attempt();
-            } catch (Throwable $error) {
-                $this->restore($copies);
-
-                throw $error;
-            }
+            return $attempt();
         }
 
-        return $this->db->withSavepoint($attempt, function () use ($coroutine, $relate, $copies): mixed {
-            $this->restore($copies);
-
-            return $this->relateOneByOne($coroutine, $relate);
-        });
+        return $this->db->withSavepoint($attempt, fn (): mixed => $this->relateOneByOne($coroutine, $relate));
     }
 
     /**
@@ -470,7 +464,11 @@ class Relationships implements Hook
         foreach ($this->relationships($collection) as $relationship) {
             /** @var string $key */
             $key = $relationship->getAttribute('key', $relationship->getId());
-            $value = $document->getAttribute($key);
+            try {
+                $value = $this->coerceToDocument($document, $key, $document->getAttribute($key));
+            } catch (RelationshipException) {
+                return false;
+            }
             $related = \array_values(\array_filter(
                 $value instanceof Document ? [$value] : (\is_array($value) ? $value : []),
                 static fn (mixed $item): bool => $item instanceof Document,

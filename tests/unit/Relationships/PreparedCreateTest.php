@@ -18,6 +18,7 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
+use Utopia\Database\Exception\Contention;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
@@ -169,6 +170,81 @@ final class PreparedCreateTest extends TestCase
         }
     }
 
+    public function testAFilterIsAppliedOnceWhenAnAssociativeValueHoldsAStoredDocument(): void
+    {
+        $filters = ['wrap' => [
+            'encode' => static fn (mixed $value): mixed => \is_string($value) ? '['.$value.']' : $value,
+            'decode' => static fn (mixed $value): mixed => \is_string($value) && \str_starts_with($value, '[') ? \substr($value, 1, -1) : $value,
+        ]];
+
+        foreach (['memory', 'sqlite'] as $engine) {
+            foreach ([self::ONE_BY_ONE, self::DEFERRED] as $mode) {
+                $database = $this->database($engine, $mode, filters: $filters);
+                foreach (['root', 'mid', 'side'] as $collection) {
+                    $database->createCollection(new Collection(id: $collection, attributes: [Attribute::string(key: 'name', size: 64)], permissions: self::permissions(), documentSecurity: true));
+                }
+                $database->createCollection(new Collection(id: 'leaf', attributes: [Attribute::string(key: 'name', size: 64, filters: ['wrap'])], permissions: self::permissions(), documentSecurity: true));
+                $database->createRelationship(Relationship::manyToOne(collection: 'root', relatedCollection: 'mid', twoWay: true, key: 'mid', twoWayKey: 'roots', onDelete: ForeignKeyAction::Cascade));
+                $database->createRelationship(Relationship::manyToOne(collection: 'root', relatedCollection: 'side', twoWay: true, key: 'side', twoWayKey: 'roots', onDelete: ForeignKeyAction::Cascade));
+                $database->createRelationship(Relationship::oneToMany(collection: 'mid', relatedCollection: 'leaf', twoWay: true, key: 'leaves', twoWayKey: 'mid', onDelete: ForeignKeyAction::Cascade));
+                $database->createDocument('leaf', new Document(['$id' => 'existing', 'name' => 'old']));
+
+                $database->createDocument('root', new Document([
+                    '$id' => 'root',
+                    'side' => new Document(['name' => 'side']),
+                    'mid' => ['name' => 'mid', 'leaves' => [new Document(['$id' => 'k1', 'name' => 'k1']), new Document(['$id' => 'existing', 'name' => 'new'])]],
+                ]));
+
+                $names = \array_map(
+                    static fn (string $id): mixed => $database->skipRelationships(static fn (): Document => $database->getDocument('leaf', $id))->getAttribute('name'),
+                    ['k1', 'existing'],
+                );
+                $this->assertSame(['k1', 'new'], $names, 'Relating '.$mode.' on '.$engine.' encoded a name more than once');
+            }
+        }
+    }
+
+    public function testALockConflictWhileWritingPreparedDocumentsIsRetried(): void
+    {
+        foreach ([true, false] as $prepare) {
+            $adapter = new class (new PDO('sqlite::memory:')) extends RelationshipSQLite {
+                private bool $conflicted = false;
+
+                #[\Override]
+                public function createDocument(Document $collection, Document $document): Document
+                {
+                    if (! $this->conflicted && $collection->getId() === 'children') {
+                        $this->conflicted = true;
+                        $this->getPDO()->exec('ROLLBACK');
+
+                        throw new Contention('Deadlock found when trying to get lock');
+                    }
+
+                    return parent::createDocument($collection, $document);
+                }
+            };
+
+            $authorization = new Authorization();
+            $authorization->addRole(Role::any()->toString());
+            $database = new Database($adapter, new Cache(new None()));
+            $database->setAuthorization($authorization)->setDatabase('prepared_create')->setNamespace('prepared');
+            $database->create();
+            $database->addHook(new Relationships($database, prepare: $prepare));
+            foreach (['parents', 'children'] as $collection) {
+                $database->createCollection(new Collection(id: $collection, attributes: [Attribute::string(key: 'name', size: 64)], permissions: self::permissions(), documentSecurity: false));
+            }
+            $database->createRelationship(Relationship::oneToMany(collection: 'parents', relatedCollection: 'children', twoWay: true, key: 'children', twoWayKey: 'parent'));
+
+            $database->createDocument('parents', new Document(['$id' => 'p1', 'name' => 'p1', 'children' => [new Document(['$id' => 'c1', 'name' => 'c1'])]]));
+
+            $this->assertSame(
+                ['c1'],
+                \array_map(static fn (Document $child): string => $child->getId(), $database->skipRelationships(static fn (): array => $database->find('children'))),
+                $prepare ? 'A prepared create was not retried' : 'A create related one by one was not retried',
+            );
+        }
+    }
+
     /**
      * @param  array<mixed>  $expected
      * @param  array<mixed>  $actual
@@ -278,6 +354,16 @@ final class PreparedCreateTest extends TestCase
                         new Document(['$id' => 'new', 'name' => 'new']),
                         new Document(['$id' => 'shared', 'name' => 'renamed']),
                     ],
+                ]), $create($database, 'level0')];
+            },
+            'associative related document holding a stored one' => static function (Database $database) use ($create): array {
+                self::chain($database, RelationType::ManyToOne, 2);
+                $database->createDocument('level2', new Document(['$id' => 'existing', 'name' => 'before']));
+
+                return [new Document([
+                    '$id' => 'root',
+                    'name' => 'root',
+                    'next' => ['name' => 'mid', 'next' => new Document(['$id' => 'existing', 'name' => 'after'])],
                 ]), $create($database, 'level0')];
             },
             'repeated related document' => static function (Database $database) use ($create): array {
@@ -586,7 +672,10 @@ final class PreparedCreateTest extends TestCase
         }
     }
 
-    private function database(string $engine, string $mode, ?int $tenant = null, bool $tenantPerDocument = false): Database
+    /**
+     * @param  array<string, array{encode: callable, decode: callable}>  $filters
+     */
+    private function database(string $engine, string $mode, ?int $tenant = null, bool $tenantPerDocument = false, array $filters = []): Database
     {
         $authorization = new Authorization();
         $authorization->addRole(Role::any()->toString());
@@ -596,7 +685,7 @@ final class PreparedCreateTest extends TestCase
             ? new RelationshipMemory($savepoints)
             : new RelationshipSQLite(new PDO('sqlite::memory:'), $savepoints);
 
-        $database = new Database($adapter, new Cache(new None()));
+        $database = new Database($adapter, new Cache(new None()), $filters);
         $database
             ->setAuthorization($authorization)
             ->setDatabase('prepared_create')

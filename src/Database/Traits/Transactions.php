@@ -74,13 +74,16 @@ trait Transactions
      * retrying it. When the callback throws, the savepoint is rolled back and the fallback's result is
      * returned instead.
      *
+     * @internal
+     *
      * @template T
      *
      * @param  callable(): T  $callback
      * @param  callable(Throwable): T  $fallback
      * @return T
      *
-     * @throws Throwable When the savepoint cannot be started, committed or rolled back
+     * @throws Throwable When the savepoint cannot be started or committed, or the callback's failure when the
+     *                   savepoint cannot be rolled back, as when the engine rolled the whole transaction back
      */
     public function withSavepoint(callable $callback, callable $fallback): mixed
     {
@@ -92,7 +95,13 @@ trait Transactions
         try {
             $result = $callback();
         } catch (Throwable $error) {
-            if (! $this->adapter->rollbackTransaction()) {
+            try {
+                $rolledBack = $this->adapter->rollbackTransaction();
+            } catch (Throwable) {
+                throw $error;
+            }
+
+            if (! $rolledBack) {
                 throw $error;
             }
 

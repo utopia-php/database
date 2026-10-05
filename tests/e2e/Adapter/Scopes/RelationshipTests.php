@@ -1943,9 +1943,7 @@ trait RelationshipTests
                 $this->assertSame('Missing read permission for the related document.', $e->getMessage());
             }
 
-            $stored = $database->getAuthorization()->skip(
-                fn () => $database->skipRelationships(fn () => $database->getDocument($parents, 'reference'))
-            );
+            $stored = $database->getDocument($parents, 'reference');
             $this->assertTrue($stored->isEmpty());
 
             $database->getAuthorization()->skip(fn () => $database->updateDocument($children, 'private', new Document([

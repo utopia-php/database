@@ -204,45 +204,145 @@ final class PreparedCreateTest extends TestCase
         }
     }
 
-    public function testALockConflictWhileWritingPreparedDocumentsIsRetried(): void
+    /**
+     * @return iterable<string, array{bool}>
+     */
+    public static function preparing(): iterable
     {
-        foreach ([true, false] as $prepare) {
-            $adapter = new class (new PDO('sqlite::memory:')) extends RelationshipSQLite {
-                private bool $conflicted = false;
+        yield 'prepared' => [true];
+        yield 'one by one' => [false];
+    }
 
-                #[\Override]
-                public function createDocument(Document $collection, Document $document): Document
-                {
-                    if (! $this->conflicted && $collection->getId() === 'children') {
-                        $this->conflicted = true;
-                        $this->getPDO()->exec('ROLLBACK');
+    #[DataProvider('preparing')]
+    public function testALockConflictWhileWritingPreparedDocumentsIsRetried(bool $prepare): void
+    {
+        $adapter = new class (new PDO('sqlite::memory:')) extends RelationshipSQLite {
+            private bool $conflicted = false;
 
-                        throw new Contention('Deadlock found when trying to get lock');
-                    }
+            #[\Override]
+            public function createDocument(Document $collection, Document $document): Document
+            {
+                if (! $this->conflicted && $collection->getId() === 'children') {
+                    $this->conflicted = true;
+                    $this->getPDO()->exec('ROLLBACK');
 
-                    return parent::createDocument($collection, $document);
+                    throw new Contention('Deadlock found when trying to get lock');
                 }
-            };
 
-            $authorization = new Authorization();
-            $authorization->addRole(Role::any()->toString());
-            $database = new Database($adapter, new Cache(new None()));
-            $database->setAuthorization($authorization)->setDatabase('prepared_create')->setNamespace('prepared');
-            $database->create();
-            $database->addHook(new Relationships($database, prepare: $prepare));
-            foreach (['parents', 'children'] as $collection) {
-                $database->createCollection(new Collection(id: $collection, attributes: [Attribute::string(key: 'name', size: 64)], permissions: self::permissions(), documentSecurity: false));
+                return parent::createDocument($collection, $document);
             }
-            $database->createRelationship(Relationship::oneToMany(collection: 'parents', relatedCollection: 'children', twoWay: true, key: 'children', twoWayKey: 'parent'));
+        };
+        $database = $this->family($adapter, $prepare);
 
-            $database->createDocument('parents', new Document(['$id' => 'p1', 'name' => 'p1', 'children' => [new Document(['$id' => 'c1', 'name' => 'c1'])]]));
+        $database->createDocument('parents', self::parent());
 
-            $this->assertSame(
-                ['c1'],
-                \array_map(static fn (Document $child): string => $child->getId(), $database->skipRelationships(static fn (): array => $database->find('children'))),
-                $prepare ? 'A prepared create was not retried' : 'A create related one by one was not retried',
-            );
+        $this->assertFamilyStored($database);
+    }
+
+    /**
+     * A lock wait that times out without the engine rolling the transaction back leaves the savepoint to roll back,
+     * but the conflicting lock is held until the whole transaction rolls back, so relating one by one in the same
+     * transaction would only wait for it again.
+     */
+    #[DataProvider('preparing')]
+    public function testALockConflictTheSavepointSurvivesIsLeftToTheTransactionRetry(bool $prepare): void
+    {
+        $adapter = new class (new PDO('sqlite::memory:')) extends RelationshipSQLite {
+            public int $lockWaits = 0;
+
+            public bool $locked = false;
+
+            #[\Override]
+            public function createDocument(Document $collection, Document $document): Document
+            {
+                if ($this->locked && $collection->getId() === 'children') {
+                    $this->lockWaits++;
+
+                    throw new Contention('Lock wait timeout exceeded; try restarting transaction');
+                }
+
+                return parent::createDocument($collection, $document);
+            }
+
+            #[\Override]
+            public function rollbackTransaction(): bool
+            {
+                $rolledBack = parent::rollbackTransaction();
+                if (! $this->inTransaction()) {
+                    $this->locked = false;
+                }
+
+                return $rolledBack;
+            }
+        };
+        $database = $this->family($adapter, $prepare);
+        $adapter->locked = true;
+
+        $database->createDocument('parents', self::parent());
+
+        $this->assertFamilyStored($database);
+        $this->assertSame(1, $adapter->lockWaits, 'A write waited for a lock its own transaction still held');
+    }
+
+    public function testADocumentWhosePreparedSavepointFailedToCommitIsRelatedAgainOnRetry(): void
+    {
+        $adapter = new class (new PDO('sqlite::memory:')) extends RelationshipSQLite {
+            public bool $failSavepointCommit = false;
+
+            #[\Override]
+            public function commitTransaction(): bool
+            {
+                if ($this->failSavepointCommit && $this->inTransaction > 1) {
+                    $this->failSavepointCommit = false;
+                    $this->getPDO()->exec('ROLLBACK');
+                    $this->inTransaction = 0;
+
+                    throw new Contention('Deadlock found when trying to get lock');
+                }
+
+                return parent::commitTransaction();
+            }
+        };
+        $database = $this->family($adapter, true);
+        $adapter->failSavepointCommit = true;
+
+        $database->createDocument('parents', self::parent());
+
+        $this->assertFalse($adapter->failSavepointCommit, 'The savepoint commit never failed');
+        $this->assertFamilyStored($database);
+    }
+
+    private function family(RelationshipSQLite $adapter, bool $prepare): Database
+    {
+        $authorization = new Authorization();
+        $authorization->addRole(Role::any()->toString());
+        $database = new Database($adapter, new Cache(new None()));
+        $database->setAuthorization($authorization)->setDatabase('prepared_create')->setNamespace('prepared');
+        $database->create();
+        $database->addHook(new Relationships($database, prepare: $prepare));
+        foreach (['parents', 'children'] as $collection) {
+            $database->createCollection(new Collection(id: $collection, attributes: [Attribute::string(key: 'name', size: 64)], permissions: self::permissions(), documentSecurity: false));
         }
+        $database->createRelationship(Relationship::oneToMany(collection: 'parents', relatedCollection: 'children', twoWay: true, key: 'children', twoWayKey: 'parent'));
+
+        return $database;
+    }
+
+    private static function parent(): Document
+    {
+        return new Document(['$id' => 'p1', 'name' => 'p1', 'children' => [new Document(['$id' => 'c1', 'name' => 'c1'])]]);
+    }
+
+    private function assertFamilyStored(Database $database): void
+    {
+        $parents = $database->skipRelationships(static fn (): array => $database->find('parents'));
+        $children = $database->skipRelationships(static fn (): array => $database->find('children'));
+
+        $this->assertSame(['p1'], \array_map(static fn (Document $parent): string => $parent->getId(), $parents));
+        $this->assertSame(
+            [['c1', 'p1']],
+            \array_map(static fn (Document $child): array => [$child->getId(), $child->getAttribute('parent')], $children),
+        );
     }
 
     /**

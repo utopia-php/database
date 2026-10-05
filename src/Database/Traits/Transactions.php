@@ -72,7 +72,8 @@ trait Transactions
     /**
      * Run the callback in a savepoint of the open transaction, which the adapter must support, without
      * retrying it. When the callback throws, the savepoint is rolled back and the fallback's result is
-     * returned instead.
+     * returned instead, unless the failure is one the transaction retries (see Adapter::isRetryable()), such
+     * as a lock conflict whose lock the open transaction holds until it rolls back.
      *
      * @internal
      *
@@ -83,7 +84,8 @@ trait Transactions
      * @return T
      *
      * @throws Throwable When the savepoint cannot be started or committed, or the callback's failure when the
-     *                   savepoint cannot be rolled back, as when the engine rolled the whole transaction back
+     *                   transaction retries it or the savepoint cannot be rolled back, as when the engine rolled
+     *                   the whole transaction back
      */
     public function withSavepoint(callable $callback, callable $fallback): mixed
     {
@@ -101,7 +103,7 @@ trait Transactions
                 throw $error;
             }
 
-            if (! $rolledBack) {
+            if (! $rolledBack || $this->adapter->isRetryable($error)) {
                 throw $error;
             }
 

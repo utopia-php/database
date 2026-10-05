@@ -358,7 +358,22 @@ class Relationships implements Hook
             return $attempt();
         }
 
-        return $this->db->withSavepoint($attempt, fn (): mixed => $this->relateOneByOne($coroutine, $relate));
+        $replayed = false;
+        $replay = function () use ($coroutine, $relate, &$replayed): mixed {
+            $replayed = true;
+
+            return $this->relateOneByOne($coroutine, $relate);
+        };
+
+        try {
+            return $this->db->withSavepoint($attempt, $replay);
+        } catch (Throwable $error) {
+            if (! $replayed) {
+                $this->restore($copies);
+            }
+
+            throw $error;
+        }
     }
 
     /**

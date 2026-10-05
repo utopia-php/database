@@ -40,3 +40,8 @@ function hookedFromOutside(Hooked $hooked): int
 {
     return $hooked->counter;
 }
+
+function hookedDynamicFromOutside(Hooked $hooked): bool
+{
+    return $hooked->{'flag'};
+}

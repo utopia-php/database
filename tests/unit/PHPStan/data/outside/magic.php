@@ -85,3 +85,8 @@ function dynamicName(Attribute $attribute, string $name): mixed
 {
     return $attribute->{$name};
 }
+
+function constantDynamicName(Attribute $attribute): mixed
+{
+    return $attribute->{'key'};
+}

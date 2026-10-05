@@ -21,6 +21,6 @@ services:
     -
         class: Tests\Unit\PHPStan\MagicPropertyFetchRule
         arguments:
-            sourceDirectory: %currentWorkingDirectory%/src
+            sourceDirectory: %rootDir%/../../../src
         tags:
             - phpstan.rules.rule

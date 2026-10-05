@@ -13,12 +13,6 @@ final class LeasableHashCache implements CacheAdapter, Leasable
     /** @var array<string, int> */
     private array $generations = [];
 
-    /** @var array<string, int> */
-    private array $purges = [];
-
-    /** @var array<string, int> */
-    private array $writes = [];
-
     private bool $failActivations = false;
 
     public function load(string $key, int $ttl, string $hash = ''): mixed
@@ -45,7 +39,6 @@ final class LeasableHashCache implements CacheAdapter, Leasable
         }
 
         $hash = $hash === '' ? $key : $hash;
-        $this->writes[$key] = ($this->writes[$key] ?? 0) + 1;
         $this->store[$key][$hash] = ['time' => \time(), 'data' => $data];
 
         return $data;
@@ -85,7 +78,6 @@ final class LeasableHashCache implements CacheAdapter, Leasable
 
     public function purge(string $key, string $hash = ''): bool
     {
-        $this->purges[$key] = ($this->purges[$key] ?? 0) + 1;
         $this->generations[$key] = ($this->generations[$key] ?? 0) + 1;
 
         if ($hash === '') {
@@ -118,22 +110,6 @@ final class LeasableHashCache implements CacheAdapter, Leasable
     public function getName(?string $key = null): string
     {
         return 'leasable-hash';
-    }
-
-    public function resetPurges(): void
-    {
-        $this->purges = [];
-        $this->writes = [];
-    }
-
-    public function getPurges(string $key): int
-    {
-        return $this->purges[$key] ?? 0;
-    }
-
-    public function getWrites(string $key): int
-    {
-        return $this->writes[$key] ?? 0;
     }
 
     public function failActivations(): void

@@ -1325,6 +1325,10 @@ API might expect. [CHANGELOG.md](CHANGELOG.md) describes the features themselves
   joins below five keep semi-joins. Right after a collection is created or bulk-loaded, until InnoDB's automatic
   statistics recalculation has run (seconds, with the default `STATS_AUTO_RECALC`), a left join on a joined
   collection's own `$id` can be slow. Run `ANALYZE TABLE` after a bulk load to avoid that window.
+- On PostgreSQL, planning a read takes about 2.6 to 3.2 times longer with each join from the fifth: about 2.7 ms with
+  five permission-checked joins, 6.9 ms with six and 20.7 ms with seven. It stops growing at eight joins, where
+  PostgreSQL's default `join_collapse_limit` ends its search for a join order. Keep a read to about five joins, or
+  split it into several reads.
 - On MariaDB and MySQL, a one-to-many joined read is ordered by the joined `$id` behind the main `$sequence` only when
   its rows show the join (no `select()`, `*`, or a joined attribute) or it pages with a cursor; see
   [Paging a joined read](#paging-a-joined-read). Without a bound, the engine sorts the whole join before applying the
@@ -1426,6 +1430,11 @@ API might expect. [CHANGELOG.md](CHANGELOG.md) describes the features themselves
   them aliases to read more than one.
 - An aggregation query is not ordered by vector distance: a vector query only filters it, keeping the rows that have
   a vector, and a fulltext `search()` only filters it, as it filters every read.
+- On MariaDB under shared tables, an aggregation query or a `distinct()` read can examine many more rows than on
+  dedicated tables: the engine reads the tenant's rows in the order of the index it groups by and checks permissions
+  row by row, instead of checking permissions first. With 50,000 documents and one tenant it takes about 43 to 50 ms,
+  against 9 to 10 ms on dedicated tables. The more tenants a table holds, the fewer rows each tenant's range covers.
+  MySQL and PostgreSQL read the same way in both modes.
 
 ### `distinct()`
 

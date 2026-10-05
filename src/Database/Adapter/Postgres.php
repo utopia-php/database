@@ -98,7 +98,9 @@ class Postgres extends SQL
 
         // Only send the timeout when it differs from what the connection already has
         if (($timeouts[$connection] ?? null) !== $this->timeout) {
-            if ($this->inTransaction === 0) {
+            // Another adapter sharing the connection may have a transaction open, and
+            // its rollback would undo a session SET
+            if ($this->inTransaction === 0 && !$pdo->inTransaction()) {
                 $pdo->exec("SET statement_timeout = '{$this->timeout}ms'");
                 $timeouts[$connection] = $this->timeout;
             } else {

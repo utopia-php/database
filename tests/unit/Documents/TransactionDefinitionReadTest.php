@@ -141,8 +141,12 @@ final class TransactionDefinitionReadTest extends TestCase
         ]);
 
         $this->assertSame('balance', $collection->attributes[0]->key);
-        $this->assertIsString($raw->getAttribute('attributes'));
-        $this->assertSame('balance', \json_decode($raw->getAttribute('attributes'), true)[0]['key']);
+        $encoded = $raw->getAttribute('attributes');
+        $this->assertIsString($encoded);
+        $attributes = \json_decode($encoded, true);
+        $this->assertIsArray($attributes);
+        $this->assertIsArray($attributes[0]);
+        $this->assertSame('balance', $attributes[0]['key']);
     }
 
     private function database(Adapter $adapter): Database

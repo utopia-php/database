@@ -647,25 +647,36 @@ coroutine that opened it and the coroutines it starts; see [Pools and profiling]
   runs a nested callback 3 times, not 9 (7.x retried in the savepoint too). A call nested in a transaction begun
   with `startTransaction()` still retries in its savepoint.
 - **Commits with an unknown result.** On MongoDB, when the result of a commit is unknown, `withTransaction()` sends
-  only the commit again, up to 3 more times, with a `majority` write concern, and does not run the callback again.
-  The result is unknown after an error labelled `UnknownTransactionCommitResult`, a network error, a primary change
-  or shutdown, or `MaxTimeMSExpired` (50) or `ExceededTimeLimit` (262) during the commit, so codes 50 and 262 at
-  commit no longer surface as `Exception\Timeout`. If the commit still cannot be confirmed, `withTransaction()`
-  throws `Utopia\Database\Exception\Unconfirmed`, whose `getPrevious()` is the first commit error, and does not run
-  the callback again: treat the work as possibly committed and re-read before acting on it. 7.x ran the whole
-  callback again, which could store its writes twice. A commit retry that the server reports aborted stored nothing,
-  so the callback runs again. The commit is retried without a recovery token, so on a sharded cluster a retry that
-  reaches another `mongos` can report a committed transaction as aborted. On the SQL adapters a connection lost
+  only the commit again, up to 3 more times, with a `majority` write concern and a 10 s `wtimeout`, and does not run
+  the callback again. Each retry can wait up to that 10 s while it holds the connection. The result is unknown after
+  a network error, a primary change or shutdown, `MaxTimeMSExpired` (50) or `ExceededTimeLimit` (262) during the
+  commit, or an error labelled `UnknownTransactionCommitResult`, so codes 50 and 262 at commit no longer surface as
+  `Exception\Timeout`. After a socket timeout or send failure the client drops the connection with its sessions, so
+  the commit cannot be sent again and `Unconfirmed` is thrown at once: only a commit that failed with a primary
+  change, shutdown, time limit or label is sent again, and a retry the client could not send is tried once more. If
+  the commit still cannot be confirmed, `withTransaction()` throws `Utopia\Database\Exception\Unconfirmed`, whose
+  `getPrevious()` is the first commit error, and does not run the callback again: treat the work as possibly
+  committed and re-read before acting on it. 7.x ran the whole callback again, which could store its writes twice. A
+  schema call whose definition write ends in `Unconfirmed` rethrows it unchanged and keeps the table, column or
+  index, as after a failure once the definition is stored (see below). On a sharded cluster (`mongos`) the adapter
+  runs without transactions, as on a standalone server.
+- **Commits the server reports aborted.** On MongoDB, a commit that the server reports aborted (`NoSuchTransaction`
+  (251) or `WriteConflict` (112)) stored nothing, so `withTransaction()` runs the callback again, within its usual 2
+  retries, whether it was the first commit or a retry; when the retries run out it throws `Utopia\Database\Exception`
+  with an `Exception\Transaction` cause. 7.x reported a first commit the server had aborted as a success, so the
+  callback's writes were lost while the call returned normally. MongoDB aborts the whole transaction on a failed
+  write in it, so a callback that catches a failed write (a `Duplicate`, for example) and carries on now runs again
+  and then fails, where 7.x returned without storing any of its writes. On the SQL adapters a connection lost
   during `COMMIT` still runs the callback again: the work is at-least-once on a SQL connection loss during `COMMIT`.
 - **Failed rollbacks of metadata writes.** When a definition cannot be persisted and the schema change's rollback
   fails too, the thrown `Utopia\Database\Exception` names the persistence error first and the rollback's after
   `| Cleanup error:`, and its `getPrevious()` is always the persistence error. In 7.x the message labelled the two the
   other way round, and some calls reported only the rollback's error.
 - **Failures after a schema change committed.** When a definition is stored and only the cache invalidation or
-  events after it fail, `createCollection()`, `createAttribute()`, `createAttributes()`, `createIndex()` and their
-  update, rename and delete siblings rethrow that failure unchanged and keep the table, column or index.
-  `createRelationship()` also completes the relationship's indexes before rethrowing it. Such a failure is not
-  retried.
+  events after it fail, or its commit ends in `Exception\Unconfirmed`, `createCollection()`, `createAttribute()`,
+  `createAttributes()`, `createIndex()` and their update, rename and delete siblings rethrow that failure unchanged
+  and keep the table, column or index. `createRelationship()` also completes the relationship's indexes before
+  rethrowing it. Such a failure is not retried.
 - **Engine errors mapped to library exceptions.**
 
   | Engine condition | Exception |

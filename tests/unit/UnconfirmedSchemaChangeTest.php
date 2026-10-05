@@ -133,10 +133,14 @@ final class UnconfirmedSchemaChangeTest extends TestCase
                     return parent::withTransaction($callback);
                 }
 
-                $this->writesTarget = false;
-                $result = parent::withTransaction($callback);
+                try {
+                    $result = parent::withTransaction($callback);
+                    $writesTarget = $this->writesTarget;
+                } finally {
+                    $this->writesTarget = false;
+                }
 
-                if ($this->writesTarget) {
+                if ($writesTarget) {
                     ($this->count)();
 
                     throw new UnconfirmedException('Failed to commit transaction: the commit could not be confirmed');

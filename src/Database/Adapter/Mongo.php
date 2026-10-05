@@ -1076,7 +1076,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 if (! \is_null($newKey) && $relationship->getKey() !== $newKey) {
                     $this->getClient()->update($junction, updates: $renameKey, multi: true);
                 }
-                if ($relationship->isTwoWay() && ! \is_null($newTwoWayKey) && $relationship->getTwoWayKey() !== $newTwoWayKey) {
+                if (! \is_null($newTwoWayKey) && $relationship->getTwoWayKey() !== $newTwoWayKey) {
                     $this->getClient()->update($junction, updates: $renameTwoWayKey, multi: true);
                 }
                 break;

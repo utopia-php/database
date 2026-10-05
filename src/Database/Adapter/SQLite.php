@@ -2661,12 +2661,15 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
                 $collectionDocument = $this->getDocument($metadataCollection, $collection);
                 $relatedCollectionDocument = $this->getDocument($metadataCollection, $relatedCollection);
 
-                $junction = $this->getSQLTable('_' . $collectionDocument->getSequence() . '_' . $relatedCollectionDocument->getSequence());
+                $junctionName = $side === RelationSide::Parent
+                    ? '_' . $collectionDocument->getSequence() . '_' . $relatedCollectionDocument->getSequence()
+                    : '_' . $relatedCollectionDocument->getSequence() . '_' . $collectionDocument->getSequence();
+                $junction = $this->getSQLTable($junctionName);
 
-                if ($newKey !== null) {
+                if ($newKey !== null && $key !== $newKey) {
                     $statements[] = "ALTER TABLE {$junction} RENAME COLUMN `{$key}` TO `{$newKey}`";
                 }
-                if ($twoWay && $newTwoWayKey !== null) {
+                if ($newTwoWayKey !== null && $twoWayKey !== $newTwoWayKey) {
                     $statements[] = "ALTER TABLE {$junction} RENAME COLUMN `{$twoWayKey}` TO `{$newTwoWayKey}`";
                 }
                 break;

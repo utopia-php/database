@@ -22,6 +22,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Exception\Transaction as TransactionException;
+use Utopia\Database\Exception\Unconfirmed as UnconfirmedException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Lifecycle;
@@ -650,6 +651,127 @@ final class DocumentPurgeTest extends TestCase
         }));
 
         $this->assertSame(['posts/first', 'posts/second'], $this->purged($recorder));
+    }
+
+    /**
+     * @param  Closure(Database): mixed  $write
+     */
+    #[DataProvider('writes')]
+    public function testPurgeEventsOfAnUnconfirmedCommitFire(Closure $write): void
+    {
+        foreach ([
+            'own transaction' => static fn (Database $database): mixed => $write($database),
+            'caller transaction' => static fn (Database $database): mixed => $database->withTransaction(static fn (): mixed => $write($database)),
+        ] as $scope => $call) {
+            [$database, $recorder] = $this->unconfirmed(['first']);
+
+            $thrown = $this->failureOf(static fn (): mixed => $call($database));
+
+            $this->assertInstanceOf(UnconfirmedException::class, $thrown, $scope);
+            $this->assertSame(['posts/first'], $this->purged($recorder), $scope.': the write may be stored, so its purge must be announced');
+        }
+    }
+
+    public function testOnlyTheUnconfirmedAttemptOfARetriedTransactionAnnouncesItsPurgeEvents(): void
+    {
+        [$database, $recorder] = $this->unconfirmed(['first', 'second'], commitFailures: 1);
+        $attempts = 0;
+
+        $attempt = static function () use ($database, &$attempts): Document {
+            $attempts++;
+
+            return $database->updateDocument(HookFixture::COLLECTION, $attempts === 1 ? 'first' : 'second', new Document(['title' => 'renamed']));
+        };
+
+        $thrown = $this->failureOf(static fn (): mixed => $database->withTransaction($attempt));
+
+        $this->assertSame(2, $attempts);
+        $this->assertInstanceOf(UnconfirmedException::class, $thrown);
+        $this->assertSame(['posts/second'], $this->purged($recorder));
+    }
+
+    public function testPurgeEventsAreDroppedWhenATransactionThatWouldBeUnconfirmedRollsBack(): void
+    {
+        [$database, $recorder] = $this->unconfirmed(['first']);
+        $abandoned = new RuntimeException('abandoned');
+
+        $this->assertSame($abandoned, $this->failureOf(static fn (): mixed => $database->withTransaction(
+            static function () use ($database, $abandoned): never {
+                $database->updateDocument(HookFixture::COLLECTION, 'first', new Document(['title' => 'renamed']));
+
+                throw $abandoned;
+            },
+        )));
+
+        $this->assertSame([], $this->purged($recorder));
+        $this->assertSame('first', $database->getDocument(HookFixture::COLLECTION, 'first')->getAttribute('title'));
+    }
+
+    public function testAnUnconfirmedCommitStaysTheFailureWhenAPurgeListenerFails(): void
+    {
+        [$database, $recorder] = $this->unconfirmed(['first', 'second']);
+        $database->addHook(new FailingLifecycle(Event::DocumentPurge, new RuntimeException('region broadcast failed')));
+
+        $thrown = $this->failureOf(static function () use ($database): void {
+            $database->withTransaction(static function () use ($database): void {
+                $database->updateDocument(HookFixture::COLLECTION, 'first', new Document(['title' => 'renamed']));
+                $database->updateDocument(HookFixture::COLLECTION, 'second', new Document(['title' => 'renamed']));
+            });
+        });
+
+        $this->assertInstanceOf(UnconfirmedException::class, $thrown);
+        $this->assertSame(['posts/first', 'posts/second'], $this->purged($recorder));
+    }
+
+    /**
+     * A seeded SQLite database whose outermost transactions from now on commit and then throw Exception\Unconfirmed,
+     * as a MongoDB commit whose result could not be confirmed does. The next $commitFailures outermost commits fail
+     * with Exception\Transaction instead, so the transaction runs again.
+     *
+     * @param  list<string>  $ids
+     * @return array{Database, RecordingLifecycle}
+     */
+    private function unconfirmed(array $ids, int $commitFailures = 0): array
+    {
+        $adapter = new class (new PDO('sqlite::memory:')) extends SQLite {
+            public bool $unconfirmed = false;
+
+            public int $commitFailures = 0;
+
+            #[\Override]
+            public function withTransaction(callable $callback): mixed
+            {
+                if ($this->inTransaction()) {
+                    return parent::withTransaction($callback);
+                }
+
+                $result = parent::withTransaction($callback);
+
+                if ($this->unconfirmed) {
+                    throw new UnconfirmedException('Failed to commit transaction: the commit could not be confirmed');
+                }
+
+                return $result;
+            }
+
+            #[\Override]
+            public function commitTransaction(): bool
+            {
+                if ($this->inTransaction === 1 && $this->commitFailures > 0) {
+                    $this->commitFailures--;
+
+                    throw new TransactionException('Failed to commit transaction: commit lost');
+                }
+
+                return parent::commitTransaction();
+            }
+        };
+        $seeded = $this->seeded(HookFixture::database($adapter), $ids);
+
+        $adapter->unconfirmed = true;
+        $adapter->commitFailures = $commitFailures;
+
+        return $seeded;
     }
 
     /**

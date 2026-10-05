@@ -24,7 +24,7 @@ trait Transactions
     /** @var array<int, array<string, array<string, Document>>> Collection definitions read inside the transaction the open invalidation scope owns, by coroutine id, lower-cased definition key and cache field. */
     protected array $transactionDefinitions = [];
 
-    /** @var array<int, list<Closure(): void>> Document purge events of the open invalidation scope, by coroutine id, fired once its outermost transaction has committed. */
+    /** @var array<int, list<Closure(): void>> Document purge events of the open invalidation scope, by coroutine id, fired once its outermost transaction has or may have committed. */
     protected array $documentPurgeEvents = [];
 
     /** @var WeakMap<Throwable, true>|null Failures raised after their outermost transaction committed. */
@@ -167,7 +167,7 @@ trait Transactions
                 return $callback();
             });
         } catch (Throwable $error) {
-            if ($this->adapter->supports(Capability::NestedTransactions)) {
+            if ($this->adapter->supports(Capability::NestedTransactions) && ! $this->mayHaveCommitted($error)) {
                 $discard();
             }
 
@@ -202,7 +202,8 @@ trait Transactions
      * Keep all nested mutation tombstones blocked, and purge every written document
      * again, once the outer transaction has committed or rolled back. Document purge
      * events queued in the scope fire after a commit, even when the invalidation after it
-     * fails, and are dropped with a rollback.
+     * fails, and after a commit that may have stored the writes (see mayHaveCommitted()),
+     * whose failure is still the one thrown. A rollback drops them.
      *
      * @template T
      *
@@ -232,6 +233,7 @@ trait Transactions
                 $queryTokens = $this->queryCacheMutations[$context];
                 $documentTokens = $this->documentCacheMutations[$context];
                 $documents = $this->documentCachePurges[$context];
+                $purgeEvents = $this->mayHaveCommitted($error) ? $this->documentPurgeEvents[$context] : [];
                 unset(
                     $this->queryCacheMutations[$context],
                     $this->documentCacheMutations[$context],
@@ -243,7 +245,7 @@ trait Transactions
                 try {
                     $this->purgeWrittenDocuments($documents);
                 } catch (Throwable) {
-                    // Rolled back: the cached entries still hold committed rows.
+                    // The transaction's own failure is the one thrown.
                 }
                 try {
                     $this->activateDocumentInvalidation($documentTokens);
@@ -255,6 +257,7 @@ trait Transactions
                 } catch (Throwable) {
                     // A failed restore leaves the shared tombstone fail-closed.
                 }
+                $this->announceDocumentPurges($purgeEvents);
             }
 
             throw $error;

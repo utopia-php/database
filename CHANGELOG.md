@@ -292,8 +292,9 @@ have to make, with the 7.x and 8.0 forms side by side.
   Only the outermost `withTransaction()` retries it: a nested call rolls back to its savepoint and rethrows, so a
   lock conflict that keeps failing runs a nested callback 3 times instead of 9. A MongoDB commit whose result is
   unknown retries only the commit, up to 3 more times with a `majority` write concern, and then throws
-  `Exception\Unconfirmed` without running the callback again (7.x ran the callback again); a schema call keeps the
-  table, column or index of a definition whose commit is unconfirmed. A MongoDB commit the server reports aborted,
+  `Exception\Unconfirmed` without running the callback again (7.x ran the callback again), after firing the
+  transaction's queued `document_purge` events; a schema call keeps the table, column or index of a definition whose
+  commit is unconfirmed. A MongoDB commit the server reports aborted,
   on the first attempt or on a commit retry, runs the callback again: 7.x reported a first commit the server had
   aborted as a success, losing its writes. On SQL a connection lost during `COMMIT` still runs the callback again, so
   that work is at-least-once. See [Errors](UPGRADE.md#errors).

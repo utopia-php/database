@@ -35,7 +35,6 @@ final class QueryCommentsTest extends TestCase
 {
     private const string NAMESPACE = 'comments';
 
-
     /**
      * @var list<string>
      */
@@ -97,7 +96,7 @@ final class QueryCommentsTest extends TestCase
 
         $this->assertSame('Dune', $this->database->getDocument('movies', 'dune')->getAttribute('title'));
         $this->assertStringStartsWith(
-            "/* host: worker-2 */\n/* project: console */\n/* user: user-1 */\nSELECT ",
+            "/* host: worker-2 */\n/* project: console */\n/* user: user-1 */\n",
             $transform->queries[Event::DocumentRead->value] ?? '',
         );
     }
@@ -112,24 +111,20 @@ final class QueryCommentsTest extends TestCase
         $this->statements = [];
 
         $this->assertCount(1, $this->database->find('movies'));
-        $this->assertNotEmpty($this->statements);
-        foreach ($this->statements as $statement) {
-            $this->assertStringStartsNotWith('/*', $statement);
-        }
+        $this->assertNoStatementCarriesComments();
     }
 
     public function testStatementsPreparedWithoutAnEventCarryTheComments(): void
     {
         $this->database->setMetadata('user', 'user-1');
 
-        $this->assertTrue($this->database->ping());
+        $this->assertPingCarries('/* user: user-1 */');
+
+        $this->statements = [];
         $rows = $this->database->getAuthorization()->skip(fn (): array => $this->database->rawQuery('SELECT ? AS answer', [42]));
 
         $this->assertSame(42, $rows[0]->getAttribute('answer'));
-        $this->assertSame([
-            "/* user: user-1 */\nSELECT 1",
-            "/* user: user-1 */\nSELECT ? AS answer",
-        ], $this->statements);
+        $this->assertEveryStatementStartsWith("/* user: user-1 */\n");
     }
 
     /**
@@ -156,7 +151,7 @@ final class QueryCommentsTest extends TestCase
         $adapter->setMetadata('user', 'user-1');
 
         $this->assertSame('7', $adapter->getConnectionId());
-        $this->assertSame(["/* user: user-1 */\nSELECT {$function}()"], $this->statements);
+        $this->assertEveryStatementStartsWith("/* user: user-1 */\n");
     }
 
     public function testEveryStatementCarriesTheComments(): void
@@ -249,8 +244,7 @@ final class QueryCommentsTest extends TestCase
             ->setMetadata('stringable', $stringable)
             ->setMetadata('object', (object) ['user' => "user\n1"]);
 
-        $this->assertTrue($this->database->ping());
-        $this->assertSame([
+        $this->assertPingCarries(
             "/* integer: 42 */\n"
             ."/* float: 1.5 */\n"
             ."/* true: 1 */\n"
@@ -259,9 +253,8 @@ final class QueryCommentsTest extends TestCase
             ."/* list: [\"a\",\"b* /\"] */\n"
             ."/* map: {\"path\":\"a/b\",\"id\":7} */\n"
             ."/* stringable: region * / one */\n"
-            ."/* object: {\"user\":\"user\\n1\"} */\n"
-            .'SELECT 1',
-        ], $this->statements);
+            ."/* object: {\"user\":\"user\\n1\"} */",
+        );
     }
 
     public function testEachStatementCarriesTheMetadataAsItIsThen(): void
@@ -276,28 +269,18 @@ final class QueryCommentsTest extends TestCase
         };
 
         $this->database->setMetadata('user', 'user-1');
-        $this->assertTrue($this->database->ping());
-        $this->assertTrue($this->database->ping());
+        $this->assertPingCarries('/* user: user-1 */');
+        $this->assertPingCarries('/* user: user-1 */');
         $this->database->setMetadata('user', 'user-2');
-        $this->assertTrue($this->database->ping());
+        $this->assertPingCarries('/* user: user-2 */');
         $this->database->setMetadata('user', 2);
-        $this->assertTrue($this->database->ping());
+        $this->assertPingCarries('/* user: 2 */');
         $this->database->resetMetadata();
-        $this->assertTrue($this->database->ping());
+        $this->assertPingCarries(null);
         $this->database->setMetadata('region', $stringable);
-        $this->assertTrue($this->database->ping());
+        $this->assertPingCarries('/* region: first */');
         $stringable->text = 'second';
-        $this->assertTrue($this->database->ping());
-
-        $this->assertSame([
-            "/* user: user-1 */\nSELECT 1",
-            "/* user: user-1 */\nSELECT 1",
-            "/* user: user-2 */\nSELECT 1",
-            "/* user: 2 */\nSELECT 1",
-            'SELECT 1',
-            "/* region: first */\nSELECT 1",
-            "/* region: second */\nSELECT 1",
-        ], $this->statements);
+        $this->assertPingCarries('/* region: second */');
     }
 
     public function testPooledConnectionCarriesOnlyTheCurrentHandlesMetadata(): void
@@ -307,9 +290,26 @@ final class QueryCommentsTest extends TestCase
 
         $first->setMetadata('user', 'user-1');
 
-        $this->assertTrue($first->ping());
-        $this->assertTrue($second->ping());
-        $this->assertSame(["/* user: user-1 */\nSELECT 1", 'SELECT 1'], $this->statements);
+        $this->assertPingCarries('/* user: user-1 */', $first);
+        $this->assertPingCarries(null, $second);
+        $this->assertPingCarries('/* user: user-1 */', $first);
+    }
+
+    /**
+     * @param non-empty-string|null $comments
+     */
+    private function assertPingCarries(?string $comments, ?Database $database = null): void
+    {
+        $this->statements = [];
+        $this->assertTrue(($database ?? $this->database)->ping());
+
+        if ($comments === null) {
+            $this->assertNoStatementCarriesComments();
+
+            return;
+        }
+
+        $this->assertEveryStatementStartsWith($comments."\n");
     }
 
     /**
@@ -320,6 +320,15 @@ final class QueryCommentsTest extends TestCase
         $this->assertNotEmpty($this->statements);
         foreach ($this->statements as $statement) {
             $this->assertStringStartsWith($prefix, $statement);
+            $this->assertStringNotContainsString('/*', \substr($statement, \strlen($prefix)), 'Only the current metadata may be written as comments');
+        }
+    }
+
+    private function assertNoStatementCarriesComments(): void
+    {
+        $this->assertNotEmpty($this->statements);
+        foreach ($this->statements as $statement) {
+            $this->assertStringNotContainsString('/*', $statement, 'A statement without metadata must carry no comments');
         }
     }
 

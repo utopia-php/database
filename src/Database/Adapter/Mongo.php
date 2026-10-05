@@ -25,6 +25,7 @@ use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Type as TypeException;
+use Utopia\Database\Exception\Unconfirmed as UnconfirmedException;
 use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Hook\Mongo\PermissionFilter as MongoPermissionFilter;
 use Utopia\Database\Hook\Mongo\TenantFilter as MongoTenantFilter;
@@ -95,6 +96,21 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      * index treats as the same id.
      */
     private const array UID_COLLATION = ['locale' => 'en', 'strength' => 1];
+
+    /**
+     * How many times a commit whose result is unknown is sent again after the first attempt.
+     */
+    private const int COMMIT_RETRIES = 3;
+
+    /**
+     * Microseconds to wait before each commit retry, multiplied by the retry number.
+     */
+    private const int COMMIT_RETRY_SLEEP = 50_000;
+
+    /**
+     * The write concern a commit retry must carry, per the MongoDB transactions specification.
+     */
+    private const array COMMIT_RETRY_WRITE_CONCERN = ['w' => 'majority', 'wtimeout' => 10_000];
 
     /**
      * Transaction/session state for MongoDB transactions
@@ -325,11 +341,11 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      *
      * @return bool
      *
+     * @throws UnconfirmedException If the commit was sent but its result could not be confirmed.
      * @throws DatabaseException If the transaction cannot be committed.
      */
     public function commitTransaction(): bool
     {
-        // If the database is not a replica set, we can't use transactions
         if (! $this->client->isReplicaSet()) {
             return true;
         }
@@ -339,50 +355,137 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 return false;
             }
             $this->inTransaction--;
-            if ($this->inTransaction === 0) {
-                if (! $this->session) {
-                    return false;
-                }
-                try {
-                    $result = $this->client->commitTransaction($this->session);
-                } catch (MongoException $e) {
-                    // If there's no active transaction, it may have been auto-aborted due to an error.
-                    // This is not necessarily a failure, just return success since the transaction was already terminated.
-                    $e = $this->processException($e);
-                    if ($e instanceof TransactionException) {
-                        $this->client->endSessions([$this->session]);
-                        $this->session = null;
-                        $this->inTransaction = 0;  // Reset counter when transaction is already terminated
-
-                        return true;
-                    }
-                    throw $e;
-                } catch (Throwable $e) {
-                    throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
-                } finally {
-                    if ($this->session) {
-                        $this->client->endSessions([$this->session]);
-                    }
-                    $this->session = null;
-                }
-
+            if ($this->inTransaction > 0) {
                 return true;
+            }
+            if (! $this->session) {
+                return false;
+            }
+
+            try {
+                $this->commit($this->session);
+            } finally {
+                $this->endSession();
             }
 
             return true;
-        } catch (Throwable $e) {
-            // Ensure cleanup on any failure
-            try {
-                if ($this->session !== null) {
-                    $this->client->endSessions([$this->session]);
-                }
-            } catch (Throwable $endSessionError) {
-                // Ignore errors when ending session during error cleanup
-            }
-            $this->session = null;
+        } catch (Throwable $error) {
+            $this->endSession();
             $this->inTransaction = 0;
-            throw new DatabaseException('Failed to commit transaction: '.$e->getMessage(), $e->getCode(), $e);
+
+            if ($error instanceof UnconfirmedException) {
+                throw $error;
+            }
+
+            throw new DatabaseException('Failed to commit transaction: '.$error->getMessage(), $error->getCode(), $error);
         }
+    }
+
+    /**
+     * Commit the session's transaction. A transaction the server already ended counts as committed. When the result
+     * of the commit is unknown, only the commit is sent again.
+     *
+     * @param  array<mixed>  $session
+     *
+     * @throws UnconfirmedException
+     * @throws Throwable
+     */
+    private function commit(array $session): void
+    {
+        try {
+            $this->client->commitTransaction($session);
+        } catch (Throwable $error) {
+            if ($this->isUnknownCommitResult($error)) {
+                $this->retryCommit($session, $error);
+
+                return;
+            }
+
+            if (! $error instanceof MongoException) {
+                throw new DatabaseException($error->getMessage(), $error->getCode(), $error);
+            }
+
+            $error = $this->processException($error);
+            if (! $error instanceof TransactionException) {
+                throw $error;
+            }
+        }
+    }
+
+    /**
+     * Send the commit again, up to COMMIT_RETRIES times after the first attempt, with a majority write concern so a
+     * commit that already applied is reported as applied.
+     *
+     * @param  array<mixed>  $session
+     *
+     * @throws TransactionException If the server reports the transaction aborted, so nothing of it is stored.
+     * @throws UnconfirmedException If the commit still cannot be confirmed.
+     */
+    private function retryCommit(array $session, Throwable $unknown): void
+    {
+        for ($retry = 1; $retry <= self::COMMIT_RETRIES; $retry++) {
+            \usleep(self::COMMIT_RETRY_SLEEP * $retry);
+
+            try {
+                $this->client->commitTransaction($session, ['writeConcern' => self::COMMIT_RETRY_WRITE_CONCERN]);
+
+                return;
+            } catch (Throwable $error) {
+                if ($this->isUnknownCommitResult($error)) {
+                    continue;
+                }
+
+                if ($this->isAbortedCommit($error)) {
+                    throw new TransactionException('The transaction was aborted while its commit was retried', previous: $error);
+                }
+
+                break;
+            }
+        }
+
+        throw new UnconfirmedException('Failed to commit transaction: the commit could not be confirmed', previous: $unknown);
+    }
+
+    /**
+     * Whether the commit reached the server but its result is unknown: the commit may have applied, so running the
+     * transaction again could apply it twice. A commit that was never sent, or that the server labels transient,
+     * applied nothing.
+     */
+    private function isUnknownCommitResult(Throwable $error): bool
+    {
+        if (! $error instanceof MongoException || $error instanceof UnsentException) {
+            return false;
+        }
+
+        $labels = $error->getErrorLabels();
+        if (\in_array(Client::TRANSIENT_TRANSACTION_ERROR, $labels, true)) {
+            return false;
+        }
+
+        return \in_array(Client::UNKNOWN_TRANSACTION_COMMIT_RESULT, $labels, true)
+            || $error->isNetworkError()
+            || $this->client->isUnknownTransactionCommitResult($error);
+    }
+
+    private function isAbortedCommit(Throwable $error): bool
+    {
+        return $error instanceof MongoException
+            && (
+                \in_array(Client::TRANSIENT_TRANSACTION_ERROR, $error->getErrorLabels(), true)
+                || $this->processException($error) instanceof TransactionException
+            );
+    }
+
+    private function endSession(): void
+    {
+        if ($this->session !== null) {
+            try {
+                $this->client->endSessions([$this->session]);
+            } catch (Throwable) {
+                // Best effort: a dropped connection fails this, and that must not replace the commit's outcome.
+            }
+        }
+        $this->session = null;
     }
 
     /**

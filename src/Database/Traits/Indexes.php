@@ -76,40 +76,39 @@ trait Indexes
         /** @var array<Attribute> $collectionAttributes */
         $collectionAttributes = $collection->getAttribute('attributes', []);
         $indexAttributesWithTypes = [];
-        foreach ($attributes as $i => $attr) {
+        foreach ($attributes as $position => $attribute) {
             // Support nested paths on object attributes using dot notation:
             // attribute.key.nestedKey -> base attribute "attribute"
-            $baseAttr = $attr;
-            if (\str_contains($attr, '.')) {
-                $baseAttr = \explode('.', $attr, 2)[0];
+            $baseAttribute = $attribute;
+            if (\str_contains($attribute, '.')) {
+                $baseAttribute = \explode('.', $attribute, 2)[0];
             }
 
             foreach ($collectionAttributes as $typedAttribute) {
-                if ($typedAttribute->getKey() === $baseAttr) {
+                if ($typedAttribute->getKey() === $baseAttribute) {
 
-                    $indexAttributesWithTypes[$attr] = $typedAttribute->getType()->value;
+                    $indexAttributesWithTypes[$attribute] = $typedAttribute->getType()->value;
 
                     /**
                      * mysql does not save length in collection when length = attributes size
                      */
                     if ($typedAttribute->getType() === ColumnType::String) {
-                        if (! empty($lengths[$i]) && $lengths[$i] === $typedAttribute->getSize() && $this->adapter->getMaxIndexLength() > 0) {
-                            $lengths[$i] = null;
+                        if (! empty($lengths[$position]) && $lengths[$position] === $typedAttribute->getSize() && $this->adapter->getMaxIndexLength() > 0) {
+                            $lengths[$position] = null;
                         }
                     }
 
                     if ($typedAttribute->isArray()) {
                         if ($this->adapter->getMaxIndexLength() > 0) {
-                            $lengths[$i] = self::MAX_ARRAY_INDEX_LENGTH;
+                            $lengths[$position] = self::MAX_ARRAY_INDEX_LENGTH;
                         }
-                        $orders[$i] = null;
+                        $orders[$position] = null;
                     }
                     break;
                 }
             }
         }
 
-        // Update the index model with potentially modified lengths/orders
         $index = new Index(
             key: $id,
             type: $type,
@@ -120,14 +119,12 @@ trait Indexes
         );
 
         if ($this->validation()->get()) {
-            /** @var array<Attribute> $collectionAttrsForValidation */
-            $collectionAttrsForValidation = $collection->getAttribute('attributes', []);
-            /** @var array<Index> $collectionIdxsForValidation */
-            $collectionIdxsForValidation = $collection->getAttribute('indexes', []);
+            /** @var array<Index> $collectionIndexes */
+            $collectionIndexes = $collection->getAttribute('indexes', []);
 
             $validator = new IndexValidator(
-                $collectionAttrsForValidation,
-                $collectionIdxsForValidation,
+                $collectionAttributes,
+                $collectionIndexes,
                 $this->adapter->getMaxIndexLength(),
                 $this->adapter->getInternalIndexesKeys(),
                 $this->adapter->supports(Capability::IndexArray),
@@ -160,7 +157,7 @@ trait Indexes
                 if (! $created) {
                     throw new DatabaseException('Failed to create index');
                 }
-            } catch (DuplicateException $e) {
+            } catch (DuplicateException) {
                 // Metadata check (lines above) already verified index is absent
                 // from metadata. A DuplicateException from the adapter means the
                 // index exists only in physical schema — an orphan from a prior
@@ -254,18 +251,20 @@ trait Indexes
             \array_shift($lengths);
         }
 
-        if (\count($columns) !== \count($index->getIndexedAttributes())) {
+        $indexedAttributes = $index->getIndexedAttributes();
+        if (\count($columns) !== \count($indexedAttributes)) {
             return false;
         }
 
-        foreach (\array_values($index->getIndexedAttributes()) as $position => $attribute) {
+        $indexLengths = $index->getLengths();
+        foreach (\array_values($indexedAttributes) as $position => $attribute) {
             if ($columns[$position] === '') {
                 continue;
             }
             if ($columns[$position] !== \strtolower($this->adapter->filter(Storage::column($attribute)))) {
                 return false;
             }
-            if ($lengths[$position] !== (int) ($index->getLengths()[$position] ?? 0)) {
+            if ($lengths[$position] !== (int) ($indexLengths[$position] ?? 0)) {
                 return false;
             }
         }
@@ -424,17 +423,16 @@ trait Indexes
 
         $collection->setAttribute('indexes', \array_values($indexes));
 
-        // Build indexAttributeTypes from collection attributes for rollback
         /** @var array<Attribute> $collectionAttributes */
         $collectionAttributes = $collection->getAttribute('attributes', []);
         $typedDeletedIndex = $indexDeleted;
         /** @var array<string, string> $indexAttributeTypes */
         $indexAttributeTypes = [];
-        foreach ($typedDeletedIndex->getIndexedAttributes() as $attr) {
-            $baseAttr = \str_contains($attr, '.') ? \explode('.', $attr, 2)[0] : $attr;
+        foreach ($typedDeletedIndex->getIndexedAttributes() as $attribute) {
+            $baseAttribute = \str_contains($attribute, '.') ? \explode('.', $attribute, 2)[0] : $attribute;
             foreach ($collectionAttributes as $collectionAttribute) {
-                if ($collectionAttribute->getKey() === $baseAttr) {
-                    $indexAttributeTypes[$attr] = $collectionAttribute->getType()->value;
+                if ($collectionAttribute->getKey() === $baseAttribute) {
+                    $indexAttributeTypes[$attribute] = $collectionAttribute->getType()->value;
                     break;
                 }
             }

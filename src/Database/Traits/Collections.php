@@ -49,7 +49,10 @@ trait Collections
     public function createCollection(Collection $collection): Collection
     {
         $id = $collection->getId();
-        $name = $collection->getName() !== '' ? $collection->getName() : $collection->getId();
+        $name = $collection->getName();
+        if ($name === '') {
+            $name = $id;
+        }
         $attributes = \array_map(static fn (Attribute $attribute): Attribute => clone $attribute, $collection->getDeclaredAttributes());
         $indexes = \array_map(static fn (Index $index): Index => clone $index, $collection->getIndexes());
         $permissions = $collection->getDeclaredPermissions() ?? [Permission::create(Role::any())];
@@ -83,7 +86,6 @@ trait Collections
             throw new DuplicateException('Collection '.$id.' already exists');
         }
 
-        // Enforce single TTL index per collection
         if ($this->validation()->get() && $this->adapter->supports(Capability::TTLIndexes)) {
             $ttlIndexes = array_filter($indexes, fn (Index $index) => $index->getType() === IndexType::Ttl);
             if (count($ttlIndexes) > 1) {
@@ -91,31 +93,28 @@ trait Collections
             }
         }
 
-        /**
-         * Fix metadata index length & orders
-         */
         foreach ($indexes as $key => $index) {
             $lengths = $index->getLengths();
             $orders = $index->getOrders();
 
-            foreach ($index->getIndexedAttributes() as $i => $attr) {
+            foreach ($index->getIndexedAttributes() as $position => $attributeKey) {
                 foreach ($attributes as $collectionAttribute) {
-                    if ($collectionAttribute->getKey() === $attr) {
+                    if ($collectionAttribute->getKey() === $attributeKey) {
                         /**
                          * mysql does not save length in collection when length = attributes size
                          */
                         if ($collectionAttribute->getType() === ColumnType::String) {
-                            if (! empty($lengths[$i]) && $lengths[$i] === $collectionAttribute->getSize() && $this->adapter->getMaxIndexLength() > 0) {
-                                $lengths[$i] = null;
+                            if (! empty($lengths[$position]) && $lengths[$position] === $collectionAttribute->getSize() && $this->adapter->getMaxIndexLength() > 0) {
+                                $lengths[$position] = null;
                             }
                         }
 
                         $isArray = $collectionAttribute->isArray();
                         if ($isArray) {
                             if ($this->adapter->getMaxIndexLength() > 0) {
-                                $lengths[$i] = self::MAX_ARRAY_INDEX_LENGTH;
+                                $lengths[$position] = self::MAX_ARRAY_INDEX_LENGTH;
                             }
-                            $orders[$i] = null;
+                            $orders[$position] = null;
                         }
                         break;
                     }
@@ -165,12 +164,10 @@ trait Collections
             }
         }
 
-        // Check index limits, if given
         if ($indexes && $this->adapter->getCountOfIndexes($collection) > $this->adapter->getLimitForIndexes()) {
             throw new LimitException('Index limit of '.$this->adapter->getLimitForIndexes().' exceeded. Cannot create collection.');
         }
 
-        // Check attribute limits, if given
         if ($attributes) {
             if (
                 $this->adapter->getLimitForAttributes() > 0 &&
@@ -192,7 +189,7 @@ trait Collections
         try {
             $this->adapter->createCollection($id, $attributes, $indexes);
             $created = true;
-        } catch (DuplicateException $e) {
+        } catch (DuplicateException $error) {
             if ($id === self::METADATA
                 || ($this->adapter->getSharedTables()
                     && $this->adapter->exists($this->adapter->getDatabase(), $id))) {
@@ -213,7 +210,7 @@ trait Collections
                 } catch (Throwable $cacheError) {
                     Console::warning('Warning: Failed to purge stale collection cache: '.$cacheError->getMessage());
                 }
-                throw new DuplicateException('Collection '.$id.' already exists', previous: $e);
+                throw new DuplicateException('Collection '.$id.' already exists', previous: $error);
             }
         }
 
@@ -223,7 +220,7 @@ trait Collections
 
         try {
             $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
-        } catch (DuplicateException $e) {
+        } catch (DuplicateException $error) {
             // A concurrent creator committed the metadata for this id first, so
             // the physical table is the one its metadata describes. Rolling back
             // here would drop a live collection out from under it.
@@ -232,10 +229,10 @@ trait Collections
             } catch (Throwable $cacheError) {
                 Console::warning('Warning: Failed to purge stale collection cache: '.$cacheError->getMessage());
             }
-            throw new DuplicateException('Collection '.$id.' already exists', previous: $e);
-        } catch (Throwable $e) {
-            if ($this->mayHaveCommitted($e)) {
-                throw $e;
+            throw new DuplicateException('Collection '.$id.' already exists', previous: $error);
+        } catch (Throwable $error) {
+            if ($this->mayHaveCommitted($error)) {
+                throw $error;
             }
 
             if ($created) {
@@ -245,7 +242,7 @@ trait Collections
                     Console::error("Failed to rollback collection '{$id}': ".$cleanupError->getMessage());
                 }
             }
-            throw new DatabaseException("Failed to create collection metadata for '{$id}': ".$e->getMessage(), previous: $e);
+            throw new DatabaseException("Failed to create collection metadata for '{$id}': ".$error->getMessage(), previous: $error);
         }
 
         $this->triggerHooks(Event::CollectionCreate, $createdCollection);
@@ -512,8 +509,9 @@ trait Collections
             fn (Attribute $attribute) => $attribute->getType() === ColumnType::Relationship
         );
 
+        $collectionId = $collection->getId();
         foreach ($relationships as $relationship) {
-            $this->deleteRelationship($collection->getId(), $relationship->getKey());
+            $this->deleteRelationship($collectionId, $relationship->getKey());
         }
 
         // Re-fetch collection to get current state after relationship deletions
@@ -540,7 +538,7 @@ trait Collections
         } else {
             try {
                 $deleted = $this->silent(fn () => $this->deleteDocument(self::METADATA, $id));
-            } catch (Throwable $e) {
+            } catch (Throwable $error) {
                 if ($schemaDeleted) {
                     try {
                         $this->adapter->createCollection($id, $currentAttributes, $currentIndexes);
@@ -549,8 +547,8 @@ trait Collections
                     }
                 }
                 throw new DatabaseException(
-                    "Failed to persist metadata for collection deletion '{$id}': ".$e->getMessage(),
-                    previous: $e
+                    "Failed to persist metadata for collection deletion '{$id}': ".$error->getMessage(),
+                    previous: $error
                 );
             }
         }

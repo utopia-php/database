@@ -429,18 +429,21 @@ class Index extends Validator
         }
 
         $arrayAttributes = [];
+        $indexType = $index->getType();
+        $lengths = $index->getLengths();
+        $orders = $index->getOrders();
         foreach ($index->getIndexedAttributes() as $attributePosition => $attributeName) {
             $attribute = $this->findAttribute($attributeName);
 
             if ($attribute !== null && $attribute->isArray()) {
                 // Database::INDEX_UNIQUE Is not allowed! since mariaDB VS MySQL makes the unique Different on values
-                if ($index->getType() !== IndexType::Key) {
-                    $this->message = '"'.ucfirst($index->getType()->value).'" index is forbidden on array attributes';
+                if ($indexType !== IndexType::Key) {
+                    $this->message = '"'.ucfirst($indexType->value).'" index is forbidden on array attributes';
 
                     return false;
                 }
 
-                if (empty($index->getLengths()[$attributePosition])) {
+                if (empty($lengths[$attributePosition])) {
                     $this->message = 'Index length for array not specified';
 
                     return false;
@@ -453,7 +456,7 @@ class Index extends Validator
                     return false;
                 }
 
-                $direction = $index->getOrders()[$attributePosition] ?? null;
+                $direction = $orders[$attributePosition] ?? null;
                 if ($direction !== null) {
                     $this->message = 'Invalid index order "'.$direction->value.'" on array attribute "'.$attribute->getKey().'"';
 
@@ -465,7 +468,7 @@ class Index extends Validator
 
                     return false;
                 }
-            } elseif (! $this->isStringAttribute($attribute) && ! empty($index->getLengths()[$attributePosition])) {
+            } elseif (! $this->isStringAttribute($attribute) && ! empty($lengths[$attributePosition])) {
                 $type = $attribute === null ? '' : $attribute->getType()->value;
                 $this->message = 'Cannot set a length on "'.$type.'" attributes';
 
@@ -493,12 +496,14 @@ class Index extends Validator
         }
 
         $total = 0;
-        if (count($index->getLengths()) > count($index->getIndexedAttributes())) {
+        $lengths = $index->getLengths();
+        $indexedAttributes = $index->getIndexedAttributes();
+        if (count($lengths) > count($indexedAttributes)) {
             $this->message = 'Invalid index lengths. Count of lengths must be equal or less than the number of attributes.';
 
             return false;
         }
-        foreach ($index->getIndexedAttributes() as $attributePosition => $attributeName) {
+        foreach ($indexedAttributes as $attributePosition => $attributeName) {
             if ($this->supportForObjects && ! isset($this->attributes[\strtolower($attributeName)])) {
                 $attributeName = $this->getBaseAttributeFromDottedAttribute($attributeName);
             }
@@ -513,7 +518,7 @@ class Index extends Validator
                 ColumnType::MediumText,
                 ColumnType::LongText => [
                     $resolvedSize,
-                    ! empty($index->getLengths()[$attributePosition]) ? $index->getLengths()[$attributePosition] : $resolvedSize,
+                    ! empty($lengths[$attributePosition]) ? $lengths[$attributePosition] : $resolvedSize,
                 ],
                 ColumnType::Float,
                 ColumnType::Double,
@@ -559,10 +564,10 @@ class Index extends Validator
      */
     public function checkReservedNames(IndexVO $index): bool
     {
-        $key = $index->getKey();
+        $key = \strtolower($index->getKey());
 
         foreach ($this->reservedKeys as $reserved) {
-            if (\strtolower($key) === \strtolower($reserved)) {
+            if ($key === \strtolower($reserved)) {
                 $this->message = 'Index key name is reserved';
 
                 return false;
@@ -767,8 +772,9 @@ class Index extends Validator
         }
 
         if ($index->getType() === IndexType::Fulltext) {
+            $key = $index->getKey();
             foreach ($this->indexes as $existingIndex) {
-                if ($existingIndex->getKey() === $index->getKey()) {
+                if ($existingIndex->getKey() === $key) {
                     continue;
                 }
                 if ($existingIndex->getType() === IndexType::Fulltext) {
@@ -795,20 +801,26 @@ class Index extends Validator
             return true;
         }
 
+        $key = \strtolower($index->getKey());
+        $indexedAttributes = $index->getIndexedAttributes();
+        $incomingOrders = self::orderValues($index);
+        $regularTypes = [IndexType::Key, IndexType::Unique];
+        $isRegularIndex = \in_array($index->getType(), $regularTypes);
+
         foreach ($this->indexes as $existingIndex) {
-            if (\strtolower($existingIndex->getKey()) === \strtolower($index->getKey())) {
+            if (\strtolower($existingIndex->getKey()) === $key) {
                 continue;
             }
 
+            $existingAttributes = $existingIndex->getIndexedAttributes();
             $attributesMatch = false;
-            if (empty(\array_diff($existingIndex->getIndexedAttributes(), $index->getIndexedAttributes())) &&
-                empty(\array_diff($index->getIndexedAttributes(), $existingIndex->getIndexedAttributes()))) {
+            if (empty(\array_diff($existingAttributes, $indexedAttributes)) &&
+                empty(\array_diff($indexedAttributes, $existingAttributes))) {
                 $attributesMatch = true;
             }
 
             $ordersMatch = false;
             $existingOrders = self::orderValues($existingIndex);
-            $incomingOrders = self::orderValues($index);
             if (empty(\array_diff($existingOrders, $incomingOrders)) &&
                 empty(\array_diff($incomingOrders, $existingOrders))) {
                 $ordersMatch = true;
@@ -816,8 +828,6 @@ class Index extends Validator
 
             if ($attributesMatch && $ordersMatch) {
                 // Allow fulltext + key/unique combinations (different purposes)
-                $regularTypes = [IndexType::Key, IndexType::Unique];
-                $isRegularIndex = \in_array($index->getType(), $regularTypes);
                 $isRegularExisting = \in_array($existingIndex->getType(), $regularTypes);
 
                 if ($isRegularIndex && $isRegularExisting) {
@@ -921,8 +931,9 @@ class Index extends Validator
             return false;
         }
 
+        $key = $index->getKey();
         foreach ($this->indexes as $existingIndex) {
-            if ($existingIndex->getKey() === $index->getKey()) {
+            if ($existingIndex->getKey() === $key) {
                 continue;
             }
 

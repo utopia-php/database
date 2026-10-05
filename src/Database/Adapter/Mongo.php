@@ -728,19 +728,18 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             return true;
         }
 
-        // Returns an array/object with the result document
         try {
             $options = $this->getTransactionOptions();
             $this->getClient()->createCollection($id, $options);
-        } catch (MongoException $e) {
-            if (\str_contains($e->getMessage(), 'Collection Exists')) {
+        } catch (MongoException $error) {
+            if (\str_contains($error->getMessage(), 'Collection Exists')) {
                 return true;
             }
-            $e = $this->processException($e);
-            if ($e instanceof DuplicateException && ($this->getSharedTables() || $name === Database::METADATA)) {
+            $error = $this->processException($error);
+            if ($error instanceof DuplicateException && ($this->getSharedTables() || $name === Database::METADATA)) {
                 return true;
             }
-            throw $e;
+            throw $error;
         }
 
         $internalIndex = [
@@ -777,8 +776,8 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         try {
             $options = $this->getTransactionOptions();
             $indexesCreated = $this->client->createIndexes($id, $internalIndex, $options);
-        } catch (Exception $e) {
-            throw $this->processException($e);
+        } catch (Exception $error) {
+            throw $this->processException($error);
         }
 
         if (! $indexesCreated) {
@@ -793,32 +792,33 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
             $collectionAttributes = $attributes;
 
-            foreach ($indexes as $i => $index) {
+            foreach ($indexes as $indexPosition => $index) {
                 $key = [];
                 $unique = false;
                 $attributes = $index->getIndexedAttributes();
                 $orders = $index->getOrders();
+                $indexType = $index->getType();
 
                 if ($this->shouldAddTenantToIndex($index)) {
                     $key[Storage::TENANT] = $this->getOrder(OrderDirection::Asc);
                 }
 
-                foreach ($attributes as $j => $attribute) {
+                foreach ($attributes as $attributePosition => $attribute) {
                     $attribute = $this->filter($this->getInternalKeyForAttribute((string) $attribute));
 
-                    switch ($index->getType()) {
+                    switch ($indexType) {
                         case IndexType::Key:
-                            $order = $this->getOrder(OrderDirection::tryFrom(Index::direction($orders[$j] ?? null)) ?? OrderDirection::Asc);
+                            $order = $this->getOrder(OrderDirection::tryFrom(Index::direction($orders[$attributePosition] ?? null)) ?? OrderDirection::Asc);
                             break;
                         case IndexType::Fulltext:
                             $order = 'text';
                             break;
                         case IndexType::Unique:
-                            $order = $this->getOrder(OrderDirection::tryFrom(Index::direction($orders[$j] ?? null)) ?? OrderDirection::Asc);
+                            $order = $this->getOrder(OrderDirection::tryFrom(Index::direction($orders[$attributePosition] ?? null)) ?? OrderDirection::Asc);
                             $unique = true;
                             break;
                         case IndexType::Ttl:
-                            $order = $this->getOrder(OrderDirection::tryFrom(Index::direction($orders[$j] ?? null)) ?? OrderDirection::Asc);
+                            $order = $this->getOrder(OrderDirection::tryFrom(Index::direction($orders[$attributePosition] ?? null)) ?? OrderDirection::Asc);
                             break;
                         default:
                             return false;
@@ -827,24 +827,24 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                     $key[$attribute] = $order;
                 }
 
-                $newIndexes[$i] = [
+                $newIndexes[$indexPosition] = [
                     'key' => $key,
                     'name' => $this->filter($index->getKey()),
                     'unique' => $unique,
                 ];
 
-                if ($index->getType() === IndexType::Fulltext) {
-                    $newIndexes[$i]['default_language'] = 'none';
+                if ($indexType === IndexType::Fulltext) {
+                    $newIndexes[$indexPosition]['default_language'] = 'none';
                 }
 
-                if ($index->getType() === IndexType::Ttl) {
+                if ($indexType === IndexType::Ttl) {
                     $ttl = $index->getTtl();
                     if ($ttl > 0) {
-                        $newIndexes[$i]['expireAfterSeconds'] = $ttl;
+                        $newIndexes[$indexPosition]['expireAfterSeconds'] = $ttl;
                     }
                 }
 
-                if (in_array($index->getType(), [IndexType::Unique, IndexType::Key])) {
+                if (in_array($indexType, [IndexType::Unique, IndexType::Key])) {
                     $fields = [];
                     foreach ($attributes as $indexedAttribute) {
                         $attributeType = ColumnType::String;
@@ -858,7 +858,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                         $fields[$this->filter($this->getInternalKeyForAttribute($indexedAttribute))] = $attributeType;
                     }
                     if (! empty($fields)) {
-                        $newIndexes[$i]['partialFilterExpression'] = $this->getPartialFilterExpression($index->getType(), $fields);
+                        $newIndexes[$indexPosition]['partialFilterExpression'] = $this->getPartialFilterExpression($indexType, $fields);
                     }
                 }
             }
@@ -866,8 +866,8 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             try {
                 $options = $this->getTransactionOptions();
                 $indexesCreated = $this->getClient()->createIndexes($id, \array_values($newIndexes), $options);
-            } catch (Exception $e) {
-                throw $this->processException($e);
+            } catch (Exception $error) {
+                throw $this->processException($error);
             }
 
             if (! $indexesCreated) {
@@ -1174,25 +1174,25 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             $indexKey[Storage::TENANT] = $this->getOrder(OrderDirection::Asc);
         }
 
-        foreach ($attributes as $i => $attribute) {
+        foreach ($attributes as $position => $attribute) {
             $attribute = (string) $attribute;
 
             if (isset($indexAttributeTypes[$attribute]) && \str_contains($attribute, '.') && $indexAttributeTypes[$attribute] === ColumnType::Object->value) {
                 $dottedAttributes = \explode('.', $attribute);
                 $expandedAttributes = array_map(fn (string $part): string => $this->filter($part), $dottedAttributes);
-                $attributes[$i] = implode('.', $expandedAttributes);
+                $attributes[$position] = implode('.', $expandedAttributes);
             } else {
-                $attributes[$i] = $this->filter($this->getInternalKeyForAttribute($attribute));
+                $attributes[$position] = $this->filter($this->getInternalKeyForAttribute($attribute));
             }
 
-            $orderType = $this->getOrder(OrderDirection::tryFrom(Index::direction($orders[$i] ?? null)) ?? OrderDirection::Asc);
-            $indexKey[$attributes[$i]] = $orderType;
+            $orderType = $this->getOrder(OrderDirection::tryFrom(Index::direction($orders[$position] ?? null)) ?? OrderDirection::Asc);
+            $indexKey[$attributes[$position]] = $orderType;
 
             switch ($type) {
                 case IndexType::Key:
                     break;
                 case IndexType::Fulltext:
-                    $indexKey[$attributes[$i]] = 'text';
+                    $indexKey[$attributes[$position]] = 'text';
                     break;
                 case IndexType::Unique:
                     $indexes['unique'] = true;
@@ -1235,8 +1235,8 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
         if (in_array($type, [IndexType::Unique, IndexType::Key])) {
             $fields = [];
-            foreach ($attributes as $i => $filteredAttribute) {
-                $fields[$filteredAttribute] = Attribute::tryNormalizeType($indexAttributeTypes[$indexedAttributes[$i]] ?? '') ?? ColumnType::String;
+            foreach ($attributes as $position => $filteredAttribute) {
+                $fields[$filteredAttribute] = Attribute::tryNormalizeType($indexAttributeTypes[$indexedAttributes[$position]] ?? '') ?? ColumnType::String;
             }
             if (! empty($fields)) {
                 $indexes['partialFilterExpression'] = $this->getPartialFilterExpression($type, $fields);
@@ -1277,12 +1277,12 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                                 }
                             }
                         }
-                    } catch (Exception $e) {
+                    } catch (Exception $error) {
                         if ($retryCount >= $maxRetries - 1) {
                             throw new DatabaseException(
-                                'Timeout waiting for index creation: '.$e->getMessage(),
-                                $e->getCode(),
-                                $e
+                                'Timeout waiting for index creation: '.$error->getMessage(),
+                                $error->getCode(),
+                                $error
                             );
                         }
                     }
@@ -1296,8 +1296,8 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             }
 
             return $result;
-        } catch (Exception $e) {
-            throw $this->processException($e);
+        } catch (Exception $error) {
+            throw $this->processException($error);
         }
     }
 
@@ -3840,8 +3840,8 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             $indexType = $indexOrType->getType();
         } elseif ($indexOrType instanceof Document) {
             $rawIndexType = $indexOrType->getAttribute('type');
-            $indexTypeVal = \is_string($rawIndexType) ? $rawIndexType : (\is_scalar($rawIndexType) ? (string) $rawIndexType : '');
-            $indexType = IndexType::tryFrom($indexTypeVal) ?? IndexType::Key;
+            $indexTypeValue = \is_string($rawIndexType) ? $rawIndexType : (\is_scalar($rawIndexType) ? (string) $rawIndexType : '');
+            $indexType = IndexType::tryFrom($indexTypeValue) ?? IndexType::Key;
         } elseif ($indexOrType instanceof IndexType) {
             $indexType = $indexOrType;
         } else {
@@ -3983,7 +3983,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         return '';
     }
 
-    protected function execute(mixed $stmt): bool
+    protected function execute(mixed $statement): bool
     {
         return true;
     }

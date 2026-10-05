@@ -1964,7 +1964,7 @@ class Memory extends Adapter implements Feature\Relationships
         return [];
     }
 
-    protected function execute(mixed $stmt): bool
+    protected function execute(mixed $statement): bool
     {
         return true;
     }

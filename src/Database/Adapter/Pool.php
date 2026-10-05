@@ -1114,7 +1114,7 @@ class Pool extends Adapter
         return $result;
     }
 
-    protected function execute(mixed $stmt): bool
+    protected function execute(mixed $statement): bool
     {
         /** @var bool $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());

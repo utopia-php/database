@@ -153,16 +153,18 @@ trait Relationships
 
         /** @var array<Attribute> $attributes */
         $attributes = $collection->getAttribute('attributes', []);
+        $collectionId = $collection->getId();
+        $relatedCollectionId = $relatedCollection->getId();
         foreach ($attributes as $attribute) {
             if (\strtolower($attribute->getKey()) === \strtolower($id)) {
                 throw new DuplicateException('Attribute already exists');
             }
 
             if ($attribute->getType() === ColumnType::Relationship) {
-                $existingRelationship = Relationship::fromArray(['collection' => $collection->getId()] + $attribute->getArrayCopy());
+                $existingRelationship = Relationship::fromArray(['collection' => $collectionId] + $attribute->getArrayCopy());
                 if (
                     \strtolower($existingRelationship->getTwoWayKey()) === \strtolower($twoWayKey)
-                    && $existingRelationship->getRelatedCollection() === $relatedCollection->getId()
+                    && $existingRelationship->getRelatedCollection() === $relatedCollectionId
                 ) {
                     throw new DuplicateException('Related attribute already exists');
                 }
@@ -241,8 +243,8 @@ trait Relationships
                 if ($junctionCollection !== null) {
                     try {
                         $this->silent(fn () => $this->cleanupCollection($junctionCollection));
-                    } catch (Throwable $e) {
-                        Console::error("Failed to cleanup junction collection '{$junctionCollection}': ".$e->getMessage());
+                    } catch (Throwable $error) {
+                        Console::error("Failed to cleanup junction collection '{$junctionCollection}': ".$error->getMessage());
                     }
                 }
                 throw new DatabaseException('Failed to create relationship');
@@ -266,8 +268,8 @@ trait Relationships
                         $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
                     });
                 });
-            } catch (Throwable $e) {
-                if (! $this->mayHaveCommitted($e)) {
+            } catch (Throwable $error) {
+                if (! $this->mayHaveCommitted($error)) {
                     $this->rollbackAttributeMetadata($collection, [$id]);
                     $this->rollbackAttributeMetadata($relatedCollection, [$twoWayKey]);
 
@@ -295,10 +297,10 @@ trait Relationships
                         }
                     }
 
-                    throw new DatabaseException('Failed to create relationship: '.$e->getMessage(), previous: $e);
+                    throw new DatabaseException('Failed to create relationship: '.$error->getMessage(), previous: $error);
                 }
 
-                $committedFailure = $e;
+                $committedFailure = $error;
             }
 
             $indexKey = '_index_'.$id;
@@ -320,16 +322,16 @@ trait Relationships
                 foreach ($indexes as [$indexCollection, $index]) {
                     try {
                         $this->createIndex($indexCollection, $index);
-                    } catch (Throwable $e) {
-                        if (! $this->mayHaveCommitted($e)) {
-                            throw $e;
+                    } catch (Throwable $error) {
+                        if (! $this->mayHaveCommitted($error)) {
+                            throw $error;
                         }
 
-                        $committedFailure ??= $e;
+                        $committedFailure ??= $error;
                     }
                     $indexesCreated[] = ['collection' => $indexCollection, 'index' => $index->getKey()];
                 }
-            } catch (Throwable $e) {
+            } catch (Throwable $error) {
                 foreach ($indexesCreated as $indexInfo) {
                     try {
                         $this->deleteIndex($indexInfo['collection'], $indexInfo['index']);
@@ -343,12 +345,12 @@ trait Relationships
                     $this->withTransaction(function () use ($collection, $relatedCollection, $id, $twoWayKey) {
                         /** @var array<Attribute> $attributes */
                         $attributes = $collection->getAttribute('attributes', []);
-                        $collection->setAttribute('attributes', array_filter($attributes, fn (Attribute $attr) => $attr->getId() !== $id));
+                        $collection->setAttribute('attributes', array_filter($attributes, fn (Attribute $existing) => $existing->getId() !== $id));
                         $this->updateDocument(self::METADATA, $collection->getId(), $collection);
 
                         /** @var array<Attribute> $relatedAttributes */
                         $relatedAttributes = $relatedCollection->getAttribute('attributes', []);
-                        $relatedCollection->setAttribute('attributes', array_filter($relatedAttributes, fn (Attribute $attr) => $attr->getId() !== $twoWayKey));
+                        $relatedCollection->setAttribute('attributes', array_filter($relatedAttributes, fn (Attribute $existing) => $existing->getId() !== $twoWayKey));
                         $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
                     });
                 } catch (Throwable $cleanupError) {
@@ -380,7 +382,7 @@ trait Relationships
                     }
                 }
 
-                throw new DatabaseException('Failed to create relationship indexes: '.$e->getMessage(), previous: $e);
+                throw new DatabaseException('Failed to create relationship indexes: '.$error->getMessage(), previous: $error);
             }
 
             if ($committedFailure !== null) {
@@ -454,12 +456,10 @@ trait Relationships
         $relatedCollectionId = $oldRelationship->getRelatedCollection();
         $relatedCollection = $this->getCollection($relatedCollectionId);
 
-        // Determine if we need to alter the database (rename columns/indexes)
         $oldTwoWayKey = $oldRelationship->getTwoWayKey();
         $altering = ($newKey !== null && $newKey !== $id)
             || ($newTwoWayKey !== null && $newTwoWayKey !== $oldTwoWayKey);
 
-        // Validate new keys don't already exist
         /** @var array<Attribute> $relatedCollectionAttributes */
         $relatedCollectionAttributes = $relatedCollection->getAttribute('attributes', []);
         if (
@@ -496,7 +496,7 @@ trait Relationships
                 if (! $adapterUpdated) {
                     throw new DatabaseException('Failed to update relationship');
                 }
-            } catch (Throwable $e) {
+            } catch (Throwable $error) {
                 // Check if the rename already happened in schema (orphan from prior
                 // partial failure where adapter succeeded but metadata+rollback failed).
                 // If the new column names already exist, the prior rename completed.
@@ -504,8 +504,8 @@ trait Relationships
                     $schemaAttributes = $this->getSchemaAttributes($collection->getId());
                     $filteredNewKey = $this->adapter->filter($actualNewKey);
                     $newKeyExists = false;
-                    foreach ($schemaAttributes as $schemaAttr) {
-                        if (\strtolower($schemaAttr->getId()) === \strtolower($filteredNewKey)) {
+                    foreach ($schemaAttributes as $schemaAttribute) {
+                        if (\strtolower($schemaAttribute->getId()) === \strtolower($filteredNewKey)) {
                             $newKeyExists = true;
                             break;
                         }
@@ -513,10 +513,10 @@ trait Relationships
                     if ($newKeyExists) {
                         $adapterUpdated = true;
                     } else {
-                        throw new DatabaseException("Failed to update relationship '{$id}': ".$e->getMessage(), previous: $e);
+                        throw new DatabaseException("Failed to update relationship '{$id}': ".$error->getMessage(), previous: $error);
                     }
                 } else {
-                    throw new DatabaseException("Failed to update relationship '{$id}': ".$e->getMessage(), previous: $e);
+                    throw new DatabaseException("Failed to update relationship '{$id}': ".$error->getMessage(), previous: $error);
                 }
             }
         }
@@ -563,7 +563,7 @@ trait Relationships
 
                 $this->withRetries(fn () => $this->purgeCachedCollection($junction));
             }
-        } catch (Throwable $e) {
+        } catch (Throwable $error) {
             $restores = [
                 fn () => $this->updateAttributeMeta($collection->getId(), $actualNewKey, function ($attribute) use ($id, $oldRelationship) {
                     $attribute->setAttribute(Document::ID, $id);
@@ -618,10 +618,9 @@ trait Relationships
                     // Ignore
                 }
             }
-            throw $e;
+            throw $error;
         }
 
-        // Update Indexes — wrapped in rollback for consistency with metadata
         $renameIndex = function (string $collection, string $key, string $newKey) {
             $this->updateIndexMeta(
                 $collection,
@@ -690,7 +689,7 @@ trait Relationships
                 default:
                     throw new RelationshipException('Invalid relationship type.');
             }
-        } catch (Throwable $e) {
+        } catch (Throwable $error) {
             if ($adapterUpdated && $this->adapter->hasFeature(Feature\Relationships::class)) {
                 try {
                     $renamed = new Relationship(
@@ -749,24 +748,24 @@ trait Relationships
             if ($oldRelationship->getType() === RelationType::ManyToMany) {
                 $junctionId = $this->getJunctionCollection($collection, $relatedCollection, $oldRelationship->getSide());
                 try {
-                    $this->updateAttributeMeta($junctionId, $actualNewKey, function ($attr) use ($id) {
-                        $attr->setAttribute(Document::ID, $id);
-                        $attr->setAttribute('key', $id);
+                    $this->updateAttributeMeta($junctionId, $actualNewKey, function ($junctionAttribute) use ($id) {
+                        $junctionAttribute->setAttribute(Document::ID, $id);
+                        $junctionAttribute->setAttribute('key', $id);
                     }, triggerEvent: false);
                 } catch (Throwable) {
                     // Best effort
                 }
                 try {
-                    $this->updateAttributeMeta($junctionId, $actualNewTwoWayKey, function ($attr) use ($oldTwoWayKey) {
-                        $attr->setAttribute(Document::ID, $oldTwoWayKey);
-                        $attr->setAttribute('key', $oldTwoWayKey);
+                    $this->updateAttributeMeta($junctionId, $actualNewTwoWayKey, function ($junctionAttribute) use ($oldTwoWayKey) {
+                        $junctionAttribute->setAttribute(Document::ID, $oldTwoWayKey);
+                        $junctionAttribute->setAttribute('key', $oldTwoWayKey);
                     }, triggerEvent: false);
                 } catch (Throwable) {
                     // Best effort
                 }
             }
 
-            throw new DatabaseException("Failed to update relationship indexes for '{$id}': ".$e->getMessage(), previous: $e);
+            throw new DatabaseException("Failed to update relationship indexes for '{$id}': ".$error->getMessage(), previous: $error);
         }
 
         $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
@@ -825,8 +824,9 @@ trait Relationships
         /** @var array<int|string, Attribute> $relatedAttributes */
         $relatedAttributes = $relatedCollection->getAttribute('attributes', []);
 
+        $twoWayKey = $definition->getTwoWayKey();
         foreach ($relatedAttributes as $name => $attribute) {
-            if ($attribute->getKey() === $definition->getTwoWayKey()) {
+            if ($attribute->getKey() === $twoWayKey) {
                 unset($relatedAttributes[$name]);
                 break;
             }
@@ -838,7 +838,6 @@ trait Relationships
         $relatedCollectionAttributes = $relatedCollection->getAttribute('attributes');
 
         // Delete indexes BEFORE dropping columns to avoid referencing non-existent columns
-        // Track deleted indexes for rollback
         $deletedIndexes = [];
         $deletedJunction = null;
 
@@ -934,7 +933,7 @@ trait Relationships
                     });
                 });
             });
-        } catch (Throwable $e) {
+        } catch (Throwable $error) {
             if ($shouldRollback) {
                 try {
                     $restored = new Relationship(
@@ -953,7 +952,6 @@ trait Relationships
                 }
             }
 
-            // Restore deleted indexes
             foreach ($deletedIndexes as $indexInfo) {
                 try {
                     $this->createIndex(
@@ -969,7 +967,6 @@ trait Relationships
                 }
             }
 
-            // Restore junction collection metadata for M2M
             if ($deletedJunction !== null && ! $deletedJunction->isEmpty()) {
                 try {
                     $this->silent(fn () => $this->createDocument(self::METADATA, $deletedJunction));
@@ -979,8 +976,8 @@ trait Relationships
             }
 
             throw new DatabaseException(
-                "Failed to persist metadata after retries for relationship deletion '{$id}': ".$e->getMessage(),
-                previous: $e
+                "Failed to persist metadata after retries for relationship deletion '{$id}': ".$error->getMessage(),
+                previous: $error
             );
         }
 

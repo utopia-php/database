@@ -1567,7 +1567,7 @@ class Redis extends Adapter implements
         return '0';
     }
 
-    protected function execute(mixed $stmt): bool
+    protected function execute(mixed $statement): bool
     {
         return true;
     }

@@ -10,6 +10,7 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 
@@ -125,6 +126,7 @@ class RedisTest extends Base
     {
         $database = $this->getDatabase();
         $collection = 'lenientReads';
+        $id = ID::unique();
         $permissions = [Permission::read(Role::any())];
 
         $database->createCollection(new Collection(
@@ -138,40 +140,62 @@ class RedisTest extends Base
             documentSecurity: true,
         ));
         $database->createDocument($collection, new Document([
-            '$id' => 'note',
+            '$id' => $id,
             '$permissions' => $permissions,
             'title' => 'stored',
         ]));
 
-        $adapter = $database->getAdapter();
         $client = self::$redisClient;
-        $this->assertInstanceOf(RedisAdapter::class, $adapter);
         $this->assertNotNull($client);
-        $segments = [RedisAdapter::KEY_PREFIX, $adapter->getNamespace(), $adapter->getDatabase(), 'doc'];
-        if ($adapter->getSharedTables()) {
-            $tenant = $adapter->getTenant();
-            \array_push($segments, 't', $tenant === null ? '_' : (string) $tenant);
+        $payloads = $this->findStoredPayloads($client, $id);
+        $this->assertNotEmpty($payloads, 'The created document must be stored as a JSON string value.');
+        foreach ($payloads as $key => $stored) {
+            $stored[Document::PERMISSIONS] = [Permission::read(Role::any()), 42, null];
+            $client->set($key, \json_encode($stored, JSON_THROW_ON_ERROR));
         }
-        \array_push($segments, $collection, 'note');
-        $key = \implode(RedisAdapter::SEP, $segments);
-        $payload = $client->get($key);
-        $this->assertIsString($payload);
-        $stored = \json_decode($payload, true, flags: JSON_THROW_ON_ERROR);
-        $this->assertIsArray($stored);
-        $stored[Document::PERMISSIONS] = [Permission::read(Role::any()), 42, null];
-        $client->set($key, \json_encode($stored, JSON_THROW_ON_ERROR));
 
-        $this->assertSame($permissions, $database->getDocument($collection, 'note')->getPermissions());
+        $this->assertSame($permissions, $database->getDocument($collection, $id)->getPermissions());
         $this->assertSame(
             [$permissions],
             \array_map(fn (Document $document): array => $document->getPermissions(), $database->find($collection)),
         );
 
         $this->assertSame(1, $database->updateDocuments($collection, new Document(['title' => 'bulk'])));
-        $this->assertSame('bulk', $database->getDocument($collection, 'note')->getAttribute('title'));
+        $this->assertSame('bulk', $database->getDocument($collection, $id)->getAttribute('title'));
 
-        $updated = $database->updateDocument($collection, 'note', new Document(['title' => 'single']));
+        $updated = $database->updateDocument($collection, $id, new Document(['title' => 'single']));
         $this->assertSame('single', $updated->getAttribute('title'));
         $this->assertSame($permissions, $updated->getPermissions());
+    }
+
+    /**
+     * @return array<string, array<mixed>>
+     */
+    private function findStoredPayloads(Redis $client, string $id): array
+    {
+        $payloads = [];
+        $iterator = null;
+        do {
+            $keys = $client->scan($iterator, null, 1000, 'string');
+            if (! \is_array($keys) || $keys === []) {
+                continue;
+            }
+            $keys = \array_values(\array_filter($keys, \is_string(...)));
+            $values = $client->mGet($keys);
+            if (! \is_array($values)) {
+                continue;
+            }
+            foreach (\array_combine($keys, \array_values($values)) as $key => $value) {
+                if (! \is_string($value) || ! \str_contains($value, $id)) {
+                    continue;
+                }
+                $decoded = \json_decode($value, true);
+                if (\is_array($decoded) && ($decoded[Document::ID] ?? null) === $id) {
+                    $payloads[$key] = $decoded;
+                }
+            }
+        } while ($iterator > 0);
+
+        return $payloads;
     }
 }

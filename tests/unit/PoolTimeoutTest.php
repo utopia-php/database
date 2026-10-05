@@ -45,12 +45,12 @@ class PoolTimeoutTest extends TestCase
 
         $adapter->setAuthorization(new Authorization());
         $adapter->setTimeout(300000);
-        $adapter->getSupportForTimeouts();
+        $adapter->ping();
 
         $this->assertSame([Database::EVENT_ALL => 300000], $connection->timeouts);
 
         $connection->timeouts = [];
-        $adapter->getSupportForTimeouts();
+        $adapter->ping();
 
         $this->assertSame([Database::EVENT_ALL => 300000], $connection->timeouts);
     }
@@ -62,9 +62,9 @@ class PoolTimeoutTest extends TestCase
 
         $adapter->setAuthorization(new Authorization());
         $adapter->setTimeout(300000);
-        $adapter->getSupportForTimeouts();
+        $adapter->ping();
         $adapter->clearTimeout(Database::EVENT_ALL);
-        $adapter->getSupportForTimeouts();
+        $adapter->ping();
 
         $this->assertSame([], $connection->timeouts);
         $this->assertSame(0, $connection->getTimeout());
@@ -79,7 +79,7 @@ class PoolTimeoutTest extends TestCase
         $adapter->setAuthorization(new Authorization());
         $adapter->setTimeout(300000);
         $adapter->setTimeout(5000, Database::EVENT_DOCUMENT_READ);
-        $adapter->getSupportForTimeouts();
+        $adapter->ping();
 
         $this->assertSame([
             Database::EVENT_DOCUMENT_READ => 5000,
@@ -103,7 +103,7 @@ class PoolTimeoutTest extends TestCase
         $adapter->setTimeout(300000);
         $adapter->setTimeout(5000, Database::EVENT_DOCUMENT_READ);
         $adapter->clearTimeout(Database::EVENT_DOCUMENT_READ);
-        $adapter->getSupportForTimeouts();
+        $adapter->ping();
 
         $this->assertSame([Database::EVENT_ALL => 300000], $connection->timeouts);
         $this->assertSame(300000, $connection->getTimeout(), 'Postgres and Mongo bound every statement by this scalar, so clearing one event must not zero it');
@@ -124,11 +124,11 @@ class PoolTimeoutTest extends TestCase
         $bounded = new Pool($pool);
         $bounded->setAuthorization(new Authorization());
         $bounded->setTimeout(5000);
-        $bounded->getSupportForTimeouts();
+        $bounded->ping();
 
         $unbounded = new Pool($pool);
         $unbounded->setAuthorization(new Authorization());
-        $unbounded->getSupportForTimeouts();
+        $unbounded->ping();
 
         $this->assertSame([], $connection->timeouts, 'A handle that asked for no timeout must not run under the last holder\'s');
         $this->assertSame(0, $connection->getTimeout());
@@ -150,7 +150,7 @@ class PoolTimeoutTest extends TestCase
         $adapter->setTimeout(300000);
         $adapter->setTimeout(5000, Database::EVENT_DOCUMENT_READ);
         $adapter->clearTimeouts();
-        $adapter->getSupportForTimeouts();
+        $adapter->ping();
 
         $this->assertSame([], $connection->timeouts, 'A timeout the caller cleared must not come back on the next checkout');
         $this->assertSame(0, $adapter->getTimeout());
@@ -197,7 +197,7 @@ class PoolTimeoutTest extends TestCase
 
         $adapter->setAuthorization(new Authorization());
         $adapter->setTimeout(0);
-        $adapter->getSupportForTimeouts();
+        $adapter->ping();
 
         $this->assertSame([], $connection->timeouts);
         $this->assertSame(0, $adapter->getTimeout());

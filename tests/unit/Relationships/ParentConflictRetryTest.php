@@ -55,6 +55,27 @@ final class ParentConflictRetryTest extends TestCase
     }
 
     #[DataProvider('modes')]
+    public function testACreateRetriedByAnEnclosingTransactionKeepsItsNewRelatedDocuments(bool $prepare): void
+    {
+        $database = $this->database($prepare, 'createDocument');
+        $document = new Document([
+            '$id' => 'p1',
+            'name' => 'p1',
+            'children' => [new Document([
+                '$id' => 'c1',
+                'name' => 'c1',
+                'toys' => [new Document(['$id' => 't1', 'name' => 't1'])],
+            ])],
+        ]);
+
+        $database->withTransaction(static fn (): Document => $database->createDocument('parents', $document));
+
+        $this->assertSame([['p1', 'p1']], $this->stored($database, 'parents', 'name'));
+        $this->assertSame([['c1', 'p1']], $this->stored($database, 'children', 'parent'));
+        $this->assertSame([['t1', 'c1']], $this->stored($database, 'toys', 'child'));
+    }
+
+    #[DataProvider('modes')]
     public function testARetriedCreateKeepsItsRelatedDocumentIds(bool $prepare): void
     {
         $database = $this->database($prepare, 'createDocument');

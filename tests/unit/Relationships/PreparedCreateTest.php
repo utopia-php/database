@@ -106,9 +106,8 @@ final class PreparedCreateTest extends TestCase
     }
 
     /**
-     * Written one by one, a write that fails leaves the related documents it got to as it changed them, and a
-     * transaction that retries the write relates whatever is left of them; written where each would be written,
-     * a write that fails restores the related documents it was given, so a retry starts over from them.
+     * Written one by one or each where it would be written, a write that fails restores the related documents it was
+     * given, so a transaction that retries the write starts over from them.
      */
     #[DataProvider('scenarios')]
     public function testImmediateCreateMatchesOneByOne(string $engine, string $scenario): void
@@ -116,14 +115,15 @@ final class PreparedCreateTest extends TestCase
         $oneByOne = $this->observe($engine, self::ONE_BY_ONE_WITHOUT_SAVEPOINTS, $scenario);
         $immediate = $this->observe($engine, self::IMMEDIATE, $scenario);
 
-        if (isset($immediate['thrown']) && $immediate['inputs'] !== $oneByOne['inputs']) {
-            $given = $immediate['given'];
-            $inputs = $immediate['inputs'];
-            if (! \is_array($given) || ! \is_array($inputs)) {
-                $this->fail('An observation lacks the documents handed in');
+        if (isset($immediate['thrown'])) {
+            foreach ([$oneByOne, $immediate] as $observation) {
+                $given = $observation['given'];
+                $inputs = $observation['inputs'];
+                if (! \is_array($given) || ! \is_array($inputs)) {
+                    $this->fail('An observation lacks the documents handed in');
+                }
+                $this->assertSame(\array_slice($given, 1), \array_slice($inputs, 1), 'A failed write left the related documents it was given changed');
             }
-            $this->assertSame(\array_slice($given, 1), \array_slice($inputs, 1), 'A failed write left the related documents it was given changed');
-            unset($oneByOne['inputs'], $immediate['inputs']);
         }
 
         $this->assertSameObservations($oneByOne, $immediate);

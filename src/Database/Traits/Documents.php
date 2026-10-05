@@ -1061,25 +1061,33 @@ trait Documents
 
         /** @var array<int, array{Document, array<string, mixed>}> $copies */
         $copies = [];
-        $document = $this->withMutation(Event::DocumentCreate, $document, function () use ($collection, $document, &$copies) {
-            $hook = $this->relationshipHook;
-            if ($hook?->isEnabled()) {
-                if ($copies !== []) {
-                    $hook->restore($copies);
+        try {
+            $document = $this->withMutation(Event::DocumentCreate, $document, function () use ($collection, $document, &$copies) {
+                $hook = $this->relationshipHook;
+                if ($hook?->isEnabled()) {
+                    if ($copies !== [] && $copies !== null) {
+                        $hook->restore($copies);
+                    }
+                    $document = $this->silent(function () use ($hook, $collection, $document, &$copies): Document {
+                        return $hook->afterDocumentCreate($collection, $document, $copies);
+                    });
                 }
-                $document = $this->silent(function () use ($hook, $collection, $document, &$copies): Document {
-                    return $hook->afterDocumentCreate($collection, $document, $copies);
-                });
+
+                $document = $this->adapter->createDocument($collection, $document);
+                $this->withDocumentTenant(
+                    $document,
+                    fn () => $this->purgeCachedDocumentInternal($collection->getId(), $document->getId())
+                );
+
+                return $document;
+            });
+        } catch (Throwable $error) {
+            if ($copies !== [] && $copies !== null) {
+                $this->relationshipHook?->restore($copies);
             }
 
-            $document = $this->adapter->createDocument($collection, $document);
-            $this->withDocumentTenant(
-                $document,
-                fn () => $this->purgeCachedDocumentInternal($collection->getId(), $document->getId())
-            );
-
-            return $document;
-        });
+            throw $error;
+        }
 
         $hook = $this->relationshipHook;
         if ($hook !== null && ! $hook->isInBatchPopulation() && $hook->isEnabled()) {

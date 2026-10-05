@@ -568,13 +568,26 @@ or the `Authorization` do not see them:
   `withPreserveDates()`, `withPreserveSequence()`, `withTenant()`, `withRequestTimestamp()`, and `skipDuplicates()`
   on the database and on the adapter.
 
-The plain setters (`Authorization::setStatus()`, `enable()`, `disable()`, `reset()`, `addRole()`, `removeRole()` and
-`cleanRoles()`, and `setTenant()`, `enableValidation()`, `disableValidation()`, `enableFilters()`,
-`disableFilters()`, `setPreserveDates()` and `setPreserveSequence()`) still change the shared value when the calling
-coroutine is outside every such scope. Inside one, whether the calling coroutine opened it or inherited it from the
-coroutine that started it, a setter changes only what the calling coroutine and the coroutines it starts see, and
-only until the scope ends. When the scope ends, the value is what it was before the scope, as in 7.x, and a change
-made by a coroutine started inside the scope never reaches the other coroutines sharing the handle.
+A plain setter is scoped only by a scope over the same state:
+
+- `Authorization::setStatus()`, `enable()`, `disable()` and `reset()` by `Authorization::skip()` and `withStatus()`;
+- `Authorization::addRole()`, `removeRole()` and `cleanRoles()` by `Authorization::withRoles()`;
+- `setTenant()` by `withTenant()`;
+- `enableValidation()` and `disableValidation()` by `skipValidation()`;
+- `enableFilters()` and `disableFilters()` by `skipFilters()`;
+- `setPreserveDates()` by `withPreserveDates()`, and `setPreserveSequence()` by `withPreserveSequence()`.
+
+`withSnapshot()` opens a scope over each of them. Outside every scope over its state, a setter changes the shared
+value, as in 7.x: `disable()` inside `withRoles()` turns authorization off for every coroutine sharing the
+`Authorization`. Inside such a scope, whether the calling coroutine opened it or inherited it from the coroutine that
+started it, a setter changes only what the calling coroutine and the coroutines it starts see, and only until the
+scope ends. When the scope ends, the value is what it was before the scope, as in 7.x.
+
+A coroutine sees a scope only while every coroutine between it and the scope's owner is still running, because
+Swoole cannot report the parent of a coroutine that has finished. Once one of those ancestors has returned, the
+coroutine reads and writes the shared values, and on `Adapter\Pool` it borrows a connection of its own outside the
+scope's transaction. Work that can outlive the coroutine that started it has to take the state with `snapshot()`
+before it starts and run under `withSnapshot()`; a snapshot does not carry a transaction.
 
 To run work started in another coroutine under the caller's state, take `$snapshot = $database->snapshot()` in the
 caller and run the work inside `$database->withSnapshot($snapshot, $callback)`. A snapshot carries the authorization

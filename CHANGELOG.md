@@ -242,8 +242,11 @@ have to make, with the 7.x and 8.0 forms side by side.
   `withRequestTimestamp()`, `skipDuplicates()` and `Authorization::withRoles()` are scoped to the calling coroutine
   and the coroutines it starts; sibling coroutines sharing the handle or the `Authorization` no longer see them. The
   plain setters (`setStatus()`, `enable()`, `disable()`, `reset()`, `setTenant()`, ...) still change the shared
-  value, except inside such a scope, including one the coroutine inherited from the coroutine that started it: there
-  the change applies to the calling coroutine and the coroutines it starts, and lasts until the scope ends.
+  value, except inside a scope over the same state (`disable()` inside `skip()`, `setTenant()` inside
+  `withTenant()`), including one the coroutine inherited from the coroutine that started it: there the change
+  applies to the calling coroutine and the coroutines it starts, and lasts until the scope ends. A coroutine sees a
+  scope only while every coroutine between it and the scope's owner is running; work that can outlive its starter
+  runs under `withSnapshot()`. See [Coroutines](UPGRADE.md#coroutines).
 - Relationship population reads its chunks of related ids concurrently only on `Adapter\Pool`, inside a coroutine
   and outside a transaction; elsewhere it reads them one after another. Related documents are merged in chunk order.
 - Linking an existing many-to-many related document needs update permission on it, as one-to-one, one-to-many and
@@ -621,6 +624,9 @@ not change anything for an upgrade from 7.x.
     wrote and collections whose cache it retired: a write no longer reads its collection definition from the
     database inside its own transaction. Reads inside a transaction still never write to the cache. A missing
     collection costs one read of `_metadata` again, as in 7.x.
+  - Inside `withTransaction()`, a collection definition read under `skipFilters()` and a filtered read of it no
+    longer share one copy: a raw `_metadata` read no longer makes later writes in the transaction fail, and a
+    `skipFilters()` read after a filtered one returns the raw definition.
   - With `ReadWritePool`, a document or query result served by a read replica is no longer cached, so a lagging
     replica cannot leave an old version in the cache for other handles.
   - A writer killed between blocking and re-enabling a collection's document or query cache no longer keeps that
@@ -678,6 +684,10 @@ not change anything for an upgrade from 7.x.
 - **Documents and schema:**
   - A document id of `'unique()'` is stored verbatim again, as in 7.x, including for related documents created
     through relationship attributes. Only an empty id asks the library to generate one.
+  - A create that writes its new related documents in one pass files a related document given as an associative
+    array under its relationship's collection (MongoDB threw `Duplicate`), leaves a lock conflict to the outermost
+    `withTransaction()` to retry, as in 7.x, and no longer applies attribute filters twice when it falls back to
+    writing the related documents one by one.
   - `updateDocuments()` with an `Operator` decodes the refetched batch once; `count()` and `sum()` on a missing
     collection throw `Exception\NotFound`; a case-only `$id` rename in `updateDocument()` is applied; and every
     internal metadata write runs Structure validation, as in 7.x.
@@ -743,6 +753,8 @@ not change anything for an upgrade from 7.x.
     the destination receives undecorated documents.
 - **Performance:**
   - Permission checks no longer use `SELECT DISTINCT` in their subquery (SQLite built a temporary B-tree per read).
+  - A delete whose set-null relationship clears related documents keeps them only while a hook that handles
+    `document_update` needs them for its report, instead of holding every cleared document until the delete returns.
   - The query and document caches list a collection's owner registrations (`HKEYS`) only until the cache shows it
     keeps hash fields, instead of twice per invalidation.
   - SQLite: `createDocument()` reads the new sequence from `PDO::lastInsertId()` instead of a

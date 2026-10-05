@@ -1118,7 +1118,7 @@ class Postgres extends SQL
 
             $sql = "
 			DELETE FROM {$this->getSQLTable($name . '_perms')}
-			WHERE _document = :_uid
+			WHERE _document{$this->getPermissionsDocumentCollation()} = :_uid
 			{$this->getTenantQuery($collection)}
 		";
 
@@ -1355,7 +1355,7 @@ class Postgres extends SQL
 			SET
 			    \"{$attribute}\" = \"{$attribute}\" + :val,
                 \"_updatedAt\" = :updatedAt
-			WHERE _uid = :_uid
+			WHERE _uid{$this->getUIDCollation()} = :_uid
 			{$this->getTenantQuery($collection)}
 		";
 
@@ -1396,7 +1396,7 @@ class Postgres extends SQL
 
         $sql = "
 			DELETE FROM {$this->getSQLTable($name)} 
-			WHERE _uid = :_uid
+			WHERE _uid{$this->getUIDCollation()} = :_uid
 			{$this->getTenantQuery($collection)}
 		";
 
@@ -1410,7 +1410,7 @@ class Postgres extends SQL
 
         $sql = "
 			DELETE FROM {$this->getSQLTable($name . '_perms')} 
-			WHERE _document = :_uid
+			WHERE _document{$this->getPermissionsDocumentCollation()} = :_uid
 			{$this->getTenantQuery($collection)}
 		";
 
@@ -1729,6 +1729,10 @@ class Postgres extends SQL
             default:
                 $conditions = [];
                 $operator = $operator ?? $this->getSQLOperator($query->getMethod());
+
+                if ($query->getMethod() === Query::TYPE_EQUAL && $query->getAttribute() === '_uid') {
+                    $attribute .= $this->getUIDCollation();
+                }
                 $isNotQuery = in_array($query->getMethod(), [
                     Query::TYPE_NOT_STARTS_WITH,
                     Query::TYPE_NOT_ENDS_WITH,
@@ -2860,6 +2864,28 @@ class Postgres extends SQL
         $table = $this->getShortKey($table);
 
         return "{$this->quote($this->getDatabase())}.{$this->quote($table)}";
+    }
+
+    /**
+     * The `_uid` unique index is built with the utf8_ci_ai collation, so the
+     * column has to be compared with it for the index to be used.
+     *
+     * @return string
+     */
+    protected function getUIDCollation(): string
+    {
+        return ' COLLATE utf8_ci_ai';
+    }
+
+    /**
+     * The permissions unique index is built on `_document` with the utf8_ci_ai
+     * collation, except for shared tables where it uses the default collation.
+     *
+     * @return string
+     */
+    protected function getPermissionsDocumentCollation(): string
+    {
+        return $this->sharedTables ? '' : ' COLLATE utf8_ci_ai';
     }
 
     public function getSupportForTTLIndexes(): bool

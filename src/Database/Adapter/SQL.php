@@ -389,7 +389,7 @@ abstract class SQL extends Adapter
         $sql = "
 		    SELECT {$this->getAttributeProjection($selections, $alias)}
             FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
-            WHERE {$this->quote($alias)}.{$this->quote('_uid')} = :_uid 
+            WHERE {$this->quote($alias)}.{$this->quote('_uid')}{$this->getUIDCollation()} = :_uid 
             {$this->getTenantQuery($collection, $alias)}
 		";
 
@@ -631,7 +631,7 @@ abstract class SQL extends Adapter
                 $sql = "
                     SELECT _type, _permission
                     FROM {$this->getSQLTable($name . '_perms')}
-                    WHERE _document = :_uid
+                    WHERE _document{$this->getPermissionsDocumentCollation()} = :_uid
                     {$this->getTenantQuery($collection)}
                 ";
 
@@ -675,7 +675,7 @@ abstract class SQL extends Adapter
                         $removeBindValues[$bindKey] = $document->getId();
 
                         $removeQueries[] = "(
-                            _document = :_uid_{$index}
+                            _document{$this->getPermissionsDocumentCollation()} = :_uid_{$index}
                             {$this->getTenantQuery($collection)}
                             AND _type = '{$type}'
                             AND _permission IN (" . \implode(', ', \array_map(function (string $i) use ($permissionsToRemove, $index, $type, &$removeBindKeys, &$removeBindValues) {
@@ -822,7 +822,7 @@ abstract class SQL extends Adapter
             if (!empty($permissionIds)) {
                 $sql = "
                 DELETE FROM {$this->getSQLTable($name . '_perms')} 
-                WHERE _document IN (" . \implode(', ', \array_map(fn ($index) => ":_id_{$index}", \array_keys($permissionIds))) . ")
+                WHERE _document{$this->getPermissionsDocumentCollation()} IN (" . \implode(', ', \array_map(fn ($index) => ":_id_{$index}", \array_keys($permissionIds))) . ")
                 {$this->getTenantQuery($collection)}
                 ";
 
@@ -894,7 +894,7 @@ abstract class SQL extends Adapter
         $sql = "
             SELECT _uid, _id
             FROM {$this->getSQLTable($collection)}
-            WHERE {$this->quote('_uid')} IN ({$placeholders})
+            WHERE {$this->quote('_uid')}{$this->getUIDCollation()} IN ({$placeholders})
             {$this->getTenantQuery($collection, tenantCount: \count($tenants))}
             ";
 
@@ -1988,6 +1988,28 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Get the collation clause to compare `_uid` with, so the comparison
+     * matches the collation of the `_uid` unique index and can use it.
+     *
+     * @return string
+     */
+    protected function getUIDCollation(): string
+    {
+        return '';
+    }
+
+    /**
+     * Get the collation clause to compare the permissions `_document` with, so
+     * the comparison matches the collation of the permissions unique index and can use it.
+     *
+     * @return string
+     */
+    protected function getPermissionsDocumentCollation(): string
+    {
+        return '';
+    }
+
+    /**
      * Get SQL table
      *
      * @param string $name
@@ -2845,7 +2867,7 @@ abstract class SQL extends Adapter
                     $toRemove = \array_diff($current[$type], $document->getPermissionsByType($type));
                     if (!empty($toRemove)) {
                         $removeQueries[] = "(
-                            _document = :_uid_{$index}
+                            _document{$this->getPermissionsDocumentCollation()} = :_uid_{$index}
                             " . ($this->sharedTables ? " AND _tenant = :_tenant_{$index}" : '') . "
                             AND _type = '{$type}'
                             AND _permission IN (" . \implode(',', \array_map(fn ($i) => ":remove_{$type}_{$index}_{$i}", \array_keys($toRemove))) . ")

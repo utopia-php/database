@@ -24,8 +24,11 @@ final class InvalidationCache extends Cache
         return $this->values[$key] ?? false;
     }
 
+    /**
+     * @return string|array<int|string, mixed>
+     */
     #[\Override]
-    public function save(string $key, mixed $data, string $hash = '', int $ttl = 0): bool|string|array
+    public function save(string $key, mixed $data, string $hash = '', int $ttl = 0): string|array
     {
         if (\is_string($data)) {
             $this->values[$key] = $data;

@@ -658,6 +658,8 @@ class Relationships implements Hook
     /**
      * Give each copied document back the attributes it was copied with.
      *
+     * @internal
+     *
      * @param  array<int, array{Document, array<string, mixed>}>  $copies
      */
     public function restore(array $copies): void

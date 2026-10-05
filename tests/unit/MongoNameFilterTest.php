@@ -40,6 +40,7 @@ final class MongoNameFilterTest extends TestCase
 
     public function testDeleteDropsTheDatabaseThatSetDatabaseSelects(): void
     {
+        /** @var ArrayObject<int, string|null> $droppedDatabases */
         $droppedDatabases = new ArrayObject();
         $adapter = self::adapter(self::client($droppedDatabases));
         $adapter->setDatabase("tenant.data\0");
@@ -51,6 +52,7 @@ final class MongoNameFilterTest extends TestCase
 
     public function testDeleteKeepsAnAlreadyValidDatabaseName(): void
     {
+        /** @var ArrayObject<int, string|null> $droppedDatabases */
         $droppedDatabases = new ArrayObject();
         $adapter = self::adapter(self::client($droppedDatabases));
 
@@ -131,7 +133,7 @@ final class MongoNameFilterTest extends TestCase
              * @param  array<mixed>  $command
              */
             #[\Override]
-            public function query(array $command, ?string $db = null): stdClass|array|int
+            public function query(array $command, ?string $db = null): stdClass
             {
                 /** @var array{name?: string} $filter */
                 $filter = $command['filter'] ?? [];

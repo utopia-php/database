@@ -12,6 +12,7 @@ use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
+use Utopia\Database\Document;
 use Utopia\Database\Exception\Unconfirmed as UnconfirmedException;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
@@ -27,7 +28,7 @@ final class UnconfirmedSchemaChangeTest extends TestCase
     public function testACollectionWhoseDefinitionIsUnconfirmedKeepsItsTable(): void
     {
         $unconfirmed = 0;
-        $database = $this->database($this->unconfirmedFrom(1, $unconfirmed));
+        $database = $this->database($unconfirmed, collection: 'logs');
 
         $thrown = $this->attempt(fn (): mixed => $database->createCollection(new Collection(id: 'logs')));
 
@@ -40,7 +41,7 @@ final class UnconfirmedSchemaChangeTest extends TestCase
     public function testAnAttributeWhoseDefinitionIsUnconfirmedKeepsItsColumn(): void
     {
         $unconfirmed = 0;
-        $database = $this->database($this->unconfirmedFrom(2, $unconfirmed));
+        $database = $this->database($unconfirmed, collection: 'logs', key: 'count');
         $database->createCollection(new Collection(id: 'logs'));
 
         $thrown = $this->attempt(fn (): bool => $database->createAttribute('logs', Attribute::integer(key: 'count')));
@@ -53,7 +54,7 @@ final class UnconfirmedSchemaChangeTest extends TestCase
     public function testAnIndexWhoseDefinitionIsUnconfirmedKeepsItsIndex(): void
     {
         $unconfirmed = 0;
-        $database = $this->database($this->unconfirmedFrom(3, $unconfirmed));
+        $database = $this->database($unconfirmed, collection: 'logs', key: 'by_count');
         $database->createCollection(new Collection(id: 'logs'));
         $database->createAttribute('logs', Attribute::integer(key: 'count'));
 
@@ -67,7 +68,7 @@ final class UnconfirmedSchemaChangeTest extends TestCase
     public function testARelationshipWhoseDefinitionIsUnconfirmedKeepsItsColumnsAndCreatesItsIndexes(): void
     {
         $unconfirmed = 0;
-        $database = $this->database($this->unconfirmedOn(3, $unconfirmed));
+        $database = $this->database($unconfirmed, collection: 'profiles', key: 'account');
         $database->createCollection(new Collection(id: 'profiles'));
         $database->createCollection(new Collection(id: 'accounts'));
 
@@ -83,7 +84,7 @@ final class UnconfirmedSchemaChangeTest extends TestCase
     public function testARelationshipWhoseIndexDefinitionIsUnconfirmedKeepsItsColumns(): void
     {
         $unconfirmed = 0;
-        $database = $this->database($this->unconfirmedOn(4, $unconfirmed));
+        $database = $this->database($unconfirmed, collection: 'profiles', key: '_index_account');
         $database->createCollection(new Collection(id: 'profiles'));
         $database->createCollection(new Collection(id: 'accounts'));
 
@@ -98,57 +99,30 @@ final class UnconfirmedSchemaChangeTest extends TestCase
     }
 
     /**
-     * Commits every outermost transaction from the $first one on, then reports it unconfirmed.
-     *
-     * @return Closure(int): bool
+     * A database over an adapter that throws Exception\Unconfirmed once an outermost transaction commits the target
+     * write: the first definition write of $collection that adds an attribute or index $key to it (or, without a key,
+     * that writes it at all), or the same definition written again. $unconfirmed counts those commits.
      */
-    private function unconfirmedFrom(int $first, int &$unconfirmed): Closure
+    private function database(int &$unconfirmed, string $collection, ?string $key = null): Database
     {
-        return function (int $transaction) use ($first, &$unconfirmed): bool {
-            if ($transaction < $first) {
-                return false;
-            }
-
+        $count = function () use (&$unconfirmed): void {
             $unconfirmed++;
-
-            return true;
         };
-    }
 
-    /**
-     * Commits the $only outermost transaction, then reports it unconfirmed.
-     *
-     * @return Closure(int): bool
-     */
-    private function unconfirmedOn(int $only, int &$unconfirmed): Closure
-    {
-        return function (int $transaction) use ($only, &$unconfirmed): bool {
-            if ($transaction !== $only) {
-                return false;
-            }
+        $adapter = new class (new PDO('sqlite::memory:'), $count, $collection, $key) extends SQLite {
+            private ?string $target = null;
 
-            $unconfirmed++;
-
-            return true;
-        };
-    }
-
-    /**
-     * A database over an adapter that numbers its outermost transactions from 1 and, once one has committed, throws
-     * Exception\Unconfirmed when $unconfirmed says so.
-     *
-     * @param  Closure(int): bool  $unconfirmed
-     */
-    private function database(Closure $unconfirmed): Database
-    {
-        $adapter = new class (new PDO('sqlite::memory:'), $unconfirmed) extends SQLite {
-            private int $transactions = 0;
+            private bool $writesTarget = false;
 
             /**
-             * @param  Closure(int): bool  $unconfirmed
+             * @param  Closure(): void  $count
              */
-            public function __construct(PDO $pdo, private readonly Closure $unconfirmed)
-            {
+            public function __construct(
+                PDO $pdo,
+                private readonly Closure $count,
+                private readonly string $collection,
+                private readonly ?string $key,
+            ) {
                 parent::__construct($pdo);
             }
 
@@ -159,14 +133,67 @@ final class UnconfirmedSchemaChangeTest extends TestCase
                     return parent::withTransaction($callback);
                 }
 
-                $transaction = ++$this->transactions;
+                $this->writesTarget = false;
                 $result = parent::withTransaction($callback);
 
-                if (($this->unconfirmed)($transaction)) {
+                if ($this->writesTarget) {
+                    ($this->count)();
+
                     throw new UnconfirmedException('Failed to commit transaction: the commit could not be confirmed');
                 }
 
                 return $result;
+            }
+
+            #[\Override]
+            public function createDocument(Document $collection, Document $document): Document
+            {
+                $this->inspect($collection, $document);
+
+                return parent::createDocument($collection, $document);
+            }
+
+            #[\Override]
+            public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
+            {
+                $this->inspect($collection, $document);
+
+                return parent::updateDocument($collection, $id, $document, $skipPermissions);
+            }
+
+            private function inspect(Document $collection, Document $definition): void
+            {
+                if ($collection->getId() !== Database::METADATA || $definition->getId() !== $this->collection) {
+                    return;
+                }
+
+                $content = \json_encode([$definition->getAttribute('attributes'), $definition->getAttribute('indexes')]) ?: '';
+
+                if ($this->target === null && ($this->key === null || $this->names($definition, $this->key))) {
+                    $this->target = $content;
+                }
+
+                if ($content === $this->target) {
+                    $this->writesTarget = true;
+                }
+            }
+
+            private function names(Document $definition, string $key): bool
+            {
+                foreach (['attributes', 'indexes'] as $field) {
+                    $entries = $definition->getAttribute($field, []);
+                    if (\is_string($entries)) {
+                        $entries = \json_decode($entries, true);
+                    }
+
+                    foreach (\is_array($entries) ? $entries : [] as $entry) {
+                        if (\is_array($entry) && ($entry['$id'] ?? null) === $key) {
+                            return true;
+                        }
+                    }
+                }
+
+                return false;
             }
         };
 

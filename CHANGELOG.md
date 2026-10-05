@@ -753,8 +753,9 @@ not change anything for an upgrade from 7.x.
     the destination receives undecorated documents.
 - **Performance:**
   - Permission checks no longer use `SELECT DISTINCT` in their subquery (SQLite built a temporary B-tree per read).
-  - A delete whose set-null relationship clears related documents keeps them only while a hook that handles
-    `document_update` needs them for its report, instead of holding every cleared document until the delete returns.
+  - A delete whose set-null relationship clears related documents keeps them only when `deleteDocument()` reports
+    them, for a two-way relationship while an active lifecycle hook handles `document_update`, instead of holding
+    every cleared document until the delete returns.
   - The query and document caches list a collection's owner registrations (`HKEYS`) only until the cache shows it
     keeps hash fields, instead of twice per invalidation.
   - SQLite: `createDocument()` reads the new sequence from `PDO::lastInsertId()` instead of a

@@ -578,17 +578,27 @@ A plain setter is scoped only by a scope over the same state:
 - `Hook\Relationships::setEnabled()` by `Hook\Relationships::withEnabled()` and `skipRelationships()`;
 - `setPreserveDates()` by `withPreserveDates()`, and `setPreserveSequence()` by `withPreserveSequence()`.
 
-`withSnapshot()` opens a scope over each of them. Outside every scope over its state, a setter changes the shared
-value, as in 7.x: `disable()` inside `withRoles()` turns authorization off for every coroutine sharing the
-`Authorization`. Inside such a scope, whether the calling coroutine opened it or inherited it from the coroutine that
-started it, a setter changes only what the calling coroutine and the coroutines it starts see, and only until the
-scope ends. When the scope ends, the value is what it was before the scope, as in 7.x.
+`withSnapshot()` opens a scope over each of them. Outside every scope over its state, a setter in the coroutine that
+opened a scope, or in a coroutine it started that is still connected to it, changes the shared value, as in 7.x:
+`disable()` inside `withRoles()` turns authorization off for every coroutine sharing the `Authorization`. A coroutine
+cut off from the scope is covered in the next paragraph. Inside such a scope, whether the calling coroutine opened it
+or inherited it from the coroutine that started it, a setter changes only what the calling coroutine and the
+coroutines it starts see, and only until the scope ends. When the scope ends, the value is what it was before the
+scope, as in 7.x.
 
 A coroutine sees a scope only while every coroutine between it and the scope's owner is still running, because
-Swoole cannot report the parent of a coroutine that has finished. Once one of those ancestors has returned, the
-coroutine reads and writes the shared values, and on `Adapter\Pool` it borrows a connection of its own outside the
-scope's transaction. Work that can outlive the coroutine that started it has to take the state with `snapshot()`
-before it starts and run under `withSnapshot()`; a snapshot does not carry a transaction.
+Swoole cannot report the parent of a coroutine that has finished. In a coroutine cut off this way:
+
+- reads see the shared values (the handle's tenant, status and roles, never the scope's), and on `Adapter\Pool` it
+  borrows a connection of its own outside the scope's transaction;
+- writes stay its own: while a scope over that state is open on the handle, even one another coroutine opened, a
+  setter changes only what that coroutine and the coroutines it starts see, until it ends, and never the shared
+  value. For `Authorization`, `skip()`, `withStatus()` and `withRoles()` each count as a scope over both the status
+  and the roles;
+- with no such scope open, a setter changes the shared value, as in 7.x.
+
+To inherit the caller's state, work that can outlive the coroutine that started it has to take `snapshot()` before it
+starts and open the scope itself, inside the child, with `withSnapshot()`; a snapshot does not carry a transaction.
 
 To run work started in another coroutine under the caller's state, take `$snapshot = $database->snapshot()` in the
 caller and run the work inside `$database->withSnapshot($snapshot, $callback)`. A snapshot carries the authorization

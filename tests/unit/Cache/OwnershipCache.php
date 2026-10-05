@@ -120,11 +120,6 @@ final class OwnershipCache implements CacheAdapter, Leasable
         return 'ownership';
     }
 
-    public function has(string $key): bool
-    {
-        return isset($this->store[$key]);
-    }
-
     public function pauseNextActivation(Closure $activation): void
     {
         $this->activation = $activation;

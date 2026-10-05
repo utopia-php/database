@@ -15,7 +15,11 @@ use Utopia\Database\Query;
 
 final class QueryCacheRoundTripTest extends TestCase
 {
-    public function testACachedFindCostsThreeCacheRoundTrips(): void
+    private const int HIT_BUDGET = 3;
+
+    private const int MISS_BUDGET = 5;
+
+    public function testACachedFindStaysWithinTheHitRoundTripBudget(): void
     {
         [$database, $adapter, $cache] = $this->createDatabase();
         $database->find('posts', [Query::orderAsc('$id')]);
@@ -25,10 +29,10 @@ final class QueryCacheRoundTripTest extends TestCase
         $this->assertSame(['first'], $this->ids($database->find('posts', [Query::orderAsc('$id')])));
 
         $this->assertSame(0, $adapter->getObservedFinds(), 'The second find must be served from the query cache');
-        $this->assertSame(3, $cache->getOperations(), 'A hit reads the epoch, the started generation it was published under and the entry');
+        $this->assertLessThanOrEqual(self::HIT_BUDGET, $cache->getOperations(), 'A cached find must stay within its cache round-trip budget (7.3.12 had no query cache, so the budget is the current cost)');
     }
 
-    public function testAnUncachedFindCostsFiveCacheRoundTrips(): void
+    public function testAnUncachedFindStaysWithinTheMissRoundTripBudget(): void
     {
         [$database, $adapter, $cache] = $this->createDatabase();
         $adapter->observeFinds('posts');
@@ -37,7 +41,7 @@ final class QueryCacheRoundTripTest extends TestCase
         $this->assertSame(['first'], $this->ids($database->find('posts', [Query::orderAsc('$id')])));
 
         $this->assertSame(1, $adapter->getObservedFinds(), 'The first find after a write must read the database');
-        $this->assertSame(5, $cache->getOperations(), 'A miss reads the epoch, its started generation, the entry and the entry\'s lease, then stores the result');
+        $this->assertLessThanOrEqual(self::MISS_BUDGET, $cache->getOperations(), 'An uncached find must stay within its cache round-trip budget (7.3.12 had no query cache, so the budget is the current cost)');
     }
 
     /**

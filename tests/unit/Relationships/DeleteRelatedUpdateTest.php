@@ -63,6 +63,7 @@ final class DeleteRelatedUpdateTest extends TestCase
                 parent::__construct();
             }
 
+            #[\Override]
             public function updateDocuments(Document $collection, Document $updates, array $documents): int
             {
                 return ($this->watch)($collection, $documents, fn (): int => parent::updateDocuments($collection, $updates, $documents));
@@ -77,6 +78,7 @@ final class DeleteRelatedUpdateTest extends TestCase
                 parent::__construct($pdo);
             }
 
+            #[\Override]
             public function updateDocuments(Document $collection, Document $updates, array $documents): int
             {
                 return ($this->watch)($collection, $documents, fn (): int => parent::updateDocuments($collection, $updates, $documents));

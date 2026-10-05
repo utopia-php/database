@@ -9,6 +9,7 @@ use MongoDB\BSON\Int64;
 use MongoDB\BSON\Regex;
 use MongoDB\BSON\UTCDateTime;
 use stdClass;
+use Swoole\Coroutine;
 use Throwable;
 use Utopia\Database\Adapter;
 use Utopia\Database\Attribute;
@@ -117,7 +118,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      *
      * @var array<mixed>|null
      */
-    private ?array $session = null; // Store session array from startSession
+    private ?array $session = null;
 
     protected int $inTransaction = 0;
 
@@ -306,7 +307,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     }
 
     /**
-     * Start a new database transaction or increment the nesting counter.
+     * Start a new database transaction or increment the nesting counter. A standalone server has no transactions.
      *
      * @return bool
      *
@@ -314,17 +315,14 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      */
     public function startTransaction(): bool
     {
-        // If the database is not a replica set, we can't use transactions
         if (! $this->client->isReplicaSet()) {
             return true;
         }
 
         try {
-            if ($this->inTransaction === 0) {
-                if (! $this->session) {
-                    $this->session = $this->client->startSession(); // Get session array
-                    $this->client->startTransaction($this->session); // Start the transaction
-                }
+            if ($this->inTransaction === 0 && ! $this->session) {
+                $this->session = $this->client->startSession();
+                $this->client->startTransaction($this->session);
             }
             $this->inTransaction++;
 
@@ -342,7 +340,8 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      * @return bool
      *
      * @throws UnconfirmedException If the commit was sent but its result could not be confirmed.
-     * @throws DatabaseException If the transaction cannot be committed.
+     * @throws DatabaseException If the transaction cannot be committed, with an `Exception\Transaction` cause when
+     *                           the server reports it aborted.
      */
     public function commitTransaction(): bool
     {
@@ -382,12 +381,12 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     }
 
     /**
-     * Commit the session's transaction. A transaction the server already ended counts as committed. When the result
-     * of the commit is unknown, only the commit is sent again.
+     * Commit the session's transaction. When the result of the commit is unknown, only the commit is sent again.
      *
      * @param  array<mixed>  $session
      *
-     * @throws UnconfirmedException
+     * @throws TransactionException If the server reports the transaction aborted, so nothing of it is stored.
+     * @throws UnconfirmedException If the commit was sent but its result could not be confirmed.
      * @throws Throwable
      */
     private function commit(array $session): void
@@ -405,16 +404,13 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 throw new DatabaseException($error->getMessage(), $error->getCode(), $error);
             }
 
-            $error = $this->processException($error);
-            if (! $error instanceof TransactionException) {
-                throw $error;
-            }
+            throw $this->processException($error);
         }
     }
 
     /**
      * Send the commit again, up to COMMIT_RETRIES times after the first attempt, with a majority write concern so a
-     * commit that already applied is reported as applied.
+     * commit that already applied is reported as applied. A retry that was never sent is sent again.
      *
      * @param  array<mixed>  $session
      *
@@ -424,14 +420,14 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     private function retryCommit(array $session, Throwable $unknown): void
     {
         for ($retry = 1; $retry <= self::COMMIT_RETRIES; $retry++) {
-            \usleep(self::COMMIT_RETRY_SLEEP * $retry);
+            $this->pause(self::COMMIT_RETRY_SLEEP * $retry);
 
             try {
                 $this->client->commitTransaction($session, ['writeConcern' => self::COMMIT_RETRY_WRITE_CONCERN]);
 
                 return;
             } catch (Throwable $error) {
-                if ($this->isUnknownCommitResult($error)) {
+                if ($error instanceof UnsentException || $this->isUnknownCommitResult($error)) {
                     continue;
                 }
 
@@ -444,6 +440,17 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         }
 
         throw new UnconfirmedException('Failed to commit transaction: the commit could not be confirmed', previous: $unknown);
+    }
+
+    private function pause(int $microseconds): void
+    {
+        if (\extension_loaded('swoole') && Coroutine::getCid() > 0) {
+            Coroutine::sleep($microseconds / 1_000_000);
+
+            return;
+        }
+
+        \usleep($microseconds);
     }
 
     /**
@@ -482,14 +489,15 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             try {
                 $this->client->endSessions([$this->session]);
             } catch (Throwable) {
-                // Best effort: a dropped connection fails this, and that must not replace the commit's outcome.
+                // Best effort: a dropped connection fails this, and that must not replace the outcome.
             }
         }
         $this->session = null;
     }
 
     /**
-     * Roll back the current database transaction or decrement the nesting counter.
+     * Roll back the current database transaction or decrement the nesting counter. A transaction the server already
+     * aborted counts as rolled back.
      *
      * @return bool
      *
@@ -497,7 +505,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      */
     public function rollbackTransaction(): bool
     {
-        // If the database is not a replica set, we can't use transactions
         if (! $this->client->isReplicaSet()) {
             return true;
         }
@@ -507,41 +514,27 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 return false;
             }
             $this->inTransaction--;
-            if ($this->inTransaction === 0) {
-                if (! $this->session) {
-                    return false;
-                }
-
-                try {
-                    $this->client->abortTransaction($this->session);
-                } catch (Throwable $e) {
-                    $e = $this->processException($e);
-
-                    if ($e instanceof TransactionException) {
-                        // If there's no active transaction, it may have been auto-aborted due to an error.
-                        // Just return success since the transaction was already terminated.
-                        return true;
-                    }
-
-                    throw $e;
-                } finally {
-                    $this->client->endSessions([$this->session]);
-                    $this->session = null;
-                }
-
+            if ($this->inTransaction > 0) {
                 return true;
+            }
+            if (! $this->session) {
+                return false;
+            }
+
+            try {
+                $this->client->abortTransaction($this->session);
+            } catch (Throwable $e) {
+                $e = $this->processException($e);
+                if (! $e instanceof TransactionException) {
+                    throw $e;
+                }
+            } finally {
+                $this->endSession();
             }
 
             return true;
         } catch (Throwable $e) {
-            try {
-                if ($this->session !== null) {
-                    $this->client->endSessions([$this->session]);
-                }
-            } catch (Throwable) {
-                // Ignore errors when ending session during error cleanup
-            }
-            $this->session = null;
+            $this->endSession();
             $this->inTransaction = 0;
 
             throw new DatabaseException('Failed to rollback transaction: '.$e->getMessage(), $e->getCode(), $e);
@@ -549,6 +542,9 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     }
 
     /**
+     * Run the callback in a transaction, retrying an attempt that failed transiently up to twice. Without savepoints
+     * a call nested in an open transaction runs the callback in it, and a standalone server runs it without one.
+     *
      * @template T
      *
      * @param  callable(): T  $callback
@@ -558,14 +554,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      */
     public function withTransaction(callable $callback): mixed
     {
-        // If the database is not a replica set, we can't use transactions
-        if (! $this->client->isReplicaSet()) {
-            return $callback();
-        }
-
-        // MongoDB doesn't support nested transactions/savepoints.
-        // If already in a transaction, just run the callback directly.
-        if ($this->inTransaction > 0) {
+        if (! $this->client->isReplicaSet() || $this->inTransaction > 0) {
             return $callback();
         }
 
@@ -590,18 +579,11 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 } catch (Throwable) {
                     // Preserve the operation failure if cleanup fails.
                 } finally {
-                    if ($this->session !== null) {
-                        try {
-                            $this->client->endSessions([$this->session]);
-                        } catch (Throwable) {
-                            // Cleanup is best-effort; preserve the operation failure.
-                        }
-                    }
+                    $this->endSession();
                     $this->inTransaction = 0;
-                    $this->session = null;
                 }
 
-                if (! $this->isRetryable($action)) {
+                if (! parent::isRetryable($action)) {
                     throw $action;
                 }
 
@@ -619,12 +601,14 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     }
 
     /**
-     * A standalone server has no transactions, so withTransaction() runs the callback once and retries nothing.
+     * A standalone server has no transactions, so withTransaction() runs the callback once and retries nothing. The
+     * failure is classified first, so a failure that is never retried needs no round trip to a server that may be
+     * gone.
      */
     #[\Override]
     public function isRetryable(Throwable $failure): bool
     {
-        return $this->client->isReplicaSet() && parent::isRetryable($failure);
+        return parent::isRetryable($failure) && $this->client->isReplicaSet();
     }
 
     /**

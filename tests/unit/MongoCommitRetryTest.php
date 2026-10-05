@@ -6,9 +6,11 @@ use ArrayObject;
 use Closure;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use Tests\Unit\Support\CommitOutcome;
 use Throwable;
+use Utopia\Cache\Adapter\None;
+use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Mongo;
+use Utopia\Database\Database;
 use Utopia\Database\Exception\Unconfirmed as UnconfirmedException;
 use Utopia\Mongo\Client;
 use Utopia\Mongo\Exception as MongoException;
@@ -24,33 +26,79 @@ final class MongoCommitRetryTest extends TestCase
 
     private const string RESULT = 'result';
 
-    private const int PRIMARY_STEPPED_DOWN = 189;
-
     private const int MAX_TIME_EXPIRED = 50;
 
-    private const int SOCKET_TIMEOUT = 11601;
+    private const int WRITE_CONFLICT = 112;
+
+    private const int PRIMARY_STEPPED_DOWN = 189;
+
+    private const int NO_SUCH_TRANSACTION = 251;
+
+    private const int EXCEEDED_TIME_LIMIT = 262;
 
     private const int SOCKET_EXCEPTION = 9001;
 
+    private const int SOCKET_TIMEOUT = 11601;
+
     /**
+     * Commit errors as utopia-php/mongo 1.5.4 raises them, without error labels, after which the commit may have
+     * applied.
+     *
      * @return array<string, array{MongoException}>
      */
     public static function unknownResults(): array
     {
         return [
-            'labelled unknown result' => [self::labelledUnknownResult()],
-            'primary stepped down' => [new MongoException('E189 PrimarySteppedDown: primary stepped down while waiting for replication', self::PRIMARY_STEPPED_DOWN)],
+            'primary stepped down (189)' => [self::primarySteppedDown()],
+            'max time expired (50)' => [new MongoException('E50 MaxTimeMSExpired: operation exceeded time limit', self::MAX_TIME_EXPIRED)],
+            'exceeded time limit (262)' => [new MongoException('E262 ExceededTimeLimit: operation exceeded time limit', self::EXCEEDED_TIME_LIMIT)],
+        ];
+    }
+
+    /**
+     * Commit errors after which utopia-php/mongo 1.5.4 drops the connection with its sessions, so the commit cannot
+     * be sent again.
+     *
+     * @return array<string, array{MongoException, MongoCommitRetryOutcome, list<string>}>
+     */
+    public static function disconnects(): array
+    {
+        return [
+            'receive timeout (11601) after the commit applied' => [
+                new MongoException('Receive timeout: no data received within reasonable time', self::SOCKET_TIMEOUT),
+                MongoCommitRetryOutcome::AppliedThenLost,
+                [self::DOCUMENT],
+            ],
+            'send failure (9001) before the commit applied' => [
+                new MongoException('Failed to send data to MongoDB after reconnection attempt', self::SOCKET_EXCEPTION),
+                MongoCommitRetryOutcome::NotApplied,
+                [],
+            ],
+        ];
+    }
+
+    /**
+     * Commit errors as utopia-php/mongo 1.5.4 raises them, without error labels, for a transaction the server
+     * aborted, so none of its writes are stored.
+     *
+     * @return array<string, array{MongoException}>
+     */
+    public static function abortedCommits(): array
+    {
+        return [
+            'no such transaction (251)' => [self::noSuchTransaction()],
+            'write conflict (112)' => [new MongoException('E112 WriteConflict: write conflict during plan execution', self::WRITE_CONFLICT)],
         ];
     }
 
     #[DataProvider('unknownResults')]
-    public function testAnUnconfirmedCommitThatAppliedIsRetriedWithoutRunningTheCallbackAgain(MongoException $error): void
+    public function testAnUnknownCommitResultThatAppliedIsRetriedWithoutRunningTheCallbackAgain(MongoException $error): void
     {
         $staged = $this->documents();
         $stored = $this->documents();
         $adapter = new Mongo($this->client($staged, $stored, [
-            [CommitOutcome::AppliedThenLost, $error],
-            [CommitOutcome::Committed, null],
+            [MongoCommitRetryOutcome::AppliedThenLost, $error],
+            [MongoCommitRetryOutcome::Committed, null],
         ]));
         $attempts = 0;
 
@@ -62,56 +110,83 @@ final class MongoCommitRetryTest extends TestCase
         $this->assertFalse($adapter->inTransaction());
     }
 
-    public function testACommitReceiveTimeoutThrowsUnconfirmedWithoutRunningTheCallbackAgain(): void
+    /**
+     * utopia-php/mongo 1.5.4 never sets error labels; this checks a client that does.
+     */
+    public function testForwardCompatibilityALabelledUnknownCommitResultIsRetriedWithoutRunningTheCallbackAgain(): void
     {
         $staged = $this->documents();
         $stored = $this->documents();
-        $timeout = new MongoException('Receive timeout: no data received within reasonable time', self::SOCKET_TIMEOUT);
         $adapter = new Mongo($this->client($staged, $stored, [
-            [CommitOutcome::AppliedThenLost, $timeout],
+            [MongoCommitRetryOutcome::AppliedThenLost, new MongoException('Commit failed', 0, null, [Client::UNKNOWN_TRANSACTION_COMMIT_RESULT])],
+            [MongoCommitRetryOutcome::Committed, null],
         ]));
         $attempts = 0;
 
-        $thrown = $this->failure($adapter, $this->work($staged, $attempts));
+        $result = $adapter->withTransaction($this->work($staged, $attempts));
 
+        $this->assertSame(self::RESULT, $result);
         $this->assertSame(1, $attempts, 'A commit whose result is unknown must not run the callback again');
         $this->assertSame([self::DOCUMENT], $stored->getArrayCopy());
-        $this->assertInstanceOf(UnconfirmedException::class, $thrown);
-        $this->assertSame($timeout, $thrown->getPrevious());
         $this->assertFalse($adapter->inTransaction());
     }
 
-    public function testACommitSendFailureThrowsUnconfirmedWithoutRunningTheCallbackAgain(): void
+    /**
+     * @param  list<string>  $expected
+     */
+    #[DataProvider('disconnects')]
+    public function testACommitThatDropsTheConnectionThrowsUnconfirmedWithoutRunningTheCallbackAgain(MongoException $error, MongoCommitRetryOutcome $outcome, array $expected): void
     {
         $staged = $this->documents();
         $stored = $this->documents();
-        $failure = new MongoException('Failed to send data to MongoDB after reconnection attempt', self::SOCKET_EXCEPTION);
         $adapter = new Mongo($this->client($staged, $stored, [
-            [CommitOutcome::NotApplied, $failure],
+            [$outcome, $error],
         ]));
         $attempts = 0;
 
-        $thrown = $this->failure($adapter, $this->work($staged, $attempts));
+        $thrown = $this->failure(fn (Closure $callback): mixed => $adapter->withTransaction($callback), $this->work($staged, $attempts));
 
-        $this->assertSame(1, $attempts, 'A commit whose result is unknown must not run the callback again');
-        $this->assertSame([], $stored->getArrayCopy());
         $this->assertInstanceOf(UnconfirmedException::class, $thrown);
-        $this->assertSame($failure, $thrown->getPrevious());
+        $this->assertSame($error, $thrown->getPrevious());
+        $this->assertSame(1, $attempts, 'A commit whose result is unknown must not run the callback again');
+        $this->assertSame($expected, $stored->getArrayCopy());
+        $this->assertFalse($adapter->isRetryable($thrown), 'Running an unconfirmed commit again could store its writes twice');
         $this->assertFalse($adapter->inTransaction());
+    }
+
+    /**
+     * @param  list<string>  $expected
+     */
+    #[DataProvider('disconnects')]
+    public function testADatabaseTransactionWhoseCommitDropsTheConnectionThrowsUnconfirmed(MongoException $error, MongoCommitRetryOutcome $outcome, array $expected): void
+    {
+        $staged = $this->documents();
+        $stored = $this->documents();
+        $database = new Database(new Mongo($this->client($staged, $stored, [
+            [$outcome, $error],
+        ])), new Cache(new None()));
+        $attempts = 0;
+
+        $thrown = $this->failure(fn (Closure $callback): mixed => $database->withTransaction($callback), $this->work($staged, $attempts));
+
+        $this->assertInstanceOf(UnconfirmedException::class, $thrown);
+        $this->assertSame($error, $thrown->getPrevious());
+        $this->assertSame(1, $attempts, 'A commit whose result is unknown must not run the callback again');
+        $this->assertSame($expected, $stored->getArrayCopy());
     }
 
     public function testACommitThatStaysUnconfirmedThrowsWithoutRunningTheCallbackAgain(): void
     {
         $staged = $this->documents();
         $stored = $this->documents();
-        $unknown = self::labelledUnknownResult();
-        $outage = new ArrayObject([self::labelledUnknownResult()]);
+        $unknown = self::primarySteppedDown();
+        $outage = new ArrayObject([self::primarySteppedDown()]);
         $adapter = new Mongo($this->client($staged, $stored, [
-            [CommitOutcome::AppliedThenLost, $unknown],
+            [MongoCommitRetryOutcome::AppliedThenLost, $unknown],
         ], $outage));
         $attempts = 0;
 
-        $thrown = $this->failure($adapter, $this->work($staged, $attempts));
+        $thrown = $this->failure(fn (Closure $callback): mixed => $adapter->withTransaction($callback), $this->work($staged, $attempts));
 
         $this->assertSame(1, $attempts, 'A commit whose result is unknown must not run the callback again');
         $this->assertSame([self::DOCUMENT], $stored->getArrayCopy());
@@ -137,7 +212,7 @@ final class MongoCommitRetryTest extends TestCase
         $adapter = new Mongo($this->client($staged, $stored, [], new ArrayObject([$expired])));
         $attempts = 0;
 
-        $thrown = $this->failure($adapter, $this->work($staged, $attempts));
+        $thrown = $this->failure(fn (Closure $callback): mixed => $adapter->withTransaction($callback), $this->work($staged, $attempts));
 
         $this->assertSame(1, $attempts, 'A commit whose result is unknown must not run the callback again');
         $this->assertSame([], $stored->getArrayCopy());
@@ -146,14 +221,14 @@ final class MongoCommitRetryTest extends TestCase
         $this->assertFalse($adapter->inTransaction());
     }
 
-    public function testARetriedCommitThatReportsTheTransactionAbortedRunsTheCallbackAgain(): void
+    #[DataProvider('abortedCommits')]
+    public function testAFirstCommitTheServerReportsAbortedRunsTheCallbackAgain(MongoException $error): void
     {
         $staged = $this->documents();
         $stored = $this->documents();
         $adapter = new Mongo($this->client($staged, $stored, [
-            [CommitOutcome::NotApplied, self::labelledUnknownResult()],
-            [CommitOutcome::Aborted, null],
-            [CommitOutcome::Committed, null],
+            [MongoCommitRetryOutcome::Aborted, $error],
+            [MongoCommitRetryOutcome::Committed, null],
         ]));
         $attempts = 0;
 
@@ -165,13 +240,36 @@ final class MongoCommitRetryTest extends TestCase
         $this->assertFalse($adapter->inTransaction());
     }
 
-    public function testALabelledTransientTransactionErrorAtCommitRunsTheCallbackAgain(): void
+    #[DataProvider('abortedCommits')]
+    public function testARetriedCommitThatReportsTheTransactionAbortedRunsTheCallbackAgain(MongoException $error): void
     {
         $staged = $this->documents();
         $stored = $this->documents();
         $adapter = new Mongo($this->client($staged, $stored, [
-            [CommitOutcome::NotApplied, new MongoException('Transaction aborted', 0, null, [Client::TRANSIENT_TRANSACTION_ERROR])],
-            [CommitOutcome::Committed, null],
+            [MongoCommitRetryOutcome::NotApplied, self::primarySteppedDown()],
+            [MongoCommitRetryOutcome::Aborted, $error],
+            [MongoCommitRetryOutcome::Committed, null],
+        ]));
+        $attempts = 0;
+
+        $result = $adapter->withTransaction($this->work($staged, $attempts));
+
+        $this->assertSame(self::RESULT, $result);
+        $this->assertSame(2, $attempts, 'An aborted transaction stored nothing, so the callback must run again');
+        $this->assertSame([self::DOCUMENT], $stored->getArrayCopy());
+        $this->assertFalse($adapter->inTransaction());
+    }
+
+    /**
+     * utopia-php/mongo 1.5.4 never sets error labels; this checks a client that does.
+     */
+    public function testForwardCompatibilityALabelledTransientTransactionErrorAtCommitRunsTheCallbackAgain(): void
+    {
+        $staged = $this->documents();
+        $stored = $this->documents();
+        $adapter = new Mongo($this->client($staged, $stored, [
+            [MongoCommitRetryOutcome::NotApplied, new MongoException('Transaction aborted', 0, null, [Client::TRANSIENT_TRANSACTION_ERROR])],
+            [MongoCommitRetryOutcome::Committed, null],
         ]));
         $attempts = 0;
 
@@ -188,8 +286,8 @@ final class MongoCommitRetryTest extends TestCase
         $staged = $this->documents();
         $stored = $this->documents();
         $adapter = new Mongo($this->client($staged, $stored, [
-            [CommitOutcome::NotApplied, new UnsentException('Connection to MongoDB has been lost')],
-            [CommitOutcome::Committed, null],
+            [MongoCommitRetryOutcome::NotApplied, new UnsentException('Connection to MongoDB has been lost')],
+            [MongoCommitRetryOutcome::Committed, null],
         ]));
         $attempts = 0;
 
@@ -201,9 +299,33 @@ final class MongoCommitRetryTest extends TestCase
         $this->assertFalse($adapter->inTransaction());
     }
 
-    private static function labelledUnknownResult(): MongoException
+    public function testACommitRetryThatWasNeverSentIsSentAgain(): void
     {
-        return new MongoException('Commit failed', 0, null, [Client::UNKNOWN_TRANSACTION_COMMIT_RESULT]);
+        $staged = $this->documents();
+        $stored = $this->documents();
+        $adapter = new Mongo($this->client($staged, $stored, [
+            [MongoCommitRetryOutcome::NotApplied, self::primarySteppedDown()],
+            [MongoCommitRetryOutcome::NotApplied, new UnsentException('Failed to connect to MongoDB')],
+            [MongoCommitRetryOutcome::Committed, null],
+        ]));
+        $attempts = 0;
+
+        $result = $adapter->withTransaction($this->work($staged, $attempts));
+
+        $this->assertSame(self::RESULT, $result);
+        $this->assertSame(1, $attempts, 'A commit whose result is unknown must not run the callback again');
+        $this->assertSame([self::DOCUMENT], $stored->getArrayCopy());
+        $this->assertFalse($adapter->inTransaction());
+    }
+
+    private static function primarySteppedDown(): MongoException
+    {
+        return new MongoException('E189 PrimarySteppedDown: primary stepped down while waiting for replication', self::PRIMARY_STEPPED_DOWN);
+    }
+
+    private static function noSuchTransaction(): MongoException
+    {
+        return new MongoException('E251 NoSuchTransaction: Transaction with { txnNumber: 1 } has been aborted.', self::NO_SUCH_TRANSACTION);
     }
 
     /**
@@ -232,12 +354,13 @@ final class MongoCommitRetryTest extends TestCase
     }
 
     /**
+     * @param  Closure(Closure(): string): mixed  $transaction
      * @param  Closure(): string  $callback
      */
-    private function failure(Mongo $adapter, Closure $callback): Throwable
+    private function failure(Closure $transaction, Closure $callback): Throwable
     {
         try {
-            $adapter->withTransaction($callback);
+            $transaction($callback);
         } catch (Throwable $thrown) {
             return $thrown;
         }
@@ -246,14 +369,15 @@ final class MongoCommitRetryTest extends TestCase
     }
 
     /**
-     * A replica-set client that behaves as utopia-php/mongo 1.5.4 does: a socket timeout or send failure drops the
-     * connection and its sessions, after which a commit reports an invalid session and ending a session is unsent.
-     * Each commit follows the next scripted outcome; once the script is spent, commits fail with the outage's error
-     * while it holds one, and succeed otherwise.
+     * A replica-set client that behaves as utopia-php/mongo 1.5.4 does: it never sets error labels, and a socket
+     * timeout or send failure drops the connection with its sessions and its replica-set state, after which every
+     * command that needs the server is unsent and a commit or abort reports an invalid session, until the adapter
+     * reconnects. Each commit follows the next scripted outcome; once the script is spent, commits fail with the
+     * outage's error while it holds one, and succeed otherwise.
      *
      * @param  ArrayObject<int, string>  $staged
      * @param  ArrayObject<int, string>  $stored
-     * @param  list<array{CommitOutcome, MongoException|null}>  $script
+     * @param  list<array{MongoCommitRetryOutcome, MongoException|null}>  $script
      * @param  ArrayObject<int, MongoException>|null  $outage
      */
     private function client(ArrayObject $staged, ArrayObject $stored, array $script, ?ArrayObject $outage = null): Client
@@ -263,14 +387,14 @@ final class MongoCommitRetryTest extends TestCase
 
             private const int NO_SUCH_TRANSACTION = 251;
 
-            private bool $connected = true;
+            private bool $connected = false;
 
             private int $sessions = 0;
 
             /**
              * @param  ArrayObject<int, string>  $staged
              * @param  ArrayObject<int, string>  $stored
-             * @param  list<array{CommitOutcome, MongoException|null}>  $script
+             * @param  list<array{MongoCommitRetryOutcome, MongoException|null}>  $script
              * @param  ArrayObject<int, MongoException>  $outage
              */
             public function __construct(
@@ -284,6 +408,8 @@ final class MongoCommitRetryTest extends TestCase
             #[\Override]
             public function connect(): self
             {
+                $this->connected = true;
+
                 return $this;
             }
 
@@ -295,6 +421,8 @@ final class MongoCommitRetryTest extends TestCase
             #[\Override]
             public function isReplicaSet(): bool
             {
+                $this->ensureConnected();
+
                 return true;
             }
 
@@ -305,7 +433,7 @@ final class MongoCommitRetryTest extends TestCase
             #[\Override]
             public function startSession(array $options = []): array
             {
-                $this->connected = true;
+                $this->ensureConnected();
                 $this->sessions++;
 
                 return ['id' => (object) ['id' => $this->sessions]];
@@ -337,10 +465,10 @@ final class MongoCommitRetryTest extends TestCase
                 [$outcome, $error] = \array_shift($this->script) ?? $this->unscripted();
 
                 return match ($outcome) {
-                    CommitOutcome::Committed => $this->store(),
-                    CommitOutcome::AppliedThenLost => $this->fail($error, applied: true),
-                    CommitOutcome::NotApplied => $this->fail($error, applied: false),
-                    CommitOutcome::Aborted => $this->abort(),
+                    MongoCommitRetryOutcome::Committed => $this->store(),
+                    MongoCommitRetryOutcome::AppliedThenLost => $this->fail($error, applied: true),
+                    MongoCommitRetryOutcome::NotApplied => $this->fail($error, applied: false),
+                    MongoCommitRetryOutcome::Aborted => $this->abort($error),
                 };
             }
 
@@ -351,6 +479,10 @@ final class MongoCommitRetryTest extends TestCase
             #[\Override]
             public function abortTransaction(array $session, array $options = []): bool
             {
+                if (! $this->connected) {
+                    throw new MongoException('Invalid session provided to abortTransaction');
+                }
+
                 $this->staged->exchangeArray([]);
 
                 return true;
@@ -363,21 +495,26 @@ final class MongoCommitRetryTest extends TestCase
             #[\Override]
             public function endSessions(array $sessions, array $options = []): bool
             {
-                if (! $this->connected) {
-                    throw new UnsentException('Client is not connected to MongoDB');
-                }
+                $this->ensureConnected();
 
                 return true;
             }
 
+            private function ensureConnected(): void
+            {
+                if (! $this->connected) {
+                    throw new UnsentException('Client is not connected to MongoDB');
+                }
+            }
+
             /**
-             * @return array{CommitOutcome, MongoException|null}
+             * @return array{MongoCommitRetryOutcome, MongoException|null}
              */
             private function unscripted(): array
             {
                 $error = $this->outage[0] ?? null;
 
-                return $error === null ? [CommitOutcome::Committed, null] : [CommitOutcome::NotApplied, $error];
+                return $error === null ? [MongoCommitRetryOutcome::Committed, null] : [MongoCommitRetryOutcome::NotApplied, $error];
             }
 
             private function store(): true
@@ -390,11 +527,11 @@ final class MongoCommitRetryTest extends TestCase
                 return true;
             }
 
-            private function abort(): never
+            private function abort(?MongoException $error): never
             {
                 $this->staged->exchangeArray([]);
 
-                throw new MongoException('E251 NoSuchTransaction: Transaction with { txnNumber: 1 } has been aborted.', self::NO_SUCH_TRANSACTION, null, [Client::TRANSIENT_TRANSACTION_ERROR]);
+                throw $error ?? new MongoException('E251 NoSuchTransaction: Transaction with { txnNumber: 1 } has been aborted.', self::NO_SUCH_TRANSACTION);
             }
 
             private function fail(?MongoException $error, bool $applied): never

@@ -1,11 +1,11 @@
 <?php
 
-namespace Tests\Unit\Support;
+namespace Tests\Unit;
 
 /**
  * What a scripted commitTransaction does on the server in MongoCommitRetryTest.
  */
-enum CommitOutcome
+enum MongoCommitRetryOutcome
 {
     case Committed;
 

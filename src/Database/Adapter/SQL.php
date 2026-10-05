@@ -215,7 +215,7 @@ abstract class SQL extends Adapter
         }
 
         try {
-            $stmt->execute();
+            $this->execute($stmt);
             $document = $stmt->fetchAll();
             $stmt->closeCursor();
         } catch (PDOException $e) {
@@ -266,9 +266,8 @@ abstract class SQL extends Adapter
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
 
         try {
-            return $this->getPDO()
-                ->prepare($sql)
-                ->execute();
+            return $this->execute($this->getPDO()
+                ->prepare($sql));
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -303,9 +302,8 @@ abstract class SQL extends Adapter
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
 
         try {
-            return $this->getPDO()
-                ->prepare($sql)
-                ->execute();
+            return $this->execute($this->getPDO()
+                ->prepare($sql));
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -332,9 +330,8 @@ abstract class SQL extends Adapter
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
 
         try {
-            return $this->getPDO()
-                ->prepare($sql)
-                ->execute();
+            return $this->execute($this->getPDO()
+                ->prepare($sql));
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -357,9 +354,8 @@ abstract class SQL extends Adapter
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_DELETE, $sql);
 
         try {
-            return $this->getPDO()
-                ->prepare($sql)
-                ->execute();
+            return $this->execute($this->getPDO()
+                ->prepare($sql));
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -608,7 +604,7 @@ abstract class SQL extends Adapter
         }
 
         try {
-            $stmt->execute();
+            $this->execute($stmt);
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -644,7 +640,7 @@ abstract class SQL extends Adapter
                     $permissionsStmt->bindValue(':_tenant', $this->tenant);
                 }
 
-                $permissionsStmt->execute();
+                $this->execute($permissionsStmt);
                 $permissions = $permissionsStmt->fetchAll();
                 $permissionsStmt->closeCursor();
 
@@ -744,7 +740,7 @@ abstract class SQL extends Adapter
                 if ($this->sharedTables) {
                     $stmtRemovePermissions->bindValue(':_tenant', $this->tenant);
                 }
-                $stmtRemovePermissions->execute();
+                $this->execute($stmtRemovePermissions);
             }
 
             if (!empty($addQuery)) {
@@ -770,7 +766,7 @@ abstract class SQL extends Adapter
                     $stmtAddPermissions->bindValue(':_tenant', $this->tenant);
                 }
 
-                $stmtAddPermissions->execute();
+                $this->execute($stmtAddPermissions);
             }
         }
 
@@ -815,7 +811,7 @@ abstract class SQL extends Adapter
                 $stmt->bindValue(':_tenant', $this->tenant);
             }
 
-            if (!$stmt->execute()) {
+            if (!$this->execute($stmt)) {
                 throw new DatabaseException('Failed to delete documents');
             }
 
@@ -838,7 +834,7 @@ abstract class SQL extends Adapter
                     $stmtPermissions->bindValue(':_tenant', $this->tenant);
                 }
 
-                if (!$stmtPermissions->execute()) {
+                if (!$this->execute($stmtPermissions)) {
                     throw new DatabaseException('Failed to delete permissions');
                 }
             }
@@ -904,7 +900,7 @@ abstract class SQL extends Adapter
             $stmt->bindValue($key, $value);
         }
 
-        $stmt->execute();
+        $this->execute($stmt);
         $sequences = $stmt->fetchAll(\PDO::FETCH_KEY_PAIR); // Fetch as [documentId => sequence]
         $stmt->closeCursor();
 
@@ -2686,7 +2682,7 @@ abstract class SQL extends Adapter
                 }
 
                 $stmt = $this->getUpsertStatement($name, $columns, $batchKeys, $regularAttributes, $bindValues, $attribute, []);
-                $stmt->execute();
+                $this->execute($stmt);
                 $stmt->closeCursor();
             } else {
                 $groups = [];
@@ -2822,7 +2818,7 @@ abstract class SQL extends Adapter
                         $operators
                     );
 
-                    $stmt->execute();
+                    $this->execute($stmt);
                     $stmt->closeCursor();
                 }
             }
@@ -2888,7 +2884,7 @@ abstract class SQL extends Adapter
                 foreach ($removeBindValues as $key => $value) {
                     $stmtRemovePermissions->bindValue($key, $value, $this->getPDOType($value));
                 }
-                $stmtRemovePermissions->execute();
+                $this->execute($stmtRemovePermissions);
             }
 
             if (!empty($addQueries)) {
@@ -2901,7 +2897,7 @@ abstract class SQL extends Adapter
                 foreach ($addBindValues as $key => $value) {
                     $stmtAddPermissions->bindValue($key, $value, $this->getPDOType($value));
                 }
-                $stmtAddPermissions->execute();
+                $this->execute($stmtAddPermissions);
             }
         } catch (PDOException $e) {
             throw $this->processException($e);

@@ -116,6 +116,16 @@ class PDO
     }
 
     /**
+     * Get the underlying connection, which is replaced on reconnect
+     *
+     * @return \PDO
+     */
+    public function getConnection(): \PDO
+    {
+        return $this->pdo;
+    }
+
+    /**
      * Create a new connection to the database
      *
      * @return void

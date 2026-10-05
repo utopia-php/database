@@ -155,9 +155,9 @@ final class ParentConflictRetryTest extends TestCase
      */
     private function stored(Database $database, string $collection, string $attribute): array
     {
-        return \array_map(
+        return \array_values(\array_map(
             static fn (Document $document): array => [$document->getId(), $document->getAttribute($attribute)],
             $database->skipRelationships(static fn (): array => $database->find($collection)),
-        );
+        ));
     }
 }

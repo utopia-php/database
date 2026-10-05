@@ -39,7 +39,6 @@ use Utopia\Database\Hook\RawTenantFilter;
 use Utopia\Database\Hook\Tenancy;
 use Utopia\Database\Hook\TenantFilter;
 use Utopia\Database\Hook\WriteContext;
-use Utopia\Database\Index;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
 use Utopia\Database\PDO as DatabasePDO;

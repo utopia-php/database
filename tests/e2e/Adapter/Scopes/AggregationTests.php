@@ -2377,15 +2377,7 @@ trait AggregationTests
 
         $collection = 'agg_search_relevance';
         $this->createProducts($database, $collection);
-        $database->createDocument($collection, new Document([
-            '$id' => 'sleeve',
-            'name' => 'Laptop Sleeve',
-            'category' => 'clothing',
-            'price' => 25,
-            'stock' => 60,
-            '$permissions' => [Permission::read(Role::any())],
-        ]));
-        $database->createIndex($collection, Index::fullText(key: 'name_search', attributes: ['name']));
+        $this->createSearchMatches($database, $collection, ['sleeve' => ['Laptop Sleeve', 'clothing']]);
 
         $totals = $database->find($collection, [Query::count('*', 'total'), Query::search('name', 'Laptop')]);
         $this->assertSame([['total']], \array_map($this->sortedAttributeNames(...), $totals));
@@ -2482,23 +2474,22 @@ trait AggregationTests
 
         $collection = 'distinct_search_relevance';
         $this->createProducts($database, $collection);
-        $database->createDocument($collection, new Document([
-            '$id' => 'dock',
-            'name' => 'Laptop Laptop Dock',
-            'category' => 'electronics',
-            'price' => 90,
-            'stock' => 5,
-            '$permissions' => [Permission::read(Role::any())],
-        ]));
-        $database->createIndex($collection, Index::fullText(key: 'name_search', attributes: ['name']));
+        $this->createSearchMatches($database, $collection, ['dock' => ['Laptop Laptop Dock', 'electronics'], 'sleeve' => ['Laptop Sleeve', 'clothing']]);
 
-        $categories = $database->find($collection, [Query::distinct(), Query::select(['category']), Query::search('name', 'Laptop')]);
-        $this->assertSame(['electronics'], $this->categoriesOf($categories));
-        $this->assertArrayNotHasKey('_relevance', $categories[0]->getArrayCopy());
+        $unordered = $database->find($collection, [Query::distinct(), Query::select(['category']), Query::search('name', 'Laptop')]);
+        $categories = $this->categoriesOf($unordered);
+        \sort($categories);
+        $this->assertSame(['clothing', 'electronics'], $categories);
 
-        $ordered = $database->find($collection, [Query::distinct(), Query::select(['category']), Query::search('name', 'Laptop'), Query::orderAsc('category')]);
-        $this->assertSame(['electronics'], $this->categoriesOf($ordered));
-        $this->assertArrayNotHasKey('_relevance', $ordered[0]->getArrayCopy());
+        $ascending = $database->find($collection, [Query::distinct(), Query::select(['category']), Query::search('name', 'Laptop'), Query::orderAsc('category')]);
+        $this->assertSame(['clothing', 'electronics'], $this->categoriesOf($ascending));
+
+        $descending = $database->find($collection, [Query::distinct(), Query::select(['category']), Query::search('name', 'Laptop'), Query::orderDesc('category')]);
+        $this->assertSame(['electronics', 'clothing'], $this->categoriesOf($descending));
+
+        foreach ([...$unordered, ...$ascending, ...$descending] as $row) {
+            $this->assertArrayNotHasKey('_relevance', $row->getArrayCopy());
+        }
 
         $database->deleteCollection($collection);
     }
@@ -2514,30 +2505,7 @@ trait AggregationTests
         }
 
         $collection = 'distinct_vector_distance';
-        $database->createCollection(new Collection(
-            id: $collection,
-            attributes: [
-                Attribute::string(key: 'name', size: 100, required: true),
-                Attribute::string(key: 'category', size: 50, required: true),
-                Attribute::vector(key: 'embedding', size: 3, required: true),
-            ],
-            indexes: [Index::fullText(key: 'name_search', attributes: ['name'])],
-            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
-        ));
-        foreach ([
-            ['laptop', 'Laptop', 'electronics', [1.0, 0.0, 0.0]],
-            ['dock', 'Laptop Laptop Dock', 'electronics', [0.0, 1.0, 0.0]],
-            ['sleeve', 'Laptop Sleeve', 'clothing', [0.0, 0.0, 1.0]],
-            ['novel', 'Novel', 'books', [1.0, 1.0, 0.0]],
-        ] as [$id, $name, $category, $embedding]) {
-            $database->createDocument($collection, new Document([
-                '$id' => $id,
-                'name' => $name,
-                'category' => $category,
-                'embedding' => $embedding,
-                '$permissions' => [Permission::read(Role::any())],
-            ]));
-        }
+        $this->createEmbeddedProducts($database, $collection);
 
         $unordered = $database->find($collection, [Query::distinct(), Query::select(['category']), Query::vectorCosine('embedding', [1.0, 0.0, 0.0])]);
         $categories = $this->categoriesOf($unordered);
@@ -2564,12 +2532,80 @@ trait AggregationTests
         }
 
         $sleeve = $database->getDocument($collection, 'sleeve');
-        $this->assertSame(
-            ['electronics'],
-            $this->categoriesOf($database->find($collection, [Query::distinct(), Query::select(['category']), Query::vectorCosine('embedding', [1.0, 0.0, 0.0]), Query::orderAsc('category'), Query::cursorAfter($sleeve)])),
-        );
+        $nearest = $database->find($collection, [Query::vectorCosine('embedding', [0.0, 0.0, 1.0]), Query::limit(1)]);
+        $this->assertSame(['sleeve'], $this->idsOf($nearest));
+        $this->assertIsFloat($nearest[0]->getAttribute(Document::DISTANCE));
+
+        foreach (['a cursor without a distance' => $sleeve, 'a cursor with a distance' => $nearest[0]] as $case => $cursor) {
+            $this->assertSame(
+                ['electronics'],
+                $this->categoriesOf($database->find($collection, [Query::distinct(), Query::select(['category']), Query::vectorCosine('embedding', [1.0, 0.0, 0.0]), Query::orderAsc('category'), Query::cursorAfter($cursor)])),
+                $case,
+            );
+        }
 
         $database->deleteCollection($collection);
+    }
+
+    public function testRowsNextToAVectorQueryAreOrderedByDistance(): void
+    {
+        $database = static::getDatabase();
+        $adapter = $database->getAdapter();
+        if (! $adapter->supports(Capability::Fulltext) || ! $adapter->supports(Capability::Vectors)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'vector_row_distance';
+        $this->createEmbeddedProducts($database, $collection);
+
+        $selected = $database->find($collection, [Query::select(['category']), Query::vectorCosine('embedding', [0.0, 1.0, 0.5])]);
+        $this->assertSame(['electronics', 'books', 'clothing', 'electronics'], $this->categoriesOf($selected));
+
+        $matches = $database->find($collection, [Query::search('name', 'Laptop'), Query::vectorCosine('embedding', [0.0, 0.5, 1.0])]);
+        $this->assertSame(['sleeve', 'dock', 'laptop'], $this->idsOf($matches));
+
+        $distances = [];
+        foreach ($matches as $row) {
+            $this->assertArrayNotHasKey('_relevance', $row->getArrayCopy());
+            $distance = $row->getAttribute(Document::DISTANCE);
+            $this->assertIsFloat($distance);
+            $distances[] = $distance;
+        }
+        $ascending = $distances;
+        \sort($ascending);
+        $this->assertSame($ascending, $distances);
+
+        $database->deleteCollection($collection);
+    }
+
+    private function createEmbeddedProducts(Database $database, string $collection): void
+    {
+        $database->createCollection(new Collection(
+            id: $collection,
+            attributes: [
+                Attribute::string(key: 'name', size: 100, required: true),
+                Attribute::string(key: 'category', size: 50, required: true),
+                Attribute::vector(key: 'embedding', size: 3, required: true),
+            ],
+            indexes: [Index::fullText(key: 'name_search', attributes: ['name'])],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+        foreach ([
+            ['laptop', 'Laptop', 'electronics', [1.0, 0.0, 0.0]],
+            ['dock', 'Laptop Laptop Dock', 'electronics', [0.0, 1.0, 0.0]],
+            ['sleeve', 'Laptop Sleeve', 'clothing', [0.0, 0.0, 1.0]],
+            ['novel', 'Novel', 'books', [1.0, 1.0, 0.0]],
+        ] as [$id, $name, $category, $embedding]) {
+            $database->createDocument($collection, new Document([
+                '$id' => $id,
+                'name' => $name,
+                'category' => $category,
+                'embedding' => $embedding,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
     }
 
     /**
@@ -2579,6 +2615,82 @@ trait AggregationTests
     private function categoriesOf(array $rows): array
     {
         return \array_values(\array_map(fn (Document $row): mixed => $row->getAttribute('category'), $rows));
+    }
+
+    /**
+     * @param  array<Document>  $rows
+     * @return list<string>
+     */
+    private function idsOf(array $rows): array
+    {
+        return \array_values(\array_map(fn (Document $row): string => $row->getId(), $rows));
+    }
+
+    /**
+     * @param  array<string, array{string, string}>  $matches
+     */
+    private function createSearchMatches(Database $database, string $collection, array $matches): void
+    {
+        foreach ($matches as $id => [$name, $category]) {
+            $database->createDocument($collection, new Document([
+                '$id' => $id,
+                'name' => $name,
+                'category' => $category,
+                'price' => 90,
+                'stock' => 5,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
+        $database->createIndex($collection, Index::fullText(key: 'name_search', attributes: ['name']));
+    }
+
+    public function testSearchReadsFollowTheirOrderInsteadOfARelevanceRanking(): void
+    {
+        $database = static::getDatabase();
+        $adapter = $database->getAdapter();
+        if (! $adapter->supports(Capability::Fulltext)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'search_explicit_order';
+        $this->createProducts($database, $collection);
+        $this->createSearchMatches($database, $collection, [
+            'dock' => ['Laptop Laptop Dock', 'electronics'],
+            'sleeve' => ['Laptop Sleeve', 'clothing'],
+            'bag' => ['Laptop Bag', 'electronics'],
+        ]);
+        $search = Query::search('name', 'Laptop');
+
+        $selected = $database->find($collection, [Query::select(['name']), $search]);
+        $this->assertSame(['Laptop', 'Laptop Laptop Dock', 'Laptop Sleeve', 'Laptop Bag'], $this->namesOf($selected));
+
+        $byName = $database->find($collection, [$search, Query::orderAsc('name')]);
+        $this->assertSame(['laptop', 'bag', 'dock', 'sleeve'], $this->idsOf($byName));
+
+        foreach ([...$selected, ...$byName] as $row) {
+            $this->assertArrayNotHasKey('_relevance', $row->getArrayCopy());
+        }
+
+        if ($adapter->supports(Capability::Aggregations)) {
+            foreach ([
+                'descending' => [Query::orderDesc('total'), [['electronics', 3], ['clothing', 1]]],
+                'ascending' => [Query::orderAsc('total'), [['clothing', 1], ['electronics', 3]]],
+            ] as $direction => [$order, $expected]) {
+                $groups = $database->find($collection, [Query::count('*', 'total'), Query::groupBy(['category']), $search, $order]);
+                $this->assertSame(
+                    $expected,
+                    \array_map(fn (Document $group): array => [$group->getAttribute('category'), $this->intAttribute($group, 'total')], $groups),
+                    $direction,
+                );
+                foreach ($groups as $group) {
+                    $this->assertSame(['category', 'total'], $this->sortedAttributeNames($group), $direction);
+                }
+            }
+        }
+
+        $database->deleteCollection($collection);
     }
 
     public function testSearchPagedWithACursorListsEachMatchOnce(): void
@@ -2592,17 +2704,11 @@ trait AggregationTests
 
         $collection = 'search_cursor_pages';
         $this->createProducts($database, $collection);
-        foreach (['dock' => 'Laptop Laptop Dock', 'sleeve' => 'Laptop Sleeve', 'bag' => 'Laptop Bag'] as $id => $name) {
-            $database->createDocument($collection, new Document([
-                '$id' => $id,
-                'name' => $name,
-                'category' => 'electronics',
-                'price' => 90,
-                'stock' => 5,
-                '$permissions' => [Permission::read(Role::any())],
-            ]));
-        }
-        $database->createIndex($collection, Index::fullText(key: 'name_search', attributes: ['name']));
+        $this->createSearchMatches($database, $collection, [
+            'dock' => ['Laptop Laptop Dock', 'electronics'],
+            'sleeve' => ['Laptop Sleeve', 'electronics'],
+            'bag' => ['Laptop Bag', 'electronics'],
+        ]);
 
         $matches = ['laptop', 'dock', 'sleeve', 'bag'];
         $search = Query::search('name', 'Laptop');
@@ -2611,17 +2717,14 @@ trait AggregationTests
 
         $this->assertSame(
             ['after' => $matches, 'before' => ['sleeve', 'dock', 'laptop']],
-            [
-                'after' => \array_map(fn (Document $document): string => $document->getId(), $after),
-                'before' => \array_map(fn (Document $document): string => $document->getId(), $before),
-            ],
+            ['after' => $this->idsOf($after), 'before' => $this->idsOf($before)],
         );
         foreach ([...$after, ...$before] as $document) {
             $this->assertArrayNotHasKey('_relevance', $document->getArrayCopy());
         }
 
         $unpaged = $database->find($collection, [$search]);
-        $this->assertSame($matches, \array_map(fn (Document $document): string => $document->getId(), $unpaged));
+        $this->assertSame($matches, $this->idsOf($unpaged));
 
         $database->deleteCollection($collection);
     }

@@ -1059,10 +1059,17 @@ trait Documents
 
         $document = $this->prepareDocument($collection, $document);
 
-        $document = $this->withMutation(Event::DocumentCreate, $document, function () use ($collection, $document) {
+        /** @var array<int, array{Document, array<string, mixed>}> $copies */
+        $copies = [];
+        $document = $this->withMutation(Event::DocumentCreate, $document, function () use ($collection, $document, &$copies) {
             $hook = $this->relationshipHook;
             if ($hook?->isEnabled()) {
-                $document = $this->silent(fn () => $hook->afterDocumentCreate($collection, $document));
+                if ($copies !== []) {
+                    $hook->restore($copies);
+                }
+                $document = $this->silent(function () use ($hook, $collection, $document, &$copies): Document {
+                    return $hook->afterDocumentCreate($collection, $document, $copies);
+                });
             }
 
             $document = $this->adapter->createDocument($collection, $document);

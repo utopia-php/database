@@ -281,15 +281,24 @@ class Relationships implements Hook
     }
 
     /**
-     * {@inheritDoc}
+     * Relate the related documents of a new document, removing or replacing its relationship values with what is
+     * stored for them.
+     *
+     * @param  array<int, array{Document, array<string, mixed>}>|null  $copies  Given an array, receives the document
+     *                                                                            and the documents nested in it as
+     *                                                                            they were before relating changed
+     *                                                                            them, for restore() to give back to an
+     *                                                                            attempt the transaction retries
      *
      * @throws DuplicateException If a related document already exists
      * @throws RelationshipException If a relationship constraint is violated
      */
-    public function afterDocumentCreate(Document $collection, Document $document): Document
+    public function afterDocumentCreate(Document $collection, Document $document, ?array &$copies = null): Document
     {
         $coroutine = $this->coroutine();
-        $relate = fn (?PreparedCreate $prepared): Document => $this->relate($collection, $document, $coroutine, $prepared);
+        $relate = function (?PreparedCreate $prepared) use ($collection, $document, $coroutine, &$copies): Document {
+            return $this->relate($collection, $document, $coroutine, $prepared, $copies);
+        };
 
         if (! $this->canPrepare($coroutine) || ! $this->hasRelatedDocuments($collection, $document)) {
             return $relate(null);
@@ -647,9 +656,11 @@ class Relationships implements Hook
     }
 
     /**
+     * Give each copied document back the attributes it was copied with.
+     *
      * @param  array<int, array{Document, array<string, mixed>}>  $copies
      */
-    private function restore(array $copies): void
+    public function restore(array $copies): void
     {
         foreach ($copies as [$document, $attributes]) {
             $document->exchangeArray($attributes);
@@ -692,7 +703,13 @@ class Relationships implements Hook
         $this->db->createPrepared($documents);
     }
 
-    private function relate(Document $collection, Document $document, int $coroutine, ?PreparedCreate $prepared): Document
+    /**
+     * @param  array<int, array{Document, array<string, mixed>}>|null  $copies  Receives the document and the
+     *                                                                            documents nested in it before
+     *                                                                            relating changes them, unless the
+     *                                                                            relating is nested in another write
+     */
+    private function relate(Document $collection, Document $document, int $coroutine, ?PreparedCreate $prepared, ?array &$copies = null): Document
     {
         $relationships = $this->relationships($collection);
         $writeStack = $this->writeStacks[$coroutine] ?? [];
@@ -702,6 +719,9 @@ class Relationships implements Hook
             /** @var string $key */
             $key = $relationship->getAttribute('key', $relationship->getId());
             $value = $document->getAttribute($key);
+            if ($copies !== null && $stackCount === 0 && (\is_array($value) || $value instanceof Document)) {
+                $this->copy($document, $copies);
+            }
             $rel = RelationshipVO::fromArray(['collection' => $collection->getId()] + $relationship->getArrayCopy());
             $relatedCollection = $prepared === null
                 ? $this->db->getCollection($rel->getRelatedCollection())

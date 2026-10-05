@@ -616,7 +616,7 @@ abstract class SQL extends Adapter
         $affected = $stmt->rowCount();
 
         // Permissions logic
-        if ($updates->offsetExists('$permissions')) {
+        if ($updates->offsetExists('$permissions') && $this->getSupportForPermissionsTable()) {
             $removeQueries = [];
             $removeBindValues = [];
 
@@ -819,7 +819,7 @@ abstract class SQL extends Adapter
                 throw new DatabaseException('Failed to delete documents');
             }
 
-            if (!empty($permissionIds)) {
+            if (!empty($permissionIds) && $this->getSupportForPermissionsTable()) {
                 $sql = "
                 DELETE FROM {$this->getSQLTable($name . '_perms')} 
                 WHERE _document IN (" . \implode(', ', \array_map(fn ($index) => ":_id_{$index}", \array_keys($permissionIds))) . ")
@@ -1110,6 +1110,16 @@ abstract class SQL extends Adapter
     protected function getInsertPermissionsSuffix(): string
     {
         return '';
+    }
+
+    /**
+     * Whether permissions are kept in the collection's `_perms` table, in addition to the
+     * row's `_permissions` column. Override in adapters that check permissions against the
+     * row alone, so the table is not written to.
+     */
+    protected function getSupportForPermissionsTable(): bool
+    {
+        return true;
     }
 
     /**
@@ -2539,7 +2549,7 @@ abstract class SQL extends Adapter
 
             $this->execute($stmt);
 
-            if (!empty($permissions)) {
+            if (!empty($permissions) && $this->getSupportForPermissionsTable()) {
                 $tenantColumn = $this->sharedTables ? ', _tenant' : '';
                 $permissions = \implode(', ', $permissions);
 
@@ -2825,6 +2835,10 @@ abstract class SQL extends Adapter
                     $stmt->execute();
                     $stmt->closeCursor();
                 }
+            }
+
+            if (!$this->getSupportForPermissionsTable()) {
+                return \array_map(fn ($change) => $change->getNew(), $changes);
             }
 
             $removeQueries = [];

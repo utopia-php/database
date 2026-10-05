@@ -1045,42 +1045,11 @@ class Postgres extends SQL
             $attributeIndex++;
         }
 
-        $permissions = [];
-        foreach (Database::PERMISSIONS as $type) {
-            foreach ($document->getPermissionsByType($type) as $permission) {
-                $permission = \str_replace('"', '', $permission);
-                $sqlTenant = $this->sharedTables ? ', :_tenant' : '';
-                $permissions[] = "('{$type}', '{$permission}', :_uid {$sqlTenant})";
-            }
-        }
-
-
-        if (!empty($permissions)) {
-            $permissions = \implode(', ', $permissions);
-            $sqlTenant = $this->sharedTables ? ', _tenant' : '';
-
-            $queryPermissions = "
-				INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document {$sqlTenant})
-				VALUES {$permissions}
-			";
-
-            $queryPermissions = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $queryPermissions);
-            $stmtPermissions = $this->getPDO()->prepare($queryPermissions);
-            $stmtPermissions->bindValue(':_uid', $document->getId());
-            if ($sqlTenant) {
-                $stmtPermissions->bindValue(':_tenant', $document->getTenant());
-            }
-        }
-
         try {
             $this->execute($stmt);
             $lastInsertedId = $this->getPDO()->lastInsertId();
             // Sequence can be manually set as well
             $document['$sequence'] ??= $lastInsertedId;
-
-            if (isset($stmtPermissions)) {
-                $this->execute($stmtPermissions);
-            }
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -1112,54 +1081,6 @@ class Postgres extends SQL
 
         $name = $this->filter($collection);
         $columns = '';
-
-        if (!$skipPermissions) {
-            $newUid = $document->offsetExists('$id') ? $document->getId() : $id;
-
-            $sql = "
-			DELETE FROM {$this->getSQLTable($name . '_perms')}
-			WHERE _document = :_uid
-			{$this->getTenantQuery($collection)}
-		";
-
-            $sql = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $sql);
-
-            $stmtRemovePermissions = $this->getPDO()->prepare($sql);
-            $stmtRemovePermissions->bindValue(':_uid', $id);
-            if ($this->sharedTables) {
-                $stmtRemovePermissions->bindValue(':_tenant', $document->getTenant());
-            }
-
-            $values = [];
-            $binds = [];
-            foreach (Database::PERMISSIONS as $type) {
-                foreach ($document->getPermissionsByType($type) as $i => $permission) {
-                    $sqlTenant = $this->sharedTables ? ', :_tenant' : '';
-                    $values[] = "( :_uid, '{$type}', :_add_{$type}_{$i} {$sqlTenant})";
-                    $binds[":_add_{$type}_{$i}"] = $permission;
-                }
-            }
-
-            if (!empty($values)) {
-                $sqlTenant = $this->sharedTables ? ', _tenant' : '';
-
-                $sql = "
-				INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission {$sqlTenant})
-				VALUES " . \implode(', ', $values);
-
-                $sql = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sql);
-
-                $stmtAddPermissions = $this->getPDO()->prepare($sql);
-                $stmtAddPermissions->bindValue(":_uid", $newUid);
-                if ($this->sharedTables) {
-                    $stmtAddPermissions->bindValue(':_tenant', $document->getTenant());
-                }
-
-                foreach ($binds as $key => $permission) {
-                    $stmtAddPermissions->bindValue($key, $permission);
-                }
-            }
-        }
 
         /**
          * Update Attributes
@@ -1230,12 +1151,6 @@ class Postgres extends SQL
 
         try {
             $this->execute($stmt);
-            if (isset($stmtRemovePermissions)) {
-                $this->execute($stmtRemovePermissions);
-            }
-            if (isset($stmtAddPermissions)) {
-                $this->execute($stmtAddPermissions);
-            }
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -1408,21 +1323,6 @@ class Postgres extends SQL
             $stmt->bindValue(':_tenant', $this->tenant);
         }
 
-        $sql = "
-			DELETE FROM {$this->getSQLTable($name . '_perms')} 
-			WHERE _document = :_uid
-			{$this->getTenantQuery($collection)}
-		";
-
-        $sql = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $sql);
-
-        $stmtPermissions = $this->getPDO()->prepare($sql);
-        $stmtPermissions->bindValue(':_uid', $id);
-
-        if ($this->sharedTables) {
-            $stmtPermissions->bindValue(':_tenant', $this->tenant);
-        }
-
         $deleted = false;
 
         try {
@@ -1431,10 +1331,6 @@ class Postgres extends SQL
             }
 
             $deleted = $stmt->rowCount();
-
-            if (!$this->execute($stmtPermissions)) {
-                throw new DatabaseException('Failed to delete permissions');
-            }
         } catch (\Throwable $th) {
             throw new DatabaseException($th->getMessage());
         }
@@ -2349,17 +2245,13 @@ class Postgres extends SQL
         return "ON CONFLICT {$conflictTarget} DO NOTHING";
     }
 
-    protected function getInsertPermissionsSuffix(): string
+    /**
+     * Permissions are checked against the row's `_permissions` column, see
+     * getSQLPermissionsCondition(), so the `_perms` table is not kept in sync.
+     */
+    protected function getSupportForPermissionsTable(): bool
     {
-        if (!$this->skipDuplicates) {
-            return '';
-        }
-
-        $conflictTarget = $this->sharedTables
-            ? '("_type", "_permission", "_document", "_tenant")'
-            : '("_type", "_permission", "_document")';
-
-        return "ON CONFLICT {$conflictTarget} DO NOTHING";
+        return false;
     }
 
     public function decodePoint(string $wkb): array

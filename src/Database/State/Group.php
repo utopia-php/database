@@ -3,8 +3,9 @@
 namespace Utopia\Database\State;
 
 /**
- * The open scopes shared by the {@see Value}s that decide together whether a write by a coroutine whose starter has
- * returned stays local to that coroutine: it does while any override of one of them is open.
+ * The open scopes shared by the {@see Value}s that decide together whether a write by a coroutine cut off from the
+ * overrides, because a coroutine between it and their owners has returned, stays local to that coroutine: it does
+ * while any override of one of them is open.
  *
  * @internal
  */

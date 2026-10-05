@@ -12,8 +12,8 @@ use Utopia\Validator;
  *
  * The status and the roles are shared by every caller, except inside skip(), withStatus() and withRoles(): those
  * scopes belong to the calling coroutine and the coroutines it starts (see {@see Value}). The status and the roles
- * share one {@see Group}, so any of those scopes keeps the status and role changes of a coroutine whose starter has
- * returned local to it.
+ * share one {@see Group}, so any of those scopes keeps the status and role changes of a coroutine cut off from it,
+ * because a coroutine between them has returned, local to that coroutine.
  */
 class Authorization extends Validator
 {

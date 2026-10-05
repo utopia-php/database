@@ -247,9 +247,10 @@ have to make, with the 7.x and 8.0 forms side by side.
   `withTenant()`), including one the coroutine inherited from the coroutine that started it: there the change
   applies to the calling coroutine and the coroutines it starts, and lasts until the scope ends. A coroutine sees a
   scope only while every coroutine between it and the scope's owner is running; work that can outlive its starter
-  runs under `withSnapshot()`. A coroutine whose starter has returned reads the shared values, but while such a
-  scope is open on the handle its writes stay with it and the coroutines it starts; for `Authorization`, `skip()`,
-  `withStatus()` and `withRoles()` count together. See [Coroutines](UPGRADE.md#coroutines).
+  runs under `withSnapshot()`. A coroutine cut off from a scope, because a coroutine between it and the scope's
+  owner has returned, reads the shared values or a scope opened outside every coroutine, and while a scope over the
+  same state is open on the handle its writes stay with it and the coroutines it starts; for `Authorization`,
+  `skip()`, `withStatus()` and `withRoles()` count together. See [Coroutines](UPGRADE.md#coroutines).
 - Relationship population reads its chunks of related ids concurrently only on `Adapter\Pool`, inside a coroutine
   and outside a transaction; elsewhere it reads them one after another. Related documents are merged in chunk order.
 - Linking an existing many-to-many related document needs update permission on it, as one-to-one, one-to-many and

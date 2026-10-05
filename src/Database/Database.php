@@ -3493,7 +3493,7 @@ class Database
 
     private function isRetryable(Throwable $error): bool
     {
-        if ($this->failedAfterCommit($error) || $this->retriedByTransaction($error)) {
+        if ($this->mayHaveCommitted($error) || $this->retriedByTransaction($error)) {
             return false;
         }
 
@@ -3538,8 +3538,8 @@ class Database
      * 2. Rolling back database operations if metadata persistence fails
      * 3. Providing detailed error messages for both success and failure scenarios
      *
-     * A failure raised after the metadata write committed (its cache invalidation or events) is
-     * rethrown unchanged and rolls nothing back: the definition it reports on is stored.
+     * A failure raised after the metadata write committed (its cache invalidation or events), or a commit that
+     * could not be confirmed, is rethrown unchanged and rolls nothing back: the definition it reports on may be stored.
      *
      * @param  Document  $collection  The collection document to persist
      * @param  callable|null  $rollbackOperation  Cleanup operation to run if persistence fails (null if no cleanup needed)
@@ -3565,7 +3565,7 @@ class Database
                 );
             }
         } catch (Throwable $e) {
-            if ($this->failedAfterCommit($e)) {
+            if ($this->mayHaveCommitted($e)) {
                 throw $e;
             }
 

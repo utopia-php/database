@@ -40,7 +40,6 @@ use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Exception\Type as TypeException;
-use Utopia\Database\Exception\Unconfirmed as UnconfirmedException;
 use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -80,7 +79,6 @@ final class CoreMinorsTest extends TestCase
             'truncate' => [new TruncateException('truncate')],
             'mismatch' => [new MismatchException('mismatch')],
             'unique' => [new UniqueException(UniqueException::MESSAGE)],
-            'unconfirmed' => [new UnconfirmedException('Failed to commit transaction: the commit could not be confirmed')],
         ];
     }
 

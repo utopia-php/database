@@ -267,7 +267,7 @@ trait Relationships
                     });
                 });
             } catch (Throwable $e) {
-                if (! $this->failedAfterCommit($e)) {
+                if (! $this->mayHaveCommitted($e)) {
                     $this->rollbackAttributeMetadata($collection, [$id]);
                     $this->rollbackAttributeMetadata($relatedCollection, [$twoWayKey]);
 
@@ -321,7 +321,7 @@ trait Relationships
                     try {
                         $this->createIndex($indexCollection, $index);
                     } catch (Throwable $e) {
-                        if (! $this->failedAfterCommit($e)) {
+                        if (! $this->mayHaveCommitted($e)) {
                             throw $e;
                         }
 

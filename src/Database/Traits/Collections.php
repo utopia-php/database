@@ -235,7 +235,7 @@ trait Collections
             }
             throw new DuplicateException('Collection '.$id.' already exists', previous: $e);
         } catch (Throwable $e) {
-            if ($this->failedAfterCommit($e)) {
+            if ($this->mayHaveCommitted($e)) {
                 throw $e;
             }
 

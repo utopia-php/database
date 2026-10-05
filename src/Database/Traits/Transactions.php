@@ -7,6 +7,7 @@ use Throwable;
 use Utopia\Database\Capability;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
+use Utopia\Database\Exception\Unconfirmed as UnconfirmedException;
 use WeakMap;
 
 /**
@@ -311,6 +312,16 @@ trait Transactions
     private function failedAfterCommit(Throwable $error): bool
     {
         return isset($this->committedFailures[$error]);
+    }
+
+    /**
+     * Whether the writes the error reports on may be stored: it was raised after their outermost transaction
+     * committed, or the commit could not be confirmed. Undoing what they describe could leave a stored definition
+     * without its table, column or index.
+     */
+    private function mayHaveCommitted(Throwable $error): bool
+    {
+        return $error instanceof UnconfirmedException || $this->failedAfterCommit($error);
     }
 
     /**

@@ -186,9 +186,6 @@ final class Value
     private function detach(int $writer, mixed $value): void
     {
         $scope = new Scope($writer, $value, null);
-        $this->scopes[$writer] = $scope;
-        $this->open++;
-        $this->group->open++;
 
         Coroutine::defer(function () use ($writer, $scope): void {
             if (($this->scopes[$writer] ?? null) === $scope) {
@@ -198,6 +195,10 @@ final class Value
             $this->open--;
             $this->group->open--;
         });
+
+        $this->scopes[$writer] = $scope;
+        $this->open++;
+        $this->group->open++;
     }
 
     private static function coroutine(): int

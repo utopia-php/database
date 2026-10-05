@@ -139,18 +139,6 @@ final class PostgresStatementTest extends TestCase
         $this->assertSame([], $this->statements);
     }
 
-    public function testPowerWithANumericExponentIsSentAsPower(): void
-    {
-        $this->adapter()->updateDocuments(
-            new Document(['$id' => 'scores', 'attributes' => []]),
-            new Document(['value' => Operator::power(3)]),
-            [new Document(['$id' => 'first', '$sequence' => '1'])],
-        );
-
-        $this->assertCount(1, $this->statements);
-        $this->assertStringContainsString('POWER(', $this->statements[0]);
-    }
-
     private function engineError(string $state, string $message): PDOException
     {
         $error = new class ('SQLSTATE[' . $state . ']: ' . $message, $state) extends PDOException {

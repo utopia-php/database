@@ -193,7 +193,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         $namespace = $this->getNamespace();
         $id = $this->filter($name);
         $tableRaw = $this->getSQLTableRaw($id);
-        $permsTableRaw = $this->getSQLTableRaw(Storage::permissionsTable($id));
+        $permissionsTableRaw = $this->getSQLTableRaw(Storage::permissionsTable($id));
 
         $schema = $this->createSchemaBuilder();
 
@@ -209,8 +209,8 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         $table->datetime(Storage::UPDATED_AT, 3)->nullable()->default(null);
 
         foreach ($attributes as $attribute) {
-            if ($attribute->type === ColumnType::Relationship) {
-                $options = $attribute->options ?? [];
+            if ($attribute->getType() === ColumnType::Relationship) {
+                $options = $attribute->getOptions() ?? [];
                 $relationType = $options['relationType'] ?? null;
                 $twoWay = $options['twoWay'] ?? false;
                 $side = $options['side'] ?? null;
@@ -227,19 +227,18 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
 
             $this->addTableColumn(
                 $table,
-                $attribute->key,
-                $attribute->type,
-                $attribute->size,
-                $attribute->signed,
-                $attribute->array,
-                $attribute->required
+                $attribute->getKey(),
+                $attribute->getType(),
+                $attribute->getSize(),
+                $attribute->isSigned(),
+                $attribute->isArray(),
+                $attribute->isRequired()
             );
         }
 
         $table->json(Storage::PERMISSIONS)->nullable()->default(null);
         $collectionResult = $table->create();
 
-        // Build default indexes using schema builder
         $indexStatements = [];
 
         if ($this->sharedTables) {
@@ -266,53 +265,52 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
 
         $collectionSql = $collectionResult->query.'; '.implode('; ', $indexStatements);
 
-        $permsTable = $schema->table($permsTableRaw);
-        $permsTable->id(Storage::SEQUENCE);
-        $permsTable->integer(Storage::TENANT)->nullable()->default(null);
-        $permsTable->string(Storage::PERM_TYPE, 12);
-        $permsTable->string(Storage::PERM_PERMISSION, 255);
-        $permsTable->string(Storage::PERM_DOCUMENT, 255);
-        $permsResult = $permsTable->create();
+        $permissionsTable = $schema->table($permissionsTableRaw);
+        $permissionsTable->id(Storage::SEQUENCE);
+        $permissionsTable->integer(Storage::TENANT)->nullable()->default(null);
+        $permissionsTable->string(Storage::PERM_TYPE, 12);
+        $permissionsTable->string(Storage::PERM_PERMISSION, 255);
+        $permissionsTable->string(Storage::PERM_DOCUMENT, 255);
+        $permissionsResult = $permissionsTable->create();
 
-        // Build permission indexes using schema builder
-        $permsIndexStatements = [];
+        $permissionsIndexStatements = [];
 
         if ($this->sharedTables) {
             $uniquePermissionIndex = $this->getShortKey("{$namespace}_{$this->currentTenant()}_{$id}_ukey");
             $permissionIndex = $this->getShortKey("{$namespace}_{$this->currentTenant()}_{$id}_permission");
-            $permsIndexStatements[] = $schema->createIndex($permsTableRaw, $uniquePermissionIndex, [Storage::TENANT, Storage::PERM_DOCUMENT, Storage::PERM_TYPE, Storage::PERM_PERMISSION], unique: true, method: 'btree')->query;
-            $permsIndexStatements[] = $schema->createIndex($permsTableRaw, $permissionIndex, [Storage::TENANT, Storage::PERM_PERMISSION, Storage::PERM_TYPE], method: 'btree')->query;
+            $permissionsIndexStatements[] = $schema->createIndex($permissionsTableRaw, $uniquePermissionIndex, [Storage::TENANT, Storage::PERM_DOCUMENT, Storage::PERM_TYPE, Storage::PERM_PERMISSION], unique: true, method: 'btree')->query;
+            $permissionsIndexStatements[] = $schema->createIndex($permissionsTableRaw, $permissionIndex, [Storage::TENANT, Storage::PERM_PERMISSION, Storage::PERM_TYPE], method: 'btree')->query;
         } else {
             $uniquePermissionIndex = $this->getShortKey("{$namespace}_{$id}_ukey");
             $permissionIndex = $this->getShortKey("{$namespace}_{$id}_permission");
-            $permsIndexStatements[] = $schema->createIndex($permsTableRaw, $uniquePermissionIndex, [Storage::PERM_DOCUMENT, Storage::PERM_TYPE, Storage::PERM_PERMISSION], unique: true, method: 'btree', collations: [Storage::PERM_DOCUMENT => 'utf8_ci_ai'])->query;
-            $permsIndexStatements[] = $schema->createIndex($permsTableRaw, $permissionIndex, [Storage::PERM_PERMISSION, Storage::PERM_TYPE], method: 'btree')->query;
+            $permissionsIndexStatements[] = $schema->createIndex($permissionsTableRaw, $uniquePermissionIndex, [Storage::PERM_DOCUMENT, Storage::PERM_TYPE, Storage::PERM_PERMISSION], unique: true, method: 'btree', collations: [Storage::PERM_DOCUMENT => 'utf8_ci_ai'])->query;
+            $permissionsIndexStatements[] = $schema->createIndex($permissionsTableRaw, $permissionIndex, [Storage::PERM_PERMISSION, Storage::PERM_TYPE], method: 'btree')->query;
         }
 
-        $permsSql = $permsResult->query.'; '.implode('; ', $permsIndexStatements);
+        $permissionsSql = $permissionsResult->query.'; '.implode('; ', $permissionsIndexStatements);
 
         $created = false;
 
         try {
             $this->executeStatement($collectionSql, Event::CollectionCreate);
             $created = true;
-            $this->executeStatement($permsSql, Event::CollectionCreate);
+            $this->executeStatement($permissionsSql, Event::CollectionCreate);
 
             foreach ($indexes as $index) {
-                $indexId = $this->filter($index->key);
-                $indexType = $index->type;
-                $indexAttributes = $index->attributes;
+                $indexId = $this->filter($index->getKey());
+                $indexType = $index->getType();
+                $indexAttributes = $index->getIndexedAttributes();
                 $indexAttributesWithType = [];
                 foreach ($indexAttributes as $indexAttribute) {
                     $baseAttribute = \explode('.', $indexAttribute, 2)[0];
                     foreach ($attributes as $attribute) {
-                        if ($attribute->key === $baseAttribute) {
-                            $indexAttributesWithType[$indexAttribute] = $attribute->type->value;
+                        if ($attribute->getKey() === $baseAttribute) {
+                            $indexAttributesWithType[$indexAttribute] = $attribute->getType()->value;
                         }
                     }
                 }
-                $indexOrders = $index->orders;
-                $indexTtl = $index->ttl;
+                $indexOrders = $index->getOrders();
+                $indexTtl = $index->getTtl();
                 if ($indexType === IndexType::Spatial && count($indexOrders)) {
                     throw new DatabaseException('Spatial indexes with explicit orders are not supported. Remove the orders to create this index.');
                 }
@@ -451,12 +449,11 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
      */
     public function createAttribute(string $collection, Attribute $attribute): bool
     {
-        // Ensure pgvector extension is installed for vector types
-        if ($attribute->type === ColumnType::Vector) {
-            if ($attribute->size <= 0) {
+        if ($attribute->getType() === ColumnType::Vector) {
+            if ($attribute->getSize() <= 0) {
                 throw new DatabaseException('Vector dimensions must be a positive integer');
             }
-            if ($attribute->size > Database::MAX_VECTOR_DIMENSIONS) {
+            if ($attribute->getSize() > Database::MAX_VECTOR_DIMENSIONS) {
                 throw new DatabaseException('Vector dimensions cannot exceed '.Database::MAX_VECTOR_DIMENSIONS);
             }
         }
@@ -465,7 +462,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
 
         $schema = $this->createSchemaBuilder();
         $table = $schema->table($this->getSQLTableRaw($collection));
-        $this->addTableColumn($table, $attribute->key, $attribute->type, $attribute->size, $attribute->signed, $attribute->array, $attribute->required);
+        $this->addTableColumn($table, $attribute->getKey(), $attribute->getType(), $attribute->getSize(), $attribute->isSigned(), $attribute->isArray(), $attribute->isRequired());
         $result = $table->alter();
 
         // Postgres does not support LOCK= on ALTER TABLE, so no lock type appended
@@ -519,12 +516,12 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         }
 
         foreach ($attributes as $attribute) {
-            $existing = $columns[$this->filter($attribute->key)] ?? null;
+            $existing = $columns[$this->filter($attribute->getKey())] ?? null;
             if ($existing === null) {
                 continue;
             }
 
-            $requested = $this->getSQLType($attribute->type, $attribute->size, $attribute->signed, $attribute->array, $attribute->required);
+            $requested = $this->getSQLType($attribute->getType(), $attribute->getSize(), $attribute->isSigned(), $attribute->isArray(), $attribute->isRequired());
             if (self::canonicalColumnType($existing) !== self::canonicalColumnType($requested)) {
                 throw new MismatchException('Attribute exists in the shared table with another type');
             }
@@ -545,14 +542,14 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
     public function updateAttribute(string $collection, Attribute $attribute, ?string $newKey = null): bool
     {
         $name = $this->filter($collection);
-        $id = $this->filter($attribute->key);
+        $id = $this->filter($attribute->getKey());
         $newKey = empty($newKey) ? null : $this->filter($newKey);
 
-        if ($attribute->type === ColumnType::Vector) {
-            if ($attribute->size <= 0) {
+        if ($attribute->getType() === ColumnType::Vector) {
+            if ($attribute->getSize() <= 0) {
                 throw new DatabaseException('Vector dimensions must be a positive integer');
             }
-            if ($attribute->size > Database::MAX_VECTOR_DIMENSIONS) {
+            if ($attribute->getSize() > Database::MAX_VECTOR_DIMENSIONS) {
                 throw new DatabaseException('Vector dimensions cannot exceed '.Database::MAX_VECTOR_DIMENSIONS);
             }
         }
@@ -564,7 +561,6 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             $newKey = null;
         }
 
-        // Rename column first if needed
         if (! empty($newKey) && $id !== $newKey) {
             $newKey = $this->filter($newKey);
 
@@ -587,8 +583,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             $id = $newKey;
         }
 
-        // Modify column type using schema builder's alterColumnType
-        $sqlType = $this->getSQLType($attribute->type, $attribute->size, $attribute->signed, $attribute->array, $attribute->required);
+        $sqlType = $this->getSQLType($attribute->getType(), $attribute->getSize(), $attribute->isSigned(), $attribute->isArray(), $attribute->isRequired());
         $tableRaw = $this->getSQLTableRaw($name);
 
         if ($sqlType == 'TIMESTAMP(3)') {
@@ -607,7 +602,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             // definition no longer claims. Only the relaxing direction is
             // applied: tightening would fail against rows already holding
             // null, and MySQL does not tighten on update either.
-            if ($ok && ! $attribute->required) {
+            if ($ok && ! $attribute->isRequired()) {
                 $nullable = $schema->alterColumnNullable($tableRaw, $id, true);
                 $ok = $this->executeStatement($nullable->query, Event::AttributeUpdate);
             }
@@ -725,12 +720,11 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         Event $event = Event::IndexCreate,
     ): bool {
         $collection = $this->filter($collection);
-        $id = $this->filter($index->key);
-        $type = $index->type;
-        $attributes = $index->attributes;
-        $orders = $index->orders;
+        $id = $this->filter($index->getKey());
+        $type = $index->getType();
+        $attributes = $index->getIndexedAttributes();
+        $orders = $index->getOrders();
 
-        // Validate index type
         match ($type) {
             IndexType::Key,
             IndexType::Fulltext,

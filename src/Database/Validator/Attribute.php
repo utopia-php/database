@@ -74,11 +74,11 @@ class Attribute extends Validator
 
         foreach ($attributes as $attribute) {
             $typed = $attribute instanceof AttributeVO ? $attribute : AttributeVO::fromDocument($attribute);
-            $this->attributes[\strtolower($typed->key)] = $typed;
+            $this->attributes[\strtolower($typed->getKey())] = $typed;
         }
         foreach ($schemaAttributes as $attribute) {
             $typed = $attribute instanceof AttributeVO ? $attribute : AttributeVO::fromDocument($attribute);
-            $this->schemaAttributes[\strtolower($typed->key)] = $typed;
+            $this->schemaAttributes[\strtolower($typed->getKey())] = $typed;
         }
     }
 
@@ -168,10 +168,10 @@ class Attribute extends Validator
      */
     public function checkDuplicateId(AttributeVO $attribute): bool
     {
-        $id = $attribute->key;
+        $id = $attribute->getKey();
 
         foreach ($this->attributes as $existingAttribute) {
-            if (\strtolower($existingAttribute->key) === \strtolower($id)) {
+            if (\strtolower($existingAttribute->getKey()) === \strtolower($id)) {
                 $this->message = 'Attribute already exists in metadata';
                 throw new DuplicateException($this->message);
             }
@@ -195,11 +195,11 @@ class Attribute extends Validator
             return true;
         }
 
-        $id = $attribute->key;
+        $id = $attribute->getKey();
 
         foreach ($this->schemaAttributes as $schemaAttribute) {
             /** @var string $schemaId */
-            $schemaId = $this->filterCallback ? ($this->filterCallback)($schemaAttribute->key) : $schemaAttribute->key;
+            $schemaId = $this->filterCallback ? ($this->filterCallback)($schemaAttribute->getKey()) : $schemaAttribute->getKey();
             if (\strtolower($schemaId) === \strtolower($id)) {
                 $this->message = 'Attribute already exists in schema';
                 throw new DuplicateException($this->message);
@@ -216,9 +216,9 @@ class Attribute extends Validator
      */
     public function checkRequiredFilters(AttributeVO $attribute): bool
     {
-        $requiredFilters = $this->getRequiredFilters($attribute->type);
-        if (! empty(\array_diff($requiredFilters, $attribute->filters))) {
-            $this->message = "Attribute of type: {$attribute->type->value} requires the following filters: ".implode(',', $requiredFilters);
+        $requiredFilters = $this->getRequiredFilters($attribute->getType());
+        if (! empty(\array_diff($requiredFilters, $attribute->getFilters()))) {
+            $this->message = 'Attribute of type: '.$attribute->getType()->value.' requires the following filters: '.implode(',', $requiredFilters);
             throw new DatabaseException($this->message);
         }
 
@@ -245,8 +245,9 @@ class Attribute extends Validator
      */
     public function checkFormat(AttributeVO $attribute): bool
     {
-        if ($attribute->format && ! Structure::hasFormat($attribute->format, $attribute->type)) {
-            $this->message = 'Format ("'.$attribute->format.'") not available for this attribute type ("'.$attribute->type->value.'")';
+        $format = $attribute->getFormat();
+        if ($format && ! Structure::hasFormat($format, $attribute->getType())) {
+            $this->message = 'Format ("'.$format.'") not available for this attribute type ("'.$attribute->getType()->value.'")';
             throw new DatabaseException($this->message);
         }
 
@@ -291,11 +292,11 @@ class Attribute extends Validator
      */
     public function checkType(AttributeVO $attribute): bool
     {
-        $type = $attribute->type;
-        $size = $attribute->size;
-        $signed = $attribute->signed;
-        $array = $attribute->array;
-        $default = $attribute->default;
+        $type = $attribute->getType();
+        $size = $attribute->getSize();
+        $signed = $attribute->isSigned();
+        $array = $attribute->isArray();
+        $default = $attribute->getDefault();
 
         switch ($type) {
             case ColumnType::Id:
@@ -444,15 +445,15 @@ class Attribute extends Validator
      */
     public function checkDefaultValue(AttributeVO $attribute): bool
     {
-        $default = $attribute->default;
-        $type = $attribute->type;
-        $signed = $attribute->signed;
+        $default = $attribute->getDefault();
+        $type = $attribute->getType();
+        $signed = $attribute->isSigned();
 
         if (\is_null($default)) {
             return true;
         }
 
-        if ($attribute->required === true) {
+        if ($attribute->isRequired()) {
             $this->message = 'Cannot set a default value for a required attribute';
             throw new DatabaseException($this->message);
         }
@@ -464,7 +465,7 @@ class Attribute extends Validator
         }
 
         // Vectors, spatial types and objects store their values as arrays.
-        if (\is_array($default) && ! $attribute->array && ! \in_array($type, [ColumnType::Vector, ColumnType::Object, ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon], true)) {
+        if (\is_array($default) && ! $attribute->isArray() && ! \in_array($type, [ColumnType::Vector, ColumnType::Object, ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon], true)) {
             $this->message = 'Cannot set an array default value for a non-array attribute';
             throw new DatabaseException($this->message);
         }
@@ -480,11 +481,11 @@ class Attribute extends Validator
      */
     private function isJsonDocumentDefault(AttributeVO $attribute): bool
     {
-        $default = $attribute->default;
+        $default = $attribute->getDefault();
 
-        return \in_array(self::JSON_FILTER, $attribute->filters, true)
-            && ! $attribute->array
-            && \in_array($attribute->type, self::STRING_TYPES, true)
+        return \in_array(self::JSON_FILTER, $attribute->getFilters(), true)
+            && ! $attribute->isArray()
+            && \in_array($attribute->getType(), self::STRING_TYPES, true)
             && (\is_array($default) || $default instanceof stdClass || $default instanceof Document);
     }
 
@@ -493,10 +494,10 @@ class Attribute extends Validator
      */
     private function checkJsonEncodable(AttributeVO $attribute): void
     {
-        $default = $attribute->default;
+        $default = $attribute->getDefault();
 
         if (\json_encode($default instanceof Document ? $default->getArrayCopy() : $default) === false) {
-            $this->message = 'Default value of json attribute "'.$attribute->key.'" is not JSON-encodable: '.\json_last_error_msg();
+            $this->message = 'Default value of json attribute "'.$attribute->getKey().'" is not JSON-encodable: '.\json_last_error_msg();
             throw new DatabaseException($this->message);
         }
     }

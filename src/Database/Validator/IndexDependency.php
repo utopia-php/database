@@ -52,17 +52,17 @@ class IndexDependency extends Validator
             return true;
         }
 
-        $attr = $value instanceof AttributeVO ? $value : AttributeVO::fromDocument($value);
+        $attribute = $value instanceof AttributeVO ? $value : AttributeVO::fromDocument($value);
 
-        if (! $attr->array) {
+        if (! $attribute->isArray()) {
             return true;
         }
 
-        $key = \strtolower($attr->key);
+        $key = \strtolower($attribute->getKey());
 
         foreach ($this->indexes as $index) {
-            foreach ($index->attributes as $attribute) {
-                if ($key === \strtolower($attribute)) {
+            foreach ($index->getIndexedAttributes() as $indexedAttribute) {
+                if ($key === \strtolower($indexedAttribute)) {
                     return false;
                 }
             }

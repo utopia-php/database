@@ -70,10 +70,10 @@ class Index extends Validator
         $this->attributes = [];
         foreach ($attributes as $attribute) {
             $typed = $attribute instanceof AttributeVO ? $attribute : AttributeVO::fromDocument($attribute);
-            $this->attributes[\strtolower($typed->key)] = $typed;
+            $this->attributes[\strtolower($typed->getKey())] = $typed;
         }
         foreach (Database::internalAttributes() as $attribute) {
-            $key = \strtolower($attribute->key);
+            $key = \strtolower($attribute->getKey());
             $this->attributes[$key] = $attribute;
         }
 
@@ -191,15 +191,14 @@ class Index extends Validator
      */
     public function checkValidIndex(IndexVO $index): bool
     {
-        $type = $index->type;
+        $type = $index->getType();
         if ($this->supportForObjects) {
-            // getting dotted attributes not present in schema
-            $dottedAttributes = array_filter($index->attributes, fn (string $attr) => ! isset($this->attributes[\strtolower($attr)]) && $this->isDottedAttribute($attr));
+            $dottedAttributes = array_filter($index->getIndexedAttributes(), fn (string $name) => ! isset($this->attributes[\strtolower($name)]) && $this->isDottedAttribute($name));
             if (\count($dottedAttributes)) {
                 foreach ($dottedAttributes as $attribute) {
                     $baseAttribute = $this->getBaseAttributeFromDottedAttribute($attribute);
                     if (isset($this->attributes[\strtolower($baseAttribute)])) {
-                        $baseType = $this->attributes[\strtolower($baseAttribute)]->type;
+                        $baseType = $this->attributes[\strtolower($baseAttribute)]->getType();
                         if ($baseType !== ColumnType::Object) {
                             $this->message = 'Index attribute "'.$attribute.'" is only supported on object attributes';
 
@@ -241,7 +240,7 @@ class Index extends Validator
 
                     return false;
                 }
-                if (! empty($index->orders) && ! $this->supportForSpatialIndexOrder) {
+                if (! empty($index->getOrders()) && ! $this->supportForSpatialIndexOrder) {
                     $this->message = 'Spatial indexes with explicit orders are not supported. Remove the orders to create this index.';
 
                     return false;
@@ -333,9 +332,7 @@ class Index extends Validator
         if (! $this->supportForAttributes) {
             return true;
         }
-        foreach ($index->attributes as $attribute) {
-            // attribute is part of the attributes
-            // or object indexes supported and its a dotted attribute with base present in the attributes
+        foreach ($index->getIndexedAttributes() as $attribute) {
             if (! isset($this->attributes[\strtolower($attribute)])) {
                 if ($this->supportForObjects) {
                     $baseAttribute = $this->getBaseAttributeFromDottedAttribute($attribute);
@@ -360,7 +357,7 @@ class Index extends Validator
      */
     public function checkEmptyIndexAttributes(IndexVO $index): bool
     {
-        if (empty($index->attributes)) {
+        if (empty($index->getIndexedAttributes())) {
             $this->message = 'No attributes provided for index';
 
             return false;
@@ -378,7 +375,7 @@ class Index extends Validator
     public function checkDuplicatedAttributes(IndexVO $index): bool
     {
         $stack = [];
-        foreach ($index->attributes as $attribute) {
+        foreach ($index->getIndexedAttributes() as $attribute) {
             $value = \strtolower($attribute);
 
             if (\in_array($value, $stack)) {
@@ -404,11 +401,11 @@ class Index extends Validator
         if (! $this->supportForAttributes) {
             return true;
         }
-        if ($index->type === IndexType::Fulltext) {
-            foreach ($index->attributes as $attributeName) {
+        if ($index->getType() === IndexType::Fulltext) {
+            foreach ($index->getIndexedAttributes() as $attributeName) {
                 $attribute = $this->findAttribute($attributeName);
                 if (! $this->isStringAttribute($attribute)) {
-                    $key = $attribute === null ? $attributeName : $attribute->key;
+                    $key = $attribute === null ? $attributeName : $attribute->getKey();
                     $this->message = 'Attribute "'.$key.'" cannot be part of a fulltext index, must be of type string';
 
                     return false;
@@ -432,33 +429,33 @@ class Index extends Validator
         }
 
         $arrayAttributes = [];
-        foreach ($index->attributes as $attributePosition => $attributeName) {
+        foreach ($index->getIndexedAttributes() as $attributePosition => $attributeName) {
             $attribute = $this->findAttribute($attributeName);
 
-            if ($attribute !== null && $attribute->array) {
+            if ($attribute !== null && $attribute->isArray()) {
                 // Database::INDEX_UNIQUE Is not allowed! since mariaDB VS MySQL makes the unique Different on values
-                if ($index->type !== IndexType::Key) {
-                    $this->message = '"'.ucfirst($index->type->value).'" index is forbidden on array attributes';
+                if ($index->getType() !== IndexType::Key) {
+                    $this->message = '"'.ucfirst($index->getType()->value).'" index is forbidden on array attributes';
 
                     return false;
                 }
 
-                if (empty($index->lengths[$attributePosition])) {
+                if (empty($index->getLengths()[$attributePosition])) {
                     $this->message = 'Index length for array not specified';
 
                     return false;
                 }
 
-                $arrayAttributes[] = $attribute->key;
+                $arrayAttributes[] = $attribute->getKey();
                 if (count($arrayAttributes) > 1) {
                     $this->message = 'An index may only contain one array attribute';
 
                     return false;
                 }
 
-                $direction = $index->orders[$attributePosition] ?? null;
+                $direction = $index->getOrders()[$attributePosition] ?? null;
                 if ($direction !== null) {
-                    $this->message = 'Invalid index order "'.$direction->value.'" on array attribute "'.$attribute->key.'"';
+                    $this->message = 'Invalid index order "'.$direction->value.'" on array attribute "'.$attribute->getKey().'"';
 
                     return false;
                 }
@@ -468,8 +465,8 @@ class Index extends Validator
 
                     return false;
                 }
-            } elseif (! $this->isStringAttribute($attribute) && ! empty($index->lengths[$attributePosition])) {
-                $type = $attribute === null ? '' : $attribute->type->value;
+            } elseif (! $this->isStringAttribute($attribute) && ! empty($index->getLengths()[$attributePosition])) {
+                $type = $attribute === null ? '' : $attribute->getType()->value;
                 $this->message = 'Cannot set a length on "'.$type.'" attributes';
 
                 return false;
@@ -487,7 +484,7 @@ class Index extends Validator
      */
     public function checkIndexLengths(IndexVO $index): bool
     {
-        if ($index->type === IndexType::Fulltext) {
+        if ($index->getType() === IndexType::Fulltext) {
             return true;
         }
 
@@ -496,33 +493,33 @@ class Index extends Validator
         }
 
         $total = 0;
-        if (count($index->lengths) > count($index->attributes)) {
+        if (count($index->getLengths()) > count($index->getIndexedAttributes())) {
             $this->message = 'Invalid index lengths. Count of lengths must be equal or less than the number of attributes.';
 
             return false;
         }
-        foreach ($index->attributes as $attributePosition => $attributeName) {
+        foreach ($index->getIndexedAttributes() as $attributePosition => $attributeName) {
             if ($this->supportForObjects && ! isset($this->attributes[\strtolower($attributeName)])) {
                 $attributeName = $this->getBaseAttributeFromDottedAttribute($attributeName);
             }
             $attribute = $this->attributes[\strtolower($attributeName)];
 
-            $attrType = $attribute->type;
-            $attrSize = $attribute->resolvedSize();
-            [$attributeSize, $indexLength] = match ($attrType) {
+            $attributeType = $attribute->getType();
+            $resolvedSize = $attribute->resolvedSize();
+            [$attributeSize, $indexLength] = match ($attributeType) {
                 ColumnType::String,
                 ColumnType::Varchar,
                 ColumnType::Text,
                 ColumnType::MediumText,
                 ColumnType::LongText => [
-                    $attrSize,
-                    ! empty($index->lengths[$attributePosition]) ? $index->lengths[$attributePosition] : $attrSize,
+                    $resolvedSize,
+                    ! empty($index->getLengths()[$attributePosition]) ? $index->getLengths()[$attributePosition] : $resolvedSize,
                 ],
                 ColumnType::Float,
                 ColumnType::Double,
                 ColumnType::BigInteger,
                 ColumnType::Id => [2, 2],
-                ColumnType::Integer => $attrSize >= self::BIG_INTEGER_SIZE ? [2, 2] : [1, 1],
+                ColumnType::Integer => $resolvedSize >= self::BIG_INTEGER_SIZE ? [2, 2] : [1, 1],
                 default => [1, 1],
             };
             if ($indexLength < 0) {
@@ -531,7 +528,7 @@ class Index extends Validator
                 return false;
             }
 
-            if ($attribute->array) {
+            if ($attribute->isArray()) {
                 $attributeSize = Database::MAX_ARRAY_INDEX_LENGTH;
                 $indexLength = Database::MAX_ARRAY_INDEX_LENGTH;
             }
@@ -562,7 +559,7 @@ class Index extends Validator
      */
     public function checkReservedNames(IndexVO $index): bool
     {
-        $key = $index->key;
+        $key = $index->getKey();
 
         foreach ($this->reservedKeys as $reserved) {
             if (\strtolower($key) === \strtolower($reserved)) {
@@ -583,7 +580,7 @@ class Index extends Validator
      */
     public function checkSpatialIndexes(IndexVO $index): bool
     {
-        $type = $index->type;
+        $type = $index->getType();
 
         if ($type !== IndexType::Spatial) {
             return true;
@@ -595,15 +592,15 @@ class Index extends Validator
             return false;
         }
 
-        if (\count($index->attributes) !== 1) {
+        if (\count($index->getIndexedAttributes()) !== 1) {
             $this->message = 'Spatial index must have exactly one attribute';
 
             return false;
         }
 
-        foreach ($index->attributes as $attributeName) {
+        foreach ($index->getIndexedAttributes() as $attributeName) {
             $attribute = $this->attributes[\strtolower($attributeName)] ?? new AttributeVO();
-            $attributeType = $attribute->type;
+            $attributeType = $attribute->getType();
 
             if (! \in_array($attributeType, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon], true)) {
                 $this->message = 'Spatial index can only be created on spatial attributes (point, linestring, polygon). Attribute "'.$attributeName.'" is of type "'.$attributeType->value.'"';
@@ -611,14 +608,14 @@ class Index extends Validator
                 return false;
             }
 
-            if (! $attribute->required && ! $this->supportForSpatialIndexNull) {
+            if (! $attribute->isRequired() && ! $this->supportForSpatialIndexNull) {
                 $this->message = 'Spatial indexes do not allow null values. Mark the attribute "'.$attributeName.'" as required or create the index on a column with no null values.';
 
                 return false;
             }
         }
 
-        if (! empty($index->orders) && ! $this->supportForSpatialIndexOrder) {
+        if (! empty($index->getOrders()) && ! $this->supportForSpatialIndexOrder) {
             $this->message = 'Spatial indexes with explicit orders are not supported. Remove the orders to create this index.';
 
             return false;
@@ -635,16 +632,15 @@ class Index extends Validator
      */
     public function checkNonSpatialIndexOnSpatialAttributes(IndexVO $index): bool
     {
-        $type = $index->type;
+        $type = $index->getType();
 
-        // Skip check for spatial indexes
         if ($type === IndexType::Spatial) {
             return true;
         }
 
-        foreach ($index->attributes as $attributeName) {
+        foreach ($index->getIndexedAttributes() as $attributeName) {
             $attribute = $this->attributes[\strtolower($attributeName)] ?? new AttributeVO();
-            $attributeType = $attribute->type;
+            $attributeType = $attribute->getType();
 
             if (\in_array($attributeType, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon], true)) {
                 $this->message = 'Cannot create '.$type->value.' index on spatial attribute "'.$attributeName.'". Spatial attributes require spatial indexes.';
@@ -661,7 +657,7 @@ class Index extends Validator
      */
     public function checkVectorIndexes(IndexVO $index): bool
     {
-        $type = $index->type;
+        $type = $index->getType();
 
         if (
             $type !== IndexType::HnswDot &&
@@ -677,20 +673,20 @@ class Index extends Validator
             return false;
         }
 
-        if (\count($index->attributes) !== 1) {
+        if (\count($index->getIndexedAttributes()) !== 1) {
             $this->message = 'Vector index must have exactly one attribute';
 
             return false;
         }
 
-        $attribute = $this->attributes[\strtolower($index->attributes[0])] ?? new AttributeVO();
-        if ($attribute->type !== ColumnType::Vector) {
+        $attribute = $this->attributes[\strtolower($index->getIndexedAttributes()[0])] ?? new AttributeVO();
+        if ($attribute->getType() !== ColumnType::Vector) {
             $this->message = 'Vector index can only be created on vector attributes';
 
             return false;
         }
 
-        if (! empty($index->orders) || \count(\array_filter($index->lengths)) > 0) {
+        if (! empty($index->getOrders()) || \count(\array_filter($index->getLengths())) > 0) {
             $this->message = 'Vector indexes do not support orders or lengths';
 
             return false;
@@ -704,7 +700,7 @@ class Index extends Validator
      */
     public function checkTrigramIndexes(IndexVO $index): bool
     {
-        $type = $index->type;
+        $type = $index->getType();
 
         if ($type !== IndexType::Trigram) {
             return true;
@@ -716,7 +712,7 @@ class Index extends Validator
             return false;
         }
 
-        foreach ($index->attributes as $attributeName) {
+        foreach ($index->getIndexedAttributes() as $attributeName) {
             if (! $this->isStringAttribute($this->findAttribute($attributeName))) {
                 $this->message = 'Trigram index can only be created on string type attributes';
 
@@ -724,7 +720,7 @@ class Index extends Validator
             }
         }
 
-        if (! empty($index->orders) || \count(\array_filter($index->lengths)) > 0) {
+        if (! empty($index->getOrders()) || \count(\array_filter($index->getLengths())) > 0) {
             $this->message = 'Trigram indexes do not support orders or lengths';
 
             return false;
@@ -741,7 +737,7 @@ class Index extends Validator
      */
     public function checkKeyUniqueFulltextSupport(IndexVO $index): bool
     {
-        $type = $index->type;
+        $type = $index->getType();
 
         if ($type === IndexType::Key && $this->supportForKeyIndexes === false) {
             $this->message = 'Key index is not supported';
@@ -770,12 +766,12 @@ class Index extends Validator
             return true;
         }
 
-        if ($index->type === IndexType::Fulltext) {
+        if ($index->getType() === IndexType::Fulltext) {
             foreach ($this->indexes as $existingIndex) {
-                if ($existingIndex->key === $index->key) {
+                if ($existingIndex->getKey() === $index->getKey()) {
                     continue;
                 }
-                if ($existingIndex->type === IndexType::Fulltext) {
+                if ($existingIndex->getType() === IndexType::Fulltext) {
                     $this->message = 'There is already a fulltext index in the collection';
 
                     return false;
@@ -800,13 +796,13 @@ class Index extends Validator
         }
 
         foreach ($this->indexes as $existingIndex) {
-            if (\strtolower($existingIndex->key) === \strtolower($index->key)) {
+            if (\strtolower($existingIndex->getKey()) === \strtolower($index->getKey())) {
                 continue;
             }
 
             $attributesMatch = false;
-            if (empty(\array_diff($existingIndex->attributes, $index->attributes)) &&
-                empty(\array_diff($index->attributes, $existingIndex->attributes))) {
+            if (empty(\array_diff($existingIndex->getIndexedAttributes(), $index->getIndexedAttributes())) &&
+                empty(\array_diff($index->getIndexedAttributes(), $existingIndex->getIndexedAttributes()))) {
                 $attributesMatch = true;
             }
 
@@ -821,10 +817,9 @@ class Index extends Validator
             if ($attributesMatch && $ordersMatch) {
                 // Allow fulltext + key/unique combinations (different purposes)
                 $regularTypes = [IndexType::Key, IndexType::Unique];
-                $isRegularIndex = \in_array($index->type, $regularTypes);
-                $isRegularExisting = \in_array($existingIndex->type, $regularTypes);
+                $isRegularIndex = \in_array($index->getType(), $regularTypes);
+                $isRegularExisting = \in_array($existingIndex->getType(), $regularTypes);
 
-                // Only reject if both are regular index types (key or unique)
                 if ($isRegularIndex && $isRegularExisting) {
                     $this->message = 'There is already an index with the same attributes and orders';
 
@@ -844,7 +839,7 @@ class Index extends Validator
      */
     public function checkObjectIndexes(IndexVO $index): bool
     {
-        $type = $index->type;
+        $type = $index->getType();
 
         if ($type !== IndexType::Object) {
             return true;
@@ -856,19 +851,19 @@ class Index extends Validator
             return false;
         }
 
-        if (count($index->attributes) !== 1) {
+        if (count($index->getIndexedAttributes()) !== 1) {
             $this->message = 'Object index can be created on a single object attribute';
 
             return false;
         }
 
-        if (! empty($index->orders)) {
+        if (! empty($index->getOrders())) {
             $this->message = 'Object index do not support explicit orders. Remove the orders to create this index.';
 
             return false;
         }
 
-        $attributeName = (string) ($index->attributes[0] ?? '');
+        $attributeName = (string) ($index->getIndexedAttributes()[0] ?? '');
 
         // Object indexes are only allowed on the top-level object attribute,
         // not on nested paths like "data.key.nestedKey".
@@ -879,7 +874,7 @@ class Index extends Validator
         }
 
         $attribute = $this->attributes[\strtolower($attributeName)] ?? new AttributeVO();
-        $attributeType = $attribute->type;
+        $attributeType = $attribute->getType();
 
         if ($attributeType !== ColumnType::Object) {
             $this->message = 'Object index can only be created on object attributes. Attribute "'.$attributeName.'" is of type "'.$attributeType->value.'"';
@@ -898,21 +893,21 @@ class Index extends Validator
      */
     public function checkTTLIndexes(IndexVO $index): bool
     {
-        $type = $index->type;
+        $type = $index->getType();
 
         if ($type !== IndexType::Ttl) {
             return true;
         }
 
-        if (count($index->attributes) !== 1) {
+        if (count($index->getIndexedAttributes()) !== 1) {
             $this->message = 'TTL indexes must be created on a single datetime attribute.';
 
             return false;
         }
 
-        $attributeName = (string) ($index->attributes[0] ?? '');
+        $attributeName = (string) ($index->getIndexedAttributes()[0] ?? '');
         $attribute = $this->attributes[\strtolower($attributeName)] ?? new AttributeVO();
-        $attributeType = $attribute->type;
+        $attributeType = $attribute->getType();
 
         if ($this->supportForAttributes && $attributeType !== ColumnType::Datetime) {
             $this->message = 'TTL index can only be created on datetime attributes. Attribute "'.$attributeName.'" is of type "'.$attributeType->value.'"';
@@ -920,20 +915,18 @@ class Index extends Validator
             return false;
         }
 
-        if ($index->ttl < 1) {
+        if ($index->getTtl() < 1) {
             $this->message = 'TTL must be at least 1 second';
 
             return false;
         }
 
-        // Check if there's already a TTL index in this collection
         foreach ($this->indexes as $existingIndex) {
-            if ($existingIndex->key === $index->key) {
+            if ($existingIndex->getKey() === $index->getKey()) {
                 continue;
             }
 
-            // Check if existing index is also a TTL index
-            if ($existingIndex->type === IndexType::Ttl) {
+            if ($existingIndex->getType() === IndexType::Ttl) {
                 $this->message = 'There can be only one TTL index in a collection';
 
                 return false;
@@ -955,7 +948,7 @@ class Index extends Validator
 
     private function isStringAttribute(?AttributeVO $attribute): bool
     {
-        return $attribute !== null && \in_array($attribute->type, self::STRING_TYPES, true);
+        return $attribute !== null && \in_array($attribute->getType(), self::STRING_TYPES, true);
     }
 
     private function isDottedAttribute(string $attribute): bool
@@ -975,7 +968,7 @@ class Index extends Validator
     {
         return \array_map(
             static fn (?Order $order): ?string => $order?->value,
-            $index->orders,
+            $index->getOrders(),
         );
     }
 }

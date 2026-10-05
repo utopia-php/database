@@ -505,7 +505,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     {
         $schema = $this->createSchemaBuilder();
         $table = $schema->table($this->getSQLTableRaw($collection));
-        $this->addTableColumn($table, $attribute->key, $attribute->type, $attribute->size, $attribute->signed, $attribute->array, $attribute->required);
+        $this->addTableColumn($table, $attribute->getKey(), $attribute->getType(), $attribute->getSize(), $attribute->isSigned(), $attribute->isArray(), $attribute->isRequired());
         $result = $table->alter();
 
         $sql = $result->query;
@@ -535,12 +535,12 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         foreach ($attributes as $attribute) {
             $this->addTableColumn(
                 $table,
-                $attribute->key,
-                $attribute->type,
-                $attribute->size,
-                $attribute->signed,
-                $attribute->array,
-                $attribute->required,
+                $attribute->getKey(),
+                $attribute->getType(),
+                $attribute->getSize(),
+                $attribute->isSigned(),
+                $attribute->isArray(),
+                $attribute->isRequired(),
             );
         }
         $result = $table->alter();
@@ -2534,30 +2534,30 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         foreach ($attributes as $attribute) {
             if ($attribute instanceof Attribute) {
-                $isArray = $attribute->array;
-                $attrSize = $attribute->size;
-                $attrType = $attribute->type->value;
+                $isArray = $attribute->isArray();
+                $attributeSize = $attribute->getSize();
+                $attributeType = $attribute->getType()->value;
             } elseif ($attribute instanceof Document) {
                 $isArray = (bool) $attribute->getAttribute('array', false);
                 $size = $attribute->getAttribute('size', 0);
-                $attrSize = \is_numeric($size) ? (int) $size : 0;
+                $attributeSize = \is_numeric($size) ? (int) $size : 0;
                 $rawType = $attribute->getAttribute('type', '');
                 if ($rawType instanceof ColumnType) {
                     $rawType = $rawType->value;
                 }
                 $rawType = \is_scalar($rawType) ? (string) $rawType : '';
                 $normalizedType = Attribute::tryNormalizeType($rawType);
-                $attrType = $normalizedType instanceof ColumnType ? $normalizedType->value : $rawType;
+                $attributeType = $normalizedType instanceof ColumnType ? $normalizedType->value : $rawType;
             } else {
                 $isArray = (bool) ($attribute['array'] ?? false);
-                $attrSize = (int) (is_scalar($attribute['size'] ?? 0) ? ($attribute['size'] ?? 0) : 0);
+                $attributeSize = (int) (is_scalar($attribute['size'] ?? 0) ? ($attribute['size'] ?? 0) : 0);
                 $rawType = $attribute['type'] ?? '';
                 if ($rawType instanceof ColumnType) {
                     $rawType = $rawType->value;
                 }
                 $rawType = \is_scalar($rawType) ? (string) $rawType : '';
                 $normalizedType = Attribute::tryNormalizeType($rawType);
-                $attrType = $normalizedType instanceof ColumnType ? $normalizedType->value : $rawType;
+                $attributeType = $normalizedType instanceof ColumnType ? $normalizedType->value : $rawType;
             }
 
             /**
@@ -2571,7 +2571,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 continue;
             }
 
-            switch ($attrType) {
+            switch ($attributeType) {
                 case ColumnType::Id->value:
                     $total += 8; //  BIGINT 8 bytes
                     break;
@@ -2583,17 +2583,17 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                      * data is stored externally
                      */
                     $total += match (true) {
-                        $attrSize > $this->getMaxVarcharLength() => 20,
-                        $attrSize > 255 => $attrSize * 4 + 2, //  VARCHAR(>255) + 2 length
-                        default => $attrSize * 4 + 1, //  VARCHAR(<=255) + 1 length
+                        $attributeSize > $this->getMaxVarcharLength() => 20,
+                        $attributeSize > 255 => $attributeSize * 4 + 2, //  VARCHAR(>255) + 2 length
+                        default => $attributeSize * 4 + 1, //  VARCHAR(<=255) + 1 length
                     };
 
                     break;
 
                 case ColumnType::Varchar->value:
                     $total += match (true) {
-                        $attrSize > 255 => $attrSize * 4 + 2, //  VARCHAR(>255) + 2 length
-                        default => $attrSize * 4 + 1, //  VARCHAR(<=255) + 1 length
+                        $attributeSize > 255 => $attributeSize * 4 + 2, //  VARCHAR(>255) + 2 length
+                        default => $attributeSize * 4 + 1, //  VARCHAR(<=255) + 1 length
                     };
                     break;
 
@@ -2604,7 +2604,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     break;
 
                 case ColumnType::Integer->value:
-                    if ($attrSize >= 8) {
+                    if ($attributeSize >= 8) {
                         $total += 8; //  BIGINT 8 bytes
                     } else {
                         $total += 4; // INT 4 bytes
@@ -2657,11 +2657,11 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
                 case ColumnType::Vector->value:
                     // Each dimension is typically 4 bytes (float32)
-                    $total += $attrSize * 4;
+                    $total += $attributeSize * 4;
                     break;
 
                 default:
-                    throw new DatabaseException('Unknown type: ' . $attrType);
+                    throw new DatabaseException('Unknown type: ' . $attributeType);
             }
         }
 
@@ -3092,15 +3092,15 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      */
     public function createRelationship(Relationship $relationship): bool
     {
-        $name = $this->filter($relationship->collection);
-        $relatedName = $this->filter($relationship->relatedCollection);
-        $id = $this->filter($relationship->key);
-        $twoWayKey = $this->filter($relationship->twoWayKey);
-        $type = $relationship->type;
-        $twoWay = $relationship->twoWay;
+        $name = $this->filter($relationship->getSourceCollection());
+        $relatedName = $this->filter($relationship->getRelatedCollection());
+        $id = $this->filter($relationship->getKey());
+        $twoWayKey = $this->filter($relationship->getTwoWayKey());
+        $type = $relationship->getType();
+        $twoWay = $relationship->isTwoWay();
 
         $schema = $this->createSchemaBuilder();
-        $addRelColumn = function (string $tableName, string $columnId) use ($schema): string {
+        $addColumn = function (string $tableName, string $columnId) use ($schema): string {
             $table = $schema->table($this->getSQLTableRaw($tableName));
             $table->string($columnId, 255)->nullable()->default(null);
             $result = $table->alter();
@@ -3109,9 +3109,9 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         };
 
         $sql = match ($type) {
-            RelationType::OneToOne => $addRelColumn($name, $id) . ';' . ($twoWay ? $addRelColumn($relatedName, $twoWayKey) . ';' : ''),
-            RelationType::OneToMany => $addRelColumn($relatedName, $twoWayKey) . ';',
-            RelationType::ManyToOne => $addRelColumn($name, $id) . ';',
+            RelationType::OneToOne => $addColumn($name, $id) . ';' . ($twoWay ? $addColumn($relatedName, $twoWayKey) . ';' : ''),
+            RelationType::OneToMany => $addColumn($relatedName, $twoWayKey) . ';',
+            RelationType::ManyToOne => $addColumn($name, $id) . ';',
             RelationType::ManyToMany => null,
         };
 
@@ -3132,15 +3132,15 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         ?string $newKey = null,
         ?string $newTwoWayKey = null,
     ): bool {
-        $collection = $relationship->collection;
-        $relatedCollection = $relationship->relatedCollection;
+        $collection = $relationship->getSourceCollection();
+        $relatedCollection = $relationship->getRelatedCollection();
         $name = $this->filter($collection);
         $relatedName = $this->filter($relatedCollection);
-        $key = $this->filter($relationship->key);
-        $twoWayKey = $this->filter($relationship->twoWayKey);
-        $type = $relationship->type;
-        $twoWay = $relationship->twoWay;
-        $side = $relationship->side;
+        $key = $this->filter($relationship->getKey());
+        $twoWayKey = $this->filter($relationship->getTwoWayKey());
+        $type = $relationship->getType();
+        $twoWay = $relationship->isTwoWay();
+        $side = $relationship->getSide();
 
         if ($newKey !== null) {
             $newKey = $this->filter($newKey);
@@ -3150,7 +3150,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         $schema = $this->createSchemaBuilder();
-        $renameCol = function (string $tableName, string $from, string $to) use ($schema): string {
+        $renameColumn = function (string $tableName, string $from, string $to) use ($schema): string {
             $table = $schema->table($this->getSQLTableRaw($tableName));
             $table->renameColumn($from, $to);
             $result = $table->alter();
@@ -3163,31 +3163,31 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         switch ($type) {
             case RelationType::OneToOne:
                 if ($key !== $newKey && \is_string($newKey)) {
-                    $sql = $renameCol($name, $key, $newKey) . ';';
+                    $sql = $renameColumn($name, $key, $newKey) . ';';
                 }
                 if ($twoWay && $twoWayKey !== $newTwoWayKey && \is_string($newTwoWayKey)) {
-                    $sql .= $renameCol($relatedName, $twoWayKey, $newTwoWayKey) . ';';
+                    $sql .= $renameColumn($relatedName, $twoWayKey, $newTwoWayKey) . ';';
                 }
                 break;
             case RelationType::OneToMany:
                 if ($side === RelationSide::Parent) {
                     if ($twoWayKey !== $newTwoWayKey && \is_string($newTwoWayKey)) {
-                        $sql = $renameCol($relatedName, $twoWayKey, $newTwoWayKey) . ';';
+                        $sql = $renameColumn($relatedName, $twoWayKey, $newTwoWayKey) . ';';
                     }
                 } else {
                     if ($key !== $newKey && \is_string($newKey)) {
-                        $sql = $renameCol($name, $key, $newKey) . ';';
+                        $sql = $renameColumn($name, $key, $newKey) . ';';
                     }
                 }
                 break;
             case RelationType::ManyToOne:
                 if ($side === RelationSide::Child) {
                     if ($twoWayKey !== $newTwoWayKey && \is_string($newTwoWayKey)) {
-                        $sql = $renameCol($relatedName, $twoWayKey, $newTwoWayKey) . ';';
+                        $sql = $renameColumn($relatedName, $twoWayKey, $newTwoWayKey) . ';';
                     }
                 } else {
                     if ($key !== $newKey && \is_string($newKey)) {
-                        $sql = $renameCol($name, $key, $newKey) . ';';
+                        $sql = $renameColumn($name, $key, $newKey) . ';';
                     }
                 }
                 break;
@@ -3199,10 +3199,10 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $junctionName = '_' . $collection->getSequence() . '_' . $relatedCollection->getSequence();
 
                 if ($newKey !== null) {
-                    $sql = $renameCol($junctionName, $key, $newKey) . ';';
+                    $sql = $renameColumn($junctionName, $key, $newKey) . ';';
                 }
                 if ($twoWay && $newTwoWayKey !== null) {
-                    $sql .= $renameCol($junctionName, $twoWayKey, $newTwoWayKey) . ';';
+                    $sql .= $renameColumn($junctionName, $twoWayKey, $newTwoWayKey) . ';';
                 }
                 break;
             default:
@@ -3223,18 +3223,18 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      */
     public function deleteRelationship(Relationship $relationship): bool
     {
-        $collection = $relationship->collection;
-        $relatedCollection = $relationship->relatedCollection;
+        $collection = $relationship->getSourceCollection();
+        $relatedCollection = $relationship->getRelatedCollection();
         $name = $this->filter($collection);
         $relatedName = $this->filter($relatedCollection);
-        $key = $this->filter($relationship->key);
-        $twoWayKey = $this->filter($relationship->twoWayKey);
-        $type = $relationship->type;
-        $twoWay = $relationship->twoWay;
-        $side = $relationship->side;
+        $key = $this->filter($relationship->getKey());
+        $twoWayKey = $this->filter($relationship->getTwoWayKey());
+        $type = $relationship->getType();
+        $twoWay = $relationship->isTwoWay();
+        $side = $relationship->getSide();
 
         $schema = $this->createSchemaBuilder();
-        $dropCol = function (string $tableName, string $columnId) use ($schema): string {
+        $dropColumn = function (string $tableName, string $columnId) use ($schema): string {
             $table = $schema->table($this->getSQLTableRaw($tableName));
             $table->dropColumn($columnId);
             $result = $table->alter();
@@ -3247,29 +3247,29 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         switch ($type) {
             case RelationType::OneToOne:
                 if ($side === RelationSide::Parent) {
-                    $sql = $dropCol($name, $key) . ';';
+                    $sql = $dropColumn($name, $key) . ';';
                     if ($twoWay) {
-                        $sql .= $dropCol($relatedName, $twoWayKey) . ';';
+                        $sql .= $dropColumn($relatedName, $twoWayKey) . ';';
                     }
                 } elseif ($side === RelationSide::Child) {
-                    $sql = $dropCol($relatedName, $twoWayKey) . ';';
+                    $sql = $dropColumn($relatedName, $twoWayKey) . ';';
                     if ($twoWay) {
-                        $sql .= $dropCol($name, $key) . ';';
+                        $sql .= $dropColumn($name, $key) . ';';
                     }
                 }
                 break;
             case RelationType::OneToMany:
                 if ($side === RelationSide::Parent) {
-                    $sql = $dropCol($relatedName, $twoWayKey) . ';';
+                    $sql = $dropColumn($relatedName, $twoWayKey) . ';';
                 } else {
-                    $sql = $dropCol($name, $key) . ';';
+                    $sql = $dropColumn($name, $key) . ';';
                 }
                 break;
             case RelationType::ManyToOne:
                 if ($side === RelationSide::Parent) {
-                    $sql = $dropCol($name, $key) . ';';
+                    $sql = $dropColumn($name, $key) . ';';
                 } else {
-                    $sql = $dropCol($relatedName, $twoWayKey) . ';';
+                    $sql = $dropColumn($relatedName, $twoWayKey) . ';';
                 }
                 break;
             case RelationType::ManyToMany:
@@ -3282,9 +3282,9 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     : '_' . $relatedCollection->getSequence() . '_' . $collection->getSequence();
 
                 $junctionResult = $schema->table($this->getSQLTableRaw($junctionName))->drop();
-                $permsResult = $schema->table($this->getSQLTableRaw(Storage::permissionsTable($junctionName)))->drop();
+                $permissionsResult = $schema->table($this->getSQLTableRaw(Storage::permissionsTable($junctionName)))->drop();
 
-                $sql = $junctionResult->query . '; ' . $permsResult->query;
+                $sql = $junctionResult->query . '; ' . $permissionsResult->query;
                 break;
             default:
                 throw new DatabaseException('Invalid relationship type');
@@ -3734,22 +3734,22 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      * Subclasses that wrap execute() with engine-specific timeout handling call
      * this instead of $stmt->execute(), so the statement is still counted.
      *
-     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $stmt
+     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $statement
      */
-    protected function executeAndProfile(mixed $stmt): bool
+    protected function executeAndProfile(mixed $statement): bool
     {
         if ($this->profiler === null || ! $this->profiler->isEnabled()) {
-            return $stmt->execute();
+            return $statement->execute();
         }
 
         $start = \microtime(true);
-        $result = $stmt->execute();
+        $result = $statement->execute();
         $this->profiler->log(
-            $stmt->queryString ?? '',
-            $this->statementBindings[$stmt] ?? [],
+            $statement instanceof DatabasePDOStatement ? $statement->getQueryString() : ($statement->queryString ?? ''),
+            $this->statementBindings[$statement] ?? [],
             (\microtime(true) - $start) * 1000,
-            $this->statementCollections[$stmt] ?? '',
-            $this->getStatementEvent($stmt)->value ?? '',
+            $this->statementCollections[$statement] ?? '',
+            $this->getStatementEvent($statement)->value ?? '',
         );
 
         return $result;

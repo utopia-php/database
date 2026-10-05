@@ -148,9 +148,9 @@ final class RedisLeasableCache implements CacheAdapter, Leasable
     /**
      * Store a different value than the one given on every write to a single field.
      */
-    public function corruptFieldWrites(): void
+    public function corruptFieldWrites(bool $corrupting = true): void
     {
-        $this->corruptingFieldWrites = true;
+        $this->corruptingFieldWrites = $corrupting;
     }
 
     /**
@@ -159,6 +159,14 @@ final class RedisLeasableCache implements CacheAdapter, Leasable
     public function evict(string $key): void
     {
         unset($this->fields[$key], $this->generations[$key]);
+    }
+
+    /**
+     * Every value the cache holds across its keys, leaving out generations.
+     */
+    public function countValues(): int
+    {
+        return \array_sum(\array_map(\count(...), $this->fields));
     }
 
     private function field(string $key, string $hash): string

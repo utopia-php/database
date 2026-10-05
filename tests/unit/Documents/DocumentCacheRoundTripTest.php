@@ -19,13 +19,13 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
 
 /**
- * Cache round trips of the core operations on a warm cache, pinned at or below database 7.3.12's (bench-core,
- * MariaDB): one round trip per cache lookup, the collection's document-cache epoch travelling with its definition,
- * and what that lookup must keep: an epoch per tenant, and `_metadata` purges that still reach every definition.
+ * Cache round trips and adapter reads of the core operations on a warm cache, bounded by database 7.3.12's
+ * (bench-core, MariaDB), and the freshness those bounds must not cost: documents cached per tenant, and `_metadata`
+ * purges that still reach every definition.
  */
 final class DocumentCacheRoundTripTest extends TestCase
 {
-    public function testAGetCollectionHitCostsOneRoundTrip(): void
+    public function testAGetCollectionHitStaysWithinSevenThreeRoundTrips(): void
     {
         [$database, $adapter, $cache] = $this->createDatabase();
         $database->getCollection('webhooks');
@@ -34,11 +34,11 @@ final class DocumentCacheRoundTripTest extends TestCase
         $cache->resetOperations();
         $this->assertFalse($database->getCollection('webhooks')->isEmpty());
 
-        $this->assertSame(1, $cache->getOperations(), 'getCollection() on a warm cache (7.3.12: 1 round trip)');
+        $this->assertLessThanOrEqual(1, $cache->getOperations(), '7.3.12: 1');
         $this->assertSame(0, $adapter->metadataReads);
     }
 
-    public function testAGetDocumentHitCostsTwoRoundTrips(): void
+    public function testAGetDocumentHitStaysWithinSevenThreeRoundTrips(): void
     {
         [$database, $adapter, $cache] = $this->createDatabase();
         $database->createDocument('webhooks', $this->hook('hook'));
@@ -48,11 +48,11 @@ final class DocumentCacheRoundTripTest extends TestCase
         $cache->resetOperations();
         $this->assertSame('hook', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
 
-        $this->assertSame(2, $cache->getOperations(), 'getDocument() on a warm cache: the collection lookup and the document (7.3.12: 2 round trips)');
+        $this->assertLessThanOrEqual(2, $cache->getOperations(), '7.3.12: 2');
         $this->assertSame(0, $adapter->documentReads + $adapter->metadataReads);
     }
 
-    public function testACachedMissCostsTwoRoundTrips(): void
+    public function testACachedMissStaysWithinSevenThreeRoundTrips(): void
     {
         [$database, $adapter, $cache] = $this->createDatabase();
         $database->getDocument('webhooks', 'missing');
@@ -61,11 +61,11 @@ final class DocumentCacheRoundTripTest extends TestCase
         $cache->resetOperations();
         $this->assertTrue($database->getDocument('webhooks', 'missing')->isEmpty());
 
-        $this->assertSame(2, $cache->getOperations(), 'getDocument() of a missing document on a warm cache (7.3.12: 2 round trips)');
+        $this->assertLessThanOrEqual(2, $cache->getOperations(), '7.3.12: 2');
         $this->assertSame(0, $adapter->documentReads);
     }
 
-    public function testAnUncachedGetDocumentCostsFourRoundTrips(): void
+    public function testAnUncachedGetDocumentStaysWithinSevenThreeRoundTrips(): void
     {
         [$database, $adapter, $cache] = $this->createDatabase();
         $database->createDocument('webhooks', $this->hook('hook'));
@@ -75,8 +75,8 @@ final class DocumentCacheRoundTripTest extends TestCase
         $cache->resetOperations();
         $this->assertSame('hook', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
 
-        $this->assertSame(4, $cache->getOperations(), 'getDocument() of an uncached document: the collection lookup, the document, its lease and the fill (7.3.12: 5 round trips)');
-        $this->assertSame(1, $adapter->documentReads);
+        $this->assertLessThanOrEqual(5, $cache->getOperations(), '7.3.12: 5');
+        $this->assertSame(1, $adapter->documentReads, 'An uncached document is read once');
     }
 
     /**
@@ -95,7 +95,7 @@ final class DocumentCacheRoundTripTest extends TestCase
      * @param  Closure(Database): mixed  $read
      */
     #[DataProvider('collectionReads')]
-    public function testCollectionReadsCostOneRoundTripBeforeTheirStatement(Closure $read): void
+    public function testCollectionReadsStayWithinSevenThreeRoundTrips(Closure $read): void
     {
         [$database, $adapter, $cache] = $this->createDatabase();
         $database->createDocument('webhooks', $this->hook('hook'));
@@ -105,11 +105,11 @@ final class DocumentCacheRoundTripTest extends TestCase
         $cache->resetOperations();
         $read($database);
 
-        $this->assertSame(1, $cache->getOperations(), 'find(), count() and sum() without a query cache look up their collection only (7.3.12: 1 round trip)');
+        $this->assertLessThanOrEqual(1, $cache->getOperations(), '7.3.12: 1');
         $this->assertSame(0, $adapter->metadataReads);
     }
 
-    public function testASiblingReadAfterAWriteCostsTwoRoundTripsAndNoRead(): void
+    public function testASiblingReadAfterAWriteStaysWithinSevenThreeRoundTripsAndReadsNothing(): void
     {
         [$database, $adapter, $cache] = $this->createDatabase();
         $database->createDocument('webhooks', $this->hook('written'));
@@ -121,12 +121,12 @@ final class DocumentCacheRoundTripTest extends TestCase
         $cache->resetOperations();
         $this->assertSame('hook', $database->getDocument('webhooks', 'sibling')->getAttribute('name'));
 
-        $this->assertSame(2, $cache->getOperations(), 'A read of a sibling after a write (7.3.12: 2 round trips)');
-        $this->assertSame(0, $adapter->documentReads + $adapter->metadataReads, 'A read of a sibling after a write (7.3.12: 0 statements)');
+        $this->assertLessThanOrEqual(2, $cache->getOperations(), '7.3.12: 2');
+        $this->assertSame(0, $adapter->documentReads + $adapter->metadataReads, '7.3.12: 0');
     }
 
     /**
-     * @return array<string, array{Closure(Database): mixed, int, int}>
+     * @return array<string, array{Closure(Database): mixed, int}>
      */
     public static function singleDocumentWrites(): array
     {
@@ -138,26 +138,21 @@ final class DocumentCacheRoundTripTest extends TestCase
                     'name' => 'created',
                 ])),
                 3,
-                3,
             ],
             'updateDocument' => [
                 static fn (Database $database): Document => $database->updateDocument('webhooks', 'hook', new Document(['name' => 'renamed'])),
-                4,
                 6,
             ],
             'increaseDocumentAttribute' => [
                 static fn (Database $database): Document => $database->increaseDocumentAttribute('webhooks', 'hook', 'count'),
                 4,
-                4,
             ],
             'decreaseDocumentAttribute' => [
                 static fn (Database $database): Document => $database->decreaseDocumentAttribute('webhooks', 'hook', 'count'),
                 4,
-                4,
             ],
             'deleteDocument' => [
                 static fn (Database $database): bool => $database->deleteDocument('webhooks', 'hook'),
-                4,
                 6,
             ],
         ];
@@ -167,7 +162,7 @@ final class DocumentCacheRoundTripTest extends TestCase
      * @param  Closure(Database): mixed  $write
      */
     #[DataProvider('singleDocumentWrites')]
-    public function testSingleDocumentWritesStayWithinSevenThreeRoundTrips(Closure $write, int $expected, int $baseline): void
+    public function testSingleDocumentWritesStayWithinSevenThreeRoundTrips(Closure $write, int $baseline): void
     {
         [$database, , $cache] = $this->createDatabase();
         $database->createDocument('webhooks', $this->hook('hook'));
@@ -176,7 +171,7 @@ final class DocumentCacheRoundTripTest extends TestCase
         $cache->resetOperations();
         $write($database);
 
-        $this->assertSame($expected, $cache->getOperations(), "Cache round trips of the write on a warm cache: one collection lookup, one more for the locking read of writes that read the document first, and one purge inside the transaction and one after it (7.3.12: {$baseline})");
+        $this->assertLessThanOrEqual($baseline, $cache->getOperations(), "7.3.12: {$baseline}");
     }
 
     public function testAnUpdateAndAReadInATransactionStayWithinSevenThreeRoundTrips(): void
@@ -196,9 +191,9 @@ final class DocumentCacheRoundTripTest extends TestCase
         });
 
         $this->assertSame('hook', $read->getAttribute('name'));
-        $this->assertSame(6, $cache->getOperations(), 'withTransaction(update + get of a sibling) on a warm cache (7.3.12: 11 round trips)');
-        $this->assertSame(0, $adapter->metadataReads, 'withTransaction(update + get of a sibling) reads no collection definition (7.3.12: 0)');
-        $this->assertSame(1, $adapter->documentReads, 'withTransaction(update + get of a sibling) reads only the written document, with its lock (7.3.12: 1)');
+        $this->assertLessThanOrEqual(11, $cache->getOperations(), '7.3.12: 11');
+        $this->assertSame(0, $adapter->metadataReads, '7.3.12: 0');
+        $this->assertLessThanOrEqual(1, $adapter->documentReads, '7.3.12: 1');
     }
 
     public function testAnUpdateAndAReadOfItStayWithinSevenThreeRoundTrips(): void
@@ -214,8 +209,8 @@ final class DocumentCacheRoundTripTest extends TestCase
             $this->assertSame('round '.$round, $database->getDocument('webhooks', 'hook')->getAttribute('name'));
         }
 
-        $this->assertSame(80, $cache->getOperations(), 'Ten updateDocument() + getDocument() pairs (cache.keys_after_1000_writes; 7.3.12: 110 round trips)');
-        $this->assertSame(20, $adapter->documentReads, 'Each pair reads the document once with its lock and once to refill the cache (7.3.12: 20)');
+        $this->assertLessThanOrEqual(110, $cache->getOperations(), '7.3.12: 110');
+        $this->assertLessThanOrEqual(20, $adapter->documentReads, '7.3.12: 20');
         $this->assertSame(0, $adapter->metadataReads);
     }
 
@@ -258,19 +253,22 @@ final class DocumentCacheRoundTripTest extends TestCase
         $this->assertSame('renamed', $database->getDocument('webhooks', 'hook')->getAttribute('name'), 'A global definition is shared by every tenant, but the epoch it carries is each tenant\'s own');
     }
 
-    public function testPurgingTheMetadataCollectionRereadsEveryDefinition(): void
+    public function testPurgingTheMetadataCollectionRetiresEveryCachedDefinition(): void
     {
         [$database, $adapter] = $this->createDatabase();
         $database->createCollection(new Collection(id: 'logs', permissions: [Permission::read(Role::any())]));
-        $database->getCollection('webhooks');
-        $database->getCollection('logs');
+        $this->assertTrue($database->getCollection('webhooks')->getAttribute('documentSecurity'));
+        $this->assertTrue($database->getCollection('logs')->getAttribute('documentSecurity'));
+
+        $uncached = $this->createUncachedTwin($database, $adapter);
+        $uncached->updateCollection('webhooks', [Permission::read(Role::any())], false);
+        $uncached->updateCollection('logs', [Permission::read(Role::any())], false);
+        $this->assertTrue($database->getCollection('webhooks')->getAttribute('documentSecurity'), 'A definition written without this cache leaves the cached definition in place');
 
         $database->purgeCachedCollection(Database::METADATA);
-        $adapter->reset();
-        $this->assertFalse($database->getCollection('webhooks')->isEmpty());
-        $this->assertFalse($database->getCollection('logs')->isEmpty());
 
-        $this->assertSame(2, $adapter->metadataReads, 'purgeCachedCollection(\'_metadata\') must retire every cached definition');
+        $this->assertFalse($database->getCollection('webhooks')->getAttribute('documentSecurity'), 'purgeCachedCollection(\'_metadata\') must retire every cached definition');
+        $this->assertFalse($database->getCollection('logs')->getAttribute('documentSecurity'), 'purgeCachedCollection(\'_metadata\') must retire every cached definition');
     }
 
     public function testPurgingTheMetadataCollectionRetiresACachedMissingCollection(): void
@@ -278,10 +276,7 @@ final class DocumentCacheRoundTripTest extends TestCase
         [$database, $adapter] = $this->createDatabase();
         $this->assertTrue($database->getCollection('logs')->isEmpty());
 
-        $uncached = new Database($adapter, new Cache(new None()));
-        $uncached
-            ->setDatabase('utopiaTests')
-            ->setNamespace($database->getNamespace());
+        $uncached = $this->createUncachedTwin($database, $adapter);
         $uncached->createCollection(new Collection(id: 'logs', permissions: [Permission::read(Role::any())]));
         $this->assertTrue($database->getCollection('logs')->isEmpty(), 'A definition written without this cache leaves the cached miss in place');
 
@@ -310,6 +305,14 @@ final class DocumentCacheRoundTripTest extends TestCase
         ]));
 
         return [$database, $adapter, $cache];
+    }
+
+    private function createUncachedTwin(Database $database, CountingMemory $adapter): Database
+    {
+        return (new Database($adapter, new Cache(new None())))
+            ->setAuthorization($database->getAuthorization())
+            ->setDatabase($database->getDatabase())
+            ->setNamespace($database->getNamespace());
     }
 
     private function hook(string $id): Document

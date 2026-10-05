@@ -8,6 +8,7 @@ use Tests\Unit\Cache\LeasableHashCache;
 use Tests\Unit\Support\CountingMemory;
 use Utopia\Cache\Adapter as CacheAdapter;
 use Utopia\Cache\Adapter\Memory as MemoryCache;
+use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
@@ -44,9 +45,8 @@ final class DocumentCacheActivationTest extends TestCase
         $cache->flush();
         $second = $this->database(new CountingMemory(), $cache, $namespace);
         $cache->flush();
-        [$collectionKey] = $first->getCacheKeys(self::COLLECTION);
 
-        $second->withTransaction(function () use ($first, $second, $firstAdapter, $cache, $collectionKey, $flush): void {
+        $second->withTransaction(function () use ($first, $second, $cache, $flush): void {
             $first->withTransaction(function () use ($first, $second, $cache, $flush): void {
                 $first->updateDocuments(self::COLLECTION, new Document(['name' => 'first']));
                 if ($flush) {
@@ -55,24 +55,25 @@ final class DocumentCacheActivationTest extends TestCase
                 $second->updateDocuments(self::COLLECTION, new Document(['name' => 'second']));
             });
 
-            $epoch = $cache->load($collectionKey.'#epoch', Database::TTL);
-            $this->assertIsString($epoch);
-            $this->assertStringStartsWith('blocked:', $epoch, 'the second writer is still in flight');
-
-            $firstAdapter->reset();
-            $first->getDocument(self::COLLECTION, 'hook');
-            $first->getDocument(self::COLLECTION, 'hook');
-            $this->assertSame(2, $firstAdapter->documentReads, 'no read is cached while the barrier stands');
+            $this->assertSame('first', $first->getDocument(self::COLLECTION, 'hook')->getAttribute('name'));
+            $this->changeBehindTheCache($first, 'changed');
+            $this->assertSame('changed', $first->getDocument(self::COLLECTION, 'hook')->getAttribute('name'), 'no read is cached while the second writer is in flight');
         });
 
-        $epoch = $cache->load($collectionKey.'#epoch', Database::TTL);
-        $this->assertIsString($epoch);
-        $this->assertStringStartsWith('active:', $epoch, 'the last writer to finish publishes the epoch');
-
+        $this->assertSame('changed', $first->getDocument(self::COLLECTION, 'hook')->getAttribute('name'));
         $firstAdapter->reset();
-        $first->getDocument(self::COLLECTION, 'hook');
-        $first->getDocument(self::COLLECTION, 'hook');
-        $this->assertSame(1, $firstAdapter->documentReads, 'caching resumes once no writer is in flight');
+        $this->assertSame('changed', $first->getDocument(self::COLLECTION, 'hook')->getAttribute('name'));
+        $this->assertSame(0, $firstAdapter->documentReads, 'caching resumes once no writer is in flight');
+    }
+
+    private function changeBehindTheCache(Database $database, string $name): void
+    {
+        $uncached = new Database($database->getAdapter(), new Cache(new None()));
+        $uncached
+            ->setAuthorization($database->getAuthorization())
+            ->setDatabase($database->getDatabase())
+            ->setNamespace($database->getNamespace());
+        $uncached->updateDocument(self::COLLECTION, 'hook', new Document(['name' => $name]));
     }
 
     private function database(CountingMemory $adapter, Cache $cache, string $namespace): Database

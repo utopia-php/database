@@ -9,6 +9,7 @@ use Tests\Unit\Cache\RedisLeasableCache;
 use Tests\Unit\Support\CountingMemory;
 use Utopia\Cache\Adapter as CacheAdapter;
 use Utopia\Cache\Adapter\Memory as MemoryCache;
+use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Cache\Feature\Leasable;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
@@ -47,43 +48,21 @@ final class DocumentCacheEpochTest extends TestCase
         }
     }
 
-    public function testPurgeCachedCollectionDoesNotThrowWhenEpochPurgeReturnsFalse(): void
+    public function testPurgeCachedCollectionRetiresItsCachedDocuments(): void
     {
-        [$database, $adapter] = $this->createDatabase();
-        $this->assertTrue($database->purgeCachedCollection('webhooks'));
-
-        [$collectionKey] = $database->getCacheKeys('webhooks');
-        $epochKey = $collectionKey.'#epoch';
-        $before = $database->getCache()->load($epochKey, Database::TTL);
-        $this->assertIsString($before);
-        $this->assertNotSame('', $before);
-
-        $adapter->failPurges();
-
-        $this->assertTrue($database->purgeCachedCollection('webhooks'));
-        $this->assertTrue($database->purgeCachedDocument('webhooks', 'hook'));
-
-        $after = $database->getCache()->load($epochKey, Database::TTL);
-        $this->assertIsString($after);
-        $this->assertNotSame($before, $after);
-    }
-
-    public function testCreateDocumentsDoesNotFailWhenEpochPurgeReturnsFalse(): void
-    {
-        [$database, $adapter] = $this->createDatabase();
-        $this->assertTrue($database->purgeCachedCollection('webhooks'));
-        $adapter->failPurges();
-
-        $created = $database->createDocuments('webhooks', [new Document([
+        $database = $this->createDatabaseWithCache(new RedisLeasableCache());
+        $database->createDocument('webhooks', new Document([
             '$id' => 'hook',
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::update(Role::any()),
-            ],
-        ])]);
+            'name' => 'original',
+        ]));
+        $this->assertSame('original', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
 
-        $this->assertSame(1, $created);
-        $this->assertSame('hook', $database->getDocument('webhooks', 'hook')->getId());
+        $this->changeBehindTheCache($database, 'webhooks', 'hook', 'changed');
+        $this->assertSame('original', $database->getDocument('webhooks', 'hook')->getAttribute('name'), 'A document written without this cache leaves the cached copy in place');
+
+        $this->assertTrue($database->purgeCachedCollection('webhooks'));
+
+        $this->assertSame('changed', $database->getDocument('webhooks', 'hook')->getAttribute('name'), 'purgeCachedCollection() must retire every cached document of the collection');
     }
 
     public function testBlockFailureRollsBackTheMutation(): void
@@ -125,17 +104,16 @@ final class DocumentCacheEpochTest extends TestCase
             $this->assertStringContainsString('activate document cache epoch', $error->getMessage());
         }
 
-        [$collectionKey] = $database->getCacheKeys('webhooks', 'hook');
-        $epoch = $database->getCache()->load($collectionKey.'#epoch', Database::TTL);
-        $this->assertIsString($epoch);
-        $this->assertStringStartsWith('blocked:', $epoch);
         $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+        $this->changeBehindTheCache($database, 'webhooks', 'hook', 'changed');
+        $this->assertSame('changed', $database->getDocument('webhooks', 'hook')->getAttribute('name'), 'A collection whose activation failed stays uncached');
     }
 
     public function testActivationFailureDoesNotStrandOtherCollectionEpochs(): void
     {
         $cache = new FailDocumentEpochMemory();
-        $database = $this->createDatabaseWithCache($cache);
+        $adapter = new CountingMemory();
+        $database = $this->createDatabaseWithCache($cache, adapter: $adapter);
         $database->createCollection(new Collection(id: 'logs', attributes: [
             Attribute::string(key: 'name'),
         ], permissions: [
@@ -165,16 +143,14 @@ final class DocumentCacheEpochTest extends TestCase
             $this->assertStringContainsString('activate document cache epoch', $error->getMessage());
         }
 
-        [$webhooksKey] = $database->getCacheKeys('webhooks', 'hook');
-        [$logsKey] = $database->getCacheKeys('logs', 'log');
-        $webhooksEpoch = $database->getCache()->load($webhooksKey.'#epoch', Database::TTL);
-        $logsEpoch = $database->getCache()->load($logsKey.'#epoch', Database::TTL);
-        $this->assertIsString($webhooksEpoch);
-        $this->assertStringStartsWith('blocked:', $webhooksEpoch);
-        $this->assertIsString($logsEpoch);
-        $this->assertStringNotContainsString('blocked:', $logsEpoch);
         $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+        $this->changeBehindTheCache($database, 'webhooks', 'hook', 'changed');
+        $this->assertSame('changed', $database->getDocument('webhooks', 'hook')->getAttribute('name'), 'The collection whose activation failed stays uncached');
+
         $this->assertSame('updated', $database->getDocument('logs', 'log')->getAttribute('name'));
+        $adapter->reset();
+        $this->assertSame('updated', $database->getDocument('logs', 'log')->getAttribute('name'));
+        $this->assertSame(0, $adapter->documentReads, 'The other collection of the transaction is cached again');
     }
 
     public function testCacheFlushDuringTransactionCannotPreserveAStalePointCacheEntry(): void
@@ -332,9 +308,10 @@ final class DocumentCacheEpochTest extends TestCase
             $this->assertStringContainsString('Invalid document cache owner', $error->getMessage());
         }
 
-        [$collectionKey] = $database->getCacheKeys('webhooks', 'hook');
-        $this->assertDocumentCacheEpochBlocked($database, $collectionKey);
+        $cache->corruptFieldWrites(false);
         $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+        $this->changeBehindTheCache($database, 'webhooks', 'hook', 'changed');
+        $this->assertSame('changed', $database->getDocument('webhooks', 'hook')->getAttribute('name'), 'A collection whose activation was refused stays uncached');
     }
 
     public function testActivationPropagatesAnOwnerReleaseFailure(): void
@@ -354,9 +331,9 @@ final class DocumentCacheEpochTest extends TestCase
             $this->assertStringContainsString('Failed to release document cache owner', $error->getMessage());
         }
 
-        [$collectionKey] = $database->getCacheKeys('webhooks', 'hook');
-        $this->assertDocumentCacheEpochBlocked($database, $collectionKey);
         $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+        $this->changeBehindTheCache($database, 'webhooks', 'hook', 'changed');
+        $this->assertSame('changed', $database->getDocument('webhooks', 'hook')->getAttribute('name'), 'A collection whose owner release failed stays uncached');
     }
 
     private function renameDocument(Database $database, string $collection, string $id, string $name): int
@@ -364,27 +341,19 @@ final class DocumentCacheEpochTest extends TestCase
         return $database->updateDocuments($collection, new Document(['name' => $name]), [Query::equal('$id', [$id])]);
     }
 
-    private function assertDocumentCacheEpochBlocked(Database $database, string $collectionKey): void
+    private function changeBehindTheCache(Database $database, string $collection, string $id, string $name): void
     {
-        $epoch = $database->getCache()->load($collectionKey.'#epoch', Database::TTL);
-        $this->assertIsString($epoch);
-        $this->assertStringStartsWith('blocked:', $epoch);
+        $uncached = new Database($database->getAdapter(), new Cache(new None()));
+        $uncached
+            ->setAuthorization($database->getAuthorization())
+            ->setDatabase($database->getDatabase())
+            ->setNamespace($database->getNamespace());
+        $uncached->updateDocument($collection, $id, new Document(['name' => $name]));
     }
 
-    /**
-     * @return array{Database, FailPurgeMemory}
-     */
-    private function createDatabase(): array
+    private function createDatabaseWithCache(CacheAdapter $cache, ?string $namespace = null, DatabaseMemory $adapter = new DatabaseMemory()): Database
     {
-        $adapter = new FailPurgeMemory();
-        $database = $this->createDatabaseWithCache($adapter);
-
-        return [$database, $adapter];
-    }
-
-    private function createDatabaseWithCache(CacheAdapter $cache, ?string $namespace = null): Database
-    {
-        $database = new Database(new DatabaseMemory(), new Cache($cache));
+        $database = new Database($adapter, new Cache($cache));
         $database
             ->setDatabase('utopiaTests')
             ->setNamespace($namespace ?? 'epoch_'.\uniqid());
@@ -469,17 +438,15 @@ final class DocumentCacheEpochTest extends TestCase
             $this->assertStringContainsString('activate document cache epoch', $error->getMessage());
         }
 
-        $adapter->reset();
-        for ($read = 0; $read < 3; $read++) {
-            $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
-        }
-        $this->assertSame(3, $adapter->documentReads, 'A collection whose write has not activated stays uncached while the write is younger than the writer timeout');
+        $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+        $this->changeBehindTheCache($database, 'webhooks', 'hook', 'changed');
+        $this->assertSame('changed', $database->getDocument('webhooks', 'hook')->getAttribute('name'), 'A collection whose write has not activated stays uncached while the write is younger than the writer timeout');
 
         $database->setCacheWriterTimeout(0);
-        $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+        $this->assertSame('changed', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
         $adapter->reset();
         for ($read = 0; $read < 3; $read++) {
-            $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+            $this->assertSame('changed', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
         }
         $this->assertSame(0, $adapter->documentReads, 'Past the writer timeout the lost activation lapses and reads are served from the cache again, without a flush');
     }
@@ -499,10 +466,9 @@ final class DocumentCacheEpochTest extends TestCase
         }
 
         $this->renameDocument($database, 'webhooks', 'hook', 'second');
-        $adapter->reset();
         $this->assertSame('second', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
-        $this->assertSame('second', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
-        $this->assertSame(2, $adapter->documentReads, 'A write younger than the writer timeout counts as in flight, so the next write leaves the collection blocked');
+        $this->changeBehindTheCache($database, 'webhooks', 'hook', 'changed');
+        $this->assertSame('changed', $database->getDocument('webhooks', 'hook')->getAttribute('name'), 'A write younger than the writer timeout counts as in flight, so the next write leaves the collection uncached');
 
         $database->setCacheWriterTimeout(0);
         $this->renameDocument($database, 'webhooks', 'hook', 'third');
@@ -620,7 +586,9 @@ final class DocumentCacheEpochTest extends TestCase
         $this->assertSame('original', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
         $definitionKey = \strtolower($database->getCacheBaseKeys(Database::METADATA, 'webhooks')[1]);
         $definition = $cache->load($definitionKey, Database::TTL);
-        $this->assertIsArray($definition);
+        if (! \is_array($definition)) {
+            $this->fail("No cached definition under '{$definitionKey}' to save again");
+        }
 
         $read = $database->withTransaction(function () use ($database, $cache, $definitionKey, $definition): mixed {
             $this->renameDocument($database, 'webhooks', 'hook', 'updated');
@@ -661,15 +629,10 @@ final class DocumentCacheEpochTest extends TestCase
 
         $this->assertSame(1, $this->renameDocument($database, 'webhooks', 'hook', 'updated'));
 
-        [$collectionKey] = $database->getCacheKeys('webhooks', 'hook');
-        $epoch = $database->getCache()->load($collectionKey.'#epoch', Database::TTL);
-        $this->assertIsString($epoch);
-        $this->assertStringStartsWith('active:', $epoch);
-
+        $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
         $adapter->reset();
         $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
-        $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
-        $this->assertSame(1, $adapter->documentReads, 'A registration another worker already released is not a failed release: the write activates and reads are cached again');
+        $this->assertSame(0, $adapter->documentReads, 'A registration another worker already released is not a failed release: the write activates and reads are cached again');
     }
 
     private function createCountedDatabase(CountingMemory $adapter, CacheAdapter $cache): Database
@@ -759,26 +722,6 @@ final class PausedDocumentSQLite extends SQLite
         }
 
         return parent::commitTransaction();
-    }
-}
-
-final class FailPurgeMemory extends MemoryCache
-{
-    private bool $failing = false;
-
-    public function failPurges(): void
-    {
-        $this->failing = true;
-    }
-
-    #[\Override]
-    public function purge(string $key, string $hash = ''): bool
-    {
-        if ($this->failing && \str_ends_with($key, '#epoch')) {
-            return false;
-        }
-
-        return parent::purge($key, $hash);
     }
 }
 

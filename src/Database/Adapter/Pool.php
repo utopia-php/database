@@ -40,26 +40,34 @@ class Pool extends Adapter
 
     /**
      * Answers to the getters that describe the adapter rather than a
-     * connection, by method.
+     * connection, by pool and method.
      *
      * Every connection in a pool is built by the same factory, so it is the
      * same adapter class on the same DSN, and these answers are the same
      * whichever connection gives them. Delegating them checked a connection
      * out and replayed the whole handle state onto it to read a constant, and
-     * the hot path asks several per document. Getters that read connection or
-     * handle state (the driver, the connection id, anything that varies with
-     * shared tables or with how a connection was set up) still delegate, and
-     * the one capability with a setter is updated by it.
+     * the hot path asks several per document. They are kept per pool rather
+     * than per handle because a handle is usually built for one request,
+     * while its pool lives as long as the process. Getters that read
+     * connection or handle state (the driver, the connection id, anything
+     * that varies with shared tables or with how a connection was set up)
+     * still delegate.
      *
-     * @var array<string, mixed>
+     * @var \WeakMap<UtopiaPool<covariant Adapter>, array<string, mixed>>
      */
-    private array $capabilities = [];
+    private static \WeakMap $capabilities;
 
     /**
      * Attribute support this handle asked for, replayed on every checkout so
-     * each connection runs with the value the memoized getter reports.
+     * each connection runs with the value the getter reports.
      */
     private ?bool $supportForAttributes = null;
+
+    /**
+     * Attribute support as the adapter reports it to this handle. It is the
+     * one capability with a setter, so it is kept per handle, not per pool.
+     */
+    private ?bool $reportedSupportForAttributes = null;
 
     /**
      * @param UtopiaPool<covariant Adapter> $pool The pool to use for connections. Must contain instances of Adapter.
@@ -67,6 +75,12 @@ class Pool extends Adapter
     public function __construct(UtopiaPool $pool)
     {
         $this->pool = $pool;
+
+        if (!isset(self::$capabilities)) {
+            /** @var \WeakMap<UtopiaPool<covariant Adapter>, array<string, mixed>> $capabilities */
+            $capabilities = new \WeakMap();
+            self::$capabilities = $capabilities;
+        }
     }
 
     /**
@@ -129,11 +143,20 @@ class Pool extends Adapter
      */
     protected function capability(string $method): mixed
     {
-        if (!\array_key_exists($method, $this->capabilities)) {
-            $this->capabilities[$method] = $this->delegate($method, []);
+        $answers = self::$capabilities[$this->pool] ?? [];
+
+        if (\array_key_exists($method, $answers)) {
+            return $answers[$method];
         }
 
-        return $this->capabilities[$method];
+        $answer = $this->delegate($method, []);
+
+        // The checkout can yield to a coroutine that kept another answer meanwhile
+        $answers = self::$capabilities[$this->pool] ?? [];
+        $answers[$method] = $answer;
+        self::$capabilities[$this->pool] = $answers;
+
+        return $answer;
     }
 
     public function getDriver(): mixed
@@ -287,14 +310,18 @@ class Pool extends Adapter
      */
     public function getHostname(): string
     {
-        if (!empty($this->capabilities[__FUNCTION__])) {
-            return $this->capabilities[__FUNCTION__];
+        $hostname = self::$capabilities[$this->pool][__FUNCTION__] ?? '';
+
+        if ($hostname !== '') {
+            return $hostname;
         }
 
         $hostname = $this->delegate(__FUNCTION__, \func_get_args());
 
         if ($hostname !== '') {
-            $this->capabilities[__FUNCTION__] = $hostname;
+            $answers = self::$capabilities[$this->pool] ?? [];
+            $answers[__FUNCTION__] = $hostname;
+            self::$capabilities[$this->pool] = $answers;
         }
 
         return $hostname;
@@ -579,7 +606,7 @@ class Pool extends Adapter
 
     public function getSupportForAttributes(): bool
     {
-        return $this->capability(__FUNCTION__);
+        return $this->reportedSupportForAttributes ??= $this->delegate(__FUNCTION__, \func_get_args());
     }
 
     public function getSupportForSchemaAttributes(): bool
@@ -915,7 +942,7 @@ class Pool extends Adapter
     {
         $this->supportForAttributes = $support;
 
-        return $this->capabilities['getSupportForAttributes'] = $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->reportedSupportForAttributes = $this->delegate(__FUNCTION__, \func_get_args());
     }
 
     public function getSupportForIntegerBooleans(): bool

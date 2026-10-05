@@ -565,9 +565,8 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     public function exists(string $database, ?string $collection = null): bool
     {
         if (! \is_null($collection)) {
-            $collection = $this->getNamespace().'_'.$collection;
+            $collection = $this->getNamespace().'_'.$this->filter($collection);
             try {
-                // Use listCollections command with filter for O(1) lookup
                 /** @var \stdClass $result */
                 $result = $this->getClient()->query([
                     'listCollections' => 1,
@@ -618,7 +617,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      */
     public function delete(string $name): bool
     {
-        $this->getClient()->dropDatabase([], $name);
+        $this->getClient()->dropDatabase([], $this->filter($name));
 
         return true;
     }

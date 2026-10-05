@@ -2110,6 +2110,11 @@ class Postgres extends SQL
         return false;
     }
 
+    public function getSupportForInsertReturning(): bool
+    {
+        return true;
+    }
+
     /**
      * Is vector type supported?
      *

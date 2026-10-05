@@ -235,7 +235,7 @@ class QueryCacheTest extends TestCase
     }
 
     /**
-     * @return iterable<string, array{\Closure(Entry): mixed}>
+     * @return iterable<string, array{\Closure(Entry): (string|array<int|string, mixed>)}>
      */
     public static function malformedPayloads(): iterable
     {
@@ -250,7 +250,7 @@ class QueryCacheTest extends TestCase
     }
 
     /**
-     * @param  \Closure(Entry): mixed  $payload
+     * @param  \Closure(Entry): (string|array<int|string, mixed>)  $payload
      */
     #[DataProvider('malformedPayloads')]
     public function testAMalformedResultMissesAndIsReplacedByTheNextFill(\Closure $payload): void

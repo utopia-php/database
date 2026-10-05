@@ -475,9 +475,7 @@ class Mirror extends Database
     {
         $this->delegate(__FUNCTION__, \func_get_args());
 
-        $this->preserveDates = $preserve;
-
-        return $this;
+        return parent::setPreserveDates($preserve);
     }
 
     /**
@@ -487,9 +485,7 @@ class Mirror extends Database
     {
         $this->delegate(__FUNCTION__, \func_get_args());
 
-        $this->preserveSequence = $preserve;
-
-        return $this;
+        return parent::setPreserveSequence($preserve);
     }
 
     /**
@@ -499,9 +495,7 @@ class Mirror extends Database
     {
         $this->delegate(__FUNCTION__);
 
-        $this->validate = true;
-
-        return $this;
+        return parent::enableValidation();
     }
 
     /**
@@ -511,9 +505,7 @@ class Mirror extends Database
     {
         $this->delegate(__FUNCTION__);
 
-        $this->validate = false;
-
-        return $this;
+        return parent::disableValidation();
     }
 
     /**
@@ -731,7 +723,7 @@ class Mirror extends Database
      */
     public function createCollection(Collection $collection): Collection
     {
-        $collectionId = $collection->id;
+        $collectionId = $collection->getId();
 
         $result = $this->source->createCollection($collection);
 
@@ -855,8 +847,6 @@ class Mirror extends Database
         $this->awaitReplications($collection);
 
         try {
-            // Round-trip through Document is required: Filter interface accepts/returns Document,
-            // so we must serialize to Document for filter processing, then deserialize back.
             $document = $attribute->toDocument();
 
             foreach ($this->writeFilters as $filter) {
@@ -864,7 +854,7 @@ class Mirror extends Database
                     source: $this->source,
                     destination: $destination,
                     collectionId: $collection,
-                    attributeId: $attribute->key,
+                    attributeId: $attribute->getKey(),
                     attribute: $document,
                 );
                 if ($document === null) {
@@ -900,8 +890,6 @@ class Mirror extends Database
         try {
             $filteredAttributes = [];
             foreach ($attributes as $attribute) {
-                // Round-trip through Document is required: Filter interface accepts/returns Document,
-                // so we must serialize to Document for filter processing, then deserialize back.
                 $document = $attribute->toDocument();
 
                 foreach ($this->writeFilters as $filter) {
@@ -909,7 +897,7 @@ class Mirror extends Database
                         source: $this->source,
                         destination: $destination,
                         collectionId: $collection,
-                        attributeId: $attribute->key,
+                        attributeId: $attribute->getKey(),
                         attribute: $document,
                     );
                     if ($document === null) {
@@ -978,20 +966,20 @@ class Mirror extends Database
             }
             $document = $filtered;
 
-            $typedAttr = Attribute::fromDocument($document);
+            $typedAttribute = Attribute::fromDocument($document);
 
             $destination->updateAttribute(
                 $collection,
                 $id,
-                $typedAttr->type,
-                $typedAttr->size,
-                $typedAttr->required,
-                $typedAttr->default,
-                $typedAttr->signed,
-                $typedAttr->array,
-                $typedAttr->format ?: null,
-                $typedAttr->formatOptions ?: null,
-                $typedAttr->filters ?: null,
+                $typedAttribute->getType(),
+                $typedAttribute->getSize(),
+                $typedAttribute->isRequired(),
+                $typedAttribute->getDefault(),
+                $typedAttribute->isSigned(),
+                $typedAttribute->isArray(),
+                $typedAttribute->getFormat() ?: null,
+                $typedAttribute->getFormatOptions() ?: null,
+                $typedAttribute->getFilters() ?: null,
                 $newKey,
             );
         } catch (Throwable $err) {
@@ -1048,8 +1036,6 @@ class Mirror extends Database
         $this->awaitReplications($collection);
 
         try {
-            // Round-trip through Document is required: Filter interface accepts/returns Document,
-            // so we must serialize to Document for filter processing, then deserialize back.
             $document = $index->toDocument();
 
             foreach ($this->writeFilters as $filter) {
@@ -1057,7 +1043,7 @@ class Mirror extends Database
                     source: $this->source,
                     destination: $destination,
                     collectionId: $collection,
-                    indexId: $index->key,
+                    indexId: $index->getKey(),
                     index: $document,
                 );
                 if ($document === null) {
@@ -1169,7 +1155,7 @@ class Mirror extends Database
         ?callable $onError = null,
     ): int {
         $onNext = $this->decorating(Event::DocumentsCreate, $collection, $onNext);
-        $modified = $this->skipDuplicates
+        $modified = $this->skippingDuplicates()
             ? $this->source->skipDuplicates(
                 fn () => $this->source->createDocuments($collection, $documents, $batchSize, $onNext, $onError)
             )
@@ -1187,10 +1173,6 @@ class Mirror extends Database
             return $modified;
         }
 
-        // Forward every input to destination. "upgraded" status means the schema
-        // is mirrored, not that every row is backfilled, so a row that is a
-        // duplicate on source may not yet exist on destination. In skipDuplicates
-        // mode the destination runs its own INSERT IGNORE and decides per-row.
         $clones = [];
         $destination = $this->destination;
 
@@ -1215,7 +1197,7 @@ class Mirror extends Database
             return $modified;
         }
 
-        $skipDuplicates = $this->skipDuplicates;
+        $skipDuplicates = $this->skippingDuplicates();
 
         $this->replicate('createDocuments', $collection, self::documentIds($documents), function () use ($destination, $collection, $clones, $batchSize, $skipDuplicates): void {
             if ($skipDuplicates) {
@@ -1660,8 +1642,8 @@ class Mirror extends Database
      */
     public function createRelationship(Relationship $relationship): bool
     {
-        $this->awaitReplications($relationship->collection);
-        $this->awaitReplications($relationship->relatedCollection);
+        $this->awaitReplications($relationship->getSourceCollection());
+        $this->awaitReplications($relationship->getRelatedCollection());
 
         /** @var bool $result */
         $result = $this->delegate(__FUNCTION__, [$relationship]);

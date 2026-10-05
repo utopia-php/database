@@ -62,16 +62,16 @@ trait Attributes
     public function createAttribute(string $collection, Attribute $attribute): bool
     {
         $attribute = clone $attribute;
-        $id = $attribute->key;
-        $type = $attribute->type;
-        $size = $attribute->size;
-        $required = $attribute->required;
-        $default = $attribute->default;
-        $signed = $attribute->signed;
-        $array = $attribute->array;
-        $format = $attribute->format;
-        $formatOptions = $attribute->formatOptions;
-        $filters = $attribute->filters;
+        $id = $attribute->getKey();
+        $type = $attribute->getType();
+        $size = $attribute->getSize();
+        $required = $attribute->isRequired();
+        $default = $attribute->getDefault();
+        $signed = $attribute->isSigned();
+        $array = $attribute->isArray();
+        $format = $attribute->getFormat();
+        $formatOptions = $attribute->getFormatOptions();
+        $filters = $attribute->getFilters();
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
@@ -82,8 +82,7 @@ trait Attributes
         if (in_array($type, Database::ATTRIBUTE_FILTER_COLUMN_TYPES, true)) {
             $filters[] = $type->value;
             $filters = array_unique($filters);
-            $attribute->filters = $filters;
-            $attribute->setAttribute('filters', $filters);
+            $attribute->setFilters($filters);
         }
 
         $existsInSchema = false;
@@ -190,14 +189,14 @@ trait Attributes
         $attributeModels = [];
         $attributesToCreate = [];
         foreach ($attributes as $attribute) {
-            if (empty($attribute->key)) {
+            if (empty($attribute->getKey())) {
                 throw new DatabaseException('Missing attribute key');
             }
 
-            if (in_array($attribute->type, Database::ATTRIBUTE_FILTER_COLUMN_TYPES, true)) {
-                $attribute->filters = array_values(
-                    array_unique(array_merge($attribute->filters, [$attribute->type->value]))
-                );
+            if (in_array($attribute->getType(), Database::ATTRIBUTE_FILTER_COLUMN_TYPES, true)) {
+                $attribute->setFilters(array_values(
+                    array_unique(array_merge($attribute->getFilters(), [$attribute->getType()->value]))
+                ));
             }
 
             $existsInSchema = false;
@@ -205,16 +204,16 @@ trait Attributes
             try {
                 $attribute = $this->validateAttribute(
                     $collection,
-                    $attribute->key,
-                    $attribute->type->value,
-                    $attribute->size,
-                    $attribute->required,
-                    $attribute->default,
-                    $attribute->signed,
-                    $attribute->array,
-                    $attribute->format,
-                    $attribute->formatOptions,
-                    $attribute->filters,
+                    $attribute->getKey(),
+                    $attribute->getType()->value,
+                    $attribute->getSize(),
+                    $attribute->isRequired(),
+                    $attribute->getDefault(),
+                    $attribute->isSigned(),
+                    $attribute->isArray(),
+                    $attribute->getFormat(),
+                    $attribute->getFormatOptions(),
+                    $attribute->getFilters(),
                     $schemaAttributes
                 );
             } catch (DuplicateException $e) {
@@ -310,7 +309,7 @@ trait Attributes
         /** @var array<Attribute> $attributes */
         $attributes = $collection->getAttribute('attributes', []);
         foreach ($attributes as $existing) {
-            if (\strtolower($existing->key) === \strtolower($attribute->key)) {
+            if (\strtolower($existing->getKey()) === \strtolower($attribute->getKey())) {
                 throw $duplicate;
             }
         }
@@ -320,17 +319,17 @@ trait Attributes
         }
 
         $expected = $this->adapter->getColumnType(
-            $attribute->type->value,
-            $attribute->size,
-            $attribute->signed,
-            $attribute->array,
-            $attribute->required,
+            $attribute->getType()->value,
+            $attribute->getSize(),
+            $attribute->isSigned(),
+            $attribute->isArray(),
+            $attribute->isRequired(),
         );
         if ($expected === '') {
             return true;
         }
 
-        $filteredId = \strtolower($this->adapter->filter($attribute->key));
+        $filteredId = \strtolower($this->adapter->filter($attribute->getKey()));
         foreach ($schemaAttributes as $column) {
             if (\strtolower($column->getId()) !== $filteredId) {
                 continue;
@@ -345,7 +344,7 @@ trait Attributes
                 throw new DuplicateException('Attribute exists in the shared table with another type', previous: $duplicate);
             }
 
-            $this->adapter->deleteAttribute($collection->getId(), $attribute->key);
+            $this->adapter->deleteAttribute($collection->getId(), $attribute->getKey());
 
             return false;
         }
@@ -597,7 +596,7 @@ trait Attributes
 
         /** @var array<Attribute> $attributes */
         $attributes = $collection->getAttribute('attributes', []);
-        $index = \array_search($id, \array_map(fn (Attribute $attribute) => $attribute->key, $attributes), true);
+        $index = \array_search($id, \array_map(fn (Attribute $attribute) => $attribute->getKey(), $attributes), true);
 
         if ($index === false) {
             throw new NotFoundException('Attribute not found');
@@ -764,7 +763,7 @@ trait Attributes
 
         /** @var array<Attribute> $attributes */
         $attributes = $collectionDoc->getAttribute('attributes', []);
-        $attributeIndex = \array_search($id, \array_map(fn (Attribute $attribute) => $attribute->key, $attributes), true);
+        $attributeIndex = \array_search($id, \array_map(fn (Attribute $attribute) => $attribute->getKey(), $attributes), true);
 
         if ($attributeIndex === false) {
             throw new NotFoundException('Attribute not found');
@@ -984,24 +983,24 @@ trait Attributes
         if (in_array($type, [ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value], true) && ! $this->adapter->supports(Capability::SpatialIndexNull)) {
             /** @var array<string, Attribute> $typedAttributeMap */
             $typedAttributeMap = [];
-            foreach ($attributes as $typedAttr) {
-                $typedAttributeMap[\strtolower($typedAttr->key)] = $typedAttr;
+            foreach ($attributes as $typedAttribute) {
+                $typedAttributeMap[\strtolower($typedAttribute->getKey())] = $typedAttribute;
             }
 
             /** @var array<Index> $spatialIndexes */
             $spatialIndexes = $collectionDoc->getAttribute('indexes', []);
             foreach ($spatialIndexes as $typedIndex) {
-                if ($typedIndex->type !== IndexType::Spatial) {
+                if ($typedIndex->getType() !== IndexType::Spatial) {
                     continue;
                 }
-                foreach ($typedIndex->attributes as $attributeName) {
+                foreach ($typedIndex->getIndexedAttributes() as $attributeName) {
                     $lookup = \strtolower($attributeName);
                     if (! isset($typedAttributeMap[$lookup])) {
                         continue;
                     }
-                    $typedAttr = $typedAttributeMap[$lookup];
+                    $typedAttribute = $typedAttributeMap[$lookup];
 
-                    if (in_array($typedAttr->type, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon], true) && ! $typedAttr->required) {
+                    if (in_array($typedAttribute->getType(), [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon], true) && ! $typedAttribute->isRequired()) {
                         throw new IndexException('Spatial indexes do not allow null values. Mark the attribute "'.$attributeName.'" as required or create the index on a column with no null values.');
                     }
                 }
@@ -1041,7 +1040,7 @@ trait Attributes
             /**
              * Since we allow changing type & size we need to validate index length
              */
-            if ($this->validate) {
+            if ($this->validation()->get()) {
                 $validator = new IndexValidator(
                     $attributes,
                     $originalIndexes,
@@ -1207,7 +1206,7 @@ trait Attributes
             throw new DatabaseException('Cannot delete relationship as an attribute');
         }
 
-        if ($this->validate) {
+        if ($this->validation()->get()) {
             /** @var array<Index> $depIndexes */
             $depIndexes = $collection->getAttribute('indexes', []);
             $validator = new IndexDependencyValidator(
@@ -1327,7 +1326,7 @@ trait Attributes
             throw new NotFoundException('Attribute not found');
         }
 
-        if ($this->validate) {
+        if ($this->validation()->get()) {
             /** @var array<Index> $renameDepIndexes */
             $renameDepIndexes = $collection->getAttribute('indexes', []);
             $validator = new IndexDependencyValidator(

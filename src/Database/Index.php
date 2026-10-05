@@ -113,6 +113,14 @@ class Index extends Document
     }
 
     /**
+     * @param  array<int|null>  $lengths
+     */
+    public function setLengths(array $lengths): static
+    {
+        return $this->setAttribute('lengths', $lengths);
+    }
+
+    /**
      * @return array<Order|null>
      */
     public function getOrders(): array
@@ -120,6 +128,16 @@ class Index extends Document
         $stored = $this->getAttribute('orders', []);
 
         return self::decodeOrders(\is_array($stored) ? $stored : []);
+    }
+
+    /**
+     * @param  array<mixed>  $orders
+     *
+     * @throws \InvalidArgumentException When an order is neither an Order nor null
+     */
+    public function setOrders(array $orders): static
+    {
+        return $this->setAttribute('orders', self::encodeOrders($orders));
     }
 
     public function getTtl(): int
@@ -137,7 +155,7 @@ class Index extends Document
             'type' => $this->setAttribute('type', $value instanceof IndexType ? $value->value : $value),
             'attributes' => $this->setAttribute('attributes', $value),
             'lengths' => $this->setAttribute('lengths', $value),
-            'orders' => $this->setAttribute('orders', self::encodeOrders(\is_array($value) ? $value : [])),
+            'orders' => $this->setOrders(\is_array($value) ? $value : []),
             'ttl' => $this->setAttribute('ttl', $value),
             default => $this->setAttribute($name, $value),
         };

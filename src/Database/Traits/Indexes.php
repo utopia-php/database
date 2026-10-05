@@ -47,12 +47,12 @@ trait Indexes
      */
     public function createIndex(string $collection, Index $index): bool
     {
-        $id = $index->key;
-        $type = $index->type;
-        $attributes = $index->attributes;
-        $lengths = $index->lengths;
-        $orders = $index->orders;
-        $ttl = $index->ttl;
+        $id = $index->getKey();
+        $type = $index->getType();
+        $attributes = $index->getIndexedAttributes();
+        $lengths = $index->getLengths();
+        $orders = $index->getOrders();
+        $ttl = $index->getTtl();
 
         if (empty($attributes)) {
             throw new DatabaseException('Missing attributes');
@@ -84,21 +84,21 @@ trait Indexes
                 $baseAttr = \explode('.', $attr, 2)[0];
             }
 
-            foreach ($collectionAttributes as $typedAttr) {
-                if ($typedAttr->key === $baseAttr) {
+            foreach ($collectionAttributes as $typedAttribute) {
+                if ($typedAttribute->getKey() === $baseAttr) {
 
-                    $indexAttributesWithTypes[$attr] = $typedAttr->type->value;
+                    $indexAttributesWithTypes[$attr] = $typedAttribute->getType()->value;
 
                     /**
                      * mysql does not save length in collection when length = attributes size
                      */
-                    if ($typedAttr->type === ColumnType::String) {
-                        if (! empty($lengths[$i]) && $lengths[$i] === $typedAttr->size && $this->adapter->getMaxIndexLength() > 0) {
+                    if ($typedAttribute->getType() === ColumnType::String) {
+                        if (! empty($lengths[$i]) && $lengths[$i] === $typedAttribute->getSize() && $this->adapter->getMaxIndexLength() > 0) {
                             $lengths[$i] = null;
                         }
                     }
 
-                    if ($typedAttr->array) {
+                    if ($typedAttribute->isArray()) {
                         if ($this->adapter->getMaxIndexLength() > 0) {
                             $lengths[$i] = self::MAX_ARRAY_INDEX_LENGTH;
                         }
@@ -119,7 +119,7 @@ trait Indexes
             ttl: $ttl
         );
 
-        if ($this->validate) {
+        if ($this->validation()->get()) {
             /** @var array<Attribute> $collectionAttrsForValidation */
             $collectionAttrsForValidation = $collection->getAttribute('attributes', []);
             /** @var array<Index> $collectionIdxsForValidation */
@@ -203,7 +203,7 @@ trait Indexes
             return false;
         }
 
-        $id = \strtolower($this->adapter->filter($index->key));
+        $id = \strtolower($this->adapter->filter($index->getKey()));
         foreach ($this->adapter->getInternalIndexesKeys() as $internal) {
             if (\strtolower($this->adapter->filter($internal)) === $id) {
                 return false;
@@ -224,7 +224,7 @@ trait Indexes
             }
 
             try {
-                $this->adapter->deleteIndex($collection, $index->key);
+                $this->adapter->deleteIndex($collection, $index->getKey());
             } catch (NotFoundException) {
                 // Already absent from the schema
             }
@@ -254,18 +254,18 @@ trait Indexes
             \array_shift($lengths);
         }
 
-        if (\count($columns) !== \count($index->attributes)) {
+        if (\count($columns) !== \count($index->getIndexedAttributes())) {
             return false;
         }
 
-        foreach (\array_values($index->attributes) as $position => $attribute) {
+        foreach (\array_values($index->getIndexedAttributes()) as $position => $attribute) {
             if ($columns[$position] === '') {
                 continue;
             }
             if ($columns[$position] !== \strtolower($this->adapter->filter(Storage::column($attribute)))) {
                 return false;
             }
-            if ($lengths[$position] !== (int) ($index->lengths[$position] ?? 0)) {
+            if ($lengths[$position] !== (int) ($index->getLengths()[$position] ?? 0)) {
                 return false;
             }
         }
@@ -277,7 +277,7 @@ trait Indexes
             'SPATIAL' => IndexType::Spatial,
             default => \is_numeric($nonUnique) && (int) $nonUnique === 0 ? IndexType::Unique : IndexType::Key,
         };
-        $requestedType = $index->type === IndexType::Index ? IndexType::Key : $index->type;
+        $requestedType = $index->getType() === IndexType::Index ? IndexType::Key : $index->getType();
 
         return $schemaType === $requestedType;
     }
@@ -430,11 +430,11 @@ trait Indexes
         $typedDeletedIndex = $indexDeleted;
         /** @var array<string, string> $indexAttributeTypes */
         $indexAttributeTypes = [];
-        foreach ($typedDeletedIndex->attributes as $attr) {
+        foreach ($typedDeletedIndex->getIndexedAttributes() as $attr) {
             $baseAttr = \str_contains($attr, '.') ? \explode('.', $attr, 2)[0] : $attr;
             foreach ($collectionAttributes as $collectionAttribute) {
-                if ($collectionAttribute->key === $baseAttr) {
-                    $indexAttributeTypes[$attr] = $collectionAttribute->type->value;
+                if ($collectionAttribute->getKey() === $baseAttr) {
+                    $indexAttributeTypes[$attr] = $collectionAttribute->getType()->value;
                     break;
                 }
             }
@@ -442,11 +442,11 @@ trait Indexes
 
         $rollbackIndex = new Index(
             key: $id,
-            type: $typedDeletedIndex->type,
-            attributes: $typedDeletedIndex->attributes,
-            lengths: $typedDeletedIndex->lengths,
-            orders: $typedDeletedIndex->orders,
-            ttl: $typedDeletedIndex->ttl
+            type: $typedDeletedIndex->getType(),
+            attributes: $typedDeletedIndex->getIndexedAttributes(),
+            lengths: $typedDeletedIndex->getLengths(),
+            orders: $typedDeletedIndex->getOrders(),
+            ttl: $typedDeletedIndex->getTtl()
         );
         $this->updateMetadata(
             collection: $collection,
@@ -488,7 +488,7 @@ trait Indexes
 
         /** @var array<Index> $indexes */
         $indexes = $collection->getAttribute('indexes', []);
-        $index = \array_search($id, \array_map(fn (Index $idx) => $idx->key, $indexes), true);
+        $index = \array_search($id, \array_map(fn (Index $candidate) => $candidate->getKey(), $indexes), true);
 
         if ($index === false) {
             throw new NotFoundException('Index not found');

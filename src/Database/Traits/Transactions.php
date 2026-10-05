@@ -33,6 +33,9 @@ trait Transactions
     /** @var WeakMap<Throwable, true>|null Failures an adapter transaction let through. */
     private ?WeakMap $transactionFailures = null;
 
+    /** @var WeakMap<Throwable, true>|null Failures of a commit whose result could not be confirmed, raised after its callback returned. */
+    private ?WeakMap $unconfirmedCommits = null;
+
     /**
      * Run a callback inside a transaction.
      *
@@ -143,7 +146,8 @@ trait Transactions
 
     /**
      * Run the callback in an adapter transaction, dropping the document purge events of every attempt the adapter
-     * rolls back. Without savepoints a failed nested call is not rolled back, so its events stay queued.
+     * rolls back. Without savepoints a failed nested call is not rolled back, so its events stay queued. The events of
+     * the last attempt also stay queued when its commit could not be confirmed.
      *
      * @template T
      *
@@ -159,15 +163,22 @@ trait Transactions
         $discard = function () use ($context, $queued): void {
             \array_splice($this->documentPurgeEvents[$context], $queued);
         };
+        $returned = false;
 
         try {
-            return $this->adapter->withTransaction(function () use ($callback, $discard): mixed {
+            return $this->adapter->withTransaction(function () use ($callback, $discard, &$returned): mixed {
+                $returned = false;
                 $discard();
+                $result = $callback();
+                $returned = true;
 
-                return $callback();
+                return $result;
             });
         } catch (Throwable $error) {
-            if ($this->adapter->supports(Capability::NestedTransactions) && ! $this->mayHaveCommitted($error)) {
+            if ($returned && $error instanceof UnconfirmedException) {
+                $this->unconfirmedCommits ??= new WeakMap();
+                $this->unconfirmedCommits[$error] = true;
+            } elseif ($this->adapter->supports(Capability::NestedTransactions)) {
                 $discard();
             }
 
@@ -202,8 +213,8 @@ trait Transactions
      * Keep all nested mutation tombstones blocked, and purge every written document
      * again, once the outer transaction has committed or rolled back. Document purge
      * events queued in the scope fire after a commit, even when the invalidation after it
-     * fails, and after a commit that may have stored the writes (see mayHaveCommitted()),
-     * whose failure is still the one thrown. A rollback drops them.
+     * fails, and after a commit that could not be confirmed, whose failure is still the
+     * one thrown. A rollback drops them, also when its callback threw Exception\Unconfirmed.
      *
      * @template T
      *
@@ -233,7 +244,7 @@ trait Transactions
                 $queryTokens = $this->queryCacheMutations[$context];
                 $documentTokens = $this->documentCacheMutations[$context];
                 $documents = $this->documentCachePurges[$context];
-                $purgeEvents = $this->mayHaveCommitted($error) ? $this->documentPurgeEvents[$context] : [];
+                $purgeEvents = $this->endedInUnconfirmedCommit($error) ? $this->documentPurgeEvents[$context] : [];
                 unset(
                     $this->queryCacheMutations[$context],
                     $this->documentCacheMutations[$context],
@@ -315,6 +326,15 @@ trait Transactions
     private function failedAfterCommit(Throwable $error): bool
     {
         return isset($this->committedFailures[$error]);
+    }
+
+    /**
+     * Whether the error is the Exception\Unconfirmed of a commit, not one its callback threw: the writes of the
+     * transaction's last attempt may be stored.
+     */
+    private function endedInUnconfirmedCommit(Throwable $error): bool
+    {
+        return isset($this->unconfirmedCommits[$error]);
     }
 
     /**

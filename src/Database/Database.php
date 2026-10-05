@@ -1160,7 +1160,7 @@ class Database
      */
     public function setPreserveDates(bool $preserve): static
     {
-        $this->preserveDates = $preserve;
+        $this->datePreservation()->set($preserve);
 
         return $this;
     }
@@ -1227,7 +1227,7 @@ class Database
      */
     public function setPreserveSequence(bool $preserve): static
     {
-        $this->preserveSequence = $preserve;
+        $this->sequencePreservation()->set($preserve);
 
         return $this;
     }
@@ -1417,7 +1417,7 @@ class Database
      */
     public function enableValidation(): static
     {
-        $this->validate = true;
+        $this->validation()->set(true);
 
         return $this;
     }
@@ -1429,7 +1429,7 @@ class Database
      */
     public function disableValidation(): static
     {
-        $this->validate = false;
+        $this->validation()->set(false);
 
         return $this;
     }
@@ -1763,6 +1763,11 @@ class Database
         return $this->duplicateSkipping ??= new Value(false);
     }
 
+    protected function skippingDuplicates(): bool
+    {
+        return $this->duplicateSkipping()->get();
+    }
+
     private function getEventContext(): int
     {
         if (! \extension_loaded('swoole')) {
@@ -1815,7 +1820,7 @@ class Database
      */
     public function enableFilters(): static
     {
-        $this->filter = true;
+        $this->filtering()->set(true);
 
         return $this;
     }
@@ -1827,7 +1832,7 @@ class Database
      */
     public function disableFilters(): static
     {
-        $this->filter = false;
+        $this->filtering()->set(false);
 
         return $this;
     }

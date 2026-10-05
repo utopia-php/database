@@ -133,8 +133,8 @@ trait Relationships
             throw new DatabaseException('Adapter does not support relationships');
         }
 
-        $collection = $this->silent(fn () => $this->getCollection($relationship->collection));
-        $relatedCollection = $this->silent(fn () => $this->getCollection($relationship->relatedCollection));
+        $collection = $this->silent(fn () => $this->getCollection($relationship->getSourceCollection()));
+        $relatedCollection = $this->silent(fn () => $this->getCollection($relationship->getRelatedCollection()));
 
         /** @var Document $collection */
         /** @var Document $relatedCollection */
@@ -145,24 +145,24 @@ trait Relationships
             throw new NotFoundException('Related collection not found');
         }
 
-        $type = $relationship->type;
-        $twoWay = $relationship->twoWay;
-        $id = ! empty($relationship->key) ? $relationship->key : $this->adapter->filter($relatedCollection->getId());
-        $twoWayKey = ! empty($relationship->twoWayKey) ? $relationship->twoWayKey : $this->adapter->filter($collection->getId());
-        $onDelete = $relationship->onDelete;
+        $type = $relationship->getType();
+        $twoWay = $relationship->isTwoWay();
+        $id = ! empty($relationship->getKey()) ? $relationship->getKey() : $this->adapter->filter($relatedCollection->getId());
+        $twoWayKey = ! empty($relationship->getTwoWayKey()) ? $relationship->getTwoWayKey() : $this->adapter->filter($collection->getId());
+        $onDelete = $relationship->getOnDelete();
 
         /** @var array<Attribute> $attributes */
         $attributes = $collection->getAttribute('attributes', []);
         foreach ($attributes as $attribute) {
-            if (\strtolower($attribute->key) === \strtolower($id)) {
+            if (\strtolower($attribute->getKey()) === \strtolower($id)) {
                 throw new DuplicateException('Attribute already exists');
             }
 
-            if ($attribute->type === ColumnType::Relationship) {
-                $existingRel = Relationship::fromArray(['collection' => $collection->getId()] + $attribute->getArrayCopy());
+            if ($attribute->getType() === ColumnType::Relationship) {
+                $existingRelationship = Relationship::fromArray(['collection' => $collection->getId()] + $attribute->getArrayCopy());
                 if (
-                    \strtolower($existingRel->twoWayKey) === \strtolower($twoWayKey)
-                    && $existingRel->relatedCollection === $relatedCollection->getId()
+                    \strtolower($existingRelationship->getTwoWayKey()) === \strtolower($twoWayKey)
+                    && $existingRelationship->getRelatedCollection() === $relatedCollection->getId()
                 ) {
                     throw new DuplicateException('Related attribute already exists');
                 }
@@ -327,7 +327,7 @@ trait Relationships
 
                         $committedFailure ??= $e;
                     }
-                    $indexesCreated[] = ['collection' => $indexCollection, 'index' => $index->key];
+                    $indexesCreated[] = ['collection' => $indexCollection, 'index' => $index->getKey()];
                 }
             } catch (Throwable $e) {
                 foreach ($indexesCreated as $indexInfo) {
@@ -437,42 +437,42 @@ trait Relationships
 
         if (
             $newKey !== null
-            && \in_array($newKey, \array_map(fn (Attribute $attribute) => $attribute->key, $attributes), true)
+            && \in_array($newKey, \array_map(fn (Attribute $attribute) => $attribute->getKey(), $attributes), true)
         ) {
             throw new DuplicateException('Relationship already exists');
         }
 
-        $attributeIndex = array_search($id, array_map(fn (Attribute $attribute) => $attribute->key, $attributes), true);
+        $attributeIndex = array_search($id, array_map(fn (Attribute $attribute) => $attribute->getKey(), $attributes), true);
 
         if ($attributeIndex === false) {
             throw new NotFoundException('Relationship not found');
         }
 
         $attribute = $attributes[$attributeIndex];
-        $oldRel = Relationship::fromArray(['collection' => $collection->getId()] + $attribute->getArrayCopy());
+        $oldRelationship = Relationship::fromArray(['collection' => $collection->getId()] + $attribute->getArrayCopy());
 
-        $relatedCollectionId = $oldRel->relatedCollection;
+        $relatedCollectionId = $oldRelationship->getRelatedCollection();
         $relatedCollection = $this->getCollection($relatedCollectionId);
 
         // Determine if we need to alter the database (rename columns/indexes)
-        $oldTwoWayKey = $oldRel->twoWayKey;
+        $oldTwoWayKey = $oldRelationship->getTwoWayKey();
         $altering = ($newKey !== null && $newKey !== $id)
             || ($newTwoWayKey !== null && $newTwoWayKey !== $oldTwoWayKey);
 
         // Validate new keys don't already exist
-        /** @var array<Attribute> $relatedAttrs */
-        $relatedAttrs = $relatedCollection->getAttribute('attributes', []);
+        /** @var array<Attribute> $relatedCollectionAttributes */
+        $relatedCollectionAttributes = $relatedCollection->getAttribute('attributes', []);
         if (
             $newTwoWayKey !== null
-            && \in_array($newTwoWayKey, \array_map(fn (Attribute $attribute) => $attribute->key, $relatedAttrs), true)
+            && \in_array($newTwoWayKey, \array_map(fn (Attribute $attribute) => $attribute->getKey(), $relatedCollectionAttributes), true)
         ) {
             throw new DuplicateException('Related attribute already exists');
         }
 
         $actualNewKey = $newKey ?? $id;
         $actualNewTwoWayKey = $newTwoWayKey ?? $oldTwoWayKey;
-        $actualTwoWay = $twoWay ?? $oldRel->twoWay;
-        $actualOnDelete = $onDelete ?? $oldRel->onDelete;
+        $actualTwoWay = $twoWay ?? $oldRelationship->isTwoWay();
+        $actualOnDelete = $onDelete ?? $oldRelationship->getOnDelete();
 
         $adapterUpdated = false;
         if ($altering) {
@@ -480,12 +480,12 @@ trait Relationships
                 $current = new Relationship(
                     collection: $collection->getId(),
                     relatedCollection: $relatedCollection->getId(),
-                    type: $oldRel->type,
+                    type: $oldRelationship->getType(),
                     twoWay: $actualTwoWay,
                     key: $id,
                     twoWayKey: $oldTwoWayKey,
                     onDelete: $actualOnDelete,
-                    side: $oldRel->side,
+                    side: $oldRelationship->getSide(),
                 );
                 $adapterUpdated = $this->adapter->updateRelationship(
                     $current,
@@ -524,16 +524,16 @@ trait Relationships
         $updatedAttributes = [];
 
         try {
-            $updatedAttributes[] = [$collection->getId(), $this->updateAttributeMeta($collection->getId(), $id, function ($attribute) use ($actualNewKey, $actualNewTwoWayKey, $actualTwoWay, $actualOnDelete, $relatedCollection, $oldRel) {
+            $updatedAttributes[] = [$collection->getId(), $this->updateAttributeMeta($collection->getId(), $id, function ($attribute) use ($actualNewKey, $actualNewTwoWayKey, $actualTwoWay, $actualOnDelete, $relatedCollection, $oldRelationship) {
                 $attribute->setAttribute(Document::ID, $actualNewKey);
                 $attribute->setAttribute('key', $actualNewKey);
                 $attribute->setAttribute('options', [
                     'relatedCollection' => $relatedCollection->getId(),
-                    'relationType' => $oldRel->type->value,
+                    'relationType' => $oldRelationship->getType()->value,
                     'twoWay' => $actualTwoWay,
                     'twoWayKey' => $actualNewTwoWayKey,
                     'onDelete' => $actualOnDelete->value,
-                    'side' => $oldRel->side->value,
+                    'side' => $oldRelationship->getSide()->value,
                 ]);
             }, triggerEvent: false)];
 
@@ -549,8 +549,8 @@ trait Relationships
                 $twoWayAttribute->setAttribute('options', $options);
             }, triggerEvent: false)];
 
-            if ($oldRel->type === RelationType::ManyToMany) {
-                $junction = $this->getJunctionCollection($collection, $relatedCollection, $oldRel->side);
+            if ($oldRelationship->getType() === RelationType::ManyToMany) {
+                $junction = $this->getJunctionCollection($collection, $relatedCollection, $oldRelationship->getSide());
 
                 $updatedAttributes[] = [$junction, $this->updateAttributeMeta($junction, $id, function ($junctionAttribute) use ($actualNewKey) {
                     $junctionAttribute->setAttribute(Document::ID, $actualNewKey);
@@ -565,26 +565,26 @@ trait Relationships
             }
         } catch (Throwable $e) {
             $restores = [
-                fn () => $this->updateAttributeMeta($collection->getId(), $actualNewKey, function ($attribute) use ($id, $oldRel) {
+                fn () => $this->updateAttributeMeta($collection->getId(), $actualNewKey, function ($attribute) use ($id, $oldRelationship) {
                     $attribute->setAttribute(Document::ID, $id);
                     $attribute->setAttribute('key', $id);
-                    $attribute->setAttribute('options', $oldRel->toDocument()->getArrayCopy());
+                    $attribute->setAttribute('options', $oldRelationship->toDocument()->getArrayCopy());
                 }, triggerEvent: false),
-                fn () => $this->updateAttributeMeta($relatedCollection->getId(), $actualNewTwoWayKey, function (Document $twoWayAttribute) use ($oldTwoWayKey, $id, $oldRel) {
+                fn () => $this->updateAttributeMeta($relatedCollection->getId(), $actualNewTwoWayKey, function (Document $twoWayAttribute) use ($oldTwoWayKey, $id, $oldRelationship) {
                     /** @var array<string, mixed> $options */
                     $options = $twoWayAttribute->getAttribute('options', []);
                     $options['twoWayKey'] = $id;
-                    $options['twoWay'] = $oldRel->twoWay;
-                    $options['onDelete'] = $oldRel->onDelete->value;
+                    $options['twoWay'] = $oldRelationship->isTwoWay();
+                    $options['onDelete'] = $oldRelationship->getOnDelete()->value;
                     $twoWayAttribute->setAttribute(Document::ID, $oldTwoWayKey);
                     $twoWayAttribute->setAttribute('key', $oldTwoWayKey);
                     $twoWayAttribute->setAttribute('options', $options);
                 }, triggerEvent: false),
-                fn () => $this->updateAttributeMeta($this->getJunctionCollection($collection, $relatedCollection, $oldRel->side), $actualNewKey, function ($junctionAttribute) use ($id) {
+                fn () => $this->updateAttributeMeta($this->getJunctionCollection($collection, $relatedCollection, $oldRelationship->getSide()), $actualNewKey, function ($junctionAttribute) use ($id) {
                     $junctionAttribute->setAttribute(Document::ID, $id);
                     $junctionAttribute->setAttribute('key', $id);
                 }, triggerEvent: false),
-                fn () => $this->updateAttributeMeta($this->getJunctionCollection($collection, $relatedCollection, $oldRel->side), $actualNewTwoWayKey, function ($junctionAttribute) use ($oldTwoWayKey) {
+                fn () => $this->updateAttributeMeta($this->getJunctionCollection($collection, $relatedCollection, $oldRelationship->getSide()), $actualNewTwoWayKey, function ($junctionAttribute) use ($oldTwoWayKey) {
                     $junctionAttribute->setAttribute(Document::ID, $oldTwoWayKey);
                     $junctionAttribute->setAttribute('key', $oldTwoWayKey);
                 }, triggerEvent: false),
@@ -602,12 +602,12 @@ trait Relationships
                     $renamed = new Relationship(
                         collection: $collection->getId(),
                         relatedCollection: $relatedCollection->getId(),
-                        type: $oldRel->type,
+                        type: $oldRelationship->getType(),
                         twoWay: $actualTwoWay,
                         key: $actualNewKey,
                         twoWayKey: $actualNewTwoWayKey,
                         onDelete: $actualOnDelete,
-                        side: $oldRel->side,
+                        side: $oldRelationship->getSide(),
                     );
                     $this->adapter->updateRelationship(
                         $renamed,
@@ -638,7 +638,7 @@ trait Relationships
         $indexRenamesCompleted = [];
 
         try {
-            switch ($oldRel->type) {
+            switch ($oldRelationship->getType()) {
                 case RelationType::OneToOne:
                     if ($id !== $actualNewKey) {
                         $renameIndex($collection->getId(), $id, $actualNewKey);
@@ -650,7 +650,7 @@ trait Relationships
                     }
                     break;
                 case RelationType::OneToMany:
-                    if ($oldRel->side === RelationSide::Parent) {
+                    if ($oldRelationship->getSide() === RelationSide::Parent) {
                         if ($oldTwoWayKey !== $actualNewTwoWayKey) {
                             $renameIndex($relatedCollection->getId(), $oldTwoWayKey, $actualNewTwoWayKey);
                             $indexRenamesCompleted[] = [$relatedCollection->getId(), $actualNewTwoWayKey, $oldTwoWayKey];
@@ -663,7 +663,7 @@ trait Relationships
                     }
                     break;
                 case RelationType::ManyToOne:
-                    if ($oldRel->side === RelationSide::Parent) {
+                    if ($oldRelationship->getSide() === RelationSide::Parent) {
                         if ($id !== $actualNewKey) {
                             $renameIndex($collection->getId(), $id, $actualNewKey);
                             $indexRenamesCompleted[] = [$collection->getId(), $actualNewKey, $id];
@@ -676,7 +676,7 @@ trait Relationships
                     }
                     break;
                 case RelationType::ManyToMany:
-                    $junction = $this->getJunctionCollection($collection, $relatedCollection, $oldRel->side);
+                    $junction = $this->getJunctionCollection($collection, $relatedCollection, $oldRelationship->getSide());
 
                     if ($id !== $actualNewKey) {
                         $renameIndex($junction, $id, $actualNewKey);
@@ -696,12 +696,12 @@ trait Relationships
                     $renamed = new Relationship(
                         collection: $collection->getId(),
                         relatedCollection: $relatedCollection->getId(),
-                        type: $oldRel->type,
-                        twoWay: $oldRel->twoWay,
+                        type: $oldRelationship->getType(),
+                        twoWay: $oldRelationship->isTwoWay(),
                         key: $actualNewKey,
                         twoWayKey: $actualNewTwoWayKey,
-                        onDelete: $oldRel->onDelete,
-                        side: $oldRel->side,
+                        onDelete: $oldRelationship->getOnDelete(),
+                        side: $oldRelationship->getSide(),
                     );
                     $this->adapter->updateRelationship(
                         $renamed,
@@ -722,22 +722,22 @@ trait Relationships
             }
 
             try {
-                $this->updateAttributeMeta($collection->getId(), $actualNewKey, function ($attribute) use ($id, $oldRel) {
+                $this->updateAttributeMeta($collection->getId(), $actualNewKey, function ($attribute) use ($id, $oldRelationship) {
                     $attribute->setAttribute(Document::ID, $id);
                     $attribute->setAttribute('key', $id);
-                    $attribute->setAttribute('options', $oldRel->toDocument()->getArrayCopy());
+                    $attribute->setAttribute('options', $oldRelationship->toDocument()->getArrayCopy());
                 }, triggerEvent: false);
             } catch (Throwable) {
                 // Best effort
             }
 
             try {
-                $this->updateAttributeMeta($relatedCollection->getId(), $actualNewTwoWayKey, function (Document $twoWayAttribute) use ($oldTwoWayKey, $id, $oldRel) {
+                $this->updateAttributeMeta($relatedCollection->getId(), $actualNewTwoWayKey, function (Document $twoWayAttribute) use ($oldTwoWayKey, $id, $oldRelationship) {
                     /** @var array<string, mixed> $options */
                     $options = $twoWayAttribute->getAttribute('options', []);
                     $options['twoWayKey'] = $id;
-                    $options['twoWay'] = $oldRel->twoWay;
-                    $options['onDelete'] = $oldRel->onDelete->value;
+                    $options['twoWay'] = $oldRelationship->isTwoWay();
+                    $options['onDelete'] = $oldRelationship->getOnDelete()->value;
                     $twoWayAttribute->setAttribute(Document::ID, $oldTwoWayKey);
                     $twoWayAttribute->setAttribute('key', $oldTwoWayKey);
                     $twoWayAttribute->setAttribute('options', $options);
@@ -746,8 +746,8 @@ trait Relationships
                 // Best effort
             }
 
-            if ($oldRel->type === RelationType::ManyToMany) {
-                $junctionId = $this->getJunctionCollection($collection, $relatedCollection, $oldRel->side);
+            if ($oldRelationship->getType() === RelationType::ManyToMany) {
+                $junctionId = $this->getJunctionCollection($collection, $relatedCollection, $oldRelationship->getSide());
                 try {
                     $this->updateAttributeMeta($junctionId, $actualNewKey, function ($attr) use ($id) {
                         $attr->setAttribute(Document::ID, $id);
@@ -806,7 +806,7 @@ trait Relationships
         $relationship = null;
 
         foreach ($attributes as $name => $attribute) {
-            if ($attribute->key === $id) {
+            if ($attribute->getKey() === $id) {
                 $relationship = $attribute;
                 unset($attributes[$name]);
                 break;
@@ -819,14 +819,14 @@ trait Relationships
 
         $collection->setAttribute('attributes', \array_values($attributes));
 
-        $rel = Relationship::fromArray(['collection' => $collection->getId()] + $relationship->getArrayCopy());
+        $definition = Relationship::fromArray(['collection' => $collection->getId()] + $relationship->getArrayCopy());
 
-        $relatedCollection = $this->silent(fn () => $this->getCollection($rel->relatedCollection));
+        $relatedCollection = $this->silent(fn () => $this->getCollection($definition->getRelatedCollection()));
         /** @var array<int|string, Attribute> $relatedAttributes */
         $relatedAttributes = $relatedCollection->getAttribute('attributes', []);
 
         foreach ($relatedAttributes as $name => $attribute) {
-            if ($attribute->key === $rel->twoWayKey) {
+            if ($attribute->getKey() === $definition->getTwoWayKey()) {
                 unset($relatedAttributes[$name]);
                 break;
             }
@@ -842,52 +842,52 @@ trait Relationships
         $deletedIndexes = [];
         $deletedJunction = null;
 
-        $this->silent(function () use ($collection, $relatedCollection, $rel, $id, &$deletedIndexes, &$deletedJunction) {
+        $this->silent(function () use ($collection, $relatedCollection, $definition, $id, &$deletedIndexes, &$deletedJunction) {
             $indexKey = '_index_'.$id;
-            $twoWayIndexKey = '_index_'.$rel->twoWayKey;
+            $twoWayIndexKey = '_index_'.$definition->getTwoWayKey();
 
-            switch ($rel->type) {
+            switch ($definition->getType()) {
                 case RelationType::OneToOne:
-                    if ($rel->side === RelationSide::Parent) {
+                    if ($definition->getSide() === RelationSide::Parent) {
                         $this->deleteIndex($collection->getId(), $indexKey);
                         $deletedIndexes[] = ['collection' => $collection->getId(), 'key' => $indexKey, 'type' => IndexType::Unique, 'attributes' => [$id]];
-                        if ($rel->twoWay) {
+                        if ($definition->isTwoWay()) {
                             $this->deleteIndex($relatedCollection->getId(), $twoWayIndexKey);
-                            $deletedIndexes[] = ['collection' => $relatedCollection->getId(), 'key' => $twoWayIndexKey, 'type' => IndexType::Unique, 'attributes' => [$rel->twoWayKey]];
+                            $deletedIndexes[] = ['collection' => $relatedCollection->getId(), 'key' => $twoWayIndexKey, 'type' => IndexType::Unique, 'attributes' => [$definition->getTwoWayKey()]];
                         }
                     }
-                    if ($rel->side === RelationSide::Child) {
+                    if ($definition->getSide() === RelationSide::Child) {
                         $this->deleteIndex($relatedCollection->getId(), $twoWayIndexKey);
-                        $deletedIndexes[] = ['collection' => $relatedCollection->getId(), 'key' => $twoWayIndexKey, 'type' => IndexType::Unique, 'attributes' => [$rel->twoWayKey]];
-                        if ($rel->twoWay) {
+                        $deletedIndexes[] = ['collection' => $relatedCollection->getId(), 'key' => $twoWayIndexKey, 'type' => IndexType::Unique, 'attributes' => [$definition->getTwoWayKey()]];
+                        if ($definition->isTwoWay()) {
                             $this->deleteIndex($collection->getId(), $indexKey);
                             $deletedIndexes[] = ['collection' => $collection->getId(), 'key' => $indexKey, 'type' => IndexType::Unique, 'attributes' => [$id]];
                         }
                     }
                     break;
                 case RelationType::OneToMany:
-                    if ($rel->side === RelationSide::Parent) {
+                    if ($definition->getSide() === RelationSide::Parent) {
                         $this->deleteIndex($relatedCollection->getId(), $twoWayIndexKey);
-                        $deletedIndexes[] = ['collection' => $relatedCollection->getId(), 'key' => $twoWayIndexKey, 'type' => IndexType::Key, 'attributes' => [$rel->twoWayKey]];
+                        $deletedIndexes[] = ['collection' => $relatedCollection->getId(), 'key' => $twoWayIndexKey, 'type' => IndexType::Key, 'attributes' => [$definition->getTwoWayKey()]];
                     } else {
                         $this->deleteIndex($collection->getId(), $indexKey);
                         $deletedIndexes[] = ['collection' => $collection->getId(), 'key' => $indexKey, 'type' => IndexType::Key, 'attributes' => [$id]];
                     }
                     break;
                 case RelationType::ManyToOne:
-                    if ($rel->side === RelationSide::Parent) {
+                    if ($definition->getSide() === RelationSide::Parent) {
                         $this->deleteIndex($collection->getId(), $indexKey);
                         $deletedIndexes[] = ['collection' => $collection->getId(), 'key' => $indexKey, 'type' => IndexType::Key, 'attributes' => [$id]];
                     } else {
                         $this->deleteIndex($relatedCollection->getId(), $twoWayIndexKey);
-                        $deletedIndexes[] = ['collection' => $relatedCollection->getId(), 'key' => $twoWayIndexKey, 'type' => IndexType::Key, 'attributes' => [$rel->twoWayKey]];
+                        $deletedIndexes[] = ['collection' => $relatedCollection->getId(), 'key' => $twoWayIndexKey, 'type' => IndexType::Key, 'attributes' => [$definition->getTwoWayKey()]];
                     }
                     break;
                 case RelationType::ManyToMany:
                     $junction = $this->getJunctionCollection(
                         $collection,
                         $relatedCollection,
-                        $rel->side
+                        $definition->getSide()
                     );
 
                     $deletedJunction = $this->silent(fn () => $this->getDocument(self::METADATA, $junction));
@@ -906,11 +906,11 @@ trait Relationships
         $dropped = new Relationship(
             collection: $collection->getId(),
             relatedCollection: $relatedCollection->getId(),
-            type: $rel->type,
-            twoWay: $rel->twoWay,
+            type: $definition->getType(),
+            twoWay: $definition->isTwoWay(),
             key: $id,
-            twoWayKey: $rel->twoWayKey,
-            side: $rel->side,
+            twoWayKey: $definition->getTwoWayKey(),
+            side: $definition->getSide(),
         );
 
         $shouldRollback = false;
@@ -940,11 +940,11 @@ trait Relationships
                     $restored = new Relationship(
                         collection: $collection->getId(),
                         relatedCollection: $relatedCollection->getId(),
-                        type: $rel->type,
-                        twoWay: $rel->twoWay,
+                        type: $definition->getType(),
+                        twoWay: $definition->isTwoWay(),
                         key: $id,
-                        twoWayKey: $rel->twoWayKey,
-                        onDelete: $rel->onDelete,
+                        twoWayKey: $definition->getTwoWayKey(),
+                        onDelete: $definition->getOnDelete(),
                         side: RelationSide::Parent,
                     );
                     $this->adapter->createRelationship($restored);

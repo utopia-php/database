@@ -216,6 +216,14 @@ class Attribute extends Document
         return $filters;
     }
 
+    /**
+     * @param  array<string>  $filters
+     */
+    public function setFilters(array $filters): static
+    {
+        return $this->setAttribute('filters', $filters);
+    }
+
     public function getStatus(): ?string
     {
         $status = $this->getAttribute('status');

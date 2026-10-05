@@ -48,21 +48,20 @@ trait Collections
      */
     public function createCollection(Collection $collection): Collection
     {
-        $id = $collection->id;
-        $name = $collection->name !== '' ? $collection->name : $collection->id;
-        $attributes = \array_map(static fn (Attribute $attribute): Attribute => clone $attribute, $collection->attributes);
-        $indexes = \array_map(static fn (Index $index): Index => clone $index, $collection->indexes);
-        $permissions = $collection->permissions ?? [Permission::create(Role::any())];
-        $documentSecurity = $collection->documentSecurity;
+        $id = $collection->getId();
+        $name = $collection->getName() !== '' ? $collection->getName() : $collection->getId();
+        $attributes = \array_map(static fn (Attribute $attribute): Attribute => clone $attribute, $collection->getDeclaredAttributes());
+        $indexes = \array_map(static fn (Index $index): Index => clone $index, $collection->getIndexes());
+        $permissions = $collection->getDeclaredPermissions() ?? [Permission::create(Role::any())];
+        $documentSecurity = $collection->hasDocumentSecurity();
         $metadata = $collection->metadata;
 
         foreach ($attributes as $attribute) {
-            if (in_array($attribute->type, Database::ATTRIBUTE_FILTER_COLUMN_TYPES, true)) {
-                $existingFilters = $attribute->filters;
-                $attribute->filters = array_values(
-                    array_unique(array_merge($existingFilters, [$attribute->type->value]))
-                );
-                $attribute->setAttribute('filters', $attribute->filters);
+            if (in_array($attribute->getType(), Database::ATTRIBUTE_FILTER_COLUMN_TYPES, true)) {
+                $existingFilters = $attribute->getFilters();
+                $attribute->setFilters(array_values(
+                    array_unique(array_merge($existingFilters, [$attribute->getType()->value]))
+                ));
             }
         }
 
@@ -71,7 +70,7 @@ trait Collections
             $typeValidator->checkType($attribute);
         }
 
-        if ($this->validate) {
+        if ($this->validation()->get()) {
             $validator = new Permissions();
             if (! $validator->isValid($permissions)) {
                 throw new DatabaseException($validator->getDescription());
@@ -85,8 +84,8 @@ trait Collections
         }
 
         // Enforce single TTL index per collection
-        if ($this->validate && $this->adapter->supports(Capability::TTLIndexes)) {
-            $ttlIndexes = array_filter($indexes, fn (Index $idx) => $idx->type === IndexType::Ttl);
+        if ($this->validation()->get() && $this->adapter->supports(Capability::TTLIndexes)) {
+            $ttlIndexes = array_filter($indexes, fn (Index $index) => $index->getType() === IndexType::Ttl);
             if (count($ttlIndexes) > 1) {
                 throw new IndexException('There can be only one TTL index in a collection');
             }
@@ -96,22 +95,22 @@ trait Collections
          * Fix metadata index length & orders
          */
         foreach ($indexes as $key => $index) {
-            $lengths = $index->lengths;
-            $orders = $index->orders;
+            $lengths = $index->getLengths();
+            $orders = $index->getOrders();
 
-            foreach ($index->attributes as $i => $attr) {
+            foreach ($index->getIndexedAttributes() as $i => $attr) {
                 foreach ($attributes as $collectionAttribute) {
-                    if ($collectionAttribute->key === $attr) {
+                    if ($collectionAttribute->getKey() === $attr) {
                         /**
                          * mysql does not save length in collection when length = attributes size
                          */
-                        if ($collectionAttribute->type === ColumnType::String) {
-                            if (! empty($lengths[$i]) && $lengths[$i] === $collectionAttribute->size && $this->adapter->getMaxIndexLength() > 0) {
+                        if ($collectionAttribute->getType() === ColumnType::String) {
+                            if (! empty($lengths[$i]) && $lengths[$i] === $collectionAttribute->getSize() && $this->adapter->getMaxIndexLength() > 0) {
                                 $lengths[$i] = null;
                             }
                         }
 
-                        $isArray = $collectionAttribute->array;
+                        $isArray = $collectionAttribute->isArray();
                         if ($isArray) {
                             if ($this->adapter->getMaxIndexLength() > 0) {
                                 $lengths[$i] = self::MAX_ARRAY_INDEX_LENGTH;
@@ -123,8 +122,8 @@ trait Collections
                 }
             }
 
-            $index->lengths = $lengths;
-            $index->orders = $orders;
+            $index->setLengths($lengths);
+            $index->setOrders($orders);
             $indexes[$key] = $index;
         }
 
@@ -137,7 +136,7 @@ trait Collections
             'documentSecurity' => $documentSecurity,
         ], $metadata));
 
-        if ($this->validate) {
+        if ($this->validation()->get()) {
             $validator = new IndexValidator(
                 $attributes,
                 [],
@@ -267,7 +266,7 @@ trait Collections
      */
     public function updateCollection(string $id, array $permissions, bool $documentSecurity): Document
     {
-        if ($this->validate) {
+        if ($this->validation()->get()) {
             $validator = new Permissions();
             if (! $validator->isValid($permissions)) {
                 throw new DatabaseException($validator->getDescription());
@@ -510,11 +509,11 @@ trait Collections
         $allAttributes = $collection->getAttribute('attributes', []);
         $relationships = \array_filter(
             $allAttributes,
-            fn (Attribute $attribute) => $attribute->type === ColumnType::Relationship
+            fn (Attribute $attribute) => $attribute->getType() === ColumnType::Relationship
         );
 
         foreach ($relationships as $relationship) {
-            $this->deleteRelationship($collection->getId(), $relationship->key);
+            $this->deleteRelationship($collection->getId(), $relationship->getKey());
         }
 
         // Re-fetch collection to get current state after relationship deletions

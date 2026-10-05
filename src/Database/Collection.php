@@ -120,21 +120,39 @@ class Collection extends Document
             case 'id':
                 return $this->getId();
             case 'name':
-                /** @var string $value */
-                $value = $this->getAttribute('name', $this->getId());
-
-                return $value;
+                return $this->getName();
             case 'attributes':
                 return $this->getDeclaredAttributes();
             case 'indexes':
                 return $this->getIndexes();
             case 'permissions':
-                return $this->offsetExists(self::PERMISSIONS) ? $this->getPermissions() : null;
+                return $this->getDeclaredPermissions();
             case 'documentSecurity':
-                return (bool) $this->getAttribute('documentSecurity', true);
+                return $this->hasDocumentSecurity();
             default:
                 return $this->getAttribute($name);
         }
+    }
+
+    public function getName(): string
+    {
+        /** @var string $name */
+        $name = $this->getAttribute('name', $this->getId());
+
+        return $name;
+    }
+
+    /**
+     * @return array<string>|null
+     */
+    public function getDeclaredPermissions(): ?array
+    {
+        return $this->offsetExists(self::PERMISSIONS) ? $this->getPermissions() : null;
+    }
+
+    public function hasDocumentSecurity(): bool
+    {
+        return (bool) $this->getAttribute('documentSecurity', true);
     }
 
     /**

@@ -31,6 +31,7 @@ use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Exception\Type as TypeException;
+use Utopia\Database\Exception\Unconfirmed as UnconfirmedException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Hook\Lifecycle;
@@ -108,7 +109,7 @@ class Database
     /**
      * Failures that fail the same way on every attempt, so withRetries() rethrows them at once: every typed failure
      * of this library except Transaction (and Contention), which another attempt can clear. Mismatch and Unique are
-     * Duplicates.
+     * Duplicates. Unconfirmed is listed because another attempt could write twice.
      *
      * @var list<class-string<Throwable>>
      */
@@ -130,6 +131,7 @@ class Database
         TimeoutException::class,
         TruncateException::class,
         TypeException::class,
+        UnconfirmedException::class,
     ];
 
     public const INSERT_BATCH_SIZE = 1_000;

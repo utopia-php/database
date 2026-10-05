@@ -296,10 +296,13 @@ have to make, with the 7.x and 8.0 forms side by side.
   on the first attempt or on a commit retry, runs the callback again: 7.x reported a first commit the server had
   aborted as a success, losing its writes. On SQL a connection lost during `COMMIT` still runs the callback again, so
   that work is at-least-once. See [Errors](UPGRADE.md#errors).
-- `createCollection()`, `createAttribute()`, `createAttributes()`, `createIndex()` and their update, rename and
-  delete siblings keep the table, column or index when only the cache invalidation after their committed definition
-  failed, and do not repeat the write. `createRelationship()` keeps a committed relationship and still creates its
-  indexes in that case; when its indexes fail and the definitions cannot be removed, the columns are kept with them.
+- `createCollection()`, `createAttribute()`, `createAttributes()` and `createIndex()` keep the table, column or
+  index, and `updateAttribute()`, `renameAttribute()`, `renameIndex()`, `deleteAttribute()` and `deleteIndex()` keep
+  their change, when only the cache invalidation after their committed definition failed or its commit is
+  unconfirmed, and do not repeat the write. `deleteCollection()` and `deleteRelationship()` recreate the dropped
+  table or columns empty in that case and throw the failure wrapped. `createRelationship()` keeps a committed
+  relationship and still creates its indexes in that case; when its indexes fail and the definitions cannot be
+  removed, the columns are kept with them.
 - `createCollection()` validates attribute types up front, like `createAttribute()`, and throws
   `Unknown attribute type: <type>. Must be one of <types>` for an unknown one. `updateAttribute()` updates `id`
   attributes and refuses relationship attributes (`Cannot update relationship as an attribute`).

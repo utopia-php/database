@@ -683,10 +683,20 @@ coroutine that opened it and the coroutines it starts; see [Pools and profiling]
   `| Cleanup error:`, and its `getPrevious()` is always the persistence error. In 7.x the message labelled the two the
   other way round, and some calls reported only the rollback's error.
 - **Failures after a schema change committed.** When a definition is stored and only the cache invalidation or
-  events after it fail, or its commit ends in `Exception\Unconfirmed`, `createCollection()`, `createAttribute()`,
-  `createAttributes()`, `createIndex()` and their update, rename and delete siblings rethrow that failure unchanged
-  and keep the table, column or index. `createRelationship()` also completes the relationship's indexes before
-  rethrowing it. Such a failure is not retried.
+  events after it fail, or its commit ends in `Exception\Unconfirmed`, the schema call rethrows that failure
+  unchanged, does not retry it and does not undo the physical change: `createCollection()`, `createAttribute()`,
+  `createAttributes()` and `createIndex()` keep the table, column or index, `updateAttribute()`,
+  `renameAttribute()` and `renameIndex()` keep the change, and `deleteAttribute()` and `deleteIndex()` leave the
+  column or index dropped. `createRelationship()` also completes the relationship's indexes before rethrowing it.
+- **Deletes whose definition may be stored.** `deleteCollection()` and `deleteRelationship()` drop the table or
+  columns before they remove the definition. When that removal fails, also after its commit or with an
+  `Exception\Unconfirmed` commit, they recreate the table or columns empty and throw a `Utopia\Database\Exception`
+  whose `getPrevious()` is the failure. If the removal was stored, this leaves an empty table or column without a
+  definition: `createRelationship()` with the same key reuses the columns, and on MongoDB `createCollection()` with
+  the same id reuses the collection as it is, while on the SQL adapters it throws `Exception\Duplicate` unless
+  tables are shared. The library does not run `deleteCollection()` again, and the wrapper no longer has the
+  `Unconfirmed` class, so a caller that retries on it runs the delete again: harmless when the removal was not
+  stored, and `Exception\NotFound` when it was.
 - **Engine errors mapped to library exceptions.**
 
   | Engine condition | Exception |

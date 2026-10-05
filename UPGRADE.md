@@ -603,6 +603,12 @@ it runs under, so a write to a state none of them covers follows the 7.x rule: a
 `withRoles()` turns authorization off for every coroutine. A cut-off coroutine cannot tell which scope it ran under,
 so it keeps the write local: the same `disable()` there applies only to it and the coroutines it starts.
 
+A cut-off coroutine must not change and then restore state with a pair of setters, such as `disable()` then
+`enable()`, or `setTenant($tenant)` then `setTenant($original)`. Each write is shared or local depending on whether a
+scope over that state is open on the handle at that moment, so the restore can stay local while the change stays
+shared. Use `skip()`, `withStatus()`, `withRoles()` or `withTenant()`, or `withSnapshot()`, which always restore the
+value when they end.
+
 While a cut-off coroutine holding such a local write is alive, reads of that state take the slower scoped path in
 every coroutine sharing the handle, as they do while any scope over it is open, so a long-lived coroutine should open
 its own scope with `withSnapshot()` around the work that needs it rather than call setters.
@@ -662,14 +668,14 @@ coroutine that opened it and the coroutines it starts; see [Pools and profiling]
   a network error, a primary change or shutdown, `MaxTimeMSExpired` (50) or `ExceededTimeLimit` (262) during the
   commit, or an error labelled `UnknownTransactionCommitResult`, so codes 50 and 262 at commit no longer surface as
   `Exception\Timeout`. After a socket timeout or send failure the client drops the connection with its sessions, so
-  the commit cannot be sent again and `Unconfirmed` is thrown at once: only a commit that failed with a primary
-  change, shutdown, time limit or label is sent again, and a retry the client could not send is tried once more. If
-  the commit still cannot be confirmed, `withTransaction()` throws `Utopia\Database\Exception\Unconfirmed`, whose
-  `getPrevious()` is the first commit error, and does not run the callback again: treat the work as possibly
-  committed and re-read before acting on it. 7.x ran the whole callback again, which could store its writes twice. A
-  schema call whose definition write ends in `Unconfirmed` rethrows it unchanged and keeps the table, column or
-  index, as after a failure once the definition is stored (see below). On a sharded cluster (`mongos`) the adapter
-  runs without transactions, as on a standalone server.
+  the commit cannot be sent again and `Unconfirmed` is thrown after a 50 ms pause, when the first retry finds the
+  session gone: only a commit that failed with a primary change, shutdown, time limit or label is sent again, and a
+  retry the client could not send is tried once more. If the commit still cannot be confirmed, `withTransaction()`
+  throws `Utopia\Database\Exception\Unconfirmed`, whose `getPrevious()` is the first commit error, and does not run
+  the callback again: treat the work as possibly committed and re-read before acting on it. 7.x ran the whole callback
+  again, which could store its writes twice. A schema call whose definition write ends in `Unconfirmed` rethrows it
+  unchanged and keeps the table, column or index, as after a failure once the definition is stored (see below). On a
+  sharded cluster (`mongos`) the adapter runs without transactions, as on a standalone server.
 - **Commits the server reports aborted.** On MongoDB, a commit that the server reports aborted (`NoSuchTransaction`
   (251) or `WriteConflict` (112)) stored nothing, so `withTransaction()` runs the callback again, within its usual 2
   retries, whether it was the first commit or a retry; when the retries run out it throws `Utopia\Database\Exception`

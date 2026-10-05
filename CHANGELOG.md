@@ -250,7 +250,8 @@ have to make, with the 7.x and 8.0 forms side by side.
   runs under `withSnapshot()`. A coroutine cut off from a scope, because a coroutine between it and the scope's
   owner has returned, reads the shared values or a scope opened outside every coroutine, and while a scope over the
   same state is open on the handle its writes stay with it and the coroutines it starts; for `Authorization`,
-  `skip()`, `withStatus()` and `withRoles()` count together. See [Coroutines](UPGRADE.md#coroutines).
+  `skip()`, `withStatus()` and `withRoles()` count together. Such a coroutine changes and restores state with those
+  scopes or `withSnapshot()`, not with a pair of setters. See [Coroutines](UPGRADE.md#coroutines).
 - Relationship population reads its chunks of related ids concurrently only on `Adapter\Pool`, inside a coroutine
   and outside a transaction; elsewhere it reads them one after another. Related documents are merged in chunk order.
 - Linking an existing many-to-many related document needs update permission on it, as one-to-one, one-to-many and

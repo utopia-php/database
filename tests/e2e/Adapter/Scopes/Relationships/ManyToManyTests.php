@@ -2485,4 +2485,98 @@ trait ManyToManyTests
             $database->deleteCollection($tags);
         }
     }
+
+    public function testRenamingAOneWayManyToManyTwoWayKeyKeepsRelations(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $books = ID::unique();
+        $authors = ID::unique();
+        $this->createManyToManyRenameCollections($database, $books, $authors);
+        $database->createRelationship(Relationship::manyToMany(collection: $books, relatedCollection: $authors, key: 'authors', twoWayKey: 'books'));
+
+        try {
+            $database->createDocument($books, new Document(['$id' => 'dune', 'authors' => [new Document(['$id' => 'herbert'])]]));
+
+            $this->assertTrue($database->updateRelationship($books, 'authors', newTwoWayKey: 'works'));
+
+            $this->assertSame(['herbert'], $this->relatedDocumentIds($database, $books, 'dune', 'authors'));
+
+            $database->createDocument($books, new Document(['$id' => 'emma', 'authors' => [new Document(['$id' => 'austen']), 'herbert']]));
+
+            $this->assertSame(['austen', 'herbert'], $this->relatedDocumentIds($database, $books, 'emma', 'authors'));
+            $this->assertSame(['herbert'], $this->relatedDocumentIds($database, $books, 'dune', 'authors'));
+
+            $this->assertTrue($database->updateRelationship($books, 'authors', newKey: 'writers'));
+
+            $this->assertSame(['austen', 'herbert'], $this->relatedDocumentIds($database, $books, 'emma', 'writers'));
+        } finally {
+            $database->deleteCollection($books);
+            $database->deleteCollection($authors);
+        }
+    }
+
+    public function testRenamingATwoWayManyToManyKeyFromTheChildSideKeepsRelations(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $books = ID::unique();
+        $authors = ID::unique();
+        $this->createManyToManyRenameCollections($database, $books, $authors);
+        $database->createRelationship(Relationship::manyToMany(collection: $books, relatedCollection: $authors, twoWay: true, key: 'authors', twoWayKey: 'books'));
+
+        try {
+            $database->createDocument($books, new Document(['$id' => 'dune', 'authors' => [new Document(['$id' => 'herbert'])]]));
+
+            $this->assertTrue($database->updateRelationship($authors, 'books', newKey: 'works'));
+
+            $this->assertSame(['dune'], $this->relatedDocumentIds($database, $authors, 'herbert', 'works'));
+            $this->assertSame(['herbert'], $this->relatedDocumentIds($database, $books, 'dune', 'authors'));
+
+            $database->createDocument($books, new Document(['$id' => 'emma', 'authors' => ['herbert']]));
+
+            $this->assertSame(['dune', 'emma'], $this->relatedDocumentIds($database, $authors, 'herbert', 'works'));
+        } finally {
+            $database->deleteCollection($books);
+            $database->deleteCollection($authors);
+        }
+    }
+
+    private function createManyToManyRenameCollections(Database $database, string $books, string $authors): void
+    {
+        $permissions = [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+
+        $database->createCollection(new Collection(id: $books, permissions: $permissions, documentSecurity: false));
+        $database->createCollection(new Collection(id: $authors, permissions: $permissions, documentSecurity: false));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function relatedDocumentIds(Database $database, string $collection, string $id, string $key): array
+    {
+        $ids = \array_map(fn (Document $document) => $document->getId(), $database->getDocument($collection, $id)->getDocuments($key));
+        \sort($ids);
+
+        return $ids;
+    }
 }

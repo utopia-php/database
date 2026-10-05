@@ -3196,12 +3196,14 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $collection = $this->getDocument($metadataCollection, $collection);
                 $relatedCollection = $this->getDocument($metadataCollection, $relatedCollection);
 
-                $junctionName = '_' . $collection->getSequence() . '_' . $relatedCollection->getSequence();
+                $junctionName = $side === RelationSide::Parent
+                    ? '_' . $collection->getSequence() . '_' . $relatedCollection->getSequence()
+                    : '_' . $relatedCollection->getSequence() . '_' . $collection->getSequence();
 
-                if ($newKey !== null) {
+                if ($newKey !== null && $key !== $newKey) {
                     $sql = $renameColumn($junctionName, $key, $newKey) . ';';
                 }
-                if ($twoWay && $newTwoWayKey !== null) {
+                if ($newTwoWayKey !== null && $twoWayKey !== $newTwoWayKey) {
                     $sql .= $renameColumn($junctionName, $twoWayKey, $newTwoWayKey) . ';';
                 }
                 break;

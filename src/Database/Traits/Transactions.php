@@ -330,11 +330,18 @@ trait Transactions
 
     /**
      * Whether the error is the Exception\Unconfirmed of a commit, not one its callback threw: the writes of the
-     * transaction's last attempt may be stored.
+     * transaction's last attempt may be stored. It answers once, so a later transaction that rethrows the same error
+     * from its callback counts as rolled back.
      */
     private function endedInUnconfirmedCommit(Throwable $error): bool
     {
-        return isset($this->unconfirmedCommits[$error]);
+        if (! isset($this->unconfirmedCommits[$error])) {
+            return false;
+        }
+
+        unset($this->unconfirmedCommits[$error]);
+
+        return true;
     }
 
     /**

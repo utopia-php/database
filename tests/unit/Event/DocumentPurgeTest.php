@@ -795,6 +795,29 @@ final class DocumentPurgeTest extends TestCase
         $this->assertSame([], $this->purged($recorder));
     }
 
+    #[DataProvider('savepoints')]
+    public function testAnUnconfirmedCommitRethrownByALaterTransactionDropsThatTransactionsPurgeEvents(bool $savepoints): void
+    {
+        [$database, $recorder] = $this->unconfirmed($savepoints, ['first', 'second']);
+        $unconfirmed = $this->failureOf(static fn (): mixed => $database->updateDocument(
+            HookFixture::COLLECTION,
+            'first',
+            new Document(['title' => 'renamed']),
+        ));
+        $this->assertInstanceOf(UnconfirmedException::class, $unconfirmed);
+
+        $this->assertSame($unconfirmed, $this->failureOf(static fn (): mixed => $database->withTransaction(
+            static function () use ($database, $unconfirmed): never {
+                $database->updateDocument(HookFixture::COLLECTION, 'second', new Document(['title' => 'renamed']));
+
+                throw $unconfirmed;
+            },
+        )));
+
+        $this->assertSame(['posts/first'], $this->purged($recorder));
+        $this->assertSame('second', $database->getDocument(HookFixture::COLLECTION, 'second')->getAttribute('title'));
+    }
+
     public function testPurgeEventsOfASavepointRolledBackOnAnotherCommitsUnconfirmedAreDropped(): void
     {
         [$database, $recorder] = $this->seeded(HookFixture::sqlite(), ['first', 'second']);

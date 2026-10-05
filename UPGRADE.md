@@ -618,14 +618,15 @@ coroutine that opened it and the coroutines it starts; see [Pools and profiling]
   `createIndex()`, their update, rename and delete siblings, `createRelationship()`) no longer retry a failure that
   fails the same way every time: `Authorization`, `Character`, `Conflict`, `Dependency`, `Duplicate` (and `Unique`
   and `Mismatch`), `Index`, `Limit`, `NotFound`, `Operator`, `Order`, `Query`, `Relationship`, `Restricted`,
-  `Structure`, `Timeout`, `Truncate` and `Type` are thrown on the first attempt. A failure the metadata write's
-  transaction retries itself (see [Transaction retries](#errors)) is not run again by the schema call, so its
-  retries do not multiply. Other failures, such as an unavailable cache, are still attempted up to three times.
+  `Structure`, `Timeout`, `Truncate`, `Type` and `Unconfirmed` are thrown on the first attempt. A failure the
+  metadata write's transaction retries itself (see [Transaction retries](#errors)) is not run again by the schema
+  call, so its retries do not multiply. Other failures, such as an unavailable cache, are still attempted up to three
+  times.
 - **Transaction retries.** `withTransaction()` runs the callback again only after a failure that can succeed on
   another attempt: an `Exception\Transaction` (a lock conflict, which is `Exception\Contention`, or a failed begin,
   commit or rollback), a lost connection (also as the cause of another failure), an engine lock conflict the adapter
-  did not map, or, on MongoDB, an error labelled `TransientTransactionError` or `UnknownTransactionCommitResult`, a
-  network error or a command that was never sent. Every other failure runs the callback once and is rethrown at once,
+  did not map, or, on MongoDB, an error labelled `TransientTransactionError`, a network error before the commit or a
+  command that was never sent. Every other failure runs the callback once and is rethrown at once,
   in a nested call too: every typed library failure (`Structure`, `NotFound`, `Query`, `Type`, `Index`,
   `Dependency`, `Truncate`, `Duplicate`, `Timeout`, ...) and any other exception. 7.x retried everything but
   `Duplicate`, `Restricted`, `Authorization`, `Relationship`, `Conflict`, `Limit` and `Timeout` twice, sleeping 50 ms
@@ -635,6 +636,17 @@ coroutine that opened it and the coroutines it starts; see [Pools and profiling]
   call runs the whole unit again, releasing its locks between attempts. A lock conflict that keeps failing therefore
   runs a nested callback 3 times, not 9 (7.x retried in the savepoint too). A call nested in a transaction begun
   with `startTransaction()` still retries in its savepoint.
+- **Commits with an unknown result.** On MongoDB, when the result of a commit is unknown, `withTransaction()` sends
+  only the commit again, up to 3 more times, with a `majority` write concern, and does not run the callback again.
+  The result is unknown after an error labelled `UnknownTransactionCommitResult`, a network error, a primary change
+  or shutdown, or `MaxTimeMSExpired` (50) or `ExceededTimeLimit` (262) during the commit, so codes 50 and 262 at
+  commit no longer surface as `Exception\Timeout`. If the commit still cannot be confirmed, `withTransaction()`
+  throws `Utopia\Database\Exception\Unconfirmed`, whose `getPrevious()` is the first commit error, and does not run
+  the callback again: treat the work as possibly committed and re-read before acting on it. 7.x ran the whole
+  callback again, which could store its writes twice. A commit retry that the server reports aborted stored nothing,
+  so the callback runs again. The commit is retried without a recovery token, so on a sharded cluster a retry that
+  reaches another `mongos` can report a committed transaction as aborted. On the SQL adapters a connection lost
+  during `COMMIT` still runs the callback again: the work is at-least-once on a SQL connection loss during `COMMIT`.
 - **Failed rollbacks of metadata writes.** When a definition cannot be persisted and the schema change's rollback
   fails too, the thrown `Utopia\Database\Exception` names the persistence error first and the rollback's after
   `| Cleanup error:`, and its `getPrevious()` is always the persistence error. In 7.x the message labelled the two the

@@ -227,8 +227,9 @@ have to make, with the 7.x and 8.0 forms side by side.
 - `Database::setCacheWriterTimeout()` and `QueryCache`'s `writerTimeout` argument bound how long an unfinished
   invalidation keeps a collection's cache off.
 - `Exception\Unique::MESSAGE`, `Exception\Mismatch` (a `Duplicate` for a shared-table column of another type),
-  `Exception\Contention` (a `Transaction` for a lock conflict with a concurrent transaction) and
-  `Validator\Structure`'s `storedAttributes` parameter.
+  `Exception\Contention` (a `Transaction` for a lock conflict with a concurrent transaction),
+  `Exception\Unconfirmed` (a MongoDB commit whose result could not be confirmed) and `Validator\Structure`'s
+  `storedAttributes` parameter.
 
 ### Changed
 
@@ -283,9 +284,12 @@ have to make, with the 7.x and 8.0 forms side by side.
   example `InvalidArgumentException`) run the callback once and are rethrown without sleeping, also in a nested call.
   Only a failure that can succeed on another attempt is still retried twice with 7.x's backoff: an
   `Exception\Transaction` (including `Contention`), a lost connection, an engine lock conflict the adapter did not
-  map, or a MongoDB error labelled transient, a network error or a command that was never sent. Only the outermost
-  `withTransaction()` retries it: a nested call rolls back to its savepoint and rethrows, so a lock conflict that
-  keeps failing runs a nested callback 3 times instead of 9. See [Errors](UPGRADE.md#errors).
+  map, or a MongoDB error labelled transient, a network error before the commit or a command that was never sent.
+  Only the outermost `withTransaction()` retries it: a nested call rolls back to its savepoint and rethrows, so a
+  lock conflict that keeps failing runs a nested callback 3 times instead of 9. A MongoDB commit whose result is
+  unknown retries only the commit, up to 3 more times with a `majority` write concern, and then throws
+  `Exception\Unconfirmed` without running the callback again (7.x ran the callback again). On SQL a connection lost
+  during `COMMIT` still runs the callback again, so that work is at-least-once. See [Errors](UPGRADE.md#errors).
 - `createCollection()`, `createAttribute()`, `createAttributes()`, `createIndex()` and their update, rename and
   delete siblings keep the table, column or index when only the cache invalidation after their committed definition
   failed, and do not repeat the write. `createRelationship()` keeps a committed relationship and still creates its

@@ -29,7 +29,7 @@ class MagicPropertyFetchRuleTest extends RuleTestCase
 
     private const string KEY_WRITE = "setAttribute('key', \$value)->setAttribute('\$id', \$value)";
 
-    private string $sourceDirectory = __DIR__ . '/data/source';
+    private string $sourceDirectory = __DIR__ . '/Data/Source';
 
     protected function getRule(): Rule
     {
@@ -38,7 +38,7 @@ class MagicPropertyFetchRuleTest extends RuleTestCase
 
     public function testReportsMagicPropertyFetches(): void
     {
-        $this->analyse([__DIR__ . '/data/source/magic.php'], [
+        $this->analyse([__DIR__ . '/Data/Source/magic.php'], [
             [self::read(self::ATTRIBUTE, 'key', 'getKey()'), 19],
             [self::write(self::INDEX, 'ttl', "setAttribute('ttl', \$value)"), 24],
             [self::read(self::RELATIONSHIP, 'twoWay', 'isTwoWay()'), 29],
@@ -78,7 +78,7 @@ class MagicPropertyFetchRuleTest extends RuleTestCase
 
     public function testReportsHookedPropertyFetchesOutsideTheirOwnHooks(): void
     {
-        $this->analyse([__DIR__ . '/data/source/hooked.php'], [
+        $this->analyse([__DIR__ . '/Data/Source/Hooked.php'], [
             [\sprintf(self::HOOKED, self::HOOKED_CLASS, 'flag'), 25],
             [\sprintf(self::HOOKED, self::HOOKED_CLASS, 'flag'), 30],
             [\sprintf(self::HOOKED, self::HOOKED_CLASS, 'counter'), 41],
@@ -88,21 +88,21 @@ class MagicPropertyFetchRuleTest extends RuleTestCase
 
     public function testIgnoresFilesOutsideTheSourceDirectory(): void
     {
-        $this->analyse([__DIR__ . '/data/outside/magic.php'], []);
+        $this->analyse([__DIR__ . '/Data/Outside/magic.php'], []);
     }
 
     public function testIgnoresEverythingWhenSourceDirectoryDoesNotContainTheFile(): void
     {
-        $this->sourceDirectory = __DIR__ . '/data/outside';
+        $this->sourceDirectory = __DIR__ . '/Data/Outside';
 
-        $this->analyse([__DIR__ . '/data/source/magic.php', __DIR__ . '/data/source/hooked.php'], []);
+        $this->analyse([__DIR__ . '/Data/Source/magic.php', __DIR__ . '/Data/Source/Hooked.php'], []);
     }
 
     public function testResolvesParentSegmentsInTheSourceDirectory(): void
     {
-        $this->sourceDirectory = __DIR__ . '/data/outside/../source/';
+        $this->sourceDirectory = __DIR__ . '/Data/Outside/../Source/';
 
-        $this->analyse([__DIR__ . '/data/source/hooked.php'], [
+        $this->analyse([__DIR__ . '/Data/Source/Hooked.php'], [
             [\sprintf(self::HOOKED, self::HOOKED_CLASS, 'flag'), 25],
             [\sprintf(self::HOOKED, self::HOOKED_CLASS, 'flag'), 30],
             [\sprintf(self::HOOKED, self::HOOKED_CLASS, 'counter'), 41],
@@ -112,7 +112,7 @@ class MagicPropertyFetchRuleTest extends RuleTestCase
 
     public function testRejectsMissingSourceDirectory(): void
     {
-        $missing = __DIR__ . '/data/missing';
+        $missing = __DIR__ . '/Data/Missing';
 
         $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage('Source directory "' . $missing . '" does not exist, so the rule would report nothing.');
@@ -123,7 +123,7 @@ class MagicPropertyFetchRuleTest extends RuleTestCase
     public function testErrorsCarryTheirIdentifiers(): void
     {
         $identifiers = [];
-        foreach ($this->gatherAnalyserErrors([__DIR__ . '/data/source/magic.php', __DIR__ . '/data/source/hooked.php']) as $error) {
+        foreach ($this->gatherAnalyserErrors([__DIR__ . '/Data/Source/magic.php', __DIR__ . '/Data/Source/Hooked.php']) as $error) {
             $identifiers[] = $error->getIdentifier();
         }
 

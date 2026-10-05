@@ -936,13 +936,28 @@ class Pool extends Adapter
 
     /**
      * The setter returns the support the adapter ends up with, which is what
-     * the getter has to report from now on.
+     * the getter has to report from now on. That answer depends only on the
+     * value asked for, so it is kept per pool, and every checkout replays the
+     * value itself. A pinned connection is not replayed onto, so it is told
+     * directly.
      */
     public function setSupportForAttributes(bool $support): bool
     {
         $this->supportForAttributes = $support;
+        $this->pinnedAdapter?->setSupportForAttributes($support);
 
-        return $this->reportedSupportForAttributes = $this->delegate(__FUNCTION__, \func_get_args());
+        $key = __FUNCTION__ . ($support ? '(true)' : '(false)');
+        $answer = self::$capabilities[$this->pool][$key] ?? null;
+
+        if ($answer === null) {
+            $answer = $this->delegate(__FUNCTION__, \func_get_args());
+
+            $answers = self::$capabilities[$this->pool] ?? [];
+            $answers[$key] = $answer;
+            self::$capabilities[$this->pool] = $answers;
+        }
+
+        return $this->reportedSupportForAttributes = $answer;
     }
 
     public function getSupportForIntegerBooleans(): bool

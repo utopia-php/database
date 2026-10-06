@@ -80,6 +80,9 @@ final class JoinedInternalAttributesTest extends TestCase
             $this->assertFalse($row->offsetExists(self::BOOK.'.'.Document::TENANT));
 
             $id = $row->getAttribute(self::BOOK.'.$id');
+            if ($id !== null) {
+                $this->assertIsString($id);
+            }
             foreach (self::INTERNALS as $internal) {
                 $this->assertSame(
                     $id === null ? null : $direct[$id]->getAttribute($internal),

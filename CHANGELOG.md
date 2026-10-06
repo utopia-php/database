@@ -233,6 +233,8 @@ have to make, with the 7.x and 8.0 forms side by side.
 
 ### Changed
 
+- A filter on a path into an object attribute takes keys of `a-z`, `A-Z`, `0-9`, `_` and `-` only, on every adapter,
+  and PostgreSQL refuses any other key also when validation is skipped. See [Queries](UPGRADE.md#queries).
 - `createAttributes()` fires `attribute_create` once per attribute, with a `Document` payload, and then
   `attributes_create` once with the list (7.x fired `attribute_create` once, with an array, and never fired
   `attributes_create`).
@@ -356,6 +358,8 @@ have to make, with the 7.x and 8.0 forms side by side.
 
 ### Fixed
 
+- With validation skipped, the SQL adapters filter the attribute of `sum()` and the grouped columns they qualify
+  with a join alias, and every identifier they quote escapes the quote character.
 - A delete retried on the same `Database` after its cascade failed (for example on a `Restricted` related document
   or a permission failure) now runs the cascade.
 - `Mirror` forwards `setCacheName()`, `setGlobalCollections()`, `resetGlobalCollections()`,

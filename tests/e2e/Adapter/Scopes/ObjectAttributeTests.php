@@ -1466,6 +1466,75 @@ trait ObjectAttributeTests
         $database->deleteCollection($collectionId);
     }
 
+    public function testObjectPathKeysOutsideTheAllowedCharsAreRefused(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::Objects) || ! $database->getAdapter()->supports(Capability::DefinedAttributes)) {
+            $this->markTestSkipped('Adapter does not support object attributes');
+        }
+
+        $collectionId = ID::unique();
+        $database->createCollection(new Collection(id: $collectionId));
+        $this->createAttribute($database, $collectionId, 'meta', ColumnType::Object, 0, false);
+        $this->createAttribute($database, $collectionId, 'secret', ColumnType::String, 64, false);
+
+        $database->createDocuments($collectionId, [
+            new Document([
+                '$id' => 'd1',
+                '$permissions' => [Permission::read(Role::any())],
+                'meta' => ['a' => 'x'],
+                'secret' => 's1',
+            ]),
+            new Document([
+                '$id' => 'd2',
+                '$permissions' => [Permission::read(Role::any())],
+                'meta' => ['a' => 'y'],
+                'secret' => 's2',
+            ]),
+        ]);
+
+        $paths = [
+            "meta.a' IN ('x') OR secret='s2' OR 'x",
+            "meta.a'||(select 1)||'",
+            "meta.a' OR 1=1 --",
+            "meta.a'b.c",
+        ];
+
+        foreach ($paths as $path) {
+            foreach ([Query::equal($path, ['x']), Query::or([Query::equal('meta.a', ['x']), Query::startsWith($path, 'x')])] as $query) {
+                try {
+                    $database->find($collectionId, [$query]);
+                    $this->fail('Expected the path to be refused: '.$path);
+                } catch (QueryException $error) {
+                    $this->assertStringContainsString('Invalid object path', $error->getMessage());
+                }
+            }
+        }
+
+        foreach ($paths as $path) {
+            foreach ([Query::equal($path, ['x']), Query::or([Query::equal('meta.a', ['x']), Query::startsWith($path, 'x')])] as $query) {
+                try {
+                    /** @var array<Document> $found */
+                    $found = $database->skipValidation(fn () => $database->find($collectionId, [$query]));
+                    $counted = $database->skipValidation(fn () => $database->count($collectionId, [$query]));
+                } catch (QueryException) {
+                    continue;
+                }
+
+                $ids = \array_map(static fn (Document $document): string => $document->getId(), $found);
+                $this->assertNotContains('d2', $ids, 'A path that names no stored key matched d2: '.$path);
+                $this->assertLessThanOrEqual(1, $counted, 'A path that names no stored key counted d2: '.$path);
+            }
+        }
+
+        $results = $database->find($collectionId, [Query::equal('meta.a', ['x'])]);
+        $this->assertSame(['d1'], \array_map(static fn (Document $document): string => $document->getId(), $results));
+
+        $database->deleteCollection($collectionId);
+    }
+
     public function testNestedObjectAttributeEdgeCases(): void
     {
         /** @var Database $database */

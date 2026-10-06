@@ -3,6 +3,7 @@
 namespace Tests\Unit\Adapter;
 
 use PDO;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\Cache\Cache;
@@ -11,6 +12,7 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -90,6 +92,32 @@ final class SQLJoinWithoutValidationTest extends TestCase
         $this->expectExceptionMessage("Joined collection '' not found");
 
         $this->database->find('customers', [Query::join('', '$id', 'customerId')]);
+    }
+
+    /**
+     * @return array<string, array{string, list<Query>}>
+     */
+    public static function sumsOverAnUnknownPrefix(): array
+    {
+        $join = [Query::join('notes', '$id', 'customerId', '=', 'note')];
+
+        return [
+            'plain name beside a join' => ['other.body', $join],
+            'name holding the quote char beside a join' => ['other`.body', $join],
+            'name holding the quote char without a join' => ['other`.body', []],
+        ];
+    }
+
+    /**
+     * @param  list<Query>  $queries
+     */
+    #[DataProvider('sumsOverAnUnknownPrefix')]
+    public function testASumOverANameWhosePrefixIsNotAJoinAliasIsAnUnknownAttribute(string $attribute, array $queries): void
+    {
+        $this->expectException(NotFoundException::class);
+        $this->expectExceptionMessage('Attribute not found');
+
+        $this->database->sum('customers', $attribute, $queries);
     }
 
     /**

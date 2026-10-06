@@ -37,6 +37,7 @@ use Utopia\Database\Query;
 use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
 use Utopia\Database\Storage;
+use Utopia\Database\Validator\ObjectPath;
 use Utopia\Query\Builder\Condition;
 use Utopia\Query\Builder\SQL as SQLBuilder;
 use Utopia\Query\Builder\Statement;
@@ -1940,7 +1941,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
 
     protected function quote(string $string): string
     {
-        return "\"{$string}\"";
+        return '"'.\str_replace('"', '""', $string).'"';
     }
 
     protected function getIdentifierQuoteChar(): string
@@ -2270,7 +2271,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         $parts = \explode('.', $path);
 
         foreach ($parts as $part) {
-            if (! preg_match('/^[a-zA-Z0-9_\-]+$/', $part)) {
+            if (\preg_match(ObjectPath::KEY_PATTERN, $part) !== 1) {
                 throw new DatabaseException('Invalid JSON key '.$part);
             }
         }

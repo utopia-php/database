@@ -6,7 +6,9 @@ use Exception;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Throwable;
 use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\Postgres;
+use Utopia\Database\Adapter\Redis;
 use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
@@ -372,6 +374,178 @@ trait AttributeTests
         ]);
 
         $this->assertEquals('Bill clinton', $documents[0]['dots.name']);
+    }
+
+    public function testDottedAttributeKeysFilterFindCountAndSumAlike(): void
+    {
+        $database = $this->getDatabase();
+        $collection = $this->createDottedKeyCollection($database);
+
+        $matching = [Query::equal('dots.name', ['v'])];
+        $this->assertSame(['a', 'b'], $this->sortedIds($database->find($collection, $matching)));
+        $this->assertSame(2, $database->count($collection, $matching));
+        $this->assertSame(2, $database->count($collection, $matching, 10));
+        $this->assertSame(1, $database->count($collection, $matching, 1));
+        $this->assertSame(5, $database->sum($collection, 'dots.score', $matching));
+        $this->assertSame(5, $database->sum($collection, 'dots.score', $matching, 10));
+        $this->assertSame(10, $database->sum($collection, 'dots.score'));
+
+        $missing = [Query::equal('dots.name', ['missing'])];
+        $this->assertSame(0, $database->count($collection, $missing));
+        $this->assertSame(0, $database->sum($collection, 'dots.score', $missing));
+
+        $grouped = [Query::or([Query::equal('dots.name', ['w']), Query::greaterThan('dots.score', 2)])];
+        $this->assertSame(['b', 'c'], $this->sortedIds($database->find($collection, $grouped)));
+        $this->assertSame(2, $database->count($collection, $grouped));
+        $this->assertSame(8, $database->sum($collection, 'dots.score', $grouped));
+
+        $ordered = [Query::isNotNull('dots.name'), Query::orderDesc('dots.score')];
+        $this->assertSame(3, $database->count($collection, $ordered));
+        $this->assertSame(10, $database->sum($collection, 'dots.score', $ordered));
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testDottedAttributeKeysInExistsQueries(): void
+    {
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+        if ($adapter instanceof Memory || $adapter instanceof Redis) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = $this->createDottedKeyCollection($database);
+
+        $exists = [Query::exists(['dots.name'])];
+        $present = $this->sortedIds($database->find($collection, $exists));
+        $this->assertSame(['a', 'b', 'c'], \array_values(\array_intersect($present, ['a', 'b', 'c'])));
+        $this->assertSame(\count($present), $database->count($collection, $exists));
+        $this->assertSame(10, $database->sum($collection, 'dots.score', $exists));
+
+        $notExists = [Query::notExists(['dots.name'])];
+        $absent = $this->sortedIds($database->find($collection, $notExists));
+        $this->assertSame([], \array_values(\array_intersect($absent, ['a', 'b', 'c'])));
+        $this->assertSame(\count($absent), $database->count($collection, $notExists));
+        $this->assertSame(4, \count($present) + \count($absent));
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testDottedAttributeKeysBesideJoinAliases(): void
+    {
+        $database = $this->getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = $this->createDottedKeyCollection($database);
+        $orders = $collection.'_orders';
+        $database->createCollection(new Collection(
+            id: $orders,
+            attributes: [
+                Attribute::string(key: 'personId', size: 64, required: true),
+                Attribute::integer(key: 'total', required: true),
+            ],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+            documentSecurity: false,
+        ));
+        $database->createDocument($orders, new Document(['$id' => 'o1', 'personId' => 'a', 'total' => 7]));
+
+        $join = Query::join($orders, '$id', 'personId', '=', 'ord');
+        $leftJoin = Query::leftJoin($orders, '$id', 'personId', '=', 'ord');
+
+        $this->assertSame(['a'], $this->sortedIds($database->find($collection, [$join, Query::equal('dots.name', ['v'])])));
+        $this->assertSame(1, $database->count($collection, [$join, Query::equal('dots.name', ['v'])]));
+        $this->assertSame(7, $database->sum($collection, 'ord.total', [$join, Query::equal('dots.name', ['v'])]));
+        $this->assertSame(2, $database->sum($collection, 'dots.score', [$join, Query::greaterThan('ord.total', 5)]));
+        $this->assertSame(0, $database->count($collection, [$join, Query::greaterThan('ord.total', 7)]));
+
+        $this->assertSame(['a'], $this->sortedIds($database->find($collection, [$join, Query::exists(['ord.$id'])])));
+        $this->assertSame(1, $database->count($collection, [$join, Query::exists(['dots.name'])]));
+        $this->assertSame(['b', 'c', 'd'], $this->sortedIds($database->find($collection, [$leftJoin, Query::notExists(['ord.$id'])])));
+        $this->assertSame(3, $database->count($collection, [$leftJoin, Query::notExists(['ord.$createdAt'])]));
+
+        $database->deleteCollection($orders);
+        $database->deleteCollection($collection);
+    }
+
+    public function testDottedAttributeKeysInGroups(): void
+    {
+        $database = $this->getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = $this->createDottedKeyCollection($database);
+
+        $groups = $database->aggregate($collection, [
+            Query::count('*', 'people'),
+            Query::sum('dots.score', 'score'),
+            Query::groupBy(['dots.name']),
+            Query::exists(['dots.name']),
+            Query::orderDesc('people'),
+        ]);
+        $this->assertSame([[2, 5], [1, 5]], \array_map(
+            static fn (Document $group): array => [(int) $group->getAttribute('people'), (int) $group->getAttribute('score')],
+            $groups,
+        ));
+
+        $filtered = $database->aggregate($collection, [
+            Query::count('*', 'people'),
+            Query::groupBy(['dots.name']),
+            Query::equal('dots.name', ['w']),
+        ]);
+        $this->assertCount(1, $filtered);
+        $this->assertSame(1, (int) $filtered[0]->getAttribute('people'));
+
+        $having = $database->aggregate($collection, [
+            Query::count('*', 'people'),
+            Query::groupBy(['dots.name']),
+            Query::having([Query::greaterThan('people', 1)]),
+        ]);
+        $this->assertCount(1, $having);
+        $this->assertSame(2, (int) $having[0]->getAttribute('people'));
+
+        $database->deleteCollection($collection);
+    }
+
+    private function createDottedKeyCollection(Database $database): string
+    {
+        $collection = 'dotted_keys_'.\substr(\uniqid(), -6);
+        $database->createCollection(new Collection(
+            id: $collection,
+            attributes: [
+                Attribute::string(key: 'dots.name', size: 64),
+                Attribute::integer(key: 'dots.score'),
+            ],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+            documentSecurity: false,
+        ));
+
+        $database->createDocument($collection, new Document(['$id' => 'a', 'dots.name' => 'v', 'dots.score' => 2]));
+        $database->createDocument($collection, new Document(['$id' => 'b', 'dots.name' => 'v', 'dots.score' => 3]));
+        $database->createDocument($collection, new Document(['$id' => 'c', 'dots.name' => 'w', 'dots.score' => 5]));
+        $database->createDocument($collection, new Document(['$id' => 'd']));
+
+        return $collection;
+    }
+
+    /**
+     * @param  array<Document>  $documents
+     * @return list<string>
+     */
+    private function sortedIds(array $documents): array
+    {
+        $ids = \array_map(static fn (Document $document): string => $document->getId(), $documents);
+        \sort($ids);
+
+        return $ids;
     }
 
     public function testUpdateAttributeDefault(): void

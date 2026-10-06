@@ -222,6 +222,28 @@ final class MongoQueryFilterTest extends TestCase
         );
     }
 
+    public function testDottedAttributesInsideGroupsAndExistsAreEscaped(): void
+    {
+        $collection = new Document([
+            '$id' => self::COLLECTION,
+            'attributes' => [
+                new Document(['$id' => 'a.b', 'key' => 'a.b', 'type' => ColumnType::Integer->value]),
+            ],
+        ]);
+        $queries = [
+            Query::or([Query::equal('a.b', [1]), Query::and([Query::greaterThan('a.b', 5), Query::lessThan('a.b', 9)])]),
+            Query::exists(['a.b']),
+            Query::notExists(['a.b']),
+        ];
+
+        $adapter = $this->createAdapter();
+        $adapter->find($collection, $queries);
+        $adapter->count($collection, $queries);
+
+        $this->assertSame(['a__dot__b'], $this->fieldNames($this->calls['find'][0] ?? []), 'find() must address the stored field name of a dotted attribute in every group and exists');
+        $this->assertSame(['a__dot__b'], $this->fieldNames($this->calls['aggregate'][0] ?? []), 'count() must address the stored field name of a dotted attribute in every group and exists');
+    }
+
     public function testRandomOrderIsRejectedAsAQueryError(): void
     {
         $this->expectException(QueryException::class);
@@ -252,6 +274,28 @@ final class MongoQueryFilterTest extends TestCase
     private function find(array $queries): array
     {
         return $this->createAdapter()->find(new Document(['$id' => self::COLLECTION]), $queries);
+    }
+
+    /**
+     * @param  array<mixed>  $filter
+     * @return list<string>
+     */
+    private function fieldNames(array $filter): array
+    {
+        $names = [];
+        foreach ($filter as $key => $value) {
+            if (\is_string($key) && $key !== '' && $key[0] !== '$' && $key !== '_permissions') {
+                $names[] = $key;
+            }
+            if ($value instanceof stdClass) {
+                $value = (array) $value;
+            }
+            if (\is_array($value)) {
+                \array_push($names, ...$this->fieldNames($value));
+            }
+        }
+
+        return \array_values(\array_unique($names));
     }
 
     /**

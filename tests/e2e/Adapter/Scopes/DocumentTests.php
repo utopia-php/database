@@ -5702,6 +5702,85 @@ trait DocumentTests
         $this->assertEquals('value', $documents[0]->getAttribute('tenant'));
     }
 
+    public function testCreateDocumentReturnsTheCreatingTenantsDocument(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getSharedTables() || $database->getTenantPerDocument()) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $originalTenant = $database->getTenant();
+        $integerTenants = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer->value;
+        $first = $integerTenants ? 41 : 'tenant_41';
+        $second = $integerTenants ? 42 : 'tenant_42';
+        $collection = 'tenant_ids_'.\substr(\uniqid(), -6);
+
+        try {
+            foreach ([$first, $second] as $tenant) {
+                $database->setTenant($tenant);
+                $database->createCollection(new Collection(
+                    id: $collection,
+                    attributes: [
+                        Attribute::string(key: 'email', size: 64, required: true),
+                        Attribute::string(key: 'secret', size: 64, required: true),
+                    ],
+                    permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+                    documentSecurity: false,
+                ));
+            }
+
+            $database->setTenant($first);
+            $firstCreated = $database->createDocument($collection, new Document(['$id' => 'shared', 'email' => 'first@tenant', 'secret' => 'first']));
+            $database->createDocuments($collection, [new Document(['$id' => 'batch', 'email' => 'first@tenant', 'secret' => 'first'])]);
+
+            $database->setTenant($second);
+            $secondCreated = $database->createDocument($collection, new Document(['$id' => 'shared', 'email' => 'second@tenant', 'secret' => 'second']));
+
+            $this->assertSame((string) $second, (string) $secondCreated->getTenant());
+            $this->assertSame('second@tenant', $secondCreated->getAttribute('email'));
+            $this->assertSame('second', $secondCreated->getAttribute('secret'));
+            $this->assertNotSame($firstCreated->getSequence(), $secondCreated->getSequence());
+
+            $batch = [];
+            $this->assertSame(1, $database->createDocuments(
+                $collection,
+                [new Document(['$id' => 'batch', 'email' => 'second@tenant', 'secret' => 'second'])],
+                onNext: function (Document $document) use (&$batch): void {
+                    $batch[] = $document;
+                },
+            ));
+            $this->assertCount(1, $batch);
+            $this->assertSame('second@tenant', $batch[0]->getAttribute('email'));
+
+            $this->assertSame('second@tenant', $database->getDocument($collection, 'shared')->getAttribute('email'));
+            $this->assertSame($secondCreated->getSequence(), $database->getDocument($collection, 'shared')->getSequence());
+            $this->assertSame('second@tenant', $database->getDocument($collection, 'batch')->getAttribute('email'));
+            $this->assertSame(2, $database->count($collection));
+
+            $database->setTenant($first);
+            $firstRead = $database->getDocument($collection, 'shared');
+            $this->assertSame((string) $first, (string) $firstRead->getTenant());
+            $this->assertSame('first@tenant', $firstRead->getAttribute('email'));
+            $this->assertSame('first', $firstRead->getAttribute('secret'));
+            $this->assertSame($firstCreated->getSequence(), $firstRead->getSequence());
+            $this->assertSame('first@tenant', $database->getDocument($collection, 'batch')->getAttribute('email'));
+            $this->assertSame(2, $database->count($collection));
+        } finally {
+            foreach ([$first, $second] as $tenant) {
+                $database->setTenant($tenant);
+                try {
+                    $database->deleteCollection($collection);
+                } catch (Throwable) {
+                }
+            }
+            $database->setTenant($originalTenant);
+        }
+    }
+
     public function testFindCheckPermissions(): void
     {
         $this->initMoviesFixture();

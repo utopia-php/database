@@ -5145,9 +5145,10 @@ trait Documents
     }
 
     /**
-     * The `alias.$id` of each join whose attributes a select names without it, when an outer join
-     * can leave a joined row unmatched: the joined `$id` is what tells an unmatched row from a
-     * matched one when the row is decoded, so it is selected for that and left out of the result.
+     * The `alias.$id` of each join whose attributes a select names without it or `alias.*`, when an
+     * outer join can leave a joined row unmatched: the joined `$id` is what tells an unmatched row
+     * from a matched one when the row is decoded, so it is selected for that and left out of the
+     * result.
      *
      * @param  array<Query>  $selects
      * @param  array<Query>  $joins
@@ -5189,7 +5190,7 @@ trait Documents
 
         $ids = [];
         foreach ($selectedAliases as $alias => $attributes) {
-            if (isset($joinedCollections[$alias]) && ! isset($attributes[Document::ID])) {
+            if (isset($joinedCollections[$alias]) && ! isset($attributes[Document::ID]) && ! isset($attributes['*'])) {
                 $ids[] = $alias.'.'.Document::ID;
             }
         }

@@ -70,19 +70,22 @@ have to make, with the 7.x and 8.0 forms side by side.
   - A join without a select returns the main document plus, under each join alias, the joined collection's `$id`
     and attributes as `alias.$id` and `alias.attribute`. The joined collection's internal attributes (`$tenant`,
     `$permissions`, `$sequence`, `$createdAt`, `$updatedAt`) and its relationship attributes that hold a column (the
-    side that stores the related document's id) are returned only when a select names them. Joined values are never
-    returned under a bare attribute name.
-  - `select('alias.*')` next to other selects returns the joined `$id` and attributes, as a join without a select
-    does. An order may name a joined attribute by its bare name when only one join's collection declares it and the
-    main collection does not; a name several joins declare throws `Exception\Query`.
+    side that stores the related document's id) are returned only when a select names them, or, for the internal
+    attributes other than `$tenant`, when the select names `alias.*` or the read orders by them. Joined values are
+    never returned under a bare attribute name.
+  - `select('alias.*')`, alone or next to other selects, returns the joined row as a direct read of the joined
+    collection returns it: its `$id`, `$sequence`, `$createdAt`, `$updatedAt`, `$permissions` and attributes, but not
+    its `$tenant`. Joined columns named next to `*` (`select(['*', 'alias.$createdAt'])`) are returned with
+    everything `*` returns. An order may name a joined attribute by its bare name when only one join's collection
+    declares it and the main collection does not; a name several joins declare throws `Exception\Query`.
   - Joined attributes are returned as a direct read of the joined collection returns them: cast to their types and
     passed through every decode filter they declare, so encrypted attributes are decrypted, JSON and arrays decoded
     and datetimes formatted. This applies to the implicit projection and to `select('alias.attribute')` alike. A
     decode filter receives a document built from the joined row: `$id`, `$collection` and the joined attributes the
-    query returned (`$sequence` and the other internal attributes only when selected). When an outer join matches no
-    row, its attributes are null, whether or not the select names `alias.$id` (outside `distinct()` reads, which
-    select only what they name). A cursor taken from a joined result can be passed back with `cursorAfter()` or
-    `cursorBefore()`: its joined values are encoded with the joined collection's filters.
+    query returned (`$sequence` and the other internal attributes only when the query returns them). When an outer
+    join matches no row, its attributes are null, whether or not the select names `alias.$id` (outside `distinct()`
+    reads, which select only what they name). A cursor taken from a joined result can be passed back with
+    `cursorAfter()` or `cursorBefore()`: its joined values are encoded with the joined collection's filters.
   - A column under a join alias (`alias.column`) must be valid on the joined collection for the query type it is
     used in: an attribute the joined collection declares, or an internal attribute the query type accepts on the
     main collection (`alias.$permissions` can be selected but not filtered or ordered by, and `alias.$collection` is

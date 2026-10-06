@@ -1345,9 +1345,16 @@ API might expect. [CHANGELOG.md](CHANGELOG.md) describes the features themselves
 - A select of joined attributes returns what it names. The main collection's unselected attributes are left out, as
   for any select; only a select of a related document's attributes (`relationship.attribute`) returns the others as
   well, as in 7.x.
-- A select may name `alias.*` next to other selects: it stands for what the join returns without a select, the
-  joined collection's `$id` and attributes as `alias.$id` and `alias.attribute`. An aggregation query still rejects
-  it as an ungrouped select, and an alias the query does not join is not found.
+- A join without a select, or with `select(['*'])`, returns under each join alias the joined collection's `$id` and
+  attributes as `alias.$id` and `alias.attribute`, plus each joined internal attribute the read orders by
+  (`alias.$sequence`, `alias.$createdAt`, `alias.$updatedAt`), so its rows can be passed back as a cursor.
+- A select may name `alias.*`, alone or next to other selects: it returns the joined row as a direct read of the
+  joined collection returns it, its `$id`, `$sequence`, `$createdAt`, `$updatedAt`, `$permissions` and attributes as
+  `alias.$id`, `alias.$sequence`, ... and `alias.attribute`. It never returns the joined `$tenant`: select
+  `alias.$tenant` to read it. A row an outer join left unmatched holds null for each of them. An aggregation query
+  still rejects `alias.*` as an ungrouped select, and an alias the query does not join is not found.
+- Joined columns named next to `*` are returned with everything `*` returns: `select(['*', 'alias.$createdAt'])`
+  returns the main document, the joined `$id` and attributes, and `alias.$createdAt`.
 - An order may name a joined attribute by its bare name when the main collection does not declare it and exactly one
   join's collection does (`orderAsc('price')` over a join whose collection declares `price`); a name the main
   collection declares always orders by the main collection. A bare name more than one join declares throws
@@ -1397,7 +1404,9 @@ API might expect. [CHANGELOG.md](CHANGELOG.md) describes the features themselves
 - Pass a row the same read returned as the cursor. It has to carry every value the read orders by, under the name the
   read orders by (`note.score`, `$sequence`, `note.$id`); a missing value throws `Utopia\Database\Exception\Order`
   (`Cursor has no value for order attribute 'note.$id'. …`). A value is never taken from the main document's attribute
-  of the same name. A read whose `select()` leaves a paged join's `alias.$id` out has to select it to be paged.
+  of the same name. A read whose `select()` names attributes without `*` has to select every joined value it orders
+  by, a paged join's `alias.$id` included, to be paged; `alias.*` selects them all. A read without a select, or
+  with `*`, returns them.
   `cursor()` and `iterate()` check the last row of each full batch before yielding the batch, so such a read throws
   before the first row; a read that fits in one batch is not paged and needs no such value.
 - A value may be null (a row an outer join did not match, a nullable attribute). Nulls keep the engine's position:

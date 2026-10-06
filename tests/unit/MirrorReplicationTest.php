@@ -9,6 +9,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use Swoole\Coroutine;
+use Swoole\Coroutine\WaitGroup;
 use Swoole\Runtime;
 use Throwable;
 use Utopia\Cache\Adapter\None;
@@ -21,6 +22,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Index;
 use Utopia\Database\Mirror;
 use Utopia\Database\Query;
@@ -36,6 +38,10 @@ final class MirrorReplicationTest extends TestCase
     private const string NOTES = 'notes';
 
     private const string SECRETS = 'secrets';
+
+    private const string PARENTS = 'parents';
+
+    private const string CHILDREN = 'children';
 
     public const string DELETED = 'deleted';
 
@@ -67,6 +73,13 @@ final class MirrorReplicationTest extends TestCase
      * @var list<array{string, string}>
      */
     private array $errors = [];
+
+    /**
+     * Destination adapter calls in progress, and the most that were ever in progress at once.
+     */
+    private int $busy = 0;
+
+    private int $peak = 0;
 
     protected function setUp(): void
     {
@@ -242,47 +255,169 @@ final class MirrorReplicationTest extends TestCase
         $this->assertSame(7, $this->destination->getDocument(self::NOTES, 'first')->getAttribute('views'));
     }
 
-    public function testWritesToDifferentDocumentsDoNotWaitForEachOther(): void
+    public function testReplicationsUseTheDestinationOneAtATimeInTheOrderTheyWereMade(): void
     {
         $this->delays = ['slow' => 0.05, 'fast' => 0.01];
+        $this->peak = 0;
 
         $this->inCoroutine(function (): void {
             $this->mirror->createDocuments(self::NOTES, [new Document([Document::ID => 'first', 'title' => 'slow'])]);
             $this->mirror->createDocuments(self::NOTES, [new Document([Document::ID => 'second', 'title' => 'fast'])]);
+            $this->mirror->updateDocument(self::NOTES, 'public', new Document(['title' => 'synchronous']));
+            $this->mirror->deleteDocument(self::NOTES, 'first');
         });
 
         $this->assertSame([], $this->errors);
-        $this->assertSame([['second', 'fast'], ['first', 'slow']], $this->titlesWritten());
+        $this->assertSame([['first', 'slow'], ['second', 'fast'], ['public', 'synchronous'], ['first', self::DELETED]], $this->titlesWritten());
+        $this->assertSame(1, $this->peak, 'Replications sharing one destination connection must not overlap');
     }
 
-    public function testFinishedReplicationsAreReleased(): void
+    public function testAwaitReplicationsReturnsOnceEveryQueuedReplicationReachedTheDestination(): void
     {
-        $mirror = new class ($this->mirror->getSource(), $this->destination) extends Mirror {
-            public function countPendingReplications(): int
-            {
-                $pending = \count($this->collectionReplications);
-                foreach ($this->documentReplications as $documents) {
-                    $pending += \count($documents);
-                }
+        $this->delays = ['queued' => 0.03, 'broken' => 0.01];
+        $seen = [];
 
-                return $pending;
-            }
-        };
-        $this->delays = ['v0' => 0.01, 'v1' => 0.01];
-        $pending = null;
-
-        $this->inCoroutine(function () use ($mirror, &$pending): void {
-            $mirror->createDocuments(self::NOTES, [
-                new Document([Document::ID => 'first', 'title' => 'v0']),
-                new Document([Document::ID => 'second', 'title' => 'v0']),
-            ]);
-            $mirror->updateDocuments(self::NOTES, new Document(['title' => 'v1']));
-            $mirror->deleteDocument(self::NOTES, 'public');
-            $pending = $mirror->countPendingReplications();
+        $this->inCoroutine(function () use (&$seen): void {
+            $this->mirror->createDocuments(self::NOTES, [new Document([Document::ID => 'first', 'title' => 'queued'])]);
+            $this->mirror->upsertDocuments(self::NOTES, [new Document([Document::ID => 'first', 'title' => 'broken'])]);
+            $seen['queued'] = [$this->titlesWritten(), $this->errors];
+            $this->mirror->awaitReplications();
+            $seen['awaited'] = [$this->titlesWritten(), $this->errors];
+            $this->mirror->awaitReplications();
         });
 
-        $this->assertSame(2, $pending, 'The bulk update waits on the create, and the delete on the bulk update');
-        $this->assertSame(0, $mirror->countPendingReplications());
+        $this->assertSame([[], []], $seen['queued']);
+        $this->assertSame([[['first', 'queued']], [['upsertDocuments', 'destination rejected broken']]], $seen['awaited']);
+    }
+
+    public function testAwaitReplicationsOutsideACoroutineReturnsAtOnce(): void
+    {
+        $this->mirror->createDocuments(self::NOTES, [new Document([Document::ID => 'first', 'title' => 'v0'])]);
+        $this->mirror->awaitReplications();
+
+        $this->assertSame([['first', 'v0']], $this->titlesWritten());
+    }
+
+    public function testAWriteThroughTheMirrorFromOnErrorDoesNotWaitForTheReplicationThatReportedIt(): void
+    {
+        $this->mirror->onError(function (string $action): void {
+            $this->mirror->createDocument(self::NOTES, new Document([Document::ID => 'reported', 'title' => $action]));
+            $this->mirror->awaitReplications();
+        });
+
+        $this->inCoroutine(function (): void {
+            $this->mirror->upsertDocuments(self::NOTES, [new Document([Document::ID => 'first', 'title' => 'broken'])]);
+            $this->mirror->updateDocument(self::NOTES, 'public', new Document(['title' => 'after']));
+        });
+
+        $this->assertSame([['upsertDocuments', 'destination rejected broken']], $this->errors);
+        $this->assertSame([['reported', 'upsertDocuments'], ['public', 'after']], $this->titlesWritten());
+    }
+
+    public function testADocumentWrittenThroughARelationshipIsNotOvertakenByALaterWriteToIt(): void
+    {
+        $this->relate();
+        $this->delays = ['parent' => 0.03, 'nested' => 0.03];
+
+        $this->inCoroutine(function (): void {
+            $this->mirror->createDocuments(self::PARENTS, [new Document([
+                Document::ID => 'parent',
+                'title' => 'parent',
+                'children' => [new Document([Document::ID => 'child', 'title' => 'nested'])],
+            ])]);
+            $this->mirror->updateDocument(self::CHILDREN, 'child', new Document(['title' => 'renamed']));
+        });
+
+        $this->assertSame([], $this->errors);
+        $this->assertSame('renamed', $this->mirror->getSource()->getDocument(self::CHILDREN, 'child')->getAttribute('title'));
+        $this->assertSame('renamed', $this->destination->getDocument(self::CHILDREN, 'child')->getAttribute('title'));
+        $this->assertFalse($this->destination->getDocument(self::PARENTS, 'parent')->isEmpty());
+    }
+
+    /**
+     * @return iterable<string, array{Closure(Mirror): mixed}>
+     */
+    public static function relationshipChanges(): iterable
+    {
+        yield 'deleteRelationship' => [static fn (Mirror $mirror): bool => $mirror->deleteRelationship(self::PARENTS, 'children')];
+        yield 'updateRelationship' => [static fn (Mirror $mirror): bool => $mirror->updateRelationship(self::PARENTS, 'children', newTwoWayKey: 'owner')];
+        yield 'deleteCollection' => [static fn (Mirror $mirror): bool => $mirror->deleteCollection(self::PARENTS)];
+    }
+
+    /**
+     * @param  Closure(Mirror): mixed  $change
+     */
+    #[DataProvider('relationshipChanges')]
+    public function testARelationshipChangeWaitsForTheQueuedReplicationsOfTheRelatedCollection(Closure $change): void
+    {
+        $this->relate();
+        $this->authorization->skip(fn (): Document => $this->mirror->createDocument(self::PARENTS, new Document([Document::ID => 'parent', 'title' => 'parent'])));
+        $this->writes = [];
+        $this->delays = ['queued' => 0.03];
+
+        $this->inCoroutine(function () use ($change): void {
+            $this->mirror->createDocuments(self::CHILDREN, [new Document([Document::ID => 'child', 'title' => 'queued', 'parent' => 'parent'])]);
+            $change($this->mirror);
+        });
+
+        $this->assertSame([], $this->errors);
+        $this->assertSame([['child', 'queued']], $this->writesOf('child'));
+        $this->assertSame('queued', $this->destination->getDocument(self::CHILDREN, 'child')->getAttribute('title'));
+    }
+
+    /**
+     * A write the mirror replicates before returning, then a write to the same document from another coroutine.
+     *
+     * @return iterable<string, array{Closure(Mirror): mixed, Closure(Mirror): mixed, array<string, float>}>
+     */
+    public static function overtakingWrites(): iterable
+    {
+        yield 'createDocument, then deleteDocument' => [
+            static fn (Mirror $mirror): Document => $mirror->createDocument(self::NOTES, new Document([Document::ID => 'raced', 'title' => 'slow'])),
+            static fn (Mirror $mirror): bool => $mirror->deleteDocument(self::NOTES, 'raced'),
+            ['slow' => 0.03],
+        ];
+        yield 'updateDocument, then upsertDocuments' => [
+            static fn (Mirror $mirror): Document => $mirror->updateDocument(self::NOTES, 'public', new Document(['title' => 'slow'])),
+            static fn (Mirror $mirror): int => $mirror->upsertDocuments(self::NOTES, [new Document([Document::ID => 'public', 'title' => 'latest'])]),
+            ['slow' => 0.03],
+        ];
+        yield 'increaseDocumentAttribute, then updateDocuments' => [
+            static fn (Mirror $mirror): Document => $mirror->increaseDocumentAttribute(self::NOTES, 'public', 'views', 5),
+            static fn (Mirror $mirror): int => $mirror->updateDocuments(self::NOTES, new Document(['views' => 1]), [Query::equal(Document::ID, ['public'])]),
+            [self::LOCKED => 0.03],
+        ];
+    }
+
+    /**
+     * @param  Closure(Mirror): mixed  $synchronous
+     * @param  Closure(Mirror): mixed  $later
+     * @param  array<string, float>  $delays
+     */
+    #[DataProvider('overtakingWrites')]
+    public function testALaterReplicationFromAnotherCoroutineDoesNotOvertakeASynchronousOne(Closure $synchronous, Closure $later, array $delays): void
+    {
+        $this->delays = $delays;
+
+        $this->inCoroutine(function () use ($synchronous, $later): void {
+            $writers = new WaitGroup();
+            $writers->add(2);
+            Coroutine::create(function () use ($synchronous, $writers): void {
+                $synchronous($this->mirror);
+                $writers->done();
+            });
+            Coroutine::create(function () use ($later, $writers): void {
+                Coroutine::sleep(0.01);
+                $later($this->mirror);
+                $writers->done();
+            });
+            $writers->wait();
+        });
+
+        $this->assertSame([], $this->errors);
+        foreach (['raced', 'public'] as $id) {
+            $this->assertSame($this->stored($this->mirror->getSource(), $id), $this->stored($this->destination, $id), "The destination's {$id} matches the source's");
+        }
     }
 
     public function testReplicationRunsUnderTheCallersRolesAfterTheCallerChangedThem(): void
@@ -455,7 +590,7 @@ final class MirrorReplicationTest extends TestCase
         $this->assertSame(['first', 'v0'], $this->titlesWritten()[0] ?? null, 'The queued write reaches the destination before the schema change');
     }
 
-    public function testASchemaChangeDoesNotWaitForAnotherCollectionsReplications(): void
+    public function testASchemaChangeWaitsForTheQueuedReplicationsOfEveryCollection(): void
     {
         $this->authorization->skip(fn (): bool => $this->mirror->createAttribute(self::SECRETS, Attribute::integer(key: 'extra')));
         $this->delays = ['slow' => 0.05];
@@ -467,9 +602,49 @@ final class MirrorReplicationTest extends TestCase
             $writesBeforeTheChangeReturned = $this->writesOf('first');
         });
 
-        $this->assertSame([], $writesBeforeTheChangeReturned);
+        $this->assertSame([['first', 'slow']], $writesBeforeTheChangeReturned);
         $this->assertSame([], $this->errors);
-        $this->assertSame([['first', 'slow']], $this->writesOf('first'));
+    }
+
+    /**
+     * Parents with a two-way one-to-many relationship to children, created through the mirror.
+     */
+    private function relate(): void
+    {
+        $this->mirror->addHook(new Relationships($this->mirror));
+        $this->authorization->skip(function (): void {
+            foreach ([self::PARENTS, self::CHILDREN] as $collection) {
+                $this->mirror->createCollection(new Collection(
+                    id: $collection,
+                    attributes: [Attribute::string(key: 'title', size: 64)],
+                    permissions: [
+                        Permission::create(Role::any()),
+                        Permission::read(Role::any()),
+                        Permission::update(Role::any()),
+                        Permission::delete(Role::any()),
+                    ],
+                    documentSecurity: false,
+                ));
+            }
+            $this->mirror->createRelationship(new Relationship(
+                collection: self::PARENTS,
+                relatedCollection: self::CHILDREN,
+                type: RelationType::OneToMany,
+                twoWay: true,
+                key: 'children',
+                twoWayKey: 'parent',
+            ));
+        });
+    }
+
+    /**
+     * @return array{mixed, mixed}|null The title and views a database stores for the note, or null when it has none
+     */
+    private function stored(Database $database, string $id): ?array
+    {
+        $note = $this->authorization->skip(static fn (): Document => $database->getDocument(self::NOTES, $id));
+
+        return $note->isEmpty() ? null : [$note->getAttribute('title'), $note->getAttribute('views')];
     }
 
     /**
@@ -530,7 +705,7 @@ final class MirrorReplicationTest extends TestCase
     /**
      * A destination whose reads yield once and whose writes wait for their delay first, so replications interleave
      * with their caller and with each other. Each write, and each read that locks a document, is recorded when it
-     * completes; a write of the title 'broken' fails.
+     * completes; a write of the title 'broken' fails. A read that locks a document waits for the delay of LOCKED.
      */
     private function yieldingAdapter(): SQLite
     {
@@ -540,75 +715,93 @@ final class MirrorReplicationTest extends TestCase
             $this->assertIsInt($coroutine);
             $this->writes[] = [$id, $title, $coroutine];
         };
+        $busy = function (int $change): void {
+            $this->busy += $change;
+            $this->peak = \max($this->peak, $this->busy);
+        };
 
-        return new class (new PDO('sqlite::memory:'), $delay, $record) extends SQLite {
+        return new class (new PDO('sqlite::memory:'), $delay, $record, $busy) extends SQLite {
             /**
              * @param  Closure(string): float  $delay
              * @param  Closure(string, string): void  $record
+             * @param  Closure(int): void  $busy
              */
-            public function __construct(PDO $pdo, private readonly Closure $delay, private readonly Closure $record)
+            public function __construct(PDO $pdo, private readonly Closure $delay, private readonly Closure $record, private readonly Closure $busy)
             {
                 parent::__construct($pdo);
             }
 
             public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
             {
-                if (Coroutine::getCid() > 0) {
-                    Coroutine::sleep(0.001);
-                }
-                if ($forUpdate) {
-                    $this->written($id, MirrorReplicationTest::LOCKED);
-                }
+                return $this->busy(function () use ($collection, $id, $queries, $forUpdate): Document {
+                    if (Coroutine::getCid() > 0) {
+                        Coroutine::sleep(0.001);
+                    }
+                    if ($forUpdate) {
+                        $this->wait(MirrorReplicationTest::LOCKED);
+                        $this->written($id, MirrorReplicationTest::LOCKED);
+                    }
 
-                return parent::getDocument($collection, $id, $queries, $forUpdate);
+                    return parent::getDocument($collection, $id, $queries, $forUpdate);
+                });
             }
 
             public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float|string $value, string $updatedAt, int|float|string|null $min = null, int|float|string|null $max = null): bool
             {
-                $increased = parent::increaseDocumentAttribute($collection, $id, $attribute, $value, $updatedAt, $min, $max);
-                $this->written($id, MirrorReplicationTest::INCREASED);
+                return $this->busy(function () use ($collection, $id, $attribute, $value, $updatedAt, $min, $max): bool {
+                    $increased = parent::increaseDocumentAttribute($collection, $id, $attribute, $value, $updatedAt, $min, $max);
+                    $this->written($id, MirrorReplicationTest::INCREASED);
 
-                return $increased;
+                    return $increased;
+                });
             }
 
             public function createDocuments(Document $collection, array $documents): array
             {
-                $this->wait($documents[0]->getAttribute('title', ''));
-                $created = parent::createDocuments($collection, $documents);
-                foreach ($documents as $document) {
-                    $this->written($document->getId(), $document->getAttribute('title', ''));
-                }
+                return $this->busy(function () use ($collection, $documents): array {
+                    $this->wait($documents[0]->getAttribute('title', ''));
+                    $created = parent::createDocuments($collection, $documents);
+                    foreach ($documents as $document) {
+                        $this->written($document->getId(), $document->getAttribute('title', ''));
+                    }
 
-                return $created;
+                    return $created;
+                });
             }
 
             public function createDocument(Document $collection, Document $document): Document
             {
-                $this->wait($document->getAttribute('title', ''));
-                $created = parent::createDocument($collection, $document);
-                $this->written($document->getId(), $document->getAttribute('title', ''));
+                return $this->busy(function () use ($collection, $document): Document {
+                    $this->wait($document->getAttribute('title', ''));
+                    $created = parent::createDocument($collection, $document);
+                    $this->written($document->getId(), $document->getAttribute('title', ''));
 
-                return $created;
+                    return $created;
+                });
             }
 
             public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
             {
-                $this->wait($document->getAttribute('title', ''));
-                $updated = parent::updateDocument($collection, $id, $document, $skipPermissions);
-                $this->written($id, $document->getAttribute('title', ''));
+                return $this->busy(function () use ($collection, $id, $document, $skipPermissions): Document {
+                    $this->wait($document->getAttribute('title', ''));
+                    $updated = parent::updateDocument($collection, $id, $document, $skipPermissions);
+                    $this->written($id, $document->getAttribute('title', ''));
 
-                return $updated;
+                    return $updated;
+                });
             }
 
             public function updateDocuments(Document $collection, Document $updates, array $documents): int
             {
-                $this->wait($updates->getAttribute('title', ''));
-                $modified = parent::updateDocuments($collection, $updates, $documents);
-                foreach ($documents as $document) {
-                    $this->written($document->getId(), $updates->getAttribute('title', ''));
-                }
+                return $this->busy(function () use ($collection, $updates, $documents): int {
+                    $this->wait($updates->getAttribute('title', ''));
+                    $modified = parent::updateDocuments($collection, $updates, $documents);
+                    foreach ($documents as $document) {
+                        $this->written($document->getId(), $updates->getAttribute('title', ''));
+                    }
 
-                return $modified;
+                    return $modified;
+                });
             }
 
             /**
@@ -617,26 +810,47 @@ final class MirrorReplicationTest extends TestCase
              */
             public function upsertDocuments(Document $collection, string $attribute, array $changes): array
             {
-                $title = $changes[0]->getNew()->getAttribute('title', '');
-                $this->wait($title);
-                if ($title === 'broken') {
-                    throw new RuntimeException('destination rejected broken');
-                }
-                $upserted = parent::upsertDocuments($collection, $attribute, $changes);
-                foreach ($changes as $change) {
-                    $this->written($change->getNew()->getId(), $change->getNew()->getAttribute('title', ''));
-                }
+                return $this->busy(function () use ($collection, $attribute, $changes): array {
+                    $title = $changes[0]->getNew()->getAttribute('title', '');
+                    $this->wait($title);
+                    if ($title === 'broken') {
+                        throw new RuntimeException('destination rejected broken');
+                    }
+                    $upserted = parent::upsertDocuments($collection, $attribute, $changes);
+                    foreach ($changes as $change) {
+                        $this->written($change->getNew()->getId(), $change->getNew()->getAttribute('title', ''));
+                    }
 
-                return $upserted;
+                    return $upserted;
+                });
             }
 
             public function deleteDocument(string $collection, string $id): bool
             {
-                $this->wait(MirrorReplicationTest::DELETED);
-                $deleted = parent::deleteDocument($collection, $id);
-                $this->written($id, MirrorReplicationTest::DELETED);
+                return $this->busy(function () use ($collection, $id): bool {
+                    $this->wait(MirrorReplicationTest::DELETED);
+                    $deleted = parent::deleteDocument($collection, $id);
+                    $this->written($id, MirrorReplicationTest::DELETED);
 
-                return $deleted;
+                    return $deleted;
+                });
+            }
+
+            /**
+             * @template T
+             *
+             * @param  Closure(): T  $call
+             * @return T
+             */
+            private function busy(Closure $call): mixed
+            {
+                ($this->busy)(1);
+
+                try {
+                    return $call();
+                } finally {
+                    ($this->busy)(-1);
+                }
             }
 
             private function wait(mixed $title): void

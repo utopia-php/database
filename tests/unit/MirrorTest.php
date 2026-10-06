@@ -37,6 +37,7 @@ use Utopia\Database\Mirror;
 use Utopia\Database\Mirroring\Filter;
 use Utopia\Database\Query;
 use Utopia\Database\Type\TypeRegistry;
+use Utopia\Database\Validator\Authorization;
 
 use function Swoole\Coroutine\run;
 
@@ -158,6 +159,50 @@ class MirrorTest extends TestCase
         $this->assertTrue($mirror->isValidationEnabled());
         $this->assertTrue($source->isValidationEnabled());
         $this->assertTrue($destination->isValidationEnabled());
+    }
+
+    public function testWrappingKeepsTheAuthorizationOfTheSourceAndDestination(): void
+    {
+        $sourceAuthorization = new Authorization();
+        $destinationAuthorization = new Authorization();
+        $source = self::sqlite()->setAuthorization($sourceAuthorization);
+        $destination = self::sqlite()->setAuthorization($destinationAuthorization);
+
+        $mirror = new Mirror($source, $destination);
+
+        $this->assertSame($sourceAuthorization, $source->getAuthorization());
+        $this->assertSame($destinationAuthorization, $destination->getAuthorization());
+        $this->assertSame($sourceAuthorization, $mirror->getAuthorization());
+    }
+
+    public function testARoleGrantedOnTheSourcesAuthorizationAfterWrappingAppliesToTheMirror(): void
+    {
+        $authorization = new Authorization();
+        $source = self::sqlite()->setAuthorization($authorization);
+        $mirror = new Mirror($source, self::sqlite());
+        $mirror->setDatabase('utopiaTests')->setNamespace('wrapped_'.\uniqid())->create();
+        $authorization->skip(function () use ($mirror): void {
+            $mirror->createCollection(new Collection(
+                id: self::COLLECTION,
+                attributes: [Attribute::string(key: 'title', size: 64)],
+                permissions: [Permission::create(Role::any())],
+                documentSecurity: true,
+            ));
+            $mirror->createDocument(self::COLLECTION, new Document([
+                Document::ID => 'owned',
+                'title' => 'owned',
+                Document::PERMISSIONS => [Permission::read(Role::user('alice'))],
+            ]));
+        });
+
+        $hidden = $mirror->getDocument(self::COLLECTION, 'owned');
+        $authorization->addRole(Role::user('alice')->toString());
+        $granted = $mirror->getDocument(self::COLLECTION, 'owned');
+        $authorization->skip(fn (): bool => $mirror->deleteDocument(self::COLLECTION, 'owned'));
+
+        $this->assertTrue($hidden->isEmpty());
+        $this->assertSame('owned', $granted->getAttribute('title'));
+        $this->assertTrue($source->getDocument(self::COLLECTION, 'owned')->isEmpty());
     }
 
     public function testCreateThrowsWhenDestinationCreateFails(): void

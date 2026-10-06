@@ -31,7 +31,7 @@ class Mirror extends Database
 {
     protected Database $source;
 
-    protected ?Database $destination;
+    protected ?Database $destination = null;
 
     /**
      * Filters to apply to documents before writing to the destination database
@@ -55,20 +55,26 @@ class Mirror extends Database
     ];
 
     /**
-     * The last queued replication of each document, by collection and document id, until it finishes
-     *
-     * @var array<array-key, array<array-key, Channel>>
+     * Closed once the latest destination change queued through the mirror has been applied or has failed
      */
-    protected array $documentReplications = [];
+    private ?Channel $latestReplication = null;
 
     /**
-     * The last queued replication that can reach every document of a collection, by collection, until it finishes
+     * Coroutines applying a destination change, by coroutine id
      *
-     * @var array<array-key, Channel>
+     * @var array<int, true>
      */
-    protected array $collectionReplications = [];
+    private array $applying = [];
 
     /**
+     * Set once the constructor has stored the source and destination. Database::__construct() calls
+     * setAuthorization() before then, and that call must leave their authorization in place.
+     */
+    private bool $wrapped = false;
+
+    /**
+     * The mirror uses the source's authorization; the source and the destination keep their own.
+     *
      * @param  array<Filter>  $filters
      */
     public function __construct(
@@ -76,13 +82,15 @@ class Mirror extends Database
         ?Database $destination = null,
         array $filters = [],
     ) {
-        $this->source = $source;
-        $this->destination = $destination;
-        $this->writeFilters = $filters;
         parent::__construct(
             $source->getAdapter(),
             $source->getCache()
         );
+        $this->source = $source;
+        $this->destination = $destination;
+        $this->writeFilters = $filters;
+        $this->wrapped = true;
+        parent::setAuthorization($source->getAuthorization());
     }
 
     /**
@@ -150,6 +158,19 @@ class Mirror extends Database
     }
 
     /**
+     * Waits until every replication queued through the mirror so far has reached the destination or has been
+     * reported to onError(). Outside a coroutine, and inside a replication, there is nothing to wait for.
+     */
+    public function awaitReplications(): void
+    {
+        if ($this->appliesInline()) {
+            return;
+        }
+
+        $this->latestReplication?->pop();
+    }
+
+    /**
      * @param  array<mixed>  $args
      */
     protected function delegate(string $method, array $args = []): mixed
@@ -162,6 +183,30 @@ class Mirror extends Database
 
         try {
             $this->destination->{$method}(...$args);
+        } catch (Throwable $error) {
+            $this->logError($method, $error);
+        }
+
+        return $sourceResult;
+    }
+
+    /**
+     * Calls the method on the source, then on the destination in order with the replications (see inOrder()); a
+     * destination failure is reported to onError().
+     *
+     * @param  array<mixed>  $args
+     */
+    private function delegateInOrder(string $method, array $args = []): mixed
+    {
+        $sourceResult = $this->source->{$method}(...$args);
+
+        $destination = $this->destination;
+        if ($destination === null) {
+            return $sourceResult;
+        }
+
+        try {
+            $this->inOrder(fn (): mixed => $destination->{$method}(...$args));
         } catch (Throwable $error) {
             $this->logError($method, $error);
         }
@@ -297,7 +342,7 @@ class Mirror extends Database
      */
     public function setTimeout(int $milliseconds, Event $event = Event::All): static
     {
-        $this->delegate(__FUNCTION__, \func_get_args());
+        $this->delegateInOrder(__FUNCTION__, \func_get_args());
 
         return $this;
     }
@@ -307,7 +352,7 @@ class Mirror extends Database
      */
     public function clearTimeout(Event $event = Event::All): void
     {
-        $this->delegate(__FUNCTION__, \func_get_args());
+        $this->delegateInOrder(__FUNCTION__, \func_get_args());
     }
 
     /**
@@ -667,7 +712,7 @@ class Mirror extends Database
     public function exists(?string $database = null, ?string $collection = null): bool
     {
         /** @var bool $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        $result = $this->delegateInOrder(__FUNCTION__, \func_get_args());
         return $result;
     }
 
@@ -678,8 +723,9 @@ class Mirror extends Database
     {
         $result = $this->source->create($database);
 
-        if ($this->destination !== null) {
-            $this->destination->create($database);
+        $destination = $this->destination;
+        if ($destination !== null) {
+            $this->inOrder(fn (): bool => $destination->create($database));
         }
 
         return $result;
@@ -690,10 +736,8 @@ class Mirror extends Database
      */
     public function delete(?string $database = null): bool
     {
-        $this->awaitEveryReplication();
-
         /** @var bool $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        $result = $this->delegateInOrder(__FUNCTION__, \func_get_args());
         return $result;
     }
 
@@ -727,26 +771,34 @@ class Mirror extends Database
 
         $result = $this->source->createCollection($collection);
 
-        if ($this->destination === null) {
+        $destination = $this->destination;
+        if ($destination === null) {
             return $result;
         }
 
         try {
-            $filtered = $result;
-            foreach ($this->writeFilters as $filter) {
-                $filtered = $filter->beforeCreateCollection(
-                    source: $this->source,
-                    destination: $this->destination,
-                    collectionId: $collectionId,
-                    collection: $filtered,
-                );
-                if ($filtered === null) {
-                    return $result;
+            $replicated = $this->inOrder(function () use ($destination, $collection, $collectionId, $result): ?Document {
+                $filtered = $result;
+                foreach ($this->writeFilters as $filter) {
+                    $filtered = $filter->beforeCreateCollection(
+                        source: $this->source,
+                        destination: $destination,
+                        collectionId: $collectionId,
+                        collection: $filtered,
+                    );
+                    if ($filtered === null) {
+                        return null;
+                    }
                 }
-            }
-            $result = $filtered;
 
-            $this->destination->createCollection($collection);
+                $destination->createCollection($collection);
+
+                return $filtered;
+            });
+            if ($replicated === null) {
+                return $result;
+            }
+            $result = $replicated;
 
             $this->silent(function () use ($collectionId) {
                 $this->createUpgrades();
@@ -776,24 +828,25 @@ class Mirror extends Database
             return $result;
         }
 
-        $this->awaitReplications($id);
-
         try {
-            $filtered = $result;
-            foreach ($this->writeFilters as $filter) {
-                $filtered = $filter->beforeUpdateCollection(
-                    source: $this->source,
-                    destination: $destination,
-                    collectionId: $id,
-                    collection: $filtered,
-                );
-                if ($filtered === null) {
-                    return $result;
+            $result = $this->inOrder(function () use ($destination, $id, $permissions, $documentSecurity, $result): Document {
+                $filtered = $result;
+                foreach ($this->writeFilters as $filter) {
+                    $filtered = $filter->beforeUpdateCollection(
+                        source: $this->source,
+                        destination: $destination,
+                        collectionId: $id,
+                        collection: $filtered,
+                    );
+                    if ($filtered === null) {
+                        return $result;
+                    }
                 }
-            }
-            $result = $filtered;
 
-            $destination->updateCollection($id, $permissions, $documentSecurity);
+                $destination->updateCollection($id, $permissions, $documentSecurity);
+
+                return $filtered;
+            });
         } catch (Throwable $error) {
             $this->logError('updateCollection', $error);
         }
@@ -813,18 +866,18 @@ class Mirror extends Database
             return $result;
         }
 
-        $this->awaitReplications($id);
-
         try {
-            $destination->deleteCollection($id);
+            $this->inOrder(function () use ($destination, $id): void {
+                $destination->deleteCollection($id);
 
-            foreach ($this->writeFilters as $filter) {
-                $filter->beforeDeleteCollection(
-                    source: $this->source,
-                    destination: $destination,
-                    collectionId: $id,
-                );
-            }
+                foreach ($this->writeFilters as $filter) {
+                    $filter->beforeDeleteCollection(
+                        source: $this->source,
+                        destination: $destination,
+                        collectionId: $id,
+                    );
+                }
+            });
         } catch (Throwable $error) {
             $this->logError('deleteCollection', $error);
         }
@@ -844,29 +897,26 @@ class Mirror extends Database
             return $result;
         }
 
-        $this->awaitReplications($collection);
-
         try {
-            $document = $attribute->toDocument();
-            $attributeId = $attribute->getKey();
+            $result = $this->inOrder(function () use ($destination, $collection, $attribute, $result): bool {
+                $document = $attribute->toDocument();
+                $attributeId = $attribute->getKey();
 
-            foreach ($this->writeFilters as $filter) {
-                $document = $filter->beforeCreateAttribute(
-                    source: $this->source,
-                    destination: $destination,
-                    collectionId: $collection,
-                    attributeId: $attributeId,
-                    attribute: $document,
-                );
-                if ($document === null) {
-                    break;
+                foreach ($this->writeFilters as $filter) {
+                    $document = $filter->beforeCreateAttribute(
+                        source: $this->source,
+                        destination: $destination,
+                        collectionId: $collection,
+                        attributeId: $attributeId,
+                        attribute: $document,
+                    );
+                    if ($document === null) {
+                        return $result;
+                    }
                 }
-            }
 
-            if ($document !== null) {
-                $filteredAttribute = Attribute::fromDocument($document);
-                $result = $destination->createAttribute($collection, $filteredAttribute);
-            }
+                return $destination->createAttribute($collection, Attribute::fromDocument($document));
+            });
         } catch (Throwable $error) {
             $this->logError('createAttribute', $error);
         }
@@ -886,38 +936,37 @@ class Mirror extends Database
             return $result;
         }
 
-        $this->awaitReplications($collection);
-
         try {
-            $filteredAttributes = [];
-            foreach ($attributes as $attribute) {
-                $document = $attribute->toDocument();
-                $attributeId = $attribute->getKey();
+            $result = $this->inOrder(function () use ($destination, $collection, $attributes, $result): bool {
+                $filteredAttributes = [];
+                foreach ($attributes as $attribute) {
+                    $document = $attribute->toDocument();
+                    $attributeId = $attribute->getKey();
 
-                foreach ($this->writeFilters as $filter) {
-                    $document = $filter->beforeCreateAttribute(
-                        source: $this->source,
-                        destination: $destination,
-                        collectionId: $collection,
-                        attributeId: $attributeId,
-                        attribute: $document,
-                    );
-                    if ($document === null) {
-                        break;
+                    foreach ($this->writeFilters as $filter) {
+                        $document = $filter->beforeCreateAttribute(
+                            source: $this->source,
+                            destination: $destination,
+                            collectionId: $collection,
+                            attributeId: $attributeId,
+                            attribute: $document,
+                        );
+                        if ($document === null) {
+                            break;
+                        }
+                    }
+
+                    if ($document !== null) {
+                        $filteredAttributes[] = Attribute::fromDocument($document);
                     }
                 }
 
-                if ($document !== null) {
-                    $filteredAttributes[] = Attribute::fromDocument($document);
+                if ($filteredAttributes === []) {
+                    return $result;
                 }
-            }
 
-            if ($filteredAttributes !== []) {
-                $result = $destination->createAttributes(
-                    $collection,
-                    $filteredAttributes,
-                );
-            }
+                return $destination->createAttributes($collection, $filteredAttributes);
+            });
         } catch (Throwable $error) {
             $this->logError('createAttributes', $error);
         }
@@ -950,40 +999,41 @@ class Mirror extends Database
             return $document;
         }
 
-        $this->awaitReplications($collection);
-
         try {
-            $filtered = $document;
-            foreach ($this->writeFilters as $filter) {
-                $filtered = $filter->beforeUpdateAttribute(
-                    source: $this->source,
-                    destination: $destination,
-                    collectionId: $collection,
-                    attributeId: $id,
-                    attribute: $filtered,
-                );
-                if ($filtered === null) {
-                    return $document;
+            $document = $this->inOrder(function () use ($destination, $collection, $id, $newKey, $document): Document {
+                $filtered = $document;
+                foreach ($this->writeFilters as $filter) {
+                    $filtered = $filter->beforeUpdateAttribute(
+                        source: $this->source,
+                        destination: $destination,
+                        collectionId: $collection,
+                        attributeId: $id,
+                        attribute: $filtered,
+                    );
+                    if ($filtered === null) {
+                        return $document;
+                    }
                 }
-            }
-            $document = $filtered;
 
-            $typedAttribute = Attribute::fromDocument($document);
+                $typedAttribute = Attribute::fromDocument($filtered);
 
-            $destination->updateAttribute(
-                $collection,
-                $id,
-                $typedAttribute->getType(),
-                $typedAttribute->getSize(),
-                $typedAttribute->isRequired(),
-                $typedAttribute->getDefault(),
-                $typedAttribute->isSigned(),
-                $typedAttribute->isArray(),
-                $typedAttribute->getFormat() ?: null,
-                $typedAttribute->getFormatOptions() ?: null,
-                $typedAttribute->getFilters() ?: null,
-                $newKey,
-            );
+                $destination->updateAttribute(
+                    $collection,
+                    $id,
+                    $typedAttribute->getType(),
+                    $typedAttribute->getSize(),
+                    $typedAttribute->isRequired(),
+                    $typedAttribute->getDefault(),
+                    $typedAttribute->isSigned(),
+                    $typedAttribute->isArray(),
+                    $typedAttribute->getFormat() ?: null,
+                    $typedAttribute->getFormatOptions() ?: null,
+                    $typedAttribute->getFilters() ?: null,
+                    $newKey,
+                );
+
+                return $filtered;
+            });
         } catch (Throwable $error) {
             $this->logError('updateAttribute', $error);
         }
@@ -1003,19 +1053,19 @@ class Mirror extends Database
             return $result;
         }
 
-        $this->awaitReplications($collection);
-
         try {
-            foreach ($this->writeFilters as $filter) {
-                $filter->beforeDeleteAttribute(
-                    source: $this->source,
-                    destination: $destination,
-                    collectionId: $collection,
-                    attributeId: $id,
-                );
-            }
+            $this->inOrder(function () use ($destination, $collection, $id): void {
+                foreach ($this->writeFilters as $filter) {
+                    $filter->beforeDeleteAttribute(
+                        source: $this->source,
+                        destination: $destination,
+                        collectionId: $collection,
+                        attributeId: $id,
+                    );
+                }
 
-            $destination->deleteAttribute($collection, $id);
+                $destination->deleteAttribute($collection, $id);
+            });
         } catch (Throwable $error) {
             $this->logError('deleteAttribute', $error);
         }
@@ -1035,29 +1085,26 @@ class Mirror extends Database
             return $result;
         }
 
-        $this->awaitReplications($collection);
-
         try {
-            $document = $index->toDocument();
-            $indexId = $index->getKey();
+            $result = $this->inOrder(function () use ($destination, $collection, $index, $result): bool {
+                $document = $index->toDocument();
+                $indexId = $index->getKey();
 
-            foreach ($this->writeFilters as $filter) {
-                $document = $filter->beforeCreateIndex(
-                    source: $this->source,
-                    destination: $destination,
-                    collectionId: $collection,
-                    indexId: $indexId,
-                    index: $document,
-                );
-                if ($document === null) {
-                    break;
+                foreach ($this->writeFilters as $filter) {
+                    $document = $filter->beforeCreateIndex(
+                        source: $this->source,
+                        destination: $destination,
+                        collectionId: $collection,
+                        indexId: $indexId,
+                        index: $document,
+                    );
+                    if ($document === null) {
+                        return $result;
+                    }
                 }
-            }
 
-            if ($document !== null) {
-                $filteredIndex = Index::fromDocument($document);
-                $result = $destination->createIndex($collection, $filteredIndex);
-            }
+                return $destination->createIndex($collection, Index::fromDocument($document));
+            });
         } catch (Throwable $error) {
             $this->logError('createIndex', $error);
         }
@@ -1077,19 +1124,19 @@ class Mirror extends Database
             return $result;
         }
 
-        $this->awaitReplications($collection);
-
         try {
-            $destination->deleteIndex($collection, $id);
+            $this->inOrder(function () use ($destination, $collection, $id): void {
+                $destination->deleteIndex($collection, $id);
 
-            foreach ($this->writeFilters as $filter) {
-                $filter->beforeDeleteIndex(
-                    source: $this->source,
-                    destination: $destination,
-                    collectionId: $collection,
-                    indexId: $id,
-                );
-            }
+                foreach ($this->writeFilters as $filter) {
+                    $filter->beforeDeleteIndex(
+                        source: $this->source,
+                        destination: $destination,
+                        collectionId: $collection,
+                        indexId: $id,
+                    );
+                }
+            });
         } catch (Throwable $error) {
             $this->logError('deleteIndex', $error);
         }
@@ -1119,27 +1166,27 @@ class Mirror extends Database
 
         try {
             $clone = clone $document;
+            $this->inOrder(function () use ($destination, $collection, $clone): void {
+                foreach ($this->writeFilters as $filter) {
+                    $clone = $filter->beforeCreateDocument(
+                        source: $this->source,
+                        destination: $destination,
+                        collectionId: $collection,
+                        document: $clone,
+                    );
+                }
 
-            foreach ($this->writeFilters as $filter) {
-                $clone = $filter->beforeCreateDocument(
-                    source: $this->source,
-                    destination: $destination,
-                    collectionId: $collection,
-                    document: $clone,
-                );
-            }
+                $destination->withPreserveDates(fn (): Document => $destination->createDocument($collection, $clone));
 
-            $this->awaitReplications($collection, [$document->getId()]);
-            $destination->withPreserveDates(fn (): Document => $destination->createDocument($collection, $clone));
-
-            foreach ($this->writeFilters as $filter) {
-                $filter->afterCreateDocument(
-                    source: $this->source,
-                    destination: $destination,
-                    collectionId: $collection,
-                    document: $clone,
-                );
-            }
+                foreach ($this->writeFilters as $filter) {
+                    $filter->afterCreateDocument(
+                        source: $this->source,
+                        destination: $destination,
+                        collectionId: $collection,
+                        document: $clone,
+                    );
+                }
+            });
         } catch (Throwable $error) {
             $this->logError('createDocument', $error);
         }
@@ -1164,9 +1211,10 @@ class Mirror extends Database
             )
             : $this->source->createDocuments($collection, $documents, $batchSize, $onNext, $onError);
 
+        $destination = $this->destination;
         if (
             \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
-            || $this->destination === null
+            || $destination === null
         ) {
             return $modified;
         }
@@ -1176,13 +1224,11 @@ class Mirror extends Database
             return $modified;
         }
 
-        $clones = [];
-        $destination = $this->destination;
+        $clones = \array_map(static fn (Document $document): Document => clone $document, $documents);
+        $skipDuplicates = $this->skippingDuplicates();
 
-        try {
-            foreach ($documents as $document) {
-                $clone = clone $document;
-
+        $this->replicate('createDocuments', function () use ($destination, $collection, $clones, $batchSize, $skipDuplicates): void {
+            foreach ($clones as $index => $clone) {
                 foreach ($this->writeFilters as $filter) {
                     $clone = $filter->beforeCreateDocument(
                         source: $this->source,
@@ -1191,37 +1237,13 @@ class Mirror extends Database
                         document: $clone,
                     );
                 }
-
-                $clones[] = $clone;
+                $clones[$index] = $clone;
             }
-        } catch (Throwable $error) {
-            $this->logError('createDocuments', $error);
 
-            return $modified;
-        }
-
-        $skipDuplicates = $this->skippingDuplicates();
-
-        $this->replicate('createDocuments', $collection, self::documentIds($documents), function () use ($destination, $collection, $clones, $batchSize, $skipDuplicates): void {
-            if ($skipDuplicates) {
-                $destination->skipDuplicates(
-                    fn () => $destination->withPreserveDates(
-                        fn () => $destination->createDocuments(
-                            $collection,
-                            $clones,
-                            $batchSize,
-                        )
-                    )
-                );
-            } else {
-                $destination->withPreserveDates(
-                    fn () => $destination->createDocuments(
-                        $collection,
-                        $clones,
-                        $batchSize,
-                    )
-                );
-            }
+            $create = fn (): mixed => $destination->withPreserveDates(
+                fn (): int => $destination->createDocuments($collection, $clones, $batchSize)
+            );
+            $skipDuplicates ? $destination->skipDuplicates($create) : $create();
 
             foreach ($clones as $clone) {
                 foreach ($this->writeFilters as $filter) {
@@ -1261,27 +1283,27 @@ class Mirror extends Database
 
         try {
             $clone = clone $document;
+            $this->inOrder(function () use ($destination, $collection, $id, $clone): void {
+                foreach ($this->writeFilters as $filter) {
+                    $clone = $filter->beforeUpdateDocument(
+                        source: $this->source,
+                        destination: $destination,
+                        collectionId: $collection,
+                        document: $clone,
+                    );
+                }
 
-            foreach ($this->writeFilters as $filter) {
-                $clone = $filter->beforeUpdateDocument(
-                    source: $this->source,
-                    destination: $destination,
-                    collectionId: $collection,
-                    document: $clone,
-                );
-            }
+                $destination->withPreserveDates(fn (): Document => $destination->updateDocument($collection, $id, $clone));
 
-            $this->awaitReplications($collection, [$id]);
-            $destination->withPreserveDates(fn (): Document => $destination->updateDocument($collection, $id, $clone));
-
-            foreach ($this->writeFilters as $filter) {
-                $filter->afterUpdateDocument(
-                    source: $this->source,
-                    destination: $destination,
-                    collectionId: $collection,
-                    document: $clone,
-                );
-            }
+                foreach ($this->writeFilters as $filter) {
+                    $filter->afterUpdateDocument(
+                        source: $this->source,
+                        destination: $destination,
+                        collectionId: $collection,
+                        document: $clone,
+                    );
+                }
+            });
         } catch (Throwable $error) {
             $this->logError('updateDocument', $error);
         }
@@ -1310,9 +1332,10 @@ class Mirror extends Database
             $onError,
         );
 
+        $destination = $this->destination;
         if (
             \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
-            || $this->destination === null
+            || $destination === null
         ) {
             return $modified;
         }
@@ -1323,9 +1346,8 @@ class Mirror extends Database
         }
 
         $clone = clone $updates;
-        $destination = $this->destination;
 
-        try {
+        $this->replicate('updateDocuments', function () use ($destination, $collection, $clone, $queries, $batchSize): void {
             foreach ($this->writeFilters as $filter) {
                 $clone = $filter->beforeUpdateDocuments(
                     source: $this->source,
@@ -1335,15 +1357,9 @@ class Mirror extends Database
                     queries: $queries,
                 );
             }
-        } catch (Throwable $error) {
-            $this->logError('updateDocuments', $error);
 
-            return $modified;
-        }
-
-        $this->replicate('updateDocuments', $collection, null, function () use ($destination, $collection, $clone, $queries, $batchSize): void {
             $destination->withPreserveDates(
-                fn () => $destination->updateDocuments(
+                fn (): int => $destination->updateDocuments(
                     $collection,
                     $clone,
                     $queries,
@@ -1389,9 +1405,10 @@ class Mirror extends Database
             $batchSize,
         );
 
+        $destination = $this->destination;
         if (
             \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
-            || $this->destination === null
+            || $destination === null
         ) {
             return $modified;
         }
@@ -1401,14 +1418,11 @@ class Mirror extends Database
             return $modified;
         }
 
-        $clones = [];
-        $destination = $this->destination;
+        $clones = \array_map(static fn (Document $document): Document => clone $document, $documents);
         $action = $attribute === '' ? 'upsertDocuments' : 'upsertDocumentsWithIncrease';
 
-        try {
-            foreach ($documents as $document) {
-                $clone = clone $document;
-
+        $this->replicate($action, function () use ($destination, $collection, $attribute, $clones, $batchSize): void {
+            foreach ($clones as $index => $clone) {
                 foreach ($this->writeFilters as $filter) {
                     $clone = $filter->beforeCreateOrUpdateDocument(
                         source: $this->source,
@@ -1417,18 +1431,11 @@ class Mirror extends Database
                         document: $clone,
                     );
                 }
-
-                $clones[] = $clone;
+                $clones[$index] = $clone;
             }
-        } catch (Throwable $error) {
-            $this->logError($action, $error);
 
-            return $modified;
-        }
-
-        $this->replicate($action, $collection, self::documentIds($documents), function () use ($destination, $collection, $attribute, $clones, $batchSize): void {
             $destination->withPreserveDates(
-                fn () => $destination->upsertDocumentsWithIncrease(
+                fn (): int => $destination->upsertDocumentsWithIncrease(
                     $collection,
                     $attribute,
                     $clones,
@@ -1458,9 +1465,10 @@ class Mirror extends Database
     {
         $result = $this->source->deleteDocument($collection, $id);
 
+        $destination = $this->destination;
         if (
             \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
-            || $this->destination === null
+            || $destination === null
         ) {
             return $result;
         }
@@ -1470,23 +1478,16 @@ class Mirror extends Database
             return $result;
         }
 
-        try {
+        $this->replicate('deleteDocument', function () use ($destination, $collection, $id): void {
             foreach ($this->writeFilters as $filter) {
                 $filter->beforeDeleteDocument(
                     source: $this->source,
-                    destination: $this->destination,
+                    destination: $destination,
                     collectionId: $collection,
                     documentId: $id,
                 );
             }
-        } catch (Throwable $error) {
-            $this->logError('deleteDocument', $error);
 
-            return $result;
-        }
-
-        $destination = $this->destination;
-        $this->replicate('deleteDocument', $collection, [$id], function () use ($destination, $collection, $id): void {
             $destination->deleteDocument($collection, $id);
 
             foreach ($this->writeFilters as $filter) {
@@ -1520,9 +1521,10 @@ class Mirror extends Database
             $onError,
         );
 
+        $destination = $this->destination;
         if (
             \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
-            || $this->destination === null
+            || $destination === null
         ) {
             return $modified;
         }
@@ -1532,23 +1534,16 @@ class Mirror extends Database
             return $modified;
         }
 
-        try {
+        $this->replicate('deleteDocuments', function () use ($destination, $collection, $queries, $batchSize): void {
             foreach ($this->writeFilters as $filter) {
                 $filter->beforeDeleteDocuments(
                     source: $this->source,
-                    destination: $this->destination,
+                    destination: $destination,
                     collectionId: $collection,
                     queries: $queries,
                 );
             }
-        } catch (Throwable $error) {
-            $this->logError('deleteDocuments', $error);
 
-            return $modified;
-        }
-
-        $destination = $this->destination;
-        $this->replicate('deleteDocuments', $collection, null, function () use ($destination, $collection, $queries, $batchSize): void {
             $destination->deleteDocuments(
                 $collection,
                 $queries,
@@ -1573,10 +1568,8 @@ class Mirror extends Database
      */
     public function updateAttributeRequired(string $collection, string $id, bool $required): Document
     {
-        $this->awaitReplications($collection);
-
         /** @var Document $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        $result = $this->delegateInOrder(__FUNCTION__, \func_get_args());
         return $result;
     }
 
@@ -1585,10 +1578,8 @@ class Mirror extends Database
      */
     public function updateAttributeFormat(string $collection, string $id, string $format): Document
     {
-        $this->awaitReplications($collection);
-
         /** @var Document $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        $result = $this->delegateInOrder(__FUNCTION__, \func_get_args());
         return $result;
     }
 
@@ -1597,10 +1588,8 @@ class Mirror extends Database
      */
     public function updateAttributeFormatOptions(string $collection, string $id, array $formatOptions): Document
     {
-        $this->awaitReplications($collection);
-
         /** @var Document $result */
-        $result = $this->delegate(__FUNCTION__, [$collection, $id, $formatOptions]);
+        $result = $this->delegateInOrder(__FUNCTION__, [$collection, $id, $formatOptions]);
         return $result;
     }
 
@@ -1609,10 +1598,8 @@ class Mirror extends Database
      */
     public function updateAttributeFilters(string $collection, string $id, array $filters): Document
     {
-        $this->awaitReplications($collection);
-
         /** @var Document $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        $result = $this->delegateInOrder(__FUNCTION__, \func_get_args());
         return $result;
     }
 
@@ -1621,10 +1608,8 @@ class Mirror extends Database
      */
     public function updateAttributeDefault(string $collection, string $id, mixed $default = null): Document
     {
-        $this->awaitReplications($collection);
-
         /** @var Document $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        $result = $this->delegateInOrder(__FUNCTION__, \func_get_args());
         return $result;
     }
 
@@ -1633,10 +1618,8 @@ class Mirror extends Database
      */
     public function renameAttribute(string $collection, string $old, string $new): bool
     {
-        $this->awaitReplications($collection);
-
         /** @var bool $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        $result = $this->delegateInOrder(__FUNCTION__, \func_get_args());
         return $result;
     }
 
@@ -1645,11 +1628,8 @@ class Mirror extends Database
      */
     public function createRelationship(Relationship $relationship): bool
     {
-        $this->awaitReplications($relationship->getSourceCollection());
-        $this->awaitReplications($relationship->getRelatedCollection());
-
         /** @var bool $result */
-        $result = $this->delegate(__FUNCTION__, [$relationship]);
+        $result = $this->delegateInOrder(__FUNCTION__, [$relationship]);
         return $result;
     }
 
@@ -1664,10 +1644,8 @@ class Mirror extends Database
         ?bool $twoWay = null,
         ?ForeignKeyAction $onDelete = null
     ): bool {
-        $this->awaitReplications($collection);
-
         /** @var bool $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        $result = $this->delegateInOrder(__FUNCTION__, \func_get_args());
         return $result;
     }
 
@@ -1676,10 +1654,8 @@ class Mirror extends Database
      */
     public function deleteRelationship(string $collection, string $id): bool
     {
-        $this->awaitReplications($collection);
-
         /** @var bool $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        $result = $this->delegateInOrder(__FUNCTION__, \func_get_args());
         return $result;
     }
 
@@ -1688,10 +1664,8 @@ class Mirror extends Database
      */
     public function renameIndex(string $collection, string $old, string $new): bool
     {
-        $this->awaitReplications($collection);
-
         /** @var bool $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        $result = $this->delegateInOrder(__FUNCTION__, \func_get_args());
         return $result;
     }
 
@@ -1700,10 +1674,8 @@ class Mirror extends Database
      */
     public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float|string $value = 1, int|float|string|null $max = null): Document
     {
-        $this->awaitReplications($collection, [$id]);
-
         /** @var Document $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        $result = $this->delegateInOrder(__FUNCTION__, \func_get_args());
         return $result;
     }
 
@@ -1712,10 +1684,8 @@ class Mirror extends Database
      */
     public function decreaseDocumentAttribute(string $collection, string $id, string $attribute, int|float|string $value = 1, int|float|string|null $min = null): Document
     {
-        $this->awaitReplications($collection, [$id]);
-
         /** @var Document $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        $result = $this->delegateInOrder(__FUNCTION__, \func_get_args());
         return $result;
     }
 
@@ -1793,14 +1763,13 @@ class Mirror extends Database
     /**
      * Applies a write to the destination under the authorization, relationship, silence, tenant and toggle state the
      * caller has at the time of the call, without its request timestamp (the source checked it), and reports a
-     * failure through onError(). Inside a coroutine the write runs in a coroutine
-     * of its own, once every earlier replication that can reach the same documents has finished; outside one it runs
-     * before this returns, since a task that yields outside a scheduler never resumes.
+     * failure through onError(). Inside a coroutine the write runs in a coroutine of its own, in order with every other
+     * destination change made through the mirror (see inOrder()); outside one it runs before this returns, since a
+     * task that yields outside a scheduler never resumes.
      *
-     * @param  array<string>|null  $documentIds  The documents the write can reach, or null for every document of the collection
      * @param  Closure(): void  $write
      */
-    private function replicate(string $action, string $collection, ?array $documentIds, Closure $write): void
+    private function replicate(string $action, Closure $write): void
     {
         $destination = $this->destination;
         if ($destination === null) {
@@ -1818,123 +1787,84 @@ class Mirror extends Database
             }
         };
 
-        if (! \extension_loaded('swoole') || Coroutine::getCid() <= 0) {
+        if ($this->appliesInline()) {
             $apply();
 
             return;
         }
 
-        $earlier = $this->replicationsBefore($collection, $documentIds);
-        $finished = new Channel(1);
-        $this->queueReplication($collection, $documentIds, $finished);
-
-        Promise::async(function () use ($apply, $earlier, $collection, $documentIds, $finished): void {
-            try {
-                foreach ($earlier as $replication) {
-                    $replication->pop();
-                }
-
-                $apply();
-            } finally {
-                $this->releaseReplication($collection, $documentIds, $finished);
-            }
-        });
+        Promise::async($this->queue($apply));
     }
 
     /**
-     * Waits until every queued replication that can reach these documents has finished, so a write or schema
-     * change the caller replicates itself reaches the destination after them.
+     * Applies a destination change before returning, once every destination change queued through the mirror before
+     * it has been applied or has failed; the changes queued after it wait for it. The destination therefore receives
+     * the mirror's changes one at a time, in the order they were made, so they never share its connection and a write
+     * never overtakes an earlier one, whichever documents, related documents or schema they reach.
      *
-     * @param  array<string>|null  $documentIds  The documents the caller's change reaches, or null for the whole collection
+     * @template T
+     *
+     * @param  Closure(): T  $change
+     * @return T
      */
-    private function awaitReplications(string $collection, ?array $documentIds = null): void
+    private function inOrder(Closure $change): mixed
     {
-        foreach ($this->replicationsBefore($collection, $documentIds) as $replication) {
-            $replication->pop();
+        if ($this->appliesInline()) {
+            return $change();
         }
-    }
 
-    private function awaitEveryReplication(): void
-    {
-        $collections = \array_keys($this->documentReplications + $this->collectionReplications);
-        foreach ($collections as $collection) {
-            $this->awaitReplications((string) $collection);
-        }
+        return $this->queue($change)();
     }
 
     /**
-     * @param  array<string>|null  $documentIds
-     * @return array<int, Channel>
+     * Whether a destination change applies at once: outside a coroutine nothing is queued, and a change made while
+     * this coroutine applies one, such as from onError() or a write filter, is part of that change.
      */
-    private function replicationsBefore(string $collection, ?array $documentIds): array
+    private function appliesInline(): bool
     {
-        $pending = $this->documentReplications[$collection] ?? [];
-        $earlier = $documentIds === null
-            ? \array_values($pending)
-            : \array_values(\array_intersect_key($pending, \array_flip($documentIds)));
+        $coroutine = self::coroutine();
 
-        if (isset($this->collectionReplications[$collection])) {
-            $earlier[] = $this->collectionReplications[$collection];
-        }
+        return $coroutine <= 0 || isset($this->applying[$coroutine]);
+    }
 
-        $unique = [];
-        foreach ($earlier as $replication) {
-            $unique[\spl_object_id($replication)] = $replication;
-        }
+    private static function coroutine(): int
+    {
+        /** @var int $coroutine */
+        $coroutine = \extension_loaded('swoole') ? Coroutine::getCid() : -1;
 
-        return $unique;
+        return $coroutine;
     }
 
     /**
-     * @param  array<string>|null  $documentIds
+     * Queues a destination change behind the latest one and returns what applies it once that one has been applied.
+     *
+     * @template T
+     *
+     * @param  Closure(): T  $change
+     * @return Closure(): T
      */
-    private function queueReplication(string $collection, ?array $documentIds, Channel $finished): void
+    private function queue(Closure $change): Closure
     {
-        if ($documentIds === null) {
-            unset($this->documentReplications[$collection]);
-            $this->collectionReplications[$collection] = $finished;
+        $earlier = $this->latestReplication;
+        $applied = new Channel(1);
+        $this->latestReplication = $applied;
 
-            return;
-        }
+        return function () use ($earlier, $applied, $change): mixed {
+            $coroutine = self::coroutine();
 
-        foreach ($documentIds as $id) {
-            $this->documentReplications[$collection][$id] = $finished;
-        }
-    }
+            try {
+                $earlier?->pop();
+                $this->applying[$coroutine] = true;
 
-    /**
-     * @param  array<string>|null  $documentIds
-     */
-    private function releaseReplication(string $collection, ?array $documentIds, Channel $finished): void
-    {
-        $finished->close();
-
-        if ($documentIds === null) {
-            if (($this->collectionReplications[$collection] ?? null) === $finished) {
-                unset($this->collectionReplications[$collection]);
+                return $change();
+            } finally {
+                unset($this->applying[$coroutine]);
+                $applied->close();
+                if ($this->latestReplication === $applied) {
+                    $this->latestReplication = null;
+                }
             }
-
-            return;
-        }
-
-        foreach ($documentIds as $id) {
-            if (($this->documentReplications[$collection][$id] ?? null) === $finished) {
-                unset($this->documentReplications[$collection][$id]);
-            }
-        }
-
-        if (($this->documentReplications[$collection] ?? null) === []) {
-            unset($this->documentReplications[$collection]);
-        }
-    }
-
-    /**
-     * @param  array<Document>  $documents
-     * @return array<string>
-     */
-    private static function documentIds(array $documents): array
-    {
-        return \array_map(static fn (Document $document): string => $document->getId(), $documents);
+        };
     }
 
     protected function logError(string $action, Throwable $error): void
@@ -1949,13 +1879,11 @@ class Mirror extends Database
      */
     public function setAuthorization(Authorization $authorization): self
     {
-
         parent::setAuthorization($authorization);
 
-        $this->source->setAuthorization($authorization);
-
-        if ($this->destination !== null) {
-            $this->destination->setAuthorization($authorization);
+        if ($this->wrapped) {
+            $this->source->setAuthorization($authorization);
+            $this->destination?->setAuthorization($authorization);
         }
 
         return $this;

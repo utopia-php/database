@@ -817,6 +817,8 @@ not change anything for an upgrade from 7.x.
 - Requires `utopia-php/query` 0.6 and `utopia-php/async` 0.2. `utopia-php/async` requires `opis/closure`, which the
   library itself does not use. `Utopia\Async\Serializer::unserialize()` no longer decodes closure payloads; use
   `Serializer::unserializeTrusted()` for data from a trusted channel.
+- Requires `utopia-php/query` 0.6.2 or later: its PostgreSQL builder quotes each key of a JSON path it reads or
+  writes, and its MongoDB builder rejects an empty field name or one that starts with `$` in a filter.
 
 ### Development
 

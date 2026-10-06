@@ -358,6 +358,8 @@ have to make, with the 7.x and 8.0 forms side by side.
 
 ### Fixed
 
+- With validation skipped, the SQL adapters filter the attribute of `sum()` and the grouped columns they qualify
+  with a join alias, and every identifier they quote escapes the quote character.
 - A delete retried on the same `Database` after its cascade failed (for example on a `Restricted` related document
   or a permission failure) now runs the cascade.
 - `Mirror` forwards `setCacheName()`, `setGlobalCollections()`, `resetGlobalCollections()`,

@@ -1941,7 +1941,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
 
     protected function quote(string $string): string
     {
-        return "\"{$string}\"";
+        return '"'.\str_replace('"', '""', $string).'"';
     }
 
     protected function getIdentifierQuoteChar(): string

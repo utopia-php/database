@@ -2165,7 +2165,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      */
     private function qualifySumSelect(string $attribute, array $joinTablePrefixes, Document $collection): string
     {
-        $quote = $this->getIdentifierQuoteChar();
         $aliasSet = \array_fill_keys(\array_column($joinTablePrefixes, 'alias'), true);
         $aliasSet[Query::DEFAULT_ALIAS] = true;
         $mainAttributes = [];
@@ -2184,7 +2183,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $prefix = \substr($qualified, 0, (int) $dot);
         $name = \substr($qualified, (int) $dot + 1);
 
-        return $quote.$prefix.$quote.'.'.$quote.$name.$quote;
+        return $this->quote($this->filter($prefix)).'.'.$this->quote($this->filter($name));
     }
 
     /**
@@ -4906,7 +4905,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     }
                     foreach ($qualified as $index => $group) {
                         [$table, $column] = \explode('.', $groupCols[$index], 2);
-                        $builder->select($this->quote($table).'.'.$this->quote($column).' AS '.$this->quote($group));
+                        $builder->select($this->quote($this->filter($table)).'.'.$this->quote($this->filter($column)).' AS '.$this->quote($group));
                     }
                 }
             }
@@ -6826,7 +6825,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      */
     protected function quote(string $string): string
     {
-        return "`{$string}`";
+        return '`'.\str_replace('`', '``', $string).'`';
     }
 
     /**

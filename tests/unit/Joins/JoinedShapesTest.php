@@ -21,12 +21,12 @@ use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 
 /**
- * `alias.*` selects what a join returns without a select, next to other selects, and an order may
- * name a joined attribute by its bare name when exactly one join declares it.
+ * `alias.*` selects the joined row as a direct read of the joined collection returns it, alone or next to other
+ * selects, and an order may name a joined attribute by its bare name when exactly one join declares it.
  */
 final class JoinedShapesTest extends TestCase
 {
-    private const array JOINED_KEYS = ['it.$id', 'it.code', 'it.name', 'it.price'];
+    private const array JOINED_KEYS = ['it.$createdAt', 'it.$id', 'it.$permissions', 'it.$sequence', 'it.$updatedAt', 'it.code', 'it.name', 'it.price'];
 
     public function testAJoinWildcardSelectsTheJoinedColumnsNextToOtherSelects(): void
     {
@@ -44,11 +44,13 @@ final class JoinedShapesTest extends TestCase
         $this->assertNull($alone[0]->getAttribute('name'));
         $this->assertSame('o1', $alone[0]->getId());
 
+        $withWildcard = $database->find('orders', [$item, Query::select(['*', 'it.*']), Query::orderAsc('$id')]);
         $this->assertSame(
-            $this->arrays($database->find('orders', [$item, Query::orderAsc('$id')])),
-            $this->arrays($database->find('orders', [$item, Query::select(['*', 'it.*']), Query::orderAsc('$id')])),
-            'next to * it adds what the read returns anyway',
+            $this->mainAttributes($database->find('orders', [$item, Query::orderAsc('$id')])),
+            $this->mainAttributes($withWildcard),
+            'next to * the main document is returned as * alone returns it',
         );
+        $this->assertSame(self::JOINED_KEYS, $this->joinedKeys($withWildcard[0]), 'next to * it adds the whole joined row');
         $this->assertSame(
             $this->arrays($database->find('orders', [$item, Query::select(['name', 'it.*']), Query::orderAsc('$id')])),
             $this->arrays($database->find('orders', [$item, Query::select(['name', 'it.*', 'it.name']), Query::orderAsc('$id')])),
@@ -57,7 +59,7 @@ final class JoinedShapesTest extends TestCase
 
         $both = $database->find('orders', [$item, Query::join('extras', 'item', 'code', '=', 'ex'), Query::select(['quantity', 'ex.*'])]);
         $this->assertCount(2, $both);
-        $this->assertSame(['ex.$id', 'ex.code', 'ex.price'], $this->joinedKeys($both[0]));
+        $this->assertSame(['ex.$createdAt', 'ex.$id', 'ex.$permissions', 'ex.$sequence', 'ex.$updatedAt', 'ex.code', 'ex.price'], $this->joinedKeys($both[0]));
 
         $document = $database->getDocument('orders', 'o2', [$item, Query::select(['name', 'it.*'])]);
         $this->assertSame('y', $document->getAttribute('name'));
@@ -177,6 +179,18 @@ final class JoinedShapesTest extends TestCase
 
             return $row;
         }, $documents));
+    }
+
+    /**
+     * @param  array<Document>  $documents
+     * @return list<array<string, mixed>>
+     */
+    private function mainAttributes(array $documents): array
+    {
+        return \array_map(
+            static fn (array $row): array => \array_filter($row, static fn (string $key): bool => ! \str_contains($key, '.'), ARRAY_FILTER_USE_KEY),
+            $this->arrays($documents),
+        );
     }
 
     /**

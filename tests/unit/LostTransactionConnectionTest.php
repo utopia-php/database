@@ -163,14 +163,16 @@ final class LostTransactionConnectionTest extends TestCase
         $pool = new Pool(new UtopiaPool(new Stack(), 'lost-transaction', 1, static fn (): MariaDB => $connection, timeout: 0.0));
         $pool->setAuthorization(new Authorization());
 
-        $error = $this->capture(fn (): mixed => $pool->withTransaction(function () use ($pool, $pdo, $endSession): void {
-            $pdo->exec('INSERT INTO items VALUES (1)');
+        $error = $this->capture(function () use ($pool, $pdo, $endSession): void {
+            $pool->withTransaction(function () use ($pool, $pdo, $endSession): void {
+                $pdo->exec('INSERT INTO items VALUES (1)');
 
-            $pool->withTransaction(function () use ($pdo, $endSession): void {
-                $endSession();
-                $pdo->prepare('INSERT INTO items VALUES (2)')->execute();
+                $pool->withTransaction(function () use ($pdo, $endSession): void {
+                    $endSession();
+                    $pdo->prepare('INSERT INTO items VALUES (2)')->execute();
+                });
             });
-        }));
+        });
 
         $this->assertInstanceOf(TransactionException::class, $error);
         $this->assertFalse($pool->inTransaction());

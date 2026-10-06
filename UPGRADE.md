@@ -176,6 +176,9 @@ These methods take or return enum cases where 7.x used the constants' strings:
 - `distinct()` needs `Capability::Aggregations`. On Memory, Redis and MongoDB, `find()` refuses it with
   `Utopia\Database\Exception\Query` (`Distinct queries are not supported by this adapter`) also when validation is
   skipped; MongoDB returned duplicate rows then.
+- A filter on a path into an object attribute (`meta.address.city`) takes keys of `a-z`, `A-Z`, `0-9`, `_` and `-`
+  only. The query validator refuses any other key with `Utopia\Database\Exception\Query` on every adapter (7.x
+  refused such keys on PostgreSQL only), and on PostgreSQL the query is refused also when validation is skipped.
 
 ## Schema: typed models
 

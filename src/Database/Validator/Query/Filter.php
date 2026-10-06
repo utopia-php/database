@@ -10,6 +10,7 @@ use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
+use Utopia\Database\Validator\ObjectPath;
 use Utopia\Database\Validator\Sequence;
 use Utopia\Query\Method;
 use Utopia\Query\Schema\ColumnType;
@@ -90,6 +91,10 @@ class Filter extends Base
                 return ! $this->supportForAttributes || $this->isJoinedColumn($alias, $column);
             }
 
+            if (! $this->isValidObjectPath($alias, $attribute)) {
+                return false;
+            }
+
             // For relationships, just validate the top level.
             // will validate each nested level during the recursive calls.
             $attribute = $alias;
@@ -98,6 +103,24 @@ class Filter extends Base
         // Search for attribute in schema
         if ($this->supportForAttributes && ! isset($this->schema[$attribute])) {
             $this->message = 'Attribute not found in schema: '.$attribute;
+
+            return false;
+        }
+
+        return true;
+    }
+
+    private function isValidObjectPath(string $base, string $path): bool
+    {
+        /** @var array<string, mixed> $definition */
+        $definition = $this->schema[$base] ?? [];
+        if (($definition['type'] ?? null) !== ColumnType::Object) {
+            return true;
+        }
+
+        $validator = new ObjectPath();
+        if (! $validator->isValid($path)) {
+            $this->message = 'Invalid object path "'.$path.'": '.$validator->getDescription();
 
             return false;
         }

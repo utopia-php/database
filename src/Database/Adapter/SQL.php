@@ -3047,7 +3047,7 @@ abstract class SQL extends Adapter
                     $prevOriginal = $orderAttributes[$j];
                     $prevAttr = $this->filter($this->getInternalKeyForAttribute($prevOriginal));
 
-                    $bindName = ":cursor_{$j}";
+                    $bindName = ":cursor_{$i}_{$j}";
                     $binds[$bindName] = $cursor[$prevOriginal];
 
                     $conditions[] = "{$this->quote($alias)}.{$this->quote($prevAttr)} = {$bindName}";
@@ -3118,7 +3118,9 @@ abstract class SQL extends Adapter
         $projection = $this->getAttributeProjection($selections, $alias);
 
         if (!empty($vectorDistances)) {
-            $readable = $this->getSQLReadableDistance($vectorDistances[0]);
+            // Built again so its vector binds under a name the ORDER BY doesn't use.
+            $distance = $this->getSQLVectorDistance($vectorQueries[0], $binds, $alias) ?? $vectorDistances[0];
+            $readable = $this->getSQLReadableDistance($distance);
             $projection .= ", {$readable} AS {$this->quote(static::VECTOR_DISTANCE_COLUMN)}";
         }
 

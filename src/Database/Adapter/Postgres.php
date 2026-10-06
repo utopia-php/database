@@ -33,11 +33,6 @@ class Postgres extends SQL
     public const MAX_IDENTIFIER_NAME = 63;
 
     /**
-     * Function that tests a row's permissions against a set of roles with jsonb's ?| operator.
-     */
-    protected const PERMISSIONS_FUNCTION = '_permissions_any';
-
-    /**
      * @inheritDoc
      */
     public function rollbackTransaction(): bool
@@ -123,9 +118,6 @@ class Postgres extends SQL
         $name = $this->filter($name);
 
         if ($this->exists($name)) {
-            // Schemas created before the function existed get it here.
-            $this->createPermissionsFunction($name);
-
             return true;
         }
 
@@ -149,9 +141,6 @@ class Postgres extends SQL
             )
         ";
         $this->getPDO()->prepare($collation)->execute();
-
-        $this->createPermissionsFunction($name);
-
         return $dbCreation;
     }
 
@@ -1842,45 +1831,23 @@ class Postgres extends SQL
             throw new DatabaseException('Unknown permission type: ' . $type);
         }
 
-        if ($roles === []) {
-            return 'FALSE';
-        }
-
         $column = "{$this->quote($alias)}.{$this->quote('_permissions')}";
 
-        // One ?| for all roles keeps the estimate flat however many roles there are; a @> per
-        // role adds up until the planner gives up on the GIN index. The operator goes through
-        // the inlined function because PDO reads a lone ? as a positional placeholder, and
-        // doubling it to escape breaks once a named placeholder is repeated, which the cursor
-        // conditions do. jsonb_exists_any would avoid both but is not indexable.
+        // One ?| for all roles; a @> per role adds to the row estimate until the planner gives
+        // up on the GIN index. ?? is PDO's escape for a literal ?, which emulated prepares only
+        // accept while no named placeholder appears twice in the statement, so the queries this
+        // condition joins bind each value under its own name. jsonb_exists_any would avoid the
+        // ? but is not indexable.
         $permissions = \array_map(
             fn ($role) => $this->getPDO()->quote("{$type}(\"{$role}\")"),
             $roles
         );
 
-        return "{$this->getSQLSchema()}{$this->quote(self::PERMISSIONS_FUNCTION)}({$column}, ARRAY[" . \implode(', ', $permissions) . ']::text[])';
-    }
+        if ($permissions === []) {
+            return 'FALSE';
+        }
 
-    /**
-     * Create the function permission checks are written against, unless the schema has it.
-     *
-     * @param string $schema
-     * @return void
-     */
-    protected function createPermissionsFunction(string $schema): void
-    {
-        $function = "\"{$schema}\".\"" . self::PERMISSIONS_FUNCTION . '"';
-
-        // Run through exec, which does not look for placeholders. A concurrent creation of
-        // the same function is not an error.
-        $this->getPDO()->exec("
-            DO \$\$ BEGIN
-                CREATE FUNCTION {$function}(jsonb, text[]) RETURNS boolean
-                    LANGUAGE sql IMMUTABLE PARALLEL SAFE
-                    AS 'SELECT \$1 OPERATOR(pg_catalog.?|) \$2';
-            EXCEPTION WHEN duplicate_function OR unique_violation THEN NULL;
-            END \$\$
-        ");
+        return "{$column} ??| ARRAY[" . \implode(', ', $permissions) . ']::text[]';
     }
 
     /**

@@ -690,7 +690,8 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
      * the retries do not multiply. A call nested in a transaction begun with startTransaction() retries in its
      * savepoint. A nested call whose enclosing transaction is gone throws `Exception\Transaction`, or the
      * `Exception\Contention` that made the engine roll the transaction back, which the outermost call retries because
-     * nothing of that attempt is stored.
+     * nothing of that attempt is stored. A callback that returns after its transaction was lost underneath it fails
+     * the same way. The outermost call never leaves the connection holding what remains of a failed transaction.
      *
      * @template T
      *
@@ -705,6 +706,7 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
         $retries = 2;
         $depth = $this->inTransaction;
         $enclosed = $this->transactionCalls > 0;
+        $outermost = $depth === 0 && ! $enclosed;
         $this->transactionCalls++;
 
         try {
@@ -714,6 +716,9 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
                     $this->startTransaction();
                     $started = true;
                     $result = $callback();
+                    if ($this->inTransaction <= $depth) {
+                        throw new TransactionException('Failed to commit transaction: the transaction was lost before the callback returned');
+                    }
                     $this->commitTransaction();
 
                     return $result;
@@ -729,6 +734,10 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
                         }
 
                         $lost = $this->inTransaction < $depth;
+                    }
+
+                    if ($outermost) {
+                        $this->abandonTransaction();
                     }
 
                     if ($lost) {
@@ -759,6 +768,14 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
         } finally {
             $this->transactionCalls--;
         }
+    }
+
+    /**
+     * End what the connection still holds of a transaction the adapter no longer counts, such as one lost with the
+     * connection or left open by a failed rollback, so that the connection's next statement runs outside it.
+     */
+    protected function abandonTransaction(): void
+    {
     }
 
     /**

@@ -343,6 +343,28 @@ class PDOTest extends TestCase
         $this->assertSame([2], $this->values($path));
     }
 
+    public function testARollbackThatFindsTheConnectionLostEndsTheTransaction(): void
+    {
+        $path = $this->createDatabaseFile();
+        [$pdo, $endSession] = $this->createLosableConnection($path);
+        $pdo->exec('CREATE TABLE items (value INTEGER)');
+        $pdo->beginTransaction();
+        $pdo->exec('INSERT INTO items VALUES (1)');
+        $endSession();
+
+        $lost = null;
+        try {
+            $pdo->rollBack();
+        } catch (PDOException $error) {
+            $lost = $error;
+        }
+
+        $this->assertInstanceOf(PDOException::class, $lost, 'The rollback must report the lost connection');
+        $this->assertFalse($pdo->inTransaction(), 'The lost connection ended the transaction');
+        $pdo->exec('INSERT INTO items VALUES (2)');
+        $this->assertSame([2], $this->values($path));
+    }
+
     private function createDatabaseFile(): string
     {
         $path = \tempnam(\sys_get_temp_dir(), 'pdo-test-');
@@ -375,6 +397,11 @@ class PDOTest extends TestCase
                     }
 
                     public function exec(string $statement): int|false
+                    {
+                        throw new PDOException('SQLSTATE[HY000]: General error: 2006 MySQL server has gone away');
+                    }
+
+                    public function rollBack(): bool
                     {
                         throw new PDOException('SQLSTATE[HY000]: General error: 2006 MySQL server has gone away');
                     }

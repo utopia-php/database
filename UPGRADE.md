@@ -956,6 +956,10 @@ reports, call `$adapter->capabilities()`.
 - Declare `Capability::NestedTransactions` only when a failed nested transaction rolls back to its savepoint and
   leaves the enclosing transaction open. `Database` drops the `document_purge` events of a failed nested call only
   on such adapters; without it they fire with the enclosing commit.
+- `Adapter::abandonTransaction(): void` (protected, a no-op by default) is new. The outermost `withTransaction()`
+  calls it after every failed attempt, once the transaction counter no longer counts the attempt's transaction; an
+  adapter whose connection can still hold part of it (a transaction lost with the connection, or one a failed
+  rollback left open) ends it there. The SQL adapters roll back whatever the connection still reports.
 - `Adapter::skippingDuplicates(): bool` and `Database::skippingDuplicates(): bool` (protected) report whether the
   calling coroutine runs under `skipDuplicates()`. Read them instead of the `$skipDuplicates` property hook.
 - `Utopia\Database\PDOStatement::getQueryString(): string` returns the wrapped statement's `queryString` without
@@ -1044,7 +1048,10 @@ as wildcards and a backslash as a literal character.
   surface) throws `Exception\Transaction` too, and the callback is not run again: statements after such a reconnect
   may already have run on their own. Code that catches an expected exception (for example `Duplicate`) from a
   nested call and carries on no longer receives that exception when the transaction was lost underneath it: catch
-  `Exception\Transaction` around the outermost call and run the whole unit again. A transaction the engine rolled
+  `Exception\Transaction` around the outermost call and run the whole unit again. A callback that catches the nested
+  call's `Exception\Transaction` and returns fails the same way instead of reporting the lost work as committed. The
+  outermost call ends what is left of the lost transaction on the connection before it throws, so the connection runs
+  the next statement. A transaction the engine rolled
   back over a lock conflict is not lost: MariaDB and MySQL roll the whole transaction back, savepoints included, when
   a statement loses a deadlock (1213), or a lock wait timeout (1205) with `innodb_rollback_on_timeout`. The nested
   calls rethrow that `Exception\Contention` unchanged, and the outermost call runs again, as in 7.x, because nothing
@@ -1052,7 +1059,8 @@ as wildcards and a backslash as a literal character.
 - **Statements after a lost transaction.** When `Utopia\Database\PDO` reconnects because a statement inside a
   transaction found the connection gone, it rethrows and then refuses every statement (`exec()`, `query()`,
   `prepare()`, `beginTransaction()`, `commit()`) with a `PDOException` until the transaction is ended with
-  `rollBack()`, a `ROLLBACK` statement or `reconnect()`. `inTransaction()` reports the transaction until then, and
+  `rollBack()`, a `ROLLBACK` statement or `reconnect()`. A `rollBack()` that itself finds the connection gone ends the
+  transaction too: it rethrows and refuses nothing after it. `inTransaction()` reports the transaction until then, and
   each refusal's `getPrevious()` is the lost connection error. Code that catches the connection error inside
   `withTransaction()` and carries on no longer writes on the new connection in autocommit: the transaction is rolled
   back and, at the top level, runs again.

@@ -43,6 +43,7 @@ class PDO
      * The lost connection that dropped the caller's open transaction, while the caller has
      * not rolled it back yet. Until then every statement is refused, so none of them runs
      * in autocommit on the new connection; each refusal carries it as its previous error.
+     * A rollBack() that finds the connection lost has ended the transaction, so it sets none.
      */
     private ?Throwable $lostTransaction = null;
 
@@ -157,7 +158,9 @@ class PDO
                     return $this->pdo->{$method}(...$args);
                 }
 
-                $this->lostTransaction = $e;
+                if (\strcasecmp($method, 'rollBack') !== 0) {
+                    $this->lostTransaction = $e;
+                }
             }
 
             throw $e;

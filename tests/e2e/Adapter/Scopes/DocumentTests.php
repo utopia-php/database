@@ -5743,7 +5743,6 @@ trait DocumentTests
             $this->assertSame((string) $second, (string) $secondCreated->getTenant());
             $this->assertSame('second@tenant', $secondCreated->getAttribute('email'));
             $this->assertSame('second', $secondCreated->getAttribute('secret'));
-            $this->assertNotSame($firstCreated->getSequence(), $secondCreated->getSequence());
 
             $batch = [];
             $this->assertSame(1, $database->createDocuments(

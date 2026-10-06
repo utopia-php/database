@@ -1870,6 +1870,82 @@ trait DocumentTests
         $this->assertGreaterThanOrEqual(1, count($documents));
     }
 
+    public function testFindFulltextSeparatorsSplitWords(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::Fulltext)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'full_text_separators';
+        $database->createCollection(new Collection(id: $collection, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ]));
+
+        $this->assertTrue($database->createAttribute($collection, Attribute::string(key: 'text', size: 128, required: true)));
+        $this->assertTrue($database->createIndex($collection, Index::fullText(key: 'text-ft', attributes: ['text'])));
+
+        $texts = [
+            'lunar' => 'lunar',
+            'solar' => 'solar',
+            'space' => 'lunar solar',
+            'slash' => 'lunar/solar',
+            'comma' => 'lunar,solar',
+            'underscore' => 'lunar_solar',
+            'comet' => 'comet',
+            'orbit' => 'orbit',
+        ];
+        foreach ($texts as $id => $text) {
+            $database->createDocument($collection, new Document([
+                '$id' => $id,
+                '$permissions' => [Permission::read(Role::any())],
+                'text' => $text,
+            ]));
+        }
+
+        $eitherWord = ['comma', 'lunar', 'slash', 'solar', 'space'];
+
+        foreach (['lunar/solar', 'lunar,solar'] as $term) {
+            $found = $this->searchedIds($database, $collection, $term);
+
+            foreach ($eitherWord as $id) {
+                $this->assertContains($id, $found, "search('{$term}') finds the document '{$texts[$id]}'");
+            }
+            $this->assertNotContains('comet', $found, "search('{$term}')");
+            $this->assertSame($this->searchedIds($database, $collection, 'lunar solar'), $found, "search('{$term}') searches the words as 'lunar solar' does");
+        }
+
+        $found = $this->searchedIds($database, $collection, 'comet, lunar/solar');
+        foreach (['comet', ...$eitherWord] as $id) {
+            $this->assertContains($id, $found, "search('comet, lunar/solar') finds the document '{$texts[$id]}'");
+        }
+        $this->assertNotContains('orbit', $found);
+        $this->assertSame($this->searchedIds($database, $collection, 'comet lunar solar'), $found);
+
+        $found = $this->searchedIds($database, $collection, 'lunar_solar');
+        $this->assertContains('underscore', $found);
+        $this->assertNotContains('comet', $found);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function searchedIds(Database $database, string $collection, string $term): array
+    {
+        $ids = \array_map(
+            fn (Document $document): string => $document->getId(),
+            $database->find($collection, [Query::search('text', $term)]),
+        );
+        \sort($ids);
+
+        return $ids;
+    }
+
     public function testFindByID(): void
     {
         $this->initMoviesFixture();

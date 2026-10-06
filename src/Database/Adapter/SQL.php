@@ -426,6 +426,21 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         return true;
     }
 
+    #[\Override]
+    protected function abandonTransaction(): void
+    {
+        $pdo = $this->getPDO();
+        if (! $pdo->inTransaction()) {
+            return;
+        }
+
+        try {
+            $pdo->rollBack();
+        } catch (PDOException) {
+            // A connection that only reports a transaction it no longer holds has nothing left to end.
+        }
+    }
+
     /**
      * Check if Database exists
      * Optionally check if collection exists in Database

@@ -382,6 +382,32 @@ class Pool extends Adapter
     }
 
     /**
+     * How many reads the calling coroutine can run at the same time, each on a connection of its own, without
+     * waiting for one and while leaving an idle connection to other coroutines. One while a transaction has pinned a
+     * connection, which runs one statement at a time.
+     *
+     * @return int<1, max>
+     */
+    public function getReadConcurrency(): int
+    {
+        if ($this->pin() !== null) {
+            return 1;
+        }
+
+        return \max(1, $this->getReadPool()->count() - 1);
+    }
+
+    /**
+     * The pool a read outside a transaction borrows its connection from.
+     *
+     * @return UtopiaPool<covariant Adapter>
+     */
+    protected function getReadPool(): UtopiaPool
+    {
+        return $this->pool;
+    }
+
+    /**
      * @return Value<Adapter|null>
      */
     private function pinned(): Value

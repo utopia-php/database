@@ -11,6 +11,7 @@ use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\Pool;
+use Utopia\Database\Adapter\ReadWritePool;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
@@ -34,9 +35,10 @@ use function Swoole\Coroutine\run;
 
 /**
  * Relationship population reads more related ids than one query may carry in chunks, and on a pooled adapter
- * inside a coroutine it reads the chunks at the same time. Every SELECT made while population runs yields for a
- * time that grows with the number of SELECTs already in flight, so the chunks start and finish in the same order
- * on every run.
+ * inside a coroutine it reads a bounded number of chunks at the same time. Every SELECT made while population runs
+ * yields for a time that grows with the number of SELECTs already in flight, so the chunks start and finish in the
+ * same order on every run. The pools hand out idle connections before opening new ones, so the connections a pool
+ * opened are the most it had checked out at once.
  */
 final class ParallelPopulationTest extends TestCase
 {
@@ -55,6 +57,8 @@ final class ParallelPopulationTest extends TestCase
     private int $finds = 0;
 
     private bool $selectedInACoroutine = false;
+
+    private int $connections = 0;
 
     protected function setUp(): void
     {
@@ -161,6 +165,75 @@ final class ParallelPopulationTest extends TestCase
         });
     }
 
+    public function testPopulationReadsNoMoreChunksAtOnceThanItsReadConcurrency(): void
+    {
+        $this->inCoroutine(function (): void {
+            $database = $this->database($this->pool(size: 16));
+            $database->setMaxQueryValues(1);
+
+            $parents = $this->findParents($database);
+
+            $this->assertSame($this->labels(), $this->populatedLabels($parents));
+            $this->assertGreaterThan(1, $this->peak, 'Population read its chunks one at a time');
+            $this->assertLessThanOrEqual(Relationships::READ_CONCURRENCY, $this->peak, 'Population read more chunks at once than its read concurrency');
+            $this->assertLessThanOrEqual(Relationships::READ_CONCURRENCY, $this->connections, 'Population checked out more connections at once than its read concurrency');
+        });
+    }
+
+    public function testPopulationOnAPoolWithFewIdleConnectionsReadsWithoutWaitingForOne(): void
+    {
+        $this->inCoroutine(function (): void {
+            $database = $this->database($this->pool(size: 2, timeout: 0.0));
+            $database->setMaxQueryValues(1);
+
+            for ($round = 1; $round <= self::ROUNDS; $round++) {
+                $parents = $this->findParents($database);
+
+                $this->assertSame($this->labels(), $this->populatedLabels($parents), "Round {$round} populated the wrong labels");
+                $this->assertSame([], $this->populatedSecrets($parents));
+            }
+
+            $this->assertSame(1, $this->peak, 'Population read chunks at once without an idle connection to spare');
+        });
+    }
+
+    public function testPopulationReadsFromAReadPoolWithFewIdleConnectionsWithoutWaitingForOne(): void
+    {
+        $this->inCoroutine(function (): void {
+            $pool = new ReadWritePool(
+                new UtopiaPool(new Stack(), 'parallel-population-writes', 16, $this->sqlite(...), timeout: 0.0),
+                new UtopiaPool(new Stack(), 'parallel-population-reads', 2, $this->sqlite(...), timeout: 0.0),
+            );
+            $pool->setSticky(false);
+            $database = $this->database($pool);
+            $database->setMaxQueryValues(1);
+
+            $parents = $this->findParents($database);
+
+            $this->assertSame($this->labels(), $this->populatedLabels($parents));
+            $this->assertSame(1, $this->peak, 'Population read chunks at once without an idle read connection to spare');
+        });
+    }
+
+    public function testPopulationOnAPinnedConnectionWithoutATransactionReadsOneChunkAtATime(): void
+    {
+        $this->inCoroutine(function (): void {
+            $database = $this->database($this->pool(connect: $this->sqliteWithoutTransactions(...)));
+            $connections = $this->connections;
+
+            $parents = $database->withTransaction(function () use ($database): array {
+                $this->assertFalse($database->getAdapter()->inTransaction(), 'The pinned connection opened a transaction');
+
+                return $this->findParents($database);
+            });
+
+            $this->assertSame($this->labels(), $this->populatedLabels($parents));
+            $this->assertSame([], $this->populatedSecrets($parents));
+            $this->assertSame(1, $this->peak, 'Chunk reads ran at the same time on the pinned connection');
+            $this->assertSame($connections, $this->connections, 'Population borrowed connections besides the pinned one');
+        });
+    }
+
     public function testPopulationOutsideACoroutineKeepsTheCallersState(): void
     {
         $database = $this->database($this->pool());
@@ -217,14 +290,35 @@ final class ParallelPopulationTest extends TestCase
         }
     }
 
-    private function pool(): Pool
+    /**
+     * @param  (Closure(): SQLite)|null  $connect
+     */
+    private function pool(int $size = 8, float $timeout = 1.0, ?Closure $connect = null): Pool
     {
-        return new Pool(new UtopiaPool(new Stack(), 'parallel-population', 8, $this->sqlite(...), timeout: 1.0));
+        return new Pool(new UtopiaPool(new Stack(), 'parallel-population', $size, $connect ?? $this->sqlite(...), $timeout));
     }
 
     private function sqlite(): SQLite
     {
+        $this->connections++;
+
         return new SQLite(new PDO('sqlite:' . $this->file));
+    }
+
+    /**
+     * A connection whose withTransaction() runs the callback without a transaction, as MongoDB does on a standalone
+     * server or under skipDuplicates().
+     */
+    private function sqliteWithoutTransactions(): SQLite
+    {
+        $this->connections++;
+
+        return new class (new PDO('sqlite:' . $this->file)) extends SQLite {
+            public function withTransaction(callable $callback): mixed
+            {
+                return $callback();
+            }
+        };
     }
 
     private function database(Adapter $adapter): Database
@@ -340,6 +434,30 @@ final class ParallelPopulationTest extends TestCase
         }
 
         return $secrets;
+    }
+
+    /**
+     * @return array<string>
+     */
+    private function labels(): array
+    {
+        return \array_map(static fn (int $index): string => "label{$index}", \range(1, self::DOCUMENTS));
+    }
+
+    /**
+     * @param  array<Document>  $parents
+     * @return array<string>
+     */
+    private function populatedLabels(array $parents): array
+    {
+        $labels = [];
+        foreach ($parents as $parent) {
+            foreach ($parent->getDocuments('labels') as $label) {
+                $labels[] = $label->getId();
+            }
+        }
+
+        return $labels;
     }
 
     /**

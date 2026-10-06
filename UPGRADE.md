@@ -634,7 +634,9 @@ preserve-sequence and skip-duplicates toggles, and the request timestamp. `Hook\
 `withCheckExist()` and `withSnapshot()` scope the hook's own flags the same way.
 
 Relationship population reads its chunks of related ids concurrently only on `Adapter\Pool`, inside a coroutine and
-outside a transaction; elsewhere it reads them one after another. Related documents are merged in chunk order.
+outside `withTransaction()`, and only as many at once as `Hook\Relationships::READ_CONCURRENCY` (4) and
+`Pool::getReadConcurrency()` (the connections the pool can hand out without waiting, less one) allow; elsewhere it
+reads them one after another. Related documents are merged in chunk order.
 
 Each coroutine sharing a handle tracks its own relationship writes and cascading deletes, so a nested write or a
 cascade in one coroutine never cuts another coroutine's short. On `Adapter\Pool`, a transaction belongs to the

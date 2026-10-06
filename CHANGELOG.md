@@ -257,7 +257,9 @@ have to make, with the 7.x and 8.0 forms side by side.
   `skip()`, `withStatus()` and `withRoles()` count together. Such a coroutine changes and restores state with those
   scopes or `withSnapshot()`, not with a pair of setters. See [Coroutines](UPGRADE.md#coroutines).
 - Relationship population reads its chunks of related ids concurrently only on `Adapter\Pool`, inside a coroutine
-  and outside a transaction; elsewhere it reads them one after another. Related documents are merged in chunk order.
+  and outside `withTransaction()`, and only as many at once as `Hook\Relationships::READ_CONCURRENCY` (4) and
+  `Pool::getReadConcurrency()` (the connections the pool can hand out without waiting, less one) allow; elsewhere it
+  reads them one after another. Related documents are merged in chunk order.
 - Linking an existing many-to-many related document needs update permission on it, as one-to-one, one-to-many and
   many-to-one links already do, on every create and update path and at every nesting depth (7.x needed only read).
   Without it the write throws `Exception\Authorization`. See [Relationships](UPGRADE.md#relationships).

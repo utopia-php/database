@@ -42,6 +42,11 @@ use Utopia\Query\Schema\ForeignKeyAction;
 class Relationships implements Hook
 {
     /**
+     * The most chunks of related ids one population reads at the same time
+     */
+    public const int READ_CONCURRENCY = 4;
+
+    /**
      * @var Value<bool>
      */
     private Value $enabled;
@@ -96,14 +101,10 @@ class Relationships implements Hook
     }
 
     /**
-     * Effective per-query chunk size for relationship fan-out reads/writes.
+     * Capped by RELATION_QUERY_CHUNK_SIZE as a memory bound, but never larger than the configured maxQueryValues,
+     * otherwise a caller that lowers the validator cap would still see relationship updates throw QueryException on
+     * the chunked find/update fallback.
      *
-     * Capped by RELATION_QUERY_CHUNK_SIZE as a memory bound, but never larger
-     * than the configured maxQueryValues — otherwise a caller that lowers the
-     * validator cap would still see relationship updates throw QueryException
-     * on the chunked find/update fallback.
-     */
-    /**
      * @return int<1, max>
      */
     private function relationQueryChunkSize(): int
@@ -112,8 +113,9 @@ class Relationships implements Hook
     }
 
     /**
-     * Run one read per chunk and return their documents in chunk order. The reads run at the same time only where
-     * each can borrow its own connection: inside a coroutine, on a pooled adapter, outside a transaction. Each
+     * Run one read per chunk and return their documents in chunk order. Several reads run at the same time only where
+     * each can borrow its own connection: inside a coroutine, on a pooled adapter whose connection no transaction
+     * has pinned, and at most as many as {@see self::READ_CONCURRENCY} and the pool's idle connections allow. Each
      * concurrent read starts from its caller's authorization, relationship and silence state, and what it changes
      * stays in its own coroutine.
      *
@@ -122,16 +124,11 @@ class Relationships implements Hook
      */
     private function readChunks(array $reads): array
     {
-        if ($this->readsConcurrently(\count($reads))) {
-            $snapshot = $this->db->snapshot();
-            $tasks = [];
-            foreach ($reads as $read) {
-                $tasks[] = fn (): array => $this->db->withSnapshot($snapshot, $read);
-            }
+        $reads = \array_values($reads);
+        $concurrency = $this->readConcurrency(\count($reads));
 
-            /** @var array<int, array<Document>> $chunks */
-            $chunks = Promise::map($tasks)->await();
-            \ksort($chunks);
+        if ($concurrency > 1) {
+            $chunks = $this->readConcurrently($reads, $concurrency);
         } else {
             $chunks = [];
             foreach ($reads as $read) {
@@ -147,15 +144,49 @@ class Relationships implements Hook
         return $documents;
     }
 
-    private function readsConcurrently(int $reads): bool
+    /**
+     * @param  list<Closure(): array<Document>>  $reads
+     * @param  int<2, max>  $concurrency
+     * @return array<int, array<Document>>
+     */
+    private function readConcurrently(array $reads, int $concurrency): array
+    {
+        $snapshot = $this->db->snapshot();
+        $chunks = [];
+        $next = 0;
+
+        $reader = function () use ($reads, $snapshot, &$chunks, &$next): void {
+            while (isset($reads[$next])) {
+                $index = $next++;
+
+                try {
+                    $chunks[$index] = $this->db->withSnapshot($snapshot, $reads[$index]);
+                } catch (Throwable $error) {
+                    $next = \count($reads);
+
+                    throw $error;
+                }
+            }
+        };
+
+        Promise::map(\array_fill(0, $concurrency, $reader))->await();
+        \ksort($chunks);
+
+        return $chunks;
+    }
+
+    private function readConcurrency(int $reads): int
     {
         if ($reads < 2 || ! \extension_loaded('swoole') || Coroutine::getCid() <= 0) {
-            return false;
+            return 1;
         }
 
         $adapter = $this->db->getAdapter();
+        if (! $adapter instanceof Pool) {
+            return 1;
+        }
 
-        return $adapter instanceof Pool && ! $adapter->inTransaction();
+        return \min($reads, self::READ_CONCURRENCY, $adapter->getReadConcurrency());
     }
 
     /**

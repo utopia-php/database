@@ -9,7 +9,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use Swoole\Coroutine;
-use Swoole\Coroutine\WaitGroup;
+use Swoole\Coroutine\Channel;
 use Swoole\Runtime;
 use Throwable;
 use Utopia\Cache\Adapter\None;
@@ -400,18 +400,18 @@ final class MirrorReplicationTest extends TestCase
         $this->delays = $delays;
 
         $this->inCoroutine(function () use ($synchronous, $later): void {
-            $writers = new WaitGroup();
-            $writers->add(2);
+            $writers = new Channel(2);
             Coroutine::create(function () use ($synchronous, $writers): void {
                 $synchronous($this->mirror);
-                $writers->done();
+                $writers->push(true);
             });
             Coroutine::create(function () use ($later, $writers): void {
                 Coroutine::sleep(0.01);
                 $later($this->mirror);
-                $writers->done();
+                $writers->push(true);
             });
-            $writers->wait();
+            $writers->pop();
+            $writers->pop();
         });
 
         $this->assertSame([], $this->errors);

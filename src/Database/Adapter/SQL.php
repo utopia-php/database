@@ -1954,6 +1954,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             return $this->countOf($this->fetchAggregate($collectionDoc, $name, $roles, 'COUNT(1)', '1', $max, Event::DocumentCount));
         }
 
+        $otherQueries = $this->mainRowQueries($otherQueries, $collectionDoc);
         $builder = $this->newBuilder($name, $alias);
 
         $filters = $this->compileRowFilters($builder, $otherQueries);
@@ -2031,6 +2032,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             return $this->sumOf($this->fetchAggregate($collectionDoc, $name, $roles, "SUM({$column})", $column, $max, Event::DocumentSum));
         }
 
+        $otherQueries = $this->mainRowQueries($otherQueries, $collectionDoc);
         $builder = $this->newBuilder($name, $alias);
 
         $filters = $this->compileRowFilters($builder, $otherQueries);
@@ -2278,6 +2280,21 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
+     * Copies of the queries of a count() or sum() without joins that name each dotted attribute key by
+     * its column, as find() does: the builder reads any other dotted name as a table and a column.
+     *
+     * @param  array<Query>  $queries
+     * @return array<Query>
+     */
+    private function mainRowQueries(array $queries, Document $collection): array
+    {
+        $queries = \array_map(static fn (Query $query): Query => clone $query, $queries);
+        $this->remapDottedQueryAttributes($queries, [], $collection);
+
+        return $queries;
+    }
+
+    /**
      * The queries of a count() or sum() as the builder compiles them into its WHERE clause, when
      * every one only narrows the rows and the builder compiles filters on their own; null when the
      * statement has to be built.
@@ -2340,6 +2357,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     private const array ROW_CONDITION_GROUPS = [Method::And, Method::Or, Method::ContainsAll, Method::ElemMatch];
 
     private const array BITWISE_AGGREGATES = [Method::BitAnd, Method::BitOr, Method::BitXor];
+
+    private const array COLUMN_LIST_METHODS = [Method::GroupBy, Method::Exists, Method::NotExists];
 
     private const string BITWISE_INPUTS = '$inputs:';
 
@@ -4132,7 +4151,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             return;
         }
 
-        if ($method === Method::GroupBy) {
+        if (\in_array($method, self::COLUMN_LIST_METHODS, true)) {
             $values = $query->getValues();
             $changed = false;
             foreach ($values as $i => $column) {
@@ -4970,7 +4989,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         PermissionType $forPermission,
     ): void {
         $queries = $this->populationStatistics($queries);
-        $this->remapDottedQueryAttributes($queries, $joinTablePrefixes, $collection);
+        $adapterFilterQueries = \array_map(static fn (Query $query): Query => clone $query, $adapterFilterQueries);
+        $this->remapDottedQueryAttributes([...$queries, ...$adapterFilterQueries], $joinTablePrefixes, $collection);
         $builder->filter($queries);
 
         foreach ($adapterFilterQueries as $query) {

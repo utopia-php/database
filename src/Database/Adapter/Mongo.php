@@ -3379,10 +3379,39 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             return;
         }
 
+        $this->escapeQueryFields($queries, $dotAttributes);
+    }
+
+    /**
+     * @param  array<mixed>  $queries
+     * @param  array<string, string>  $dotAttributes
+     */
+    private function escapeQueryFields(array $queries, array $dotAttributes): void
+    {
         foreach ($queries as $query) {
-            $attr = $query->getAttribute();
-            if (isset($dotAttributes[$attr])) {
-                $query->setAttribute($dotAttributes[$attr]);
+            if (! $query instanceof Query) {
+                continue;
+            }
+
+            $method = $query->getMethod();
+            if ($method === Method::And || $method === Method::Or) {
+                $this->escapeQueryFields($query->getValues(), $dotAttributes);
+
+                continue;
+            }
+
+            if ($method === Method::Exists || $method === Method::NotExists) {
+                $query->setValues(\array_map(
+                    static fn (mixed $field): mixed => \is_string($field) ? $dotAttributes[$field] ?? $field : $field,
+                    $query->getValues(),
+                ));
+
+                continue;
+            }
+
+            $attribute = $query->getAttribute();
+            if (isset($dotAttributes[$attribute])) {
+                $query->setAttribute($dotAttributes[$attribute]);
             }
         }
     }

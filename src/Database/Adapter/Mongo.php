@@ -4182,6 +4182,9 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         try {
             $this->client->insert($name, $document, $options);
             $filters = [Storage::UID => $document[Storage::UID]];
+            if ($this->sharedTables) {
+                $filters[Storage::TENANT] = $document[Storage::TENANT] ?? null;
+            }
 
             try {
                 $findResult = $this->client->find(

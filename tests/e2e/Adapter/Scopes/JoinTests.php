@@ -8553,6 +8553,167 @@ trait JoinTests
         $this->cleanupAggCollections($database, [$authors, $notes]);
     }
 
+    /**
+     * `alias.*` returns the joined row as a direct read of the joined collection returns it: its `$id`, `$sequence`,
+     * `$createdAt`, `$updatedAt` and `$permissions` next to its attributes, never its `$tenant`, alone, next to main
+     * attributes and next to `*`. A joined internal attribute named next to `*` is returned as well. A row an outer
+     * join left without a note holds null for each of them.
+     *
+     * @param  list<string>  $rows
+     */
+    #[DataProvider('joinCursorShapes')]
+    public function testJoinWildcardSelectReturnsTheJoinedInternalAttributes(Method $join, array $rows): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        [$authors, $notes] = $this->seedJoinCursorFixture($database);
+        $joinQuery = new Query($join, $notes, ['$id', '=', 'author', 'n']);
+
+        $direct = [];
+        foreach ($database->find($notes, [Query::limit(100)]) as $note) {
+            $direct[$note->getId()] = $note;
+        }
+
+        $internals = [Document::ID, Document::SEQUENCE, Document::CREATED_AT, Document::UPDATED_AT, Document::PERMISSIONS];
+        $expected = $rows;
+        \sort($expected);
+
+        foreach ([
+            'the alias wildcard' => [['n.*'], $internals],
+            'a main attribute and the alias wildcard' => [['name', 'n.*'], $internals],
+            'every attribute and the alias wildcard' => [['*', 'n.*'], $internals],
+            'every attribute and the joined creation time' => [['*', 'n.$createdAt'], [Document::ID, Document::CREATED_AT]],
+            'every attribute, the joined sequence and update time' => [['*', 'n.$sequence', 'n.$updatedAt'], [Document::ID, Document::SEQUENCE, Document::UPDATED_AT]],
+        ] as $label => [$select, $returned]) {
+            $found = $database->find($authors, [$joinQuery, Query::select($select), Query::limit(100)]);
+            $keys = \array_map($this->joinCursorKey(...), $found);
+            \sort($keys);
+            $this->assertSame($expected, $keys, "{$label}: each joined row once, with its joined \$id");
+
+            foreach ($found as $row) {
+                $this->assertFalse($row->offsetExists('n.'.Document::TENANT), "{$label}: the joined \$tenant is not returned");
+
+                $id = $row->getAttribute('n.$id');
+                if ($id === null) {
+                    foreach ($returned as $internal) {
+                        $this->assertTrue($row->offsetExists('n.'.$internal), "{$label}: an unmatched row returns n.{$internal}");
+                        $this->assertNull($row->getAttribute('n.'.$internal), "{$label}: an unmatched row holds null for n.{$internal}");
+                    }
+
+                    continue;
+                }
+
+                $this->assertIsString($id);
+                $note = $direct[$id];
+                foreach ($returned as $internal) {
+                    $this->assertNotNull($note->getAttribute($internal), "{$label}: the direct read returns {$internal}");
+                    $this->assertSame($note->getAttribute($internal), $row->getAttribute('n.'.$internal), "{$label}: n.{$internal} of {$id} as a direct read returns it");
+                }
+
+                if (\in_array('n.*', $select, true)) {
+                    $this->assertSame($note->getAttribute('label'), $row->getAttribute('n.label'), "{$label}: the joined attributes of {$id}");
+                }
+                if (\in_array('*', $select, true)) {
+                    $this->assertSame($row->getId() === '' ? null : $row->getId(), $row->getAttribute('name'), "{$label}: every main attribute");
+                    $this->assertSame($note->getAttribute('label'), $row->getAttribute('n.label'), "{$label}: the joined attributes of {$id} next to *");
+                }
+            }
+        }
+
+        $this->cleanupAggCollections($database, [$authors, $notes]);
+    }
+
+    /**
+     * A joined read ordered by a joined internal attribute pages without a select naming that attribute: without a
+     * select, with `*`, with `alias.*` and with main attributes next to `alias.*`, in pages of two after and before
+     * every page, each joined row exactly once in both directions, also through `cursor()`. A read selecting
+     * `alias.*` pages along the default order as well, which orders by the joined `$id`.
+     *
+     * @param  list<string>  $rows
+     */
+    #[DataProvider('joinCursorShapes')]
+    public function testJoinCursorPagesAlongAJoinedInternalAttribute(Method $join, array $rows): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        [$authors, $notes] = $this->seedJoinCursorFixture($database);
+        $joinQuery = new Query($join, $notes, ['$id', '=', 'author', 'n']);
+        $expected = $rows;
+        \sort($expected);
+
+        foreach ([
+            'joined sequence ascending' => [Query::orderAsc('n.$sequence')],
+            'joined sequence descending' => [Query::orderDesc('n.$sequence')],
+            'joined creation time ascending' => [Query::orderAsc('n.$createdAt')],
+            'joined creation time descending' => [Query::orderDesc('n.$createdAt')],
+            'default order' => [],
+        ] as $orderLabel => $order) {
+            foreach ([
+                'no select' => [],
+                'every attribute' => [Query::select(['*'])],
+                'the alias wildcard' => [Query::select(['n.*'])],
+                'a main attribute and the alias wildcard' => [Query::select(['name', 'n.*'])],
+            ] as $selectLabel => $select) {
+                $label = "{$orderLabel}, {$selectLabel}";
+                $queries = [$joinQuery, ...$select, ...$order];
+
+                $all = \array_values($database->find($authors, [...$queries, Query::limit(100)]));
+                $keys = \array_map($this->joinCursorKey(...), $all);
+                $sorted = $keys;
+                \sort($sorted);
+                $this->assertSame($expected, $sorted, "{$label}: the unpaged read returns each joined row once");
+
+                $forward = [];
+                $cursor = null;
+                $pages = 0;
+                for ($page = 0; $page <= \count($all); $page++) {
+                    $batch = $database->find($authors, [...$queries, Query::limit(2), ...($cursor === null ? [] : [Query::cursorAfter($cursor)])]);
+                    \array_push($forward, ...\array_map($this->joinCursorKey(...), $batch));
+                    $pages++;
+                    if (\count($batch) < 2) {
+                        break;
+                    }
+                    $cursor = $batch[1];
+                }
+                $this->assertGreaterThanOrEqual(3, $pages, "{$label}: the read spans at least three pages");
+                $this->assertSame($keys, $forward, "{$label}: paging forward in pages of two");
+
+                $backward = [];
+                $cursor = $all[\count($all) - 1];
+                for ($page = 0; $page <= \count($all); $page++) {
+                    $batch = $database->find($authors, [...$queries, Query::limit(2), Query::cursorBefore($cursor)]);
+                    $backward = [...\array_map($this->joinCursorKey(...), $batch), ...$backward];
+                    if (\count($batch) < 2) {
+                        break;
+                    }
+                    $cursor = $batch[0];
+                }
+                $this->assertSame(\array_slice($keys, 0, -1), $backward, "{$label}: paging backward in pages of two from the last row");
+
+                $iterated = [];
+                foreach ($database->cursor($authors, $queries, 2) as $row) {
+                    $iterated[] = $this->joinCursorKey($row);
+                    if (\count($iterated) > \count($all)) {
+                        break;
+                    }
+                }
+                $this->assertSame($keys, $iterated, "{$label}: cursor() in batches of two");
+            }
+        }
+
+        $this->cleanupAggCollections($database, [$authors, $notes]);
+    }
+
     public function testFullOuterJoinInRandomOrderReturnsEveryRow(): void
     {
         $database = static::getDatabase();

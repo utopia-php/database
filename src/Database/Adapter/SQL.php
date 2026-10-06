@@ -89,6 +89,17 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     private const string FOJ_ROWS_ALIAS = 'foj_rows';
 
     /**
+     * The internal attributes `alias.*` returns next to the joined `$id`: those a direct read of the joined
+     * collection returns, but `$tenant`, which is the read's own tenant on every joined row.
+     */
+    private const array JOINED_ROW_INTERNALS = [
+        Document::SEQUENCE,
+        Document::CREATED_AT,
+        Document::UPDATED_AT,
+        Document::PERMISSIONS,
+    ];
+
+    /**
      * MariaDB, MySQL and SQLite accept OFFSET only after a LIMIT; this one bounds nothing on any engine.
      */
     private const int UNBOUNDED_LIMIT = PHP_INT_MAX;
@@ -1706,6 +1717,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $alias,
                 $roles,
                 $forPermission,
+                orderAttributes: $orderAttributes,
             );
             $this->applyFullOuterJoinOrderProjection(
                 $left,
@@ -1739,6 +1751,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $alias,
                 $roles,
                 $forPermission,
+                orderAttributes: $orderAttributes,
             );
             $this->applyFullOuterJoinOrderProjection(
                 $right,
@@ -1784,6 +1797,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $alias,
                 $roles,
                 $forPermission,
+                orderAttributes: $orderAttributes,
             );
 
             $vectorDistance = null;
@@ -4075,11 +4089,11 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      * database column names (like _uid, _id) and ensures internal columns
      * are always included.
      *
-     * An `alias.*` selection stands for the columns the join returns without a select, from $joinSelections.
+     * An `alias.*` selection stands for the joined columns $joinSelections lists under that alias.
      *
      * @param  array<string>  $selections
      * @param  array<string>  $joinAliases
-     * @param  array<string, list<string>>  $joinSelections  The selections a read without a select makes under each join alias
+     * @param  array<string, list<string>>  $joinSelections  The selections `alias.*` makes under each join alias
      */
     private function applySelectionProjection(
         SQLBuilder $builder,
@@ -4273,21 +4287,34 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
-     * The projection of a join without a select: every column of the main table, and under each join
-     * alias the joined collection's `$id` and the attributes the Database layer handed over for it.
-     * A joined table's internal columns are returned only when a select names them.
+     * The projection of a join without a select or with `*`: every column of the main table, and under each
+     * join alias the joined collection's `$id` and the attributes the Database layer handed over for it. A
+     * joined table's internal columns are returned only when a select names them or when the read orders by
+     * them, so that every row it returns can be passed back as its cursor.
      *
      * @param  list<array{table: string, alias: string}>  $joinTablePrefixes
+     * @param  array<string>  $additions  Selections next to `*` and order attributes; those under a join alias are projected too
      */
-    private function applyJoinProjection(SQLBuilder $builder, Document $collection, array $joinTablePrefixes, string $alias): void
+    private function applyJoinProjection(SQLBuilder $builder, Document $collection, array $joinTablePrefixes, string $alias, array $additions = []): void
     {
         $builder->select([$this->filter($alias).'.*']);
 
+        $joinAliases = \array_column($joinTablePrefixes, 'alias');
+        $aliasSet = \array_fill_keys($joinAliases, true);
+        $selections = \array_merge(...\array_values($this->joinSelections($collection, $joinTablePrefixes)));
+        foreach ($additions as $addition) {
+            $dot = \strpos($addition, '.');
+            if ($dot !== false && isset($aliasSet[\substr($addition, 0, $dot)])) {
+                $selections[] = $addition;
+            }
+        }
+
         $this->applySelectionProjection(
             $builder,
-            \array_merge(...\array_values($this->joinSelections($collection, $joinTablePrefixes))),
+            $selections,
             includeInternal: false,
-            joinAliases: \array_column($joinTablePrefixes, 'alias'),
+            joinAliases: $joinAliases,
+            joinSelections: $this->joinWildcardSelections($collection, $joinTablePrefixes),
         );
     }
 
@@ -4312,6 +4339,26 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     $selections[$join['alias']][] = $join['alias'].'.'.$attribute;
                 }
             }
+        }
+
+        return $selections;
+    }
+
+    /**
+     * What `alias.*` selects under each join alias: what a read without a select returns there, and the joined
+     * collection's internal attributes a direct read of it returns.
+     *
+     * @param  list<array{table: string, alias: string}>  $joinTablePrefixes
+     * @return array<string, list<string>>
+     */
+    private function joinWildcardSelections(Document $collection, array $joinTablePrefixes): array
+    {
+        $selections = $this->joinSelections($collection, $joinTablePrefixes);
+        foreach ($selections as $joinAlias => $columns) {
+            foreach (self::JOINED_ROW_INTERNALS as $internal) {
+                $columns[] = $joinAlias.'.'.$internal;
+            }
+            $selections[$joinAlias] = $columns;
         }
 
         return $selections;
@@ -4807,6 +4854,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      * @param  list<array{table: string, alias: string}>  $joinTablePrefixes
      * @param  array<Query>  $adapterFilterQueries
      * @param  array<string>  $roles
+     * @param  array<string>  $orderAttributes  The attributes the read orders by
      */
     private function configureFindBuilder(
         SQLBuilder $builder,
@@ -4821,6 +4869,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         array $roles,
         PermissionType $forPermission,
         bool $qualifyCollidingGroups = true,
+        array $orderAttributes = [],
     ): bool {
         $hasSelectionProjection = false;
         if (! $hasAggregation) {
@@ -4839,14 +4888,20 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     $selections,
                     includeInternal: ! $hasDistinct,
                     joinAliases: \array_column($joinTablePrefixes, 'alias'),
-                    joinSelections: $this->joinSelections($collection, $joinTablePrefixes),
+                    joinSelections: $this->joinWildcardSelections($collection, $joinTablePrefixes),
                 );
                 // The projection replaces the select; forwarded as well, the builder would compile the caller's
                 // raw attribute names whenever the projection holds only aliased joined columns.
                 $queries = \array_values(\array_filter($queries, static fn (BaseQuery $query): bool => $query->getMethod() !== Method::Select));
                 $hasSelectionProjection = true;
             } elseif (! empty($joinTablePrefixes)) {
-                $this->applyJoinProjection($builder, $collection, $joinTablePrefixes, $alias);
+                $this->applyJoinProjection(
+                    $builder,
+                    $collection,
+                    $joinTablePrefixes,
+                    $alias,
+                    $hasDistinct ? $selections : [...$selections, ...$orderAttributes],
+                );
                 $hasSelectionProjection = true;
             }
         }
@@ -6249,7 +6304,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             }
 
             $value = $row[$key];
-            if ($bare === Storage::PERMISSIONS || $public === Document::PERMISSIONS) {
+            if ($value !== null && ($bare === Storage::PERMISSIONS || $public === Document::PERMISSIONS)) {
                 $value = \json_decode(\is_string($value) ? $value : '[]', true);
             }
             if (! \array_key_exists($dotted, $row) || $key === $dotted) {

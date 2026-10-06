@@ -151,6 +151,15 @@ class ReadWritePool extends Pool
     }
 
     /**
+     * @return UtopiaPool<covariant Adapter>
+     */
+    #[\Override]
+    protected function getReadPool(): UtopiaPool
+    {
+        return $this->isSticky() ? parent::getReadPool() : $this->readPool;
+    }
+
+    /**
      * @param  array<mixed>  $args
      * @param  class-string|null  $feature
      */

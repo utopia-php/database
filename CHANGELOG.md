@@ -226,6 +226,8 @@ have to make, with the 7.x and 8.0 forms side by side.
   flags the same way.
 - `Database::setCacheWriterTimeout()` and `QueryCache`'s `writerTimeout` argument bound how long an unfinished
   invalidation keeps a collection's cache off.
+- `Mirror::awaitReplications()` waits until every replication queued through the mirror has reached the destination
+  or has been reported to `onError()`, for example before a worker stops.
 - `Exception\Unique::MESSAGE`, `Exception\Mismatch` (a `Duplicate` for a shared-table column of another type),
   `Exception\Contention` (a `Transaction` for a lock conflict with a concurrent transaction),
   `Exception\Unconfirmed` (a MongoDB commit whose result could not be confirmed) and `Validator\Structure`'s
@@ -263,10 +265,14 @@ have to make, with the 7.x and 8.0 forms side by side.
   `upsertDocuments()`, `upsertDocumentsWithIncrease()`, `deleteDocument()` and `deleteDocuments()` in a coroutine of
   its own, so the call returns once the source write is done (7.x wrote the destination before returning). Each
   replication runs under the authorization status and roles, tenant, relationship and silence state and toggles
-  the caller had when it made the call, and writes to one document reach the destination in the order they were
-  made; `createDocument()`, `updateDocument()`, `increaseDocumentAttribute()` and `decreaseDocumentAttribute()`,
-  which replicate before returning, first wait for the pending replications of their document. Outside a coroutine
+  the caller had when it made the call. A mirror applies its changes to the destination one at a time, in the order
+  they were made through it: the calls that reach the destination before returning (`createDocument()`,
+  `updateDocument()`, `increaseDocumentAttribute()`, `decreaseDocumentAttribute()`, schema changes, `create()`,
+  `delete()`, `exists()`, `setTimeout()`, `clearTimeout()`) first wait for the queued replications, and later
+  replications wait for them. The write filters' document hooks run when the replication applies. Outside a coroutine
   every replication finishes before the call returns.
+- A `Mirror` uses its source's `Authorization` and leaves the source's and destination's in place; in 7.x it started
+  with one of its own, which it also gave the source's adapter.
 - `Mirror::createDocument()` returns the document written to the source, as `updateDocument()` does, instead of the
   destination's copy.
 - `notContains` on an array attribute excludes documents whose array is NULL or missing on every adapter; SQLite
@@ -760,10 +766,11 @@ not change anything for an upgrade from 7.x.
   - A replication no longer changes the caller's authorization status. It runs under the status, roles, tenant,
     relationship and silence state the caller had when it made the call, also after the caller left a `skip()`,
     `skipRelationships()` or `silent()` scope, so a write made inside `skip()` no longer fails on the destination.
-  - Writes to one document reach the destination in the order they were made through the mirror; a failed
-    replication is reported to `onError()` and does not hold back later ones. Concurrent replications no longer
-    share the destination's preserve-dates and skip-duplicates settings, and schema changes wait for queued
-    replications of their collection.
+  - Changes reach the destination one at a time, in the order they were made through the mirror; a failed
+    replication is reported to `onError()` and does not hold back later ones. A write to a document created through a
+    relationship, a write made before returning, and a relationship or collection change after queued writes to the
+    related collection no longer overtake earlier replications, and replications no longer share the destination's
+    connection, preserve-dates or skip-duplicates settings.
   - Outside a coroutine, replications finish before the call returns; before, a destination write that yielded
     never resumed. Synchronous replications inside `withTenant()` use the caller's tenant on the destination.
   - An exception from a write filter's `before*` document hook is reported to `onError()` under the write's action

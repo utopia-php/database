@@ -1216,17 +1216,30 @@ in 7.x, ahead of the registered `Transform` hooks.
   `withRequestTimestamp()` now runs its callback once; 7.x ran it once per database when a destination was set.
 - **Replication.** Inside a coroutine (a Swoole server), `createDocuments()`, `updateDocuments()`, the upserts,
   `deleteDocument()` and `deleteDocuments()` return once the source write is done and replicate in a coroutine of
-  their own; a destination failure reaches `onError()` later. `createDocument()`, `updateDocument()`,
-  `increaseDocumentAttribute()` and `decreaseDocumentAttribute()` replicate before returning, after the pending
-  replications of their document. Outside a coroutine all replication finishes before the call returns. In 7.x every
-  write replicated before returning.
+  their own; a destination failure reaches `onError()` later. Every other call that reaches the destination
+  (`createDocument()`, `updateDocument()`, `increaseDocumentAttribute()`, `decreaseDocumentAttribute()`, the schema
+  changes, `create()`, `delete()`, `exists()`, `setTimeout()` and `clearTimeout()`) applies there before it returns,
+  after the replications queued before it. Outside a coroutine all replication finishes before the call returns. In
+  7.x every write replicated before returning.
   - Each replication runs under the state the caller had at the time of the call: authorization status and roles,
     tenant, relationship and silence state and the toggles (see [Coroutines](#coroutines)), without the request
     timestamp. A write made inside `skip()` replicates under it even after the caller has left the scope.
-  - Writes to one document reach the destination in the order they were made through the mirror; a failed
-    replication is reported to `onError()` and does not hold back later ones.
-  - A schema change through a mirror waits for the queued replications of the collections it touches before it
-    reaches the destination.
+  - A mirror applies its changes to the destination one at a time, in the order they were made through it, whichever
+    documents, related documents or schema they reach: a write never overtakes an earlier one, a schema change waits
+    for every queued replication, and two replications never share the destination's connection, so the destination
+    needs no `Adapter\Pool`. A failed replication is reported to `onError()` and does not hold back later ones. The
+    order holds per mirror; writes through two mirrors over the same destination are not ordered with each other.
+  - A write through the mirror made while a replication applies, from `onError()` or a write filter, is part of that
+    replication and applies at once.
+  - The write filters' document hooks (`beforeCreateDocument()`, ...) run when the replication applies, in its
+    coroutine.
+  - `$mirror->awaitReplications()` returns once every replication queued so far has reached the destination or has
+    been reported to `onError()`. Call it before a worker stops, or queued replications are lost. `delete()` waits
+    for them before it deletes the destination database.
+- **Authorization.** `new Mirror($source, $destination)` leaves the source's and the destination's `Authorization` in
+  place, and the mirror uses the source's, so roles and `skip()` scopes set on it apply to reads and writes through
+  the mirror. In 7.x the mirror started with an `Authorization` of its own, which it also gave the source's adapter.
+  `$mirror->setAuthorization()` sets one on the mirror, its source and its destination, as before.
 - **Write filters.** A `null` return from `beforeCreateCollection()`, `beforeUpdateCollection()`,
   `beforeCreateAttribute()`, `beforeUpdateAttribute()` or `beforeCreateIndex()` skips that change on the destination,
   and a collection whose creation was skipped is not replicated. An exception from a filter hook is reported to

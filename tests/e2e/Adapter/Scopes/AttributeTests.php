@@ -492,7 +492,7 @@ trait AttributeTests
             Query::orderDesc('people'),
         ]);
         $this->assertSame([[2, 5], [1, 5]], \array_map(
-            static fn (Document $group): array => [(int) $group->getAttribute('people'), (int) $group->getAttribute('score')],
+            fn (Document $group): array => [$this->aggregatedNumber($group, 'people'), $this->aggregatedNumber($group, 'score')],
             $groups,
         ));
 
@@ -502,7 +502,7 @@ trait AttributeTests
             Query::equal('dots.name', ['w']),
         ]);
         $this->assertCount(1, $filtered);
-        $this->assertSame(1, (int) $filtered[0]->getAttribute('people'));
+        $this->assertSame(1, $this->aggregatedNumber($filtered[0], 'people'));
 
         $having = $database->aggregate($collection, [
             Query::count('*', 'people'),
@@ -510,9 +510,17 @@ trait AttributeTests
             Query::having([Query::greaterThan('people', 1)]),
         ]);
         $this->assertCount(1, $having);
-        $this->assertSame(2, (int) $having[0]->getAttribute('people'));
+        $this->assertSame(2, $this->aggregatedNumber($having[0], 'people'));
 
         $database->deleteCollection($collection);
+    }
+
+    private function aggregatedNumber(Document $group, string $key): int
+    {
+        $value = $group->getAttribute($key);
+        $this->assertIsNumeric($value, "The aggregate {$key} is a number");
+
+        return (int) $value;
     }
 
     private function createDottedKeyCollection(Database $database): string

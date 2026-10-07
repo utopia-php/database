@@ -314,7 +314,7 @@ class MemoryTest extends Base
             'old' => 'value',
         ]));
 
-        $adapter->updateAttribute('renames', Attribute::string(key: 'old', size: 256), 'fresh');
+        $adapter->updateAttribute('renames', 'old', Attribute::string(key: 'fresh', size: 256));
 
         $renamed = $adapter->getDocument($collection, 'row');
         $this->assertSame('value', $renamed->getAttribute('fresh'));

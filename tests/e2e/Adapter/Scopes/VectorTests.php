@@ -47,20 +47,20 @@ trait VectorTests
         $embeddingAttr = null;
         $largeEmbeddingAttr = null;
 
-        foreach ($attributes as $attr) {
-            if ($attr->getAttribute('key') === 'embedding') {
-                $embeddingAttr = $attr;
-            } elseif ($attr->getAttribute('key') === 'large_embedding') {
-                $largeEmbeddingAttr = $attr;
+        foreach ($attributes as $attribute) {
+            if ($attribute->key === 'embedding') {
+                $embeddingAttr = $attribute;
+            } elseif ($attribute->key === 'large_embedding') {
+                $largeEmbeddingAttr = $attribute;
             }
         }
 
-        $this->assertInstanceOf(Document::class, $embeddingAttr);
-        $this->assertInstanceOf(Document::class, $largeEmbeddingAttr);
-        $this->assertEquals(ColumnType::Vector->value, $embeddingAttr->getAttribute('type'));
-        $this->assertEquals(3, $embeddingAttr->getAttribute('size'));
-        $this->assertEquals(ColumnType::Vector->value, $largeEmbeddingAttr->getAttribute('type'));
-        $this->assertEquals(128, $largeEmbeddingAttr->getAttribute('size'));
+        $this->assertInstanceOf(Attribute::class, $embeddingAttr);
+        $this->assertInstanceOf(Attribute::class, $largeEmbeddingAttr);
+        $this->assertEquals(ColumnType::Vector, $embeddingAttr->type);
+        $this->assertEquals(3, $embeddingAttr->size);
+        $this->assertEquals(ColumnType::Vector, $largeEmbeddingAttr->type);
+        $this->assertEquals(128, $largeEmbeddingAttr->size);
 
         // Cleanup
         $database->deleteCollection('vectorCollection');
@@ -1282,8 +1282,8 @@ trait VectorTests
         // Verify attribute is gone
         $collection = $database->getCollection('vectorDeleteAttr');
         $attributes = $collection->attributes();
-        foreach ($attributes as $attr) {
-            $this->assertNotEquals('embedding', $attr->getAttribute('key'));
+        foreach ($attributes as $attribute) {
+            $this->assertNotEquals('embedding', $attribute->key);
         }
 
         // Fetch document - should not have embedding anymore

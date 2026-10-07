@@ -114,7 +114,7 @@ class PostgresTest extends Base
 
         $this->assertSame('vector-doc', $document->getId());
         $this->assertSame('embeddings', $database->getDocument($collection, 'vector-doc')->getAttribute('name'));
-        $this->assertTrue($database->exists($database->getDatabase(), $collection));
+        $this->assertTrue($database->collectionExists($collection));
         $database->deleteCollection($collection);
     }
 

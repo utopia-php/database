@@ -31,7 +31,7 @@ use Utopia\Database\Index;
 use Utopia\Database\IntegerWidth;
 use Utopia\Database\Query;
 use Utopia\Database\Storage;
-use Utopia\Database\Validator\Index as IndexValidator;
+use Utopia\Database\Validator\IndexDefinition;
 use Utopia\Mongo\Client;
 use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
@@ -170,7 +170,7 @@ trait IndexTests
      * {@see self::testIndexLengthZero} covers: 701 is well under the maximum, and
      * only oversized relative to title1's own 700.
      *
-     * Ported from main's testIndexValidation, which drove Validator\Index
+     * Ported from main's testIndexValidation, which drove the index validator
      * directly. Going through createIndex() proves the validator is actually
      * consulted on the path a caller takes, which a direct construction cannot.
      */
@@ -356,9 +356,9 @@ trait IndexTests
             $collection = $database->getCollection($collectionId);
             $indexes = $collection->indexes();
             $this->assertCount(1, $indexes);
-            $this->assertEquals('trigram_name', $indexes[0]['$id']);
-            $this->assertEquals(IndexType::Trigram->value, $indexes[0]['type']);
-            $this->assertEquals(['name'], $indexes[0]['attributes']);
+            $this->assertEquals('trigram_name', $indexes[0]->key);
+            $this->assertEquals(IndexType::Trigram, $indexes[0]->type);
+            $this->assertEquals(['name'], $indexes[0]->attributes);
 
             // Create another trigram index on description
             $database->createIndex($collectionId, Index::trigram(key: 'trigram_description', attributes: ['description']));
@@ -477,9 +477,9 @@ trait IndexTests
         $indexes = $collection->indexes();
         $this->assertCount(1, $indexes);
         $ttlIndex = $indexes[0];
-        $this->assertEquals('idx_ttl_valid', $ttlIndex->getId());
-        $this->assertEquals(IndexType::Ttl->value, $ttlIndex->getAttribute('type'));
-        $this->assertEquals(3600, $ttlIndex->getAttribute('ttl'));
+        $this->assertEquals('idx_ttl_valid', $ttlIndex->key);
+        $this->assertEquals(IndexType::Ttl, $ttlIndex->type);
+        $this->assertEquals(3600, $ttlIndex->ttl);
 
         $now = new \DateTime();
         $future1 = (clone $now)->modify('+2 hours');
@@ -520,8 +520,8 @@ trait IndexTests
         $indexes2 = $collection2->indexes();
         $this->assertCount(1, $indexes2);
         $ttlIndex2 = $indexes2[0];
-        $this->assertEquals('idx_ttl_collection', $ttlIndex2->getId());
-        $this->assertEquals(7200, $ttlIndex2->getAttribute('ttl'));
+        $this->assertEquals('idx_ttl_collection', $ttlIndex2->key);
+        $this->assertEquals(7200, $ttlIndex2->ttl);
 
         $database->deleteCollection($col);
         $database->deleteCollection($col2);
@@ -551,11 +551,11 @@ trait IndexTests
      * @param  array<Attribute>  $attributes
      * @param  array<Index>  $indexes
      */
-    private function indexValidator(array $attributes, array $indexes): IndexValidator
+    private function indexValidator(array $attributes, array $indexes): IndexDefinition
     {
         $adapter = $this->getDatabase()->getAdapter();
 
-        return new IndexValidator(
+        return new IndexDefinition(
             $attributes,
             $indexes,
             $adapter->getMaxIndexLength(),
@@ -714,9 +714,9 @@ trait IndexTests
 
         $indexes = $collection->indexes();
         $this->assertCount(2, $indexes);
-        $this->assertSame('_index 123', $indexes[0]->getId());
+        $this->assertSame('_index 123', $indexes[0]->key);
         $this->assertSame(['username', '$sequence'], $indexes[0]->attributes);
-        $this->assertSame('_index 456', $indexes[1]->getId());
+        $this->assertSame('_index 456', $indexes[1]->key);
         $this->assertSame(['email', '$sequence'], $indexes[1]->attributes);
 
         $this->assertSequenceIndexesAnswerQueries('sequenceIndexes');
@@ -744,9 +744,9 @@ trait IndexTests
 
         $indexes = $database->getCollection(__FUNCTION__)->indexes();
         $this->assertCount(2, $indexes);
-        $this->assertSame('_index 123', $indexes[0]->getId());
+        $this->assertSame('_index 123', $indexes[0]->key);
         $this->assertSame(['username', '$sequence'], $indexes[0]->attributes);
-        $this->assertSame('_index 456', $indexes[1]->getId());
+        $this->assertSame('_index 456', $indexes[1]->key);
         $this->assertSame(['email', '$sequence'], $indexes[1]->attributes);
 
         $this->assertSequenceIndexesAnswerQueries(__FUNCTION__);
@@ -894,12 +894,12 @@ trait IndexTests
         }
 
         foreach ($database->getSchemaIndexes($collection) as $schemaIndex) {
-            if ($schemaIndex->name !== $index) {
+            if ($schemaIndex->getId() !== $index) {
                 continue;
             }
 
-            $columns = $schemaIndex->columns;
-            $lengths = $schemaIndex->lengths;
+            $columns = $schemaIndex->getAttribute('columns');
+            $lengths = $schemaIndex->getAttribute('lengths');
             $this->assertIsArray($columns);
             $this->assertIsArray($lengths);
 
@@ -1209,20 +1209,20 @@ trait IndexTests
     {
         $indexes = [];
         foreach ($database->getSchemaIndexes($collection) as $schemaIndex) {
-            $type = $schemaIndex->type;
+            $type = $schemaIndex->getAttribute('indexType');
             $this->assertIsString($type);
             if (\strtoupper($type) !== 'FULLTEXT') {
                 continue;
             }
 
-            $columns = $schemaIndex->columns;
+            $columns = $schemaIndex->getAttribute('columns');
             $this->assertIsArray($columns);
             $columns = \array_values(\array_filter(
                 $columns,
                 static fn (mixed $column): bool => \is_string($column) && $column !== '_tenant',
             ));
             /** @var list<string> $columns */
-            $indexes[$schemaIndex->name] = $columns;
+            $indexes[$schemaIndex->getId()] = $columns;
         }
         \ksort($indexes);
 
@@ -1301,7 +1301,7 @@ trait IndexTests
             $this->assertSame(128, $database->getCollection($collection)->attributes()[0]->size);
             $this->assertSame(['by_name'], \array_map(
                 static fn (Index $index): string => $index->key,
-                \array_values($database->getCollection($collection)->indexes()),
+                $database->getCollection($collection)->indexes(),
             ));
         } finally {
             $database->deleteCollection($collection);
@@ -1314,11 +1314,11 @@ trait IndexTests
     private function getSchemaIndexColumns(Database $database, string $collection, string $index): ?array
     {
         foreach ($database->getSchemaIndexes($collection) as $schemaIndex) {
-            if ($schemaIndex->name !== $index) {
+            if ($schemaIndex->getId() !== $index) {
                 continue;
             }
 
-            $columns = $schemaIndex->columns;
+            $columns = $schemaIndex->getAttribute('columns');
             $this->assertIsArray($columns);
 
             $names = [];
@@ -1522,7 +1522,7 @@ trait IndexTests
     {
         return \array_map(
             static fn (Index $index): string => $index->key,
-            \array_values($database->getCollection($collection)->indexes()),
+            $database->getCollection($collection)->indexes(),
         );
     }
 

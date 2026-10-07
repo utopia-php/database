@@ -25,22 +25,14 @@ use Utopia\Query\Schema\IndexType;
 
 trait ObjectAttributeTests
 {
-    /**
-     * Helper function to create an attribute if adapter supports attributes,
-     * otherwise returns true to allow tests to continue
-     *
-     * @param  mixed  $default
-     */
-    private function createAttribute(Database $database, string $collectionId, string $attributeId, ColumnType $type, int $size, bool $required, $default = null): bool
+    private function createAttribute(Database $database, string $collectionId, string $attributeId, ColumnType $type, int $size, bool $required, mixed $default = null): void
     {
         if (! $database->getAdapter()->supports(Capability::DefinedAttributes)) {
-            return true;
+            return;
         }
 
-        $result = $database->createAttribute($collectionId, Attribute::fromArray(['key' => $attributeId, 'type' => $type, 'size' => $size, 'required' => $required, 'default' => $default]));
-        $this->assertEquals(true, $result);
-
-        return $result;
+        $created = $database->createAttribute($collectionId, Attribute::fromArray(['key' => $attributeId, 'type' => $type, 'size' => $size, 'required' => $required, 'default' => $default]));
+        $this->assertSame($attributeId, $created->key);
     }
 
     /**
@@ -1551,8 +1543,7 @@ trait ObjectAttributeTests
         $this->createAttribute($database, $collectionId, 'age', ColumnType::Integer, 0, false);
 
         // Edge Case 1: Deep nesting (5 levels deep)
-        $created = $database->createIndex($collectionId, Index::key(key: 'idx_deep_nest', attributes: ['profile.level1.level2.level3.level4.value']));
-        $this->assertTrue($created);
+        $database->createIndex($collectionId, Index::key(key: 'idx_deep_nest', attributes: ['profile.level1.level2.level3.level4.value']));
 
         $database->createDocuments($collectionId, [
             new Document([
@@ -1606,12 +1597,9 @@ trait ObjectAttributeTests
         $this->assertEquals('deep1', $results[0]->getId());
 
         // Edge Case 2: Multiple nested indexes on same base attribute
-        $created = $database->createIndex($collectionId, Index::key(key: 'idx_email', attributes: ['profile.user.email']));
-        $this->assertTrue($created);
-        $created = $database->createIndex($collectionId, Index::key(key: 'idx_country', attributes: ['profile.user.info.country']));
-        $this->assertTrue($created);
-        $created = $database->createIndex($collectionId, Index::key(key: 'idx_city', attributes: ['profile.user.info.city']));
-        $this->assertTrue($created);
+        $database->createIndex($collectionId, Index::key(key: 'idx_email', attributes: ['profile.user.email']));
+        $database->createIndex($collectionId, Index::key(key: 'idx_country', attributes: ['profile.user.info.country']));
+        $database->createIndex($collectionId, Index::key(key: 'idx_city', attributes: ['profile.user.info.city']));
 
         $database->createDocuments($collectionId, [
             new Document([
@@ -2013,8 +2001,7 @@ trait ObjectAttributeTests
         $this->assertGreaterThanOrEqual(1, count($results));
 
         // Re-create index
-        $created = $database->createIndex($collectionId, Index::key(key: 'idx_email_recreated', attributes: ['profile.user.email']));
-        $this->assertTrue($created);
+        $database->createIndex($collectionId, Index::key(key: 'idx_email_recreated', attributes: ['profile.user.email']));
 
         // Query should still work with recreated index
         $results = $database->find($collectionId, [
@@ -2024,8 +2011,7 @@ trait ObjectAttributeTests
 
         // Edge Case 11: UNIQUE index with updates (duplicate prevention)
         if ($database->getAdapter()->supports(Capability::IdenticalIndexes)) {
-            $created = $database->createIndex($collectionId, Index::unique(key: 'idx_unique_email', attributes: ['profile.user.email']));
-            $this->assertTrue($created);
+            $database->createIndex($collectionId, Index::unique(key: 'idx_unique_email', attributes: ['profile.user.email']));
 
             // Try to create duplicate
             try {

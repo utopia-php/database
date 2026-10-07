@@ -35,7 +35,6 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Transform;
 use Utopia\Database\Index;
-use Utopia\Database\IntegerWidth;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationshipDeleteAction;
@@ -92,15 +91,15 @@ trait CollectionTests
             Permission::read(Role::any()),
         ]));
         $this->assertCount(1, $database->listCollections());
-        $this->assertEquals(true, $database->exists($this->testDatabase, 'actors'));
+        $this->assertEquals(true, $database->collectionExists('actors', $this->testDatabase));
 
         // Collection names should not be unique
         $database->createCollection(Collection::create(id: 'actors2', permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
         ]));
-        $this->assertCount(2, $database->listCollections());
-        $this->assertEquals(true, $database->exists($this->testDatabase, 'actors2'));
+        $this->assertCount(2, $database->listCollections(100));
+        $this->assertEquals(true, $database->collectionExists('actors2', $this->testDatabase));
         $collection = $database->getCollection('actors2');
         $collection->setAttribute('name', 'actors'); // change name to one that exists
         $updated = $database->updateDocument(
@@ -112,10 +111,10 @@ trait CollectionTests
         $database->deleteCollection('actors2'); // Delete collection when finished
         $this->assertCount(1, $database->listCollections());
 
-        $this->assertEquals(false, $database->findCollection('actors') === null);
+        $this->assertNotNull($database->findCollection('actors'));
         $database->deleteCollection('actors');
-        $this->assertEquals(true, $database->findCollection('actors') === null);
-        $this->assertEquals(false, $database->exists($this->testDatabase, 'actors'));
+        $this->assertNull($database->findCollection('actors'));
+        $this->assertEquals(false, $database->collectionExists('actors', $this->testDatabase));
     }
 
     public function testDatabaseHostname(): void
@@ -153,7 +152,6 @@ trait CollectionTests
 
         $collection = $database->createCollection(Collection::create(id: 'withSchema', attributes: $attributes, indexes: $indexes));
 
-        $this->assertEquals(false, $collection->isEmpty());
         $this->assertEquals('withSchema', $collection->getId());
 
         $this->assertCount(4, $collection->attributes());
@@ -190,7 +188,6 @@ trait CollectionTests
             Index::key(key: 'index-one', attributes: ['attribute-one'], lengths: [256], orders: [OrderDirection::Asc]),
         ]));
 
-        $this->assertEquals(false, $collection2->isEmpty());
         $this->assertEquals('with-dash', $collection2->getId());
         $this->assertCount(1, $collection2->attributes());
         $this->assertEquals('attribute-one', $collection2->attributes()[0]->key);
@@ -367,7 +364,7 @@ trait CollectionTests
             /**
              * @var Document $attribute
              */
-            $attributes[$attribute->name] = $attribute;
+            $attributes[$attribute->getId()] = $attribute;
         }
 
         $attribute = $attributes['username'];
@@ -500,8 +497,8 @@ trait CollectionTests
             $this->assertCount(1, $documents);
             $this->assertEquals('helloWorld', $documents[0]->getId());
 
-            $collection = $database->deleteCollection($keyword);
-            $this->assertTrue($collection);
+            $database->deleteCollection($keyword);
+            $this->assertNull($database->findCollection($keyword));
         }
 
         // TODO: updateCollection name tests
@@ -549,8 +546,8 @@ trait CollectionTests
             $this->assertCount(1, $documents);
             $this->assertEquals('reservedKeyDocument', $documents[0]->getId());
 
-            $collection = $database->deleteCollection($collectionName);
-            $this->assertTrue($collection);
+            $database->deleteCollection($collectionName);
+            $this->assertNull($database->findCollection($collectionName));
         }
     }
 
@@ -614,7 +611,7 @@ trait CollectionTests
 
         $database->createRelationship('testers', Relationship::oneToMany(relatedCollection: 'devices', twoWay: true, twoWayKey: 'tester'));
 
-        $testers = $database->findCollection('testers');
+        $testers = $database->getCollection('testers');
         $devices = $database->getCollection('devices');
 
         $this->assertEquals(1, \count($testers->attributes()));
@@ -626,7 +623,7 @@ trait CollectionTests
         $testers = $database->findCollection('testers');
         $devices = $database->getCollection('devices');
 
-        $this->assertEquals(true, $testers === null);
+        $this->assertNull($testers);
         $this->assertEquals(0, \count($devices->attributes()));
         $this->assertEquals(0, \count($devices->indexes()));
     }
@@ -842,7 +839,7 @@ trait CollectionTests
             $this->assertEquals('Collection not found', $e->getMessage());
         }
 
-        $this->assertCount(0, $database->listCollections());
+        $this->assertCount(0, $database->listCollections(100));
 
         // Swap back to tenant 1, allowed
         $database->setTenant($tenant1);
@@ -998,8 +995,8 @@ trait CollectionTests
         }
 
         try {
-            $tenant1 = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer ? 10 : 'tenant_10';
-            $tenant2 = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer ? 20 : 'tenant_20';
+            $tenant1 = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer->value ? 10 : 'tenant_10';
+            $tenant2 = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer->value ? 20 : 'tenant_20';
             $colName = 'mt_' . uniqid();
 
             $database->setTenant($tenant1);
@@ -1056,8 +1053,8 @@ trait CollectionTests
         $originalTenant = $database->getTenant();
 
         try {
-            $tenant1 = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer ? 100 : 'tenant_100';
-            $tenant2 = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer ? 200 : 'tenant_200';
+            $tenant1 = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer->value ? 100 : 'tenant_100';
+            $tenant2 = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer->value ? 200 : 'tenant_200';
 
             if ($sharedTables) {
                 // Already in shared-tables mode; create() should be idempotent.
@@ -1111,6 +1108,7 @@ trait CollectionTests
                 Event::CollectionRead,
                 Event::DocumentPurge,
                 Event::AttributeCreate,
+                Event::DocumentPurge,
                 Event::AttributeUpdate,
                 Event::IndexCreate,
                 Event::DocumentCreate,
@@ -1544,8 +1542,7 @@ trait CollectionTests
         $survivor = $peer->getDocument($collection, 'written');
         $this->assertSame('peer', $survivor->getAttribute('name'), 'Peer document was destroyed by the losing creator');
 
-        $metadata = $peer->getCollection($collection);
-        $this->assertFalse($metadata->isEmpty(), 'Peer collection metadata was destroyed by the losing creator');
+        $this->assertNotNull($peer->findCollection($collection), 'Peer collection metadata was destroyed by the losing creator');
 
         // The loser's cache still held the collection as missing from the read
         // it took before the peer committed, and the peer's purge cannot reach
@@ -1692,7 +1689,7 @@ trait CollectionTests
             Permission::delete(Role::users()),
         ], documentSecurity: false));
 
-        $this->assertFalse($collection->isEmpty());
+        $this->assertSame('collectionUpdate', $collection->getId());
 
         $collection = $database->getCollection('collectionUpdate');
 
@@ -1742,7 +1739,6 @@ trait CollectionTests
         foreach ($collections as $id) {
             $collection = $database->createCollection(Collection::create(id: $id, attributes: $attributes, indexes: $indexes));
 
-            $this->assertFalse($collection->isEmpty());
             $this->assertSame($id, $collection->getId());
 
             $this->assertCount(5, $collection->attributes());
@@ -2143,14 +2139,14 @@ trait CollectionTests
 
         $collection = 'mainTableGone';
         $database->createCollection(Collection::create(id: $collection, permissions: [Permission::read(Role::any())]));
-        $this->assertTrue($database->exists(collection: Storage::permissionsTable($collection)));
+        $this->assertTrue($database->collectionExists(Storage::permissionsTable($collection)));
 
         $table = $database->getDatabase().'.'.$database->getNamespace().'_'.$collection;
         $database->getAuthorization()->skip(fn () => $database->schema()->table($table)->drop()->execute());
 
         $database->deleteCollection($collection);
         $this->assertNull($database->findCollection($collection));
-        $this->assertFalse($database->exists(collection: Storage::permissionsTable($collection)), 'The permissions table of a collection whose table was gone was left behind');
+        $this->assertFalse($database->collectionExists(Storage::permissionsTable($collection)), 'The permissions table of a collection whose table was gone was left behind');
     }
 
     public function testPostgresSharedTablesRefuseAnotherTenantsColumnOfAnotherType(): void
@@ -2165,7 +2161,7 @@ trait CollectionTests
         }
 
         $originalTenant = $database->getTenant();
-        $integerTenants = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer;
+        $integerTenants = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer->value;
         $first = $integerTenants ? 401 : 'tenant_401';
         $second = $integerTenants ? 402 : 'tenant_402';
         $collection = 'sharedColumnType';
@@ -2197,12 +2193,12 @@ trait CollectionTests
                 $this->assertSame('Attribute exists in the shared table with another type', $e->getMessage());
             }
 
-            $this->assertSame([], $database->getCollection($collection)->getAttribute('attributes', []));
+            $stored = $database->getCollection($collection);
+            $this->assertSame([], $stored->attributes());
 
             $database->createAttribute($collection, Attribute::integer(key: 'age'));
-            /** @var array<Attribute> $attributes */
-            $attributes = $database->getCollection($collection)->getAttribute('attributes', []);
-            $this->assertSame(['age'], \array_map(static fn (Attribute $attribute): string => $attribute->key, \array_values($attributes)));
+            $stored = $database->getCollection($collection);
+            $this->assertSame(['age'], \array_map(static fn (Attribute $attribute): string => $attribute->key, $stored->attributes()));
 
             $database->setTenant($first);
             $this->assertSame(7, $database->getDocument($collection, 'first')->getAttribute('age'));
@@ -2229,7 +2225,7 @@ trait CollectionTests
         }
 
         $originalTenant = $database->getTenant();
-        $integerTenants = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer;
+        $integerTenants = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer->value;
         $tenants = $integerTenants ? [411, 412] : ['tenant_411', 'tenant_412'];
         $collection = 'sharedColumnSameType';
         $definition = Collection::create(id: $collection, permissions: [
@@ -2248,9 +2244,7 @@ trait CollectionTests
                     Attribute::string(key: 'bio', size: 20000),
                 ]);
 
-                /** @var array<Attribute> $attributes */
-                $attributes = $database->getCollection($collection)->getAttribute('attributes', []);
-                $this->assertSame(['age', 'name', 'seen', 'bio'], \array_map(static fn (Attribute $attribute): string => $attribute->key, \array_values($attributes)));
+                $this->assertSame(['age', 'name', 'seen', 'bio'], \array_map(static fn (Attribute $attribute): string => $attribute->key, $database->getCollection($collection)->attributes()));
 
                 $database->createDocument($collection, new Document([
                     '$id' => 'own',

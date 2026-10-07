@@ -274,7 +274,7 @@ trait AttributeTests
         $attributes = $collection->attributes();
         $attribute = end($attributes);
         $this->assertInstanceOf(Attribute::class, $attribute);
-        $this->assertEquals('string1', $attribute->getId());
+        $this->assertEquals('string1', $attribute->key);
 
         $database->deleteAttribute($this->getAttributesCollection(), 'string1');
 
@@ -282,7 +282,7 @@ trait AttributeTests
         $attributes = $collection->attributes();
         $attribute = end($attributes);
         $this->assertInstanceOf(Attribute::class, $attribute);
-        $this->assertNotEquals('string1', $attribute->getId());
+        $this->assertNotEquals('string1', $attribute->key);
 
         $collection = $database->getCollection($this->getAttributesCollection());
     }
@@ -741,7 +741,7 @@ trait AttributeTests
         $database->createCollection(Collection::create(id: $collection));
 
         foreach ([ColumnType::Json, ColumnType::Timestamp, ColumnType::BigSerial] as $type) {
-            $message = 'Unknown attribute type: '.$type->value.'.';
+            $message = 'Unknown attribute type: '.$type->value;
             $inline = $collection.'_'.$type->value;
 
             try {
@@ -783,9 +783,7 @@ trait AttributeTests
         $updated = $database->updateAttribute($collection, 'reference', new AttributeUpdate(key: 'target'));
 
         $this->assertSame('target', $updated->key);
-        $type = $updated->type->value;
-        $this->assertTrue($type instanceof ColumnType || \is_string($type));
-        $this->assertSame(ColumnType::Id, Attribute::normalizeType($type));
+        $this->assertSame(ColumnType::Id, $updated->type);
         $this->assertSame('7', $database->getDocument($collection, 'one')->getAttribute('target'));
 
         $database->deleteCollection($collection);
@@ -892,8 +890,7 @@ trait AttributeTests
 
         Structure::addFormat('priceRange', $this->priceRangeFormat(...), ColumnType::Integer);
 
-        $database->updateAttribute($this->getFlowersCollection(), 'price', new AttributeUpdate(format: new Format('priceRange')));
-        $database->updateAttributeFormatOptions($this->getFlowersCollection(), 'price', ['min' => 1, 'max' => 10000]);
+        $database->updateAttribute($this->getFlowersCollection(), 'price', new AttributeUpdate(format: new Format('priceRange', ['min' => 1, 'max' => 10000])));
 
         $this->expectExceptionMessage('Invalid document structure: Attribute "price" has invalid format. Value must be a valid range between 1 and 10,000');
 
@@ -962,8 +959,7 @@ trait AttributeTests
 
         Structure::addFormat('priceRange', $this->priceRangeFormat(...), ColumnType::Integer);
 
-        $database->updateAttribute($this->getFlowersCollection(), 'price', new AttributeUpdate(format: new Format('priceRange')));
-        $database->updateAttributeFormatOptions($this->getFlowersCollection(), 'price', ['min' => 1, 'max' => 10000]);
+        $database->updateAttribute($this->getFlowersCollection(), 'price', new AttributeUpdate(format: new Format('priceRange', ['min' => 1, 'max' => 10000])));
 
         self::$flowersWithPriceFixtureInit = true;
     }
@@ -988,7 +984,7 @@ trait AttributeTests
         $this->assertEquals(false, $attribute->array);
         $this->assertEquals(false, $attribute->required);
         $this->assertEquals('priceRange', $attribute->format?->name);
-        $this->assertEquals(['min' => 1, 'max' => 10000], $attribute->format?->options ?? []);
+        $this->assertEquals(['min' => 1, 'max' => 10000], $attribute->format->options ?? []);
 
         $database->updateAttribute($this->getFlowersCollection(), 'price', new AttributeUpdate(default: 100));
         $collection = $database->getCollection($this->getFlowersCollection());
@@ -1000,7 +996,31 @@ trait AttributeTests
         $this->assertEquals(false, $attribute->array);
         $this->assertEquals(false, $attribute->required);
         $this->assertEquals('priceRange', $attribute->format?->name);
-        $this->assertEquals(['min' => 1, 'max' => 10000], $attribute->format?->options ?? []);
+        $this->assertEquals(['min' => 1, 'max' => 10000], $attribute->format->options ?? []);
+
+        $database->updateAttribute($this->getFlowersCollection(), 'price', new AttributeUpdate(format: new Format('priceRangeNew', ['min' => 1, 'max' => 10000])));
+        $collection = $database->getCollection($this->getFlowersCollection());
+        $attribute = $collection->attributes()[4];
+        $this->assertEquals(ColumnType::Integer, $attribute->type);
+        $this->assertEquals(true, $attribute->signed);
+        $this->assertEquals(0, $attribute->size);
+        $this->assertEquals(100, $attribute->default);
+        $this->assertEquals(false, $attribute->array);
+        $this->assertEquals(false, $attribute->required);
+        $this->assertEquals('priceRangeNew', $attribute->format?->name);
+        $this->assertEquals(['min' => 1, 'max' => 10000], $attribute->format->options ?? []);
+
+        $database->updateAttribute($this->getFlowersCollection(), 'price', new AttributeUpdate(format: new Format('priceRangeNew', ['min' => 1, 'max' => 999])));
+        $collection = $database->getCollection($this->getFlowersCollection());
+        $attribute = $collection->attributes()[4];
+        $this->assertEquals(ColumnType::Integer, $attribute->type);
+        $this->assertEquals(true, $attribute->signed);
+        $this->assertEquals(0, $attribute->size);
+        $this->assertEquals(100, $attribute->default);
+        $this->assertEquals(false, $attribute->array);
+        $this->assertEquals(false, $attribute->required);
+        $this->assertEquals('priceRangeNew', $attribute->format?->name);
+        $this->assertEquals(['min' => 1, 'max' => 999], $attribute->format->options ?? []);
 
         $database->updateAttribute($this->getFlowersCollection(), 'price', new AttributeUpdate(format: new Format('priceRangeNew')));
         $collection = $database->getCollection($this->getFlowersCollection());
@@ -1012,9 +1032,9 @@ trait AttributeTests
         $this->assertEquals(false, $attribute->array);
         $this->assertEquals(false, $attribute->required);
         $this->assertEquals('priceRangeNew', $attribute->format?->name);
-        $this->assertEquals(['min' => 1, 'max' => 10000], $attribute->format?->options ?? []);
+        $this->assertEquals([], $attribute->format->options ?? []);
 
-        $database->updateAttribute($this->getFlowersCollection(), 'price', format: '');
+        $database->updateAttribute($this->getFlowersCollection(), 'price', new AttributeUpdate(format: null));
         $collection = $database->getCollection($this->getFlowersCollection());
         $attribute = $collection->attributes()[4];
         $this->assertEquals(ColumnType::Integer, $attribute->type);
@@ -1023,32 +1043,7 @@ trait AttributeTests
         $this->assertEquals(100, $attribute->default);
         $this->assertEquals(false, $attribute->array);
         $this->assertEquals(false, $attribute->required);
-        $this->assertEquals('', $attribute->format?->name);
-        $this->assertEquals(['min' => 1, 'max' => 10000], $attribute->format?->options ?? []);
-
-        $database->updateAttribute($this->getFlowersCollection(), 'price', formatOptions: ['min' => 1, 'max' => 999]);
-        $collection = $database->getCollection($this->getFlowersCollection());
-        $attribute = $collection->attributes()[4];
-        $this->assertEquals(ColumnType::Integer, $attribute->type);
-        $this->assertEquals(true, $attribute->signed);
-        $this->assertEquals(0, $attribute->size);
-        $this->assertEquals(100, $attribute->default);
-        $this->assertEquals(false, $attribute->array);
-        $this->assertEquals(false, $attribute->required);
-        $this->assertEquals('', $attribute->format?->name);
-        $this->assertEquals(['min' => 1, 'max' => 999], $attribute->format?->options ?? []);
-
-        $database->updateAttribute($this->getFlowersCollection(), 'price', formatOptions: []);
-        $collection = $database->getCollection($this->getFlowersCollection());
-        $attribute = $collection->attributes()[4];
-        $this->assertEquals(ColumnType::Integer, $attribute->type);
-        $this->assertEquals(true, $attribute->signed);
-        $this->assertEquals(0, $attribute->size);
-        $this->assertEquals(100, $attribute->default);
-        $this->assertEquals(false, $attribute->array);
-        $this->assertEquals(false, $attribute->required);
-        $this->assertEquals('', $attribute->format?->name);
-        $this->assertEquals([], $attribute->format?->options ?? []);
+        $this->assertNull($attribute->format);
 
         $database->updateAttribute($this->getFlowersCollection(), 'price', new AttributeUpdate(signed: false));
         $collection = $database->getCollection($this->getFlowersCollection());
@@ -1059,8 +1054,7 @@ trait AttributeTests
         $this->assertEquals(100, $attribute->default);
         $this->assertEquals(false, $attribute->array);
         $this->assertEquals(false, $attribute->required);
-        $this->assertEquals('', $attribute->format?->name);
-        $this->assertEquals([], $attribute->format?->options ?? []);
+        $this->assertNull($attribute->format);
 
         $database->updateAttribute($this->getFlowersCollection(), 'price', new AttributeUpdate(required: true));
         $collection = $database->getCollection($this->getFlowersCollection());
@@ -1071,22 +1065,19 @@ trait AttributeTests
         $this->assertEquals(null, $attribute->default);
         $this->assertEquals(false, $attribute->array);
         $this->assertEquals(true, $attribute->required);
-        $this->assertEquals('', $attribute->format?->name);
-        $this->assertEquals([], $attribute->format?->options ?? []);
+        $this->assertNull($attribute->format);
 
-        $database->updateAttribute($this->getFlowersCollection(), 'price', type: ColumnType::String, size: Database::LENGTH_KEY, format: '');
+        $database->updateAttribute($this->getFlowersCollection(), 'price', new AttributeUpdate(type: ColumnType::String, size: Database::LENGTH_KEY, format: null));
         $collection = $database->getCollection($this->getFlowersCollection());
         $attribute = $collection->attributes()[4];
         $this->assertEquals(ColumnType::String, $attribute->type);
-        $this->assertEquals(false, $attribute->signed);
+        $this->assertEquals(true, $attribute->signed);
         $this->assertEquals(255, $attribute->size);
         $this->assertEquals(null, $attribute->default);
         $this->assertEquals(false, $attribute->array);
         $this->assertEquals(true, $attribute->required);
-        $this->assertEquals('', $attribute->format?->name);
-        $this->assertEquals([], $collection->attributes()[4]->format?->options ?? []);
+        $this->assertNull($attribute->format);
 
-        // Date attribute
         $attribute = $collection->attributes()[2];
         $this->assertEquals('date', $attribute->key);
         $this->assertEquals(ColumnType::String, $attribute->type);
@@ -1099,10 +1090,9 @@ trait AttributeTests
         $this->assertEquals(0, $attribute->size);
         $this->assertEquals(null, $attribute->default);
         $this->assertEquals(false, $attribute->required);
-        $this->assertEquals(true, $attribute->signed);
+        $this->assertEquals(false, $attribute->signed);
         $this->assertEquals(false, $attribute->array);
-        $this->assertEquals('', $attribute->format?->name);
-        $this->assertEquals([], $attribute->format?->options ?? []);
+        $this->assertNull($attribute->format);
 
         $doc = $database->getDocument($this->getFlowersCollection(), 'LiliPriced');
         $this->assertIsString($doc->getAttribute('price'));
@@ -2202,7 +2192,7 @@ trait AttributeTests
         $this->assertCount(2, $attributes);
 
         foreach ($attributes as $attribute) {
-            $this->assertSame([ColumnType::Datetime->value], $attribute['filters']);
+            $this->assertSame([ColumnType::Datetime->value], $attribute->filters);
         }
 
         $database->deleteCollection($collection);
@@ -2256,24 +2246,22 @@ trait AttributeTests
         $collectionName = 'bigint_ignores_size_limit';
         $database->createCollection(Collection::create(id: $collectionName));
 
-        $attributes = [Attribute::bigInteger(key: 'foo')];
+        $attributes = [Attribute::fromArray(['key' => 'foo', 'type' => ColumnType::BigInteger, 'size' => 9999])];
 
         $database->createAttributes($collectionName, $attributes);
 
         $collection = $database->getCollection($collectionName);
         $attrs = $collection->attributes();
         $this->assertCount(1, $attrs);
-        $attribute = $attrs[0] ?? null;
-        $this->assertInstanceOf(Document::class, $attribute);
-        $this->assertSame('foo', $attribute->getId());
-        $this->assertSame(0, $attribute->getAttribute('size'));
+        $attribute = $attrs[0];
+        $this->assertSame('foo', $attribute->key);
+        $this->assertNull($attribute->size);
 
         $database->updateAttribute($collectionName, 'foo', new AttributeUpdate(type: ColumnType::BigInteger, size: 1));
         $collection = $database->getCollection($collectionName);
         $attrs = $collection->attributes();
-        $attribute = $attrs[0] ?? null;
-        $this->assertInstanceOf(Document::class, $attribute);
-        $this->assertSame(0, $attribute->getAttribute('size'));
+        $this->assertCount(1, $attrs);
+        $this->assertNull($attrs[0]->size);
     }
 
     public function testCreateAttributesBigIntValidationSignedUnsignedAndMetadata(): void
@@ -2299,20 +2287,20 @@ trait AttributeTests
         $signedAttribute = null;
         $unsignedAttribute = null;
         foreach ($attributes as $attribute) {
-            if ($attribute->getId() === 'signed_bigint') {
+            if ($attribute->key === 'signed_bigint') {
                 $signedAttribute = $attribute;
             }
-            if ($attribute->getId() === 'unsigned_bigint') {
+            if ($attribute->key === 'unsigned_bigint') {
                 $unsignedAttribute = $attribute;
             }
         }
 
-        $this->assertInstanceOf(Document::class, $signedAttribute);
-        $this->assertInstanceOf(Document::class, $unsignedAttribute);
-        $this->assertTrue($signedAttribute->getAttribute('signed'));
-        $this->assertFalse($unsignedAttribute->getAttribute('signed'));
-        $this->assertSame(0, $signedAttribute->getAttribute('size'));
-        $this->assertSame(0, $unsignedAttribute->getAttribute('size'));
+        $this->assertInstanceOf(Attribute::class, $signedAttribute);
+        $this->assertInstanceOf(Attribute::class, $unsignedAttribute);
+        $this->assertTrue($signedAttribute->signed);
+        $this->assertFalse($unsignedAttribute->signed);
+        $this->assertNull($signedAttribute->size);
+        $this->assertNull($unsignedAttribute->size);
 
         $largeUnsignedAttribute = [Attribute::bigInteger(key: 'unsigned_bigint_large', default: '18446744073709551615', signed: false)];
         if ($database->getAdapter()->supports(Capability::UnsignedBigInt)) {
@@ -2388,8 +2376,8 @@ trait AttributeTests
         $collection = $database->getCollection(__FUNCTION__);
         $attrs = $collection->attributes();
         $this->assertCount(2, $attrs);
-        $this->assertEquals('a', $attrs[0]['$id']);
-        $this->assertEquals('b', $attrs[1]['$id']);
+        $this->assertEquals('a', $attrs[0]->key);
+        $this->assertEquals('b', $attrs[1]->key);
 
         $doc = $database->createDocument(__FUNCTION__, new Document([
             'a' => 'foo',
@@ -2420,15 +2408,15 @@ trait AttributeTests
         $collection = $database->getCollection(__FUNCTION__);
         $attrs = $collection->attributes();
         $this->assertCount(2, $attrs);
-        $this->assertEquals('a', $attrs[0]['$id']);
-        $this->assertEquals('b', $attrs[1]['$id']);
+        $this->assertEquals('a', $attrs[0]->key);
+        $this->assertEquals('b', $attrs[1]->key);
 
         $database->deleteAttribute(__FUNCTION__, 'a');
 
         $collection = $database->getCollection(__FUNCTION__);
         $attrs = $collection->attributes();
         $this->assertCount(1, $attrs);
-        $this->assertEquals('b', $attrs[0]['$id']);
+        $this->assertEquals('b', $attrs[0]->key);
     }
 
     public function testStringTypeAttributes(): void
@@ -2845,12 +2833,10 @@ trait AttributeTests
 
         $limit = (int) ($database->getAdapter()->getLimitForInt() / 2);
 
-        try {
-            $database->createAttributes(__FUNCTION__, [Attribute::integer(key: 'foo', width: IntegerWidth::fromSize($limit + 1))]);
-            $this->fail('Expected DatabaseException not thrown');
-        } catch (Throwable $e) {
-            $this->assertInstanceOf(DatabaseException::class, $e);
-        }
+        $created = $database->createAttributes(__FUNCTION__, [Attribute::fromArray(['key' => 'foo', 'type' => ColumnType::Integer, 'size' => $limit + 1])]);
+
+        $this->assertSame(IntegerWidth::Bits64, $created[0]->width());
+        $this->assertSame(IntegerWidth::Bits64, $database->getCollection(__FUNCTION__)->attributes()[0]->width());
     }
 
     public function testCreateAttributesSkipsAColumnThatExistsOnlyInTheSchema(): void
@@ -2877,7 +2863,7 @@ trait AttributeTests
 
         $this->assertSame(['a', 'b'], \array_map(
             static fn (Attribute $attribute): string => $attribute->key,
-            \array_values($database->getCollection($collection)->attributes()),
+            $database->getCollection($collection)->attributes(),
         ));
 
         $database->createDocument($collection, new Document([Document::ID => 'one', 'a' => 1, 'b' => 'kept']));
@@ -2899,7 +2885,7 @@ trait AttributeTests
         }
 
         $originalTenant = $database->getTenant();
-        $integerTenants = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer;
+        $integerTenants = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer->value;
         $first = $integerTenants ? 301 : 'tenant_301';
         $second = $integerTenants ? 302 : 'tenant_302';
         $collection = 'sharedColumn_'.\uniqid();
@@ -2929,7 +2915,7 @@ trait AttributeTests
                 $database->createAttribute($collection, Attribute::integer(key: 'age'));
                 $this->assertSame(['age'], \array_map(
                     static fn (Attribute $attribute): string => $attribute->key,
-                    \array_values($database->getCollection($collection)->attributes()),
+                    $database->getCollection($collection)->attributes(),
                 ));
             } else {
                 $database->createAttribute($collection, Attribute::string(key: 'age', size: 64));
@@ -2990,7 +2976,7 @@ trait AttributeTests
     {
         return \array_map(
             static fn (Attribute $attribute): string => $attribute->key,
-            \array_values($database->getCollection($collection)->attributes()),
+            $database->getCollection($collection)->attributes(),
         );
     }
 
@@ -3145,7 +3131,7 @@ trait AttributeTests
         }
 
         $originalTenant = $database->getTenant();
-        $integerTenants = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer;
+        $integerTenants = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer->value;
         $tenants = $integerTenants ? [501, 502] : ['tenant_501', 'tenant_502'];
         $collection = 'sharedRename_'.\uniqid();
         $definition = Collection::create(id: $collection, attributes: [

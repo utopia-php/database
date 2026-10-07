@@ -62,20 +62,11 @@ trait MetadataCacheTests
     }
 
     /**
-     * @return array<Attribute>
+     * @return list<Attribute>
      */
     private function definedAttributes(Database $database, string $collection): array
     {
-        $attributes = $database->getCollection($collection)->getAttribute('attributes', []);
-        $this->assertIsArray($attributes);
-
-        $defined = [];
-        foreach ($attributes as $attribute) {
-            $this->assertInstanceOf(Attribute::class, $attribute);
-            $defined[] = $attribute;
-        }
-
-        return $defined;
+        return $database->getCollection($collection)->attributes();
     }
 
     /**
@@ -94,16 +85,10 @@ trait MetadataCacheTests
      */
     private function definedIndexKeys(Database $database, string $collection): array
     {
-        $indexes = $database->getCollection($collection)->getAttribute('indexes', []);
-        $this->assertIsArray($indexes);
-
-        $keys = [];
-        foreach ($indexes as $index) {
-            $this->assertInstanceOf(Index::class, $index);
-            $keys[] = $index->key;
-        }
-
-        return $keys;
+        return \array_map(
+            fn (Index $index) => $index->key,
+            $database->getCollection($collection)->indexes()
+        );
     }
 
     public function testCreateAttributeIsVisibleToTheNextRead(): void

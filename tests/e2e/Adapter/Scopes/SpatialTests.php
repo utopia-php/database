@@ -728,10 +728,8 @@ trait SpatialTests
             $collection = $database->getCollection($collectionName);
             $indexes = $collection->indexes();
             $this->assertCount(1, $indexes);
-            $index = $indexes[0] ?? null;
-            $this->assertInstanceOf(Document::class, $index);
-            $this->assertSame('loc_spatial', $index->getId());
-            $this->assertSame(IndexType::Spatial->value, $index->getAttribute('type'));
+            $this->assertSame('loc_spatial', $indexes[0]->key);
+            $this->assertSame(IndexType::Spatial, $indexes[0]->type);
 
             $database->deleteIndex($collectionName, 'loc_spatial');
             $collection = $database->getCollection($collectionName);
@@ -757,9 +755,8 @@ trait SpatialTests
                 $database->createCollection(Collection::create(id: $collOrderCreate, attributes: $attributes, indexes: $indexes));
                 $meta = $database->getCollection($collOrderCreate);
                 $createdIndexes = $meta->indexes();
-                $createdIndex = $createdIndexes[0] ?? null;
-                $this->assertInstanceOf(Document::class, $createdIndex);
-                $this->assertSame('idx_loc', $createdIndex->getId());
+                $this->assertCount(1, $createdIndexes);
+                $this->assertSame('idx_loc', $createdIndexes[0]->key);
             } else {
                 try {
                     $database->createCollection(Collection::create(id: $collOrderCreate, attributes: $attributes, indexes: $indexes));
@@ -806,9 +803,8 @@ trait SpatialTests
                 $database->createCollection(Collection::create(id: $collNullCreate, attributes: $attributes, indexes: $indexes));
                 $meta = $database->getCollection($collNullCreate);
                 $createdIndexes = $meta->indexes();
-                $createdIndex = $createdIndexes[0] ?? null;
-                $this->assertInstanceOf(Document::class, $createdIndex);
-                $this->assertSame('idx_loc', $createdIndex->getId());
+                $this->assertCount(1, $createdIndexes);
+                $this->assertSame('idx_loc', $createdIndexes[0]->key);
             } else {
                 try {
                     $database->createCollection(Collection::create(id: $collNullCreate, attributes: $attributes, indexes: $indexes));
@@ -1886,20 +1882,16 @@ trait SpatialTests
         try {
             $database->createCollection(Collection::create(id: $collectionName));
 
-            // 0) Disallow creation of spatial attributes with size or array
-            try {
-                $database->createAttribute($collectionName, Attribute::point(key: 'geom_bad_size', required: true));
-                $this->fail('Expected DatabaseException when creating spatial attribute with non-zero size');
-            } catch (\Throwable $e) {
-                $this->assertInstanceOf(Exception::class, $e);
-            }
+            // 0) A spatial attribute never stores a size or an array flag
+            $created = $database->createAttribute($collectionName, Attribute::fromArray(['key' => 'geom_bad_size', 'type' => ColumnType::Point, 'size' => 10, 'required' => true]));
+            $this->assertNull($created->size);
+            $this->assertNull($database->getCollection($collectionName)->attributes()[0]->size);
+            $database->deleteAttribute($collectionName, 'geom_bad_size');
 
-            try {
-                $database->createAttribute($collectionName, Attribute::fromArray(['key' => 'geom_bad_array', 'type' => ColumnType::Point, 'required' => true, 'array' => true]));
-                $this->fail('Expected DatabaseException when creating spatial attribute with array=true');
-            } catch (\Throwable $e) {
-                $this->assertInstanceOf(Exception::class, $e);
-            }
+            $created = $database->createAttribute($collectionName, Attribute::fromArray(['key' => 'geom_bad_array', 'type' => ColumnType::Point, 'required' => true, 'array' => true]));
+            $this->assertFalse($created->array);
+            $this->assertFalse($database->getCollection($collectionName)->attributes()[0]->array);
+            $database->deleteAttribute($collectionName, 'geom_bad_array');
 
             // Create a single spatial attribute (required=true)
             $database->createAttribute($collectionName, Attribute::point(key: 'geom', required: true));
@@ -1927,9 +1919,9 @@ trait SpatialTests
                 $database->updateAttribute($collectionName, 'geom', new AttributeUpdate(required: false));
                 $meta = $database->getCollection($collectionName);
                 $attributes = $meta->attributes();
-                $attribute = $attributes[0] ?? null;
-                $this->assertInstanceOf(Document::class, $attribute);
-                $this->assertFalse($attribute->getAttribute('required'));
+                $this->assertCount(1, $attributes);
+                $this->assertSame('geom', $attributes[0]->key);
+                $this->assertFalse($attributes[0]->required);
             } else {
                 // Should error (index constraint) when making required=false while spatial index exists
                 $threw = false;
@@ -1942,9 +1934,9 @@ trait SpatialTests
                 // Ensure attribute remains required
                 $meta = $database->getCollection($collectionName);
                 $attributes = $meta->attributes();
-                $attribute = $attributes[0] ?? null;
-                $this->assertInstanceOf(Document::class, $attribute);
-                $this->assertTrue($attribute->getAttribute('required'));
+                $this->assertCount(1, $attributes);
+                $this->assertSame('geom', $attributes[0]->key);
+                $this->assertTrue($attributes[0]->required);
             }
 
             // 3) Spatial index order support: providing orders should fail if not supported
@@ -2958,7 +2950,7 @@ trait SpatialTests
 
                 $nullable = [];
                 foreach ($database->getSchemaAttributes($collection) as $column) {
-                    $nullable[$column->name] = $column->nullable;
+                    $nullable[$column->getId()] = $column->getAttribute('isNullable');
                 }
                 foreach (\array_keys($shapes) as $key) {
                     $this->assertSame('NO', $nullable[$key] ?? null, 'The required '.$key.' column of '.$collection.' must be NOT NULL');

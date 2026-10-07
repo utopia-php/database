@@ -718,7 +718,7 @@ trait SchemalessTests
         $collection = $database->getCollection($col);
         $indexes = $collection->indexes();
         $this->assertCount(2, $indexes);
-        $ids = array_map(fn ($i) => $i['$id'], $indexes);
+        $ids = array_map(fn (Index $index): string => $index->key, $indexes);
         $this->assertContains('idx_rank_key', $ids);
         $this->assertContains('idx_title_unique', $ids);
 
@@ -760,7 +760,7 @@ trait SchemalessTests
         $collection = $database->getCollection($col);
         $indexes = $collection->indexes();
         $this->assertCount(2, $indexes);
-        $ids = array_map(fn ($i) => $i['$id'], $indexes);
+        $ids = array_map(fn (Index $index): string => $index->key, $indexes);
         $this->assertContains('idx_meta_key', $ids);
         $this->assertContains('idx_meta_unique', $ids);
 
@@ -2231,9 +2231,9 @@ trait SchemalessTests
         $indexes = $collection->indexes();
         $this->assertCount(1, $indexes);
         $ttlIndex = $indexes[0];
-        $this->assertEquals('idx_ttl_valid', $ttlIndex->getId());
-        $this->assertEquals(IndexType::Ttl->value, $ttlIndex->getAttribute('type'));
-        $this->assertEquals(3600, $ttlIndex->getAttribute('ttl'));
+        $this->assertEquals('idx_ttl_valid', $ttlIndex->key);
+        $this->assertEquals(IndexType::Ttl, $ttlIndex->type);
+        $this->assertEquals(3600, $ttlIndex->ttl);
 
         $now = new \DateTime();
         $future1 = (clone $now)->modify('+2 hours');
@@ -2282,8 +2282,8 @@ trait SchemalessTests
         $indexes2 = $collection2->indexes();
         $this->assertCount(1, $indexes2);
         $ttlIndex2 = $indexes2[0];
-        $this->assertEquals('idx_ttl_collection', $ttlIndex2->getId());
-        $this->assertEquals(7200, $ttlIndex2->getAttribute('ttl'));
+        $this->assertEquals('idx_ttl_collection', $ttlIndex2->key);
+        $this->assertEquals(7200, $ttlIndex2->ttl);
 
         $database->deleteCollection($col);
         $database->deleteCollection($col2);

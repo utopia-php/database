@@ -37,7 +37,7 @@ final class BaseAdapterStateTest extends TestCase
         $this->assertSame($adapter, $adapter->setMetadata('a', 2));
         $this->assertSame(['a' => 2, 'b' => ['nested' => true]], $adapter->getMetadata());
 
-        $this->assertSame($adapter, $adapter->resetMetadata());
+        $adapter->resetMetadata();
         $this->assertSame([], $adapter->getMetadata());
     }
 

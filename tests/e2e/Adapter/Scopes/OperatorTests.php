@@ -4528,13 +4528,14 @@ trait OperatorTests
             ]),
             [],
             Database::BATCH_SIZE,
-            function (Document $doc, Document $old) use (&$callbackResults) {
+            function (Document $doc, ?Document $old) use (&$callbackResults) {
                 // Verify callback receives fresh computed values, not Operator objects
                 $this->assertIsInt($doc->getAttribute('count'));
                 $this->assertIsFloat($doc->getAttribute('score'));
                 $this->assertIsArray($doc->getAttribute('tags'));
 
                 // Verify values are actually computed
+                $this->assertNotNull($old, 'an update hands onNext the document it replaced');
                 $oldCount = $old->getAttribute('count');
                 $oldScore = $old->getAttribute('score');
                 $this->assertIsNumeric($oldCount);

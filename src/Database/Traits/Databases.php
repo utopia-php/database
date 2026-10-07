@@ -2,22 +2,17 @@
 
 namespace Utopia\Database\Traits;
 
-use Utopia\Database\Attribute;
-use Utopia\Database\Collection;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 
 /**
- * Provides database-level operations including creation, existence checks, listing, and deletion.
+ * Provides database-level operations including creation, existence checks, listing, renaming and deletion.
  */
 trait Databases
 {
     /**
-     * Create Database
-     *
      * @param  string|null  $database  Database name, defaults to the adapter's configured database
-     * @return bool True if the database was created successfully
      */
     public function create(?string $database = null): bool
     {
@@ -25,13 +20,7 @@ trait Databases
 
         $this->adapter->create($database);
 
-        /** @var array<Attribute> $attributes */
-        $attributes = self::collectionMeta()['attributes'];
-
-        $this->silent(fn () => $this->createCollection(new Collection(
-            id: self::METADATA,
-            attributes: $attributes,
-        )));
+        $this->silent(fn () => $this->createCollection(self::collectionDefinition()));
 
         $this->trigger(Event::DatabaseCreate, $database);
 
@@ -39,22 +28,22 @@ trait Databases
     }
 
     /**
-     * Check if database exists, and optionally check if a collection exists in the database.
-     *
      * @param  string|null  $database  Database name, defaults to the adapter's configured database
-     * @param  string|null  $collection  Collection name to check for within the database
-     * @return bool True if the database (and optionally the collection) exists
      */
-    public function exists(?string $database = null, ?string $collection = null): bool
+    public function exists(?string $database = null): bool
     {
-        $database ??= $this->adapter->getDatabase();
-
-        return $this->adapter->exists($database, $collection);
+        return $this->adapter->exists($database ?? $this->adapter->getDatabase());
     }
 
     /**
-     * List Databases
-     *
+     * @param  string|null  $database  Database name, defaults to the adapter's configured database
+     */
+    public function collectionExists(string $collection, ?string $database = null): bool
+    {
+        return $this->adapter->exists($database ?? $this->adapter->getDatabase(), $collection);
+    }
+
+    /**
      * @return array<Document>
      */
     public function list(): array
@@ -67,16 +56,31 @@ trait Databases
     }
 
     /**
-     * Delete Database
+     * Renames a database. Under shared tables a database holds other tenants' data, so renaming it is refused.
      *
+     * @throws DatabaseException
+     */
+    public function update(string $database, string $new): bool
+    {
+        if ($this->adapter->getSharedTables()) {
+            throw new DatabaseException('Cannot rename a database while shared tables are enabled');
+        }
+
+        $updated = $this->adapter->update($database, $new);
+
+        $this->cache->flush();
+
+        return $updated;
+    }
+
+    /**
      * @param  string|null  $database  Database name, defaults to the adapter's configured database
-     * @return bool True if the database was deleted successfully
      *
      * @throws DatabaseException
      */
     public function delete(?string $database = null): bool
     {
-        $database = $database ?? $this->adapter->getDatabase();
+        $database ??= $this->adapter->getDatabase();
 
         $deleted = $this->adapter->delete($database);
 

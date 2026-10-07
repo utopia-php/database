@@ -13,6 +13,7 @@ use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\Postgres;
+use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Cache\QueryCache;
@@ -579,7 +580,7 @@ trait GeneralTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::CacheSkipOnFailure)) {
+        if (! $this->engineIs(SQL::class)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1113,7 +1114,7 @@ trait GeneralTests
     {
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::CacheSkipOnFailure)) {
+        if (! $this->engineIs(SQL::class)) {
             $this->expectNotToPerformAssertions();
 
             return;

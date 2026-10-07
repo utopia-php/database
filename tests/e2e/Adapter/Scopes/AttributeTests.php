@@ -1857,127 +1857,125 @@ trait AttributeTests
             $database->createIndex($collection, Index::key(key: 'indx7', attributes: ['age', 'booleans'], lengths: [0, 999]));
         }
 
-        if ($this->getDatabase()->getAdapter()->supports(Capability::QueryContains)) {
-            try {
-                $database->find($collection, [
-                    Query::equal('names', ['Joe']),
-                ]);
-                $this->fail('Failed to throw exception');
-            } catch (Throwable $e) {
-                $this->assertEquals('Invalid query: Cannot query equal on attribute "names" because it is an array.', $e->getMessage());
-            }
-
-            try {
-                $database->find($collection, [
-                    new Query(Method::Contains, 'age', [10]),
-                ]);
-                $this->fail('Failed to throw exception');
-            } catch (Throwable $e) {
-                $this->assertEquals('Invalid query: Cannot query contains on attribute "age" because it is not an array, string, or object.', $e->getMessage());
-            }
-
-            $documents = $database->find($collection, [
-                Query::isNull('long_size'),
+        try {
+            $database->find($collection, [
+                Query::equal('names', ['Joe']),
             ]);
-            $this->assertCount(1, $documents);
-
-            $documents = $database->find($collection, [
-                Query::containsString('tv_show', ['love']),
-            ]);
-            $this->assertCount(1, $documents);
-
-            $documents = $database->find($collection, [
-                new Query(Method::Contains, 'names', ['Jake', 'Joe']),
-            ]);
-            $this->assertCount(1, $documents);
-
-            $documents = $database->find($collection, [
-                new Query(Method::Contains, 'numbers', [-1, 0, 999]),
-            ]);
-            $this->assertCount(1, $documents);
-
-            $documents = $database->find($collection, [
-                new Query(Method::Contains, 'booleans', [false, true]),
-            ]);
-            $this->assertCount(1, $documents);
-
-            // Regular like query on primitive json string data
-            $documents = $database->find($collection, [
-                Query::containsString('pref', ['Joe']),
-            ]);
-            $this->assertCount(1, $documents);
-
-            // containsAny tests — should behave identically to contains
-
-            $documents = $database->find($collection, [
-                Query::containsAny('tv_show', ['love']),
-            ]);
-            $this->assertCount(1, $documents);
-
-            $documents = $database->find($collection, [
-                Query::containsAny('names', ['Jake', 'Joe']),
-            ]);
-            $this->assertCount(1, $documents);
-
-            $documents = $database->find($collection, [
-                Query::containsAny('numbers', [-1, 0, 999]),
-            ]);
-            $this->assertCount(1, $documents);
-
-            $documents = $database->find($collection, [
-                Query::containsAny('booleans', [false, true]),
-            ]);
-            $this->assertCount(1, $documents);
-
-            $documents = $database->find($collection, [
-                Query::containsAny('pref', ['Joe']),
-            ]);
-            $this->assertCount(1, $documents);
-
-            // containsAny with no matching values
-            $documents = $database->find($collection, [
-                Query::containsAny('names', ['Jake', 'Unknown']),
-            ]);
-            $this->assertCount(0, $documents);
-
-            // containsAll tests on array attributes
-
-            // All values present in names array
-            $documents = $database->find($collection, [
-                Query::containsAll('names', ['Joe', 'Antony']),
-            ]);
-            $this->assertCount(1, $documents);
-
-            // One value missing from names array
-            $documents = $database->find($collection, [
-                Query::containsAll('names', ['Joe', 'Jake']),
-            ]);
-            $this->assertCount(0, $documents);
-
-            // All values present in numbers array
-            $documents = $database->find($collection, [
-                Query::containsAll('numbers', [0, 100, -1]),
-            ]);
-            $this->assertCount(1, $documents);
-
-            // One value missing from numbers array
-            $documents = $database->find($collection, [
-                Query::containsAll('numbers', [0, 999]),
-            ]);
-            $this->assertCount(0, $documents);
-
-            // Single value containsAll — should match
-            $documents = $database->find($collection, [
-                Query::containsAll('booleans', [false]),
-            ]);
-            $this->assertCount(1, $documents);
-
-            // Boolean value not present
-            $documents = $database->find($collection, [
-                Query::containsAll('booleans', [true]),
-            ]);
-            $this->assertCount(0, $documents);
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertEquals('Invalid query: Cannot query equal on attribute "names" because it is an array.', $e->getMessage());
         }
+
+        try {
+            $database->find($collection, [
+                new Query(Method::Contains, 'age', [10]),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertEquals('Invalid query: Cannot query contains on attribute "age" because it is not an array, string, or object.', $e->getMessage());
+        }
+
+        $documents = $database->find($collection, [
+            Query::isNull('long_size'),
+        ]);
+        $this->assertCount(1, $documents);
+
+        $documents = $database->find($collection, [
+            Query::containsString('tv_show', ['love']),
+        ]);
+        $this->assertCount(1, $documents);
+
+        $documents = $database->find($collection, [
+            new Query(Method::Contains, 'names', ['Jake', 'Joe']),
+        ]);
+        $this->assertCount(1, $documents);
+
+        $documents = $database->find($collection, [
+            new Query(Method::Contains, 'numbers', [-1, 0, 999]),
+        ]);
+        $this->assertCount(1, $documents);
+
+        $documents = $database->find($collection, [
+            new Query(Method::Contains, 'booleans', [false, true]),
+        ]);
+        $this->assertCount(1, $documents);
+
+        // Regular like query on primitive json string data
+        $documents = $database->find($collection, [
+            Query::containsString('pref', ['Joe']),
+        ]);
+        $this->assertCount(1, $documents);
+
+        // containsAny tests — should behave identically to contains
+
+        $documents = $database->find($collection, [
+            Query::containsAny('tv_show', ['love']),
+        ]);
+        $this->assertCount(1, $documents);
+
+        $documents = $database->find($collection, [
+            Query::containsAny('names', ['Jake', 'Joe']),
+        ]);
+        $this->assertCount(1, $documents);
+
+        $documents = $database->find($collection, [
+            Query::containsAny('numbers', [-1, 0, 999]),
+        ]);
+        $this->assertCount(1, $documents);
+
+        $documents = $database->find($collection, [
+            Query::containsAny('booleans', [false, true]),
+        ]);
+        $this->assertCount(1, $documents);
+
+        $documents = $database->find($collection, [
+            Query::containsAny('pref', ['Joe']),
+        ]);
+        $this->assertCount(1, $documents);
+
+        // containsAny with no matching values
+        $documents = $database->find($collection, [
+            Query::containsAny('names', ['Jake', 'Unknown']),
+        ]);
+        $this->assertCount(0, $documents);
+
+        // containsAll tests on array attributes
+
+        // All values present in names array
+        $documents = $database->find($collection, [
+            Query::containsAll('names', ['Joe', 'Antony']),
+        ]);
+        $this->assertCount(1, $documents);
+
+        // One value missing from names array
+        $documents = $database->find($collection, [
+            Query::containsAll('names', ['Joe', 'Jake']),
+        ]);
+        $this->assertCount(0, $documents);
+
+        // All values present in numbers array
+        $documents = $database->find($collection, [
+            Query::containsAll('numbers', [0, 100, -1]),
+        ]);
+        $this->assertCount(1, $documents);
+
+        // One value missing from numbers array
+        $documents = $database->find($collection, [
+            Query::containsAll('numbers', [0, 999]),
+        ]);
+        $this->assertCount(0, $documents);
+
+        // Single value containsAll — should match
+        $documents = $database->find($collection, [
+            Query::containsAll('booleans', [false]),
+        ]);
+        $this->assertCount(1, $documents);
+
+        // Boolean value not present
+        $documents = $database->find($collection, [
+            Query::containsAll('booleans', [true]),
+        ]);
+        $this->assertCount(0, $documents);
     }
 
     public function testCreateDatetime(): void
@@ -2202,10 +2200,6 @@ trait AttributeTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
-            $this->markTestSkipped('Adapter does not support batch attribute creation');
-        }
-
         $collection = 'datetime_batch_auto_filter';
 
         $database->createCollection(Collection::create(
@@ -2236,11 +2230,6 @@ trait AttributeTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-
-        if (!$database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionName = 'bigint_ignores_size_limit';
         $database->createCollection(Collection::create(id: $collectionName));
@@ -2327,10 +2316,8 @@ trait AttributeTests
         $database->createAttribute($collectionName, Attribute::bigInteger(key: 'single'));
         $expected = ['inline' => 'bigint', 'single' => 'bigint'];
 
-        if ($database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
-            $database->createAttributes($collectionName, [Attribute::bigInteger(key: 'batch')]);
-            $expected['batch'] = 'bigint';
-        }
+        $database->createAttributes($collectionName, [Attribute::bigInteger(key: 'batch')]);
+        $expected['batch'] = 'bigint';
 
         $database->updateAttribute($collectionName, 'single', new AttributeUpdate(required: true));
 
@@ -2360,12 +2347,6 @@ trait AttributeTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
-            $this->expectNotToPerformAssertions();
-
-            return;
-        }
-
         $database->createCollection(Collection::create(id: __FUNCTION__));
 
         $attributes = [Attribute::string(key: 'a', size: 10), Attribute::integer(key: 'b')];
@@ -2391,12 +2372,6 @@ trait AttributeTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-
-        if (! $database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
-            $this->expectNotToPerformAssertions();
-
-            return;
-        }
 
         $database->createCollection(Collection::create(id: __FUNCTION__));
 
@@ -2697,12 +2672,6 @@ trait AttributeTests
     {
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
-            $this->expectNotToPerformAssertions();
-
-            return;
-        }
-
         $database->createCollection(Collection::create(id: __FUNCTION__));
 
         try {
@@ -2716,12 +2685,6 @@ trait AttributeTests
     public function testCreateAttributesMissingKey(): void
     {
         $database = $this->getDatabase();
-
-        if (! $database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
-            $this->expectNotToPerformAssertions();
-
-            return;
-        }
 
         $database->createCollection(Collection::create(id: __FUNCTION__));
 
@@ -2738,12 +2701,6 @@ trait AttributeTests
     {
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
-            $this->expectNotToPerformAssertions();
-
-            return;
-        }
-
         $database->createCollection(Collection::create(id: __FUNCTION__));
         $database->createAttribute(__FUNCTION__, Attribute::string(key: 'dup', size: 10));
 
@@ -2759,12 +2716,6 @@ trait AttributeTests
     {
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
-            $this->expectNotToPerformAssertions();
-
-            return;
-        }
-
         $database->createCollection(Collection::create(id: __FUNCTION__));
 
         try {
@@ -2778,12 +2729,6 @@ trait AttributeTests
     public function testCreateAttributesDefaultOnRequired(): void
     {
         $database = $this->getDatabase();
-
-        if (! $database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
-            $this->expectNotToPerformAssertions();
-
-            return;
-        }
 
         $database->createCollection(Collection::create(id: __FUNCTION__));
 
@@ -2799,12 +2744,6 @@ trait AttributeTests
     public function testCreateAttributesStringSizeLimit(): void
     {
         $database = $this->getDatabase();
-
-        if (! $database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
-            $this->expectNotToPerformAssertions();
-
-            return;
-        }
 
         $database->createCollection(Collection::create(id: __FUNCTION__));
 
@@ -2822,12 +2761,6 @@ trait AttributeTests
     {
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
-            $this->expectNotToPerformAssertions();
-
-            return;
-        }
-
         $database->createCollection(Collection::create(id: __FUNCTION__));
 
         $limit = (int) ($database->getAdapter()->limits()->integer / 2);
@@ -2841,12 +2774,6 @@ trait AttributeTests
     public function testCreateAttributesSkipsAColumnThatExistsOnlyInTheSchema(): void
     {
         $database = $this->getDatabase();
-
-        if (! $database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
-            $this->expectNotToPerformAssertions();
-
-            return;
-        }
 
         $collection = 'schemaOnlyColumn';
         $database->createCollection(Collection::create(id: $collection, permissions: [

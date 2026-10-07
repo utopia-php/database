@@ -4,6 +4,7 @@ namespace Tests\E2E\Adapter\Scopes;
 
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\MariaDB;
+use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Attribute;
 use Utopia\Database\AttributeUpdate;
@@ -152,7 +153,7 @@ trait SpatialTests
             ];
 
             foreach ($lineQueries as $queryType => $query) {
-                if (! $database->getAdapter()->supports(Capability::BoundaryInclusive) && in_array($queryType, ['contains', 'notContains'])) {
+                if (! $this->includesBoundaries() && in_array($queryType, ['contains', 'notContains'])) {
                     continue;
                 }
                 $result = $database->find($collectionName, [$query], PermissionType::Read);
@@ -195,7 +196,7 @@ trait SpatialTests
             ];
 
             foreach ($polyQueries as $queryType => $query) {
-                if (! $database->getAdapter()->supports(Capability::BoundaryInclusive) && in_array($queryType, ['contains', 'notContains'])) {
+                if (! $this->includesBoundaries() && in_array($queryType, ['contains', 'notContains'])) {
                     continue;
                 }
                 $result = $database->find($collectionName, [$query], PermissionType::Read);
@@ -942,7 +943,7 @@ trait SpatialTests
             $database->createDocument($collectionName, $doc2);
 
             // Test rectangle contains point
-            if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
+            if ($this->includesBoundaries()) {
                 $insideRect1 = $database->find($collectionName, [
                     Query::covers('rectangle', [[5, 5]]), // Point inside first rectangle
                 ], PermissionType::Read);
@@ -951,7 +952,7 @@ trait SpatialTests
             }
 
             // Test rectangle doesn't contain point outside
-            if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
+            if ($this->includesBoundaries()) {
                 $outsideRect1 = $database->find($collectionName, [
                     Query::notCovers('rectangle', [[25, 25]]), // Point outside first rectangle
                 ], PermissionType::Read);
@@ -959,7 +960,7 @@ trait SpatialTests
             }
 
             // Test failure case: rectangle should NOT contain distant point
-            if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
+            if ($this->includesBoundaries()) {
                 $distantPoint = $database->find($collectionName, [
                     Query::covers('rectangle', [[100, 100]]), // Point far outside rectangle
                 ], PermissionType::Read);
@@ -967,7 +968,7 @@ trait SpatialTests
             }
 
             // Test failure case: rectangle should NOT contain point outside
-            if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
+            if ($this->includesBoundaries()) {
                 $outsidePoint = $database->find($collectionName, [
                     Query::covers('rectangle', [[-1, -1]]), // Point clearly outside rectangle
                 ], PermissionType::Read);
@@ -984,7 +985,7 @@ trait SpatialTests
             $this->assertNotEmpty($overlappingRect);
 
             // Test square contains point
-            if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
+            if ($this->includesBoundaries()) {
                 $insideSquare1 = $database->find($collectionName, [
                     Query::covers('square', [[10, 10]]), // Point inside first square
                 ], PermissionType::Read);
@@ -993,7 +994,7 @@ trait SpatialTests
             }
 
             // Test rectangle contains square (shape contains shape)
-            if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
+            if ($this->includesBoundaries()) {
                 $rectContainsSquare = $database->find($collectionName, [
                     Query::covers('rectangle', [[[5, 2], [5, 8], [15, 8], [15, 2], [5, 2]]]), // Square geometry that fits within rectangle
                 ], PermissionType::Read);
@@ -1002,7 +1003,7 @@ trait SpatialTests
             }
 
             // Test rectangle contains triangle (shape contains shape)
-            if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
+            if ($this->includesBoundaries()) {
                 $rectContainsTriangle = $database->find($collectionName, [
                     Query::covers('rectangle', [[[10, 2], [18, 2], [14, 8], [10, 2]]]), // Triangle geometry that fits within rectangle
                 ], PermissionType::Read);
@@ -1011,7 +1012,7 @@ trait SpatialTests
             }
 
             // Test L-shaped polygon contains smaller rectangle (shape contains shape)
-            if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
+            if ($this->includesBoundaries()) {
                 $lShapeContainsRect = $database->find($collectionName, [
                     Query::covers('complex_polygon', [[[5, 5], [5, 10], [10, 10], [10, 5], [5, 5]]]), // Small rectangle inside L-shape
                 ], PermissionType::Read);
@@ -1020,7 +1021,7 @@ trait SpatialTests
             }
 
             // Test T-shaped polygon contains smaller square (shape contains shape)
-            if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
+            if ($this->includesBoundaries()) {
                 $tShapeContainsSquare = $database->find($collectionName, [
                     Query::covers('complex_polygon', [[[35, 5], [35, 10], [40, 10], [40, 5], [35, 5]]]), // Small square inside T-shape
                 ], PermissionType::Read);
@@ -1029,7 +1030,7 @@ trait SpatialTests
             }
 
             // Test failure case: square should NOT contain rectangle (smaller shape cannot contain larger shape)
-            if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
+            if ($this->includesBoundaries()) {
                 $squareNotContainsRect = $database->find($collectionName, [
                     Query::notCovers('square', [[[0, 0], [0, 20], [20, 20], [20, 0], [0, 0]]]), // Larger rectangle
                 ], PermissionType::Read);
@@ -1037,7 +1038,7 @@ trait SpatialTests
             }
 
             // Test failure case: triangle should NOT contain rectangle
-            if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
+            if ($this->includesBoundaries()) {
                 $triangleNotContainsRect = $database->find($collectionName, [
                     Query::notCovers('triangle', [[[20, 0], [20, 25], [30, 25], [30, 0], [20, 0]]]), // Rectangle that extends beyond triangle
                 ], PermissionType::Read);
@@ -1045,7 +1046,7 @@ trait SpatialTests
             }
 
             // Test failure case: L-shape should NOT contain T-shape (different complex polygons)
-            if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
+            if ($this->includesBoundaries()) {
                 $lShapeNotContainsTShape = $database->find($collectionName, [
                     Query::notCovers('complex_polygon', [[[30, 0], [30, 20], [50, 20], [50, 0], [30, 0]]]), // T-shape geometry
                 ], PermissionType::Read);
@@ -1053,7 +1054,7 @@ trait SpatialTests
             }
 
             // Test square doesn't contain point outside
-            if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
+            if ($this->includesBoundaries()) {
                 $outsideSquare1 = $database->find($collectionName, [
                     Query::notCovers('square', [[20, 20]]), // Point outside first square
                 ], PermissionType::Read);
@@ -1061,7 +1062,7 @@ trait SpatialTests
             }
 
             // Test failure case: square should NOT contain distant point
-            if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
+            if ($this->includesBoundaries()) {
                 $distantPointSquare = $database->find($collectionName, [
                     Query::covers('square', [[100, 100]]), // Point far outside square
                 ], PermissionType::Read);
@@ -1069,7 +1070,7 @@ trait SpatialTests
             }
 
             // Test failure case: square should NOT contain point on boundary
-            if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
+            if ($this->includesBoundaries()) {
                 $boundaryPointSquare = $database->find($collectionName, [
                     Query::covers('square', [[5, 5]]), // Point on square boundary (should be empty if boundary not inclusive)
                 ], PermissionType::Read);
@@ -1077,7 +1078,7 @@ trait SpatialTests
             }
 
             // Test square equals same geometry using contains when supported, otherwise intersects
-            if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
+            if ($this->includesBoundaries()) {
                 $exactSquare = $database->find($collectionName, [
                     Query::covers('square', [[[5, 5], [5, 15], [15, 15], [15, 5], [5, 5]]]),
                 ], PermissionType::Read);
@@ -1096,7 +1097,7 @@ trait SpatialTests
             $this->assertNotEmpty($differentSquare);
 
             // Test triangle contains point
-            if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
+            if ($this->includesBoundaries()) {
                 $insideTriangle1 = $database->find($collectionName, [
                     Query::covers('triangle', [[25, 10]]), // Point inside first triangle
                 ], PermissionType::Read);
@@ -1105,7 +1106,7 @@ trait SpatialTests
             }
 
             // Test triangle doesn't contain point outside
-            if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
+            if ($this->includesBoundaries()) {
                 $outsideTriangle1 = $database->find($collectionName, [
                     Query::notCovers('triangle', [[25, 25]]), // Point outside first triangle
                 ], PermissionType::Read);
@@ -1113,7 +1114,7 @@ trait SpatialTests
             }
 
             // Test failure case: triangle should NOT contain distant point
-            if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
+            if ($this->includesBoundaries()) {
                 $distantPointTriangle = $database->find($collectionName, [
                     Query::covers('triangle', [[100, 100]]), // Point far outside triangle
                 ], PermissionType::Read);
@@ -1121,7 +1122,7 @@ trait SpatialTests
             }
 
             // Test failure case: triangle should NOT contain point outside its area
-            if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
+            if ($this->includesBoundaries()) {
                 $outsideTriangleArea = $database->find($collectionName, [
                     Query::covers('triangle', [[35, 25]]), // Point outside triangle area
                 ], PermissionType::Read);
@@ -1141,7 +1142,7 @@ trait SpatialTests
             $this->assertNotEmpty($nonIntersectingTriangle);
 
             // Test L-shaped polygon contains point
-            if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
+            if ($this->includesBoundaries()) {
                 $insideLShape = $database->find($collectionName, [
                     Query::covers('complex_polygon', [[10, 10]]), // Point inside L-shape
                 ], PermissionType::Read);
@@ -1150,7 +1151,7 @@ trait SpatialTests
             }
 
             // Test L-shaped polygon doesn't contain point in "hole"
-            if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
+            if ($this->includesBoundaries()) {
                 $inHole = $database->find($collectionName, [
                     Query::notCovers('complex_polygon', [[17, 10]]), // Point in the "hole" of L-shape
                 ], PermissionType::Read);
@@ -1158,7 +1159,7 @@ trait SpatialTests
             }
 
             // Test failure case: L-shaped polygon should NOT contain distant point
-            if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
+            if ($this->includesBoundaries()) {
                 $distantPointLShape = $database->find($collectionName, [
                     Query::covers('complex_polygon', [[100, 100]]), // Point far outside L-shape
                 ], PermissionType::Read);
@@ -1166,7 +1167,7 @@ trait SpatialTests
             }
 
             // Test failure case: L-shaped polygon should NOT contain point in the hole
-            if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
+            if ($this->includesBoundaries()) {
                 $holePoint = $database->find($collectionName, [
                     Query::covers('complex_polygon', [[17, 10]]), // Point in the "hole" of L-shape
                 ], PermissionType::Read);
@@ -1174,7 +1175,7 @@ trait SpatialTests
             }
 
             // Test T-shaped polygon contains point
-            if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
+            if ($this->includesBoundaries()) {
                 $insideTShape = $database->find($collectionName, [
                     Query::covers('complex_polygon', [[40, 5]]), // Point inside T-shape
                 ], PermissionType::Read);
@@ -1183,7 +1184,7 @@ trait SpatialTests
             }
 
             // Test failure case: T-shaped polygon should NOT contain distant point
-            if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
+            if ($this->includesBoundaries()) {
                 $distantPointTShape = $database->find($collectionName, [
                     Query::covers('complex_polygon', [[100, 100]]), // Point far outside T-shape
                 ], PermissionType::Read);
@@ -1191,7 +1192,7 @@ trait SpatialTests
             }
 
             // Test failure case: T-shaped polygon should NOT contain point outside its area
-            if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
+            if ($this->includesBoundaries()) {
                 $outsideTShapeArea = $database->find($collectionName, [
                     Query::covers('complex_polygon', [[25, 25]]), // Point outside T-shape area
                 ], PermissionType::Read);
@@ -1205,7 +1206,7 @@ trait SpatialTests
             $this->assertNotEmpty($intersectingLine);
 
             // Test linestring contains point
-            if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
+            if ($this->includesBoundaries()) {
                 $onLine1 = $database->find($collectionName, [
                     Query::covers('multi_linestring', [[5, 5]]), // Point on first line segment
                 ], PermissionType::Read);
@@ -1213,7 +1214,7 @@ trait SpatialTests
             }
 
             // Test linestring doesn't contain point off line
-            if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
+            if ($this->includesBoundaries()) {
                 $offLine1 = $database->find($collectionName, [
                     Query::notCovers('multi_linestring', [[5, 15]]), // Point not on any line
                 ], PermissionType::Read);
@@ -1372,7 +1373,7 @@ trait SpatialTests
 
             // Test complex spatial queries with logical combinations
             // Test AND combination: parks within area AND near specific location
-            if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
+            if ($this->includesBoundaries()) {
                 $nearbyAndInArea = $database->find($collectionName, [
                     Query::and([
                         Query::distanceLessThan('location', [40.7829, -73.9654], 0.01), // Near Central Park
@@ -1850,7 +1851,7 @@ trait SpatialTests
             $this->assertEquals(30, $database->sum($collectionName, 'score', $queriesFar));
 
             // COUNT and SUM with polygon contains filter (adapter-dependent boundary inclusivity)
-            if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
+            if ($this->includesBoundaries()) {
                 $queriesContain = [
                     Query::covers('area', [[10.0, 10.0]]),
                 ];
@@ -2187,7 +2188,7 @@ trait SpatialTests
             return;
         }
 
-        if (! $database->getAdapter()->supports(Capability::MultiDimensionDistance)) {
+        if (! $this->engineIs(MySQL::class, Postgres::class)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2545,7 +2546,7 @@ trait SpatialTests
             return;
         }
 
-        if ($database->getAdapter()->supports(Capability::OptionalSpatial)) {
+        if ($this->engineIs(MariaDB::class) && ! $this->engineIs(MySQL::class)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2673,7 +2674,7 @@ trait SpatialTests
             return;
         }
 
-        if ($database->getAdapter()->supports(Capability::MultiDimensionDistance)) {
+        if ($this->engineIs(MySQL::class, Postgres::class)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2728,7 +2729,7 @@ trait SpatialTests
         $database = $this->getDatabase();
         $adapter = $database->getAdapter();
 
-        if (! $adapter->hasFeature(Feature\Spatial::class) || ! $adapter->supports(Capability::BatchCreateAttributes)) {
+        if (! $adapter->hasFeature(Feature\Spatial::class)) {
             $this->expectNotToPerformAssertions();
 
             return;

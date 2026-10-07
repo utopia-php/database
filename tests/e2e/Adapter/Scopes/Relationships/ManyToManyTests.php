@@ -4,6 +4,7 @@ namespace Tests\E2E\Adapter\Scopes\Relationships;
 
 use Exception;
 use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
@@ -1645,7 +1646,7 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) || ! $database->getAdapter()->supports(Capability::BatchOperations)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) || $this->engineIs(Mongo::class)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1721,7 +1722,7 @@ trait ManyToManyTests
 
         if (
             ! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) ||
-            ! $database->getAdapter()->supports(Capability::BatchOperations)
+            $this->engineIs(Mongo::class)
         ) {
             $this->expectNotToPerformAssertions();
 
@@ -1798,7 +1799,7 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) || ! $database->getAdapter()->supports(Capability::BatchOperations)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) || $this->engineIs(Mongo::class)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2250,7 +2251,7 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) || ! $database->getAdapter()->supports(Capability::BatchOperations)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) || $this->engineIs(Mongo::class)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2290,7 +2291,7 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) || ! $database->getAdapter()->supports(Capability::BatchOperations)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) || $this->engineIs(Mongo::class)) {
             $this->expectNotToPerformAssertions();
 
             return;

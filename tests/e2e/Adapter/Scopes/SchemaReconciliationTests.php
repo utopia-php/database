@@ -210,7 +210,7 @@ trait SchemaReconciliationTests
     {
         return \array_map(
             static fn (Attribute $attribute): string => $attribute->key,
-            \array_values($database->getCollection($collection)->attributes()),
+            $database->getCollection($collection)->attributes(),
         );
     }
 

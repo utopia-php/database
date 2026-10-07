@@ -4,6 +4,7 @@ namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
 use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
@@ -1007,7 +1008,7 @@ trait PermissionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::BatchOperations)) {
+        if ($this->engineIs(Mongo::class)) {
             $this->expectNotToPerformAssertions();
             return;
         }

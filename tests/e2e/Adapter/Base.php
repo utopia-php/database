@@ -23,6 +23,13 @@ use Tests\E2E\Adapter\Scopes\SchemaReconciliationTests;
 use Tests\E2E\Adapter\Scopes\SchemalessTests;
 use Tests\E2E\Adapter\Scopes\SpatialTests;
 use Tests\E2E\Adapter\Scopes\VectorTests;
+use Utopia\Database\Adapter;
+use Utopia\Database\Adapter\MariaDB;
+use Utopia\Database\Adapter\Memory;
+use Utopia\Database\Adapter\MySQL;
+use Utopia\Database\Adapter\Pool;
+use Utopia\Database\Adapter\Postgres;
+use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Database;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Hook\Relationships;
@@ -104,5 +111,31 @@ abstract class Base extends TestCase
     protected static function getTestToken(): string
     {
         return getenv('TEST_TOKEN') ?: getenv('UNIQUE_TEST_TOKEN') ?: (string) getmypid();
+    }
+
+    /**
+     * A Pool lends one adapter per call, and setNamespace() hands that adapter back.
+     *
+     * @param  class-string<Adapter>  ...$engines
+     */
+    private function engineIs(string ...$engines): bool
+    {
+        $adapter = $this->getDatabase()->getAdapter();
+        if ($adapter instanceof Pool) {
+            $adapter = $adapter->delegate('setNamespace', [$adapter->getNamespace()]);
+        }
+
+        foreach ($engines as $engine) {
+            if ($adapter instanceof $engine) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function includesBoundaries(): bool
+    {
+        return $this->engineIs(MariaDB::class, Postgres::class, SQLite::class, Memory::class) && ! $this->engineIs(MySQL::class);
     }
 }

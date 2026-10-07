@@ -1983,7 +1983,7 @@ trait CollectionTests
         ]));
 
         try {
-            $adapter->increaseDocumentAttribute($collection, 'text', 'name', 1, $document->getUpdatedAt() ?? '');
+            $adapter->increaseDocumentAttribute($database->getCollection($collection), 'text', 'name', 1, $document->getUpdatedAt() ?? '');
             $this->fail('Expected TypeException for an increment of a text value');
         } catch (TypeException $e) {
             $this->assertSame('Invalid operation', $e->getMessage());

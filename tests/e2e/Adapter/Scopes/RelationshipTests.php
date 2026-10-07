@@ -36,6 +36,7 @@ use Utopia\Database\RelationshipUpdate;
 use Utopia\Query\Method;
 
 use function Swoole\Coroutine\run;
+use Utopia\Database\Adapter\Mongo;
 
 trait RelationshipTests
 {
@@ -1894,7 +1895,7 @@ trait RelationshipTests
 
     public function testUpdateDocumentsRelationships(): void
     {
-        if (! $this->getDatabase()->getAdapter()->supports(Capability::BatchOperations) || ! ($this->getDatabase()->getAdapter()->hasFeature(Feature\Relationships::class))) {
+        if ($this->engineIs(Mongo::class) || ! ($this->getDatabase()->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
 
             return;

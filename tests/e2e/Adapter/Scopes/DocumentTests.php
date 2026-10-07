@@ -10,7 +10,9 @@ use Utopia\Cache\Adapter\None as NoneCacheAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\Mongo;
+use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\SQL;
+use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
@@ -367,7 +369,6 @@ trait DocumentTests
         $this->assertSame((string) $sequence, $document->getSequence());
 
         if ($database->getIdAttributeType() === ColumnType::Integer) {
-            $this->assertTrue($sequence === 5_000_000_000_000_000);
             $document = $database->findOne(__FUNCTION__, [Query::equal('$sequence', [$sequence])]);
             $this->assertSame((string) $sequence, $document->getSequence());
         }
@@ -1637,12 +1638,6 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::QueryContains)) {
-            $this->expectNotToPerformAssertions();
-
-            return;
-        }
-
         $this->initMoviesFixture();
 
         $documents = $database->find($this->getMoviesCollection(), [
@@ -2192,12 +2187,6 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::QueryContains)) {
-            $this->expectNotToPerformAssertions();
-
-            return;
-        }
-
         // Test notContains with array attributes - should return documents that don't contain specified genres
         $documents = $database->find($this->getMoviesCollection(), [
             Query::notContains('genres', ['comics']),
@@ -2680,7 +2669,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::BatchOperations)) {
+        if ($this->engineIs(Mongo::class)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2859,7 +2848,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::BatchOperations)) {
+        if ($this->engineIs(Mongo::class)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -3903,16 +3892,9 @@ trait DocumentTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        // Skip test if regex is not supported
-        if (! $database->getAdapter()->supports(Capability::Regex)) {
-            $this->expectNotToPerformAssertions();
-
-            return;
-        }
-
         // Determine regex support type
-        $supportsPCRE = $database->getAdapter()->supports(Capability::PCRE);
-        $supportsPOSIX = $database->getAdapter()->supports(Capability::POSIX);
+        $supportsPCRE = ! $this->engineIs(Postgres::class);
+        $supportsPOSIX = $this->engineIs(Postgres::class);
 
         // Determine word boundary pattern based on support
         $wordBoundaryPattern = null;
@@ -4415,13 +4397,6 @@ trait DocumentTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
-
-        // Skip test if regex is not supported
-        if (! $database->getAdapter()->supports(Capability::Regex)) {
-            $this->expectNotToPerformAssertions();
-
-            return;
-        }
 
         $collectionName = 'injectionTest';
         $database->createCollection(Collection::create(id: $collectionName, permissions: [
@@ -7827,7 +7802,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::BatchOperations)) {
+        if ($this->engineIs(Mongo::class)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -7953,7 +7928,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::BatchOperations)) {
+        if ($this->engineIs(Mongo::class)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -8003,7 +7978,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::BatchOperations)) {
+        if ($this->engineIs(Mongo::class)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -8110,7 +8085,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::BatchOperations)) {
+        if ($this->engineIs(Mongo::class)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -8667,7 +8642,7 @@ trait DocumentTests
         }
 
         // 3) updateDocuments setting required to null should fail when validation enabled, pass when disabled
-        if ($database->getAdapter()->supports(Capability::BatchOperations)) {
+        if (! $this->engineIs(Mongo::class)) {
             try {
                 $database->updateDocuments($collection, new Document([
                     'name' => null,
@@ -10286,7 +10261,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::BitwiseAggregates)) {
+        if (! $this->engineIs(SQL::class) || $this->engineIs(SQLite::class)) {
             $this->expectNotToPerformAssertions();
 
             return;

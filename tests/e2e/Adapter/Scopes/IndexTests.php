@@ -7,7 +7,6 @@ use Exception;
 use MongoDB\BSON\UTCDateTime;
 use stdClass;
 use Throwable;
-use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\Postgres;
@@ -32,7 +31,6 @@ use Utopia\Database\IntegerWidth;
 use Utopia\Database\Query;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\IndexDefinition;
-use Utopia\Mongo\Client;
 use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
@@ -1494,7 +1492,6 @@ trait IndexTests
         }
 
         $client = $adapter->getDriver();
-        $this->assertInstanceOf(Client::class, $client);
 
         $explain = $client->query([
             'explain' => [

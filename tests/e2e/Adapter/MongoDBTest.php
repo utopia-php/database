@@ -288,8 +288,9 @@ class MongoDBTest extends Base
 
     private function databaseBoundTo(string $name): Database
     {
-        $database = new Database(new Mongo(new Client($name, 'mongo', 27017, 'root', 'password', false)), $this->getDatabase()->getCache());
-        $database->getAdapter()->setSupportForAttributes(true);
+        $adapter = new Mongo(new Client($name, 'mongo', 27017, 'root', 'password', false));
+        $adapter->setSchemaless(false);
+        $database = new Database($adapter, $this->getDatabase()->getCache());
         assert(self::$authorization !== null);
         $database
             ->setAuthorization(self::$authorization)

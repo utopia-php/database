@@ -3,6 +3,7 @@
 namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
+use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
@@ -423,7 +424,7 @@ trait SchemalessTests
             return;
         }
 
-        if (! $database->getAdapter()->supports(Capability::BatchOperations)) {
+        if ($this->engineIs(Mongo::class)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -520,7 +521,7 @@ trait SchemalessTests
             return;
         }
 
-        if (! $database->getAdapter()->supports(Capability::BatchOperations)) {
+        if ($this->engineIs(Mongo::class)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -604,7 +605,7 @@ trait SchemalessTests
             return;
         }
 
-        if (! $database->getAdapter()->supports(Capability::BatchOperations)) {
+        if ($this->engineIs(Mongo::class)) {
             $this->expectNotToPerformAssertions();
 
             return;

@@ -64,7 +64,7 @@ trait MongoReadFilterTests
         $lane = $this->getDatabase();
 
         $adapter = new Mongo(new Client($this->testDatabase, 'mongo', 27017, 'root', 'password', false));
-        $adapter->setSupportForAttributes($lane->getAdapter()->supports(Capability::DefinedAttributes));
+        $adapter->setSchemaless(! $lane->getAdapter()->supports(Capability::DefinedAttributes));
 
         $database = (new Database($adapter, new Cache(new None())))
             ->setAuthorization(new Authorization())
@@ -304,8 +304,6 @@ trait MongoReadFilterTests
     public function testContainsFamilyMatchesLikeTheOtherEngines(): void
     {
         $database = $this->getDatabase();
-        $this->assertTrue($database->getAdapter()->supports(Capability::QueryContains));
-
         $collection = 'contains_family';
         $database->createCollection(Collection::create(
             id: $collection,

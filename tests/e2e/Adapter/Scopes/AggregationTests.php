@@ -8,6 +8,7 @@ use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\Postgres;
+use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
@@ -1993,7 +1994,7 @@ trait AggregationTests
         $this->assertSame([$longest], \array_keys($total[0]->getArrayCopy()));
         $this->assertSame(2785, $this->intAttribute($total[0], $longest));
 
-        if ($database->getAdapter()->supports(Capability::BitwiseAggregates)) {
+        if ($this->engineIs(SQL::class) && ! $this->engineIs(SQLite::class)) {
             $grouped = $database->find($collection, [Query::bitOr('price', $longest), Query::groupBy(['category']), Query::orderAsc('category')]);
             $this->assertSame(
                 [['books', 63], ['clothing', 126], ['electronics', 2036]],
@@ -2158,7 +2159,7 @@ trait AggregationTests
     public function testBitwiseAggregateUnderALongAliasLeavesAnotherAggregateItsValue(): void
     {
         $database = static::getDatabase();
-        if (! $database->getAdapter()->supports(Capability::BitwiseAggregates)) {
+        if (! $this->engineIs(SQL::class) || $this->engineIs(SQLite::class)) {
             $this->expectNotToPerformAssertions();
 
             return;

@@ -5,7 +5,6 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Query as QueryException;
-use Utopia\Database\ParsedQuery;
 use Utopia\Database\Query;
 use Utopia\Query\Method;
 use Utopia\Query\OrderDirection;
@@ -659,11 +658,9 @@ class QueryTest extends TestCase
             Query::cursorAfter($cursor),
         ]);
 
-        $this->assertInstanceOf(ParsedQuery::class, $parsed);
         $this->assertSame(['views', 'title'], $parsed->orderAttributes);
         $this->assertSame([OrderDirection::Desc, OrderDirection::Asc], $parsed->orderTypes);
         $this->assertCount(1, $parsed->filters);
-        $this->assertInstanceOf(Query::class, $parsed->filters[0]);
         $this->assertSame(5, $parsed->limit);
         $this->assertSame($cursor, $parsed->cursor);
     }

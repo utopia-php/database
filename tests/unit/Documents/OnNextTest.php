@@ -69,6 +69,7 @@ final class OnNextTest extends TestCase
         $this->assertCount(1, $pairs);
         [$document, $previous] = $pairs[0];
         $this->assertSame('second', $document->getId());
+        $this->assertNotNull($previous);
         $this->assertNotSame($document, $previous, 'The previous document is a copy, so changing one leaves the other');
         $this->assertSame($document->getArrayCopy(), $previous->getArrayCopy());
         $this->assertSame(2, $previous->getAttribute('views'));

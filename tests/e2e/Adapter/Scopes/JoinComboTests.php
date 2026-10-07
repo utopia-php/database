@@ -2231,12 +2231,8 @@ trait JoinComboTests
             return false;
         }
 
-        /** @var array<Document> $indexes */
-        $indexes = $database->getCollection($collection)->indexes();
-        foreach ($indexes as $index) {
-            $type = $index->getAttribute('type');
-            $typeValue = $type instanceof IndexType ? $type->value : $type;
-            if ($typeValue === IndexType::Fulltext->value) {
+        foreach ($database->getCollection($collection)->indexes() as $index) {
+            if ($index->type === IndexType::Fulltext) {
                 return true;
             }
         }

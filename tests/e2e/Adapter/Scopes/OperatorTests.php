@@ -14,7 +14,6 @@ use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
-use Utopia\Database\IntegerWidth;
 use Utopia\Database\Operator;
 use Utopia\Database\Query;
 
@@ -3020,15 +3019,14 @@ trait OperatorTests
         $database->createAttribute($collectionId, Attribute::integer(key: 'score', default: 0, signed: false));
 
         // Get the collection to verify attribute was created
-        $collection = $database->getCollection($collectionId);
-        $attributes = $collection->attributes();
-        $scoreAttr = null;
-        foreach ($attributes as $attr) {
-            if ($attr['$id'] === 'score') {
-                $scoreAttr = $attr;
+        $score = null;
+        foreach ($database->getCollection($collectionId)->attributes() as $attribute) {
+            if ($attribute->key === 'score') {
+                $score = $attribute;
                 break;
             }
         }
+        $this->assertNotNull($score);
 
         // Create a document with score at 95 (within valid range)
         $doc = $database->createDocument($collectionId, new Document([
@@ -5260,7 +5258,7 @@ trait OperatorTests
         }
 
         $collectionId = 'j47a_power_numeric_text';
-        if ($database->exists($database->getDatabase(), $collectionId)) {
+        if ($database->collectionExists($collectionId)) {
             $database->deleteCollection($collectionId);
         }
         $database->createCollection(Collection::create(id: $collectionId, permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())], documentSecurity: false));

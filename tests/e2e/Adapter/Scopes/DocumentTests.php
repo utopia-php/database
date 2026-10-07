@@ -111,7 +111,7 @@ trait DocumentTests
         $database->createAttribute($collection, Attribute::id(key: 'id'));
 
         $sequence = '1000000';
-        if ($database->getAdapter()->getIdAttributeType() == ColumnType::Uuid7) {
+        if ($database->getAdapter()->getIdAttributeType() == ColumnType::Uuid7->value) {
             $sequence = '01890dd5-7331-7f3a-9c1b-123456789abc';
         }
 
@@ -347,7 +347,7 @@ trait DocumentTests
         $database->createCollection(Collection::create(id: __FUNCTION__));
 
         $sequence = 5_000_000_000_000_000;
-        if ($database->getAdapter()->getIdAttributeType() == ColumnType::Uuid7) {
+        if ($database->getAdapter()->getIdAttributeType() == ColumnType::Uuid7->value) {
             $sequence = '01995753-881b-78cf-9506-2cffecf8f227';
         }
 
@@ -366,7 +366,7 @@ trait DocumentTests
         $document = $database->findOne(__FUNCTION__, [Query::equal('$sequence', [(string) $sequence])]);
         $this->assertSame((string) $sequence, $document->getSequence());
 
-        if ($database->getAdapter()->getIdAttributeType() == ColumnType::Integer) {
+        if ($database->getAdapter()->getIdAttributeType() == ColumnType::Integer->value) {
             $this->assertTrue($sequence === 5_000_000_000_000_000);
             $document = $database->findOne(__FUNCTION__, [Query::equal('$sequence', [$sequence])]);
             $this->assertSame((string) $sequence, $document->getSequence());
@@ -381,7 +381,7 @@ trait DocumentTests
         $database = $this->getDatabase();
 
         $sequence = '1000000';
-        if ($database->getAdapter()->getIdAttributeType() == ColumnType::Uuid7) {
+        if ($database->getAdapter()->getIdAttributeType() == ColumnType::Uuid7->value) {
             $sequence = '01890dd5-7331-7f3a-9c1b-123456789abc';
         }
 
@@ -410,7 +410,7 @@ trait DocumentTests
         $this->assertEquals($sequence, $document->getAttribute('id'));
 
         $sequence = '56000';
-        if ($database->getAdapter()->getIdAttributeType() == ColumnType::Uuid7) {
+        if ($database->getAdapter()->getIdAttributeType() == ColumnType::Uuid7->value) {
             $sequence = '01890dd5-7331-7f3a-9c1b-123456789def';
         }
 
@@ -592,7 +592,7 @@ trait DocumentTests
         $this->assertNull($documentIdNull->getAttribute('id'));
 
         $sequence = '0';
-        if ($database->getAdapter()->getIdAttributeType() == ColumnType::Uuid7) {
+        if ($database->getAdapter()->getIdAttributeType() == ColumnType::Uuid7->value) {
             $sequence = '01890dd5-7331-7f3a-9c1b-123456789abc';
         }
 
@@ -642,9 +642,9 @@ trait DocumentTests
 
         $database->createCollection(Collection::create(id: $collection));
 
-        $database->createAttribute($collection, Attribute::string(key: 'string', size: 128, required: true));
-        $database->createAttribute($collection, Attribute::integer(key: 'integer', required: true));
-        $database->createAttribute($collection, Attribute::integer(key: 'bigint', width: IntegerWidth::Bits64, required: true));
+        $this->assertSame('string', $database->createAttribute($collection, Attribute::string(key: 'string', size: 128, required: true))->key);
+        $this->assertSame('integer', $database->createAttribute($collection, Attribute::integer(key: 'integer', required: true))->key);
+        $this->assertSame('bigint', $database->createAttribute($collection, Attribute::integer(key: 'bigint', width: IntegerWidth::Bits64, required: true))->key);
 
         // Create an array of documents with random attributes. Don't use the createDocument function
         $documents = [];
@@ -723,7 +723,7 @@ trait DocumentTests
             Permission::read(Role::any()),
             Permission::create(Role::any()),
         ], documentSecurity: false));
-        $database->createAttribute($collection, Attribute::string(key: 'name', size: 128));
+        $this->assertSame('name', $database->createAttribute($collection, Attribute::string(key: 'name', size: 128))->key);
 
         $ghost = fn () => $this->assertTrue($database->getDocument($collection, 'ghost')->isEmpty());
         $ghost();
@@ -779,7 +779,7 @@ trait DocumentTests
             Permission::create(Role::any()),
         ], documentSecurity: false));
 
-        $database->createAttribute($collection, Attribute::string(key: 'name', size: 128));
+        $this->assertSame('name', $database->createAttribute($collection, Attribute::string(key: 'name', size: 128))->key);
 
         $projected = fn () => $this->assertTrue($database->getDocument($collection, 'ghost', [Query::select(['name'])])->isEmpty());
         $plain = fn () => $this->assertTrue($database->getDocument($collection, 'ghost')->isEmpty());
@@ -851,7 +851,7 @@ trait DocumentTests
 
         $auth->skip(function () use ($database, $collection) {
             $database->createCollection(Collection::create(id: $collection));
-            $database->createAttribute($collection, Attribute::string(key: 'name', size: 128));
+            $this->assertSame('name', $database->createAttribute($collection, Attribute::string(key: 'name', size: 128))->key);
             $database->createDocument($collection, new Document([
                 '$id' => 'secret',
                 '$permissions' => [
@@ -892,14 +892,14 @@ trait DocumentTests
 
         $database->createCollection(Collection::create(id: __FUNCTION__));
 
-        $database->createAttribute(__FUNCTION__, Attribute::string(key: 'string', size: 128, required: true));
+        $this->assertSame('string', $database->createAttribute(__FUNCTION__, Attribute::string(key: 'string', size: 128, required: true))->key);
 
         /** @var array<Document> $documents */
         $documents = [];
         $offset = 1000000;
         for ($i = $offset; $i <= ($offset + 10); $i++) {
             $sequence = (string) $i;
-            if ($database->getAdapter()->getIdAttributeType() == ColumnType::Uuid7) {
+            if ($database->getAdapter()->getIdAttributeType() == ColumnType::Uuid7->value) {
                 // Replace last 6 digits with $i to make it unique
                 $suffix = str_pad(substr((string) $i, -6), 6, '0', STR_PAD_LEFT);
                 $sequence = '01890dd5-7331-7f3a-9c1b-123456'.$suffix;
@@ -942,10 +942,10 @@ trait DocumentTests
 
         $database->createCollection(Collection::create(id: $collection));
 
-        $database->createAttribute($collection, Attribute::string(key: 'string', size: 128, required: true));
-        $database->createAttribute($collection, Attribute::integer(key: 'integer'));
-        $database->createAttribute($collection, Attribute::integer(key: 'bigint', width: IntegerWidth::Bits64));
-        $database->createAttribute($collection, Attribute::string(key: 'string_default', size: 128, default: 'default'));
+        $this->assertSame('string', $database->createAttribute($collection, Attribute::string(key: 'string', size: 128, required: true))->key);
+        $this->assertSame('integer', $database->createAttribute($collection, Attribute::integer(key: 'integer'))->key);
+        $this->assertSame('bigint', $database->createAttribute($collection, Attribute::integer(key: 'bigint', width: IntegerWidth::Bits64))->key);
+        $this->assertSame('string_default', $database->createAttribute($collection, Attribute::string(key: 'string_default', size: 128, default: 'default'))->key);
 
         $documents = [
             new Document([
@@ -1687,7 +1687,7 @@ trait DocumentTests
          * Fulltext search
          */
         if ($this->getDatabase()->getAdapter()->supports(Capability::Fulltext)) {
-            $database->createIndex($this->getMoviesCollection(), Index::fulltext(key: 'name', attributes: ['name']));
+            $this->assertSame('name', $database->createIndex($this->getMoviesCollection(), Index::fulltext(key: 'name', attributes: ['name']))->key);
 
             $documents = $database->find($this->getMoviesCollection(), [
                 Query::search('name', 'captain'),
@@ -1731,8 +1731,8 @@ trait DocumentTests
             Permission::update(Role::users()),
         ]));
 
-        $database->createAttribute($collection, Attribute::string(key: 'ft', size: 128, required: true));
-        $database->createIndex($collection, Index::fulltext(key: 'ft-index', attributes: ['ft']));
+        $this->assertSame('ft', $database->createAttribute($collection, Attribute::string(key: 'ft', size: 128, required: true))->key);
+        $this->assertSame('ft-index', $database->createIndex($collection, Index::fulltext(key: 'ft-index', attributes: ['ft']))->key);
 
         $database->createDocument($collection, new Document([
             '$permissions' => [Permission::read(Role::any())],
@@ -1804,8 +1804,8 @@ trait DocumentTests
             Permission::update(Role::users()),
         ]));
 
-        $database->createAttribute($collection, Attribute::string(key: 'nombre', size: 128, required: true));
-        $database->createIndex($collection, Index::fulltext(key: 'nombre-ft', attributes: ['nombre']));
+        $this->assertSame('nombre', $database->createAttribute($collection, Attribute::string(key: 'nombre', size: 128, required: true))->key);
+        $this->assertSame('nombre-ft', $database->createIndex($collection, Index::fulltext(key: 'nombre-ft', attributes: ['nombre']))->key);
 
         $database->createDocument($collection, new Document([
             '$permissions' => [Permission::read(Role::any())],
@@ -1888,8 +1888,8 @@ trait DocumentTests
             Permission::read(Role::any()),
         ]));
 
-        $database->createAttribute($collection, Attribute::string(key: 'text', size: 128, required: true));
-        $database->createIndex($collection, Index::fulltext(key: 'text-ft', attributes: ['text']));
+        $this->assertSame('text', $database->createAttribute($collection, Attribute::string(key: 'text', size: 128, required: true))->key);
+        $this->assertSame('text-ft', $database->createIndex($collection, Index::fulltext(key: 'text-ft', attributes: ['text']))->key);
 
         $texts = [
             'lunar' => 'lunar',
@@ -3050,7 +3050,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $database->createIndex($this->getMoviesCollection(), Index::unique(key: 'uniqueIndex', attributes: ['name'], lengths: [128], orders: [OrderDirection::Asc]));
+        $this->assertSame('uniqueIndex', $database->createIndex($this->getMoviesCollection(), Index::unique(key: 'uniqueIndex', attributes: ['name'], lengths: [128], orders: [OrderDirection::Asc]))->key);
 
         try {
             $database->createDocument($this->getMoviesCollection(), new Document([
@@ -3338,8 +3338,8 @@ trait DocumentTests
         $database = $this->getDatabase();
         $collection = 'create_modify_dates';
         $database->createCollection(Collection::create(id: $collection));
-        $database->createAttribute($collection, Attribute::string(key: 'string', size: 128));
-        $database->createAttribute($collection, Attribute::datetime(key: 'datetime'));
+        $this->assertSame('string', $database->createAttribute($collection, Attribute::string(key: 'string', size: 128))->key);
+        $this->assertSame('datetime', $database->createAttribute($collection, Attribute::datetime(key: 'datetime'))->key);
 
         $date = '2000-01-01T10:00:00.000+00:00';
         // test - default behaviour of external datetime attribute not changed
@@ -3392,7 +3392,7 @@ trait DocumentTests
 
         $collection = 'upsert_date_operations';
         $database->createCollection(Collection::create(id: $collection));
-        $database->createAttribute($collection, Attribute::string(key: 'string', size: 128));
+        $this->assertSame('string', $database->createAttribute($collection, Attribute::string(key: 'string', size: 128))->key);
 
         $database->setPreserveDates(true);
 
@@ -3933,9 +3933,9 @@ trait DocumentTests
         ]));
 
         if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
-            $database->createAttribute('moviesRegex', Attribute::string(key: 'name', size: 128, required: true));
-            $database->createAttribute('moviesRegex', Attribute::string(key: 'director', size: 128, required: true));
-            $database->createAttribute('moviesRegex', Attribute::integer(key: 'year', required: true));
+            $this->assertSame('name', $database->createAttribute('moviesRegex', Attribute::string(key: 'name', size: 128, required: true))->key);
+            $this->assertSame('director', $database->createAttribute('moviesRegex', Attribute::string(key: 'director', size: 128, required: true))->key);
+            $this->assertSame('year', $database->createAttribute('moviesRegex', Attribute::integer(key: 'year', required: true))->key);
         }
 
         if ($database->getAdapter()->supports(Capability::TrigramIndex)) {
@@ -4432,7 +4432,7 @@ trait DocumentTests
         ]));
 
         if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
-            $database->createAttribute($collectionName, Attribute::string(key: 'text', size: 1000, required: true));
+            $this->assertSame('text', $database->createAttribute($collectionName, Attribute::string(key: 'text', size: 1000, required: true))->key);
         }
 
         // Create test documents - one that should match, one that shouldn't
@@ -4796,7 +4796,7 @@ trait DocumentTests
         }
 
         $database->createCollection(Collection::create(id: __FUNCTION__));
-        $database->createAttribute(__FUNCTION__, Attribute::string(key: 'title', size: 128, required: true));
+        $this->assertSame('title', $database->createAttribute(__FUNCTION__, Attribute::string(key: 'title', size: 128, required: true))->key);
 
         $nonUtfString = "Hello\x00World\xC3\x28\xFF\xFE\xA0Test\x00End";
 
@@ -4834,7 +4834,7 @@ trait DocumentTests
 
         $database->createCollection(Collection::create(id: 'numericalIds'));
 
-        $database->createAttribute('numericalIds', Attribute::string(key: 'name', size: 128, required: true));
+        $this->assertSame('name', $database->createAttribute('numericalIds', Attribute::string(key: 'name', size: 128, required: true))->key);
 
         // Test creating a document with an entirely numerical ID
         $numericalIdDocument = $database->createDocument('numericalIds', new Document([
@@ -5323,11 +5323,11 @@ trait DocumentTests
 
         $database->createCollection(Collection::create(id: 'documents_nulls'));
 
-        $database->createAttribute('documents_nulls', Attribute::string(key: 'string', size: 128));
-        $database->createAttribute('documents_nulls', Attribute::integer(key: 'integer'));
-        $database->createAttribute('documents_nulls', Attribute::integer(key: 'bigint', width: IntegerWidth::Bits64));
-        $database->createAttribute('documents_nulls', Attribute::double(key: 'float'));
-        $database->createAttribute('documents_nulls', Attribute::boolean(key: 'boolean'));
+        $this->assertSame('string', $database->createAttribute('documents_nulls', Attribute::string(key: 'string', size: 128))->key);
+        $this->assertSame('integer', $database->createAttribute('documents_nulls', Attribute::integer(key: 'integer'))->key);
+        $this->assertSame('bigint', $database->createAttribute('documents_nulls', Attribute::integer(key: 'bigint', width: IntegerWidth::Bits64))->key);
+        $this->assertSame('float', $database->createAttribute('documents_nulls', Attribute::double(key: 'float'))->key);
+        $this->assertSame('boolean', $database->createAttribute('documents_nulls', Attribute::boolean(key: 'boolean'))->key);
 
         $document = $database->createDocument('documents_nulls', new Document([
             '$permissions' => [
@@ -5361,12 +5361,12 @@ trait DocumentTests
 
         $database->createCollection(Collection::create(id: 'defaults'));
 
-        $database->createAttribute('defaults', Attribute::string(key: 'string', size: 128, default: 'default'));
-        $database->createAttribute('defaults', Attribute::integer(key: 'integer', default: 1));
-        $database->createAttribute('defaults', Attribute::double(key: 'float', default: 1.5));
-        $database->createAttribute('defaults', Attribute::boolean(key: 'boolean', default: true));
-        $database->createAttribute('defaults', Attribute::string(key: 'colors', size: 32, default: ['red', 'green', 'blue'], array: true));
-        $database->createAttribute('defaults', Attribute::datetime(key: 'datetime', default: '2000-06-12T14:12:55.000+00:00'));
+        $this->assertSame('string', $database->createAttribute('defaults', Attribute::string(key: 'string', size: 128, default: 'default'))->key);
+        $this->assertSame('integer', $database->createAttribute('defaults', Attribute::integer(key: 'integer', default: 1))->key);
+        $this->assertSame('float', $database->createAttribute('defaults', Attribute::double(key: 'float', default: 1.5))->key);
+        $this->assertSame('boolean', $database->createAttribute('defaults', Attribute::boolean(key: 'boolean', default: true))->key);
+        $this->assertSame('colors', $database->createAttribute('defaults', Attribute::string(key: 'colors', size: 32, default: ['red', 'green', 'blue'], array: true))->key);
+        $this->assertSame('datetime', $database->createAttribute('defaults', Attribute::datetime(key: 'datetime', default: '2000-06-12T14:12:55.000+00:00'))->key);
 
         $document = $database->createDocument('defaults', new Document([
             'string' => null,
@@ -5411,11 +5411,11 @@ trait DocumentTests
         $collection = $this->getIncDecCollection();
         $database->createCollection(Collection::create(id: $collection));
 
-        $database->createAttribute($collection, Attribute::integer(key: 'increase', required: true));
-        $database->createAttribute($collection, Attribute::integer(key: 'decrease', required: true));
-        $database->createAttribute($collection, Attribute::string(key: 'increase_text', required: true));
-        $database->createAttribute($collection, Attribute::double(key: 'increase_float', required: true));
-        $database->createAttribute($collection, Attribute::integer(key: 'sizes', width: IntegerWidth::Bits64, array: true));
+        $this->assertSame('increase', $database->createAttribute($collection, Attribute::integer(key: 'increase', required: true))->key);
+        $this->assertSame('decrease', $database->createAttribute($collection, Attribute::integer(key: 'decrease', required: true))->key);
+        $this->assertSame('increase_text', $database->createAttribute($collection, Attribute::string(key: 'increase_text', required: true))->key);
+        $this->assertSame('increase_float', $database->createAttribute($collection, Attribute::double(key: 'increase_float', required: true))->key);
+        $this->assertSame('sizes', $database->createAttribute($collection, Attribute::integer(key: 'sizes', width: IntegerWidth::Bits64, array: true))->key);
 
         $document = $database->createDocument($collection, new Document([
             'increase' => 100,
@@ -5724,7 +5724,7 @@ trait DocumentTests
         $database = $this->getDatabase();
 
         $database->createCollection(Collection::create(id: __FUNCTION__));
-        $database->createAttribute(__FUNCTION__, Attribute::string(key: 'collection', size: 128));
+        $this->assertSame('collection', $database->createAttribute(__FUNCTION__, Attribute::string(key: 'collection', size: 128))->key);
 
         $database->createDocument(__FUNCTION__, new Document([
             '$id' => ID::custom('clash'),
@@ -5762,7 +5762,7 @@ trait DocumentTests
         }
 
         $database->createCollection(Collection::create(id: __FUNCTION__));
-        $database->createAttribute(__FUNCTION__, Attribute::string(key: 'tenant', size: 128));
+        $this->assertSame('tenant', $database->createAttribute(__FUNCTION__, Attribute::string(key: 'tenant', size: 128))->key);
 
         $database->createDocument(__FUNCTION__, new Document([
             '$id' => ID::custom('clash'),
@@ -5791,7 +5791,7 @@ trait DocumentTests
         }
 
         $originalTenant = $database->getTenant();
-        $integerTenants = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer;
+        $integerTenants = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer->value;
         $first = $integerTenants ? 41 : 'tenant_41';
         $second = $integerTenants ? 42 : 'tenant_42';
         $collection = 'tenant_ids_'.\substr(\uniqid(), -6);
@@ -6965,7 +6965,7 @@ trait DocumentTests
 
         $database->createCollection(Collection::create(id: $collection));
 
-        $database->createAttribute($collection, Attribute::string(key: 'value', size: 256, required: true));
+        $this->assertSame('value', $database->createAttribute($collection, Attribute::string(key: 'value', size: 256, required: true))->key);
 
         $values = [
             'NormalString',
@@ -7034,7 +7034,7 @@ trait DocumentTests
             Permission::update(Role::users())
         ]));
 
-        $database->createAttribute('movies_nested_id', Attribute::string(key: 'name', size: 128, required: true));
+        $this->assertSame('name', $database->createAttribute('movies_nested_id', Attribute::string(key: 'name', size: 128, required: true))->key);
 
         $database->createDocument('movies_nested_id', new Document([
             '$id' => ID::custom('1'),
@@ -7315,6 +7315,7 @@ trait DocumentTests
         }
         $this->assertEquals(0, \count($documents));
         $database->deleteCollection('moviesEmpty');
+        $this->assertNull($database->findCollection('moviesEmpty'));
 
         /**
          * Test, foreach generator
@@ -8186,7 +8187,7 @@ trait DocumentTests
         $database = $this->getDatabase();
         $collection = 'normal_date_operations';
         $database->createCollection(Collection::create(id: $collection));
-        $database->createAttribute($collection, Attribute::string(key: 'string', size: 128));
+        $this->assertSame('string', $database->createAttribute($collection, Attribute::string(key: 'string', size: 128))->key);
 
         $database->setPreserveDates(true);
 
@@ -8358,7 +8359,7 @@ trait DocumentTests
         $database = $this->getDatabase();
         $collection = 'bulk_date_operations';
         $database->createCollection(Collection::create(id: $collection));
-        $database->createAttribute($collection, Attribute::string(key: 'string', size: 128));
+        $this->assertSame('string', $database->createAttribute($collection, Attribute::string(key: 'string', size: 128))->key);
 
         $database->setPreserveDates(true);
 
@@ -8777,7 +8778,7 @@ trait DocumentTests
         ];
 
         $database->createCollection(Collection::create(id: __FUNCTION__));
-        $database->createAttribute(__FUNCTION__, Attribute::string(key: 'known', size: 128));
+        $this->assertSame('known', $database->createAttribute(__FUNCTION__, Attribute::string(key: 'known', size: 128))->key);
 
         try {
             $database->createDocument(__FUNCTION__, new Document([
@@ -8862,8 +8863,8 @@ trait DocumentTests
         $database = $this->getDatabase();
 
         $database->createCollection(Collection::create(id: __FUNCTION__));
-        $database->createAttribute(__FUNCTION__, Attribute::bigInteger(key: 'bigint_signed', required: true));
-        $database->createAttribute(__FUNCTION__, Attribute::bigInteger(key: 'bigint_unsigned', required: true, signed: false));
+        $this->assertSame('bigint_signed', $database->createAttribute(__FUNCTION__, Attribute::bigInteger(key: 'bigint_signed', required: true))->key);
+        $this->assertSame('bigint_unsigned', $database->createAttribute(__FUNCTION__, Attribute::bigInteger(key: 'bigint_unsigned', required: true, signed: false))->key);
 
         $document = $database->createDocument(__FUNCTION__, new Document([
             '$id' => 'bigint-type-doc',
@@ -8896,8 +8897,8 @@ trait DocumentTests
 
         $collection = 'bigint_scenarios_filters';
         $database->createCollection(Collection::create(id: $collection));
-        $database->createAttribute($collection, Attribute::bigInteger(key: 'signed_bigint', required: true));
-        $database->createAttribute($collection, Attribute::bigInteger(key: 'unsigned_bigint', required: true, signed: false));
+        $this->assertSame('signed_bigint', $database->createAttribute($collection, Attribute::bigInteger(key: 'signed_bigint', required: true))->key);
+        $this->assertSame('unsigned_bigint', $database->createAttribute($collection, Attribute::bigInteger(key: 'unsigned_bigint', required: true, signed: false))->key);
 
         $collectionDoc = $database->getCollection($collection);
         $this->assertSame($collection, $collectionDoc->getId());
@@ -8915,8 +8916,8 @@ trait DocumentTests
 
         $this->assertNotNull($signedAttribute);
         $this->assertNotNull($unsignedAttribute);
-        $this->assertSame(0, $signedAttribute->size);
-        $this->assertSame(0, $unsignedAttribute->size);
+        $this->assertSame(0, $signedAttribute->toDocument()->getAttribute('size'));
+        $this->assertSame(0, $unsignedAttribute->toDocument()->getAttribute('size'));
 
         $beyond32Bit = '2147483648';
         $signedMax = (string) \PHP_INT_MAX;
@@ -8981,7 +8982,7 @@ trait DocumentTests
 
         $collection = 'signed_bigint_only';
         $database->createCollection(Collection::create(id: $collection));
-        $database->createAttribute($collection, Attribute::bigInteger(key: 'signed_bigint', required: true));
+        $this->assertSame('signed_bigint', $database->createAttribute($collection, Attribute::bigInteger(key: 'signed_bigint', required: true))->key);
 
         $document = $database->createDocument($collection, new Document([
             '$id' => 'signed-bigint-doc',
@@ -9018,8 +9019,8 @@ trait DocumentTests
         $collection = 'bigint_update_increase_decrease';
         $database->createCollection(Collection::create(id: $collection));
 
-        $database->createAttribute($collection, Attribute::bigInteger(key: 'inc', required: true));
-        $database->createAttribute($collection, Attribute::bigInteger(key: 'dec', required: true));
+        $this->assertSame('inc', $database->createAttribute($collection, Attribute::bigInteger(key: 'inc', required: true))->key);
+        $this->assertSame('dec', $database->createAttribute($collection, Attribute::bigInteger(key: 'dec', required: true))->key);
 
         $document = $database->createDocument($collection, new Document([
             'inc' => 10,
@@ -9448,7 +9449,7 @@ trait DocumentTests
 
         $collection = 'datetime_array_doc';
         $database->createCollection(Collection::create(id: $collection));
-        $database->createAttribute($collection, Attribute::datetime(key: 'dates', array: true));
+        $this->assertSame('dates', $database->createAttribute($collection, Attribute::datetime(key: 'dates', array: true))->key);
 
         $d1 = '2000-01-01T10:00:00.000+00:00';
         $d2 = '2001-02-03T05:06:07.000+00:00';
@@ -9493,7 +9494,7 @@ trait DocumentTests
         $filteredStorageKey = $database->getAdapter()->filter($attributeId);
 
         $database->createCollection(Collection::create(id: $collectionId));
-        $database->createAttribute($collectionId, Attribute::string(key: $attributeId, size: 128));
+        $this->assertSame($attributeId, $database->createAttribute($collectionId, Attribute::string(key: $attributeId, size: 128))->key);
 
         $database->createDocument($collectionId, new Document([
             '$id' => 'dev1',
@@ -9656,7 +9657,7 @@ trait DocumentTests
         $collection = 'invalid_date_attributes';
 
         $database->createCollection(Collection::create(id: $collection));
-        $database->createAttribute($collection, Attribute::string(key: 'string', size: 128));
+        $this->assertSame('string', $database->createAttribute($collection, Attribute::string(key: 'string', size: 128))->key);
 
         $database->setPreserveDates(true);
 

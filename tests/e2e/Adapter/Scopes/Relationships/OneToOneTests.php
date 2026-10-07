@@ -23,7 +23,6 @@ use Utopia\Database\RelationshipDeleteAction;
 use Utopia\Database\RelationshipType;
 use Utopia\Database\RelationshipUpdate;
 use Utopia\Query\Schema\ColumnType;
-use Utopia\Query\Schema\ForeignKeyAction;
 
 trait OneToOneTests
 {
@@ -52,14 +51,14 @@ trait OneToOneTests
 
         foreach ($collection->attributes() as $attribute) {
             if ($attribute->key === 'library') {
-                $options = $attribute->options ?? [];
+                $relationship = $attribute->relationship;
+                $this->assertNotNull($relationship);
                 $this->assertEquals(ColumnType::Relationship, $attribute->type);
                 $this->assertEquals('library', $attribute->key);
-                $this->assertEquals('library', $attribute->key);
-                $this->assertEquals('library', $options['relatedCollection'] ?? null);
-                $this->assertEquals(RelationshipType::OneToOne->value, $options['relationType'] ?? null);
-                $this->assertEquals(false, $options['twoWay'] ?? null);
-                $this->assertEquals('person', $options['twoWayKey'] ?? null);
+                $this->assertSame('library', $relationship->relatedCollection);
+                $this->assertSame(RelationshipType::OneToOne, $relationship->type);
+                $this->assertSame(false, $relationship->twoWay);
+                $this->assertSame('person', $relationship->twoWayKey);
             }
         }
 
@@ -470,28 +469,28 @@ trait OneToOneTests
         $collection = $database->getCollection('country');
         foreach ($collection->attributes() as $attribute) {
             if ($attribute->key === 'city') {
-                $options = $attribute->options ?? [];
+                $relationship = $attribute->relationship;
+                $this->assertNotNull($relationship);
                 $this->assertEquals(ColumnType::Relationship, $attribute->type);
                 $this->assertEquals('city', $attribute->key);
-                $this->assertEquals('city', $attribute->key);
-                $this->assertEquals('city', $options['relatedCollection'] ?? null);
-                $this->assertEquals(RelationshipType::OneToOne->value, $options['relationType'] ?? null);
-                $this->assertEquals(true, $options['twoWay'] ?? null);
-                $this->assertEquals('country', $options['twoWayKey'] ?? null);
+                $this->assertSame('city', $relationship->relatedCollection);
+                $this->assertSame(RelationshipType::OneToOne, $relationship->type);
+                $this->assertSame(true, $relationship->twoWay);
+                $this->assertSame('country', $relationship->twoWayKey);
             }
         }
 
         $collection = $database->getCollection('city');
         foreach ($collection->attributes() as $attribute) {
             if ($attribute->key === 'country') {
-                $options = $attribute->options ?? [];
+                $relationship = $attribute->relationship;
+                $this->assertNotNull($relationship);
                 $this->assertEquals(ColumnType::Relationship, $attribute->type);
                 $this->assertEquals('country', $attribute->key);
-                $this->assertEquals('country', $attribute->key);
-                $this->assertEquals('country', $options['relatedCollection'] ?? null);
-                $this->assertEquals(RelationshipType::OneToOne->value, $options['relationType'] ?? null);
-                $this->assertEquals(true, $options['twoWay'] ?? null);
-                $this->assertEquals('city', $options['twoWayKey'] ?? null);
+                $this->assertSame('country', $relationship->relatedCollection);
+                $this->assertSame(RelationshipType::OneToOne, $relationship->type);
+                $this->assertSame(true, $relationship->twoWay);
+                $this->assertSame('city', $relationship->twoWayKey);
             }
         }
 
@@ -920,7 +919,7 @@ trait OneToOneTests
         $city1 = $database->getDocument('city', 'city1');
         $this->assertNull($city1->getAttribute('newCountry'));
 
-        // Check Delete TwoWay TRUE && ForeignKeyAction::SetNull && related value NULL
+        // Check Delete TwoWay TRUE && RelationshipDeleteAction::SetNull && related value NULL
         $this->assertTrue($database->deleteDocument('city', 'city1'));
         $city1 = $database->getDocument('city', 'city1');
         $this->assertTrue($city1->isEmpty());
@@ -1033,13 +1032,12 @@ trait OneToOneTests
 
         $collection = $database->getCollection('parent');
         foreach ($collection->attributes() as $attribute) {
-            $options = $attribute->options ?? [];
             if ($attribute->key === 'child1') {
-                $this->assertEquals('parent', $options['twoWayKey'] ?? null);
+                $this->assertSame('parent', $attribute->relationship?->twoWayKey);
             }
 
             if ($attribute->key === 'children') {
-                $this->assertEquals('parent_id', $options['twoWayKey'] ?? null);
+                $this->assertSame('parent_id', $attribute->relationship?->twoWayKey);
             }
         }
 
@@ -1688,7 +1686,9 @@ trait OneToOneTests
 
         $database->deleteRelationship($two, $one);
 
-        $database->createRelationship($one, Relationship::oneToOne(relatedCollection: $two));
+        $relationship = $database->createRelationship($one, Relationship::oneToOne(relatedCollection: $two));
+
+        $this->assertSame($two, $relationship->relatedCollection);
 
         $database->deleteCollection($one);
         $database->deleteCollection($two);
@@ -1729,7 +1729,9 @@ trait OneToOneTests
 
         $database->deleteRelationship($one, $two);
 
-        $database->createRelationship($one, Relationship::oneToOne(relatedCollection: $two, twoWay: true));
+        $relationship = $database->createRelationship($one, Relationship::oneToOne(relatedCollection: $two, twoWay: true));
+
+        $this->assertSame($two, $relationship->relatedCollection);
 
         $database->deleteCollection($one);
         $database->deleteCollection($two);
@@ -1770,7 +1772,9 @@ trait OneToOneTests
 
         $database->deleteRelationship($two, $one);
 
-        $database->createRelationship($one, Relationship::oneToOne(relatedCollection: $two, twoWay: true));
+        $relationship = $database->createRelationship($one, Relationship::oneToOne(relatedCollection: $two, twoWay: true));
+
+        $this->assertSame($two, $relationship->relatedCollection);
 
         $database->deleteCollection($one);
         $database->deleteCollection($two);
@@ -1811,7 +1815,9 @@ trait OneToOneTests
 
         $database->deleteRelationship($one, $two);
 
-        $database->createRelationship($one, Relationship::oneToOne(relatedCollection: $two));
+        $relationship = $database->createRelationship($one, Relationship::oneToOne(relatedCollection: $two));
+
+        $this->assertSame($two, $relationship->relatedCollection);
 
         $database->deleteCollection($one);
         $database->deleteCollection($two);
@@ -2110,7 +2116,7 @@ trait OneToOneTests
 
         $drivers = $database->getCollection('drivers');
         $licenses = $database->getCollection('licenses');
-        $junction = $database->findCollection('_'.$licenses->getSequence().'_'.$drivers->getSequence());
+        $junction = $database->getCollection('_'.$licenses->getSequence().'_'.$drivers->getSequence());
 
         $this->assertEquals(1, \count($drivers->attributes()));
         $this->assertEquals(0, \count($drivers->indexes()));
@@ -2130,7 +2136,7 @@ trait OneToOneTests
         $this->assertEquals(0, \count($licenses->attributes()));
         $this->assertEquals(0, \count($licenses->indexes()));
 
-        $this->assertEquals(true, $junction === null);
+        $this->assertNull($junction);
     }
 
     public function testUpdateParentAndChild_OneToOne(): void

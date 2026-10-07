@@ -50,12 +50,12 @@ trait ManyToOneTests
             if ($attribute->key === 'movie') {
                 $this->assertEquals(ColumnType::Relationship, $attribute->type);
                 $this->assertEquals('movie', $attribute->key);
-                $this->assertEquals('movie', $attribute->key);
-                $options = $attribute->options ?? [];
-                $this->assertEquals('movie', $options['relatedCollection'] ?? null);
-                $this->assertEquals(RelationshipType::ManyToOne->value, $options['relationType'] ?? null);
-                $this->assertEquals(false, $options['twoWay'] ?? null);
-                $this->assertEquals('reviews', $options['twoWayKey'] ?? null);
+                $relationship = $attribute->relationship;
+                $this->assertNotNull($relationship);
+                $this->assertSame('movie', $relationship->relatedCollection);
+                $this->assertSame(RelationshipType::ManyToOne, $relationship->type);
+                $this->assertSame(false, $relationship->twoWay);
+                $this->assertSame('reviews', $relationship->twoWayKey);
             }
         }
 
@@ -65,12 +65,12 @@ trait ManyToOneTests
             if ($attribute->key === 'reviews') {
                 $this->assertEquals(ColumnType::Relationship, $attribute->type);
                 $this->assertEquals('reviews', $attribute->key);
-                $this->assertEquals('reviews', $attribute->key);
-                $options = $attribute->options ?? [];
-                $this->assertEquals('review', $options['relatedCollection'] ?? null);
-                $this->assertEquals(RelationshipType::ManyToOne->value, $options['relationType'] ?? null);
-                $this->assertEquals(false, $options['twoWay'] ?? null);
-                $this->assertEquals('movie', $options['twoWayKey'] ?? null);
+                $relationship = $attribute->relationship;
+                $this->assertNotNull($relationship);
+                $this->assertSame('review', $relationship->relatedCollection);
+                $this->assertSame(RelationshipType::ManyToOne, $relationship->type);
+                $this->assertSame(false, $relationship->twoWay);
+                $this->assertSame('movie', $relationship->twoWayKey);
             }
         }
 
@@ -383,12 +383,12 @@ trait ManyToOneTests
             if ($attribute->key === 'store') {
                 $this->assertEquals(ColumnType::Relationship, $attribute->type);
                 $this->assertEquals('store', $attribute->key);
-                $this->assertEquals('store', $attribute->key);
-                $options = $attribute->options ?? [];
-                $this->assertEquals('store', $options['relatedCollection'] ?? null);
-                $this->assertEquals(RelationshipType::ManyToOne->value, $options['relationType'] ?? null);
-                $this->assertEquals(true, $options['twoWay'] ?? null);
-                $this->assertEquals('products', $options['twoWayKey'] ?? null);
+                $relationship = $attribute->relationship;
+                $this->assertNotNull($relationship);
+                $this->assertSame('store', $relationship->relatedCollection);
+                $this->assertSame(RelationshipType::ManyToOne, $relationship->type);
+                $this->assertSame(true, $relationship->twoWay);
+                $this->assertSame('products', $relationship->twoWayKey);
             }
         }
 
@@ -398,12 +398,12 @@ trait ManyToOneTests
             if ($attribute->key === 'products') {
                 $this->assertEquals(ColumnType::Relationship, $attribute->type);
                 $this->assertEquals('products', $attribute->key);
-                $this->assertEquals('products', $attribute->key);
-                $options = $attribute->options ?? [];
-                $this->assertEquals('product', $options['relatedCollection'] ?? null);
-                $this->assertEquals(RelationshipType::ManyToOne->value, $options['relationType'] ?? null);
-                $this->assertEquals(true, $options['twoWay'] ?? null);
-                $this->assertEquals('store', $options['twoWayKey'] ?? null);
+                $relationship = $attribute->relationship;
+                $this->assertNotNull($relationship);
+                $this->assertSame('product', $relationship->relatedCollection);
+                $this->assertSame(RelationshipType::ManyToOne, $relationship->type);
+                $this->assertSame(true, $relationship->twoWay);
+                $this->assertSame('store', $relationship->twoWayKey);
             }
         }
 
@@ -1340,7 +1340,9 @@ trait ManyToOneTests
 
         $database->deleteRelationship($one, $two);
 
-        $database->createRelationship($one, Relationship::manyToOne(relatedCollection: $two));
+        $relationship = $database->createRelationship($one, Relationship::manyToOne(relatedCollection: $two));
+
+        $this->assertSame($two, $relationship->relatedCollection);
 
         $database->deleteCollection($one);
         $database->deleteCollection($two);
@@ -1381,7 +1383,9 @@ trait ManyToOneTests
 
         $database->deleteRelationship($two, $one);
 
-        $database->createRelationship($one, Relationship::manyToOne(relatedCollection: $two));
+        $relationship = $database->createRelationship($one, Relationship::manyToOne(relatedCollection: $two));
+
+        $this->assertSame($two, $relationship->relatedCollection);
 
         $database->deleteCollection($one);
         $database->deleteCollection($two);
@@ -1422,7 +1426,9 @@ trait ManyToOneTests
 
         $database->deleteRelationship($one, $two);
 
-        $database->createRelationship($one, Relationship::manyToOne(relatedCollection: $two, twoWay: true));
+        $relationship = $database->createRelationship($one, Relationship::manyToOne(relatedCollection: $two, twoWay: true));
+
+        $this->assertSame($two, $relationship->relatedCollection);
 
         $database->deleteCollection($one);
         $database->deleteCollection($two);
@@ -1463,7 +1469,9 @@ trait ManyToOneTests
 
         $database->deleteRelationship($two, $one);
 
-        $database->createRelationship($one, Relationship::manyToOne(relatedCollection: $two, twoWay: true));
+        $relationship = $database->createRelationship($one, Relationship::manyToOne(relatedCollection: $two, twoWay: true));
+
+        $this->assertSame($two, $relationship->relatedCollection);
 
         $database->deleteCollection($one);
         $database->deleteCollection($two);

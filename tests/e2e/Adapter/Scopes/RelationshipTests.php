@@ -46,7 +46,7 @@ trait RelationshipTests
     use OneToOneTests;
 
     /**
-     * @return array<string, array{RelationType, string, int}>
+     * @return array<string, array{RelationshipType, string, int}>
      */
     public static function relationshipQueryValueLimitProvider(): array
     {
@@ -4298,7 +4298,7 @@ trait RelationshipTests
     }
 
     /**
-     * @return array<string, array{RelationType, ForeignKeyAction}>
+     * @return array<string, array{RelationshipType, RelationshipDeleteAction}>
      */
     public static function relatedDocumentsBeyondQueryValueLimitProvider(): array
     {
@@ -4332,9 +4332,11 @@ trait RelationshipTests
         ];
         $database->createCollection(Collection::create(id: $parents, permissions: $permissions));
         $database->createCollection(Collection::create(id: $children, permissions: $permissions));
-        $database->createRelationship($type === RelationshipType::ManyToOne ? $children : $parents, $type === RelationshipType::ManyToOne
-            ? Relationship::fromArray(['relatedCollection' => $parents, 'relationType' => $type, 'twoWay' => true, 'key' => 'parent', 'twoWayKey' => 'children', 'onDelete' => $onDelete])
-            : Relationship::fromArray(['relatedCollection' => $children, 'relationType' => $type, 'twoWay' => true, 'key' => 'children', 'twoWayKey' => 'parent', 'onDelete' => $onDelete]));
+        if ($type === RelationshipType::ManyToOne) {
+            $database->createRelationship($children, Relationship::manyToOne(relatedCollection: $parents, key: 'parent', twoWay: true, twoWayKey: 'children', onDelete: $onDelete));
+        } else {
+            $database->createRelationship($parents, Relationship::fromArray(['relatedCollection' => $children, 'relationType' => $type, 'twoWay' => true, 'key' => 'children', 'twoWayKey' => 'parent', 'onDelete' => $onDelete]));
+        }
 
         $childIds = ['child1', 'child2', 'child3'];
         if ($type === RelationshipType::ManyToMany) {
@@ -5294,7 +5296,7 @@ trait RelationshipTests
     }
 
     /**
-     * @return array<string>
+     * @return list<string>
      */
     private function relationshipCoveragePermissions(): array
     {

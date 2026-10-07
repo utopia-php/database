@@ -696,7 +696,7 @@ trait PermissionTests
 
         $this->assertSame($this->getCollSecurityParentCollection(), $collection->getId());
 
-        $database->createAttribute($collection->getId(), Attribute::string(key: 'test'));
+        $this->assertSame('test', $database->createAttribute($collection->getId(), Attribute::string(key: 'test'))->key);
 
         $collectionOneToOne = $database->createCollection(Collection::create(id: $this->getCollSecurityOneToOneCollection(), permissions: [
             Permission::create(Role::users()),
@@ -707,9 +707,9 @@ trait PermissionTests
 
         $this->assertSame($this->getCollSecurityOneToOneCollection(), $collectionOneToOne->getId());
 
-        $database->createAttribute($collectionOneToOne->getId(), Attribute::string(key: 'test'));
+        $this->assertSame('test', $database->createAttribute($collectionOneToOne->getId(), Attribute::string(key: 'test'))->key);
 
-        $database->createRelationship($collection->getId(), Relationship::oneToOne(relatedCollection: $collectionOneToOne->getId(), key: RelationshipType::OneToOne->value, onDelete: RelationshipDeleteAction::Cascade));
+        $this->assertSame(RelationshipType::OneToOne->value, $database->createRelationship($collection->getId(), Relationship::oneToOne(relatedCollection: $collectionOneToOne->getId(), key: RelationshipType::OneToOne->value, onDelete: RelationshipDeleteAction::Cascade))->key);
 
         $collectionOneToMany = $database->createCollection(Collection::create(id: $this->getCollSecurityOneToManyCollection(), permissions: [
             Permission::create(Role::users()),
@@ -720,9 +720,9 @@ trait PermissionTests
 
         $this->assertSame($this->getCollSecurityOneToManyCollection(), $collectionOneToMany->getId());
 
-        $database->createAttribute($collectionOneToMany->getId(), Attribute::string(key: 'test'));
+        $this->assertSame('test', $database->createAttribute($collectionOneToMany->getId(), Attribute::string(key: 'test'))->key);
 
-        $database->createRelationship($collection->getId(), Relationship::oneToMany(relatedCollection: $collectionOneToMany->getId(), key: RelationshipType::OneToMany->value, onDelete: RelationshipDeleteAction::Cascade));
+        $this->assertSame(RelationshipType::OneToMany->value, $database->createRelationship($collection->getId(), Relationship::oneToMany(relatedCollection: $collectionOneToMany->getId(), key: RelationshipType::OneToMany->value, onDelete: RelationshipDeleteAction::Cascade))->key);
     }
 
     public function testUnsetPermissions(): void
@@ -731,7 +731,7 @@ trait PermissionTests
         $database = $this->getDatabase();
 
         $database->createCollection(Collection::create(id: __FUNCTION__));
-        $database->createAttribute(__FUNCTION__, Attribute::string(key: 'president'));
+        $this->assertSame('president', $database->createAttribute(__FUNCTION__, Attribute::string(key: 'president'))->key);
 
         $permissions = [
             Permission::read(Role::any()),
@@ -1135,7 +1135,7 @@ trait PermissionTests
 
         $this->assertSame($this->getCollSecurityCollection(), $collection->getId());
 
-        $database->createAttribute($collection->getId(), Attribute::string(key: 'test'));
+        $this->assertSame('test', $database->createAttribute($collection->getId(), Attribute::string(key: 'test'))->key);
     }
 
     public function testCollectionPermissionsCountThrowsException(): void

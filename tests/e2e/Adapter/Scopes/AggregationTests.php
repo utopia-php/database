@@ -59,7 +59,7 @@ trait AggregationTests
             return;
         }
 
-        if ($database->exists($database->getDatabase(), $collection)) {
+        if ($database->collectionExists($collection)) {
             self::$createdProductCollections[$collection] = true;
             return;
         }
@@ -96,7 +96,7 @@ trait AggregationTests
 
     private function createOrders(Database $database, string $collection = 'agg_orders'): void
     {
-        if ($database->exists($database->getDatabase(), $collection)) {
+        if ($database->collectionExists($collection)) {
             $database->deleteCollection($collection);
         }
 
@@ -133,7 +133,7 @@ trait AggregationTests
 
     private function createCustomers(Database $database, string $collection = 'agg_customers'): void
     {
-        if ($database->exists($database->getDatabase(), $collection)) {
+        if ($database->collectionExists($collection)) {
             $database->deleteCollection($collection);
         }
 
@@ -164,7 +164,7 @@ trait AggregationTests
 
     private function createReviews(Database $database, string $collection = 'agg_reviews'): void
     {
-        if ($database->exists($database->getDatabase(), $collection)) {
+        if ($database->collectionExists($collection)) {
             $database->deleteCollection($collection);
         }
 
@@ -206,7 +206,7 @@ trait AggregationTests
     private function cleanupAggCollections(Database $database, array $collections): void
     {
         foreach ($collections as $col) {
-            if ($database->exists($database->getDatabase(), $col)) {
+            if ($database->collectionExists($col)) {
                 $database->deleteCollection($col);
             }
         }
@@ -283,7 +283,7 @@ trait AggregationTests
         }
 
         $col = 'cnt_empty';
-        if ($database->exists($database->getDatabase(), $col)) {
+        if ($database->collectionExists($col)) {
             $database->deleteCollection($col);
         }
         $database->createCollection(Collection::create(id: $col, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]));
@@ -1687,7 +1687,7 @@ trait AggregationTests
         }
 
         $collection = 'join_cap';
-        if ($database->exists($database->getDatabase(), $collection)) {
+        if ($database->collectionExists($collection)) {
             $database->deleteCollection($collection);
         }
         $database->createCollection(Collection::create(id: $collection, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]));
@@ -1854,7 +1854,7 @@ trait AggregationTests
         }
 
         $collection = 'null_bitwise_inputs';
-        if ($database->exists($database->getDatabase(), $collection)) {
+        if ($database->collectionExists($collection)) {
             $database->deleteCollection($collection);
         }
         $database->createCollection(Collection::create(id: $collection, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]));
@@ -2043,7 +2043,7 @@ trait AggregationTests
 
     private function createScores(Database $database, string $collection): void
     {
-        if ($database->exists($database->getDatabase(), $collection)) {
+        if ($database->collectionExists($collection)) {
             $database->deleteCollection($collection);
         }
 

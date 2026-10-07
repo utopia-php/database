@@ -50,12 +50,12 @@ trait OneToManyTests
             if ($attribute->key === 'albums') {
                 $this->assertEquals(ColumnType::Relationship, $attribute->type);
                 $this->assertEquals('albums', $attribute->key);
-                $this->assertEquals('albums', $attribute->key);
-                $options = $attribute->options ?? [];
-                $this->assertEquals('album', $options['relatedCollection'] ?? null);
-                $this->assertEquals(RelationshipType::OneToMany->value, $options['relationType'] ?? null);
-                $this->assertEquals(false, $options['twoWay'] ?? null);
-                $this->assertEquals('artist', $options['twoWayKey'] ?? null);
+                $relationship = $attribute->relationship;
+                $this->assertNotNull($relationship);
+                $this->assertSame('album', $relationship->relatedCollection);
+                $this->assertSame(RelationshipType::OneToMany, $relationship->type);
+                $this->assertSame(false, $relationship->twoWay);
+                $this->assertSame('artist', $relationship->twoWayKey);
             }
         }
 
@@ -417,12 +417,12 @@ trait OneToManyTests
             if ($attribute->key === 'accounts') {
                 $this->assertEquals(ColumnType::Relationship, $attribute->type);
                 $this->assertEquals('accounts', $attribute->key);
-                $this->assertEquals('accounts', $attribute->key);
-                $options = $attribute->options ?? [];
-                $this->assertEquals('account', $options['relatedCollection'] ?? null);
-                $this->assertEquals(RelationshipType::OneToMany->value, $options['relationType'] ?? null);
-                $this->assertEquals(true, $options['twoWay'] ?? null);
-                $this->assertEquals('customer', $options['twoWayKey'] ?? null);
+                $relationship = $attribute->relationship;
+                $this->assertNotNull($relationship);
+                $this->assertSame('account', $relationship->relatedCollection);
+                $this->assertSame(RelationshipType::OneToMany, $relationship->type);
+                $this->assertSame(true, $relationship->twoWay);
+                $this->assertSame('customer', $relationship->twoWayKey);
             }
         }
 
@@ -432,12 +432,12 @@ trait OneToManyTests
             if ($attribute->key === 'customer') {
                 $this->assertEquals(ColumnType::Relationship, $attribute->type);
                 $this->assertEquals('customer', $attribute->key);
-                $this->assertEquals('customer', $attribute->key);
-                $options = $attribute->options ?? [];
-                $this->assertEquals('customer', $options['relatedCollection'] ?? null);
-                $this->assertEquals(RelationshipType::OneToMany->value, $options['relationType'] ?? null);
-                $this->assertEquals(true, $options['twoWay'] ?? null);
-                $this->assertEquals('accounts', $options['twoWayKey'] ?? null);
+                $relationship = $attribute->relationship;
+                $this->assertNotNull($relationship);
+                $this->assertSame('customer', $relationship->relatedCollection);
+                $this->assertSame(RelationshipType::OneToMany, $relationship->type);
+                $this->assertSame(true, $relationship->twoWay);
+                $this->assertSame('accounts', $relationship->twoWayKey);
             }
         }
 
@@ -1532,7 +1532,9 @@ trait OneToManyTests
 
         $database->deleteRelationship($two, $one);
 
-        $database->createRelationship($one, Relationship::oneToMany(relatedCollection: $two));
+        $relationship = $database->createRelationship($one, Relationship::oneToMany(relatedCollection: $two));
+
+        $this->assertSame($two, $relationship->relatedCollection);
 
         $database->deleteCollection($one);
         $database->deleteCollection($two);
@@ -1573,7 +1575,9 @@ trait OneToManyTests
 
         $database->deleteRelationship($one, $two);
 
-        $database->createRelationship($one, Relationship::oneToMany(relatedCollection: $two, twoWay: true));
+        $relationship = $database->createRelationship($one, Relationship::oneToMany(relatedCollection: $two, twoWay: true));
+
+        $this->assertSame($two, $relationship->relatedCollection);
 
         $database->deleteCollection($one);
         $database->deleteCollection($two);
@@ -1614,7 +1618,9 @@ trait OneToManyTests
 
         $database->deleteRelationship($two, $one);
 
-        $database->createRelationship($one, Relationship::oneToMany(relatedCollection: $two, twoWay: true));
+        $relationship = $database->createRelationship($one, Relationship::oneToMany(relatedCollection: $two, twoWay: true));
+
+        $this->assertSame($two, $relationship->relatedCollection);
 
         $database->deleteCollection($one);
         $database->deleteCollection($two);
@@ -1655,7 +1661,9 @@ trait OneToManyTests
 
         $database->deleteRelationship($one, $two);
 
-        $database->createRelationship($one, Relationship::oneToMany(relatedCollection: $two));
+        $relationship = $database->createRelationship($one, Relationship::oneToMany(relatedCollection: $two));
+
+        $this->assertSame($two, $relationship->relatedCollection);
 
         $database->deleteCollection($one);
         $database->deleteCollection($two);

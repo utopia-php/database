@@ -50,14 +50,14 @@ trait ManyToManyTests
 
         foreach ($collection->attributes() as $attribute) {
             if ($attribute->key === 'songs') {
-                $options = $attribute->options ?? [];
+                $relationship = $attribute->relationship;
+                $this->assertNotNull($relationship);
                 $this->assertEquals(ColumnType::Relationship, $attribute->type);
                 $this->assertEquals('songs', $attribute->key);
-                $this->assertEquals('songs', $attribute->key);
-                $this->assertEquals('song', $options['relatedCollection'] ?? null);
-                $this->assertEquals(RelationshipType::ManyToMany->value, $options['relationType'] ?? null);
-                $this->assertEquals(false, $options['twoWay'] ?? null);
-                $this->assertEquals('playlist', $options['twoWayKey'] ?? null);
+                $this->assertSame('song', $relationship->relatedCollection);
+                $this->assertSame(RelationshipType::ManyToMany, $relationship->type);
+                $this->assertSame(false, $relationship->twoWay);
+                $this->assertSame('playlist', $relationship->twoWayKey);
             }
         }
 
@@ -372,14 +372,14 @@ trait ManyToManyTests
         $collection = $database->getCollection('students');
         foreach ($collection->attributes() as $attribute) {
             if ($attribute->key === 'students') {
-                $options = $attribute->options ?? [];
+                $relationship = $attribute->relationship;
+                $this->assertNotNull($relationship);
                 $this->assertEquals(ColumnType::Relationship, $attribute->type);
                 $this->assertEquals('students', $attribute->key);
-                $this->assertEquals('students', $attribute->key);
-                $this->assertEquals('students', $options['relatedCollection'] ?? null);
-                $this->assertEquals(RelationshipType::ManyToMany->value, $options['relationType'] ?? null);
-                $this->assertEquals(true, $options['twoWay'] ?? null);
-                $this->assertEquals('classes', $options['twoWayKey'] ?? null);
+                $this->assertSame('students', $relationship->relatedCollection);
+                $this->assertSame(RelationshipType::ManyToMany, $relationship->type);
+                $this->assertSame(true, $relationship->twoWay);
+                $this->assertSame('classes', $relationship->twoWayKey);
             }
         }
 
@@ -387,14 +387,14 @@ trait ManyToManyTests
         $collection = $database->getCollection('classes');
         foreach ($collection->attributes() as $attribute) {
             if ($attribute->key === 'classes') {
-                $options = $attribute->options ?? [];
+                $relationship = $attribute->relationship;
+                $this->assertNotNull($relationship);
                 $this->assertEquals(ColumnType::Relationship, $attribute->type);
                 $this->assertEquals('classes', $attribute->key);
-                $this->assertEquals('classes', $attribute->key);
-                $this->assertEquals('classes', $options['relatedCollection'] ?? null);
-                $this->assertEquals(RelationshipType::ManyToMany->value, $options['relationType'] ?? null);
-                $this->assertEquals(true, $options['twoWay'] ?? null);
-                $this->assertEquals('students', $options['twoWayKey'] ?? null);
+                $this->assertSame('classes', $relationship->relatedCollection);
+                $this->assertSame(RelationshipType::ManyToMany, $relationship->type);
+                $this->assertSame(true, $relationship->twoWay);
+                $this->assertSame('students', $relationship->twoWayKey);
             }
         }
 
@@ -1328,7 +1328,9 @@ trait ManyToManyTests
 
         $database->deleteRelationship($two, $one);
 
-        $database->createRelationship($one, Relationship::manyToMany(relatedCollection: $two));
+        $relationship = $database->createRelationship($one, Relationship::manyToMany(relatedCollection: $two));
+
+        $this->assertSame($two, $relationship->relatedCollection);
 
         $database->deleteCollection($one);
         $database->deleteCollection($two);
@@ -1369,7 +1371,9 @@ trait ManyToManyTests
 
         $database->deleteRelationship($one, $two);
 
-        $database->createRelationship($one, Relationship::manyToMany(relatedCollection: $two, twoWay: true));
+        $relationship = $database->createRelationship($one, Relationship::manyToMany(relatedCollection: $two, twoWay: true));
+
+        $this->assertSame($two, $relationship->relatedCollection);
 
         $database->deleteCollection($one);
         $database->deleteCollection($two);
@@ -1410,7 +1414,9 @@ trait ManyToManyTests
 
         $database->deleteRelationship($two, $one);
 
-        $database->createRelationship($one, Relationship::manyToMany(relatedCollection: $two, twoWay: true));
+        $relationship = $database->createRelationship($one, Relationship::manyToMany(relatedCollection: $two, twoWay: true));
+
+        $this->assertSame($two, $relationship->relatedCollection);
 
         $database->deleteCollection($one);
         $database->deleteCollection($two);
@@ -1451,7 +1457,9 @@ trait ManyToManyTests
 
         $database->deleteRelationship($one, $two);
 
-        $database->createRelationship($one, Relationship::manyToMany(relatedCollection: $two));
+        $relationship = $database->createRelationship($one, Relationship::manyToMany(relatedCollection: $two));
+
+        $this->assertSame($two, $relationship->relatedCollection);
 
         $database->deleteCollection($one);
         $database->deleteCollection($two);
@@ -2491,7 +2499,7 @@ trait ManyToManyTests
         try {
             $database->createDocument($books, new Document(['$id' => 'dune', 'authors' => [new Document(['$id' => 'herbert'])]]));
 
-            $database->updateRelationship($books, 'authors', new RelationshipUpdate(twoWayKey: 'works'));
+            $this->assertSame('works', $database->updateRelationship($books, 'authors', new RelationshipUpdate(twoWayKey: 'works'))->twoWayKey);
 
             $this->assertSame(['herbert'], $this->relatedDocumentIds($database, $books, 'dune', 'authors'));
 
@@ -2500,7 +2508,7 @@ trait ManyToManyTests
             $this->assertSame(['austen', 'herbert'], $this->relatedDocumentIds($database, $books, 'emma', 'authors'));
             $this->assertSame(['herbert'], $this->relatedDocumentIds($database, $books, 'dune', 'authors'));
 
-            $database->updateRelationship($books, 'authors', new RelationshipUpdate(key: 'writers'));
+            $this->assertSame('writers', $database->updateRelationship($books, 'authors', new RelationshipUpdate(key: 'writers'))->key);
 
             $this->assertSame(['austen', 'herbert'], $this->relatedDocumentIds($database, $books, 'emma', 'writers'));
         } finally {
@@ -2528,7 +2536,7 @@ trait ManyToManyTests
         try {
             $database->createDocument($books, new Document(['$id' => 'dune', 'authors' => [new Document(['$id' => 'herbert'])]]));
 
-            $database->updateRelationship($authors, 'books', new RelationshipUpdate(key: 'works'));
+            $this->assertSame('works', $database->updateRelationship($authors, 'books', new RelationshipUpdate(key: 'works'))->key);
 
             $this->assertSame(['dune'], $this->relatedDocumentIds($database, $authors, 'herbert', 'works'));
             $this->assertSame(['herbert'], $this->relatedDocumentIds($database, $books, 'dune', 'authors'));

@@ -90,10 +90,10 @@ trait Relationships
         RelationSide $side = RelationSide::Parent,
         int $maxAttempts = 3
     ): void {
-        $adapter = $this->adapter;
-        if (! $adapter->hasFeature(Feature\Relationships::class)) {
+        if (! $this->adapterHasFeature(Feature\Relationships::class)) {
             throw new DatabaseException('Adapter does not support relationships');
         }
+        $adapter = $this->adapter;
 
         $relationshipModel = new Relationship(
             collection: $collectionId,
@@ -128,7 +128,7 @@ trait Relationships
     public function createRelationship(
         Relationship $relationship
     ): bool {
-        if (! $this->adapter->hasFeature(Feature\Relationships::class)) {
+        if (! $this->adapterHasFeature(Feature\Relationships::class)) {
             throw new DatabaseException('Adapter does not support relationships');
         }
 
@@ -419,7 +419,7 @@ trait Relationships
         ?bool $twoWay = null,
         ?ForeignKeyAction $onDelete = null
     ): bool {
-        if (! $this->adapter->hasFeature(Feature\Relationships::class)) {
+        if (! $this->adapterHasFeature(Feature\Relationships::class)) {
             throw new DatabaseException('Adapter does not support relationships');
         }
 
@@ -499,7 +499,7 @@ trait Relationships
                 // Check if the rename already happened in schema (orphan from prior
                 // partial failure where adapter succeeded but metadata+rollback failed).
                 // If the new column names already exist, the prior rename completed.
-                if ($this->adapter->hasFeature(Feature\SchemaAttributes::class)) {
+                if ($this->adapterHasFeature(Feature\SchemaAttributes::class)) {
                     $schemaAttributes = $this->getSchemaAttributes($collection->getId());
                     $filteredNewKey = $this->adapter->filter($actualNewKey);
                     $newKeyExists = false;
@@ -596,7 +596,7 @@ trait Relationships
                 }
             }
 
-            if ($adapterUpdated && $this->adapter->hasFeature(Feature\Relationships::class)) {
+            if ($adapterUpdated && $this->adapterHasFeature(Feature\Relationships::class)) {
                 try {
                     $renamed = new Relationship(
                         collection: $collection->getId(),
@@ -689,7 +689,7 @@ trait Relationships
                     throw new RelationshipException('Invalid relationship type.');
             }
         } catch (Throwable $error) {
-            if ($adapterUpdated && $this->adapter->hasFeature(Feature\Relationships::class)) {
+            if ($adapterUpdated && $this->adapterHasFeature(Feature\Relationships::class)) {
                 try {
                     $renamed = new Relationship(
                         collection: $collection->getId(),
@@ -794,7 +794,7 @@ trait Relationships
      */
     public function deleteRelationship(string $collection, string $id): bool
     {
-        if (! $this->adapter->hasFeature(Feature\Relationships::class)) {
+        if (! $this->adapterHasFeature(Feature\Relationships::class)) {
             throw new DatabaseException('Adapter does not support relationships');
         }
 

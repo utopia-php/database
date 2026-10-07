@@ -5,8 +5,8 @@ namespace Utopia\Database;
 /**
  * Defines the set of optional behavioral capabilities that a database adapter may support.
  *
- * Feature availability (method contracts) is expressed via Feature interfaces
- * on the adapter class and checked with instanceof, not capabilities.
+ * Feature availability (method contracts) is expressed via Feature interfaces on the adapter class and checked
+ * with Adapter::hasFeature(), not capabilities and not instanceof, which is false on a proxy such as Pool.
  */
 enum Capability
 {

@@ -114,11 +114,11 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     }
 
     /**
-     * @template T of object
+     * Whether this adapter offers the optional methods of a Feature interface. A proxy such as Pool answers for
+     * the adapter it delegates to without implementing the interface itself, so callers ask this rather than
+     * use instanceof.
      *
-     * @param  class-string<T>  $feature
-     *
-     * @phpstan-assert-if-true T $this
+     * @param  class-string  $feature
      */
     public function hasFeature(string $feature): bool
     {

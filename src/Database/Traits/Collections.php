@@ -150,7 +150,7 @@ trait Collections
                 $this->adapter->supports(Capability::IdenticalIndexes),
                 $this->adapter->supports(Capability::ObjectIndexes),
                 $this->adapter->supports(Capability::TrigramIndex),
-                $this->adapter->hasFeature(Feature\Spatial::class),
+                $this->adapterHasFeature(Feature\Spatial::class),
                 $this->adapter->supports(Capability::Index),
                 $this->adapter->supports(Capability::UniqueIndex),
                 $this->adapter->supports(Capability::Fulltext),

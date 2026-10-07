@@ -2079,7 +2079,7 @@ trait Documents
         ?callable $onError = null,
         int $batchSize = self::INSERT_BATCH_SIZE
     ): int {
-        if (! $this->adapter->hasFeature(Feature\Upserts::class)) {
+        if (! $this->adapterHasFeature(Feature\Upserts::class)) {
             throw new DatabaseException('Adapter does not support upserts');
         }
 
@@ -2325,7 +2325,7 @@ trait Documents
                 Event::DocumentsUpsert,
                 \array_map(static fn (Change $change): Document => $change->getNew(), $chunk),
                 function () use ($collection, $attribute, $chunk): array {
-                    if (! $this->adapter->hasFeature(Feature\Upserts::class)) {
+                    if (! $this->adapterHasFeature(Feature\Upserts::class)) {
                         throw new DatabaseException('Adapter does not support upserts');
                     }
 
@@ -4148,7 +4148,7 @@ trait Documents
     {
         $this->requireSkippedAuthorization();
 
-        if (! $this->adapter->hasFeature(Feature\RawQuery::class)) {
+        if (! $this->adapterHasFeature(Feature\RawQuery::class)) {
             throw new DatabaseException('Raw queries are not supported by this adapter');
         }
 
@@ -5307,7 +5307,7 @@ trait Documents
 
     private function castingBefore(Document $collection, Document $document): Document
     {
-        if ($this->adapter->hasFeature(Feature\InternalCasting::class)) {
+        if ($this->adapterHasFeature(Feature\InternalCasting::class)) {
             return $this->adapter->castingBefore($collection, $document);
         }
 
@@ -5316,7 +5316,7 @@ trait Documents
 
     private function castingAfter(Document $collection, Document $document): Document
     {
-        if ($this->adapter->hasFeature(Feature\InternalCasting::class)) {
+        if ($this->adapterHasFeature(Feature\InternalCasting::class)) {
             return $this->adapter->castingAfter($collection, $document);
         }
 
@@ -5329,7 +5329,7 @@ trait Documents
      */
     private function castingAfterDocuments(Document $collection, array $documents): array
     {
-        if ($documents !== [] && $this->adapter->hasFeature(Feature\InternalCasting::class)) {
+        if ($documents !== [] && $this->adapterHasFeature(Feature\InternalCasting::class)) {
             return $this->adapter->castingAfterDocuments($collection, $documents);
         }
 

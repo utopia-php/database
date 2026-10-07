@@ -3145,10 +3145,10 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         switch ($relationship->type) {
             case RelationshipType::OneToOne:
-                if ($newKey !== null && $key !== $newKey) {
+                if (($twoWay || $side === RelationshipSide::Parent) && $newKey !== null && $key !== $newKey) {
                     $sql = $renameColumn($name, $key, $newKey) . ';';
                 }
-                if ($twoWay && $newTwoWayKey !== null && $twoWayKey !== $newTwoWayKey) {
+                if (($twoWay || $side === RelationshipSide::Child) && $newTwoWayKey !== null && $twoWayKey !== $newTwoWayKey) {
                     $sql .= $renameColumn($relatedName, $twoWayKey, $newTwoWayKey) . ';';
                 }
                 break;

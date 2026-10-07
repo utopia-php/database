@@ -776,10 +776,10 @@ class Memory extends Adapter implements Feature\Relationships
 
         switch ($relationship->type) {
             case RelationshipType::OneToOne:
-                if ($newKey !== null && $newKey !== $key) {
+                if (($twoWay || $side === RelationshipSide::Parent) && $newKey !== null && $newKey !== $key) {
                     $this->renameDocumentField($collection, $key, $newKey);
                 }
-                if ($twoWay && $newTwoWayKey !== null && $newTwoWayKey !== $twoWayKey) {
+                if (($twoWay || $side === RelationshipSide::Child) && $newTwoWayKey !== null && $newTwoWayKey !== $twoWayKey) {
                     $this->renameDocumentField($relatedCollection, $twoWayKey, $newTwoWayKey);
                 }
                 break;

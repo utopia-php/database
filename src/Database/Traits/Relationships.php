@@ -635,7 +635,11 @@ trait Relationships
         $other = $twoWayKey !== $newTwoWayKey ? [[$relatedCollection, $twoWayKey, $newTwoWayKey]] : [];
 
         return match ($type) {
-            RelationshipType::OneToOne => [...$own, ...($twoWay ? $other : [])],
+            RelationshipType::OneToOne => match (true) {
+                $twoWay => [...$own, ...$other],
+                $side === RelationshipSide::Parent => $own,
+                default => $other,
+            },
             RelationshipType::OneToMany => $side === RelationshipSide::Parent ? $other : $own,
             RelationshipType::ManyToOne => $side === RelationshipSide::Parent ? $own : $other,
             RelationshipType::ManyToMany => $junction === null ? [] : [

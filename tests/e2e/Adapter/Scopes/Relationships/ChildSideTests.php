@@ -129,6 +129,80 @@ trait ChildSideTests
         $this->assertSame([], $this->childSideIds($database->getDocument($children, 'c1')->getAttribute('back')));
     }
 
+    public function testOneWayOneToOneChildSideUpdateRenamesTheParentKey(): void
+    {
+        $database = $this->getDatabase();
+        if (! $database->getAdapter()->hasFeature(Feature\Relationships::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        [$parents, $children] = $this->createOneWayOneToOne($database);
+
+        $updated = $database->updateRelationship($children, 'back', new RelationshipUpdate(key: 'owner', twoWayKey: 'item'));
+
+        $this->assertSame('owner', $updated->key);
+        $this->assertSame('item', $updated->twoWayKey);
+        $this->assertNull($this->childSideAttribute($database, $parents, 'related'));
+        $this->assertSame(RelationshipSide::Parent, $this->childSideAttribute($database, $parents, 'item')?->side);
+        $this->assertSame(RelationshipSide::Child, $this->childSideAttribute($database, $children, 'owner')?->side);
+        $this->assertSame(['c1'], $this->childSideIds($database->getDocument($parents, 'p1')->getAttribute('item')));
+
+        $database->updateDocument($parents, 'p1', new Document(['item' => null]));
+        $this->assertSame([], $this->childSideIds($database->getDocument($parents, 'p1')->getAttribute('item')));
+    }
+
+    public function testOneWayOneToOneChildSideDeleteRemovesTheParentKey(): void
+    {
+        $database = $this->getDatabase();
+        if (! $database->getAdapter()->hasFeature(Feature\Relationships::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        [$parents, $children] = $this->createOneWayOneToOne($database);
+
+        $database->deleteRelationship($children, 'back');
+
+        $this->assertNull($this->childSideAttribute($database, $children, 'back'));
+        $this->assertNull($this->childSideAttribute($database, $parents, 'related'));
+        $this->assertNull($database->getDocument($parents, 'p1')->getAttribute('related'));
+
+        $database->createRelationship($parents, Relationship::oneToOne($children, key: 'related', twoWayKey: 'back'));
+        $database->updateDocument($parents, 'p1', new Document(['related' => 'c1']));
+
+        $this->assertSame(['c1'], $this->childSideIds($database->getDocument($parents, 'p1')->getAttribute('related')));
+    }
+
+    /**
+     * Two collections related one-way one-to-one from the first under "related", the child side stored as "back",
+     * with the parent document linked to the child.
+     *
+     * @return array{string, string}
+     */
+    private function createOneWayOneToOne(Database $database): array
+    {
+        $parents = 'one_way_parents_'.ID::unique();
+        $children = 'one_way_children_'.ID::unique();
+        $permissions = [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+
+        $database->createCollection(Collection::create($parents, attributes: [Attribute::string('name', 64)], permissions: $permissions, documentSecurity: false));
+        $database->createCollection(Collection::create($children, attributes: [Attribute::string('name', 64)], permissions: $permissions, documentSecurity: false));
+        $database->createRelationship($parents, Relationship::oneToOne($children, key: 'related', twoWayKey: 'back'));
+
+        $database->createDocument($children, new Document(['$id' => 'c1', 'name' => 'child']));
+        $database->createDocument($parents, new Document(['$id' => 'p1', 'name' => 'parent', 'related' => 'c1']));
+
+        return [$parents, $children];
+    }
+
     /**
      * Two collections related two-way from the first, the parent, under the key "related", with the child side
      * stored as "back", and one document on each side linked to the other.

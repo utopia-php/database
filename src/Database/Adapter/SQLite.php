@@ -2552,10 +2552,10 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
 
         switch ($relationship->type) {
             case RelationshipType::OneToOne:
-                if ($newKey !== null && $key !== $newKey) {
+                if (($twoWay || $side === RelationshipSide::Parent) && $newKey !== null && $key !== $newKey) {
                     $statements[] = "ALTER TABLE {$table} RENAME COLUMN `{$key}` TO `{$newKey}`";
                 }
-                if ($twoWay && $newTwoWayKey !== null && $twoWayKey !== $newTwoWayKey) {
+                if (($twoWay || $side === RelationshipSide::Child) && $newTwoWayKey !== null && $twoWayKey !== $newTwoWayKey) {
                     $statements[] = "ALTER TABLE {$relatedTable} RENAME COLUMN `{$twoWayKey}` TO `{$newTwoWayKey}`";
                 }
                 break;

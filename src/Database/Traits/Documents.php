@@ -1824,7 +1824,6 @@ trait Documents
             $cacheTarget = $collection->getId() === self::METADATA ? $batch : $collection->getId();
             $found = $batch;
             $this->withMutation(Event::DocumentsUpdate, $cacheTarget, function () use ($collection, $updates, $decodedUpdates, $adapterUpdates, &$batch, $found, $currentPermissions) {
-                /** @var array<string, bool> $keepsPermissions */
                 $keepsPermissions = [];
                 foreach ($found as $index => $document) {
                     $skipPermissionsUpdate = true;
@@ -1873,13 +1872,11 @@ trait Documents
                     $batch[$index] = $this->castBefore($collection, $encoded);
                 }
 
-                /** @var array<string, true> $skipPermissions */
-                $skipPermissions = \array_filter($keepsPermissions);
                 $this->adapter->updateDocuments(
                     $collection,
                     $adapterUpdates,
                     $batch,
-                    $skipPermissions,
+                    \array_filter($keepsPermissions),
                 );
 
                 foreach ($batch as $document) {

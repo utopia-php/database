@@ -2,635 +2,339 @@
 
 namespace Utopia\Database;
 
-use Utopia\Database\Helpers\ID;
+use Utopia\Database\Exception\Index as IndexException;
+use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\IndexType;
-use Utopia\Query\Schema\Order;
 
-/**
- * Represents a database index with its type, target attributes, and configuration.
- *
- * @property string $key
- * @property IndexType $type
- * @property array<string> $attributes
- * @property array<int|null> $lengths
- * @property array<Order|null> $orders
- * @property int $ttl
- */
-class Index extends Document
+final readonly class Index
 {
     /**
-     * @param  array<string>  $attributes
-     * @param  array<int|null>  $lengths
-     * @param  array<Order|null>  $orders
+     * @param  list<string>  $attributes
+     * @param  list<?int>  $lengths
+     * @param  list<?OrderDirection>  $orders
      */
-    public function __construct(
-        string $key,
-        IndexType $type,
-        array $attributes = [],
-        array $lengths = [],
-        array $orders = [],
-        int $ttl = 1,
+    private function __construct(
+        public string $key,
+        public IndexType $type,
+        public array $attributes,
+        public array $lengths,
+        public array $orders,
+        public ?int $ttl,
     ) {
-        parent::__construct([
-            self::ID => $key,
-            'key' => $key,
-            'type' => $type->value,
-            'attributes' => $attributes,
-            'lengths' => $lengths,
-            'orders' => self::encodeOrders($orders),
-            'ttl' => $ttl,
-        ]);
     }
 
     /**
-     * @return (
-     *     $name is 'key' ? string :
-     *     $name is 'type' ? IndexType :
-     *     $name is 'attributes' ? array<string> :
-     *     $name is 'lengths' ? array<int|null> :
-     *     $name is 'orders' ? array<Order|null> :
-     *     $name is 'ttl' ? int :
-     *     mixed
-     * )
-     */
-    public function __get(string $name): mixed
-    {
-        return match ($name) {
-            'key' => $this->getKey(),
-            'type' => $this->getType(),
-            'attributes' => $this->getIndexedAttributes(),
-            'lengths' => $this->getLengths(),
-            'orders' => $this->getOrders(),
-            'ttl' => $this->getTtl(),
-            default => $this->getAttribute($name),
-        };
-    }
-
-    public function getKey(): string
-    {
-        /** @var string $key */
-        $key = $this->getAttribute('key', $this->getId());
-
-        return $key;
-    }
-
-    public function getType(): IndexType
-    {
-        $type = $this->getAttribute('type', IndexType::Key->value);
-        if ($type instanceof IndexType) {
-            return $type;
-        }
-
-        return IndexType::from(\is_string($type) ? $type : IndexType::Key->value);
-    }
-
-    /**
-     * @return array<string>
-     */
-    public function getIndexedAttributes(): array
-    {
-        $attributes = $this->getAttribute('attributes', []);
-        if (! \is_array($attributes)) {
-            return [];
-        }
-        /** @var array<string> $attributes */
-
-        return $attributes;
-    }
-
-    /**
-     * @return array<int|null>
-     */
-    public function getLengths(): array
-    {
-        $lengths = $this->getAttribute('lengths', []);
-        if (! \is_array($lengths)) {
-            return [];
-        }
-        /** @var array<int|null> $lengths */
-
-        return $lengths;
-    }
-
-    /**
-     * @param  array<int|null>  $lengths
-     */
-    public function setLengths(array $lengths): static
-    {
-        return $this->setAttribute('lengths', $lengths);
-    }
-
-    /**
-     * @return array<Order|null>
-     */
-    public function getOrders(): array
-    {
-        $stored = $this->getAttribute('orders', []);
-
-        return self::decodeOrders(\is_array($stored) ? $stored : []);
-    }
-
-    /**
-     * @param  array<mixed>  $orders
+     * @param  list<string>  $attributes
+     * @param  list<?int>  $lengths
+     * @param  list<?OrderDirection>  $orders
      *
-     * @throws \InvalidArgumentException When an order is neither an Order nor null
+     * @throws IndexException
      */
-    public function setOrders(array $orders): static
+    public static function key(string $key, array $attributes, array $lengths = [], array $orders = []): self
     {
-        return $this->setAttribute('orders', self::encodeOrders($orders));
-    }
-
-    public function getTtl(): int
-    {
-        /** @var int $ttl */
-        $ttl = $this->getAttribute('ttl', 1);
-
-        return $ttl;
-    }
-
-    public function __set(string $name, mixed $value): void
-    {
-        match ($name) {
-            'key' => $this->setAttribute('key', $value)->setAttribute(self::ID, $value),
-            'type' => $this->setAttribute('type', $value instanceof IndexType ? $value->value : $value),
-            'attributes' => $this->setAttribute('attributes', $value),
-            'lengths' => $this->setAttribute('lengths', $value),
-            'orders' => $this->setOrders(\is_array($value) ? $value : []),
-            'ttl' => $this->setAttribute('ttl', $value),
-            default => $this->setAttribute($name, $value),
-        };
-    }
-
-    public function __isset(string $name): bool
-    {
-        return match ($name) {
-            'key', 'type', 'attributes', 'lengths', 'orders', 'ttl' => true,
-            default => $this->offsetExists($name),
-        };
+        return self::make($key, IndexType::Key, $attributes, $lengths, $orders, null);
     }
 
     /**
-     * @param  array<string>  $attributes
-     * @param  array<int|null>  $lengths
-     * @param  array<Order|null>  $orders
-     */
-    public static function key(
-        string $key,
-        array $attributes = [],
-        array $lengths = [],
-        array $orders = [],
-        int $ttl = 1,
-    ): self {
-        return new self(
-            key: $key,
-            type: IndexType::Key,
-            attributes: $attributes,
-            lengths: $lengths,
-            orders: $orders,
-            ttl: $ttl,
-        );
-    }
-
-    /**
-     * @param  array<string>  $attributes
-     * @param  array<int|null>  $lengths
-     * @param  array<Order|null>  $orders
-     */
-    public static function index(
-        string $key,
-        array $attributes = [],
-        array $lengths = [],
-        array $orders = [],
-        int $ttl = 1,
-    ): self {
-        return new self(
-            key: $key,
-            type: IndexType::Index,
-            attributes: $attributes,
-            lengths: $lengths,
-            orders: $orders,
-            ttl: $ttl,
-        );
-    }
-
-    /**
-     * @param  array<string>  $attributes
-     * @param  array<int|null>  $lengths
-     * @param  array<Order|null>  $orders
-     */
-    public static function unique(
-        string $key,
-        array $attributes = [],
-        array $lengths = [],
-        array $orders = [],
-        int $ttl = 1,
-    ): self {
-        return new self(
-            key: $key,
-            type: IndexType::Unique,
-            attributes: $attributes,
-            lengths: $lengths,
-            orders: $orders,
-            ttl: $ttl,
-        );
-    }
-
-    /**
-     * @param  array<string>  $attributes
-     * @param  array<int|null>  $lengths
-     * @param  array<Order|null>  $orders
-     */
-    public static function fullText(
-        string $key,
-        array $attributes = [],
-        array $lengths = [],
-        array $orders = [],
-        int $ttl = 1,
-    ): self {
-        return new self(
-            key: $key,
-            type: IndexType::Fulltext,
-            attributes: $attributes,
-            lengths: $lengths,
-            orders: $orders,
-            ttl: $ttl,
-        );
-    }
-
-    /**
-     * @param  array<string>  $attributes
-     * @param  array<int|null>  $lengths
-     * @param  array<Order|null>  $orders
-     */
-    public static function spatial(
-        string $key,
-        array $attributes = [],
-        array $lengths = [],
-        array $orders = [],
-        int $ttl = 1,
-    ): self {
-        return new self(
-            key: $key,
-            type: IndexType::Spatial,
-            attributes: $attributes,
-            lengths: $lengths,
-            orders: $orders,
-            ttl: $ttl,
-        );
-    }
-
-    /**
-     * @param  array<string>  $attributes
-     * @param  array<int|null>  $lengths
-     * @param  array<Order|null>  $orders
-     */
-    public static function object(
-        string $key,
-        array $attributes = [],
-        array $lengths = [],
-        array $orders = [],
-        int $ttl = 1,
-    ): self {
-        return new self(
-            key: $key,
-            type: IndexType::Object,
-            attributes: $attributes,
-            lengths: $lengths,
-            orders: $orders,
-            ttl: $ttl,
-        );
-    }
-
-    /**
-     * @param  array<string>  $attributes
-     * @param  array<int|null>  $lengths
-     * @param  array<Order|null>  $orders
-     */
-    public static function hnswEuclidean(
-        string $key,
-        array $attributes = [],
-        array $lengths = [],
-        array $orders = [],
-        int $ttl = 1,
-    ): self {
-        return new self(
-            key: $key,
-            type: IndexType::HnswEuclidean,
-            attributes: $attributes,
-            lengths: $lengths,
-            orders: $orders,
-            ttl: $ttl,
-        );
-    }
-
-    /**
-     * @param  array<string>  $attributes
-     * @param  array<int|null>  $lengths
-     * @param  array<Order|null>  $orders
-     */
-    public static function hnswCosine(
-        string $key,
-        array $attributes = [],
-        array $lengths = [],
-        array $orders = [],
-        int $ttl = 1,
-    ): self {
-        return new self(
-            key: $key,
-            type: IndexType::HnswCosine,
-            attributes: $attributes,
-            lengths: $lengths,
-            orders: $orders,
-            ttl: $ttl,
-        );
-    }
-
-    /**
-     * @param  array<string>  $attributes
-     * @param  array<int|null>  $lengths
-     * @param  array<Order|null>  $orders
-     */
-    public static function hnswDot(
-        string $key,
-        array $attributes = [],
-        array $lengths = [],
-        array $orders = [],
-        int $ttl = 1,
-    ): self {
-        return new self(
-            key: $key,
-            type: IndexType::HnswDot,
-            attributes: $attributes,
-            lengths: $lengths,
-            orders: $orders,
-            ttl: $ttl,
-        );
-    }
-
-    /**
-     * @param  array<string>  $attributes
-     * @param  array<int|null>  $lengths
-     * @param  array<Order|null>  $orders
-     */
-    public static function trigram(
-        string $key,
-        array $attributes = [],
-        array $lengths = [],
-        array $orders = [],
-        int $ttl = 1,
-    ): self {
-        return new self(
-            key: $key,
-            type: IndexType::Trigram,
-            attributes: $attributes,
-            lengths: $lengths,
-            orders: $orders,
-            ttl: $ttl,
-        );
-    }
-
-    /**
-     * @param  array<string>  $attributes
-     * @param  array<int|null>  $lengths
-     * @param  array<Order|null>  $orders
-     */
-    public static function ttl(
-        string $key,
-        array $attributes = [],
-        array $lengths = [],
-        array $orders = [],
-        int $ttl = 1,
-    ): self {
-        return new self(
-            key: $key,
-            type: IndexType::Ttl,
-            attributes: $attributes,
-            lengths: $lengths,
-            orders: $orders,
-            ttl: $ttl,
-        );
-    }
-
-    /**
-     * Convert this index to a Document representation.
+     * @param  list<string>  $attributes
+     * @param  list<?int>  $lengths
+     * @param  list<?OrderDirection>  $orders
      *
-     * @return Document
+     * @throws IndexException
      */
-    public function toDocument(): Document
+    public static function unique(string $key, array $attributes, array $lengths = [], array $orders = []): self
     {
-        $key = $this->getKey();
-
-        return new Document([
-            Document::ID => ID::custom($key),
-            'key' => $key,
-            'type' => $this->getType()->value,
-            'attributes' => $this->getIndexedAttributes(),
-            'lengths' => $this->getLengths(),
-            'orders' => $this->getAttribute('orders', []),
-            'ttl' => $this->getTtl(),
-        ]);
+        return self::make($key, IndexType::Unique, $attributes, $lengths, $orders, null);
     }
 
     /**
-     * Create from an associative array (used by collection config files).
+     * @param  list<string>  $attributes
      *
+     * @throws IndexException
+     */
+    public static function fulltext(string $key, array $attributes): self
+    {
+        return self::make($key, IndexType::Fulltext, $attributes, [], [], null);
+    }
+
+    /**
+     * @param  list<string>  $attributes
+     *
+     * @throws IndexException
+     */
+    public static function trigram(string $key, array $attributes): self
+    {
+        return self::make($key, IndexType::Trigram, $attributes, [], [], null);
+    }
+
+    /**
+     * @throws IndexException
+     */
+    public static function spatial(string $key, string $attribute, ?OrderDirection $order = null): self
+    {
+        return self::make($key, IndexType::Spatial, [$attribute], [], $order === null ? [] : [$order], null);
+    }
+
+    /**
+     * @throws IndexException
+     */
+    public static function object(string $key, string $attribute): self
+    {
+        return self::make($key, IndexType::Object, [$attribute], [], [], null);
+    }
+
+    /**
+     * @throws IndexException
+     */
+    public static function hnswEuclidean(string $key, string $attribute): self
+    {
+        return self::make($key, IndexType::HnswEuclidean, [$attribute], [], [], null);
+    }
+
+    /**
+     * @throws IndexException
+     */
+    public static function hnswCosine(string $key, string $attribute): self
+    {
+        return self::make($key, IndexType::HnswCosine, [$attribute], [], [], null);
+    }
+
+    /**
+     * @throws IndexException
+     */
+    public static function hnswDot(string $key, string $attribute): self
+    {
+        return self::make($key, IndexType::HnswDot, [$attribute], [], [], null);
+    }
+
+    /**
+     * @throws IndexException
+     */
+    public static function ttl(string $key, string $attribute, int $ttl): self
+    {
+        return self::make($key, IndexType::Ttl, [$attribute], [], [], $ttl);
+    }
+
+    /**
+     * @throws IndexException
+     */
+    public static function fromDocument(Document $document): self
+    {
+        return self::hydrate(
+            $document->getAttribute('key', $document->getId()),
+            $document->getAttribute('type', IndexType::Key->value),
+            $document->getAttribute('attributes', []),
+            $document->getAttribute('lengths', []),
+            $document->getAttribute('orders', []),
+            $document->getAttribute('ttl'),
+        );
+    }
+
+    /**
      * @param  array<string, mixed>  $data
+     *
+     * @throws IndexException
      */
     public static function fromArray(array $data): self
     {
-        /** @var IndexType|string $type */
-        $type = $data['type'] ?? 'key';
-        /** @var string $key */
-        $key = $data[Document::ID] ?? $data['key'] ?? '';
-        /** @var array<string> $attributes */
-        $attributes = $data['attributes'] ?? [];
-        /** @var array<int|null> $lengths */
-        $lengths = $data['lengths'] ?? [];
-        /** @var array<mixed> $orders */
-        $orders = $data['orders'] ?? [];
-        /** @var int $ttl */
-        $ttl = $data['ttl'] ?? 1;
-
-        return self::make(
-            key: $key,
-            type: $type instanceof IndexType ? $type : IndexType::from((string) $type),
-            attributes: $attributes,
-            lengths: $lengths,
-            orders: self::decodeOrders($orders),
-            ttl: $ttl,
+        return self::hydrate(
+            $data['key'] ?? $data[Document::ID] ?? '',
+            $data['type'] ?? IndexType::Key->value,
+            $data['attributes'] ?? [],
+            $data['lengths'] ?? [],
+            $data['orders'] ?? [],
+            $data['ttl'] ?? null,
         );
     }
 
-    public static function fromDocument(Document $document): self
+    public function toDocument(): Document
     {
-        /** @var string $key */
-        $key = $document->getAttribute('key', $document->getId());
-        $type = $document->getAttribute('type', IndexType::Key->value);
-        /** @var array<string> $attributes */
-        $attributes = $document->getAttribute('attributes', []);
-        /** @var array<int> $lengths */
-        $lengths = $document->getAttribute('lengths', []);
-        /** @var array<mixed> $orders */
-        $orders = $document->getAttribute('orders', []);
-        /** @var int $ttl */
-        $ttl = $document->getAttribute('ttl', 1);
+        $data = [
+            Document::ID => $this->key,
+            'key' => $this->key,
+            'type' => $this->type->value,
+            'attributes' => $this->attributes,
+        ];
 
-        return self::make(
+        if ($this->type !== IndexType::Fulltext) {
+            $data['lengths'] = $this->lengths;
+        }
+
+        if ($this->type !== IndexType::Fulltext && $this->type !== IndexType::Ttl) {
+            $data['orders'] = \array_map(
+                static fn (?OrderDirection $order): ?string => $order?->value,
+                $this->orders,
+            );
+        }
+
+        if ($this->type === IndexType::Ttl) {
+            $data['ttl'] = $this->ttl;
+        }
+
+        return new Document($data);
+    }
+
+    public function withKey(string $key): self
+    {
+        return clone($this, ['key' => $key]);
+    }
+
+    /**
+     * @param  list<?int>  $lengths
+     *
+     * @throws IndexException
+     */
+    public function withLengths(array $lengths): self
+    {
+        return clone($this, ['lengths' => self::lengths($lengths)]);
+    }
+
+    /**
+     * @param  list<?OrderDirection>  $orders
+     *
+     * @throws IndexException
+     */
+    public function withOrders(array $orders): self
+    {
+        return clone($this, ['orders' => self::orders($orders)]);
+    }
+
+    /**
+     * @param  array<mixed>  $attributes
+     * @param  array<mixed>  $lengths
+     * @param  array<mixed>  $orders
+     *
+     * @throws IndexException
+     */
+    private static function make(string $key, IndexType $type, array $attributes, array $lengths, array $orders, mixed $ttl): self
+    {
+        if ($type === IndexType::Index) {
+            $type = IndexType::Key;
+        }
+
+        if ($type === IndexType::Ttl && (! \is_int($ttl) || $ttl < 1)) {
+            throw new IndexException('TTL must be at least 1 second');
+        }
+
+        return new self(
             key: $key,
-            type: $type instanceof IndexType ? $type : IndexType::tryFrom(\is_string($type) ? $type : '') ?? IndexType::Key,
-            attributes: $attributes,
-            lengths: $lengths,
-            orders: self::decodeOrders($orders),
-            ttl: $ttl,
+            type: $type,
+            attributes: self::attributes($attributes),
+            lengths: self::lengths($lengths),
+            orders: self::orders($orders),
+            ttl: $type === IndexType::Ttl && \is_int($ttl) ? $ttl : null,
         );
     }
 
     /**
-     * @param  array<string>  $attributes
-     * @param  array<int|null>  $lengths
-     * @param  array<Order|null>  $orders
+     * @throws IndexException
      */
-    private static function make(
-        string $key,
-        IndexType $type,
-        array $attributes,
-        array $lengths,
-        array $orders,
-        int $ttl,
-    ): self {
-        return match ($type) {
-            IndexType::Key => self::key(
-                key: $key,
-                attributes: $attributes,
-                lengths: $lengths,
-                orders: $orders,
-                ttl: $ttl,
-            ),
-            IndexType::Index => self::index(
-                key: $key,
-                attributes: $attributes,
-                lengths: $lengths,
-                orders: $orders,
-                ttl: $ttl,
-            ),
-            IndexType::Unique => self::unique(
-                key: $key,
-                attributes: $attributes,
-                lengths: $lengths,
-                orders: $orders,
-                ttl: $ttl,
-            ),
-            IndexType::Fulltext => self::fullText(
-                key: $key,
-                attributes: $attributes,
-                lengths: $lengths,
-                orders: $orders,
-                ttl: $ttl,
-            ),
-            IndexType::Spatial => self::spatial(
-                key: $key,
-                attributes: $attributes,
-                lengths: $lengths,
-                orders: $orders,
-                ttl: $ttl,
-            ),
-            IndexType::Object => self::object(
-                key: $key,
-                attributes: $attributes,
-                lengths: $lengths,
-                orders: $orders,
-                ttl: $ttl,
-            ),
-            IndexType::HnswEuclidean => self::hnswEuclidean(
-                key: $key,
-                attributes: $attributes,
-                lengths: $lengths,
-                orders: $orders,
-                ttl: $ttl,
-            ),
-            IndexType::HnswCosine => self::hnswCosine(
-                key: $key,
-                attributes: $attributes,
-                lengths: $lengths,
-                orders: $orders,
-                ttl: $ttl,
-            ),
-            IndexType::HnswDot => self::hnswDot(
-                key: $key,
-                attributes: $attributes,
-                lengths: $lengths,
-                orders: $orders,
-                ttl: $ttl,
-            ),
-            IndexType::Trigram => self::trigram(
-                key: $key,
-                attributes: $attributes,
-                lengths: $lengths,
-                orders: $orders,
-                ttl: $ttl,
-            ),
-            IndexType::Ttl => self::ttl(
-                key: $key,
-                attributes: $attributes,
-                lengths: $lengths,
-                orders: $orders,
-                ttl: $ttl,
-            ),
-        };
+    private static function hydrate(mixed $key, mixed $type, mixed $attributes, mixed $lengths, mixed $orders, mixed $ttl): self
+    {
+        if (! \is_string($key)) {
+            throw new IndexException('Index key must be a string');
+        }
+
+        $type = $type instanceof IndexType ? $type : IndexType::tryFrom(\is_string($type) ? $type : '');
+        if ($type === null) {
+            throw new IndexException('Unknown index type for index "'.$key.'"');
+        }
+
+        return self::make(
+            $key,
+            $type,
+            \is_array($attributes) ? $attributes : [],
+            \is_array($lengths) ? \array_map(self::storedLength(...), $lengths) : [],
+            \is_array($orders) ? \array_map(self::storedOrder(...), $orders) : [],
+            $type === IndexType::Ttl ? self::storedLength($ttl) : null,
+        );
     }
 
-    public static function direction(?Order $order): string
+    private static function storedLength(mixed $length): mixed
     {
-        return $order === null ? '' : $order->value;
+        return \is_string($length) && \ctype_digit($length) ? (int) $length : $length;
+    }
+
+    /**
+     * @throws IndexException
+     */
+    private static function storedOrder(mixed $order): mixed
+    {
+        if ($order instanceof OrderDirection || $order === null) {
+            return $order;
+        }
+
+        if ($order instanceof \BackedEnum) {
+            $order = $order->value;
+        }
+
+        if ($order === '') {
+            return null;
+        }
+
+        if (! \is_string($order)) {
+            return $order;
+        }
+
+        return OrderDirection::tryFrom(\strtoupper($order))
+            ?? throw new IndexException('Unknown index order "'.$order.'"');
+    }
+
+    /**
+     * @param  array<mixed>  $attributes
+     * @return list<string>
+     *
+     * @throws IndexException
+     */
+    private static function attributes(array $attributes): array
+    {
+        $list = [];
+        foreach ($attributes as $attribute) {
+            if (! \is_string($attribute)) {
+                throw new IndexException('Index attributes must be strings');
+            }
+            $list[] = $attribute;
+        }
+
+        return $list;
+    }
+
+    /**
+     * @param  array<mixed>  $lengths
+     * @return list<?int>
+     *
+     * @throws IndexException
+     */
+    private static function lengths(array $lengths): array
+    {
+        $list = [];
+        foreach ($lengths as $length) {
+            if ($length !== null && ! \is_int($length)) {
+                throw new IndexException('Index lengths must be integers or null');
+            }
+            $list[] = $length;
+        }
+
+        return $list;
     }
 
     /**
      * @param  array<mixed>  $orders
-     * @return array<string|null>
+     * @return list<?OrderDirection>
+     *
+     * @throws IndexException
      */
-    private static function encodeOrders(array $orders): array
+    private static function orders(array $orders): array
     {
-        $encoded = [];
-
+        $list = [];
         foreach ($orders as $order) {
-            if ($order instanceof Order) {
-                $encoded[] = $order->value;
-                continue;
-            }
-
-            if ($order === null) {
-                $encoded[] = null;
-                continue;
-            }
-
-            throw new \InvalidArgumentException('Index order must be Order or null');
+            $list[] = match (true) {
+                $order === OrderDirection::Random => throw new IndexException('Index orders cannot be random'),
+                $order === null, $order instanceof OrderDirection => $order,
+                default => throw new IndexException('Index orders must be OrderDirection cases or null'),
+            };
         }
 
-        return $encoded;
-    }
-
-    /**
-     * @param  array<mixed>  $orders
-     * @return array<Order|null>
-     */
-    private static function decodeOrders(array $orders): array
-    {
-        $decoded = [];
-
-        foreach ($orders as $order) {
-            if ($order instanceof Order || $order === null) {
-                $decoded[] = $order;
-                continue;
-            }
-
-            if (\is_string($order)) {
-                $decoded[] = Order::from(\strtoupper($order));
-                continue;
-            }
-
-            throw new \InvalidArgumentException('Index order must be Order or null');
-        }
-
-        return $decoded;
+        return $list;
     }
 }

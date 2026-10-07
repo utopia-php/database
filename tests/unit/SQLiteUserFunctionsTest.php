@@ -4,8 +4,8 @@ namespace Tests\Unit;
 
 use ErrorException;
 use PDO;
-use PDOException;
 use Pdo\Sqlite as PdoSqlite;
+use PDOException;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use Utopia\Database\Adapter\SQLite;

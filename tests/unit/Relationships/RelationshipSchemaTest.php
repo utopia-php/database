@@ -24,11 +24,11 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Index;
-use Utopia\Database\Schema\Index as SchemaIndex;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationshipSide;
 use Utopia\Database\RelationshipUpdate;
+use Utopia\Database\Schema\Index as SchemaIndex;
 use Utopia\Database\Validator\Authorization;
 
 final class RelationshipSchemaTest extends TestCase

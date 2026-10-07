@@ -10,6 +10,7 @@ use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -24,6 +25,9 @@ class AttributeValidationTest extends TestCase
     private Adapter&Stub $adapter;
 
     private Database $database;
+
+    /** @var list<Document> */
+    private array $metadataWrites = [];
 
     protected function setUp(): void
     {
@@ -123,7 +127,21 @@ class AttributeValidationTest extends TestCase
                 return new Document();
             }
         );
-        $this->adapter->method('updateDocument')->willReturnArgument(2);
+        $this->adapter->method('updateDocument')->willReturnCallback(function (Document $collection, string $id, Document $document): Document {
+            $this->metadataWrites[] = $document;
+
+            return $document;
+        });
+    }
+
+    private function lastMetadataWrite(): Collection
+    {
+        $write = \end($this->metadataWrites);
+        if ($write === false) {
+            $this->fail('no metadata was written');
+        }
+
+        return Collection::fromDocument($write);
     }
 
     public function testCreateAttributeOnMissingCollectionThrows(): void
@@ -326,8 +344,9 @@ class AttributeValidationTest extends TestCase
         $this->setupCollection('testCol', $existingAttrs);
         $this->adapter->method('deleteAttribute')->willReturn(true);
 
-        $this->expectNotToPerformAssertions();
         $this->database->deleteAttribute('testCol', 'name');
+
+        $this->assertSame([], $this->lastMetadataWrite()->attributes());
     }
 
     public function testDeleteAttributeThrowsOnNotFound(): void

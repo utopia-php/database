@@ -152,49 +152,46 @@ trait CollectionTests
 
         $collection = $database->createCollection(Collection::create(id: 'withSchema', attributes: $attributes, indexes: $indexes));
 
-        $this->assertEquals('withSchema', $collection->getId());
+        $this->assertSame('withSchema', $collection->getId());
 
         $this->assertCount(4, $collection->attributes());
-        $this->assertEquals('attribute1', $collection->attributes()[0]->key);
         $this->assertSame('attribute1', $collection->attributes()[0]->key);
-        $this->assertEquals(ColumnType::String, $collection->attributes()[0]->type);
-        $this->assertEquals('attribute2', $collection->attributes()[1]->key);
-        $this->assertEquals(ColumnType::Integer, $collection->attributes()[1]->type);
-        $this->assertEquals('attribute3', $collection->attributes()[2]->key);
-        $this->assertEquals(ColumnType::Boolean, $collection->attributes()[2]->type);
-        $this->assertEquals('attribute4', $collection->attributes()[3]->key);
-        $this->assertEquals(ColumnType::Id, $collection->attributes()[3]->type);
+        $this->assertSame(ColumnType::String, $collection->attributes()[0]->type);
+        $this->assertSame('attribute2', $collection->attributes()[1]->key);
+        $this->assertSame(ColumnType::Integer, $collection->attributes()[1]->type);
+        $this->assertSame('attribute3', $collection->attributes()[2]->key);
+        $this->assertSame(ColumnType::Boolean, $collection->attributes()[2]->type);
+        $this->assertSame('attribute4', $collection->attributes()[3]->key);
+        $this->assertSame(ColumnType::Id, $collection->attributes()[3]->type);
 
         $this->assertCount(4, $collection->indexes());
-        $this->assertEquals('index1', $collection->indexes()[0]->key);
         $this->assertSame('index1', $collection->indexes()[0]->key);
-        $this->assertEquals(IndexType::Key, $collection->indexes()[0]->type);
-        $this->assertEquals('index2', $collection->indexes()[1]->key);
-        $this->assertEquals(IndexType::Key, $collection->indexes()[1]->type);
-        $this->assertEquals('index3', $collection->indexes()[2]->key);
-        $this->assertEquals(IndexType::Key, $collection->indexes()[2]->type);
-        $this->assertEquals('index4', $collection->indexes()[3]->key);
-        $this->assertEquals(IndexType::Key, $collection->indexes()[3]->type);
+        $this->assertSame(IndexType::Key, $collection->indexes()[0]->type);
+        $this->assertSame('index2', $collection->indexes()[1]->key);
+        $this->assertSame(IndexType::Key, $collection->indexes()[1]->type);
+        $this->assertSame('index3', $collection->indexes()[2]->key);
+        $this->assertSame(IndexType::Key, $collection->indexes()[2]->type);
+        $this->assertSame('index4', $collection->indexes()[3]->key);
+        $this->assertSame(IndexType::Key, $collection->indexes()[3]->type);
 
         $fetched = $database->getCollection('withSchema');
         $this->assertSame('attribute1', $fetched->attributes()[0]->key);
 
         $database->deleteCollection('withSchema');
 
-        // Test collection with dash (+attribute +index)
         $collection2 = $database->createCollection(Collection::create(id: 'with-dash', attributes: [
             Attribute::string(key: 'attribute-one', size: 256),
         ], indexes: [
             Index::key(key: 'index-one', attributes: ['attribute-one'], lengths: [256], orders: [OrderDirection::Asc]),
         ]));
 
-        $this->assertEquals('with-dash', $collection2->getId());
+        $this->assertSame('with-dash', $collection2->getId());
         $this->assertCount(1, $collection2->attributes());
-        $this->assertEquals('attribute-one', $collection2->attributes()[0]->key);
-        $this->assertEquals(ColumnType::String, $collection2->attributes()[0]->type);
+        $this->assertSame('attribute-one', $collection2->attributes()[0]->key);
+        $this->assertSame(ColumnType::String, $collection2->attributes()[0]->type);
         $this->assertCount(1, $collection2->indexes());
-        $this->assertEquals('index-one', $collection2->indexes()[0]->key);
-        $this->assertEquals(IndexType::Key, $collection2->indexes()[0]->type);
+        $this->assertSame('index-one', $collection2->indexes()[0]->key);
+        $this->assertSame(IndexType::Key, $collection2->indexes()[0]->type);
         $database->deleteCollection('with-dash');
     }
 

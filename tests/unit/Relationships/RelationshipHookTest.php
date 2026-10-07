@@ -554,7 +554,7 @@ final class RelationshipHookTest extends TestCase
 
     /**
      * @param  Closure(): Adapter  $adapter
-     * @param  array<string>  $grandchildPermissions
+     * @param  list<string>  $grandchildPermissions
      */
     private function nestedCascadeDatabase(Closure $adapter, array $grandchildPermissions, RelationshipDeleteAction $onDelete): Database
     {
@@ -604,7 +604,7 @@ final class RelationshipHookTest extends TestCase
     }
 
     /**
-     * @param  array<string>  $childPermissions
+     * @param  list<string>  $childPermissions
      */
     private function relate(Database $database, Relationship $relationship, array $childPermissions = [], bool $childDocumentSecurity = true): void
     {
@@ -641,7 +641,7 @@ final class RelationshipHookTest extends TestCase
     }
 
     /**
-     * @return array<string>
+     * @return list<string>
      */
     private function permissions(): array
     {
@@ -819,7 +819,7 @@ final class RelationshipHookTest extends TestCase
     }
 
     /**
-     * @return array<string, array{Closure(ForeignKeyAction): Relationship, Closure(Database, string, string): void}>
+     * @return array<string, array{Closure(RelationshipDeleteAction): Relationship, Closure(Database, string, string): void}>
      */
     private function deletePairs(): array
     {
@@ -1172,7 +1172,8 @@ final class RelationshipHookTest extends TestCase
         $database = $this->database($adapter);
         $this->relate($database, $relationship);
         $database->createDocument('child', new Document(['$id' => 'child1']));
-        $database->createDocument('parent', new Document(['$id' => 'parent1', ...($linked ? [$relationship->key => 'child1'] : [])]));
+        $key = $relationship->key ?? $this->fail('an update case relates under a key');
+        $database->createDocument('parent', new Document(['$id' => 'parent1', ...($linked ? [$key => 'child1'] : [])]));
 
         $id = $collection === 'parent' ? 'parent1' : 'child1';
         $stored = fn (): array => $database->getAuthorization()->skip(fn () => $database->skipRelationships(fn () => $database->getDocument($collection, $id)))->getArrayCopy();

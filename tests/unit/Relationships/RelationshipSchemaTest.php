@@ -678,10 +678,10 @@ final class RelationshipSchemaTest extends TestCase
      */
     private function attributeKeys(Database $database, string $collection): array
     {
-        return \array_values(\array_map(
+        return \array_map(
             static fn (Attribute $attribute): string => $attribute->key,
             $this->attributes($database, $collection),
-        ));
+        );
     }
 
     private function relationship(Database $database, string $collection, string $key): Relationship
@@ -846,9 +846,10 @@ final class RelationshipSchemaTest extends TestCase
                     ($this->update)($collection, $id, $document);
                 }
 
-                $replaced = $this->attributeMeta === null || $collection !== self::METADATA ? null : RelationshipSchemaTest::replacedAttribute($this, $id, $document);
-                if ($replaced !== null) {
-                    ($this->attributeMeta)($id, $replaced);
+                $attributeMeta = $this->attributeMeta;
+                $replaced = $attributeMeta === null || $collection !== self::METADATA ? null : RelationshipSchemaTest::replacedAttribute($this, $id, $document);
+                if ($attributeMeta !== null && $replaced !== null) {
+                    $attributeMeta($id, $replaced);
                 }
 
                 return parent::updateDocument($collection, $id, $document);

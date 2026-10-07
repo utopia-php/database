@@ -112,12 +112,8 @@ class IndexDefinition extends Validator
     }
 
     /**
-     * Is valid.
-     *
-     * Returns true index if valid.
-     *
-     * Stored index documents are checked for a known type and a TTL before they are hydrated, since
-     * Index::fromDocument() reads stored metadata leniently.
+     * An index document is checked for a known type and a TTL before it is hydrated, since
+     * Index::fromDocument() reads an unknown stored type as a key index.
      *
      * @param  mixed  $value
      *

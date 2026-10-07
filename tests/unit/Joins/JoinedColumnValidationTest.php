@@ -395,7 +395,7 @@ final class JoinedColumnValidationTest extends TestCase
     }
 
     /**
-     * @param  array<Attribute>  $attributes
+     * @param  list<Attribute>  $attributes
      */
     private function createCollection(string $id, array $attributes): void
     {

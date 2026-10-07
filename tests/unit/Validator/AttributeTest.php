@@ -2088,12 +2088,13 @@ class AttributeTest extends TestCase
             supportForVectors: true,
         );
 
-        $attrVO2 = Attribute::vector(
-            key: 'vec2',
-            dimensions: 3,
-            required: false,
-            default: [1.0, 'notANumber', 3.0],
-        );
+        $attrVO2 = Attribute::fromArray([
+            'key' => 'vec2',
+            'type' => ColumnType::Vector->value,
+            'size' => 3,
+            'required' => false,
+            'default' => [1.0, 'notANumber', 3.0],
+        ]);
 
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('Vector default value must contain only numeric elements');

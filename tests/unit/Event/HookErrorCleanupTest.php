@@ -116,7 +116,7 @@ final class HookErrorCleanupTest extends TestCase
     }
 
     /**
-     * @return array<string>
+     * @return list<string>
      */
     private function permissions(): array
     {

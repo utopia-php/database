@@ -13,8 +13,10 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Operator;
 use Utopia\Database\Query;
+use Utopia\Database\SetType;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Mongo\Client;
 use Utopia\Query\Schema\ColumnType;
@@ -233,6 +235,25 @@ final class MongoResultDecodingTest extends TestCase
         $this->assertSame($expected, $this->castingAdapter()->castingAfterDocuments($collection, [clone $document])[0]->getArrayCopy());
     }
 
+    public function testCastingAfterRefusesAStoredAttributeOfAnUnknownType(): void
+    {
+        $collection = $this->castingCollection();
+        $collection->setAttribute('attributes', ['$id' => 'unknown', 'type' => 'no such type', 'array' => false], SetType::Append);
+        $document = new Document(['$id' => 'm1', 'unknown' => 'value']);
+
+        foreach ([
+            'castingAfter' => fn (): mixed => $this->castingAdapter()->castingAfter($collection, clone $document),
+            'castingAfterDocuments' => fn (): mixed => $this->castingAdapter()->castingAfterDocuments($collection, [clone $document]),
+        ] as $method => $cast) {
+            try {
+                $cast();
+                $this->fail($method.' must refuse an attribute of an unknown type');
+            } catch (StructureException $error) {
+                $this->assertSame('Unknown attribute type: no such type', $error->getMessage(), $method);
+            }
+        }
+    }
+
     private function castingCollection(): Document
     {
         return new Document([
@@ -281,7 +302,7 @@ final class MongoResultDecodingTest extends TestCase
             Database::internalAttributesFor(true)
         );
 
-        foreach (\array_merge($attributes, \array_values($internal)) as $attribute) {
+        foreach (\array_merge($attributes, $internal) as $attribute) {
             $key = \is_string($attribute['$id'] ?? null) ? $attribute['$id'] : '';
             $rawType = $attribute['type'] ?? null;
             $type = $rawType instanceof ColumnType ? $rawType : (\is_string($rawType) ? Attribute::typeFromStored($rawType) : null);

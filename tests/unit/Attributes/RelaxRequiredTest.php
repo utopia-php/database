@@ -2,11 +2,15 @@
 
 namespace Tests\Unit\Attributes;
 
+use Closure;
+use PDO;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\Memory;
+use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\AttributeUpdate;
 use Utopia\Database\Collection;
@@ -59,9 +63,24 @@ final class RelaxRequiredTest extends TestCase
         $this->assertTrue($this->storedAttribute($database, 'name')->required);
     }
 
-    public function testRelaxedAttributeAcceptsADocumentWithoutIt(): void
+    /**
+     * @return array<string, array{Closure(): Adapter}>
+     */
+    public static function adapters(): array
     {
-        $database = $this->database(new Memory());
+        return [
+            'memory' => [static fn (): Adapter => new Memory()],
+            'sqlite' => [static fn (): Adapter => new SQLite(new PDO('sqlite::memory:'))],
+        ];
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testRelaxedAttributeAcceptsANull(Closure $adapter): void
+    {
+        $database = $this->database($adapter());
 
         $updated = $database->updateAttribute('items', 'name', new AttributeUpdate(required: false));
 
@@ -71,6 +90,7 @@ final class RelaxRequiredTest extends TestCase
         $created = $database->createDocument('items', new Document([
             Document::ID => 'nameless',
             Document::PERMISSIONS => [Permission::read(Role::any())],
+            'name' => null,
         ]));
 
         $this->assertSame('nameless', $created->getId());

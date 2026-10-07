@@ -891,7 +891,7 @@ final class CoreMinorsTest extends TestCase
     {
         return \array_map(
             static fn (Attribute $attribute): string => $attribute->key,
-            \array_values($database->getCollection($collection)->attributes()),
+            $database->getCollection($collection)->attributes(),
         );
     }
 
@@ -902,7 +902,7 @@ final class CoreMinorsTest extends TestCase
     {
         return \array_map(
             static fn (Index $index): string => $index->key,
-            \array_values($database->getCollection($collection)->indexes()),
+            $database->getCollection($collection)->indexes(),
         );
     }
 

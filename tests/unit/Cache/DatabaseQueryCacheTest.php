@@ -806,7 +806,7 @@ final class DatabaseQueryCacheTest extends TestCase
         $this->assertSame(['fresh'], $this->ids($queryCache->get($after) ?? []), 'The mutation must publish a fresh epoch');
     }
 
-    /** @return array<string> */
+    /** @return list<string> */
     private static function permissions(): array
     {
         return [

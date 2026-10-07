@@ -45,7 +45,6 @@ trait ManyToManyTests
 
         $database->createRelationship('playlist', Relationship::manyToMany(relatedCollection: 'song', key: 'songs'));
 
-        // Check metadata for collection
         $collection = $database->getCollection('playlist');
 
         foreach ($collection->attributes() as $attribute) {
@@ -368,35 +367,25 @@ trait ManyToManyTests
 
         $database->createRelationship('students', Relationship::manyToMany(relatedCollection: 'classes', twoWay: true));
 
-        // Check metadata for collection
-        $collection = $database->getCollection('students');
-        foreach ($collection->attributes() as $attribute) {
-            if ($attribute->key === 'classes') {
-                $relationship = $attribute->relationship;
-                $this->assertNotNull($relationship);
-                $this->assertEquals(ColumnType::Relationship, $attribute->type);
-                $this->assertEquals('classes', $attribute->key);
-                $this->assertSame('classes', $relationship->relatedCollection);
-                $this->assertSame(RelationshipType::ManyToMany, $relationship->type);
-                $this->assertSame(true, $relationship->twoWay);
-                $this->assertSame('students', $relationship->twoWayKey);
-            }
-        }
+        $attribute = \array_find($database->getCollection('students')->attributes(), static fn (Attribute $attribute): bool => $attribute->key === 'classes');
+        $this->assertNotNull($attribute);
+        $relationship = $attribute->relationship;
+        $this->assertNotNull($relationship);
+        $this->assertSame(ColumnType::Relationship, $attribute->type);
+        $this->assertSame('classes', $relationship->relatedCollection);
+        $this->assertSame(RelationshipType::ManyToMany, $relationship->type);
+        $this->assertTrue($relationship->twoWay);
+        $this->assertSame('students', $relationship->twoWayKey);
 
-        // Check metadata for related collection
-        $collection = $database->getCollection('classes');
-        foreach ($collection->attributes() as $attribute) {
-            if ($attribute->key === 'students') {
-                $relationship = $attribute->relationship;
-                $this->assertNotNull($relationship);
-                $this->assertEquals(ColumnType::Relationship, $attribute->type);
-                $this->assertEquals('students', $attribute->key);
-                $this->assertSame('students', $relationship->relatedCollection);
-                $this->assertSame(RelationshipType::ManyToMany, $relationship->type);
-                $this->assertSame(true, $relationship->twoWay);
-                $this->assertSame('classes', $relationship->twoWayKey);
-            }
-        }
+        $attribute = \array_find($database->getCollection('classes')->attributes(), static fn (Attribute $attribute): bool => $attribute->key === 'students');
+        $this->assertNotNull($attribute);
+        $relationship = $attribute->relationship;
+        $this->assertNotNull($relationship);
+        $this->assertSame(ColumnType::Relationship, $attribute->type);
+        $this->assertSame('students', $relationship->relatedCollection);
+        $this->assertSame(RelationshipType::ManyToMany, $relationship->type);
+        $this->assertTrue($relationship->twoWay);
+        $this->assertSame('classes', $relationship->twoWayKey);
 
         // Create document with relationship with nested data
         $student1 = $database->createDocument('students', new Document([

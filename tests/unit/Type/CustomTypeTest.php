@@ -159,7 +159,7 @@ final class CustomTypeTest extends TestCase
     }
 
     /**
-     * @param  array<string>  $filters
+     * @param  list<string>  $filters
      */
     private function createNote(Database $database, string $body, array $filters = []): void
     {

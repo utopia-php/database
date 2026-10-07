@@ -253,7 +253,7 @@ final class NarrowTest extends TestCase
     }
 
     /**
-     * @return list<Document>
+     * @return list<Attribute>
      */
     private function attributes(): array
     {

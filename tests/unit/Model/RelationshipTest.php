@@ -17,8 +17,9 @@ final class RelationshipTest extends TestCase
     public function testConstructorIsNotCallableFromOutside(): void
     {
         $this->expectException(\Error::class);
+        $this->expectExceptionMessage('Call to private Utopia\Database\Relationship::__construct()');
 
-        new Relationship('users', RelationshipType::OneToOne, false, null, null, RelationshipDeleteAction::Restrict); // @phpstan-ignore new.privateConstructor
+        $relationship = new Relationship('users', RelationshipType::OneToOne, false, null, null, RelationshipDeleteAction::Restrict); // @phpstan-ignore new.privateConstructor
     }
 
     public function testInverseSwapsKeysAndPointsAtTheGivenCollection(): void

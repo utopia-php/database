@@ -443,7 +443,7 @@ final class QueryValidationTest extends TestCase
     }
 
     /**
-     * @param  array<Attribute>  $attributes
+     * @param  list<Attribute>  $attributes
      */
     private function createCollection(string $id, array $attributes): void
     {

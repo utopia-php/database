@@ -16,9 +16,10 @@ final class IndexTest extends TestCase
     public function testConstructorIsPrivate(): void
     {
         $this->expectException(\Error::class);
+        $this->expectExceptionMessage('Call to private Utopia\Database\Index::__construct()');
 
         /** @phpstan-ignore new.privateConstructor */
-        new Index('by_age', IndexType::Key, ['age'], [], [], null);
+        $index = new Index('by_age', IndexType::Key, ['age'], [], [], null);
     }
 
     public function testPropertiesAreReadonly(): void
@@ -113,11 +114,12 @@ final class IndexTest extends TestCase
         $this->assertSame(IndexType::Key, $index->type);
     }
 
-    public function testFromDocumentRejectsAnUnknownType(): void
+    public function testFromDocumentReadsAnUnknownTypeAsKey(): void
     {
-        $this->expectException(IndexException::class);
+        $index = Index::fromDocument(new Document(['$id' => 'odd', 'type' => 'bitmap', 'attributes' => ['age']]));
 
-        Index::fromDocument(new Document(['$id' => 'odd', 'type' => 'bitmap', 'attributes' => ['age']]));
+        $this->assertSame(IndexType::Key, $index->type);
+        $this->assertSame(['age'], $index->attributes);
     }
 
     public function testFromDocumentRejectsAStoredRandomOrder(): void

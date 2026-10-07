@@ -103,7 +103,7 @@ final class DefinitionModelCacheTest extends TestCase
     /**
      * Reads the definition twice and checks the second read was served by the cache.
      *
-     * @return array{attributes: array<string>, sizes: array<string, int>, indexes: array<string>, name: string}
+     * @return array{attributes: list<string>, sizes: array<string, int|null>, indexes: list<string>, name: string}
      */
     private function cachedRead(Database $database, CountingMemory $adapter): array
     {

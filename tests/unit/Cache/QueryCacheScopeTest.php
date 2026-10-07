@@ -194,7 +194,7 @@ final class QueryCacheScopeTest extends TestCase
         return [$database, $adapter];
     }
 
-    /** @return array<string> */
+    /** @return list<string> */
     private function permissions(): array
     {
         return [

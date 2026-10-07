@@ -184,8 +184,8 @@ trait ChildSideTests
      */
     private function createOneWayOneToOne(Database $database): array
     {
-        $parents = 'one_way_parents_'.ID::unique();
-        $children = 'one_way_children_'.ID::unique();
+        $parents = 'parents_'.ID::unique();
+        $children = 'children_'.ID::unique();
         $permissions = [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
@@ -211,8 +211,8 @@ trait ChildSideTests
      */
     private function createChildSideRelationship(Database $database, RelationshipType $type): array
     {
-        $parents = 'child_side_parents_'.ID::unique();
-        $children = 'child_side_children_'.ID::unique();
+        $parents = 'parents_'.ID::unique();
+        $children = 'children_'.ID::unique();
         $permissions = [
             Permission::create(Role::any()),
             Permission::read(Role::any()),

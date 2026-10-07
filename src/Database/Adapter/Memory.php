@@ -425,7 +425,7 @@ class Memory extends Adapter implements Feature\Relationships
         return true;
     }
 
-/**
+    /**
      * @return array{type: string, size: int, signed: bool, array: bool, required: bool}
      */
     private static function attributeEntry(Attribute $attribute): array
@@ -452,7 +452,7 @@ class Memory extends Adapter implements Feature\Relationships
         ];
     }
 
-        public function deleteCollection(string $id): bool
+    public function deleteCollection(string $id): bool
     {
         $key = $this->key($id);
         $previousData = $this->data[$key] ?? null;
@@ -854,6 +854,10 @@ class Memory extends Adapter implements Feature\Relationships
                 }
                 break;
             case RelationshipType::ManyToMany:
+                $junction = $this->resolveJunctionCollection($collection, $relatedCollection, $side);
+                if ($junction !== null) {
+                    $this->deleteCollection($junction);
+                }
                 break;
         }
 

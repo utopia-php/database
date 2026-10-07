@@ -849,7 +849,7 @@ final class PreparedCreateTest extends TestCase
     }
 
     /**
-     * @return array<string>
+     * @return list<string>
      */
     private static function permissions(): array
     {

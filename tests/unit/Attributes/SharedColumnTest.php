@@ -181,7 +181,7 @@ final class SharedColumnTest extends TestCase
     }
 
     /**
-     * @param  callable(): bool  $operation
+     * @param  callable(): mixed  $operation
      */
     private function refusal(callable $operation): ?DuplicateException
     {
@@ -265,7 +265,7 @@ final class SharedColumnTest extends TestCase
     {
         return \array_map(
             static fn (Attribute $attribute): string => $attribute->key,
-            \array_values($database->getCollection(self::COLLECTION)->attributes()),
+            $database->getCollection(self::COLLECTION)->attributes(),
         );
     }
 

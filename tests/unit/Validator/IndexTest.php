@@ -9,6 +9,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Index;
 use Utopia\Database\Validator\IndexDefinition;
+use Utopia\Database\Validator\IndexedQueries;
 use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\IndexType;
 
@@ -474,7 +475,7 @@ class IndexTest extends TestCase
         $this->assertStringStartsWith('Unknown index type: bogus. Must be one of ', $validator->getDescription());
     }
 
-    public function testStoredIndexOfAnUnknownTypeIsRefusedOnHydration(): void
+    public function testStoredIndexOfAnUnknownTypeIsReadLeniently(): void
     {
         $stored = new Document([
             Document::ID => 'by_title',
@@ -482,12 +483,11 @@ class IndexTest extends TestCase
             'attributes' => ['title'],
         ]);
 
-        try {
-            Index::fromDocument($stored);
-            $this->fail('A stored index of an unknown type must be refused');
-        } catch (IndexException $error) {
-            $this->assertSame('Unknown index type for index "by_title"', $error->getMessage());
-        }
+        $index = Index::fromDocument($stored);
+
+        $this->assertSame(IndexType::Key, $index->type);
+        $this->assertSame(['title'], $index->attributes);
+        $this->assertTrue((new IndexedQueries([Attribute::string(key: 'title', size: 64)], [$stored]))->isValid([]));
     }
 
     public function testTextAttributeWithoutASizeIsJudgedAgainstTheTextMaximum(): void

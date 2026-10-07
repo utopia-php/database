@@ -149,10 +149,10 @@ final class SQLiteSchemaIndexesTest extends TestCase
         $indexes = $this->indexes($database);
         $this->assertArrayNotHasKey('by_title', $indexes);
         $this->assertSame([1, [...($shared ? ['_tenant'] : []), 'title']], $indexes['by_heading'] ?? null, 'the metadata names an index the schema has');
-        $this->assertSame(['by_heading'], \array_values(\array_map(
+        $this->assertSame(['by_heading'], \array_map(
             static fn (Index $index): string => $index->key,
             $database->getCollection(self::COLLECTION)->indexes(),
-        )));
+        ));
     }
 
     /**

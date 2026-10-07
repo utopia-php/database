@@ -12,6 +12,7 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
+use Utopia\Database\SetType;
 
 final class DocumentsValidatorFingerprintTest extends TestCase
 {
@@ -39,7 +40,7 @@ final class DocumentsValidatorFingerprintTest extends TestCase
         $resized = $this->collection();
         $resized->setAttribute('attributes', [Attribute::string(key: 'title', size: 32)->toDocument()]);
         $added = $this->collection();
-        $added->setAttribute('attributes', [...$added->getAttribute('attributes'), Attribute::integer(key: 'pages')->toDocument()]);
+        $added->setAttribute('attributes', Attribute::integer(key: 'pages')->toDocument(), SetType::Append);
         $indexed = $this->collection();
         $indexed->setAttribute('indexes', []);
         $permitted = $this->collection();

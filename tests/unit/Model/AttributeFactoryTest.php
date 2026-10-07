@@ -202,7 +202,7 @@ final class AttributeFactoryTest extends TestCase
         $this->assertSame('user@example.com', $attribute->default);
         $this->assertTrue($attribute->array);
         $this->assertSame('email', $attribute->format?->name);
-        $this->assertSame(['allowPlus' => true], $attribute->format?->options);
+        $this->assertSame(['allowPlus' => true], $attribute->format->options);
         $this->assertSame(['json', 'lowercase'], $attribute->filters);
         $this->assertNull($attribute->relationship);
         $this->assertNull($attribute->side);
@@ -269,7 +269,7 @@ final class AttributeFactoryTest extends TestCase
 
         $this->assertSame(ColumnType::Relationship, $attribute->type);
         $this->assertSame('author', $attribute->relationship?->key);
-        $this->assertSame(RelationshipType::ManyToOne, $attribute->relationship?->type);
+        $this->assertSame(RelationshipType::ManyToOne, $attribute->relationship->type);
         $this->assertSame(RelationshipSide::Child, $attribute->side);
         $this->assertNull($attribute->size);
         $this->assertSame([], $attribute->filters);

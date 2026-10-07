@@ -490,6 +490,145 @@ final class CollectionTest extends TestCase
         $this->assertSame('Renamed', $collection->name());
     }
 
+    public function testWritesToPermissionsKeepTheHydratedLists(): void
+    {
+        $collection = $this->collection();
+        $attributes = $collection->attributes();
+        $indexes = $collection->indexes();
+
+        $collection->setAttribute('$permissions', [Permission::read(Role::any())]);
+        $collection['documentSecurity'] = false;
+        unset($collection['name']);
+
+        $this->assertSame($attributes, $collection->attributes());
+        $this->assertSame($indexes, $collection->indexes());
+    }
+
+    public function testExchangeArrayWithTheSameListsKeepsTheHydratedLists(): void
+    {
+        $collection = $this->collection();
+        $attributes = $collection->attributes();
+        $indexes = $collection->indexes();
+
+        $collection->exchangeArray([...\iterator_to_array($collection), 'name' => 'Renamed']);
+
+        $this->assertSame($attributes, $collection->attributes());
+        $this->assertSame($indexes, $collection->indexes());
+        $this->assertSame('Renamed', $collection->name());
+    }
+
+    public function testEncodedListsAreDecoded(): void
+    {
+        $collection = Collection::fromArray([
+            '$id' => 'books',
+            'attributes' => \json_encode([Attribute::string('title', 128)->toDocument()->getArrayCopy()]),
+            'indexes' => \json_encode([Index::key('by_title', ['title'])->toDocument()->getArrayCopy()]),
+        ]);
+
+        $this->assertSame(['title'], $this->attributeKeys($collection));
+        $this->assertSame(['by_title'], $this->indexKeys($collection));
+        $this->assertSame($collection->attributes(), $collection->attributes());
+    }
+
+    /**
+     * @return array<string, array{mixed}>
+     */
+    public static function undecodableLists(): array
+    {
+        return [
+            'invalid JSON' => ['{not json'],
+            'JSON that is not a list' => ['7'],
+            'a scalar' => [7],
+        ];
+    }
+
+    #[DataProvider('undecodableLists')]
+    public function testAnUndecodableAttributeListIsRefused(mixed $stored): void
+    {
+        $collection = $this->collection();
+        $collection->setAttribute('attributes', $stored);
+
+        $this->expectException(StructureException::class);
+
+        $collection->attributes();
+    }
+
+    #[DataProvider('undecodableLists')]
+    public function testAnUndecodableIndexListIsRefused(mixed $stored): void
+    {
+        $collection = $this->collection();
+        $collection->setAttribute('indexes', $stored);
+
+        $this->expectException(IndexException::class);
+
+        $collection->indexes();
+    }
+
+    public function testTheFingerprintIsStableUntilTheSchemaChanges(): void
+    {
+        $collection = $this->collection();
+        $fingerprint = $collection->fingerprint();
+
+        $collection->setAttribute('name', 'Renamed');
+
+        $this->assertSame($fingerprint, $collection->fingerprint());
+        $this->assertSame($fingerprint, $this->collection()->fingerprint());
+        $this->assertSame($fingerprint, (clone $collection)->fingerprint());
+    }
+
+    /**
+     * @return array<string, array{\Closure(Collection): void}>
+     */
+    public static function schemaChanges(): array
+    {
+        return [
+            'attribute appended' => [static function (Collection $collection): void {
+                $collection->setAttribute('attributes', Attribute::integer('pages')->toDocument(), SetType::Append);
+            }],
+            'index replaced' => [static function (Collection $collection): void {
+                $collection->setAttribute('indexes', [Index::unique('by_title', ['title'])->toDocument()]);
+            }],
+            'attribute written through a reference' => [static function (Collection $collection): void {
+                $attributes = &$collection['attributes'];
+                if (\is_array($attributes)) {
+                    $attributes[] = Attribute::integer('pages')->toDocument();
+                }
+            }],
+            'nested attribute mutated and set back' => [static function (Collection $collection): void {
+                $collection->getDocuments('attributes')[0]->setAttribute('size', 256);
+                $collection->setAttribute('attributes', $collection->getAttribute('attributes'));
+            }],
+            'permissions' => [static function (Collection $collection): void {
+                $collection->setAttribute('$permissions', [Permission::read(Role::any())]);
+            }],
+            'document security' => [static function (Collection $collection): void {
+                $collection->setAttribute('documentSecurity', false);
+            }],
+        ];
+    }
+
+    /**
+     * @param  \Closure(Collection): void  $change
+     */
+    #[DataProvider('schemaChanges')]
+    public function testTheFingerprintFollowsEverySchemaChange(\Closure $change): void
+    {
+        $collection = $this->collection();
+        $fingerprint = $collection->fingerprint();
+
+        $change($collection);
+
+        $this->assertNotSame($fingerprint, $collection->fingerprint());
+    }
+
+    public function testFingerprintsOfDifferentSchemasWithNanDefaultsDiffer(): void
+    {
+        $ratio = Collection::create('books', attributes: [Attribute::double('ratio', default: \NAN)]);
+        $score = Collection::create('books', attributes: [Attribute::double('score', default: \NAN)]);
+
+        $this->assertNotSame($ratio->fingerprint(), $score->fingerprint());
+    }
+
     private function collection(): Collection
     {
         return Collection::create(

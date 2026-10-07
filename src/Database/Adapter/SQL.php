@@ -737,7 +737,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             $name = $this->filter($collection);
             $hasSequence = $this->batchHasSequence($documents);
 
-            if ($this->skippingDuplicates()) {
+            if ($this->isIgnoringDuplicates()) {
                 $documents = $this->firstCopies($documents);
                 $documents = $this->supportsInsertReturning()
                     ? $this->insertReturning($name, $documents, $spatialAttributes, $hasSequence)
@@ -3493,7 +3493,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             prepare: fn (Statement $statement, Event $event): PDOStatement|DatabasePDOStatement|PDOStatementProxy => $this->executeResult($statement, $event),
             execute: fn (PDOStatement|DatabasePDOStatement|PDOStatementProxy $statement): bool => $this->execute($statement),
             decorateRow: $this->decorateRow(...),
-            ignoreDuplicates: $this->skippingDuplicates(),
+            ignoreDuplicates: $this->isIgnoringDuplicates(),
             skipPermissions: $skipPermissions,
         );
     }

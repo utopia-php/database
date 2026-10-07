@@ -271,7 +271,7 @@ class Database
     private ?Value $sequencePreservation = null;
 
     /** @var Value<bool>|null */
-    private ?Value $duplicateSkipping = null;
+    private ?Value $ignoringDuplicates = null;
 
     protected ?Relationships $relationshipHook = null;
 
@@ -1182,7 +1182,7 @@ class Database
      */
     public function ignoreDuplicates(callable $callback): mixed
     {
-        return $this->duplicateSkipping()->with(true, $callback);
+        return $this->ignoringDuplicates()->with(true, $callback);
     }
 
     /**
@@ -1646,7 +1646,7 @@ class Database
             validation: $this->validation()->get(),
             preserveDates: $this->datePreservation()->get(),
             preserveSequence: $this->sequencePreservation()->get(),
-            skipDuplicates: $this->duplicateSkipping()->get(),
+            ignoreDuplicates: $this->ignoringDuplicates()->get(),
             requestTimestamp: $this->requestTimestamp()->get(),
         );
     }
@@ -1687,7 +1687,7 @@ class Database
     private function withToggles(Snapshot $snapshot, callable $callback): mixed
     {
         $timestamped = fn (): mixed => $this->requestTimestamp()->with($snapshot->requestTimestamp, $callback);
-        $deduplicated = fn (): mixed => $this->duplicateSkipping()->with($snapshot->skipDuplicates, $timestamped);
+        $deduplicated = fn (): mixed => $this->ignoringDuplicates()->with($snapshot->ignoreDuplicates, $timestamped);
         $sequenced = fn (): mixed => $this->sequencePreservation()->with($snapshot->preserveSequence, $deduplicated);
         $dated = fn (): mixed => $this->datePreservation()->with($snapshot->preserveDates, $sequenced);
         $validated = fn (): mixed => $this->validation()->with($snapshot->validation, $dated);
@@ -1760,14 +1760,14 @@ class Database
     /**
      * @return Value<bool>
      */
-    private function duplicateSkipping(): Value
+    private function ignoringDuplicates(): Value
     {
-        return $this->duplicateSkipping ??= new Value(false);
+        return $this->ignoringDuplicates ??= new Value(false);
     }
 
-    protected function skippingDuplicates(): bool
+    protected function isIgnoringDuplicates(): bool
     {
-        return $this->duplicateSkipping()->get();
+        return $this->ignoringDuplicates()->get();
     }
 
     private function getEventContext(): int

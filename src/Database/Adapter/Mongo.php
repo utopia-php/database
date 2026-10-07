@@ -550,7 +550,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         }
 
         // An upsert with $setOnInsert hits WriteConflict (112) under the transaction's snapshot isolation.
-        if ($this->skippingDuplicates()) {
+        if ($this->isIgnoringDuplicates()) {
             return $callback();
         }
 
@@ -1584,7 +1584,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         }
 
         // insertMany aborts the txn on any duplicate; upsert + $setOnInsert no-ops instead.
-        if ($this->skippingDuplicates()) {
+        if ($this->isIgnoringDuplicates()) {
             if (empty($records)) {
                 return [];
             }

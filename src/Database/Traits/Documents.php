@@ -1328,7 +1328,7 @@ trait Documents
                     return $batch;
                 }
             );
-            $batch = $this->duplicateSkipping()->get()
+            $batch = $this->ignoringDuplicates()->get()
                 ? $this->adapter->ignoreDuplicates($insert)
                 : $insert();
 

@@ -41,7 +41,7 @@ abstract class Adapter
     private ?Value $scopedTenant = null;
 
     /** @var Value<bool>|null */
-    private ?Value $duplicateSkipping = null;
+    private ?Value $ignoringDuplicates = null;
 
     protected bool $tenantPerDocument = false;
 
@@ -477,23 +477,23 @@ abstract class Adapter
      */
     public function ignoreDuplicates(callable $callback): mixed
     {
-        return $this->duplicateSkipping()->with(true, $callback);
+        return $this->ignoringDuplicates()->with(true, $callback);
     }
 
     /**
      * Whether the calling coroutine runs under ignoreDuplicates().
      */
-    protected function skippingDuplicates(): bool
+    protected function isIgnoringDuplicates(): bool
     {
-        return $this->duplicateSkipping()->get();
+        return $this->ignoringDuplicates()->get();
     }
 
     /**
      * @return Value<bool>
      */
-    private function duplicateSkipping(): Value
+    private function ignoringDuplicates(): Value
     {
-        return $this->duplicateSkipping ??= new Value(false);
+        return $this->ignoringDuplicates ??= new Value(false);
     }
 
     /**

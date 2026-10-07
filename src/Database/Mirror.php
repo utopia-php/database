@@ -1218,7 +1218,7 @@ class Mirror extends Database
         ?callable $onNext = null,
     ): int {
         $onNext = $this->decorating(Event::DocumentsCreate, $collection, $onNext);
-        $modified = $this->skippingDuplicates()
+        $modified = $this->isIgnoringDuplicates()
             ? $this->source->ignoreDuplicates(
                 fn () => $this->source->createDocuments($collection, $documents, $batchSize, $onNext)
             )
@@ -1238,7 +1238,7 @@ class Mirror extends Database
         }
 
         $clones = \array_map(static fn (Document $document): Document => clone $document, $documents);
-        $ignoreDuplicates = $this->skippingDuplicates();
+        $ignoreDuplicates = $this->isIgnoringDuplicates();
 
         $this->replicate('createDocuments', function () use ($destination, $collection, $clones, $batchSize, $ignoreDuplicates): void {
             foreach ($clones as $index => $clone) {

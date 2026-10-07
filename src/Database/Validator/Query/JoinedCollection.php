@@ -18,7 +18,7 @@ final readonly class JoinedCollection
     private const string ENCRYPT = 'encrypt';
 
     /**
-     * @param  string  $alias  The alias the join declares, empty when it declares none
+     * @param  string  $alias  The alias the join declares
      * @param  array<string, true>  $attributes  The attributes the collection declares, relationships left out
      * @param  array<string, ColumnType>  $numeric  The type of each attribute that holds a single number
      * @param  array<string, true>  $encrypted  The attributes whose values are stored encrypted

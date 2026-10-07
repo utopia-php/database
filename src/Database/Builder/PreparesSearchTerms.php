@@ -19,11 +19,11 @@ trait PreparesSearchTerms
      * @param  array<mixed>  $values
      */
     #[\Override]
-    protected function compileSearchExpr(string $attribute, array $values, bool $not): string
+    protected function compileSearchExpression(string $attribute, array $values, bool $not): string
     {
         $term = $values[0] ?? '';
 
-        return parent::compileSearchExpr($attribute, [$this->prepareSearchTerm(\is_string($term) ? $term : '')], $not);
+        return parent::compileSearchExpression($attribute, [$this->prepareSearchTerm(\is_string($term) ? $term : '')], $not);
     }
 
     private function prepareSearchTerm(string $term): string

@@ -73,8 +73,8 @@ class Having extends Base
         $this->aggregations = [];
 
         foreach ($aggregations as $aggregation) {
-            $alias = $aggregation->getValue('');
-            if (\is_string($alias) && $alias !== '') {
+            $alias = $aggregation->getAlias();
+            if ($alias !== '') {
                 $this->aggregations[$alias] = $aggregation;
             }
         }

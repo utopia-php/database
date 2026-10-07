@@ -105,14 +105,9 @@ class IndexedQueries extends Queries
                 continue;
             }
 
-            $alias = $query->getJoinAlias();
-            if ($alias === '') {
-                continue;
-            }
-
             $collection = $this->getJoinedCollection($query->getAttribute());
 
-            $indexes[$alias] = $collection === null ? [] : Collection::fromDocument($collection)->indexes();
+            $indexes[$query->getAlias()] = $collection === null ? [] : Collection::fromDocument($collection)->indexes();
         }
 
         return $indexes;

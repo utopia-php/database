@@ -51,7 +51,7 @@ class Query extends BaseQuery
     /**
      * @param  array<mixed>  $values
      */
-    public function __construct(Method|string $method, string $attribute = '', array $values = [])
+    public function __construct(Method|string $method, string $attribute = '', array $values = [], string $alias = '')
     {
         $methodEnum = $method instanceof Method ? $method : Method::from($method);
 
@@ -59,7 +59,7 @@ class Query extends BaseQuery
             $attribute = Document::SEQUENCE;
         }
 
-        parent::__construct($methodEnum, $attribute, $values);
+        parent::__construct($methodEnum, $attribute, $values, $alias);
     }
 
     /**
@@ -70,7 +70,7 @@ class Query extends BaseQuery
         try {
             $parsed = parent::parse($query, $allowRaw);
 
-            return new static($parsed->getMethod(), $parsed->getAttribute(), $parsed->getValues());
+            return new static($parsed->getMethod(), $parsed->getAttribute(), $parsed->getValues(), $parsed->getAlias());
         } catch (BaseQueryException $e) {
             throw new QueryException($e->getMessage(), $e->getCode(), $e);
         }
@@ -86,7 +86,7 @@ class Query extends BaseQuery
         try {
             $parsed = parent::parseQuery(self::decodeNestedValues($query, $allowRaw), $allowRaw);
 
-            return new static($parsed->getMethod(), $parsed->getAttribute(), $parsed->getValues());
+            return new static($parsed->getMethod(), $parsed->getAttribute(), $parsed->getValues(), $parsed->getAlias());
         } catch (BaseQueryException $e) {
             throw new QueryException($e->getMessage(), $e->getCode(), $e);
         }
@@ -141,17 +141,17 @@ class Query extends BaseQuery
     }
 
     /**
-     * @param  Document  $value
+     * @param  array<string, mixed>|object  $value  a Document; Validator\Query\Cursor also takes its id, and refuses an array
      */
-    public static function cursorAfter(mixed $value): static
+    public static function cursorAfter(array|object $value): static
     {
         return new static(Method::CursorAfter, values: [$value]);
     }
 
     /**
-     * @param  Document  $value
+     * @param  array<string, mixed>|object  $value  a Document; Validator\Query\Cursor also takes its id, and refuses an array
      */
-    public static function cursorBefore(mixed $value): static
+    public static function cursorBefore(array|object $value): static
     {
         return new static(Method::CursorBefore, values: [$value]);
     }
@@ -307,6 +307,10 @@ class Query extends BaseQuery
             $array['attribute'] = $this->attribute;
         }
 
+        if ($this->alias !== '') {
+            $array['alias'] = $this->alias;
+        }
+
         if (\in_array($this->method, self::LOGICAL_TYPES, true) || $this->method === Method::Having) {
             foreach ($this->values as $index => $value) {
                 if (! $value instanceof self) {
@@ -319,10 +323,11 @@ class Query extends BaseQuery
         } else {
             $array['values'] = [];
             foreach ($this->values as $value) {
-                if ($value instanceof Document && in_array($this->method, [Method::CursorAfter, Method::CursorBefore])) {
-                    $value = $value->getId();
-                }
-                $array['values'][] = $value;
+                $array['values'][] = match (true) {
+                    $value instanceof BaseQuery => $value->toArray(),
+                    $value instanceof Document && \in_array($this->method, [Method::CursorAfter, Method::CursorBefore], true) => $value->getId(),
+                    default => $value,
+                };
             }
         }
 

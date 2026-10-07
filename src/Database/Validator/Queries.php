@@ -146,19 +146,13 @@ class Queries extends Validator
 
             $method = $q->getMethod();
 
-            if ($method->isAggregate()) {
-                $alias = $q->getValue('');
-                if (\is_string($alias) && $alias !== '') {
-                    $aggregationAliases[] = $alias;
-                }
+            if ($method->isAggregate() && $q->getAlias() !== '') {
+                $aggregationAliases[] = $q->getAlias();
             }
 
             if ($method->isJoin()) {
                 $hasJoins = true;
-                $alias = $q->getJoinAlias();
-                if ($alias !== '') {
-                    $joinAliases[] = $alias;
-                }
+                $joinAliases[] = $q->getAlias();
             }
         }
 
@@ -360,7 +354,7 @@ class Queries extends Validator
 
             $collection = $this->getJoinedCollection($query->getAttribute());
             if ($collection !== null) {
-                $joins[] = JoinedCollection::of($query->getJoinAlias(), $collection);
+                $joins[] = JoinedCollection::of($query->getAlias(), $collection);
             }
         }
 

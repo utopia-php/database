@@ -27,18 +27,18 @@ final class BaseAdapterStateTest extends TestCase
 
     private const int FILTERED_KEY_CACHE_LIMIT = 4096;
 
-    public function testSetDebugStoresEntriesAndResetDebugClearsThem(): void
+    public function testSetMetadataStoresEntriesAndResetMetadataClearsThem(): void
     {
         $adapter = new SQLite(new PDO('sqlite::memory:'));
 
-        $this->assertSame([], $adapter->getDebug());
-        $this->assertSame($adapter, $adapter->setDebug('a', 1));
-        $this->assertSame($adapter, $adapter->setDebug('b', ['nested' => true]));
-        $this->assertSame($adapter, $adapter->setDebug('a', 2));
-        $this->assertSame(['a' => 2, 'b' => ['nested' => true]], $adapter->getDebug());
+        $this->assertSame([], $adapter->getMetadata());
+        $this->assertSame($adapter, $adapter->setMetadata('a', 1));
+        $this->assertSame($adapter, $adapter->setMetadata('b', ['nested' => true]));
+        $this->assertSame($adapter, $adapter->setMetadata('a', 2));
+        $this->assertSame(['a' => 2, 'b' => ['nested' => true]], $adapter->getMetadata());
 
-        $this->assertSame($adapter, $adapter->resetDebug());
-        $this->assertSame([], $adapter->getDebug());
+        $this->assertSame($adapter, $adapter->resetMetadata());
+        $this->assertSame([], $adapter->getMetadata());
     }
 
     #[RunInSeparateProcess]

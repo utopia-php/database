@@ -9,6 +9,7 @@ use PDOStatement;
 use Swoole\Database\PDOProxy;
 use Swoole\Database\PDOStatementProxy;
 use Throwable;
+use Utopia\Database\Adapter\SQL\Wkt;
 use Utopia\Database\Attribute;
 use Utopia\Database\Builder\MariaDB as MariaDBBuilder;
 use Utopia\Database\Capability;
@@ -64,7 +65,6 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
             Capability::SchemaIntrospection,
             Capability::UpsertOnUniqueIndex,
             Capability::UnsignedBigInt,
-            Capability::SchemaIntrospection,
         ]);
     }
 
@@ -104,12 +104,18 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
 
     /**
      * MariaDB and MySQL cannot rename a database, so every table moves into a new one in a single atomic
-     * `RENAME TABLE` and the emptied database is dropped. Grants on the old database do not move.
+     * `RENAME TABLE` and the emptied database is dropped. Grants on the old database do not move. A table
+     * created in the old database during the rename keeps it from being dropped. Shared tables refuse the
+     * rename: other tenants' rows share the database.
      *
      * @throws DatabaseException
      */
     public function update(string $name, string $new): bool
     {
+        if ($this->getSharedTables()) {
+            throw new DatabaseException('Cannot rename a database while shared tables are enabled');
+        }
+
         $name = $this->filter($name);
         $new = $this->filter($new);
 
@@ -139,6 +145,10 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
 
                 throw $error instanceof PDOException ? $this->processException($error) : $error;
             }
+        }
+
+        if ($this->getTables($name) !== []) {
+            throw new DatabaseException("Database {$name} was renamed to {$new} but holds tables created during the rename, so it was not dropped");
         }
 
         return $this->executeStatement($schema->dropDatabase($name)->query, Event::DatabaseDelete);
@@ -634,10 +644,10 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
 
             $spatialMap = \array_fill_keys($spatialAttributes, true);
 
-            foreach ($attributes as $attr => $value) {
-                $column = $this->filter($attr);
+            foreach ($attributes as $attribute => $value) {
+                $column = $this->filter($attribute);
 
-                if (isset($spatialMap[$attr])) {
+                if (isset($spatialMap[$attribute])) {
                     $value = $this->encodeSpatialWriteValue($value);
                     $value = (\is_bool($value)) ? (int) $value : $value;
                     $row[$column] = $value;
@@ -807,7 +817,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
 
     public function encode(mixed $value, ColumnType $type): string
     {
-        return $this->encodeSpatial($value, $type);
+        return Wkt::encode($value, $type);
     }
 
     /**

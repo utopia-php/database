@@ -85,6 +85,34 @@ final class LimitsTest extends TestCase
         $this->assertSame(768, $adapter->limits()->indexLength);
     }
 
+    public function testSettingSharedTablesToTheirCurrentValueKeepsTheLimits(): void
+    {
+        $adapter = new MariaDB(new stdClass());
+        $limits = $adapter->limits();
+
+        $adapter->setSharedTables(false);
+
+        $this->assertSame($limits, $adapter->limits(), 'An unchanged mode must not rebuild the limits');
+
+        $adapter->setSharedTables(true);
+
+        $this->assertSame($limits->indexLength - 1, $adapter->limits()->indexLength);
+    }
+
+    public function testChangingADatetimeLimitTheDatabaseReturnsLeavesTheLimit(): void
+    {
+        $database = new Database(new MariaDB(new stdClass()), new Cache(new None()));
+        $min = $database->getMinDateTime()->format('Y-m-d H:i:s');
+        $max = $database->getMaxDateTime()->format('Y-m-d H:i:s');
+
+        $database->getMinDateTime()->modify('+1 year');
+        $database->getMaxDateTime()->modify('-1 year');
+
+        $this->assertSame($min, $database->getMinDateTime()->format('Y-m-d H:i:s'));
+        $this->assertSame($max, $database->getMaxDateTime()->format('Y-m-d H:i:s'));
+        $this->assertSame($min, $database->profile()->limits->minDateTime->format('Y-m-d H:i:s'));
+    }
+
     public function testSQLiteReservesItsOwnKeywords(): void
     {
         $mariadb = (new MariaDB(new stdClass()))->limits()->keywords;

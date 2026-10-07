@@ -9,6 +9,8 @@ use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Database;
+use Utopia\Database\Hook\Permissions;
+use Utopia\Database\Hook\Relationships;
 use Utopia\Database\PDO;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
@@ -53,7 +55,7 @@ $cli
                 'pass' => 'password',
                 'dsn' => static fn (string $host, int $port) => "mysql:host={$host};port={$port};charset=utf8mb4",
                 'adapter' => MariaDB::class,
-                'pdoAttr' => MariaDB::getPDOAttributes(),
+                'pdoAttr' => PDO_ATTRIBUTES,
             ],
             'mysql' => [
                 'host' => 'mysql',
@@ -62,7 +64,7 @@ $cli
                 'pass' => 'password',
                 'dsn' => static fn (string $host, int $port) => "mysql:host={$host};port={$port};charset=utf8mb4",
                 'adapter' => MySQL::class,
-                'pdoAttr' => MySQL::getPDOAttributes(),
+                'pdoAttr' => PDO_ATTRIBUTES,
             ],
             'postgres' => [
                 'host' => 'postgres',
@@ -71,7 +73,7 @@ $cli
                 'pass' => 'password',
                 'dsn' => static fn (string $host, int $port) => "pgsql:host={$host};port={$port}",
                 'adapter' => Postgres::class,
-                'pdoAttr' => Postgres::getPDOAttributes(),
+                'pdoAttr' => PDO_ATTRIBUTES,
             ],
         ];
 
@@ -90,7 +92,10 @@ $cli
             $cfg['pdoAttr']
         );
 
-        $database = (new Database(new ($cfg['adapter'])($pdo), $cache))
+        $database = new Database(new ($cfg['adapter'])($pdo), $cache);
+        $database
+            ->addHook(new Permissions())
+            ->addHook(new Relationships($database))
             ->setDatabase($name)
             ->setNamespace($namespace)
             ->setSharedTables($sharedTables);

@@ -40,6 +40,7 @@ class ReadWritePool extends Pool
         'builder',
         'schema',
         'getColumnType',
+        'getSchemaIndexType',
         'encode',
         'decode',
         'castBefore',

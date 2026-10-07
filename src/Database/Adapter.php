@@ -20,6 +20,7 @@ use Utopia\Database\State\Value;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\CursorDirection;
 use Utopia\Query\Method;
+use Utopia\Query\Schema\IndexType;
 
 /**
  * Abstract base class for all database adapters, providing shared state management and a contract for database operations.
@@ -66,11 +67,6 @@ abstract class Adapter
             $this->duplicateSkipping()->set($value);
         }
     }
-
-    /**
-     * @var array<string, mixed>
-     */
-    protected array $debug = [];
 
     /**
      * @var array<string, Transform>
@@ -237,8 +233,10 @@ abstract class Adapter
      */
     public function setSharedTables(bool $sharedTables): bool
     {
-        $this->sharedTables = $sharedTables;
-        $this->limits = null;
+        if ($this->sharedTables !== $sharedTables) {
+            $this->sharedTables = $sharedTables;
+            $this->limits = null;
+        }
 
         return true;
     }
@@ -343,42 +341,6 @@ abstract class Adapter
     public function getTenantPerDocument(): bool
     {
         return $this->tenantPerDocument;
-    }
-
-    /**
-     * Set a debug key-value pair for diagnostic purposes.
-     *
-     * @param string $key The debug key.
-     * @param mixed $value The debug value.
-     * @return $this
-     */
-    public function setDebug(string $key, mixed $value): static
-    {
-        $this->debug[$key] = $value;
-
-        return $this;
-    }
-
-    /**
-     * Get all collected debug data.
-     *
-     * @return array<string, mixed>
-     */
-    public function getDebug(): array
-    {
-        return $this->debug;
-    }
-
-    /**
-     * Reset all debug data.
-     *
-     * @return $this
-     */
-    public function resetDebug(): static
-    {
-        $this->debug = [];
-
-        return $this;
     }
 
     /**
@@ -816,6 +778,17 @@ abstract class Adapter
      * @return list<Schema\Index>
      */
     abstract public function getSchemaIndexes(string $collection): array;
+
+    /**
+     * The type getSchemaIndexes() reports for an index created as $type: an engine that stores an index of one
+     * type as another reports the type it stores.
+     *
+     * @internal
+     */
+    public function getSchemaIndexType(IndexType $type): IndexType
+    {
+        return $type;
+    }
 
     /**
      * The native column type the adapter creates for an attribute, in the spelling of Schema\Column::$type; null where

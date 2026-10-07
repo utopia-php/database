@@ -4,6 +4,7 @@ namespace Utopia\Database\Adapter;
 
 use Throwable;
 use Utopia\Database\Adapter;
+use Utopia\Database\Adapter\SQL\Wkt;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Change;
@@ -25,6 +26,7 @@ use Utopia\Query\Builder;
 use Utopia\Query\CursorDirection;
 use Utopia\Query\Schema;
 use Utopia\Query\Schema\ColumnType;
+use Utopia\Query\Schema\IndexType;
 
 /**
  * Connection pool adapter that delegates database operations to pooled adapter instances.
@@ -182,10 +184,6 @@ class Pool extends Adapter implements Feature\Timeouts
         }
 
         $this->syncTimeouts($adapter);
-        $adapter->resetDebug();
-        foreach ($this->getDebug() as $key => $value) {
-            $adapter->setDebug($key, $value);
-        }
         $adapter->resetMetadata();
         foreach ($this->getMetadata() as $key => $value) {
             $adapter->setMetadata($key, $value);
@@ -208,6 +206,7 @@ class Pool extends Adapter implements Feature\Timeouts
         $adapter->setProfiler(null);
     }
 
+    #[\Override]
     public function getDriver(): object
     {
         /** @var object $result */
@@ -224,6 +223,7 @@ class Pool extends Adapter implements Feature\Timeouts
      * that mode, every connection it borrows is put in it first, so the answer is kept per pool
      * and mode; before that, a connection keeps its own mode and is asked every time.
      */
+    #[\Override]
     public function supports(Capability $capability): bool
     {
         if ($capability === Capability::DefinedAttributes) {
@@ -263,6 +263,7 @@ class Pool extends Adapter implements Feature\Timeouts
      *
      * @return array<Capability>
      */
+    #[\Override]
     public function capabilities(): array
     {
         $remembered = self::$declared[$this->pool] ?? null;
@@ -284,6 +285,7 @@ class Pool extends Adapter implements Feature\Timeouts
      *
      * @param  class-string  $feature
      */
+    #[\Override]
     public function hasFeature(string $feature): bool
     {
         if ($this instanceof $feature) {
@@ -313,6 +315,7 @@ class Pool extends Adapter implements Feature\Timeouts
      * @param Transform $transform The transform instance
      * @return static
      */
+    #[\Override]
     public function addTransform(string $name, Transform $transform): static
     {
         $this->transforms[$name] = $transform;
@@ -326,6 +329,7 @@ class Pool extends Adapter implements Feature\Timeouts
      * @param string $name The transform name to remove
      * @return static
      */
+    #[\Override]
     public function removeTransform(string $name): static
     {
         unset($this->transforms[$name]);
@@ -340,6 +344,7 @@ class Pool extends Adapter implements Feature\Timeouts
      * @param Event $event The event scope for the timeout
      * @return void
      */
+    #[\Override]
     public function setTimeout(int $milliseconds, Event $event = Event::All): void
     {
         // Zero is what a caller's own default carries when it wants no timeout,
@@ -354,6 +359,7 @@ class Pool extends Adapter implements Feature\Timeouts
         $this->syncPinnedTimeouts();
     }
 
+    #[\Override]
     public function clearTimeout(Event $event = Event::All): void
     {
         $this->clearTimeoutState($event);
@@ -441,6 +447,7 @@ class Pool extends Adapter implements Feature\Timeouts
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function startTransaction(): bool
     {
         /** @var bool $result */
@@ -455,6 +462,7 @@ class Pool extends Adapter implements Feature\Timeouts
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function commitTransaction(): bool
     {
         /** @var bool $result */
@@ -469,6 +477,7 @@ class Pool extends Adapter implements Feature\Timeouts
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function rollbackTransaction(): bool
     {
         /** @var bool $result */
@@ -476,6 +485,7 @@ class Pool extends Adapter implements Feature\Timeouts
         return $result;
     }
 
+    #[\Override]
     public function inTransaction(): bool
     {
         return $this->pin()?->inTransaction() ?? parent::inTransaction();
@@ -503,6 +513,7 @@ class Pool extends Adapter implements Feature\Timeouts
      *
      * @throws Throwable
      */
+    #[\Override]
     public function withTransaction(callable $callback): mixed
     {
         $pinned = $this->pin();
@@ -616,6 +627,7 @@ class Pool extends Adapter implements Feature\Timeouts
     /**
      * {@inheritDoc}
      */
+    #[\Override]
     public function create(string $name): bool
     {
         /** @var bool $result */
@@ -623,6 +635,7 @@ class Pool extends Adapter implements Feature\Timeouts
         return $result;
     }
 
+    #[\Override]
     public function update(string $name, string $new): bool
     {
         /** @var bool $result */
@@ -634,6 +647,7 @@ class Pool extends Adapter implements Feature\Timeouts
     /**
      * {@inheritDoc}
      */
+    #[\Override]
     public function exists(string $database): bool
     {
         /** @var bool $result */
@@ -641,6 +655,7 @@ class Pool extends Adapter implements Feature\Timeouts
         return $result;
     }
 
+    #[\Override]
     public function collectionExists(string $database, string $collection): bool
     {
         /** @var bool $result */
@@ -651,6 +666,7 @@ class Pool extends Adapter implements Feature\Timeouts
     /**
      * {@inheritDoc}
      */
+    #[\Override]
     public function list(): array
     {
         /** @var array<Document> $result */
@@ -661,6 +677,7 @@ class Pool extends Adapter implements Feature\Timeouts
     /**
      * {@inheritDoc}
      */
+    #[\Override]
     public function delete(string $name): bool
     {
         /** @var bool $result */
@@ -672,6 +689,7 @@ class Pool extends Adapter implements Feature\Timeouts
      * @param  list<Attribute>  $attributes
      * @param  list<Index>  $indexes
      */
+    #[\Override]
     public function createCollection(string $collection, array $attributes = [], array $indexes = []): bool
     {
         /** @var bool $result */
@@ -682,6 +700,7 @@ class Pool extends Adapter implements Feature\Timeouts
     /**
      * {@inheritDoc}
      */
+    #[\Override]
     public function deleteCollection(string $collection): bool
     {
         /** @var bool $result */
@@ -692,6 +711,7 @@ class Pool extends Adapter implements Feature\Timeouts
     /**
      * {@inheritDoc}
      */
+    #[\Override]
     public function analyzeCollection(string $collection): bool
     {
         /** @var bool $result */
@@ -702,6 +722,7 @@ class Pool extends Adapter implements Feature\Timeouts
     /**
      * {@inheritDoc}
      */
+    #[\Override]
     public function createAttribute(string $collection, Attribute $attribute): bool
     {
         /** @var bool $result */
@@ -712,6 +733,7 @@ class Pool extends Adapter implements Feature\Timeouts
     /**
      * @param  list<Attribute>  $attributes
      */
+    #[\Override]
     public function createAttributes(string $collection, array $attributes): bool
     {
         /** @var bool $result */
@@ -719,6 +741,7 @@ class Pool extends Adapter implements Feature\Timeouts
         return $result;
     }
 
+    #[\Override]
     public function updateAttribute(string $collection, string $key, Attribute $attribute): bool
     {
         /** @var bool $result */
@@ -726,6 +749,7 @@ class Pool extends Adapter implements Feature\Timeouts
         return $result;
     }
 
+    #[\Override]
     public function relaxAttributeRequired(string $collection, string $id): bool
     {
         /** @var bool $result */
@@ -737,6 +761,7 @@ class Pool extends Adapter implements Feature\Timeouts
     /**
      * {@inheritDoc}
      */
+    #[\Override]
     public function deleteAttribute(string $collection, string $key): bool
     {
         /** @var bool $result */
@@ -747,6 +772,7 @@ class Pool extends Adapter implements Feature\Timeouts
     /**
      * {@inheritDoc}
      */
+    #[\Override]
     public function renameAttribute(string $collection, string $old, string $new): bool
     {
         /** @var bool $result */
@@ -787,6 +813,7 @@ class Pool extends Adapter implements Feature\Timeouts
     /**
      * {@inheritDoc}
      */
+    #[\Override]
     public function renameIndex(string $collection, string $old, string $new): bool
     {
         /** @var bool $result */
@@ -797,6 +824,7 @@ class Pool extends Adapter implements Feature\Timeouts
     /**
      * {@inheritDoc}
      */
+    #[\Override]
     public function createIndex(string $collection, Index $index, array $indexAttributeTypes = [], array $collation = []): bool
     {
         /** @var bool $result */
@@ -807,6 +835,7 @@ class Pool extends Adapter implements Feature\Timeouts
     /**
      * {@inheritDoc}
      */
+    #[\Override]
     public function deleteIndex(string $collection, string $key): bool
     {
         /** @var bool $result */
@@ -817,6 +846,7 @@ class Pool extends Adapter implements Feature\Timeouts
     /**
      * {@inheritDoc}
      */
+    #[\Override]
     public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
         /** @var Document $result */
@@ -827,6 +857,7 @@ class Pool extends Adapter implements Feature\Timeouts
     /**
      * {@inheritDoc}
      */
+    #[\Override]
     public function createDocument(Document $collection, Document $document): Document
     {
         /** @var Document $result */
@@ -837,6 +868,7 @@ class Pool extends Adapter implements Feature\Timeouts
     /**
      * {@inheritDoc}
      */
+    #[\Override]
     public function createDocuments(Document $collection, array $documents): array
     {
         /** @var array<Document> $result */
@@ -847,6 +879,7 @@ class Pool extends Adapter implements Feature\Timeouts
     /**
      * {@inheritDoc}
      */
+    #[\Override]
     public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
     {
         /** @var Document $result */
@@ -857,6 +890,7 @@ class Pool extends Adapter implements Feature\Timeouts
     /**
      * {@inheritDoc}
      */
+    #[\Override]
     public function updateDocuments(Document $collection, Document $updates, array $documents): int
     {
         /** @var int $result */
@@ -885,6 +919,7 @@ class Pool extends Adapter implements Feature\Timeouts
     /**
      * {@inheritDoc}
      */
+    #[\Override]
     public function deleteDocument(Document $collection, string $id): bool
     {
         /** @var bool $result */
@@ -895,6 +930,7 @@ class Pool extends Adapter implements Feature\Timeouts
     /**
      * {@inheritDoc}
      */
+    #[\Override]
     public function deleteDocuments(Document $collection, array $sequences, array $permissionIds): int
     {
         /** @var int $result */
@@ -905,6 +941,7 @@ class Pool extends Adapter implements Feature\Timeouts
     /**
      * {@inheritDoc}
      */
+    #[\Override]
     public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read): array
     {
         /** @var array<Document> $result */
@@ -915,6 +952,7 @@ class Pool extends Adapter implements Feature\Timeouts
     /**
      * {@inheritDoc}
      */
+    #[\Override]
     public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): float|int
     {
         /** @var float|int $result */
@@ -925,6 +963,7 @@ class Pool extends Adapter implements Feature\Timeouts
     /**
      * {@inheritDoc}
      */
+    #[\Override]
     public function count(Document $collection, array $queries = [], ?int $max = null): int
     {
         /** @var int $result */
@@ -935,6 +974,7 @@ class Pool extends Adapter implements Feature\Timeouts
     /**
      * {@inheritDoc}
      */
+    #[\Override]
     public function getSizeOfCollection(string $collection): int
     {
         /** @var int $result */
@@ -945,6 +985,7 @@ class Pool extends Adapter implements Feature\Timeouts
     /**
      * {@inheritDoc}
      */
+    #[\Override]
     public function getSizeOfCollectionOnDisk(string $collection): int
     {
         /** @var int $result */
@@ -967,6 +1008,7 @@ class Pool extends Adapter implements Feature\Timeouts
     /**
      * {@inheritDoc}
      */
+    #[\Override]
     public function getCountOfAttributes(Document $collection): int
     {
         /** @var int $result */
@@ -977,6 +1019,7 @@ class Pool extends Adapter implements Feature\Timeouts
     /**
      * {@inheritDoc}
      */
+    #[\Override]
     public function getCountOfIndexes(Document $collection): int
     {
         /** @var int $result */
@@ -987,6 +1030,7 @@ class Pool extends Adapter implements Feature\Timeouts
     /**
      * {@inheritDoc}
      */
+    #[\Override]
     public function getAttributeWidth(Document $collection): int
     {
         /** @var int $result */
@@ -997,6 +1041,7 @@ class Pool extends Adapter implements Feature\Timeouts
     /**
      * {@inheritDoc}
      */
+    #[\Override]
     public function increaseDocumentAttribute(Document $collection, string $id, string $attribute, float|int|string $value, string $updatedAt, float|int|string|null $min = null, float|int|string|null $max = null): bool
     {
         /** @var bool $result */
@@ -1015,6 +1060,7 @@ class Pool extends Adapter implements Feature\Timeouts
     /**
      * @return list<SchemaColumn>
      */
+    #[\Override]
     public function getSchemaAttributes(string $collection): array
     {
         /** @var list<SchemaColumn> $result */
@@ -1025,6 +1071,7 @@ class Pool extends Adapter implements Feature\Timeouts
     /**
      * @return list<SchemaIndex>
      */
+    #[\Override]
     public function getSchemaIndexes(string $collection): array
     {
         /** @var list<SchemaIndex> $result */
@@ -1032,6 +1079,15 @@ class Pool extends Adapter implements Feature\Timeouts
         return $result;
     }
 
+    #[\Override]
+    public function getSchemaIndexType(IndexType $type): IndexType
+    {
+        /** @var IndexType $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
+    }
+
+    #[\Override]
     public function getColumnType(Attribute $attribute): ?string
     {
         /** @var string|null $result */
@@ -1042,6 +1098,7 @@ class Pool extends Adapter implements Feature\Timeouts
     /**
      * {@inheritDoc}
      */
+    #[\Override]
     public function getSequences(Document $collection, array $documents): array
     {
         /** @var array<Document> $result */
@@ -1049,11 +1106,13 @@ class Pool extends Adapter implements Feature\Timeouts
         return $result;
     }
 
+    /**
+     * The well-known text does not depend on a connection, so it is built without borrowing one, whichever
+     * adapter the pool holds: hasFeature(Feature\Spatial::class) says whether that adapter stores geometries.
+     */
     public function encode(mixed $value, ColumnType $type): string
     {
-        /** @var string $result */
-        $result = $this->delegateFeature(Feature\Spatial::class, __FUNCTION__, \func_get_args());
-        return $result;
+        return Wkt::encode($value, $type);
     }
 
     /**
@@ -1090,11 +1149,11 @@ class Pool extends Adapter implements Feature\Timeouts
     }
 
     /**
-     * Every adapter this handle borrows afterwards is put in the mode first.
+     * Every adapter this handle borrows afterwards is put in the mode first; one without a schemaless
+     * mode always enforces its schema and is left as it is.
      */
     public function setSchemaless(bool $schemaless): static
     {
-        $this->delegateFeature(Feature\Schemaless::class, __FUNCTION__, \func_get_args());
         $this->schemaless = $schemaless;
 
         return $this;
@@ -1102,7 +1161,7 @@ class Pool extends Adapter implements Feature\Timeouts
 
     public function isSchemaless(): bool
     {
-        if ($this->schemaless !== null) {
+        if ($this->schemaless !== null && $this->hasFeature(Feature\Schemaless::class)) {
             return $this->schemaless;
         }
 
@@ -1118,6 +1177,7 @@ class Pool extends Adapter implements Feature\Timeouts
      * @param Authorization $authorization The authorization instance
      * @return self
      */
+    #[\Override]
     public function setAuthorization(Authorization $authorization): self
     {
         $this->authorization = $authorization;

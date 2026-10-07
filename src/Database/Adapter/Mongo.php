@@ -150,7 +150,8 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
-     * The wire protocol has no connection id, so the client's object id names the connection within the process.
+     * The wire protocol has no connection id, so the client's object id names the connection: unique only within
+     * the process and only while the client lives.
      */
     public function id(): string
     {
@@ -631,14 +632,20 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
-     * Moves every collection into the new database with `renameCollection`, then drops the emptied one.
-     * A sharded cluster cannot move a collection between databases, so it refuses the rename.
-     * The client stays bound to the database it was built for: address the renamed one with a client built for it.
+     * Moves every collection into the new database with `renameCollection`, then drops the emptied one. A failure
+     * part way moves the collections already moved back, newest first, and is thrown. A sharded cluster cannot move
+     * a collection between databases, so it refuses the rename, as do shared tables, whose database other tenants
+     * share. The client stays bound to the database it was built for: address the renamed one with a client built
+     * for it.
      *
      * @throws DatabaseException
      */
     public function update(string $name, string $new): bool
     {
+        if ($this->getSharedTables()) {
+            throw new DatabaseException('Cannot rename a database while shared tables are enabled');
+        }
+
         $name = $this->filter($name);
         $new = $this->filter($new);
         $client = $this->getClient();
@@ -659,28 +666,53 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
             throw new DuplicateException('Database already exists');
         }
 
-        /** @var stdClass $listed */
-        $listed = $client->query(['listCollections' => 1, 'nameOnly' => true], $name);
-        /** @var stdClass $cursor */
-        $cursor = $listed->cursor;
-        /** @var array<stdClass> $collections */
-        $collections = $cursor->firstBatch ?? [];
-
-        foreach ($collections as $collection) {
-            $collectionName = $collection->name ?? null;
-            if (! \is_string($collectionName) || \str_starts_with($collectionName, 'system.')) {
-                continue;
+        $moved = [];
+        try {
+            foreach ($this->getCollectionNames($name) as $collection) {
+                $client->query(['renameCollection' => "{$name}.{$collection}", 'to' => "{$new}.{$collection}"], 'admin');
+                $moved[] = $collection;
+            }
+        } catch (Throwable $error) {
+            foreach (\array_reverse($moved) as $collection) {
+                $client->query(['renameCollection' => "{$new}.{$collection}", 'to' => "{$name}.{$collection}"], 'admin');
             }
 
-            $client->query([
-                'renameCollection' => "{$name}.{$collectionName}",
-                'to' => "{$new}.{$collectionName}",
-            ], 'admin');
+            throw $error instanceof MongoException ? $this->processException($error) : $error;
         }
 
         $client->dropDatabase([], $name);
 
         return true;
+    }
+
+    /**
+     * The collections of a database a rename moves: every one but the server's own.
+     *
+     * @return list<string>
+     *
+     * @throws DatabaseException When the server pages the listing, which a rename cannot move in one pass
+     */
+    private function getCollectionNames(string $database): array
+    {
+        /** @var stdClass $listed */
+        $listed = $this->getClient()->query(['listCollections' => 1, 'nameOnly' => true], $database);
+        /** @var stdClass $cursor */
+        $cursor = $listed->cursor;
+        if (! empty($cursor->id)) {
+            throw new DatabaseException('Database has more collections than one listing returns, so it cannot be renamed');
+        }
+
+        /** @var array<stdClass> $collections */
+        $collections = $cursor->firstBatch ?? [];
+        $names = [];
+        foreach ($collections as $collection) {
+            $collectionName = $collection->name ?? null;
+            if (\is_string($collectionName) && ! \str_starts_with($collectionName, 'system.')) {
+                $names[] = $collectionName;
+            }
+        }
+
+        return $names;
     }
 
     /**
@@ -705,21 +737,28 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
+     * MongoDB creates a database on its first write, so only a database holding data is listed and exists.
+     *
      * @throws Exception
      */
     public function exists(string $database): bool
     {
-        return $this->getClient()->selectDatabase() != null;
+        return \in_array($this->filter($database), $this->getDatabaseNames(), true);
     }
 
+    /**
+     * An empty database name asks the database the client was built for.
+     */
     public function collectionExists(string $database, string $collection): bool
     {
+        $database = $this->filter($database);
+
         try {
             /** @var \stdClass $result */
             $result = $this->getClient()->query([
                 'listCollections' => 1,
                 'filter' => ['name' => $this->getNamespace().'_'.$this->filter($collection)],
-            ]);
+            ], $database === '' ? null : $database);
 
             /** @var \stdClass $cursor */
             $cursor = $result->cursor;
@@ -783,7 +822,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         // In shared-tables mode or for metadata, the physical collection may
         // already exist for another tenant. Return early to avoid a
         // "Collection Exists" exception from the client.
-        if (! $this->inTransaction && ($this->getSharedTables() || $collection === Database::METADATA) && $this->collectionExists($this->getNamespace(), $collection)) {
+        if (! $this->inTransaction && ($this->getSharedTables() || $collection === Database::METADATA) && $this->collectionExists($this->getDatabase(), $collection)) {
             return true;
         }
 

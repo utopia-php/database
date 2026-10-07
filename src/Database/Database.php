@@ -472,6 +472,8 @@ class Database
         self::addFilter(
             ColumnType::Point->value,
             /**
+             * An invalid geometry is returned as given, for the structure validator to reject.
+             *
              * @return mixed
              */
             static function (mixed $value, Document $document, Database $database) {
@@ -483,7 +485,7 @@ class Database
 
                 try {
                     return $adapter->encode($value, ColumnType::Point);
-                } catch (Throwable) {
+                } catch (StructureException) {
                     return $value;
                 }
             },
@@ -508,6 +510,8 @@ class Database
         self::addFilter(
             ColumnType::Linestring->value,
             /**
+             * An invalid geometry is returned as given, for the structure validator to reject.
+             *
              * @return mixed
              */
             static function (mixed $value, Document $document, Database $database) {
@@ -519,7 +523,7 @@ class Database
 
                 try {
                     return $adapter->encode($value, ColumnType::Linestring);
-                } catch (Throwable) {
+                } catch (StructureException) {
                     return $value;
                 }
             },
@@ -544,6 +548,8 @@ class Database
         self::addFilter(
             ColumnType::Polygon->value,
             /**
+             * An invalid geometry is returned as given, for the structure validator to reject.
+             *
              * @return mixed
              */
             static function (mixed $value, Document $document, Database $database) {
@@ -555,7 +561,7 @@ class Database
 
                 try {
                     return $adapter->encode($value, ColumnType::Polygon);
-                } catch (Throwable) {
+                } catch (StructureException) {
                     return $value;
                 }
             },
@@ -750,16 +756,28 @@ class Database
 
     /**
      * The adapter's limits and capabilities and this database's mode, built once and rebuilt when
-     * shared tables, migration or the schemaless mode change.
+     * shared tables, migration or the schemaless mode change. DefinedAttributes is asked of the
+     * adapter on every check, as the database asks it.
      */
     public function profile(): Profile
     {
-        return $this->profile ??= new Profile(
-            $this->adapter->limits(),
-            \array_values(\array_filter(Capability::cases(), $this->adapter->supports(...))),
-            \array_values(\array_filter(self::FEATURES, $this->adapter->hasFeature(...))),
-            $this->adapter->getSharedTables(),
+        if ($this->profile !== null) {
+            return $this->profile;
+        }
+
+        $adapter = $this->adapter;
+        $capabilities = \array_filter(
+            Capability::cases(),
+            static fn (Capability $capability): bool => $capability !== Capability::DefinedAttributes && $adapter->supports($capability),
+        );
+
+        return $this->profile = new Profile(
+            $adapter->limits(),
+            \array_values($capabilities),
+            \array_values(\array_filter(self::FEATURES, $adapter->hasFeature(...))),
+            $adapter->getSharedTables(),
             $this->migrating,
+            static fn (): bool => $adapter->supports(Capability::DefinedAttributes),
         );
     }
 
@@ -2412,14 +2430,20 @@ class Database
         return $this->adapter->limits()->uidLength;
     }
 
+    /**
+     * A copy, so a caller that modifies it leaves the adapter's limit as it is.
+     */
     public function getMinDateTime(): NativeDateTime
     {
-        return $this->adapter->limits()->minDateTime;
+        return clone $this->adapter->limits()->minDateTime;
     }
 
+    /**
+     * A copy, so a caller that modifies it leaves the adapter's limit as it is.
+     */
     public function getMaxDateTime(): NativeDateTime
     {
-        return $this->adapter->limits()->maxDateTime;
+        return clone $this->adapter->limits()->maxDateTime;
     }
 
     /**

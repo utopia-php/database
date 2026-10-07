@@ -22,7 +22,8 @@ use Utopia\Query\Schema\IndexType;
 /**
  * SQLite names its physical indexes after the namespace, tenant and collection. The adapter
  * here reports them under their index id, as MariaDB and MySQL do, where one physical index
- * of a shared table serves every tenant's collection.
+ * of a shared table serves every tenant's collection, and stores a fulltext index as a key,
+ * as Postgres does.
  */
 final class OrphanIndexTest extends TestCase
 {
@@ -102,6 +103,29 @@ final class OrphanIndexTest extends TestCase
         $this->assertSame([self::INDEX], $this->indexKeys($second));
     }
 
+    public function testSharedTablesReuseAnIndexTheEngineStoresAsAKeyForAFulltextIndex(): void
+    {
+        $first = $this->database(tenant: 1);
+        $first->createIndex(self::COLLECTION, Index::key(key: self::INDEX, attributes: ['name']));
+        $second = $this->database(tenant: 2);
+
+        $this->assertSame(IndexType::Fulltext, $second->createIndex(self::COLLECTION, Index::fulltext(key: self::INDEX, attributes: ['name']))->type);
+
+        $this->assertSame([['_tenant', 'name'], IndexType::Key], $this->schemaIndex($first));
+        $this->assertSame([self::INDEX], $this->indexKeys($second));
+    }
+
+    public function testSharedTablesReuseAnIndexWhoseEngineReportsNoPrefixLengths(): void
+    {
+        $first = $this->database(tenant: 1);
+        $first->createIndex(self::COLLECTION, Index::key(key: self::INDEX, attributes: ['name']));
+        $second = $this->database(tenant: 2);
+
+        $this->assertSame([32], $second->createIndex(self::COLLECTION, Index::key(key: self::INDEX, attributes: ['name'], lengths: [32]))->lengths);
+
+        $this->assertSame([self::INDEX], $this->indexKeys($second));
+    }
+
     private function database(?int $tenant = null): Database
     {
         $database = new Database($this->adapter(), new Cache(new None()));
@@ -136,6 +160,11 @@ final class OrphanIndexTest extends TestCase
     private function adapter(): SQLite
     {
         return new class (new PDO('sqlite:'.$this->path)) extends SQLite {
+            public function getSchemaIndexType(IndexType $type): IndexType
+            {
+                return $type === IndexType::Fulltext ? IndexType::Key : $type;
+            }
+
             public function getSchemaIndexes(string $collection): array
             {
                 $prefix = '/^'.\preg_quote($this->getNamespace(), '/').'_[^_]*_'.\preg_quote($this->filter($collection), '/').'_/';

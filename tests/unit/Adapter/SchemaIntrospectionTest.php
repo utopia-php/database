@@ -6,6 +6,7 @@ use PDO;
 use PDOStatement;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use stdClass;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
@@ -215,6 +216,16 @@ final class SchemaIntrospectionTest extends TestCase
         $this->assertSame([], $adapter->getSchemaAttributes(self::COLLECTION));
         $this->assertSame([], $adapter->getSchemaIndexes(self::COLLECTION));
         $this->assertNull($adapter->getColumnType(Attribute::string(key: 'name', size: 64)));
+    }
+
+    public function testPostgresReportsAFulltextIndexAsTheKeyItStores(): void
+    {
+        $postgres = new Postgres(new stdClass());
+        $mariadb = new MariaDB(new stdClass());
+
+        $this->assertSame(IndexType::Key, $postgres->getSchemaIndexType(IndexType::Fulltext));
+        $this->assertSame(IndexType::Unique, $postgres->getSchemaIndexType(IndexType::Unique));
+        $this->assertSame(IndexType::Fulltext, $mariadb->getSchemaIndexType(IndexType::Fulltext));
     }
 
     public function testNoReconciliationRunsWithoutIntrospection(): void

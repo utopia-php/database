@@ -8,6 +8,7 @@ use PDOException;
 use PDOStatement;
 use Swoole\Database\PDOStatementProxy;
 use Throwable;
+use Utopia\Database\Adapter\SQL\Wkt;
 use Utopia\Database\Attribute;
 use Utopia\Database\Builder\PostgreSQL as PostgreSQLBuilder;
 use Utopia\Database\Capability;
@@ -149,12 +150,17 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     /**
-     * A Postgres database is a schema, which renames in place with everything it holds.
+     * A Postgres database is a schema, which renames in place with everything it holds. Shared tables refuse
+     * the rename: other tenants' rows share the schema.
      *
      * @throws DatabaseException
      */
     public function update(string $name, string $new): bool
     {
+        if ($this->getSharedTables()) {
+            throw new DatabaseException('Cannot rename a database while shared tables are enabled');
+        }
+
         $name = $this->filter($name);
         $new = $this->filter($new);
 
@@ -745,6 +751,15 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     /**
+     * A fulltext index is a plain btree index here, which the catalog reports as a key.
+     */
+    #[\Override]
+    public function getSchemaIndexType(IndexType $type): IndexType
+    {
+        return $type === IndexType::Fulltext ? IndexType::Key : $type;
+    }
+
+    /**
      * Under shared tables every tenant keeps its own copy of an index, named after it: the current tenant's are
      * reported under their keys, any other index under its physical name.
      *
@@ -1059,16 +1074,16 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
                 $row[Storage::SEQUENCE] = $document->getSequence();
             }
 
-            foreach ($spatialAttributes as $spatialCol) {
-                $builder->insertColumnExpression($spatialCol, $this->getSpatialGeometryFromText('?'));
+            foreach ($spatialAttributes as $spatialColumn) {
+                $builder->insertColumnExpression($spatialColumn, $this->getSpatialGeometryFromText('?'));
             }
 
             $spatialMap = \array_fill_keys($spatialAttributes, true);
 
-            foreach ($attributes as $attr => $value) {
-                $column = $this->filter($attr);
+            foreach ($attributes as $attribute => $value) {
+                $column = $this->filter($attribute);
 
-                if (isset($spatialMap[$attr])) {
+                if (isset($spatialMap[$attribute])) {
                     $row[$column] = $this->encodeSpatialWriteValue($value);
                     $builder->insertColumnExpression($column, $this->getSpatialGeometryFromText('?'));
                 } else {
@@ -1203,7 +1218,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
 
     public function encode(mixed $value, ColumnType $type): string
     {
-        return $this->encodeSpatial($value, $type);
+        return Wkt::encode($value, $type);
     }
 
     /**

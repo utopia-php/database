@@ -17,6 +17,8 @@ use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Hook\Permissions;
+use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Index;
 use Utopia\Database\PDO;
 use Utopia\Validator\Boolean;
@@ -48,18 +50,18 @@ $cli
             $database->getAuthorization()->addRole(Role::any()->toString());
             $database->create();
 
-            $database->createCollection(new Collection(id: 'articles', permissions: [
+            $database->createCollection(Collection::create(id: 'articles', permissions: [
                 Permission::create(Role::any()),
                 Permission::read(Role::any()),
             ]));
 
             $database->createAttribute('articles', Attribute::string(key: 'author', size: 256, required: true));
-            $database->createAttribute('articles', Attribute::datetime(key: 'created', size: 0, required: true, filters: ['datetime']));
+            $database->createAttribute('articles', Attribute::datetime(key: 'created', required: true));
             $database->createAttribute('articles', Attribute::string(key: 'text', size: 5000, required: true));
             $database->createAttribute('articles', Attribute::string(key: 'genre', size: 256, required: true));
-            $database->createAttribute('articles', Attribute::integer(key: 'views', size: 0, required: true));
+            $database->createAttribute('articles', Attribute::integer(key: 'views', required: true));
             $database->createAttribute('articles', Attribute::string(key: 'tags', size: 0, required: true, array: true));
-            $database->createIndex('articles', Index::fullText(key: 'text', attributes: ['text']));
+            $database->createIndex('articles', Index::fulltext(key: 'text', attributes: ['text']));
         };
 
         $start = null;
@@ -79,7 +81,7 @@ $cli
                 'dsn' => static fn (string $host, int $port) => "mysql:host={$host};port={$port};charset=utf8mb4",
                 'driver' => 'mysql',
                 'adapter' => MariaDB::class,
-                'attrs' => MariaDB::getPDOAttributes(),
+                'attrs' => PDO_ATTRIBUTES,
             ],
             'mysql' => [
                 'host' => 'mysql',
@@ -89,7 +91,7 @@ $cli
                 'dsn' => static fn (string $host, int $port) => "mysql:host={$host};port={$port};charset=utf8mb4",
                 'driver' => 'mysql',
                 'adapter' => MySQL::class,
-                'attrs' => MySQL::getPDOAttributes(),
+                'attrs' => PDO_ATTRIBUTES,
             ],
             'postgres' => [
                 'host' => 'postgres',
@@ -99,7 +101,7 @@ $cli
                 'dsn' => static fn (string $host, int $port) => "pgsql:host={$host};port={$port}",
                 'driver' => 'pgsql',
                 'adapter' => Postgres::class,
-                'attrs' => Postgres::getPDOAttributes(),
+                'attrs' => PDO_ATTRIBUTES,
             ],
         ];
 
@@ -120,12 +122,15 @@ $cli
             $cfg['attrs']
         );
 
-        $createSchema(
-            (new Database(new ($cfg['adapter'])($pdo), $cache))
-                ->setDatabase($name)
-                ->setNamespace($namespace)
-                ->setSharedTables($sharedTables)
-        );
+        $database = new Database(new ($cfg['adapter'])($pdo), $cache);
+        $database
+            ->addHook(new Permissions())
+            ->addHook(new Relationships($database))
+            ->setDatabase($name)
+            ->setNamespace($namespace)
+            ->setSharedTables($sharedTables);
+
+        $createSchema($database);
 
         $pool = new PDOPool(
             (new PDOConfig())
@@ -146,7 +151,10 @@ $cli
             try {
                 // $pdo = $pool->get();
 
-                $database = (new Database(new ($cfg['adapter'])($pdo), $cache))
+                $database = new Database(new ($cfg['adapter'])($pdo), $cache);
+                $database
+                    ->addHook(new Permissions())
+                    ->addHook(new Relationships($database))
                     ->setDatabase($name)
                     ->setNamespace($namespace)
                     ->setSharedTables($sharedTables);

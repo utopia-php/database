@@ -274,8 +274,17 @@ class Memory extends Adapter implements Feature\Relationships
         return true;
     }
 
+    /**
+     * Shared tables refuse the rename: other tenants' documents share the database.
+     *
+     * @throws DatabaseException
+     */
     public function update(string $name, string $new): bool
     {
+        if ($this->getSharedTables()) {
+            throw new DatabaseException('Cannot rename a database while shared tables are enabled');
+        }
+
         if (! isset($this->databases[$name])) {
             throw new NotFoundException('Database not found');
         }

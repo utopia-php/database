@@ -19,8 +19,8 @@ use Tests\E2E\Adapter\Scopes\ObjectAttributeTests;
 use Tests\E2E\Adapter\Scopes\OperatorTests;
 use Tests\E2E\Adapter\Scopes\PermissionTests;
 use Tests\E2E\Adapter\Scopes\RelationshipTests;
-use Tests\E2E\Adapter\Scopes\SchemaReconciliationTests;
 use Tests\E2E\Adapter\Scopes\SchemalessTests;
+use Tests\E2E\Adapter\Scopes\SchemaReconciliationTests;
 use Tests\E2E\Adapter\Scopes\SpatialTests;
 use Tests\E2E\Adapter\Scopes\VectorTests;
 use Utopia\Database\Adapter;
@@ -114,7 +114,9 @@ abstract class Base extends TestCase
     }
 
     /**
-     * A Pool lends one adapter per call, and setNamespace() hands that adapter back.
+     * Whether the tests run on one of the engines, for the few assertions that differ by engine. Test-only: a Pool
+     * lends one adapter per call and setNamespace() hands that adapter back, which only a plain Pool allows; a
+     * ReadWritePool would route setNamespace() as a write.
      *
      * @param  class-string<Adapter>  ...$engines
      */

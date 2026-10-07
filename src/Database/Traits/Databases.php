@@ -24,8 +24,9 @@ trait Databases
 
         $this->silent(fn () => $this->createCollection(self::collectionDefinition()));
 
-        if ($this->listens(Event::DatabaseCreate)) {
-            $this->dispatch(new Event\Database\Created($database));
+        $listeners = $this->listens(Event::DatabaseCreate);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Database\Created($database), $listeners);
         }
 
         return true;
@@ -54,8 +55,9 @@ trait Databases
     {
         $databases = $this->adapter->list();
 
-        if ($this->listens(Event::DatabaseList)) {
-            $this->dispatch(new Event\Database\Listed(\array_values($databases)));
+        $listeners = $this->listens(Event::DatabaseList);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Database\Listed(\array_values($databases)), $listeners);
         }
 
         return $databases;
@@ -90,8 +92,9 @@ trait Databases
             $this->setDatabase($new);
         }
 
-        if ($this->listens(Event::DatabaseUpdate)) {
-            $this->dispatch(new Event\Database\Updated($database, $new));
+        $listeners = $this->listens(Event::DatabaseUpdate);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Database\Updated($database, $new), $listeners);
         }
 
         return $updated;
@@ -110,8 +113,9 @@ trait Databases
 
         $this->cache->flush();
 
-        if ($this->listens(Event::DatabaseDelete)) {
-            $this->dispatch(new Event\Database\Deleted($database, $deleted));
+        $listeners = $this->listens(Event::DatabaseDelete);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Database\Deleted($database, $deleted), $listeners);
         }
 
         return $deleted;

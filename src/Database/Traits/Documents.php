@@ -37,6 +37,7 @@ use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\ID;
+use Utopia\Database\Hook\Lifecycle;
 use Utopia\Database\Operator;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
@@ -583,8 +584,9 @@ trait Documents
 
             $document = $this->decorateDocument(Event::DocumentRead, $collection, $document);
 
-            if ($this->listens(Event::DocumentRead)) {
-                $this->dispatch(new Event\Document\Read($collection->getId(), $document));
+            $listeners = $this->listens(Event::DocumentRead);
+            if ($listeners !== []) {
+                $this->dispatch(new Event\Document\Read($collection->getId(), $document), $listeners);
             }
 
             if ($this->isTtlExpired($collection, $document)) {
@@ -613,8 +615,9 @@ trait Documents
         if ($readInTransaction !== null) {
             $collectionState = $this->loadDocumentCacheState($this->getCacheBaseKeys($id)[0]);
             $document = $this->decorateDocument(Event::DocumentRead, $collection, clone $readInTransaction);
-            if ($this->listens(Event::DocumentRead)) {
-                $this->dispatch(new Event\Document\Read($collection->getId(), $document));
+            $listeners = $this->listens(Event::DocumentRead);
+            if ($listeners !== []) {
+                $this->dispatch(new Event\Document\Read($collection->getId(), $document), $listeners);
             }
             $this->attachCollectionCacheEpoch($document, $collectionState->value);
 
@@ -729,8 +732,9 @@ trait Documents
 
         $document = $this->decorateDocument(Event::DocumentRead, $collection, $document);
 
-        if ($this->listens(Event::DocumentRead)) {
-            $this->dispatch(new Event\Document\Read($collection->getId(), $document));
+        $listeners = $this->listens(Event::DocumentRead);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Document\Read($collection->getId(), $document), $listeners);
         }
 
         $this->attachCollectionCacheEpoch($document, $collectionState->value);
@@ -1059,8 +1063,9 @@ trait Documents
 
         $document = $this->decorateDocument(Event::DocumentCreate, $collection, $document);
 
-        if ($this->listens(Event::DocumentCreate)) {
-            $this->dispatch(new Event\Document\Created($collection->getId(), $document));
+        $listeners = $this->listens(Event::DocumentCreate);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Document\Created($collection->getId(), $document), $listeners);
         }
 
         return $document;
@@ -1353,8 +1358,9 @@ trait Documents
             }
         }
 
-        if ($this->listens(Event::DocumentsCreate)) {
-            $this->dispatch(new Event\Document\BatchCreated($collection->getId(), $modified));
+        $listeners = $this->listens(Event::DocumentsCreate);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Document\BatchCreated($collection->getId(), $modified), $listeners);
         }
 
         return $modified;
@@ -1658,8 +1664,9 @@ trait Documents
 
         $document = $this->decorateDocument(Event::DocumentUpdate, $collection, $document);
 
-        if ($this->listens(Event::DocumentUpdate)) {
-            $this->dispatch(new Event\Document\Updated($collection->getId(), $document));
+        $listeners = $this->listens(Event::DocumentUpdate);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Document\Updated($collection->getId(), $document), $listeners);
         }
 
         return $document;
@@ -1919,8 +1926,9 @@ trait Documents
             $last = \end($batch);
         }
 
-        if ($this->listens(Event::DocumentsUpdate)) {
-            $this->dispatch(new Event\Document\BatchUpdated($collection->getId(), $modified));
+        $listeners = $this->listens(Event::DocumentsUpdate);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Document\BatchUpdated($collection->getId(), $modified), $listeners);
         }
 
         return $modified;
@@ -1958,8 +1966,9 @@ trait Documents
             return $this->getDocument($collection, $document->getId());
         }
 
-        if ($this->listens(Event::DocumentUpsert)) {
-            $this->dispatch(new Event\Document\Upserted($collection, $result, $created));
+        $listeners = $this->listens(Event::DocumentUpsert);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Document\Upserted($collection, $result, $created), $listeners);
         }
 
         return $result;
@@ -1993,8 +2002,9 @@ trait Documents
     ): int {
         [$created, $updated] = $this->upsert($collection, $documents, self::batchSize($batchSize), $onNext, $increase);
 
-        if ($documents !== [] && $this->listens(Event::DocumentsUpsert)) {
-            $this->dispatch(new Event\Document\BatchUpserted($collection, $created, $updated));
+        $listeners = $documents === [] ? [] : $this->listens(Event::DocumentsUpsert);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Document\BatchUpserted($collection, $created, $updated), $listeners);
         }
 
         return $created + $updated;
@@ -2493,8 +2503,9 @@ trait Documents
             return $document->setAttribute($attribute, $result);
         });
 
-        if ($this->listens(Event::DocumentIncrease)) {
-            $this->dispatch(new Event\Document\Increased($collection->getId(), $document, $attribute));
+        $listeners = $this->listens(Event::DocumentIncrease);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Document\Increased($collection->getId(), $document, $attribute), $listeners);
         }
 
         return $document;
@@ -2616,8 +2627,9 @@ trait Documents
             return $document->setAttribute($attribute, $result);
         });
 
-        if ($this->listens(Event::DocumentDecrease)) {
-            $this->dispatch(new Event\Document\Decreased($collection->getId(), $document, $attribute));
+        $listeners = $this->listens(Event::DocumentDecrease);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Document\Decreased($collection->getId(), $document, $attribute), $listeners);
         }
 
         return $document;
@@ -2647,7 +2659,8 @@ trait Documents
         $cacheTarget = $collection->getId() === self::METADATA
             ? new Document([Document::ID => $id, Document::COLLECTION => self::METADATA])
             : $collection->getId();
-        $report = $this->listens(Event::DocumentUpdate);
+        $updateListeners = $this->listens(Event::DocumentUpdate);
+        $report = $updateListeners !== [];
         $changed = [];
         $deleted = $this->withMutation(Event::DocumentDelete, $cacheTarget, function () use ($collection, $id, $report, &$changed): ?Document {
             $changed = [];
@@ -2700,7 +2713,7 @@ trait Documents
             return false;
         }
 
-        $this->dispatchDeleted($collection->getId(), $deleted, $changed);
+        $this->dispatchDeleted($collection->getId(), $deleted, $changed, $updateListeners);
 
         return true;
     }
@@ -2710,22 +2723,24 @@ trait Documents
      * fires, and the first failure reaches the caller once they have.
      *
      * @param  list<Document>  $changed
+     * @param  list<Lifecycle>  $updateListeners  The hooks the related documents' updates are dispatched to
      */
-    private function dispatchDeleted(string $collection, Document $document, array $changed): void
+    private function dispatchDeleted(string $collection, Document $document, array $changed, array $updateListeners): void
     {
         $failure = null;
 
         try {
-            if ($this->listens(Event::DocumentDelete)) {
-                $this->dispatch(new Event\Document\Deleted($collection, $document));
+            $listeners = $this->listens(Event::DocumentDelete);
+            if ($listeners !== []) {
+                $this->dispatch(new Event\Document\Deleted($collection, $document), $listeners);
             }
         } catch (Throwable $error) {
             $failure = $error;
         }
 
-        foreach ($changed as $related) {
+        foreach ($updateListeners === [] ? [] : $changed as $related) {
             try {
-                $this->dispatch(new Event\Document\Updated($related->getCollection(), $related));
+                $this->dispatch(new Event\Document\Updated($related->getCollection(), $related), $updateListeners);
             } catch (Throwable $error) {
                 $failure ??= $error;
             }
@@ -2896,8 +2911,9 @@ trait Documents
             $last = \end($batch);
         }
 
-        if ($this->listens(Event::DocumentsDelete)) {
-            $this->dispatch(new Event\Document\BatchDeleted($collection->getId(), $modified));
+        $listeners = $this->listens(Event::DocumentsDelete);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Document\BatchDeleted($collection->getId(), $modified), $listeners);
         }
 
         return $modified;
@@ -3347,8 +3363,9 @@ trait Documents
             Document::COLLECTION => $collection,
         ]));
 
-        if ($this->listens(Event::DocumentPurge)) {
-            $this->dispatchPropagating(new Event\Document\Purged($collection, $id));
+        $listeners = $this->listens(Event::DocumentPurge);
+        if ($listeners !== []) {
+            $this->dispatchPropagating(new Event\Document\Purged($collection, $id), $listeners);
         }
     }
 
@@ -3360,14 +3377,15 @@ trait Documents
      */
     private function queueDocumentPurge(string $collectionId, string $id): void
     {
-        if (! $this->listens(Event::DocumentPurge)) {
+        $listeners = $this->listens(Event::DocumentPurge);
+        if ($listeners === []) {
             return;
         }
 
         $purged = new Event\Document\Purged($collectionId, $id);
 
         if (! $this->adapter->inTransaction()) {
-            $this->dispatchPropagating($purged);
+            $this->dispatchPropagating($purged, $listeners);
 
             return;
         }
@@ -3375,7 +3393,7 @@ trait Documents
         $context = $this->getEventContext();
         $tenant = $this->getTenant();
         $silenced = \array_keys($this->silencedListeners()->get());
-        $announce = fn () => $this->dispatchPropagating($purged);
+        $announce = fn () => $this->dispatchPropagating($purged, $this->listens(Event::DocumentPurge));
 
         $this->documentPurgeEvents[$context][] = function () use ($tenant, $silenced, $announce): void {
             $this->withTenant(
@@ -3976,8 +3994,9 @@ trait Documents
             }
         }
 
-        if ($this->listens(Event::DocumentFind)) {
-            $this->dispatch(new Event\Document\Found($collection->getId(), \array_values($results)));
+        $listeners = $this->listens(Event::DocumentFind);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Document\Found($collection->getId(), \array_values($results)), $listeners);
         }
 
         return $results;
@@ -4027,8 +4046,9 @@ trait Documents
             return new Document();
         }
 
-        if ($this->listens(Event::DocumentFind)) {
-            $this->dispatch(new Event\Document\Found($found->getCollection(), [$found]));
+        $listeners = $this->listens(Event::DocumentFind);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Document\Found($found->getCollection(), [$found]), $listeners);
         }
 
         return $found;
@@ -4081,8 +4101,9 @@ trait Documents
         $getCount = fn () => $this->adapter->count($collection, $queries, $max);
         $count = $skipAuth ? $this->authorization->skip($getCount) : $getCount();
 
-        if ($this->listens(Event::DocumentCount)) {
-            $this->dispatch(new Event\Document\Counted($collection->getId(), $count));
+        $listeners = $this->listens(Event::DocumentCount);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Document\Counted($collection->getId(), $count), $listeners);
         }
 
         return $count;
@@ -4144,8 +4165,9 @@ trait Documents
         $getSum = fn () => $this->adapter->sum($collection, $attribute, $queries, $max);
         $sum = $skipAuth ? $this->authorization->skip($getSum) : $getSum();
 
-        if ($this->listens(Event::DocumentSum)) {
-            $this->dispatch(new Event\Document\Summed($collection->getId(), $attribute, $sum));
+        $listeners = $this->listens(Event::DocumentSum);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Document\Summed($collection->getId(), $attribute, $sum), $listeners);
         }
 
         return $sum;
@@ -4419,8 +4441,9 @@ trait Documents
             $rows[] = $row->getArrayCopy();
         }
 
-        if ($this->listens(Event::DocumentAggregate)) {
-            $this->dispatch(new Event\Document\Aggregated($collection, $rows));
+        $listeners = $this->listens(Event::DocumentAggregate);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Document\Aggregated($collection, $rows), $listeners);
         }
 
         return $rows;

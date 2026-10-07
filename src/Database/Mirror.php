@@ -626,7 +626,7 @@ class Mirror extends Database
     /**
      * Lifecycle hooks are registered on the source (see addLifecycleHook()).
      */
-    protected function listens(Event $event): bool
+    protected function listens(Event $event): array
     {
         return $this->source->listens($event);
     }
@@ -634,9 +634,9 @@ class Mirror extends Database
     /**
      * Lifecycle hooks are registered on the source (see addLifecycleHook()).
      */
-    protected function dispatch(Domain $event): void
+    protected function dispatch(Domain $event, array $listeners): void
     {
-        $this->source->dispatch($event);
+        $this->source->dispatch($event, $listeners);
     }
 
     /**
@@ -654,9 +654,9 @@ class Mirror extends Database
     /**
      * Lifecycle hooks are registered on the source (see addLifecycleHook()).
      */
-    protected function dispatchPropagating(Domain $event): void
+    protected function dispatchPropagating(Domain $event, array $listeners): void
     {
-        $this->source->dispatchPropagating($event);
+        $this->source->dispatchPropagating($event, $listeners);
     }
 
     /**
@@ -759,8 +759,9 @@ class Mirror extends Database
             $collections[] = Collection::fromDocument($doc);
         }
 
-        if ($this->listens(Event::CollectionList)) {
-            $this->dispatch(new Event\Collection\Listed($collections));
+        $listeners = $this->listens(Event::CollectionList);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Collection\Listed($collections), $listeners);
         }
 
         return $collections;

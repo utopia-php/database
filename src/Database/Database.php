@@ -2994,24 +2994,46 @@ class Database
     }
 
     /**
-     * Whether a registered lifecycle hook handles the event, so a trigger site builds the typed event only then.
+     * The registered lifecycle hooks that handle the event now; a trigger site builds the typed event only when there
+     * is one, and hands them to {@see self::dispatch()}.
+     *
+     * @return list<Lifecycle>
      */
-    protected function listens(Event $event): bool
+    protected function listens(Event $event): array
     {
-        return $this->getActiveLifecycleHooks($event) !== [];
+        if ($this->lifecycleHooks === [] || $this->areEventsSilenced()) {
+            return [];
+        }
+
+        $silenced = $this->silencedListeners()->get();
+        $active = [];
+        foreach ($this->lifecycleHooks as $hook) {
+            if ($hook instanceof Named && isset($silenced[$hook->getName()])) {
+                continue;
+            }
+            if ($hook instanceof Selective && ! $hook->handles($event)) {
+                continue;
+            }
+            $active[] = $hook;
+        }
+
+        return $active;
     }
 
     /**
-     * Hand a typed event to the lifecycle hooks that handle it, after mandatory invalidation succeeded.
+     * Hand a typed event to the lifecycle hooks {@see self::listens()} returned for it, after mandatory invalidation
+     * succeeded.
      *
      * Whether a hook's exception reaches the caller depends on the event
      * ({@see propagatesHookFailures()}); an \Error always does.
+     *
+     * @param  list<Lifecycle>  $listeners
      */
-    protected function dispatch(Domain $event): void
+    protected function dispatch(Domain $event, array $listeners): void
     {
         $propagates = $this->propagatesHookFailures($event->event);
 
-        foreach ($this->getActiveLifecycleHooks($event->event) as $hook) {
+        foreach ($listeners as $hook) {
             try {
                 $hook->handle($event);
             } catch (Exception $exception) {
@@ -3026,10 +3048,12 @@ class Database
      * Hand a typed event to the lifecycle hooks that handle it and let the first hook exception reach the caller
      * whatever the event's default. Document writes and purgeCachedDocument() dispatch Event::DocumentPurge through
      * it; the schema changes that purge a collection dispatch it through dispatch(), isolated.
+     *
+     * @param  list<Lifecycle>  $listeners
      */
-    protected function dispatchPropagating(Domain $event): void
+    protected function dispatchPropagating(Domain $event, array $listeners): void
     {
-        foreach ($this->getActiveLifecycleHooks($event->event) as $hook) {
+        foreach ($listeners as $hook) {
             $hook->handle($event);
         }
     }
@@ -3080,30 +3104,6 @@ class Database
             Event::IndexRename,
             Event::IndexDelete => false,
         };
-    }
-
-    /**
-     * @return array<Lifecycle>
-     */
-    private function getActiveLifecycleHooks(Event $event): array
-    {
-        if ($this->lifecycleHooks === [] || $this->areEventsSilenced()) {
-            return [];
-        }
-
-        $silenced = $this->silencedListeners()->get();
-        $active = [];
-        foreach ($this->lifecycleHooks as $hook) {
-            if ($hook instanceof Named && isset($silenced[$hook->getName()])) {
-                continue;
-            }
-            if ($hook instanceof Selective && ! $hook->handles($event)) {
-                continue;
-            }
-            $active[] = $hook;
-        }
-
-        return $active;
     }
 
     /**

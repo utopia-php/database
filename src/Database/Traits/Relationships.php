@@ -271,8 +271,9 @@ trait Relationships
             }
         });
 
-        if ($this->listens(Event::AttributeCreate)) {
-            $this->dispatch(new Event\Attribute\Created($collectionId, $parent));
+        $listeners = $this->listens(Event::AttributeCreate);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Attribute\Created($collectionId, $parent), $listeners);
         }
 
         return $relationship;
@@ -430,9 +431,10 @@ trait Relationships
         $this->withRetries(fn () => $this->purgeCachedCollection($collectionId));
         $this->withRetries(fn () => $this->purgeCachedCollection($relatedCollectionId));
 
-        if ($this->listens(Event::AttributeUpdate)) {
+        $listeners = $this->listens(Event::AttributeUpdate);
+        if ($listeners !== []) {
             foreach ($updatedAttributes as [$updatedCollection, $updatedAttribute]) {
-                $this->dispatch(new Event\Attribute\Updated($updatedCollection, $updatedAttribute));
+                $this->dispatch(new Event\Attribute\Updated($updatedCollection, $updatedAttribute), $listeners);
             }
         }
 
@@ -542,8 +544,9 @@ trait Relationships
         $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
         $this->withRetries(fn () => $this->purgeCachedCollection($relatedCollection->getId()));
 
-        if ($this->listens(Event::AttributeDelete)) {
-            $this->dispatch(new Event\Attribute\Deleted($collection->getId(), $attribute));
+        $listeners = $this->listens(Event::AttributeDelete);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Attribute\Deleted($collection->getId(), $attribute), $listeners);
         }
     }
 

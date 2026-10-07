@@ -253,8 +253,9 @@ class MirrorTest extends TestCase
             public function fire(Document $document): void
             {
                 $this->invalidate(Event::DocumentUpdate, $document);
-                if ($this->listens(Event::DocumentUpdate)) {
-                    $this->dispatch(new Event\Document\Updated($document->getCollection(), $document));
+                $listeners = $this->listens(Event::DocumentUpdate);
+                if ($listeners !== []) {
+                    $this->dispatch(new Event\Document\Updated($document->getCollection(), $document), $listeners);
                 }
             }
         };

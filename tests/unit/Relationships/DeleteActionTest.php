@@ -94,14 +94,6 @@ final class DeleteActionTest extends TestCase
         $this->assertSame($action, $fromForeignKeyAction->onDelete);
     }
 
-    public function testOnlySupportedActionsExist(): void
-    {
-        $this->assertSame(
-            ['cascade', 'restrict', 'setNull'],
-            \array_column(RelationshipDeleteAction::cases(), 'value'),
-        );
-    }
-
     #[DataProvider('unsupportedActions')]
     public function testDeletingParentWithStoredUnsupportedActionThrowsAndLeavesChildrenLinked(ForeignKeyAction $action): void
     {

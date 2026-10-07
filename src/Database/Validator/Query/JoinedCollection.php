@@ -42,9 +42,7 @@ final readonly class JoinedCollection
      */
     public static function of(string $alias, Document $collection): self
     {
-        $definitions = $collection instanceof Collection
-            ? $collection->attributes()
-            : Collection::fromArray($collection->getArrayCopy())->attributes();
+        $definitions = Collection::fromDocument($collection)->attributes();
 
         $attributes = [];
         $numeric = [];

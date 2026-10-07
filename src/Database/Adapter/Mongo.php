@@ -1314,68 +1314,34 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $collectionDocument = $this->getDocument($metadataCollection, $collection);
         $old = $this->filter($old);
         $new = $this->filter($new);
-        $rawIndexes = $collectionDocument->getAttribute('indexes', '[]');
-        /** @var array<int, array<string, mixed>> $indexes */
-        $indexes = json_decode((string) (is_string($rawIndexes) ? $rawIndexes : '[]'), true) ?? [];
-        /** @var array<string, mixed>|null $index */
-        $index = null;
+        $stored = self::storedCollection($collectionDocument);
 
-        foreach ($indexes as $node) {
-            /** @var array<string, mixed> $node */
-            $nodeId = $node[Document::ID] ?? $node['key'] ?? '';
-            $nodeIdStr = \is_string($nodeId) ? $nodeId : (\is_scalar($nodeId) ? (string) $nodeId : '');
-            if ($nodeIdStr === $old) {
-                $index = $node;
+        $index = null;
+        foreach ($stored->indexes() as $candidate) {
+            if ($candidate->key === $old) {
+                $index = $candidate;
                 break;
             }
         }
 
-        // Extract attribute types from the collection document
         $indexAttributeTypes = [];
-        $rawAttributes = $collectionDocument->getAttribute('attributes');
-        if ($rawAttributes !== null) {
-            /** @var array<int, array<string, mixed>> $attributes */
-            $attributes = json_decode((string) (is_string($rawAttributes) ? $rawAttributes : '[]'), true) ?? [];
-            if ($attributes && $index) {
-                // Map index attributes to their types
-                /** @var array<string> $indexAttrs */
-                $indexAttrs = $index['attributes'] ?? [];
-                foreach ($indexAttrs as $attrName) {
-                    foreach ($attributes as $attr) {
-                        /** @var array<string, mixed> $attr */
-                        $attrKey = $attr['key'] ?? '';
-                        $attrKeyStr = \is_string($attrKey) ? $attrKey : (\is_scalar($attrKey) ? (string) $attrKey : '');
-                        if ($attrKeyStr === $attrName) {
-                            $attrType = $attr['type'] ?? '';
-                            $indexAttributeTypes[$attrName] = \is_string($attrType) ? $attrType : (\is_scalar($attrType) ? (string) $attrType : '');
-                            break;
-                        }
+        if ($index !== null) {
+            foreach ($index->attributes as $indexed) {
+                foreach ($stored->attributes() as $attribute) {
+                    if ($attribute->key === $indexed) {
+                        $indexAttributeTypes[$indexed] = $attribute->type->value;
+                        break;
                     }
                 }
             }
         }
 
         try {
-            if (! $index) {
+            if ($index === null) {
                 throw new DatabaseException('Index not found: '.$old);
             }
             $deletedindex = $this->deleteIndex($collection, $old);
-            /** @var array<string> $indexAttributes */
-            $indexAttributes = $index['attributes'] ?? [];
-            /** @var array<int> $indexLengths */
-            $indexLengths = $index['lengths'] ?? [];
-            $rawIndexType = $index['type'] ?? 'key';
-            $indexTypeStr = \is_string($rawIndexType) ? $rawIndexType : (\is_scalar($rawIndexType) ? (string) $rawIndexType : 'key');
-            $rawIndexTtl = $index['ttl'] ?? 0;
-            $indexTtlInt = \is_int($rawIndexTtl) ? $rawIndexTtl : (\is_numeric($rawIndexTtl) ? (int) $rawIndexTtl : 0);
-            $createdindex = $this->createIndex($collection, Index::fromArray([
-                'key' => $new,
-                'type' => $indexTypeStr,
-                'attributes' => $indexAttributes,
-                'lengths' => $indexLengths,
-                'orders' => $index['orders'] ?? [],
-                'ttl' => $indexTtlInt,
-            ]), $indexAttributeTypes);
+            $createdindex = $this->createIndex($collection, $index->withKey($new), $indexAttributeTypes);
         } catch (Exception $e) {
             throw $this->processException($e);
         }
@@ -3366,11 +3332,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      */
     protected function ensureRelationshipDefaults(Document $collection, Document $document): void
     {
-        $attributes = $collection instanceof Collection
-            ? $collection->attributes()
-            : Collection::fromArray($collection->getArrayCopy())->attributes();
-
-        foreach ($attributes as $attribute) {
+        foreach (Collection::fromDocument($collection)->attributes() as $attribute) {
             $relationship = $attribute->relationship;
             if ($relationship === null || $document->offsetExists($attribute->key)) {
                 continue;

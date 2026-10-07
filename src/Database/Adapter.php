@@ -1115,9 +1115,7 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
      */
     protected static function collectionAttributes(Document $collection): array
     {
-        return $collection instanceof Collection
-            ? $collection->attributes()
-            : Collection::fromArray($collection->getArrayCopy())->attributes();
+        return Collection::fromDocument($collection)->attributes();
     }
 
     /**
@@ -1127,9 +1125,26 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
      */
     protected static function collectionIndexes(Document $collection): array
     {
-        return $collection instanceof Collection
-            ? $collection->indexes()
-            : Collection::fromArray($collection->getArrayCopy())->indexes();
+        return Collection::fromDocument($collection)->indexes();
+    }
+
+    /**
+     * The collection a metadata row read straight from storage describes. Such a row still holds its attributes
+     * and indexes as the JSON that Database encodes them to, so they are decoded here, once.
+     *
+     * @throws IndexException
+     * @throws StructureException
+     */
+    protected static function storedCollection(Document $metadata): Collection
+    {
+        $data = $metadata->getArrayCopy();
+        foreach (self::STORED_SCHEMA_KEYS as $key) {
+            if (\is_string($data[$key] ?? null)) {
+                $data[$key] = \json_decode($data[$key], true);
+            }
+        }
+
+        return Collection::fromArray($data);
     }
 
     /**
@@ -1186,6 +1201,8 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     private static array $filteredKeyCache = [];
 
     private const FILTERED_KEY_CACHE_LIMIT = 4096;
+
+    private const array STORED_SCHEMA_KEYS = ['attributes', 'indexes'];
 
     /**
      * Filter Keys

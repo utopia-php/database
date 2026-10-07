@@ -212,9 +212,7 @@ class Structure extends Validator
             return $this->definitions;
         }
 
-        $collection = $this->collection instanceof Collection
-            ? $this->collection
-            : Collection::fromArray($this->collection->getArrayCopy());
+        $collection = Collection::fromDocument($this->collection);
 
         $definitions = [];
         foreach (self::internalAttributes() as $attribute) {

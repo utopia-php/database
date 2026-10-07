@@ -112,11 +112,7 @@ class IndexedQueries extends Queries
 
             $collection = $this->getJoinedCollection($query->getAttribute());
 
-            $indexes[$alias] = match (true) {
-                $collection === null => [],
-                $collection instanceof Collection => $collection->indexes(),
-                default => Collection::fromArray($collection->getArrayCopy())->indexes(),
-            };
+            $indexes[$alias] = $collection === null ? [] : Collection::fromDocument($collection)->indexes();
         }
 
         return $indexes;

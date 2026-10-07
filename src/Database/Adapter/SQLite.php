@@ -748,25 +748,17 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             throw new NotFoundException('Collection not found');
         }
 
-        $rawIndexes = $collection->getAttribute('indexes', '[]');
-        /** @var array<int, array<string, mixed>> $indexes */
-        $indexes = \json_decode(\is_string($rawIndexes) ? $rawIndexes : '[]', true) ?? [];
-
-        foreach ($indexes as $index) {
-            /** @var array<string, mixed> $index */
-            $attributes = $index['attributes'] ?? [];
-            $indexId = \is_string($index[Document::ID] ?? null) ? (string) $index[Document::ID] : '';
-            $indexType = \is_string($index['type'] ?? null) ? (string) $index['type'] : '';
-            if ($attributes === [$id]) {
-                $this->deleteIndex($name, $indexId, Event::AttributeDelete);
-            } elseif (\in_array($id, \is_array($attributes) ? $attributes : [])) {
-                $this->deleteIndex($name, $indexId, Event::AttributeDelete);
+        foreach (self::storedCollection($collection)->indexes() as $index) {
+            if ($index->attributes === [$id]) {
+                $this->deleteIndex($name, $index->key, Event::AttributeDelete);
+            } elseif (\in_array($id, $index->attributes, true)) {
+                $this->deleteIndex($name, $index->key, Event::AttributeDelete);
                 $this->createIndex($name, Index::fromArray([
-                    'key' => $indexId,
-                    'type' => $indexType,
-                    'attributes' => \array_map(fn (mixed $v): string => \is_scalar($v) ? (string) $v : '', \is_array($attributes) ? \array_values(\array_filter($attributes, fn ($v) => $v !== $id)) : []),
-                    'lengths' => \array_map(fn (mixed $v): int => \is_numeric($v) ? (int) $v : 0, \is_array($index['lengths'] ?? null) ? $index['lengths'] : []),
-                    'orders' => \is_array($index['orders'] ?? null) ? $index['orders'] : [],
+                    'key' => $index->key,
+                    'type' => $index->type,
+                    'attributes' => \array_values(\array_filter($index->attributes, fn (string $attribute): bool => $attribute !== $id)),
+                    'lengths' => $index->lengths,
+                    'orders' => $index->orders,
                 ]), event: Event::AttributeDelete);
             }
         }
@@ -1050,33 +1042,17 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
 
         $old = $this->filter($old);
         $new = $this->filter($new);
-        $storedIndexes = $collection->getAttribute('indexes', '[]');
-        /** @var array<int, array<string, mixed>> $indexes */
-        $indexes = \json_decode(\is_string($storedIndexes) ? $storedIndexes : '[]', true) ?? [];
-        /** @var array<string, mixed>|null $index */
         $index = null;
-
-        foreach ($indexes as $node) {
-            /** @var array<string, mixed> $node */
-            if (($node['key'] ?? null) === $old) {
-                $index = $node;
+        foreach (self::storedCollection($collection)->indexes() as $stored) {
+            if ($stored->key === $old) {
+                $index = $stored;
                 break;
             }
         }
 
-        if ($index
+        if ($index !== null
             && $this->deleteIndex($collection->getId(), $old, Event::IndexRename)
-            && $this->createIndex(
-                $collection->getId(),
-                Index::fromArray([
-                    'key' => $new,
-                    'type' => \is_string($index['type'] ?? null) ? (string) $index['type'] : '',
-                    'attributes' => \array_map(fn (mixed $value): string => \is_scalar($value) ? (string) $value : '', \is_array($index['attributes'] ?? null) ? $index['attributes'] : []),
-                    'lengths' => \array_map(fn (mixed $value): int => \is_numeric($value) ? (int) $value : 0, \is_array($index['lengths'] ?? null) ? $index['lengths'] : []),
-                    'orders' => \is_array($index['orders'] ?? null) ? $index['orders'] : [],
-                ]),
-                event: Event::IndexRename,
-            )) {
+            && $this->createIndex($collection->getId(), $index->withKey($new), event: Event::IndexRename)) {
             return true;
         }
 
@@ -1168,34 +1144,14 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             return [];
         }
 
-        $indexes = $metadata->getAttribute('indexes', []);
-        if (\is_string($indexes)) {
-            $indexes = \json_decode($indexes, true);
-        }
-        if (! \is_array($indexes)) {
-            return [];
-        }
-
         $tables = [];
-        foreach ($indexes as $index) {
-            if ($index instanceof Document) {
-                $index = $index->getArrayCopy();
-            }
-            if (! \is_array($index) || ($index['type'] ?? null) !== IndexType::Fulltext->value) {
+        foreach (self::storedCollection($metadata)->indexes() as $index) {
+            if ($index->type !== IndexType::Fulltext) {
                 continue;
             }
 
-            $id = $index[Document::ID] ?? $index['key'] ?? null;
-            $attributes = $index['attributes'] ?? [];
-            if (! \is_scalar($id) || ! \is_array($attributes)) {
-                continue;
-            }
-
-            $internal = \array_map(
-                fn (mixed $attribute): string => \is_string($attribute) ? $this->getInternalKeyForAttribute($attribute) : '',
-                $attributes,
-            );
-            $tables[$this->filter((string) $id)] = $this->getFulltextTableName($collection, $internal);
+            $internal = \array_map($this->getInternalKeyForAttribute(...), $index->attributes);
+            $tables[$this->filter($index->key)] = $this->getFulltextTableName($collection, $internal);
         }
 
         return $tables;

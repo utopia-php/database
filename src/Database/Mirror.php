@@ -773,7 +773,7 @@ class Mirror extends Database
 
         $collections = [];
         foreach ($result as $doc) {
-            $collections[] = $doc instanceof Collection ? $doc : Collection::fromArray($doc->getArrayCopy());
+            $collections[] = Collection::fromDocument($doc);
         }
 
         return $collections;
@@ -830,7 +830,7 @@ class Mirror extends Database
             $this->logError('createCollection', $error);
         }
 
-        return $result instanceof Collection ? $result : Collection::fromArray($result->getArrayCopy());
+        return Collection::fromDocument($result);
     }
 
     public function updateCollection(string $collection, CollectionUpdate $update): Collection

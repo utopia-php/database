@@ -664,9 +664,7 @@ class Relationships implements Hook
      */
     private static function attributes(Document $collection): array
     {
-        return $collection instanceof Collection
-            ? $collection->attributes()
-            : Collection::fromArray($collection->getArrayCopy())->attributes();
+        return Collection::fromDocument($collection)->attributes();
     }
 
     /**

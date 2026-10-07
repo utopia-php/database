@@ -422,9 +422,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
             throw new NotFoundException('Collection not found');
         }
 
-        $storedAttributes = $collection->getAttribute('attributes', []);
-        /** @var array<int, array<string, mixed>> $collectionAttributes */
-        $collectionAttributes = \is_string($storedAttributes) ? (\json_decode($storedAttributes, true) ?? []) : [];
+        $collectionAttributes = self::storedCollection($collection)->attributes();
         $id = $this->filter($index->key);
         $type = $index->type;
 
@@ -433,18 +431,17 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
 
         $columns = [];
         foreach ($index->attributes as $position => $key) {
-            $attribute = null;
+            $array = false;
             foreach ($collectionAttributes as $collectionAttribute) {
-                $attributeId = $collectionAttribute[Document::ID] ?? '';
-                if (\strtolower(\is_string($attributeId) ? $attributeId : '') === \strtolower($key)) {
-                    $attribute = $collectionAttribute;
+                if (\strtolower($collectionAttribute->key) === \strtolower($key)) {
+                    $array = $collectionAttribute->array;
                     break;
                 }
             }
 
             $columns[] = $this->compileIndexColumn(
                 $this->filter($this->getInternalKeyForAttribute($key)),
-                ! empty($attribute['array']),
+                $array,
                 $index->lengths[$position] ?? 0,
                 $type === IndexType::Fulltext ? '' : ($index->orders[$position]->value ?? ''),
             );

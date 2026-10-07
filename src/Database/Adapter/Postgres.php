@@ -150,12 +150,17 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     /**
-     * A Postgres database is a schema, which renames in place with everything it holds.
+     * A Postgres database is a schema, which renames in place with everything it holds. Shared tables refuse
+     * the rename: other tenants' rows share the schema.
      *
      * @throws DatabaseException
      */
     public function update(string $name, string $new): bool
     {
+        if ($this->getSharedTables()) {
+            throw new DatabaseException('Cannot rename a database while shared tables are enabled');
+        }
+
         $name = $this->filter($name);
         $new = $this->filter($new);
 

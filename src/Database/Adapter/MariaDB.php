@@ -105,12 +105,18 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
 
     /**
      * MariaDB and MySQL cannot rename a database, so every table moves into a new one in a single atomic
-     * `RENAME TABLE` and the emptied database is dropped. Grants on the old database do not move.
+     * `RENAME TABLE` and the emptied database is dropped. Grants on the old database do not move. A table
+     * created in the old database during the rename keeps it from being dropped. Shared tables refuse the
+     * rename: other tenants' rows share the database.
      *
      * @throws DatabaseException
      */
     public function update(string $name, string $new): bool
     {
+        if ($this->getSharedTables()) {
+            throw new DatabaseException('Cannot rename a database while shared tables are enabled');
+        }
+
         $name = $this->filter($name);
         $new = $this->filter($new);
 
@@ -140,6 +146,10 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
 
                 throw $error instanceof PDOException ? $this->processException($error) : $error;
             }
+        }
+
+        if ($this->getTables($name) !== []) {
+            throw new DatabaseException("Database {$name} was renamed to {$new} but holds tables created during the rename, so it was not dropped");
         }
 
         return $this->executeStatement($schema->dropDatabase($name)->query, Event::DatabaseDelete);

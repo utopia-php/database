@@ -2757,7 +2757,7 @@ trait AttributeTests
         }
     }
 
-    public function testCreateAttributesWidensAnIntegerSizedPastTheIntLimitToBits64(): void
+    public function testWideIntegerBecomesBits64(): void
     {
         $database = $this->getDatabase();
 

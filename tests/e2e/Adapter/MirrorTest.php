@@ -8,6 +8,7 @@ use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
+use Utopia\Database\CollectionUpdate;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception;
@@ -110,7 +111,7 @@ class MirrorTest extends Base
         $database->create();
 
         $destination = $database->getDestination();
-        if ($destination === null || ! $destination->exists($this->testDatabase, Database::METADATA)) {
+        if ($destination === null || ! $destination->collectionExists(Database::METADATA, $this->testDatabase)) {
             throw new Exception('Mirror destination is missing _metadata after create');
         }
 
@@ -150,13 +151,13 @@ class MirrorTest extends Base
     {
         $database = $this->getDatabase();
 
-        $database->createCollection(new Collection(id: 'testCreateMirroredCollection'));
+        $database->createCollection(Collection::create(id: 'testCreateMirroredCollection'));
 
         // Assert collection exists in both databases
-        $this->assertFalse($database->getSource()->getCollection('testCreateMirroredCollection')->isEmpty());
+        $this->assertNotNull($database->getSource()->findCollection('testCreateMirroredCollection'));
         $destination = $database->getDestination();
         $this->assertNotNull($destination);
-        $this->assertFalse($destination->getCollection('testCreateMirroredCollection')->isEmpty());
+        $this->assertNotNull($destination->findCollection('testCreateMirroredCollection'));
     }
 
     /**
@@ -170,7 +171,7 @@ class MirrorTest extends Base
     {
         $database = $this->getDatabase();
 
-        $database->createCollection(new Collection(id: 'testUpdateMirroredCollection', permissions: [
+        $database->createCollection(Collection::create(id: 'testUpdateMirroredCollection', permissions: [
             Permission::read(Role::any()),
         ]));
 
@@ -178,10 +179,12 @@ class MirrorTest extends Base
 
         $database->updateCollection(
             'testUpdateMirroredCollection',
-            [
-                Permission::read(Role::users()),
-            ],
-            (bool) $collection->getAttribute('documentSecurity')
+            new CollectionUpdate(
+                permissions: [
+                    Permission::read(Role::users()),
+                ],
+                documentSecurity: (bool) $collection->getAttribute('documentSecurity'),
+            ),
         );
 
         // Asset both databases have updated the collection
@@ -202,15 +205,15 @@ class MirrorTest extends Base
     {
         $database = $this->getDatabase();
 
-        $database->createCollection(new Collection(id: 'testDeleteMirroredCollection'));
+        $database->createCollection(Collection::create(id: 'testDeleteMirroredCollection'));
 
         $database->deleteCollection('testDeleteMirroredCollection');
 
         // Assert collection is deleted in both databases
-        $this->assertTrue($database->getSource()->getCollection('testDeleteMirroredCollection')->isEmpty());
+        $this->assertNull($database->getSource()->findCollection('testDeleteMirroredCollection'));
         $destination = $database->getDestination();
         $this->assertNotNull($destination);
-        $this->assertTrue($destination->getCollection('testDeleteMirroredCollection')->isEmpty());
+        $this->assertNull($destination->findCollection('testDeleteMirroredCollection'));
     }
 
     /**
@@ -225,7 +228,7 @@ class MirrorTest extends Base
     {
         $database = $this->getDatabase();
 
-        $database->createCollection(new Collection(id: 'testCreateMirroredDocument', attributes: [
+        $database->createCollection(Collection::create(id: 'testCreateMirroredDocument', attributes: [
             Attribute::string(key: 'name', required: true),
         ], permissions: [
             Permission::create(Role::any()),
@@ -264,7 +267,7 @@ class MirrorTest extends Base
     {
         $database = $this->getDatabase();
 
-        $database->createCollection(new Collection(id: 'testUpdateMirroredDocument', attributes: [
+        $database->createCollection(Collection::create(id: 'testUpdateMirroredDocument', attributes: [
             Attribute::string(key: 'name', required: true),
         ], permissions: [
             Permission::create(Role::any()),
@@ -302,7 +305,7 @@ class MirrorTest extends Base
         $database = $this->getDatabase();
         $collection = 'mirrorSequenceTargeting';
 
-        $database->createCollection(new Collection(id: $collection, attributes: [
+        $database->createCollection(Collection::create(id: $collection, attributes: [
             Attribute::string(key: 'name', required: true),
         ], permissions: [
             Permission::create(Role::any()),
@@ -349,7 +352,7 @@ class MirrorTest extends Base
     {
         $database = $this->getDatabase();
 
-        $database->createCollection(new Collection(id: 'testDeleteMirroredDocument', attributes: [
+        $database->createCollection(Collection::create(id: 'testDeleteMirroredDocument', attributes: [
             Attribute::string(key: 'name', required: true),
         ], permissions: [
             Permission::create(Role::any()),
@@ -376,7 +379,7 @@ class MirrorTest extends Base
         $database = $this->getDatabase();
         $collection = 'mirrorSkipDup';
 
-        $database->createCollection(new Collection(id: $collection, attributes: [
+        $database->createCollection(Collection::create(id: $collection, attributes: [
             Attribute::string(key: 'name', required: true),
         ], permissions: [
             Permission::create(Role::any()),

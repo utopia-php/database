@@ -108,7 +108,7 @@ class MongoDBTest extends Base
         try {
             $database->setTenant(null)->setTenantPerDocument(true);
 
-            $database->createCollection(new Collection(
+            $database->createCollection(Collection::create(
                 id: $collection,
                 attributes: [Attribute::string(key: 'name', size: 64, required: true)],
                 permissions: [
@@ -161,11 +161,11 @@ class MongoDBTest extends Base
 
         try {
             $database->setTenant(null);
-            $database->createCollection(new Collection(id: 'pooledDefinition', permissions: [Permission::read(Role::any())]));
-            $database->createCollection(new Collection(id: 'pooledAdminDefinition', permissions: [Permission::read(Role::user('admin'))]));
+            $database->createCollection(Collection::create(id: 'pooledDefinition', permissions: [Permission::read(Role::any())]));
+            $database->createCollection(Collection::create(id: 'pooledAdminDefinition', permissions: [Permission::read(Role::user('admin'))]));
 
             $database->setTenant(1);
-            $database->createCollection(new Collection(id: 'ownedDefinition', permissions: [Permission::read(Role::any())]));
+            $database->createCollection(Collection::create(id: 'ownedDefinition', permissions: [Permission::read(Role::any())]));
 
             $database->setTenant(990);
             $authorization->cleanRoles();

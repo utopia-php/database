@@ -129,7 +129,7 @@ class RedisTest extends Base
         $id = ID::unique();
         $permissions = [Permission::read(Role::any())];
 
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: $collection,
             attributes: [Attribute::string(key: 'title', size: 64)],
             permissions: [

@@ -84,7 +84,7 @@ class SQLiteTest extends Base
         $collection = 'tenantIndexNames';
 
         $database->withTenant('acme.1', function () use ($database, $collection): void {
-            $database->createCollection(new Collection(id: $collection, attributes: [
+            $database->createCollection(Collection::create(id: $collection, attributes: [
                 Attribute::string(key: 'email', size: 64, required: true),
             ], permissions: [
                 Permission::create(Role::any()),
@@ -97,7 +97,7 @@ class SQLiteTest extends Base
             $this->assertTrue($database->getAdapter()->createIndex($collection, $index), 'Creating an existing index must be a no-op');
             $this->assertSame([$database->getNamespace().'_acme1_'.$collection.'_email'], $this->emailIndexes($database, $collection));
 
-            $this->assertTrue($database->deleteIndex($collection, 'email'));
+            $database->deleteIndex($collection, 'email');
             $this->assertSame([], $this->emailIndexes($database, $collection), 'The index deleteIndex() reported as dropped must be gone');
 
             $database->createDocument($collection, new Document(['email' => 'user@example.com']));

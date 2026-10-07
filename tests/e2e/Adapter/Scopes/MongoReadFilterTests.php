@@ -6,6 +6,7 @@ use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Attribute;
+use Utopia\Database\AttributeUpdate;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
@@ -83,7 +84,7 @@ trait MongoReadFilterTests
     {
         $collection = 'aliceOnly';
 
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: $collection,
             attributes: [Attribute::integer(key: 'count', required: true)],
             permissions: [],
@@ -156,7 +157,7 @@ trait MongoReadFilterTests
         $database = $this->getDatabase();
         $collection = 'dotted_'.\uniqid();
 
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: $collection,
             attributes: [
                 Attribute::string(key: 'a.b', size: 16),
@@ -167,7 +168,7 @@ trait MongoReadFilterTests
         ));
         $database->createDocument($collection, new Document(['$id' => 'first', 'a.b' => 'renamed', 'x.y' => 'deleted']));
 
-        $database->updateAttribute($collection, 'a.b', newKey: 'c');
+        $database->updateAttribute($collection, 'a.b', new AttributeUpdate(key: 'c'));
         $this->assertSame('renamed', $database->getDocument($collection, 'first')->getAttribute('c'));
 
         $database->deleteAttribute($collection, 'x.y');
@@ -204,7 +205,7 @@ trait MongoReadFilterTests
         $database = $this->getDatabase();
         $collection = 'dotted_sum_'.\uniqid();
 
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: $collection,
             attributes: [
                 Attribute::integer(key: 'score.value'),
@@ -234,7 +235,7 @@ trait MongoReadFilterTests
     {
         $collection = 'names_'.\uniqid();
 
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: $collection,
             attributes: [
                 Attribute::string(key: 'name', size: 64),
@@ -272,7 +273,7 @@ trait MongoReadFilterTests
     {
         $database = $this->getDatabase();
         $collection = 'dollar_words';
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: $collection,
             attributes: [Attribute::string(key: 'label', size: 64, required: true)],
             permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
@@ -306,7 +307,7 @@ trait MongoReadFilterTests
         $this->assertTrue($database->getAdapter()->supports(Capability::QueryContains));
 
         $collection = 'contains_family';
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: $collection,
             attributes: [
                 Attribute::string(key: 'name', size: 64, required: true),

@@ -136,7 +136,7 @@ class PoolTest extends Base
         $database = $this->getDatabase();
         $collection = 'orphanedPermsRecovery';
 
-        $database->createCollection(new Collection(id: $collection));
+        $database->createCollection(Collection::create(id: $collection));
         $database->createAttribute($collection, Attribute::string(key: 'title', size: 128, required: true));
 
         // Step 1: Create a document with permissions

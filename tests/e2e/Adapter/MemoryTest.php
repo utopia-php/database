@@ -187,7 +187,7 @@ class MemoryTest extends Base
     {
         $database = $this->freshDatabase();
 
-        $database->createCollection(new Collection(id: 'nested', attributes: [
+        $database->createCollection(Collection::create(id: 'nested', attributes: [
             Attribute::string(key: 'name', size: 64, required: true),
         ], permissions: [
             Permission::create(Role::any()),
@@ -225,7 +225,7 @@ class MemoryTest extends Base
     {
         $database = $this->freshDatabase();
 
-        $database->createCollection(new Collection(id: 'lists', attributes: [
+        $database->createCollection(Collection::create(id: 'lists', attributes: [
             Attribute::string(key: 'tags', size: 64, array: true),
         ], permissions: [
             Permission::create(Role::any()),
@@ -273,7 +273,7 @@ class MemoryTest extends Base
     {
         $database = $this->freshDatabase();
 
-        $database->createCollection(new Collection(id: 'optional', attributes: [
+        $database->createCollection(Collection::create(id: 'optional', attributes: [
             Attribute::string(key: 'token', size: 64),
         ], indexes: [
             Index::unique(key: 'unique_token', attributes: ['token']),
@@ -314,7 +314,7 @@ class MemoryTest extends Base
             'old' => 'value',
         ]));
 
-        $adapter->updateAttribute('renames', Attribute::string(key: 'old', size: 256), 'fresh');
+        $adapter->updateAttribute('renames', 'old', Attribute::string(key: 'fresh', size: 256));
 
         $renamed = $adapter->getDocument($collection, 'row');
         $this->assertSame('value', $renamed->getAttribute('fresh'));
@@ -426,7 +426,7 @@ class MemoryTest extends Base
     {
         $database = $this->freshDatabase();
 
-        $database->createCollection(new Collection(id: 'handles', attributes: [
+        $database->createCollection(Collection::create(id: 'handles', attributes: [
             Attribute::string(key: 'handle', size: 64, required: true),
         ], indexes: [
             Index::unique(key: 'unique_handle', attributes: ['handle']),
@@ -471,7 +471,7 @@ class MemoryTest extends Base
     {
         $database = $this->freshDatabase();
 
-        $database->createCollection(new Collection(id: 'siblings', attributes: [
+        $database->createCollection(Collection::create(id: 'siblings', attributes: [
             Attribute::string(key: 'handle', size: 64, required: true),
         ], indexes: [
             Index::unique(key: 'unique_handle', attributes: ['handle']),
@@ -516,7 +516,7 @@ class MemoryTest extends Base
     {
         $database = $this->freshDatabase();
 
-        $database->createCollection(new Collection(id: 'cleanup', attributes: [
+        $database->createCollection(Collection::create(id: 'cleanup', attributes: [
             Attribute::string(key: 'name', size: 64, required: true),
         ], permissions: [
             Permission::create(Role::any()),
@@ -593,7 +593,7 @@ class MemoryTest extends Base
     {
         $database = $this->getDatabase();
         $collection = 'single_date_operations_memory';
-        $database->createCollection(new Collection(id: $collection));
+        $database->createCollection(Collection::create(id: $collection));
         $database->createAttribute($collection, Attribute::string(key: 'string', size: 128));
 
         $database->setPreserveDates(true);
@@ -790,7 +790,7 @@ class MemoryTest extends Base
     {
         $database = $this->freshDatabase();
 
-        $database->createCollection(new Collection(id: 'flags', attributes: [
+        $database->createCollection(Collection::create(id: 'flags', attributes: [
             Attribute::boolean(key: 'active', required: true),
         ], indexes: [
             Index::unique(key: 'unique_active', attributes: ['active']),
@@ -853,12 +853,12 @@ class MemoryTest extends Base
     {
         $database = $this->freshDatabase();
 
-        $database->createCollection(new Collection(id: 'nullable', attributes: [
+        $database->createCollection(Collection::create(id: 'nullable', attributes: [
             Attribute::string(key: 'name', size: 64),
             Attribute::integer(key: 'score'),
             Attribute::string(key: 'bio', size: 1024),
         ], indexes: [
-            Index::fullText(key: 'bio_ft', attributes: ['bio']),
+            Index::fulltext(key: 'bio_ft', attributes: ['bio']),
         ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),

@@ -19,8 +19,8 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
+use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\IndexType;
-use Utopia\Query\Schema\Order;
 
 trait SchemalessTests
 {
@@ -57,7 +57,7 @@ trait SchemalessTests
         }
 
         $colName = uniqid('schemaless');
-        $database->createCollection(new Collection(id: $colName));
+        $database->createCollection(Collection::create(id: $colName));
         $database->createAttribute($colName, Attribute::string(key: 'key', size: 50, required: true));
         $database->createAttribute($colName, Attribute::string(key: 'value', size: 50, default: 'value'));
 
@@ -155,7 +155,7 @@ trait SchemalessTests
         }
 
         $colName = uniqid('schemaless');
-        $database->createCollection(new Collection(id: $colName));
+        $database->createCollection(Collection::create(id: $colName));
         $permissions = [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())];
         $docs = [
             new Document(['$id' => 'doc1', '$permissions' => $permissions, 'freeA' => 'doc1']),
@@ -203,7 +203,7 @@ trait SchemalessTests
         }
 
         $colName = uniqid('schemaless_increment');
-        $database->createCollection(new Collection(id: $colName));
+        $database->createCollection(Collection::create(id: $colName));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -266,7 +266,7 @@ trait SchemalessTests
         }
 
         $colName = uniqid('schemaless_decrement');
-        $database->createCollection(new Collection(id: $colName));
+        $database->createCollection(Collection::create(id: $colName));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -321,7 +321,7 @@ trait SchemalessTests
         }
 
         $colName = uniqid('schemaless_update');
-        $database->createCollection(new Collection(id: $colName));
+        $database->createCollection(Collection::create(id: $colName));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -380,7 +380,7 @@ trait SchemalessTests
         }
 
         $colName = uniqid('schemaless_delete');
-        $database->createCollection(new Collection(id: $colName));
+        $database->createCollection(Collection::create(id: $colName));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -430,7 +430,7 @@ trait SchemalessTests
         }
 
         $colName = uniqid('schemaless_bulk_update');
-        $database->createCollection(new Collection(id: $colName));
+        $database->createCollection(Collection::create(id: $colName));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -527,7 +527,7 @@ trait SchemalessTests
         }
 
         $colName = uniqid('schemaless_bulk_delete');
-        $database->createCollection(new Collection(id: $colName));
+        $database->createCollection(Collection::create(id: $colName));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -611,7 +611,7 @@ trait SchemalessTests
         }
 
         $colName = uniqid('schemaless_callbacks');
-        $database->createCollection(new Collection(id: $colName));
+        $database->createCollection(Collection::create(id: $colName));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -697,7 +697,7 @@ trait SchemalessTests
 
         // Schemaless adapter still supports defining attributes/indexes metadata
         $col = uniqid('sl_idx');
-        $database->createCollection(new Collection(id: $col));
+        $database->createCollection(Collection::create(id: $col));
 
         $database->createDocument($col, new Document([
             '$id' => 'a',
@@ -712,22 +712,22 @@ trait SchemalessTests
             'rank' => 2,
         ]));
 
-        $this->assertTrue($database->createIndex($col, Index::unique(key: 'idx_title_unique', attributes: ['title'], lengths: [128], orders: [Order::Asc])));
-        $this->assertTrue($database->createIndex($col, Index::key(key: 'idx_rank_key', attributes: ['rank'], lengths: [0], orders: [Order::Asc])));
+        $database->createIndex($col, Index::unique(key: 'idx_title_unique', attributes: ['title'], lengths: [128], orders: [OrderDirection::Asc]));
+        $database->createIndex($col, Index::key(key: 'idx_rank_key', attributes: ['rank'], lengths: [0], orders: [OrderDirection::Asc]));
 
         $collection = $database->getCollection($col);
-        $indexes = $collection->indexes;
+        $indexes = $collection->indexes();
         $this->assertCount(2, $indexes);
-        $ids = array_map(fn ($i) => $i['$id'], $indexes);
+        $ids = array_map(fn (Index $index): string => $index->key, $indexes);
         $this->assertContains('idx_rank_key', $ids);
         $this->assertContains('idx_title_unique', $ids);
 
-        $this->assertTrue($database->deleteIndex($col, 'idx_rank_key'));
+        $database->deleteIndex($col, 'idx_rank_key');
         $collection = $database->getCollection($col);
-        $this->assertCount(1, $collection->indexes);
-        $this->assertEquals('idx_title_unique', $collection->indexes[0]['$id']);
+        $this->assertCount(1, $collection->indexes());
+        $this->assertEquals('idx_title_unique', $collection->indexes()[0]->key);
 
-        $this->assertTrue($database->deleteIndex($col, 'idx_title_unique'));
+        $database->deleteIndex($col, 'idx_title_unique');
         $database->deleteCollection($col);
     }
 
@@ -744,33 +744,29 @@ trait SchemalessTests
         }
 
         $col = uniqid('sl_obj_idx');
-        $database->createCollection(new Collection(id: $col));
+        $database->createCollection(Collection::create(id: $col));
 
         // Define object attributes in metadata
         $database->createAttribute($col, Attribute::object(key: 'meta'));
         $database->createAttribute($col, Attribute::object(key: 'meta2'));
 
         // Create regular key index on first object attribute
-        $this->assertTrue(
-            $database->createIndex($col, Index::key(key: 'idx_meta_key', attributes: ['meta'], lengths: [0], orders: [Order::Asc]))
-        );
+        $database->createIndex($col, Index::key(key: 'idx_meta_key', attributes: ['meta'], lengths: [0], orders: [OrderDirection::Asc]));
 
         // Create unique index on second object attribute
-        $this->assertTrue(
-            $database->createIndex($col, Index::unique(key: 'idx_meta_unique', attributes: ['meta2'], lengths: [0], orders: [Order::Asc]))
-        );
+        $database->createIndex($col, Index::unique(key: 'idx_meta_unique', attributes: ['meta2'], lengths: [0], orders: [OrderDirection::Asc]));
 
         // Verify index metadata is stored on the collection
         $collection = $database->getCollection($col);
-        $indexes = $collection->indexes;
+        $indexes = $collection->indexes();
         $this->assertCount(2, $indexes);
-        $ids = array_map(fn ($i) => $i['$id'], $indexes);
+        $ids = array_map(fn (Index $index): string => $index->key, $indexes);
         $this->assertContains('idx_meta_key', $ids);
         $this->assertContains('idx_meta_unique', $ids);
 
         // Clean up indexes and collection
-        $this->assertTrue($database->deleteIndex($col, 'idx_meta_key'));
-        $this->assertTrue($database->deleteIndex($col, 'idx_meta_unique'));
+        $database->deleteIndex($col, 'idx_meta_key');
+        $database->deleteIndex($col, 'idx_meta_unique');
         $database->deleteCollection($col);
     }
 
@@ -786,7 +782,7 @@ trait SchemalessTests
         }
 
         $col = uniqid('sl_perms');
-        $database->createCollection(new Collection(id: $col));
+        $database->createCollection(Collection::create(id: $col));
 
         // Create with permissive read only
         $doc = $database->createDocument($col, new Document([
@@ -859,7 +855,7 @@ trait SchemalessTests
         }
 
         $collectionId = uniqid('sl_internal_full');
-        $database->createCollection(new Collection(id: $collectionId));
+        $database->createCollection(Collection::create(id: $collectionId));
 
         try {
             $document = $database->createDocument($collectionId, new Document([
@@ -964,7 +960,7 @@ trait SchemalessTests
         }
 
         $col = uniqid('sl_dates');
-        $database->createCollection(new Collection(id: $col));
+        $database->createCollection(Collection::create(id: $col));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -1277,7 +1273,7 @@ trait SchemalessTests
         }
 
         $colName = uniqid('schemaless_exists');
-        $database->createCollection(new Collection(id: $colName));
+        $database->createCollection(Collection::create(id: $colName));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -1395,7 +1391,7 @@ trait SchemalessTests
         }
 
         $colName = uniqid('schemaless_not_exists');
-        $database->createCollection(new Collection(id: $colName));
+        $database->createCollection(Collection::create(id: $colName));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -1505,7 +1501,7 @@ trait SchemalessTests
             return;
         }
         $collectionId = ID::unique();
-        $database->createCollection(new Collection(id: $collectionId));
+        $database->createCollection(Collection::create(id: $collectionId));
 
         // Create documents with array of objects
         $doc1 = $database->createDocument($collectionId, new Document([
@@ -1659,7 +1655,7 @@ trait SchemalessTests
             return;
         }
         $collectionId = ID::unique();
-        $database->createCollection(new Collection(id: $collectionId));
+        $database->createCollection(Collection::create(id: $collectionId));
 
         // Create documents with complex nested structures
         $doc1 = $database->createDocument($collectionId, new Document([
@@ -1756,7 +1752,7 @@ trait SchemalessTests
         }
 
         $col = uniqid('sl_nested_obj');
-        $database->createCollection(new Collection(id: $col));
+        $database->createCollection(Collection::create(id: $col));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -1933,7 +1929,7 @@ trait SchemalessTests
         }
 
         $collectionName = ID::unique();
-        $database->createCollection(new Collection(id: $collectionName, permissions: [
+        $database->createCollection(Collection::create(id: $collectionName, permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
             Permission::update(Role::any()),
@@ -2220,7 +2216,7 @@ trait SchemalessTests
         }
 
         $col = uniqid('sl_ttl');
-        $database->createCollection(new Collection(id: $col));
+        $database->createCollection(Collection::create(id: $col));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -2229,17 +2225,15 @@ trait SchemalessTests
             Permission::delete(Role::any()),
         ];
 
-        $this->assertTrue(
-            $database->createIndex($col, Index::ttl(key: 'idx_ttl_valid', attributes: ['expiresAt'], orders: [Order::Asc], ttl: 3600))
-        );
+        $database->createIndex($col, Index::ttl(key: 'idx_ttl_valid', attribute: 'expiresAt', ttl: 3600));
 
         $collection = $database->getCollection($col);
-        $indexes = $collection->indexes;
+        $indexes = $collection->indexes();
         $this->assertCount(1, $indexes);
         $ttlIndex = $indexes[0];
-        $this->assertEquals('idx_ttl_valid', $ttlIndex->getId());
-        $this->assertEquals(IndexType::Ttl->value, $ttlIndex->getAttribute('type'));
-        $this->assertEquals(3600, $ttlIndex->getAttribute('ttl'));
+        $this->assertEquals('idx_ttl_valid', $ttlIndex->key);
+        $this->assertEquals(IndexType::Ttl, $ttlIndex->type);
+        $this->assertEquals(3600, $ttlIndex->ttl);
 
         $now = new \DateTime();
         $future1 = (clone $now)->modify('+2 hours');
@@ -2272,26 +2266,24 @@ trait SchemalessTests
         $this->assertEquals('doc2', $doc2->getId());
         $this->assertEquals('doc3', $doc3->getId());
 
-        $this->assertTrue($database->deleteIndex($col, 'idx_ttl_valid'));
+        $database->deleteIndex($col, 'idx_ttl_valid');
 
-        $this->assertTrue(
-            $database->createIndex($col, Index::ttl(key: 'idx_ttl_min', attributes: ['expiresAt'], orders: [Order::Asc]))
-        );
+        $database->createIndex($col, Index::ttl(key: 'idx_ttl_min', attribute: 'expiresAt', ttl: 1));
 
         $col2 = uniqid('sl_ttl_collection');
 
-        $expiresAtAttr = Attribute::datetime(key: 'expiresAt', signed: false, filters: ['datetime']);
+        $expiresAtAttr = Attribute::datetime(key: 'expiresAt');
 
-        $ttlIndexDoc = Index::ttl(key: 'idx_ttl_collection', attributes: ['expiresAt'], orders: [Order::Asc], ttl: 7200);
+        $ttlIndexDoc = Index::ttl(key: 'idx_ttl_collection', attribute: 'expiresAt', ttl: 7200);
 
-        $database->createCollection(new Collection(id: $col2, attributes: [$expiresAtAttr], indexes: [$ttlIndexDoc]));
+        $database->createCollection(Collection::create(id: $col2, attributes: [$expiresAtAttr], indexes: [$ttlIndexDoc]));
 
         $collection2 = $database->getCollection($col2);
-        $indexes2 = $collection2->indexes;
+        $indexes2 = $collection2->indexes();
         $this->assertCount(1, $indexes2);
         $ttlIndex2 = $indexes2[0];
-        $this->assertEquals('idx_ttl_collection', $ttlIndex2->getId());
-        $this->assertEquals(7200, $ttlIndex2->getAttribute('ttl'));
+        $this->assertEquals('idx_ttl_collection', $ttlIndex2->key);
+        $this->assertEquals(7200, $ttlIndex2->ttl);
 
         $database->deleteCollection($col);
         $database->deleteCollection($col2);
@@ -2309,7 +2301,7 @@ trait SchemalessTests
         }
 
         $collectionId = uniqid('sl_ttl_dup');
-        $database->createCollection(new Collection(id: $collectionId));
+        $database->createCollection(Collection::create(id: $collectionId));
 
         $assertRejected = function (callable $create, string $case): void {
             try {
@@ -2320,50 +2312,46 @@ trait SchemalessTests
             }
         };
 
-        $indexIds = fn (): array => array_map(fn (Index $index) => $index->getId(), $database->getCollection($collectionId)->indexes);
+        $indexIds = fn (): array => array_map(fn (Index $index) => $index->key, $database->getCollection($collectionId)->indexes());
 
         try {
-            $this->assertTrue(
-                $database->createIndex($collectionId, Index::ttl(key: 'idx_ttl_expires', attributes: ['expiresAt'], orders: [Order::Asc], ttl: 3600))
-            );
+            $database->createIndex($collectionId, Index::ttl(key: 'idx_ttl_expires', attribute: 'expiresAt', ttl: 3600));
 
             $assertRejected(
-                fn () => $database->createIndex($collectionId, Index::ttl(key: 'idx_ttl_expires_duplicate', attributes: ['expiresAt'], orders: [Order::Asc], ttl: 7200)),
+                fn () => $database->createIndex($collectionId, Index::ttl(key: 'idx_ttl_expires_duplicate', attribute: 'expiresAt', ttl: 7200)),
                 'a second TTL index on the same attribute',
             );
             $assertRejected(
-                fn () => $database->createIndex($collectionId, Index::ttl(key: 'idx_ttl_deleted', attributes: ['deletedAt'], orders: [Order::Asc], ttl: 86400)),
+                fn () => $database->createIndex($collectionId, Index::ttl(key: 'idx_ttl_deleted', attribute: 'deletedAt', ttl: 86400)),
                 'a second TTL index on another attribute',
             );
 
             $this->assertSame(['idx_ttl_expires'], $indexIds());
 
             $assertRejected(
-                fn () => $database->createIndex($collectionId, Index::ttl(key: 'idx_ttl_deleted_duplicate', attributes: ['deletedAt'], orders: [Order::Asc], ttl: 172800)),
+                fn () => $database->createIndex($collectionId, Index::ttl(key: 'idx_ttl_deleted_duplicate', attribute: 'deletedAt', ttl: 172800)),
                 'a second TTL index after earlier rejections',
             );
 
-            $this->assertTrue($database->deleteIndex($collectionId, 'idx_ttl_expires'));
+            $database->deleteIndex($collectionId, 'idx_ttl_expires');
 
-            $this->assertTrue(
-                $database->createIndex($collectionId, Index::ttl(key: 'idx_ttl_deleted', attributes: ['deletedAt'], orders: [Order::Asc], ttl: 1800))
-            );
+            $database->createIndex($collectionId, Index::ttl(key: 'idx_ttl_deleted', attribute: 'deletedAt', ttl: 1800));
 
             $this->assertSame(['idx_ttl_deleted'], $indexIds());
 
             $collectionWithTwoTTLIndexes = uniqid('sl_ttl_dup_collection');
             $assertRejected(
-                fn () => $database->createCollection(new Collection(
+                fn () => $database->createCollection(Collection::create(
                     id: $collectionWithTwoTTLIndexes,
-                    attributes: [Attribute::datetime(key: 'expiresAt', signed: false, filters: ['datetime'])],
+                    attributes: [Attribute::datetime(key: 'expiresAt')],
                     indexes: [
-                        Index::ttl(key: 'idx_ttl_1', attributes: ['expiresAt'], orders: [Order::Asc], ttl: 3600),
-                        Index::ttl(key: 'idx_ttl_2', attributes: ['expiresAt'], orders: [Order::Asc], ttl: 7200),
+                        Index::ttl(key: 'idx_ttl_1', attribute: 'expiresAt', ttl: 3600),
+                        Index::ttl(key: 'idx_ttl_2', attribute: 'expiresAt', ttl: 7200),
                     ],
                 )),
                 'two TTL indexes in createCollection',
             );
-            $this->assertTrue($database->getCollection($collectionWithTwoTTLIndexes)->isEmpty(), 'A rejected collection must not be created');
+            $this->assertNull($database->findCollection($collectionWithTwoTTLIndexes), 'A rejected collection must not be created');
         } finally {
             $database->deleteCollection($collectionId);
         }
@@ -2381,7 +2369,7 @@ trait SchemalessTests
         }
 
         $col = uniqid('sl_datetime');
-        $database->createCollection(new Collection(id: $col));
+        $database->createCollection(Collection::create(id: $col));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -2501,7 +2489,7 @@ trait SchemalessTests
         }
 
         $col = uniqid('sl_ttl_expiry');
-        $database->createCollection(new Collection(id: $col));
+        $database->createCollection(Collection::create(id: $col));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -2511,9 +2499,7 @@ trait SchemalessTests
         ];
 
         // Create TTL index with 60 seconds expiry
-        $this->assertTrue(
-            $database->createIndex($col, Index::ttl(key: 'idx_ttl_expiresAt', attributes: ['expiresAt'], orders: [Order::Asc], ttl: 10))
-        );
+        $database->createIndex($col, Index::ttl(key: 'idx_ttl_expiresAt', attribute: 'expiresAt', ttl: 10));
 
         $now = new \DateTime();
         $expiredTime = (clone $now)->modify('-10 seconds'); // Already expired
@@ -2636,7 +2622,7 @@ trait SchemalessTests
         }
 
         $col = uniqid('sl_ttl_cache_expiry');
-        $database->createCollection(new Collection(id: $col));
+        $database->createCollection(Collection::create(id: $col));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -2646,9 +2632,7 @@ trait SchemalessTests
         ];
 
         // Create TTL index with 10 seconds expiry (also used as cache TTL)
-        $this->assertTrue(
-            $database->createIndex($col, Index::ttl(key: 'idx_ttl_expiresAt', attributes: ['expiresAt'], orders: [Order::Asc], ttl: 10))
-        );
+        $database->createIndex($col, Index::ttl(key: 'idx_ttl_expiresAt', attribute: 'expiresAt', ttl: 10));
 
         $now = new \DateTime();
         $expiredTime = (clone $now)->modify('-10 seconds'); // Already expired from TTL perspective
@@ -2716,7 +2700,7 @@ trait SchemalessTests
         }
 
         $col = uniqid('sl_str_datetime');
-        $database->createCollection(new Collection(id: $col));
+        $database->createCollection(Collection::create(id: $col));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -2845,7 +2829,7 @@ trait SchemalessTests
         }
 
         $col = uniqid('sl_str_date_ttl');
-        $database->createCollection(new Collection(id: $col));
+        $database->createCollection(Collection::create(id: $col));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -2855,9 +2839,7 @@ trait SchemalessTests
         ];
 
         // Create TTL index on expiresAt field
-        $this->assertTrue(
-            $database->createIndex($col, Index::ttl(key: 'idx_ttl_expiresAt', attributes: ['expiresAt'], orders: [Order::Asc], ttl: 10))
-        );
+        $database->createIndex($col, Index::ttl(key: 'idx_ttl_expiresAt', attribute: 'expiresAt', ttl: 10));
 
         $now = new \DateTime();
         $expiredTime = (clone $now)->modify('-10 seconds'); // Already expired
@@ -3000,7 +2982,7 @@ trait SchemalessTests
         }
 
         $col = uniqid('sl_mongo_dot_idx');
-        $database->createCollection(new Collection(id: $col));
+        $database->createCollection(Collection::create(id: $col));
 
         // Define top-level object attribute (metadata only; schemaless adapter won't enforce)
         $database->createAttribute($col, Attribute::object(key: 'profile'));
@@ -3030,14 +3012,10 @@ trait SchemalessTests
         ]);
 
         // Create KEY index on nested path
-        $this->assertTrue(
-            $database->createIndex($col, Index::key(key: 'idx_profile_user_email_key', attributes: ['profile.user.email'], lengths: [0], orders: [Order::Asc]))
-        );
+        $database->createIndex($col, Index::key(key: 'idx_profile_user_email_key', attributes: ['profile.user.email'], lengths: [0], orders: [OrderDirection::Asc]));
 
         // Create UNIQUE index on nested path and verify enforcement
-        $this->assertTrue(
-            $database->createIndex($col, Index::unique(key: 'idx_profile_user_id_unique', attributes: ['profile.user.id'], lengths: [0], orders: [Order::Asc]))
-        );
+        $database->createIndex($col, Index::unique(key: 'idx_profile_user_id_unique', attributes: ['profile.user.id'], lengths: [0], orders: [OrderDirection::Asc]));
 
         try {
             $database->createDocument($col, new Document([
@@ -3077,7 +3055,7 @@ trait SchemalessTests
         }
 
         $col = uniqid('sl_query_datetime');
-        $database->createCollection(new Collection(id: $col));
+        $database->createCollection(Collection::create(id: $col));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -3206,7 +3184,7 @@ trait SchemalessTests
         }
 
         // Create a simple schemaless collection and one document.
-        $database->createCollection(new Collection(id: 'schemaless_time', permissions: [
+        $database->createCollection(Collection::create(id: 'schemaless_time', permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),

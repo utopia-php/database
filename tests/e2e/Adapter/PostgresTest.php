@@ -96,7 +96,7 @@ class PostgresTest extends Base
             'The fixture must exceed the Postgres identifier limit, or this test no longer covers long table names'
         );
 
-        $database->createCollection(new Collection(id: $collection, attributes: [
+        $database->createCollection(Collection::create(id: $collection, attributes: [
             Attribute::string(key: 'name', size: 128, required: true),
         ], permissions: [
             Permission::read(Role::any()),
@@ -114,8 +114,8 @@ class PostgresTest extends Base
 
         $this->assertSame('vector-doc', $document->getId());
         $this->assertSame('embeddings', $database->getDocument($collection, 'vector-doc')->getAttribute('name'));
-        $this->assertTrue($database->exists($database->getDatabase(), $collection));
-        $this->assertTrue($database->deleteCollection($collection));
+        $this->assertTrue($database->collectionExists($collection));
+        $database->deleteCollection($collection);
     }
 
     /**
@@ -130,7 +130,7 @@ class PostgresTest extends Base
         $pdo = self::$pdo;
         $this->assertNotNull($pdo);
 
-        $database->createCollection(new Collection(id: 'permsPlan', attributes: [
+        $database->createCollection(Collection::create(id: 'permsPlan', attributes: [
             Attribute::string(key: 'title', size: 64, required: true),
         ], permissions: [
             Permission::create(Role::any()),
@@ -186,10 +186,10 @@ class PostgresTest extends Base
         $pdo = self::$pdo;
         $this->assertNotNull($pdo);
 
-        $database->createCollection(new Collection(id: 'vectorPlan', attributes: [
-            Attribute::vector(key: 'embedding', size: 3, required: true),
+        $database->createCollection(Collection::create(id: 'vectorPlan', attributes: [
+            Attribute::vector(key: 'embedding', dimensions: 3, required: true),
         ], indexes: [
-            Index::hnswCosine(key: 'idx_cosine', attributes: ['embedding']),
+            Index::hnswCosine(key: 'idx_cosine', attribute: 'embedding'),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),

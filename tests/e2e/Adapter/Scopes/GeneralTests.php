@@ -64,12 +64,9 @@ trait GeneralTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $database->createCollection(new Collection(id: 'global-timeouts'));
+        $database->createCollection(Collection::create(id: 'global-timeouts'));
 
-        $this->assertEquals(
-            true,
-            $database->createAttribute('global-timeouts', Attribute::string(key: 'longtext', size: 100000000, required: true))
-        );
+        $database->createAttribute('global-timeouts', Attribute::string(key: 'longtext', size: 100000000, required: true));
 
         for ($i = 0; $i < 20; $i++) {
             $database->createDocument('global-timeouts', new Document([
@@ -124,7 +121,7 @@ trait GeneralTests
             ->create();
 
         try {
-            $database->createCollection(new Collection(id: __FUNCTION__, documentSecurity: false));
+            $database->createCollection(Collection::create(id: __FUNCTION__, documentSecurity: false));
 
             $database
                 ->setTenant(1)
@@ -182,7 +179,7 @@ trait GeneralTests
 
         try {
             // Create collection
-            $database->createCollection(new Collection(id: __FUNCTION__, permissions: [
+            $database->createCollection(Collection::create(id: __FUNCTION__, permissions: [
                 Permission::create(Role::any()),
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
@@ -436,7 +433,7 @@ trait GeneralTests
                 ->setNamespace('')
                 ->setTenant(null)
                 ->create();
-            $database->createCollection(new Collection(
+            $database->createCollection(Collection::create(
                 id: 'notes',
                 attributes: [Attribute::string(key: 'title', size: 64)],
                 permissions: [
@@ -536,7 +533,7 @@ trait GeneralTests
             // tenant out of another's rows.
             $database->setTenant(null)->setTenantPerDocument(true);
 
-            $database->createCollection(new Collection(
+            $database->createCollection(Collection::create(
                 id: $collection,
                 attributes: [Attribute::string(key: 'name', size: 128, required: true)],
                 permissions: [
@@ -589,7 +586,7 @@ trait GeneralTests
 
         $collection = 'cacheFallback_'.uniqid();
 
-        $database->createCollection(new Collection(id: $collection, attributes: [
+        $database->createCollection(Collection::create(id: $collection, attributes: [
             Attribute::string(key: 'string', size: 767, required: true),
         ], permissions: [
             Permission::read(Role::any()),
@@ -673,7 +670,7 @@ trait GeneralTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $database->createCollection(new Collection(id: 'transactionAtomicity'));
+        $database->createCollection(Collection::create(id: 'transactionAtomicity'));
         $database->createAttribute('transactionAtomicity', Attribute::string(key: 'title', size: 128, required: true));
 
         // Verify a successful transaction commits
@@ -833,7 +830,7 @@ trait GeneralTests
 
     private function createCachedUsers(Database $database, string $collection): void
     {
-        $database->createCollection(new Collection(id: $collection, attributes: [
+        $database->createCollection(Collection::create(id: $collection, attributes: [
             Attribute::string(key: 'name', required: true),
         ], permissions: [
             Permission::read(Role::any()),
@@ -855,7 +852,7 @@ trait GeneralTests
         }
 
         $collection = 'ownerKeys'.ID::unique();
-        $database->createCollection(new Collection(id: $collection, attributes: [
+        $database->createCollection(Collection::create(id: $collection, attributes: [
             Attribute::string(key: 'name', size: 64, required: true),
         ], permissions: [
             Permission::read(Role::any()),
@@ -917,7 +914,7 @@ trait GeneralTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $database->createCollection(new Collection(id: 'txKnownException'));
+        $database->createCollection(Collection::create(id: 'txKnownException'));
         $database->createAttribute('txKnownException', Attribute::string(key: 'title', size: 128, required: true));
 
         $database->createDocument('txKnownException', new Document([
@@ -1007,7 +1004,7 @@ trait GeneralTests
         }
 
         $collection = 'txInvalidDocument';
-        $database->createCollection(new Collection(id: $collection, attributes: [
+        $database->createCollection(Collection::create(id: $collection, attributes: [
             Attribute::string(key: 'title', size: 128, required: true),
         ], permissions: [
             Permission::create(Role::any()),
@@ -1050,7 +1047,7 @@ trait GeneralTests
             return;
         }
 
-        $database->createCollection(new Collection(id: 'txNested'));
+        $database->createCollection(Collection::create(id: 'txNested'));
         $database->createAttribute('txNested', Attribute::string(key: 'title', size: 128, required: true));
 
         $database->createDocument('txNested', new Document([
@@ -1131,7 +1128,7 @@ trait GeneralTests
         $collection = 'cacheReconnect_'.uniqid();
 
         try {
-            $database->createCollection(new Collection(id: $collection, attributes: [
+            $database->createCollection(Collection::create(id: $collection, attributes: [
                 Attribute::string(key: 'title', size: 255, required: true),
             ], permissions: [
                 Permission::read(Role::any()),
@@ -1206,9 +1203,9 @@ trait GeneralTests
             return;
         }
 
-        $database->createCollection(new Collection(id: 'count-timeouts'));
+        $database->createCollection(Collection::create(id: 'count-timeouts'));
 
-        $this->assertTrue($database->createAttribute('count-timeouts', Attribute::string(key: 'longtext', size: 100000000, required: true)));
+        $database->createAttribute('count-timeouts', Attribute::string(key: 'longtext', size: 100000000, required: true));
 
         $longtext = file_get_contents(__DIR__.'/../../../resources/longtext.txt');
         $this->assertIsString($longtext);
@@ -1304,7 +1301,7 @@ trait GeneralTests
         $database = $this->getDatabase();
         $collection = 'cursorCollection_'.uniqid();
 
-        $database->createCollection(new Collection(id: $collection));
+        $database->createCollection(Collection::create(id: $collection));
 
         try {
             $database->find($collection, [
@@ -1358,7 +1355,7 @@ trait GeneralTests
     {
         $database = $this->getDatabase();
 
-        $database->createCollection(new Collection(id: __FUNCTION__, attributes: [
+        $database->createCollection(Collection::create(id: __FUNCTION__, attributes: [
             Attribute::string(key: 'name', size: 255, required: true),
         ], permissions: [
             Permission::read(Role::any()),
@@ -1408,7 +1405,7 @@ trait GeneralTests
         $database->setPreserveDates(true);
 
         try {
-            $database->createCollection(new Collection(id: 'preserve_create_dates', attributes: [
+            $database->createCollection(Collection::create(id: 'preserve_create_dates', attributes: [
                 Attribute::string(key: 'attr1', size: 10),
             ]));
 
@@ -1516,7 +1513,7 @@ trait GeneralTests
         $database->setPreserveDates(true);
 
         try {
-            $database->createCollection(new Collection(id: 'preserve_update_dates', attributes: [
+            $database->createCollection(Collection::create(id: 'preserve_update_dates', attributes: [
                 Attribute::string(key: 'attr1', size: 10),
             ]));
 
@@ -1616,7 +1613,7 @@ trait GeneralTests
         }
 
         $collection = 'lostConnectionNestedTransaction';
-        $database->createCollection(new Collection(id: $collection));
+        $database->createCollection(Collection::create(id: $collection));
         $database->createAttribute($collection, Attribute::string(key: 'title', size: 16, required: true));
 
         $create = fn (string $id): Document => $database->createDocument($collection, new Document([
@@ -1745,7 +1742,7 @@ trait GeneralTests
         };
 
         try {
-            $database->createCollection(new Collection(id: $collection, attributes: [
+            $database->createCollection(Collection::create(id: $collection, attributes: [
                 Attribute::string(key: 'name', size: 64, required: true),
                 Attribute::integer(key: 'count', default: 0),
             ], permissions: [
@@ -1815,7 +1812,7 @@ trait GeneralTests
             ->create();
 
         try {
-            $database->createCollection(new Collection(id: $collection, permissions: [
+            $database->createCollection(Collection::create(id: $collection, permissions: [
                 Permission::create(Role::any()),
                 Permission::read(Role::any()),
             ], documentSecurity: false));

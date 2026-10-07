@@ -8,7 +8,10 @@ This library will abstract multiple database technologies using the adapter's de
 * MariaDB
 * MySQL
 * Postgres
+* SQLite
 * MongoDB
+* Redis
+* Memory
 
 ## Data Types
 
@@ -36,26 +39,35 @@ Databases that don't support the storage of complex data types should store them
 Each database adapter should support the following action for fast storing and retrieval of collections of documents.
 
 **Databases** (Schemas for MariaDB)
-* create
-* delete
+* create(string $name)
+* update(string $name, string $new)
+* exists(string $database)
+* delete(string $name)
 
 **Collections** (Tables for MariaDB)
-* createCollection(string $name, array $attributes = [], array $indexes = [])
-* deleteCollection(string $id)
+* createCollection(string $collection, array $attributes = [], array $indexes = [])
+* collectionExists(string $database, string $collection)
+* deleteCollection(string $collection)
 
 **Attributes** (Table columns for MariaDB)
 * createAttribute(string $collection, Attribute $attribute)
-* deleteAttribute(string $collection, string $id)
+* updateAttribute(string $collection, string $key, Attribute $attribute)
+* renameAttribute(string $collection, string $old, string $new)
+* deleteAttribute(string $collection, string $key)
 
 **Indices** (Table indices for MariaDB)
 * createIndex(string $collection, Index $index)
-* deleteIndex(string $collection, string $id)
+* renameIndex(string $collection, string $old, string $new)
+* deleteIndex(string $collection, string $key)
 
 **Documents** (Table rows columns for MariaDB)
 * getDocument(Document $collection, string $id)
 * createDocument(Document $collection, Document $document)
 * updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions)
-* deleteDocument(string $collection, string $id)
+* deleteDocument(Document $collection, string $id)
+
+**Limits**
+* limits(): Adapter\Limits
 
 ## Queries
 

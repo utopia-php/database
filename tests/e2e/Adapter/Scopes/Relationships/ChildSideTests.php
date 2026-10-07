@@ -55,11 +55,11 @@ trait ChildSideTests
 
         $child = $this->childSideAttribute($database, $children, 'owner');
         $this->assertSame(RelationshipSide::Child, $child?->side);
-        $this->assertSame('items', $child?->relationship?->twoWayKey);
+        $this->assertSame('items', $child->relationship?->twoWayKey);
 
         $parent = $this->childSideAttribute($database, $parents, 'items');
         $this->assertSame(RelationshipSide::Parent, $parent?->side);
-        $this->assertSame('owner', $parent?->relationship?->twoWayKey);
+        $this->assertSame('owner', $parent->relationship?->twoWayKey);
 
         $this->assertSame(['c1'], $this->childSideIds($database->getDocument($parents, 'p1')->getAttribute('items')));
         $this->assertSame(['p1'], $this->childSideIds($database->getDocument($children, 'c1')->getAttribute('owner')));

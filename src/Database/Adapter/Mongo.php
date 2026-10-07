@@ -1047,12 +1047,20 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 }
                 break;
             case RelationshipType::OneToMany:
-                if ($twoWay && $newTwoWayKey !== null && $twoWayKey !== $newTwoWayKey) {
-                    $this->getClient()->update($relatedCollectionName, updates: $renameTwoWayKey, multi: true);
+                if ($side === RelationshipSide::Parent) {
+                    if ($newTwoWayKey !== null && $twoWayKey !== $newTwoWayKey) {
+                        $this->getClient()->update($relatedCollectionName, updates: $renameTwoWayKey, multi: true);
+                    }
+                } elseif ($newKey !== null && $key !== $newKey) {
+                    $this->getClient()->update($collectionName, updates: $renameKey, multi: true);
                 }
                 break;
             case RelationshipType::ManyToOne:
-                if ($newKey !== null && $key !== $newKey) {
+                if ($side === RelationshipSide::Child) {
+                    if ($newTwoWayKey !== null && $twoWayKey !== $newTwoWayKey) {
+                        $this->getClient()->update($relatedCollectionName, updates: $renameTwoWayKey, multi: true);
+                    }
+                } elseif ($newKey !== null && $key !== $newKey) {
                     $this->getClient()->update($collectionName, updates: $renameKey, multi: true);
                 }
                 break;

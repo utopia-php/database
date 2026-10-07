@@ -19,8 +19,9 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
 use Utopia\Query\Method;
+use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
-use Utopia\Query\Schema\Order;
+use Utopia\Query\Schema\IndexType;
 
 trait ObjectAttributeTests
 {
@@ -36,7 +37,7 @@ trait ObjectAttributeTests
             return true;
         }
 
-        $result = $database->createAttribute($collectionId, new Attribute(key: $attributeId, type: $type, size: $size, required: $required, default: $default));
+        $result = $database->createAttribute($collectionId, Attribute::fromArray(['key' => $attributeId, 'type' => $type, 'size' => $size, 'required' => $required, 'default' => $default]));
         $this->assertEquals(true, $result);
 
         return $result;
@@ -74,7 +75,7 @@ trait ObjectAttributeTests
         }
 
         $collectionId = ID::unique();
-        $database->createCollection(new Collection(id: $collectionId));
+        $database->createCollection(Collection::create(id: $collectionId));
 
         // Create object attribute
         $this->createAttribute($database, $collectionId, 'meta', ColumnType::Object, 0, false);
@@ -628,14 +629,13 @@ trait ObjectAttributeTests
         }
 
         $collectionId = ID::unique();
-        $database->createCollection(new Collection(id: $collectionId));
+        $database->createCollection(Collection::create(id: $collectionId));
 
         // Create object attribute
         $this->createAttribute($database, $collectionId, 'data', ColumnType::Object, 0, false);
 
         // Test 1: Create Object index on object attribute
-        $ginIndex = $database->createIndex($collectionId, Index::object(key: 'idx_data_gin', attributes: ['data']));
-        $this->assertTrue($ginIndex);
+        $database->createIndex($collectionId, Index::object(key: 'idx_data_gin', attribute: 'data'));
 
         // Test 2: Create documents with JSONB data
         $doc1 = $database->createDocument($collectionId, new Document([
@@ -690,7 +690,7 @@ trait ObjectAttributeTests
 
         $exceptionThrown = false;
         try {
-            $database->createIndex($collectionId, Index::object(key: 'idx_name_gin', attributes: ['name']));
+            $database->createIndex($collectionId, Index::object(key: 'idx_name_gin', attribute: 'name'));
         } catch (\Exception $e) {
             $exceptionThrown = true;
             $this->assertInstanceOf(IndexException::class, $e);
@@ -703,7 +703,7 @@ trait ObjectAttributeTests
 
         $exceptionThrown = false;
         try {
-            $database->createIndex($collectionId, Index::object(key: 'idx_multi_gin', attributes: ['data', 'metadata']));
+            $database->createIndex($collectionId, Index::fromArray(['key' => 'idx_multi_gin', 'type' => IndexType::Object, 'attributes' => ['data', 'metadata']]));
         } catch (\Exception $e) {
             $exceptionThrown = true;
             $this->assertInstanceOf(IndexException::class, $e);
@@ -714,7 +714,7 @@ trait ObjectAttributeTests
         // Test 8: Try to create Object index with orders (should fail)
         $exceptionThrown = false;
         try {
-            $database->createIndex($collectionId, Index::object(key: 'idx_ordered_gin', attributes: ['metadata'], orders: [Order::Asc]));
+            $database->createIndex($collectionId, Index::fromArray(['key' => 'idx_ordered_gin', 'type' => IndexType::Object, 'attributes' => ['metadata'], 'orders' => [OrderDirection::Asc]]));
         } catch (\Exception $e) {
             $exceptionThrown = true;
             $this->assertInstanceOf(IndexException::class, $e);
@@ -736,7 +736,7 @@ trait ObjectAttributeTests
         }
 
         $collectionId = ID::unique();
-        $database->createCollection(new Collection(id: $collectionId));
+        $database->createCollection(Collection::create(id: $collectionId));
 
         $this->createAttribute($database, $collectionId, 'meta', ColumnType::Object, 0, false);
 
@@ -904,7 +904,7 @@ trait ObjectAttributeTests
         }
 
         $collectionId = ID::unique();
-        $database->createCollection(new Collection(id: $collectionId));
+        $database->createCollection(Collection::create(id: $collectionId));
 
         $this->createAttribute($database, $collectionId, 'metaDefaultEmpty', ColumnType::Object, 0, false, []);
         $this->createAttribute($database, $collectionId, 'settings', ColumnType::Object, 0, false, ['config' => ['theme' => 'light', 'lang' => 'en']]);
@@ -957,7 +957,7 @@ trait ObjectAttributeTests
         }
 
         $collectionId = ID::unique();
-        $database->createCollection(new Collection(id: $collectionId));
+        $database->createCollection(Collection::create(id: $collectionId));
         $this->createAttribute($database, $collectionId, 'meta', ColumnType::Object, 0, false);
 
         // An object attribute has no per-key schema, so there is no typed cast
@@ -1005,7 +1005,7 @@ trait ObjectAttributeTests
         }
 
         $collectionId = ID::unique();
-        $database->createCollection(new Collection(id: $collectionId));
+        $database->createCollection(Collection::create(id: $collectionId));
         $this->createAttribute($database, $collectionId, 'meta', ColumnType::Object, 0, false);
 
         $created = $database->createDocument($collectionId, new Document([
@@ -1051,7 +1051,7 @@ trait ObjectAttributeTests
         }
 
         $collectionId = ID::unique();
-        $database->createCollection(new Collection(id: $collectionId));
+        $database->createCollection(Collection::create(id: $collectionId));
         $this->createAttribute($database, $collectionId, 'meta', ColumnType::Object, 0, false);
 
         $created = $database->createDocument($collectionId, new Document([
@@ -1117,7 +1117,7 @@ trait ObjectAttributeTests
         }
 
         $collectionId = ID::unique();
-        $database->createCollection(new Collection(id: $collectionId));
+        $database->createCollection(Collection::create(id: $collectionId));
 
         // Attributes: 3D vector and nested metadata object
         $this->createAttribute($database, $collectionId, 'embedding', ColumnType::Vector, 3, true);
@@ -1275,7 +1275,7 @@ trait ObjectAttributeTests
         }
 
         $collectionId = ID::unique();
-        $database->createCollection(new Collection(id: $collectionId));
+        $database->createCollection(Collection::create(id: $collectionId));
 
         // Base attributes
         $this->createAttribute($database, $collectionId, 'profile', ColumnType::Object, 0, false);
@@ -1284,8 +1284,7 @@ trait ObjectAttributeTests
         // 1) KEY index on a nested object path (dot notation)
 
         // 2) UNIQUE index on a nested object path should enforce uniqueness on insert
-        $created = $database->createIndex($collectionId, Index::unique(key: 'idx_profile_email_unique', attributes: ['profile.user.email']));
-        $this->assertTrue($created);
+        $database->createIndex($collectionId, Index::unique(key: 'idx_profile_email_unique', attributes: ['profile.user.email']));
 
         $database->createDocument($collectionId, new Document([
             '$id' => 'nest1',
@@ -1320,7 +1319,7 @@ trait ObjectAttributeTests
 
         // 3) INDEX_OBJECT must NOT be allowed on nested paths
         try {
-            $database->createIndex($collectionId, Index::object(key: 'idx_profile_nested_object', attributes: ['profile.user.email']));
+            $database->createIndex($collectionId, Index::object(key: 'idx_profile_nested_object', attribute: 'profile.user.email'));
         } catch (Exception $e) {
             $this->assertInstanceOf(IndexException::class, $e);
         }
@@ -1350,15 +1349,14 @@ trait ObjectAttributeTests
         }
 
         $collectionId = ID::unique();
-        $database->createCollection(new Collection(id: $collectionId));
+        $database->createCollection(Collection::create(id: $collectionId));
 
         // Base attributes
         $this->createAttribute($database, $collectionId, 'profile', ColumnType::Object, 0, false);
         $this->createAttribute($database, $collectionId, 'name', ColumnType::String, 255, false);
 
         // Create index on nested email path
-        $created = $database->createIndex($collectionId, Index::key(key: 'idx_profile_email', attributes: ['profile.user.email']));
-        $this->assertTrue($created);
+        $database->createIndex($collectionId, Index::key(key: 'idx_profile_email', attributes: ['profile.user.email']));
 
         // Seed documents with different nested values
         $database->createDocuments($collectionId, [
@@ -1476,7 +1474,7 @@ trait ObjectAttributeTests
         }
 
         $collectionId = ID::unique();
-        $database->createCollection(new Collection(id: $collectionId));
+        $database->createCollection(Collection::create(id: $collectionId));
         $this->createAttribute($database, $collectionId, 'meta', ColumnType::Object, 0, false);
         $this->createAttribute($database, $collectionId, 'secret', ColumnType::String, 64, false);
 
@@ -1545,7 +1543,7 @@ trait ObjectAttributeTests
         }
 
         $collectionId = ID::unique();
-        $database->createCollection(new Collection(id: $collectionId));
+        $database->createCollection(Collection::create(id: $collectionId));
 
         // Base attributes
         $this->createAttribute($database, $collectionId, 'profile', ColumnType::Object, 0, false);

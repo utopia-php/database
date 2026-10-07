@@ -28,7 +28,7 @@ trait MySQLJoinPlanTests
     {
         $database = $this->getDatabase();
         $customers = 'checked_self_joins';
-        $database->createCollection(new Collection(id: $customers, permissions: [Permission::create(Role::any())], documentSecurity: true));
+        $database->createCollection(Collection::create(id: $customers, permissions: [Permission::create(Role::any())], documentSecurity: true));
 
         try {
             $this->seed($database, $customers, [Role::any(), Role::user(self::HIDDEN)]);
@@ -47,8 +47,8 @@ trait MySQLJoinPlanTests
         $database = $this->getDatabase();
         $customers = 'partly_checked_joins';
         $labels = 'partly_checked_labels';
-        $database->createCollection(new Collection(id: $customers, permissions: [Permission::create(Role::any())], documentSecurity: true));
-        $database->createCollection(new Collection(id: $labels, permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: false));
+        $database->createCollection(Collection::create(id: $customers, permissions: [Permission::create(Role::any())], documentSecurity: true));
+        $database->createCollection(Collection::create(id: $labels, permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: false));
 
         try {
             $this->seed($database, $customers, [Role::any(), Role::user(self::HIDDEN)]);
@@ -82,10 +82,10 @@ trait MySQLJoinPlanTests
         $this->assertInstanceOf(RawQuery::class, $adapter);
 
         $customers = 'left_joined_customers';
-        $database->createCollection(new Collection(id: $customers, permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: false));
+        $database->createCollection(Collection::create(id: $customers, permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: false));
         $links = \array_map(static fn (int $link): string => 'left_joined_link'.$link, \range(1, self::OUTER_JOIN_LINKS));
         foreach ($links as $link) {
-            $database->createCollection(new Collection(id: $link, permissions: [Permission::create(Role::any())], documentSecurity: true));
+            $database->createCollection(Collection::create(id: $link, permissions: [Permission::create(Role::any())], documentSecurity: true));
         }
 
         $authorization = $database->getAuthorization();

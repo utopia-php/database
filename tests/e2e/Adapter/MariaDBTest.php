@@ -80,7 +80,7 @@ class MariaDBTest extends Base
 
         $database = $this->getDatabase();
         $collection = 'deadlockedGap';
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: $collection,
             attributes: [Attribute::integer(key: 'count', required: false)],
             permissions: [Permission::read(Role::any()), Permission::create(Role::any())],

@@ -113,7 +113,7 @@ trait CustomDocumentTypeTests
     {
         $database = $this->getDatabase();
 
-        $database->createCollection(new Collection(id: 'customUsers', attributes: [
+        $database->createCollection(Collection::create(id: 'customUsers', attributes: [
             Attribute::string(key: 'email', size: 255, required: true),
             Attribute::string(key: 'name', size: 255, required: true),
             Attribute::string(key: 'status', size: 50, required: true),
@@ -152,7 +152,7 @@ trait CustomDocumentTypeTests
     {
         $database = $this->getDatabase();
 
-        $database->createCollection(new Collection(id: 'customPosts', attributes: [
+        $database->createCollection(Collection::create(id: 'customPosts', attributes: [
             Attribute::string(key: 'title', size: 255, required: true),
             Attribute::string(key: 'content', size: 5000, required: true),
         ], permissions: [
@@ -192,7 +192,7 @@ trait CustomDocumentTypeTests
     {
         $database = $this->getDatabase();
 
-        $database->createCollection(new Collection(id: 'customUsersUpdate', attributes: [
+        $database->createCollection(Collection::create(id: 'customUsersUpdate', attributes: [
             Attribute::string(key: 'email', size: 255, required: true),
             Attribute::string(key: 'name', size: 255, required: true),
             Attribute::string(key: 'status', size: 50, required: true),
@@ -232,7 +232,7 @@ trait CustomDocumentTypeTests
     {
         $database = $this->getDatabase();
 
-        $database->createCollection(new Collection(id: 'unmappedCollection', attributes: [
+        $database->createCollection(Collection::create(id: 'unmappedCollection', attributes: [
             Attribute::string(key: 'data', size: 255, required: true),
         ], permissions: [
             Permission::read(Role::any()),

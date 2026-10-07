@@ -92,7 +92,7 @@ class MongoDBTest extends Base
         $database = $this->getDatabase();
         $collection = 'collectionGrantedWrites';
 
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: $collection,
             attributes: [Attribute::integer(key: 'count', required: true)],
             permissions: [
@@ -136,7 +136,7 @@ class MongoDBTest extends Base
         $database = $this->getDatabase();
         $collection = 'documentGrantedWrites';
 
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: $collection,
             attributes: [Attribute::integer(key: 'count', required: true)],
             permissions: [],
@@ -176,7 +176,7 @@ class MongoDBTest extends Base
         $database = $this->getDatabase();
         $collection = 'deniedReaderProfiles';
 
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: $collection,
             attributes: [Attribute::string(key: 'name', size: 64)],
             permissions: [Permission::read(Role::user('alice'))],
@@ -203,9 +203,9 @@ class MongoDBTest extends Base
         $database = $this->getDatabase();
         $definitions = ['adminDefinition', 'listedDefinition', 'unlistedDefinition'];
 
-        $database->createCollection(new Collection(id: 'listedDefinition', permissions: [Permission::read(Role::any())]));
-        $database->createCollection(new Collection(id: 'adminDefinition', permissions: [Permission::read(Role::user('admin'))]));
-        $database->createCollection(new Collection(id: 'unlistedDefinition', permissions: [Permission::create(Role::any())]));
+        $database->createCollection(Collection::create(id: 'listedDefinition', permissions: [Permission::read(Role::any())]));
+        $database->createCollection(Collection::create(id: 'adminDefinition', permissions: [Permission::read(Role::user('admin'))]));
+        $database->createCollection(Collection::create(id: 'unlistedDefinition', permissions: [Permission::create(Role::any())]));
 
         $listed = fn (): array => \array_values(\array_intersect(
             $definitions,
@@ -263,7 +263,7 @@ class MongoDBTest extends Base
         $collection = 'lenientReads';
         $permissions = [Permission::read(Role::any())];
 
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: $collection,
             attributes: [Attribute::string(key: 'title', size: 64)],
             permissions: [

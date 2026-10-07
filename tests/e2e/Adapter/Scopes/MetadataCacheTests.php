@@ -6,8 +6,10 @@ use RuntimeException;
 use Throwable;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
+use Utopia\Database\AttributeUpdate;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
+use Utopia\Database\CollectionUpdate;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\NotFound as NotFoundException;
@@ -32,7 +34,7 @@ trait MetadataCacheTests
     {
         $collection = 'meta'.$suffix.\substr(\uniqid(), -8);
 
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: $collection,
             attributes: [Attribute::string(key: 'name', size: 128)],
             permissions: [
@@ -180,7 +182,7 @@ trait MetadataCacheTests
 
         $collection = $this->warmedCollection($database, 'updattr');
 
-        $database->updateAttribute($collection, 'name', size: 2048);
+        $database->updateAttribute($collection, 'name', new AttributeUpdate(size: 2048));
 
         $sizes = [];
         foreach ($this->definedAttributes($database, $collection) as $attribute) {
@@ -254,7 +256,7 @@ trait MetadataCacheTests
 
         $this->assertFalse($database->getCollection($collection)->getAttribute('documentSecurity'));
 
-        $database->updateCollection($collection, [Permission::read(Role::any())], true);
+        $database->updateCollection($collection, new CollectionUpdate(permissions: [Permission::read(Role::any())], documentSecurity: true));
 
         $updated = $database->getCollection($collection);
         $this->assertTrue($updated->getAttribute('documentSecurity'));
@@ -269,7 +271,7 @@ trait MetadataCacheTests
 
         $database->deleteCollection($collection);
 
-        $this->assertTrue($database->getCollection($collection)->isEmpty());
+        $this->assertNull($database->findCollection($collection));
 
         $this->expectException(NotFoundException::class);
         $database->getDocument($collection, 'warm');
@@ -288,8 +290,7 @@ trait MetadataCacheTests
         $parent = $this->warmedCollection($database, 'relparent');
         $child = $this->warmedCollection($database, 'relchild');
 
-        $database->createRelationship(Relationship::oneToOne(
-            collection: $parent,
+        $database->createRelationship($parent, Relationship::oneToOne(
             relatedCollection: $child,
             twoWay: false,
             key: 'child',
@@ -326,8 +327,7 @@ trait MetadataCacheTests
         $parent = $this->warmedCollection($database, 'unrelparent');
         $child = $this->warmedCollection($database, 'unrelchild');
 
-        $database->createRelationship(Relationship::oneToOne(
-            collection: $parent,
+        $database->createRelationship($parent, Relationship::oneToOne(
             relatedCollection: $child,
             twoWay: true,
             key: 'child',
@@ -361,7 +361,7 @@ trait MetadataCacheTests
 
         try {
             $database->setDatabase($first)->create();
-            $database->createCollection(new Collection(
+            $database->createCollection(Collection::create(
                 id: $collection,
                 attributes: [Attribute::string(key: 'first', size: 128)],
                 permissions: [
@@ -372,7 +372,7 @@ trait MetadataCacheTests
             ));
 
             $database->setDatabase($second)->create();
-            $database->createCollection(new Collection(
+            $database->createCollection(Collection::create(
                 id: $collection,
                 attributes: [Attribute::string(key: 'second', size: 128)],
                 permissions: [
@@ -420,7 +420,7 @@ trait MetadataCacheTests
         $rolledBack = false;
         try {
             $database->withTransaction(function () use ($database, $collection): void {
-                $database->updateCollection($collection, [Permission::read(Role::any())], true);
+                $database->updateCollection($collection, new CollectionUpdate(permissions: [Permission::read(Role::any())], documentSecurity: true));
                 $database->getCollection($collection);
 
                 throw new RuntimeException('rollback');
@@ -436,7 +436,7 @@ trait MetadataCacheTests
             'a rolled back schema change was served from the cache'
         );
 
-        $database->updateCollection($collection, [Permission::read(Role::any())], true);
+        $database->updateCollection($collection, new CollectionUpdate(permissions: [Permission::read(Role::any())], documentSecurity: true));
 
         $this->assertTrue(
             $database->getCollection($collection)->getAttribute('documentSecurity'),

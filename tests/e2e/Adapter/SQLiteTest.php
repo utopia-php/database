@@ -70,7 +70,7 @@ class SQLiteTest extends Base
         $database = $this->getDatabase();
         $collection = 'likeEscape';
 
-        $database->createCollection(new Collection(id: $collection, attributes: [
+        $database->createCollection(Collection::create(id: $collection, attributes: [
             Attribute::string(key: 'name', size: 64, required: true),
         ], permissions: [
             Permission::create(Role::any()),

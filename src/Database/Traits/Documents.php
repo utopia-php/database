@@ -4235,7 +4235,7 @@ trait Documents
      *
      * @param  string  $collection  The collection identifier
      * @param  array<Query>  $queries  Queries for filtering
-     * @return Document The matching document, or an empty Document if none found
+     * @return Document The matching document, or an empty Document if none found, which fires no event
      *
      * @throws DatabaseException
      */
@@ -4247,11 +4247,11 @@ trait Documents
 
         $found = \reset($results);
 
-        $this->trigger(Event::DocumentFind, $found);
-
-        if (! $found) {
+        if ($found === false) {
             return new Document();
         }
+
+        $this->trigger(Event::DocumentFind, $found);
 
         return $found;
     }

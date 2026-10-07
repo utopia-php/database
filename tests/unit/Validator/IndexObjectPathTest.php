@@ -6,7 +6,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Attribute;
 use Utopia\Database\Index;
-use Utopia\Database\Validator\Index as IndexValidator;
+use Utopia\Database\Validator\IndexDefinition as IndexValidator;
 
 class IndexObjectPathTest extends TestCase
 {
@@ -29,7 +29,7 @@ class IndexObjectPathTest extends TestCase
 
     public function test_fulltext_index_on_object_path_is_rejected(): void
     {
-        $this->assertFalse($this->validator->isValid(Index::fullText(key: 'idx_fulltext', attributes: ['data.title'])));
+        $this->assertFalse($this->validator->isValid(Index::fulltext(key: 'idx_fulltext', attributes: ['data.title'])));
         $this->assertSame('Attribute "data.title" cannot be part of a fulltext index, must be of type string', $this->validator->getDescription());
     }
 
@@ -53,7 +53,7 @@ class IndexObjectPathTest extends TestCase
         return [
             'key on object path' => [Index::key(key: 'idx_key', attributes: ['data.title'])],
             'unique on object path' => [Index::unique(key: 'idx_unique', attributes: ['data.title'])],
-            'fulltext on string' => [Index::fullText(key: 'idx_fulltext', attributes: ['title'])],
+            'fulltext on string' => [Index::fulltext(key: 'idx_fulltext', attributes: ['title'])],
             'length on string' => [Index::key(key: 'idx_length', attributes: ['title'], lengths: [128])],
             'trigram on string' => [Index::trigram(key: 'idx_trigram', attributes: ['title'])],
         ];

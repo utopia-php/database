@@ -53,8 +53,8 @@ class Document extends ArrayObject
     {
         if (self::$internalKeySet === null) {
             self::$internalKeySet = [];
-            foreach (Database::internalAttributes() as $attr) {
-                self::$internalKeySet[$attr->getKey()] = true;
+            foreach (Database::internalAttributes() as $attribute) {
+                self::$internalKeySet[$attribute->key] = true;
             }
         }
         return self::$internalKeySet;
@@ -120,21 +120,13 @@ class Document extends ArrayObject
     }
 
     /**
-     * Construct from a raw PDO row.
-     *
-     * Fast path that skips nested-Document detection. Raw PDO rows from
-     * `$stmt->fetch()` only contain scalars or JSON-encoded strings — there
-     * are never nested arrays carrying `$id`/`$collection`, so the
-     * nested-detection foreach in the constructor is pure waste per row.
-     *
-     * Callers that build documents from relationship-resolved trees or
-     * arbitrary user input must continue to use the regular constructor.
+     * @internal
      *
      * @param  array<int|string, mixed>  $row
      *
      * @throws DatabaseException
      */
-    public static function fromRow(array $row): self
+    final public static function fromRow(array $row): self
     {
         foreach (\array_keys($row) as $key) {
             if (\is_int($key)) {
@@ -170,16 +162,13 @@ class Document extends ArrayObject
     }
 
     /**
-     * Construct from a document read back from storage.
-     *
-     * Builds nested documents like the constructor, but drops non-string permissions instead of
-     * rejecting them, as fromRow() does.
+     * @internal
      *
      * @param  array<string, mixed>  $data
      *
      * @throws StructureException When $id is not a string or $permissions is not an array
      */
-    public static function fromStorage(array $data): self
+    final public static function fromStorage(array $data): self
     {
         if (array_key_exists(self::ID, $data) && ! \is_string($data[self::ID])) {
             throw new StructureException(self::ID.' must be of type string');

@@ -503,17 +503,11 @@ class Database
                     return Document::fromStorage($decoded);
                 }
 
-                $decoded = array_map(function ($item) use ($document, $attribute) {
+                $decoded = array_map(static function ($item) {
                     if (! is_array($item) || ! array_key_exists(Document::ID, $item)) {
                         return $item;
                     }
                     /** @var array<string, mixed> $item */
-                    if ($document instanceof Collection && $attribute === 'attributes') {
-                        return Attribute::fromArray($item);
-                    }
-                    if ($document instanceof Collection && $attribute === 'indexes') {
-                        return Index::fromArray($item);
-                    }
 
                     return Document::fromStorage($item);
                 }, $decoded);

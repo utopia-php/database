@@ -127,7 +127,7 @@ final class ProfileConstructionTest extends TestCase
     public function testQueryValidatorsTakeTheUidLengthFromTheLimits(): void
     {
         $attributes = [Attribute::string(key: 'title', size: 64)];
-        $cursor = [Query::cursorAfter(\str_repeat('a', 40))];
+        $cursor = [Query::cursorAfter(new Document(['$id' => \str_repeat('a', 40)]))];
 
         $this->assertFalse(new Documents($attributes, [], Profiles::of(uidLength: 36))->isValid($cursor));
         $this->assertTrue(new Documents($attributes, [], Profiles::of(uidLength: 255))->isValid($cursor));

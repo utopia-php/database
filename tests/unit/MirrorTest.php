@@ -906,8 +906,10 @@ class MirrorTest extends TestCase
     {
         $adapter = $database->getAdapter();
         self::assertTrue(\method_exists($adapter, 'isLocking'));
+        $locking = $adapter->isLocking();
+        self::assertIsBool($locking);
 
-        return $adapter->isLocking();
+        return $locking;
     }
 
     /**

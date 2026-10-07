@@ -80,7 +80,7 @@ final class SpatialCodecTest extends TestCase
     #[DataProvider('adaptersAndGeometries')]
     public function testAnEncodedGeometryDecodesToItsCoordinates(Adapter&Feature\Spatial $adapter, ColumnType $type, array $value, string $text): void
     {
-        $expected = $type === ColumnType::Polygon && \is_numeric($value[0][0] ?? null) ? [$value] : $value;
+        $expected = $type === ColumnType::Polygon && \is_array($value[0] ?? null) && \is_numeric($value[0][0] ?? null) ? [$value] : $value;
 
         $this->assertSame(self::floats($expected), $adapter->decode($adapter->encode($value, $type), $type));
     }
@@ -147,7 +147,11 @@ final class SpatialCodecTest extends TestCase
      */
     private static function floats(array $value): array
     {
-        return \array_map(static fn (mixed $node): mixed => \is_array($node) ? self::floats($node) : (float) $node, $value);
+        return \array_map(static fn (mixed $node): mixed => match (true) {
+            \is_array($node) => self::floats($node),
+            \is_numeric($node) => (float) $node,
+            default => $node,
+        }, $value);
     }
 
     private function pool(Adapter $adapter): Pool

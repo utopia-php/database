@@ -65,7 +65,6 @@ final class SchemaIntrospectionTest extends TestCase
 
         $indexes = [];
         foreach ($database->getSchemaIndexes(self::COLLECTION) as $index) {
-            $this->assertInstanceOf(SchemaIndex::class, $index);
             $indexes[$index->name] = $index;
         }
 

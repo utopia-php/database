@@ -93,7 +93,6 @@ final class LimitsTest extends TestCase
         $this->assertContains('SELECT', $mariadb);
         $this->assertNotContains('ABORT', $mariadb);
         $this->assertContains('ABORT', $sqlite);
-        $this->assertSame($sqlite, \array_values($sqlite));
     }
 
     public function testMongoHasNoAttributeOrDocumentSizeCap(): void

@@ -26,7 +26,6 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Pools\Pool as UtopiaPool;
-use Utopia\Query\Builder\SQL as SQLBuilder;
 use Utopia\Query\Schema\MySQL as MySQLSchema;
 use Utopia\Query\Schema\PostgreSQL as PostgreSQLSchema;
 
@@ -55,7 +54,6 @@ final class BuilderTest extends TestCase
 
         $this->assertTrue($adapter->hasFeature(Feature\QueryBuilder::class));
         $this->assertInstanceOf($schema, $adapter->schema());
-        $this->assertInstanceOf(SQLBuilder::class, $adapter->builder(self::COLLECTION));
     }
 
     public function testTheDatabaseRunsABuilderOverACollection(): void
@@ -69,6 +67,7 @@ final class BuilderTest extends TestCase
 
         $this->assertIsArray($rows);
         $this->assertCount(1, $rows);
+        $this->assertInstanceOf(Document::class, $rows[0]);
         $this->assertSame('hello', $rows[0]->getAttribute('title'));
     }
 

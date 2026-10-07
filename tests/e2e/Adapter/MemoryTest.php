@@ -694,7 +694,7 @@ class MemoryTest extends Base
         $adapter->setNamespace('missing_' . \uniqid());
 
         $this->expectException(NotFoundException::class);
-        $adapter->deleteDocument('ghost', 'x');
+        $adapter->deleteDocument(new Document(['$id' => 'ghost']), 'x');
     }
 
     public function testDeleteDocumentReturnsFalseForMissingDoc(): void
@@ -704,7 +704,7 @@ class MemoryTest extends Base
         $adapter->createCollection('here', [], []);
 
         // Collection exists, document does not — mirrors MariaDB rowCount() == 0.
-        $this->assertFalse($adapter->deleteDocument('here', 'never-created'));
+        $this->assertFalse($adapter->deleteDocument(new Document(['$id' => 'here']), 'never-created'));
     }
 
     public function testDeleteDocumentsThrowsWhenCollectionMissing(): void
@@ -713,7 +713,7 @@ class MemoryTest extends Base
         $adapter->setNamespace('missing_' . \uniqid());
 
         $this->expectException(NotFoundException::class);
-        $adapter->deleteDocuments('ghost', [], []);
+        $adapter->deleteDocuments(new Document(['$id' => 'ghost']), [], []);
     }
 
     public function testDeleteDocumentsHonoursTenantBoundary(): void
@@ -740,7 +740,7 @@ class MemoryTest extends Base
         ]));
 
         $adapter->setTenant(1);
-        $deleted = $adapter->deleteDocuments('box', ['1'], []);
+        $deleted = $adapter->deleteDocuments($collection, ['1'], []);
 
         $this->assertEquals(1, $deleted);
 
@@ -777,7 +777,7 @@ class MemoryTest extends Base
         // empty — this assertion would fail. The discriminating signal is
         // that the doc resolves *against* the current adapter tenant.
         $probe = new Document(['$id' => 'tenant1-only', '$tenant' => 1]);
-        [$result] = $adapter->getSequences('box', [$probe]);
+        [$result] = $adapter->getSequences($collection, [$probe]);
         $this->assertSame((string) $tenant1Doc->getSequence(), $result->getSequence());
     }
 

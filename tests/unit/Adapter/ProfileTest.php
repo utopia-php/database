@@ -19,6 +19,7 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
+use Utopia\Database\Schema\Column;
 use Utopia\Database\Validator\AttributeDefinition;
 use Utopia\Database\Validator\IndexDefinition;
 use Utopia\Database\Validator\Queries\Documents;
@@ -97,7 +98,7 @@ final class ProfileTest extends TestCase
     public function testASchemaColumnClashesOnlyUntilASharedTableMigrationStarts(): void
     {
         $database = $this->database(new MariaDB(new stdClass()))->setSharedTables(true);
-        $schema = [Attribute::string(key: 'orphan', size: 16)];
+        $schema = [new Column(name: 'orphan', type: 'VARCHAR(16)', length: 16, nullable: true)];
         $attribute = Attribute::string(key: 'orphan', size: 16);
 
         $this->assertFalse($database->profile()->migrating);

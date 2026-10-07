@@ -1472,6 +1472,9 @@ class Database
      * Unregister a hook, or with a class-string every hook of that class, from wherever {@see self::addHook()}
      * registered it.
      *
+     * A SQL adapter owns its {@see Hook\Tenancy} write hook while shared tables are on and registers it again before
+     * its next write, so removing Hook\Tenancy::class lasts only until then.
+     *
      * @param  \Utopia\Query\Hook|class-string<\Utopia\Query\Hook>  $hook
      */
     public function removeHook(\Utopia\Query\Hook|string $hook): static

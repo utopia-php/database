@@ -2819,7 +2819,7 @@ trait AttributeTests
         }
     }
 
-    public function testCreateAttributesIntegerSizeLimit(): void
+    public function testCreateAttributesWidensAnIntegerSizedPastTheIntLimitToBits64(): void
     {
         $database = $this->getDatabase();
 

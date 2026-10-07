@@ -1,30 +1,36 @@
 # Upgrading from 7.x to 8.0
 
-This guide lists the changes you may need to make when you move from utopia-php/database 7.x (last release 7.3.12)
-to 8.0. [CHANGELOG.md](CHANGELOG.md) lists everything that is new in 8.0.
+This guide lists the changes you may need to make when you move from utopia-php/database 7.x (last release 7.4.0)
+to 8.0. [CHANGELOG.md](CHANGELOG.md) lists everything that is new in 8.0. If you built against the unreleased
+`feat-query-lib` branch, also read [Changes since the 8.0 pre-releases](#changes-since-the-80-pre-releases).
 
 - [Before you start](#before-you-start)
 - [Register the permission and relationship hooks](#register-the-permission-and-relationship-hooks)
 - [Constants are now enums](#constants-are-now-enums)
+- [Namespaces](#namespaces)
 - [Queries](#queries)
-- [Schema: typed models](#schema-typed-models)
+- [Schema: value objects](#schema-value-objects)
 - [Lifecycle events are hooks](#lifecycle-events-are-hooks)
 - [Relationships](#relationships)
 - [Documents](#documents)
+- [Bulk writes and reads](#bulk-writes-and-reads)
+- [Configuration toggles](#configuration-toggles)
 - [Coroutines](#coroutines)
 - [Errors](#errors)
 - [Caches](#caches)
+- [Filters](#filters)
 - [Adapters](#adapters)
 - [Mirror](#mirror)
 - [Validators and helpers](#validators-and-helpers)
 - [Removed unused public methods](#removed-unused-public-methods)
+- [Changes since the 8.0 pre-releases](#changes-since-the-80-pre-releases)
 - [Rules for features new in 8.0](#rules-for-features-new-in-80)
 - [Known limitations](#known-limitations)
 
 ## Before you start
 
 - PHP 8.5 or later is required, as for 7.x.
-- Two new dependencies are installed with the library. `utopia-php/query` 0.6 provides the query, schema and
+- Two new dependencies are installed with the library. `utopia-php/query` 0.7 provides the query, schema and
   builder types that 8.0 uses in its signatures (`Utopia\Query\Method`, `Utopia\Query\Schema\ColumnType`, ...).
   `utopia-php/async` 0.2 is used by `Mirror` replication and the relationship hook. Its
   `Utopia\Async\Serializer::unserialize()` no longer decodes closure payloads: code of your own that calls it on
@@ -32,6 +38,8 @@ to 8.0. [CHANGELOG.md](CHANGELOG.md) lists everything that is new in 8.0.
 - Many constants became enums, and many signatures now take or return enum cases. PHP never treats an enum case as
   equal to a string, so a comparison like `$query->getMethod() === 'equal'` is now always `false` and raises no
   error. Run PHPStan at level 4 or higher on your code after upgrading: it reports these comparisons.
+- Most API changes have a one-to-one replacement. Each table below lists the 7.x form and the 8.0 form; every
+  removed name is listed with its replacement. 8.0 ships no aliases for removed names.
 
 ## Register the permission and relationship hooks
 
@@ -43,8 +51,14 @@ use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Hook\Relationships;
 
 $database->addHook(new Permissions());
-$database->addHook(new Relationships($database));
+$database->addHook(new Relationships());
 ```
+
+`addHook()` throws `Utopia\Database\Exception` for a hook it does not recognise. A hook that implements
+`Hook\Attachable` is given the database it is added to through `attach(Database $database)`, so hooks are configured
+in their constructor and never take the database there: `new Relationships(bool $prepare = true)`,
+`new Tenancy(string $column = Storage::TENANT)`. `removeHook($hook)` unregisters a hook instance, or every hook of a
+class when given its class name.
 
 - `Hook\Permissions` writes, moves and deletes the rows of each collection's permissions table (`_perms`) when a
   document's `$permissions` change. What depends on those rows differs by engine:
@@ -61,8 +75,7 @@ $database->addHook(new Relationships($database));
   (`Cascade`, `SetNull`, `Restrict`) and the relationship permission checks. Without it, a read returns a
   relationship attribute's stored value (the related document's id) instead of the related document, a nested
   related document cannot be written, and deleting a document leaves the documents related to it unchanged: no
-  cascade runs, no key is set to null and `Restrict` does not block the delete. `Database::getRelationshipHook()`
-  returns the registered hook.
+  cascade runs, no key is set to null and `Restrict` does not block the delete.
 
 ## Constants are now enums
 
@@ -73,30 +86,33 @@ Every removed string constant maps to an enum case with the same backing value, 
 
 | 7.x | 8.0 |
 |---|---|
-| `VAR_STRING`, `VAR_VARCHAR`, `VAR_TEXT`, `VAR_MEDIUMTEXT`, `VAR_LONGTEXT`, `VAR_INTEGER`, `VAR_BOOLEAN`, `VAR_DATETIME`, `VAR_ID`, `VAR_UUID7`, `VAR_OBJECT`, `VAR_VECTOR`, `VAR_RELATIONSHIP`, `VAR_POINT`, `VAR_LINESTRING`, `VAR_POLYGON` | `Utopia\Query\Schema\ColumnType::String`, `Varchar`, `Text`, `MediumText`, `LongText`, `Integer`, `Boolean`, `Datetime`, `Id`, `Uuid7`, `Object`, `Vector`, `Relationship`, `Point`, `Linestring`, `Polygon` |
+| `VAR_STRING`, `VAR_VARCHAR`, `VAR_TEXT`, `VAR_MEDIUMTEXT`, `VAR_LONGTEXT`, `VAR_INTEGER`, `VAR_BOOLEAN`, `VAR_DATETIME`, `VAR_ID`, `VAR_OBJECT`, `VAR_VECTOR`, `VAR_RELATIONSHIP`, `VAR_POINT`, `VAR_LINESTRING`, `VAR_POLYGON` | `Utopia\Query\Schema\ColumnType::String`, `Varchar`, `Text`, `MediumText`, `LongText`, `Integer`, `Boolean`, `Datetime`, `Id`, `Object`, `Vector`, `Relationship`, `Point`, `Linestring`, `Polygon` |
+| `VAR_UUID7` | `ColumnType::Uuid7`. It names MongoDB's sequence id type (`Database::getIdAttributeType()`) and is not an attribute type: an attribute stored as `uuid7` is refused (see [Stored metadata](#stored-metadata)) |
 | `VAR_FLOAT` (`'double'`) | `ColumnType::Double`. `ColumnType::Float` (`'float'`) is a separate, new type |
 | `VAR_BIGINT` (`'bigint'`) | `ColumnType::BigInteger`, whose value is `'biginteger'` (see [Attribute types](#attribute-types)) |
 | `STRING_TYPES` | No replacement: list the string cases (`String`, `Varchar`, `Text`, `MediumText`, `LongText`) |
-| `SPATIAL_TYPES` | `Attribute::isSpatialType($type)` |
-| `ATTRIBUTE_FILTER_TYPES` | `ATTRIBUTE_FILTER_COLUMN_TYPES`, which holds `ColumnType` cases (see [Attribute types](#attribute-types)) |
+| `SPATIAL_TYPES` | `$attribute->isSpatial()` on an `Attribute` |
+| `ATTRIBUTE_FILTER_TYPES` | No replacement: the `datetime()`, `point()`, `lineString()`, `polygon()`, `vector()` and `object()` factories add their filter themselves. The built-in filter names are the `Utopia\Database\Filter` cases |
+| `INTERNAL_ATTRIBUTES` | `$database->internalAttributes()`, a list of `Attribute` (tenant-aware) |
+| `INSERT_BATCH_SIZE`, `DELETE_BATCH_SIZE` | `Database::BATCH_SIZE` (see [Bulk writes and reads](#bulk-writes-and-reads)) |
 | `INDEX_KEY`, `INDEX_UNIQUE`, `INDEX_FULLTEXT`, `INDEX_SPATIAL`, `INDEX_OBJECT`, `INDEX_TRIGRAM`, `INDEX_TTL`, `INDEX_HNSW_EUCLIDEAN`, `INDEX_HNSW_COSINE`, `INDEX_HNSW_DOT` | `Utopia\Query\Schema\IndexType::Key`, `Unique`, `Fulltext`, `Spatial`, `Object`, `Trigram`, `Ttl`, `HnswEuclidean`, `HnswCosine`, `HnswDot` |
-| `ORDER_ASC`, `ORDER_DESC` | Index orders: `Utopia\Query\Schema\Order::Asc`, `Desc`. Adapter order types: `Utopia\Query\OrderDirection::Asc`, `Desc` |
-| `ORDER_RANDOM` | `Utopia\Query\OrderDirection::Random`, or `Query::orderRandom()` |
+| `ORDER_ASC`, `ORDER_DESC` | `Utopia\Query\OrderDirection::Asc`, `Desc`, for index orders and adapter order types alike |
+| `ORDER_RANDOM` | `OrderDirection::Random` for queries (`Query::orderRandom()`). An index refuses it with `Exception\Index` |
 | `PERMISSION_CREATE`, `PERMISSION_READ`, `PERMISSION_UPDATE`, `PERMISSION_DELETE`, `PERMISSION_WRITE` | `Utopia\Database\PermissionType::Create`, `Read`, `Update`, `Delete`, `Write` |
 | `PERMISSIONS` | `[PermissionType::Create, PermissionType::Read, PermissionType::Update, PermissionType::Delete]` |
-| `RELATION_ONE_TO_ONE`, `RELATION_ONE_TO_MANY`, `RELATION_MANY_TO_ONE`, `RELATION_MANY_TO_MANY` | `Utopia\Database\RelationType::OneToOne`, `OneToMany`, `ManyToOne`, `ManyToMany` |
-| `RELATION_MUTATE_CASCADE`, `RELATION_MUTATE_RESTRICT`, `RELATION_MUTATE_SET_NULL` | `Utopia\Query\Schema\ForeignKeyAction::Cascade`, `Restrict`, `SetNull` |
-| `RELATION_SIDE_PARENT`, `RELATION_SIDE_CHILD` | `Utopia\Database\RelationSide::Parent`, `Child` |
+| `RELATION_ONE_TO_ONE`, `RELATION_ONE_TO_MANY`, `RELATION_MANY_TO_ONE`, `RELATION_MANY_TO_MANY` | `Utopia\Database\RelationshipType::OneToOne`, `OneToMany`, `ManyToOne`, `ManyToMany` |
+| `RELATION_MUTATE_CASCADE`, `RELATION_MUTATE_RESTRICT`, `RELATION_MUTATE_SET_NULL` | `Utopia\Database\RelationshipDeleteAction::Cascade`, `Restrict`, `SetNull` |
+| `RELATION_SIDE_PARENT`, `RELATION_SIDE_CHILD` | `Utopia\Database\RelationshipSide::Parent`, `Child` |
 | `CURSOR_AFTER`, `CURSOR_BEFORE` | `Utopia\Query\CursorDirection::After`, `Before` |
-| `EVENT_*` (all 33) | `Utopia\Database\Event` cases: `EVENT_DOCUMENT_CREATE` is `Event::DocumentCreate`, `EVENT_ALL` is `Event::All`, and so on. The values are unchanged (`Event::DocumentCreate->value === 'document_create'`) |
-| `COLLECTION` (protected) | `Database::collectionDefinition()` |
+| `EVENT_*` (all 33) | `Utopia\Database\Event` cases: `EVENT_DOCUMENT_CREATE` is `Event::DocumentCreate`, `EVENT_ALL` is `Event::All`, and so on. The values are unchanged (`Event::DocumentCreate->value === 'document_create'`). New cases: `DatabaseUpdate`, `DocumentUpsert`, `DocumentAggregate`, `AttributeRename`, `IndexesCreate` |
+| `COLLECTION` (protected) | `Database::collectionDefinition(): Collection` |
 
 ### `Query`
 
 - The 48 `TYPE_*` constants are replaced by `Utopia\Query\Method` cases with the same values. Most names map
   directly (`TYPE_EQUAL` is `Method::Equal`, `TYPE_CURSOR_AFTER` is `Method::CursorAfter`); these four do not:
   `TYPE_GREATER` is `Method::GreaterThan`, `TYPE_GREATER_EQUAL` is `Method::GreaterThanEqual`, `TYPE_LESSER` is
-  `Method::LessThan` and `TYPE_LESSER_EQUAL` is `Method::LessThanEqual`. `Query::TYPE_ELEM_MATCH` is kept.
+  `Method::LessThan` and `TYPE_LESSER_EQUAL` is `Method::LessThanEqual`. `Query::TYPE_ELEM_MATCH` is removed.
 - `Query::TYPES` is removed. `Query::VECTOR_TYPES` is replaced by `Method::isVector()`; `Method` also has
   `isFilter()`, `isSpatial()`, `isNested()`, `isAggregate()` and `isJoin()`.
 - `Query::LOGICAL_TYPES` is public and holds `Method` cases.
@@ -116,8 +132,8 @@ Every removed string constant maps to an enum case with the same backing value, 
 
 ### Other constants
 
-- `Validator\Query\Select::INTERNAL_ATTRIBUTES` (protected) is removed. `Database::internalAttributes()` returns the
-  internal attributes as `Attribute` models.
+- `Validator\Query\Select::INTERNAL_ATTRIBUTES` (protected) is removed. `$database->internalAttributes()` returns the
+  internal attributes as `Attribute` value objects, including `$tenant` under shared tables.
 - `Adapter\SQL::VECTOR_DISTANCE_COLUMN` (protected) is replaced by `Utopia\Database\Storage::DISTANCE`.
 
 ### Arguments that take enum cases
@@ -126,16 +142,43 @@ These methods take or return enum cases where 7.x used the constants' strings:
 
 | Method | Argument or return value |
 |---|---|
-| `Database::find()`, `iterate()`, `foreach()` | `PermissionType $forPermission = PermissionType::Read` |
-| `Database::getQueryCacheField()` | `PermissionType $forPermission = PermissionType::Read` |
+| `Database::find()`, `cursor()` | `PermissionType $forPermission = PermissionType::Read` |
 | `Database::setTimeout()`, `clearTimeout()` | `Event $event = Event::All` |
-| `Database::updateRelationship()` | `?ForeignKeyAction $onDelete` |
-| `Database::updateAttribute()` | `ColumnType\|string\|null $type` |
+| `Database::getIdAttributeType()` | returns a `ColumnType` case (was a string) |
 | `Document::setAttribute()` | `SetType $type = SetType::Assign` |
 | `Document::getPermissionsByType()` | `PermissionType $type` |
 | `Query::getMethod()` | returns a `Method` case (see [Queries](#queries)) |
 | `Operator::__construct()`, `setMethod()` | `OperatorType $method` |
 | `Operator::getMethod()` | returns an `OperatorType` case |
+
+## Namespaces
+
+Moved classes keep no alias under their 7.x name.
+
+| 7.x | 8.0 |
+|---|---|
+| `Utopia\Database\Helpers\ID` | `Utopia\Database\Id` |
+| `Utopia\Database\Helpers\Permission`, `Helpers\Role` | `Utopia\Database\Permission`, `Utopia\Database\Role` |
+| `Utopia\Database\Mirroring\Filter` | `Utopia\Database\Mirror\Filter`; its `init()` is `initialize()` |
+| `Validator\Attribute` | `Validator\AttributeDefinition` (see [Validators and helpers](#validators-and-helpers)) |
+| `Validator\Index` | `Validator\IndexDefinition` |
+| `Validator\Queries` | `Validator\Queries\Base` |
+| `Validator\IndexedQueries` | `Validator\Queries\Indexed` |
+| `Validator\ObjectValidator` | `Validator\ObjectValue` |
+
+```php
+// 7.x
+use Utopia\Database\Helpers\ID;
+use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Helpers\Role;
+
+// 8.0
+use Utopia\Database\Id;
+use Utopia\Database\Permission;
+use Utopia\Database\Role;
+
+$permissions = [Permission::read(Role::user(Id::unique()))];
+```
 
 ## Queries
 
@@ -146,12 +189,11 @@ These methods take or return enum cases where 7.x used the constants' strings:
   always `false` and raises no error (see [Before you start](#before-you-start)). `setMethod()`, `isMethod()` and the
   constructor accept a `Method` case or its string value.
 - `Query::groupByType()` returns a `Utopia\Query\Builder\ParsedQuery` object instead of an array, and it no longer
-  carries the order attributes and order types. `Query::groupForDatabase()` returns the 7.x array shape (`filters`,
-  `selections`, `limit`, `offset`, `orderAttributes`, `orderTypes`, `cursor`, `cursorDirection`), plus the new
-  `aggregations`, `groupBy`, `having`, `joins` and `distinct` keys. Its `orderTypes` are `OrderDirection` cases, and
-  its `cursorDirection` is a `CursorDirection` case.
-- `Query::cursorAfter()` and `Query::cursorBefore()` accept `mixed` instead of `Document`. Pass the cursor document,
-  as before.
+  carries the order attributes and order types. Read the groups from its properties.
+- `Query::cursorAfter()` and `Query::cursorBefore()` take `array|object` instead of `Document`. Pass the cursor
+  document, as before. `Validator\Query\Cursor` accepts a `Document` or a document id and refuses an array.
+- Aggregates and joins carry their alias in a property: read it with `getAlias()`. `toArray()` writes it as
+  `"alias"`, and `parse()` reads it there as well as from the 7.x positions.
 - `Query::parse()`, `parseQuery()` and `parseQueries()` take a trailing `bool $allowRaw = false`. Raw queries are
   refused unless it is `true`, so leave it `false` for input you do not control.
 - `Query::orderAsc()` and `Query::orderDesc()` take an optional `?Utopia\Query\NullsPosition $nulls`.
@@ -166,7 +208,7 @@ These methods take or return enum cases where 7.x used the constants' strings:
   adapter. SQLite and MongoDB used to include them. To match those documents as well, combine it with
   `Query::isNull()` in `Query::or()`.
 - On SQLite, `contains`, `containsAny`, `containsAll` and `notContains` on array attributes compare elements by value
-  (strings, integers, doubles, booleans), and the adapter reports `Capability::QueryContains`.
+  (strings, integers, doubles, booleans).
 - On MongoDB, `startsWith()` and `endsWith()` are anchored: `startsWith('foo')` no longer returns `barfoo`, and
   `endsWith('foo')` no longer returns `foobar`. Both remain case-sensitive on MongoDB (on MariaDB and MySQL they
   follow the column collation). A caller that relied on the substring behaviour should use `containsString()`.
@@ -183,10 +225,12 @@ These methods take or return enum cases where 7.x used the constants' strings:
   MariaDB, MySQL and SQLite, and `notSearch()` with an exact term excludes only that phrase. In 7.4.0 PostgreSQL
   matched both words in any order. To match both words in any order, pass a `search()` for each word.
 
-## Schema: typed models
+## Schema: value objects
 
-The schema methods take model objects instead of long lists of scalar arguments. The models are
-`Utopia\Database\Collection`, `Attribute`, `Index` and `Relationship`, and all four extend `Document`.
+The schema methods take value objects instead of long lists of scalar arguments, and the create and update methods
+return what they stored. `Attribute`, `Index` and `Relationship` are `final readonly` classes with a private
+constructor: build them with their factories. `Collection` stays a `Document`, because it is the metadata row, and is
+built with `Collection::create()`. Updates take `AttributeUpdate`, `CollectionUpdate` and `RelationshipUpdate`.
 
 ```php
 // 7.x
@@ -194,9 +238,12 @@ $database->createCollection('movies', $attributes, $indexes, [Permission::read(R
 $database->createAttribute('movies', 'year', Database::VAR_INTEGER, 0, true);
 $database->createIndex('movies', 'idx_year', Database::INDEX_KEY, ['year'], [], [Database::ORDER_DESC]);
 $database->createRelationship('movies', 'reviews', Database::RELATION_ONE_TO_MANY, true, 'reviews', 'movie', Database::RELATION_MUTATE_CASCADE);
+$database->updateAttributeRequired('movies', 'year', false);
+$database->updateRelationship('movies', 'reviews', onDelete: Database::RELATION_MUTATE_SET_NULL);
+$database->updateCollection('movies', [Permission::read(Role::any())], false);
 
 // 8.0
-$database->createCollection(new Collection(
+$database->createCollection(Collection::create(
     id: 'movies',
     attributes: $attributes,
     indexes: $indexes,
@@ -204,76 +251,255 @@ $database->createCollection(new Collection(
     documentSecurity: true,
 ));
 $database->createAttribute('movies', Attribute::integer('year', required: true));
-$database->createIndex('movies', Index::key('idx_year', ['year'], orders: [Order::Desc]));
-$database->createRelationship(new Relationship(
-    collection: 'movies',
-    relatedCollection: 'reviews',
-    type: RelationType::OneToMany,
-    twoWay: true,
+$database->createIndex('movies', Index::key('idx_year', ['year'], orders: [OrderDirection::Desc]));
+$database->createRelationship('movies', Relationship::oneToMany(
+    'reviews',
     key: 'reviews',
+    twoWay: true,
     twoWayKey: 'movie',
-    onDelete: ForeignKeyAction::Cascade,
+    onDelete: RelationshipDeleteAction::Cascade,
 ));
+$database->updateAttribute('movies', 'year', new AttributeUpdate(required: false));
+$database->updateRelationship('movies', 'reviews', new RelationshipUpdate(onDelete: RelationshipDeleteAction::SetNull));
+$database->updateCollection('movies', new CollectionUpdate(permissions: [Permission::read(Role::any())], documentSecurity: false));
 ```
+
+Every schema method names its collection argument `$collection`, and its attribute, index or relationship argument
+`$key`.
 
 | 7.x | 8.0 |
 |---|---|
-| `createCollection(string $id, array $attributes = [], array $indexes = [], ?array $permissions = null, bool $documentSecurity = true): Document` | `createCollection(Collection $collection): Collection`. `Collection` accepts `Attribute` and `Index` models, `Document`s or arrays |
-| `getCollection(string $id): Document` | `getCollection(string $id): Collection` |
-| `createAttribute(string $collection, string $id, string $type, int $size, bool $required, mixed $default = null, bool $signed = true, bool $array = false, ?string $format = null, array $formatOptions = [], array $filters = [])` | `createAttribute(string $collection, Attribute $attribute)`. Build the model with `new Attribute(key: ..., type: ColumnType::...)` or a factory: `Attribute::string()`, `varchar()`, `text()`, `mediumText()`, `longText()`, `integer()`, `bigInteger()`, `float()`, `double()`, `boolean()`, `datetime()`, `point()`, `linestring()`, `polygon()`, `vector()`, `id()`, `object()` |
-| `updateAttribute(..., ?string $type = null, ...)` | `updateAttribute(..., ColumnType\|string\|null $type = null, ...)`. The other arguments are unchanged |
-| `createIndex(string $collection, string $id, string $type, array $attributes, array $lengths = [], array $orders = [], int $ttl = 1)` | `createIndex(string $collection, Index $index)`. Build the model with `new Index(key: ..., type: IndexType::...)` or a factory: `Index::key()`, `unique()`, `fullText()`, `spatial()`, `object()`, `trigram()`, `ttl()`, `hnswEuclidean()`, `hnswCosine()`, `hnswDot()`. Orders are `Order` cases or `null`; a string order throws `InvalidArgumentException` |
-| `createRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay = false, ?string $id = null, ?string $twoWayKey = null, string $onDelete = Database::RELATION_MUTATE_RESTRICT)` | `createRelationship(Relationship $relationship)`. The `$id` argument is the model's `key`. `Relationship::oneToOne()`, `oneToMany()`, `manyToOne()` and `manyToMany()` build one per type |
-| `updateRelationship(..., ?string $onDelete = null)` | `updateRelationship(..., ?ForeignKeyAction $onDelete = null)`: pass the case, not its `->value` |
-| `checkAttribute(Document $collection, Document $attribute)` | `checkAttribute(Document $collection, Attribute $attribute)` |
-| `updateAttributeMeta(): Document`, `updateIndexMeta(): Document` (protected) | Return `Attribute` and `Index` |
+| `createCollection(string $id, array $attributes = [], array $indexes = [], ?array $permissions = null, bool $documentSecurity = true): Document` | `createCollection(Collection $collection): Collection` |
+| `updateCollection(string $id, array $permissions, bool $documentSecurity): Document` | `updateCollection(string $collection, CollectionUpdate $update): Collection`. A `null` field keeps the stored value |
+| `getCollection(string $id): Document`, an empty `Document` when the collection is missing | `getCollection(string $collection): Collection`, which throws `Exception\NotFound` when it is missing |
+| — | `findCollection(string $collection): ?Collection`, `null` when the collection is missing. A miss fires no event |
+| `deleteCollection(string $id): bool` | `deleteCollection(string $collection): void` |
+| `exists(?string $database = null, ?string $collection = null): bool` | `exists(?string $database = null): bool` for a database, `collectionExists(string $collection, ?string $database = null): bool` for a collection |
+| `createAttribute(string $collection, string $id, string $type, int $size, bool $required, mixed $default = null, bool $signed = true, bool $array = false, ?string $format = null, array $formatOptions = [], array $filters = []): bool` | `createAttribute(string $collection, Attribute $attribute): Attribute` |
+| `createAttributes(string $collection, array $attributes): bool`, with attribute arrays | `createAttributes(string $collection, array $attributes): array`, a list of `Attribute` in and out |
+| `updateAttribute(string $collection, string $id, ?string $type = null, ?int $size = null, ?bool $required = null, mixed $default = null, ?bool $signed = null, ?bool $array = null, ?string $format = null, ?array $formatOptions = null, ?array $filters = null, ?string $newKey = null): Document` | `updateAttribute(string $collection, string $key, AttributeUpdate $update): Attribute` |
+| `updateAttributeRequired()`, `updateAttributeFormat()`, `updateAttributeFormatOptions()`, `updateAttributeFilters()`, `updateAttributeDefault()` | `updateAttribute()` with the `AttributeUpdate` field of the same name (`required`, `format`, `filters`, `default`) |
+| `renameAttribute(string $collection, string $old, string $new): bool` | `renameAttribute(string $collection, string $old, string $new): void`. `AttributeUpdate(key: ...)` renames as well |
+| `deleteAttribute(string $collection, string $id): bool` | `deleteAttribute(string $collection, string $key): void` |
+| `checkAttribute(Document $collection, Document $attribute): bool` | `checkAttribute(string $collection, Attribute $attribute): bool` |
+| `createIndex(string $collection, string $id, string $type, array $attributes, array $lengths = [], array $orders = [], int $ttl = 1): bool` | `createIndex(string $collection, Index $index): Index` |
+| — | `createIndexes(string $collection, array $indexes): array`. It validates every index first, creates each one, then writes the definition once |
+| `renameIndex(string $collection, string $old, string $new): bool` | `renameIndex(string $collection, string $old, string $new): void` |
+| `deleteIndex(string $collection, string $id): bool` | `deleteIndex(string $collection, string $key): void` |
+| `createRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay = false, ?string $id = null, ?string $twoWayKey = null, string $onDelete = Database::RELATION_MUTATE_RESTRICT): bool` | `createRelationship(string $collection, Relationship $relationship): Relationship`, with both keys resolved |
+| `updateRelationship(string $collection, string $id, ?string $newKey = null, ?string $newTwoWayKey = null, ?bool $twoWay = null, ?string $onDelete = null): bool` | `updateRelationship(string $collection, string $key, RelationshipUpdate $update): Relationship`. It works from either side |
+| `deleteRelationship(string $collection, string $id): bool` | `deleteRelationship(string $collection, string $key): void` |
+| `getInternalAttributes(): array` | `internalAttributes(): array`, a list of `Attribute` |
+| `getSchemaAttributes(string $collection): array`, `getSchemaIndexes(string $collection): array`, lists of `Document` | Lists of `Schema\Column` and `Schema\Index` (see [Schema introspection](#schema-introspection)) |
+| `getIdAttributeType(): string` | `getIdAttributeType(): ColumnType` |
+| — | `update(string $database, string $new): bool` renames a database (see [Renaming a database](#renaming-a-database)) |
 
-To turn stored 7.x metadata into models, use `Attribute::fromDocument()`, `Index::fromDocument()`,
-`Relationship::fromDocument()` and `Collection::fromArray()`. `Attribute::normalizeType()` turns a stored type
-string into a `ColumnType` case.
+`create()`, `exists()`, `update()` and `delete()` on a database keep returning `bool`.
 
-Read model values through the typed getters, such as `Attribute::getType()`, `isArray()` and `getFormat()`,
-`Index::getIndexedAttributes()`, `Relationship::getSourceCollection()` and `Collection::getDeclaredAttributes()`,
-`getName()`, `getDeclaredPermissions()` and `hasDocumentSecurity()`. Change them with `Attribute::setFilters()`,
-`Index::setLengths()` and `Index::setOrders()`. The magic properties (`$attribute->type`, `$index->attributes`, ...)
-remain for compatibility, but PHP 8.5's tracing JIT can miscompile magic `__get()` and `__set()` calls in
-long-running processes (php/php-src#22084), so the library itself no longer uses them.
+### `Attribute`
+
+One factory per type. Each takes only the arguments its type uses:
+
+| Factory | Notes |
+|---|---|
+| `string($key, int $size = Database::LENGTH_KEY, ...)`, `varchar(...)` | Also `required`, `default`, `array`, `format`, `filters` |
+| `text($key, ?int $size = null, ...)`, `mediumText(...)`, `longText(...)` | `size: null` means the engine's maximum for the type |
+| `integer($key, ..., bool $signed = true, bool $array = false, IntegerWidth $width = IntegerWidth::Bits32, ...)` | A 7.x integer of size 8 or more is `width: IntegerWidth::Bits64` |
+| `bigInteger(...)`, `float(...)`, `double(...)` | `signed`, `array`, `format`, `filters` |
+| `boolean($key, bool $required = false, bool\|array\|null $default = null, bool $array = false, array $filters = [])` | |
+| `datetime($key, bool $required = false, string\|array\|null $default = null, bool $array = false)` | Adds the `datetime` filter |
+| `point($key, ...)`, `lineString($key, ...)`, `polygon($key, ...)` | Never arrays; add their filter |
+| `vector($key, int $dimensions, ...)` | The size is the dimension count |
+| `object($key, ...)`, `id($key, ...)` | |
+| `relationship($key, Relationship $relationship, RelationshipSide $side)` | Built for you by `createRelationship()` |
+
+```php
+// 7.x
+$database->createAttribute('movies', 'rating', Database::VAR_INTEGER, 8, false, 0, false, false, 'range', ['min' => 0, 'max' => 10], ['encrypt']);
+
+// 8.0
+$database->createAttribute('movies', Attribute::integer(
+    'rating',
+    default: 0,
+    signed: false,
+    width: IntegerWidth::Bits64,
+    format: new Format('range', ['min' => 0, 'max' => 10]),
+    filters: ['encrypt'],
+));
+```
+
+- **Properties, not getters.** Read `$attribute->key`, `type` (`ColumnType`), `size` (`?int`, `null` where the type
+  has no size), `required`, `default`, `signed`, `array`, `format` (`?Format`, with `name` and `options`), `filters`
+  (`list<string>`), `relationship` (`?Relationship`) and `side` (`?RelationshipSide`). A 7.x attribute's
+  `format` and `formatOptions` are one `Format`. `filters` takes `Utopia\Database\Filter` cases or names.
+- **Helpers.** `width(): ?IntegerWidth` (integers only), `resolvedSize(): int`, `isSpatial()`, `isNumeric()`,
+  `isInteger()`, `bounds(): ?NumericBounds`, the static `Attribute::isRelationship(Document $attribute)`, and
+  `apply(AttributeUpdate $update)` and `withFilters(array $filters)`, which return a changed copy.
+  `Attribute::availableTypes(Adapter\Profile $profile)` lists the types an adapter supports, out of `Attribute::TYPES`.
+- **Storage.** `Attribute::fromDocument()` reads a stored attribute document and `toDocument()` writes one with the
+  same keys. `Attribute::fromArray()` reads an array. `Attribute::typeFromStored()` and `Attribute::storedType()`
+  convert between `ColumnType` cases and stored type strings (see [Attribute types](#attribute-types)).
+- **Library fields only.** `status` and `options` are not attribute fields any more: `fromDocument()` ignores both,
+  except a relationship's options, which become `relationship` and `side`. Keep application fields such as a
+  `status` in your own documents.
+- **Normalised values.** The factories, `apply()` and `withFilters()` keep each type's invariants: a type's own
+  filter is always kept, `size` is `null` where the factory takes no size, and spatial, object and vector attributes
+  are never arrays. A spatial attribute stored with a size or an array flag is read without them. Stored values
+  are normalised per type:
+
+  | Factory | Stored values |
+  |---|---|
+  | `datetime()` | `signed: false`, `filters: ['datetime']` |
+  | `point()`, `lineString()`, `polygon()` | `array: false`, `filters: [<type>]` |
+  | `vector()` | `size: <dimensions>`, `array: false`, `filters: ['vector']` |
+  | `object()` | `array: false`, `filters: ['object']` |
+  | `integer()` | `size` 0 (`Bits32`) or 8 (`Bits64`) |
+  | `boolean()`, `double()`, `id()` | `size: 0` |
+  | `string()`, `varchar()`, `text()`, `mediumText()`, `longText()` | `signed: true` |
+  | `relationship()` | the 7.x `options` shape plus `side` |
+
+  Code that compares stored attribute documents field by field (for example to detect drift) has to compare these
+  normalised values.
+- **64-bit integers.** `bounds()` gives a `Bits64` integer the bounds `[PHP_INT_MIN, PHP_INT_MAX]` signed and
+  `[0, PHP_INT_MAX]` unsigned; 7.x applied the 32-bit range. `increaseDocumentAttribute()`,
+  `decreaseDocumentAttribute()` and the numeric operators on a size-8 integer accept values past 2147483647.
+
+### `Index`
+
+| Factory | Notes |
+|---|---|
+| `key($key, array $attributes, array $lengths = [], array $orders = [])`, `unique(...)` | Orders are `?OrderDirection` |
+| `fulltext($key, array $attributes)`, `trigram($key, array $attributes)` | No lengths or orders |
+| `spatial($key, string $attribute, ?OrderDirection $order = null)`, `object($key, string $attribute)` | One attribute |
+| `hnswEuclidean($key, string $attribute)`, `hnswCosine(...)`, `hnswDot(...)` | One vector attribute |
+| `ttl($key, string $attribute, int $ttl)` | `ttl` of at least 1 |
+
+```php
+// 7.x
+$database->createIndex('movies', 'expiry', Database::INDEX_TTL, ['expiresAt'], [], [], 3600);
+
+// 8.0
+$database->createIndex('movies', Index::ttl('expiry', 'expiresAt', 3600));
+```
+
+- Read `$index->key`, `type` (`IndexType`), `attributes`, `lengths` (`list<?int>`), `orders`
+  (`list<?OrderDirection>`) and `ttl` (`?int`, TTL indexes only). `withKey()`, `withLengths()` and `withOrders()`
+  return a changed copy.
+- `OrderDirection::Random` and a `ttl` below 1 throw `Exception\Index`.
+- Fulltext and TTL indexes store no `orders`, fulltext indexes store no `lengths`, and an index other than TTL no
+  longer stores `ttl: 1`. `Index::fromDocument()` reads both shapes, the 7.x `'asc'`/`'desc'` orders, and the legacy
+  type `index` as a key index.
+
+### `Relationship`
+
+`Relationship::oneToOne()`, `oneToMany()`, `manyToOne()` and `manyToMany()` take
+`(string $relatedCollection, ?string $key = null, bool $twoWay = false, ?string $twoWayKey = null,
+RelationshipDeleteAction $onDelete = RelationshipDeleteAction::Restrict)`. The collection it belongs to is the first
+argument of `createRelationship()`. A `null` key is derived from the related collection's id and a `null` two-way key
+from the source collection's id; `createRelationship()` returns the relationship with both resolved.
+
+- Read `$relationship->relatedCollection`, `type` (`RelationshipType`), `twoWay`, `key`, `twoWayKey` and
+  `onDelete` (`RelationshipDeleteAction`). `inverse(string $collection)` is the other side's view, and
+  `apply(RelationshipUpdate $update)` a changed copy.
+- `onDelete` has three cases: `Cascade`, `Restrict` and `SetNull`. `RelationshipDeleteAction::toForeignKeyAction()`
+  converts for the adapter.
+- A relationship attribute of a `Collection` carries its `Relationship` and `RelationshipSide` in
+  `$attribute->relationship` and `$attribute->side`.
+
+### `Collection`
+
+```php
+// 7.x
+$collection = $database->getCollection('movies');
+if ($collection->isEmpty()) {
+    // missing
+}
+foreach ($collection->getAttribute('attributes', []) as $attribute) {
+    $type = $attribute->getAttribute('type');
+}
+
+// 8.0
+$collection = $database->findCollection('movies');
+if ($collection === null) {
+    // missing
+}
+foreach ($collection->attributes() as $attribute) {
+    $type = $attribute->type;
+}
+```
+
+- `Collection::create(string $id, string $name = '', array $attributes = [], array $indexes = [], ?array $permissions
+  = null, bool $documentSecurity = true, array $metadata = [])` builds one; `Collection::fromArray()` and
+  `Collection::fromDocument()` read a stored definition.
+- `attributes()` and `indexes()` return the definition as `Attribute` and `Index` lists, built on the first call.
+  `name()`, `documentSecurity()` and `declaredPermissions(): ?array` read the other fields.
+  `Collection::NAME`, `ATTRIBUTES`, `INDEXES` and `DOCUMENT_SECURITY` name the stored keys.
+- `documentSecurity` is always stored: `Collection::create(documentSecurity: false)` reads back `false`.
+- `$metadata` takes only keys the metadata collection stores. `create()` refuses `attributes`, `indexes` and
+  `documentSecurity` in it (pass them as arguments), and `createCollection()` throws `Exception\Structure` for a
+  collection carrying any other key, before anything is created.
+
+### Updates
+
+`new AttributeUpdate(?ColumnType $type = null, ?int $size = null, ?bool $required = null, mixed $default =
+Unchanged::Value, ?bool $signed = null, ?bool $array = null, Format|Unchanged|null $format = Unchanged::Value, ?array
+$filters = null, ?string $key = null)` is sparse: `null` keeps a field. `default` and `format` use
+`Unchanged::Value` to keep the stored value, because `null` is a value for them:
+
+- `default: null` removes the default, and `format: null` removes the format.
+- A default on an attribute stored as required throws, and so does a default sent together with `required: true`.
+  `required: true` alone removes the stored default.
+- `required: false` relaxes the column's `NOT NULL`. 7.x's `updateAttributeRequired(false)` changed only the
+  metadata and left the column `NOT NULL`.
+- `key` renames the attribute, like `renameAttribute()`.
+- A `Mirror` replicates attribute updates to its destination.
+
+`new CollectionUpdate(?array $permissions = null, ?bool $documentSecurity = null)` and
+`new RelationshipUpdate(?string $key = null, ?string $twoWayKey = null, ?bool $twoWay = null,
+?RelationshipDeleteAction $onDelete = null)` follow the same rule.
+
+### Stored metadata
+
+Collection metadata written by 7.x reads without migration: every 7.4 `VAR_*` type hydrates. Two kinds of stored
+value make a collection unreadable, because hydrating its definition throws, so every read and write of the
+collection fails until the row is repaired:
+
+- an attribute type outside `Attribute::TYPES`, `uuid7` included: `Exception\Structure`;
+- a relationship `onDelete` of `setDefault` or `noAction`: `Exception\Relationship`.
+
+Repair such a row before you upgrade, while 7.x still reads it: set a supported `onDelete` with
+`updateRelationship()`, and delete or recreate the attribute with a supported type. After the upgrade, edit the
+collection's row in the metadata table (`_metadata`): in its `attributes`, set the relationship's `options.onDelete`
+on both sides to `cascade`, `restrict` or `setNull`, or remove the attribute of the unknown type. Then drop the cached
+definition with `$database->purgeCachedDocument(Database::METADATA, $collection)`.
+
+An index of an unknown stored type is read as a key index, so it does not block reads. Creating such an index is
+refused.
 
 ### Attribute types
 
 - `Database::VAR_BIGINT` is replaced by `ColumnType::BigInteger`, whose value is `'biginteger'`. The type stored in
   collection metadata is still `'bigint'`, exactly as in 7.x: existing rows need no migration and new bigint
   attributes are written as `'bigint'` too. Do not compare or write stored type strings against
-  `ColumnType::BigInteger->value`. Use the typed model (`$attribute->getType() === ColumnType::BigInteger`),
-  normalise a raw string with `Attribute::normalizeType($type)` or `Attribute::tryNormalizeType($type)` (both accept
-  `'bigint'` and `'biginteger'`), and write a stored type with `Attribute::persistedType($type)` (it returns
-  `'bigint'` for `ColumnType::BigInteger` and the enum value for every other type). Error messages that name a type
-  use the stored spelling too: a bigint default mismatch reads `Default value … does not match given type bigint`, as
-  in 7.x.
-- `Attribute::toDocument()`, `getAttribute('type')` on an `Attribute` model, the `attribute_create`,
-  `attributes_create` and `attribute_update` event payloads and the documents returned by `updateAttribute*()` report
-  bigint attributes as `'bigint'`.
-- `Database::ATTRIBUTE_FILTER_TYPES` is renamed `Database::ATTRIBUTE_FILTER_COLUMN_TYPES` and holds `ColumnType`
-  cases instead of type strings. Compare with the typed model
-  (`in_array($attribute->getType(), Database::ATTRIBUTE_FILTER_COLUMN_TYPES, true)`), or normalise a stored string
-  first with `Attribute::normalizeType()`.
-- The column types an attribute can use are listed in `Attribute::TYPES`. `Attribute::availableTypes(objects:,
-  spatial:, vectors:)` narrows the list to what an adapter supports.
-- An empty `format` means no format. `Attribute` models store and report `null` for `format: ''`, including
-  attributes read from metadata written by 7.x, which stored `''`. Compare a stored attribute's format with `null`.
-  `$attribute->getFormat()` and `toDocument()` never return `''`.
+  `ColumnType::BigInteger->value`. Use the value object (`$attribute->type === ColumnType::BigInteger`), read a raw
+  string with `Attribute::typeFromStored($type)` (it accepts `'bigint'` and `'biginteger'`), and write one with
+  `Attribute::storedType($type)` (it returns `'bigint'` for `ColumnType::BigInteger` and the enum value for every
+  other type). Error messages that name a type use the stored spelling too: a bigint default mismatch reads
+  `Default value … does not match given type bigint`, as in 7.x.
+- `toDocument()` and the attribute event payloads report bigint attributes as `'bigint'`.
+- An empty `format` means no format: an attribute read from metadata written by 7.x, which stored `''`, has a
+  `null` format.
 
 ### Collections and attributes
 
-- `createCollection()` validates attribute types like `createAttribute()`: an unknown type throws
-  `Utopia\Database\Exception` (`Unknown attribute type: <type>. Must be one of ...`) before anything is created, and
-  object, spatial and vector attributes need the adapter to support them. In 7.x the SQL adapters failed with
-  `Unknown type: <type>` and MongoDB created the collection.
-- `createCollection()`, `createAttribute()` and `createAttributes()` no longer modify the `Attribute` and `Index`
-  objects passed to them. Two adjustments are applied to copies and appear only in the stored metadata: the filters
-  added for `datetime`, `object`, spatial and vector attributes, and the index `lengths` and `orders` adjusted for
-  the adapter. Read them back with `getCollection()`. In 7.x `createCollection()` wrote these changes into the
-  documents it was given. It is safe to pass shared definitions, such as the objects in a config array, directly.
+- `createCollection()` checks every attribute like `createAttribute()`: object, spatial and vector attributes need
+  the adapter to support them. An unknown type cannot reach it: `Attribute::fromArray()` and `fromDocument()` refuse
+  it with `Exception\Structure`. In 7.x the SQL adapters failed with `Unknown type: <type>` and MongoDB created the
+  collection.
+- `createCollection()`, `createAttribute()` and `createAttributes()` return what they stored: the filters added for
+  `datetime`, `object`, spatial and vector attributes, and the index `lengths` and `orders` adjusted for the adapter.
+  The value objects you pass are never changed, so shared definitions, such as the ones in a config array, are safe
+  to pass directly. In 7.x `createCollection()` wrote these changes into the documents it was given.
 - `updateAttribute()` now updates `id` attributes (7.x threw `Unknown attribute type: id`), and it refuses
   relationship attributes with `Cannot update relationship as an attribute`: use `updateRelationship()`.
 - The default of a point, linestring or polygon attribute is validated like a value of that attribute: a point
@@ -281,17 +507,13 @@ long-running processes (php/php-src#22084), so the library itself no longer uses
   points. 7.x accepted any array.
 - `createAttribute()` and `createAttributes()` refuse a varchar of size 0 or above the maximum varchar length, as
   `createCollection()` does and as 7.x did.
-- **Index definitions need a known type.** `Validator\Index::isValid()` fails for an index document without
-  `type`, with a type outside `IndexType`, or for a TTL index without `ttl`, as 7.x did. `Index::fromDocument()` no
-  longer throws for an unknown stored type (it reads it as `key`), so stored metadata keeps parsing during query
-  validation.
-- **Index length accounting.** Big integer columns (big integer, id, and integer of size 8 or more) count 8 bytes
-  toward the maximum index length, and a `text()`, `mediumText()` or `longText()` attribute with size 0 counts as the
+- **Index length accounting.** Big integer columns (big integer, id, and 64-bit integer) count 8 bytes toward the
+  maximum index length, and a `text()`, `mediumText()` or `longText()` attribute without a size counts as the
   engine's maximum for its type. An index that relied on the old undercount has to give the text column a prefix
   length.
-- **Existing indexes.** On adapters with schema index introspection, `createIndex()` compares an index that exists in
-  the schema but not in the metadata with the request (columns, prefix lengths, key, unique, fulltext or spatial): a
-  match is adopted and a mismatch is dropped and recreated, as in 7.3.12.
+- **Existing indexes.** On adapters with `Capability::SchemaIntrospection`, `createIndex()` compares an index that
+  exists in the schema but not in the metadata with the request (columns, prefix lengths, key, unique, fulltext or
+  spatial): a match is adopted and a mismatch is dropped and recreated, as in 7.3.12.
 - `analyzeCollection()` refreshes planner statistics on PostgreSQL and SQLite (the collection's table and its
   permissions table) and returns `true`; it returned `false` there. Call it after bulk loads (migrations, imports):
   a freshly loaded collection otherwise plans joins with empty-table statistics, and SQLite never gathers
@@ -299,27 +521,56 @@ long-running processes (php/php-src#22084), so the library itself no longer uses
 - On PostgreSQL `getSizeOfCollection()` reports the table's relation size, which a delete does not reduce until the
   table is vacuumed; `analyzeCollection()` refreshes statistics only.
 
+### Schema introspection
+
+`getSchemaAttributes()` returns `list<Schema\Column>` (`name`, `type` as the engine's canonical native type,
+`length`, `nullable`) and `getSchemaIndexes()` returns `list<Schema\Index>` (`name`, `type` as `IndexType`,
+`columns`, `lengths`), read back from the engine. Both are meaningful only where the adapter declares
+`Capability::SchemaIntrospection`: MariaDB, MySQL, SQLite and PostgreSQL. MongoDB, Memory and Redis return `[]`.
+
+PostgreSQL now introspects its schema, so it reconciles orphan columns and indexes like the other SQL adapters:
+`createAttribute()` and `createIndex()` adopt or replace a column or index the schema has but the metadata lacks.
+PostgreSQL reports a fulltext index as a key index and no prefix lengths. An index whose name PostgreSQL shortened to
+its md5 form, or another tenant's index of a shared table, is not matched and is created as before.
+
+### Renaming a database
+
+`Database::update(string $database, string $new): bool` renames a database and fires `Event\Database\Updated`. It
+retires the cached definitions and documents of the moved collections under both names. Every adapter refuses it
+under shared tables, also when called on the adapter directly.
+
+| Adapter | How |
+|---|---|
+| MariaDB, MySQL | Moves every table into the new schema in one atomic `RENAME TABLE`, then drops the old schema when it is empty (a table created there during the rename keeps it). Grants on the old schema do not move |
+| PostgreSQL | `ALTER SCHEMA ... RENAME TO` |
+| SQLite | Nothing to move: SQLite stores no database name, so `update()` succeeds and `exists()` is always `false` |
+| Memory, Redis | Re-keys the stored data, and rolls back on failure |
+| MongoDB | Moves each collection, and rolls back on failure. A sharded cluster throws `Exception`. The client stays bound to the old database: build a new client for the new name |
+
 ## Lifecycle events are hooks
 
 `Database::on()`, `Database::before()`, `Mirror::on()` and `Adapter::before()` are removed, and so are the
 `Database::EVENT_*` constants. Everything is registered with `Database::addHook()`, which dispatches on the hook's
-type:
+type and throws for a hook it does not recognise:
 
 | Hook interface | Receives | Replaces |
 |---|---|---|
-| `Utopia\Database\Hook\Lifecycle` | every event, for side effects | `on()` |
+| `Utopia\Database\Hook\Lifecycle` | a typed event object per event, for side effects | `on()` |
 | `Utopia\Database\Hook\Decorator` | each document a read or write returns, to modify it | nothing in 7.x |
 | `Utopia\Database\Hook\Transform` | each SQL statement before it runs | `before()` |
-| `Utopia\Database\Hook\Write` | row writes, such as `Hook\Permissions` | built into 7.x |
+| `Utopia\Database\Hook\Write` | document writes, to write rows of their own, such as `Hook\Permissions` | built into 7.x |
 | `Utopia\Database\Hook\Relationships` | relationship resolution and mutation | built into 7.x |
+| `Utopia\Database\Cache\Invalidator` | the writes that invalidate the `find()` query cache | nothing in 7.x |
+
+`removeHook($hook)` unregisters a hook instance, or every hook of a class given its class name.
 
 ### Lifecycle hooks (replaces `on()` and the `EVENT_*` constants)
 
 A listener is now an object implementing `Utopia\Database\Hook\Lifecycle` and registered with
-`Database::addHook()`. It receives every `Utopia\Database\Event`, so filter by event inside
-`handle(Event $event, mixed $data)`. The event string values are unchanged
-(`Event::DocumentCreate->value === 'document_create'`). To keep 7.x's by-name behaviour, also implement
-`Utopia\Database\Hook\Named` (`getName(): string`):
+`Database::addHook()`. Its `handle(Event\Domain $event): void` receives one typed event object per event: every
+`Event` case except `All` has a `final readonly` class under `Utopia\Database\Event\{Database,Collection,Attribute,
+Index,Document,Permission}`, and `$event->event` is the `Event` case. Match on the class to read its typed payload. To
+keep 7.x's by-name behaviour, also implement `Utopia\Database\Hook\Named` (`getName(): string`):
 
 - Registering a named hook replaces the lifecycle hook already registered under that name, in its position.
   Re-registering on every request or job no longer stacks listeners. Hooks without a name are appended every time
@@ -329,25 +580,33 @@ A listener is now an object implementing `Utopia\Database\Hook\Lifecycle` and re
   several `Named` hooks with the same name keep only the one registered last: handle all of a name's events in one
   hook, or give each hook its own name.
 - `silent()` can silence a named hook on its own (see below).
+- A hook that also implements `Hook\Selective` (`handles(Event $event): bool`) receives only the events it accepts.
+  An event object is built only when a registered hook handles its event.
 
 ```php
 // 7.x
-$database->on(Database::EVENT_DOCUMENT_CREATE, 'calculate-usage', $listener);
+$database->on(Database::EVENT_DOCUMENT_CREATE, 'calculate-usage', function (mixed $document) {
+    // ...
+});
 
 // 8.0
-final class Usage implements Lifecycle, Named
+final class Usage implements Lifecycle, Named, Selective
 {
     public function getName(): string
     {
         return 'calculate-usage';
     }
 
-    public function handle(Event $event, mixed $data): void
+    public function handles(Event $event): bool
     {
-        if ($event !== Event::DocumentCreate) {
-            return;
+        return $event === Event::DocumentCreate;
+    }
+
+    public function handle(Domain $event): void
+    {
+        if ($event instanceof Event\Document\Created) {
+            // $event->collection, $event->document
         }
-        // ...
     }
 }
 
@@ -357,9 +616,41 @@ $database->addHook(new Usage());
 On a `Mirror`, lifecycle hooks are registered on the source database. `Mirror::silent()` silences both the source
 and the mirror.
 
+### Event classes
+
+Each event's payload is a typed property; 7.x passed arrays, strings, `false` and `Document(['modified' => N])`.
+
+| Event | Class | Properties |
+|---|---|---|
+| `database_create`, `database_update`, `database_delete`, `database_list` | `Event\Database\Created`, `Updated`, `Deleted`, `Listed` | `database`; `new` (update); `deleted` (delete); `databases` (list) |
+| `collection_create`, `collection_read`, `collection_update`, `collection_delete` | `Event\Collection\Created`, `Read`, `Updated`, `Deleted` | `collection`, `definition` (`Collection`) |
+| `collection_list` | `Event\Collection\Listed` | `collections` |
+| `attribute_create`, `attribute_update`, `attribute_delete` | `Event\Attribute\Created`, `Updated`, `Deleted` | `collection`, `attribute` (`Attribute`) |
+| `attribute_rename` | `Event\Attribute\Renamed` | `collection`, `old`, `attribute` |
+| `attributes_create` | `Event\Attribute\BatchCreated` | `collection`, `attributes` |
+| `index_create`, `index_delete` | `Event\Index\Created`, `Deleted` | `collection`, `index` (`Index`) |
+| `index_rename` | `Event\Index\Renamed` | `collection`, `old`, `index` |
+| `indexes_create` | `Event\Index\BatchCreated` | `collection`, `indexes` |
+| `document_create`, `document_read`, `document_update`, `document_delete` | `Event\Document\Created`, `Read`, `Updated`, `Deleted` | `collection`, `document` |
+| `document_upsert` | `Event\Document\Upserted` | `collection`, `document`, `created` |
+| `document_increase`, `document_decrease` | `Event\Document\Increased`, `Decreased` | `collection`, `document`, `attribute` |
+| `documents_create`, `documents_update`, `documents_delete` | `Event\Document\BatchCreated`, `BatchUpdated`, `BatchDeleted` | `collection`, `count` |
+| `documents_upsert` | `Event\Document\BatchUpserted` | `collection`, `count`, `created`, `updated` |
+| `document_find` | `Event\Document\Found` | `collection`, `documents` |
+| `document_aggregate` | `Event\Document\Aggregated` | `collection`, `rows` |
+| `document_count`, `document_sum` | `Event\Document\Counted`, `Summed` | `collection`, `count`; `attribute`, `sum` |
+| `document_purge` | `Event\Document\Purged` | `collection`, `id` |
+| `permissions_create`, `permissions_read`, `permissions_delete` | `Event\Permission\Created`, `Read`, `Deleted` | `collection`, `document`, `permissions` |
+
+`Event::domain()` names the class of a case. New events: `upsertDocument()` fires `document_upsert` (not
+`documents_upsert`), `renameAttribute()` fires `attribute_rename` (it fired `attribute_update`), `createIndexes()`
+fires `indexes_create` after each `index_create`, `aggregate()` fires `document_aggregate` (not `document_find`),
+and `update()` fires `database_update`. `findOne()` and `findCollection()` fire nothing on a miss; 7.x's `findOne()`
+fired `document_find` with `false`.
+
 ### `silent()`
 
-`silent(callable $callback, ?array $listeners = null)`:
+`silent(callable $callback, ?array $hooks = null)`:
 
 - `null` silences every lifecycle hook, and every decorator, for the duration of the callback. This is unchanged.
 - A list of names silences only the lifecycle hooks that implement `Named` with one of those names. Unnamed hooks and
@@ -396,8 +687,8 @@ A `Decorator`'s exception always reaches the caller.
 
 It fires once per written document from `updateDocument()` (for both the old and the new `$id` when the id changes),
 `updateDocuments()`, `upsertDocuments()`, `increaseDocumentAttribute()`, `decreaseDocumentAttribute()`,
-`deleteDocument()` and `deleteDocuments()`, and from `purgeCachedDocument()`. The payload is
-`Document(['$id' => $id, '$collection' => $collectionId])`. As in 7.x, `createDocument()` and `createDocuments()` do
+`deleteDocument()` and `deleteDocuments()`, and from `purgeCachedDocument()`. The event is
+`Event\Document\Purged` with the document's `collection` and `id`. As in 7.x, `createDocument()` and `createDocuments()` do
 not fire it. Attribute schema changes fire it for the collection's metadata document (`$collection` = `_metadata`).
 
 A write fires it after the outermost transaction commits: inside `withTransaction()` the events of every write wait
@@ -434,21 +725,23 @@ of a two-way relationship that the delete changed, after its own `document_delet
 
 ### `attribute_create` from `createAttributes()`
 
-`createAttributes()` fires `attribute_create` once per attribute, with that attribute's `Document` as payload (the
-same shape `createAttribute()` sends). It then fires `attributes_create` once, with the list. In 7.x,
-`createAttributes()` fired `attribute_create` once, with the array of attribute documents as payload, and nothing
-fired `attributes_create`.
+`createAttributes()` fires `attribute_create` (`Event\Attribute\Created`) once per attribute, then
+`attributes_create` (`Event\Attribute\BatchCreated`) once, with the list. In 7.x, `createAttributes()` fired
+`attribute_create` once, with the array of attribute documents as payload, and nothing fired `attributes_create`.
 
 ### `Event\DispatcherHook`
 
-`Event\DispatcherHook` turns lifecycle events into domain event objects for listeners registered with
-`on(string $eventClass, callable $listener)` and for an optional PSR-14 dispatcher:
+`Event\DispatcherHook` forwards the typed events to listeners registered per class with
+`on(string $eventClass, callable $listener)` and to an optional PSR-14 dispatcher. It handles an event only while a
+listener or the dispatcher can receive it.
 
-| Event | Domain event |
-|---|---|
-| `document_create`, `document_update`, `document_delete` | `Event\Document\Created`, `Updated` (with the document), `Deleted` (with the id) |
-| `documents_create`, `documents_update`, `documents_delete` | `Event\Documents\Created`, `Updated`, `Deleted`, with the collection and `count`, the number of documents the call wrote |
-| `collection_create`, `collection_delete` | `Event\Collection\Created` (with the collection document), `Deleted` |
+```php
+$dispatcher = new DispatcherHook();
+$dispatcher->on(Event\Document\Created::class, function (Event\Document\Created $event): void {
+    // $event->collection, $event->document
+});
+$database->addHook($dispatcher);
+```
 
 A bulk write never delivers a single-document event. `Event\Document\Updated` has no `$previous` property. Every
 listener and the PSR-14 dispatcher run; the first `\Exception` among them is then rethrown, and whether it reaches the
@@ -477,16 +770,34 @@ $database->addHook(new Label());
 $database->removeTransform(Label::class);
 ```
 
+### Write hooks
+
+A `Hook\Write` stands alone; it does not extend `Utopia\Query\Hook\Write`. `Hook\Interceptor` implements every
+method as a no-op, so a hook overrides only what it needs:
+
+- `decorateRow(array $row, Hook\RowMetadata $metadata): array` adjusts each row before it is written. `$metadata->tenant`
+  is the document's tenant, else the adapter's.
+- `afterDocumentCreate()`, `afterDocumentUpdate()`, `afterDocumentBatchUpdate()`, `afterDocumentUpsert()` and
+  `afterDocumentDelete()` take a `Hook\WriteContext` as their last argument. `afterDocumentUpdate()` receives the id
+  the document is stored under.
+- `Hook\WriteContext` is an interface the SQL adapters implement: `builder(string $table)`, `rawBuilder()`,
+  `rawTable(string $table)`, `run(Statement $statement, Event $event): bool`, `fetch(Statement $statement, Event
+  $event): array`, `decorateRow(array $row, Document $document)`, `skipPermissions()` and `ignoreDuplicates()`.
+
 ### Subclasses of `Database`
 
-- The protected `trigger(string $event, mixed $args = null)` is now `trigger(Event $event, mixed $data = null)`.
+- The protected `trigger(string $event, mixed $args = null)` is replaced by `listens(Event $event): bool` and
+  `dispatch(Event\Domain $event): void`: build the event object only when `listens()` is `true`.
+- The protected `createDocumentInstance()` is `newDocument()`.
+- `casting()` and `applySelectFiltersToDocuments()` are internal, and so are `getRelationshipHook()` and the public
+  helpers of `Hook\Relationships` that `Database` calls.
 - `increaseDocumentAttribute()` and `decreaseDocumentAttribute()` accept numeric strings as well
   (`string|int|float`), for unsigned 64-bit values, so an override has to widen its parameter types.
-- `Database` is now composed of the traits in `Utopia\Database\Traits`. Its public methods are unchanged by that.
+- `Database` is now composed of the traits in `Utopia\Database\Trait`. Its public methods are unchanged by that.
 - The protected `$listeners` and `$silentListeners` properties are gone. Registered lifecycle hooks are in the
   protected `$lifecycleHooks`; to silence or test for silence, use `silent()` and the protected
   `areEventsSilenced()`.
-- The protected `decodeAttribute()` applies the filter it is given. `decode()` reads `disableFilters()` and
+- The protected `decodeAttribute()` applies the filter it is given. `decode()` reads `setFiltering()` and
   `skipFilters()` once per document and calls it only for the filters they leave enabled, so an override that relied
   on the method returning the value unchanged while filters are disabled no longer has to check.
 
@@ -536,7 +847,7 @@ $database->removeTransform(Label::class);
   in full.
 - `Document::setAttribute()` takes a `SetType` case, and `Document::getPermissionsByType()` takes a
   `PermissionType` case.
-- **`createDocuments()` under `skipDuplicates()`** returns and counts only the documents it inserted, and hands only
+- **`createDocuments()` under `ignoreDuplicates()`** (7.x `skipDuplicates()`) returns and counts only the documents it inserted, and hands only
   those to `onNext`. A document skipped because its id is already stored is neither counted nor emitted (7.x
   counted and emitted it). Of a batch that repeats an id, only the first copy is written. Permissions are written
   only for inserted documents: in 7.x the skipped copy's permissions were added to the stored document on MariaDB,
@@ -566,10 +877,120 @@ $database->removeTransform(Label::class);
   attribute's default, as it does for an existing document: `dateAddDays()` and `dateSubDays()` shift the date,
   `arrayFilter()` filters the array, and the maximum or minimum of increment, decrement, multiply, divide and power
   is honoured. Code that relied on the default being stored unchanged gets the operator's result.
-- `Database::cursor($collection, $queries, $batchSize)` reads the matches in batches of `$batchSize`. A `limit()` in
-  the queries caps how many documents it yields; an `offset()` or `cursorAfter()` in them positions the first batch
-  only; `cursorBefore()` throws `Utopia\Database\Exception` (`Cursor before not supported in this method.`), as
-  `iterate()` does.
+- **`Document` methods.**
+
+  | 7.x | 8.0 |
+  |---|---|
+  | `getRead()`, `getCreate()`, `getUpdate()`, `getDelete()`, `getWrite()` | `getPermissionsByType(PermissionType::Read)` and so on. `Write` covers create, update and delete |
+  | `getArrayCopy(array $allow = [], array $disallow = [])` | `getArrayCopy()` without arguments, `only(array $keys)` for `$allow` and `except(array $keys)` for `$disallow` |
+  | `find()`, `findAndReplace()`, `findAndRemove()` | No replacement: read and write the attribute with `getAttribute()` and `setAttribute()` |
+
+  `only()` and `except()` filter top-level keys only, as `$allow` and `$disallow` did, and convert nested documents
+  to arrays like `getArrayCopy()`; `only([])` returns `[]`. `Document::fromRow()` and `fromStorage()` are internal.
+
+```php
+// 7.x
+$readers = $document->getRead();
+$response = $document->getArrayCopy(disallow: ['$permissions']);
+
+// 8.0
+$readers = $document->getPermissionsByType(PermissionType::Read);
+$response = $document->except(['$permissions']);
+```
+
+## Bulk writes and reads
+
+| 7.x | 8.0 |
+|---|---|
+| `createDocuments($collection, $documents, $batchSize = INSERT_BATCH_SIZE, $onNext, $onError)` | `createDocuments(string $collection, array $documents, int $batchSize = Database::BATCH_SIZE, ?callable $onNext = null): int` |
+| `updateDocuments($collection, $updates, $queries, $batchSize, $onNext, $onError)` | `updateDocuments(string $collection, Document $updates, array $queries = [], int $batchSize = Database::BATCH_SIZE, ?callable $onNext = null): int` |
+| `upsertDocuments($collection, $documents, $batchSize, $onNext, $onError)` | `upsertDocuments(string $collection, array $documents, int $batchSize = Database::BATCH_SIZE, ?callable $onNext = null, ?string $increase = null): int` |
+| `upsertDocumentsWithIncrease($collection, $attribute, $documents, $onNext, $onError, $batchSize)` | `upsertDocuments(..., increase: $attribute)` |
+| `deleteDocuments($collection, $queries, $batchSize = DELETE_BATCH_SIZE, $onNext, $onError)` | `deleteDocuments(string $collection, array $queries = [], int $batchSize = Database::BATCH_SIZE, ?callable $onNext = null): int` |
+| `iterate($collection, $queries, $forPermission)`, `foreach($collection, $callback, $queries, $forPermission)` | `cursor(string $collection, array $queries = [], int $batchSize = Database::CURSOR_BATCH_SIZE, PermissionType $forPermission = PermissionType::Read): Generator` |
+| `find()` with aggregates or `groupBy()` | `aggregate(string $collection, array $queries): array`, a list of rows |
+| `purgeCachedDocument(string $collectionId, ?string $id): bool`, `purgeCachedCollection(string $collectionId): bool` | `purgeCachedDocument(string $collection, string $id): void`, `purgeCachedCollection(string $collection): void` |
+
+```php
+// 7.x
+$database->deleteDocuments('sessions', [$expired], onNext: fn (Document $deleted, Document $old) => $log($old), onError: fn (Throwable $error) => $report($error));
+foreach ($database->iterate('sessions', [Query::limit(25)]) as $session) {
+    // ...
+}
+
+// 8.0
+$database->deleteDocuments('sessions', [$expired], onNext: fn (Document $deleted, ?Document $previous) => $log($previous));
+foreach ($database->cursor('sessions', batchSize: 25) as $session) {
+    // ...
+}
+```
+
+- **`$onNext`** has one shape everywhere: `callable(Document $document, ?Document $previous): void`. `$previous` is
+  `null` on create, the stored document an update or upsert replaced, and on delete the stored document itself (7.x
+  passed a clone of the first argument). `$onError` is removed: an exception from `$onNext` aborts the call, like any
+  other callback.
+- **Batch size.** `Database::BATCH_SIZE` (1000) replaces `INSERT_BATCH_SIZE` and `DELETE_BATCH_SIZE`. A batch size
+  above it throws `Exception\Limit` instead of being reduced to it; one below 1 still writes one document at a time.
+- **`cursor()`** is the only generator. It reads the matches in batches of `$batchSize` (default
+  `Database::CURSOR_BATCH_SIZE`, 100). A `limit()` in the queries caps how many documents it yields; an `offset()`
+  or `cursorAfter()` positions the first batch only; `cursorBefore()` throws `Utopia\Database\Exception`
+  (`Cursor before not supported in this method.`) when called. In `iterate()` and `foreach()` a `limit()` set the
+  page size, and without one they read pages of 25: move the limit to `batchSize`, or pass `batchSize: 25`, to keep
+  the page size.
+- **`aggregate()`** returns `list<array<string, mixed>>`. An unaliased aggregate comes back under
+  `<method>_<attribute>`, or `<method>` for `count('*')`; give it an alias to choose the name. It fires
+  `document_aggregate`. `find()` refuses aggregate and `groupBy()` queries with `Exception\Query`.
+- **`sum()` and `count()`** throw `Exception\Query` for a `$max` of 0 or less; they returned 0.
+- **`increaseDocumentAttribute()` and `decreaseDocumentAttribute()`** throw `Exception\Type` for a change value of 0
+  or less; they threw `InvalidArgumentException`.
+- **`findOne()`** fires no `document_find` on a miss.
+- **`deleteDocument()`** still returns `bool`.
+
+## Configuration toggles
+
+Every toggle has one form: `set<Noun>(bool): static` sets it, `is<Participle>()` or `has<Noun>()` reads it, and a
+scoped form takes the value and a callback. Setters return `static` and `reset`/`clear` methods return `void`.
+
+| 7.x | 8.0 |
+|---|---|
+| `enableValidation()`, `disableValidation()` | `setValidation(bool $validation)`; read with `isValidating()`; scope with `withValidation(bool $validation, callable $callback)` or `skipValidation(callable $callback)` |
+| `enableFilters()`, `disableFilters()` | `setFiltering(bool $filtering)`; read with `isFiltering()`; scope with `withFiltering(bool $filtering, callable $callback, ?array $filters = null)` or `skipFilters(callable $callback, ?array $filters = null)` |
+| `enableLocks(bool $enabled)` | `setLocks(bool $locks)` |
+| `getPreserveDates()`, `withPreserveDates(callable $callback)` | `isPreservingDates()`, `withPreserveDates(bool $preserve, callable $callback)` |
+| `getPreserveSequence()`, `withPreserveSequence(callable $callback)` | `isPreservingSequence()`, `withPreserveSequence(bool $preserve, callable $callback)` |
+| `skipDuplicates(callable $callback)` (database and adapter) | `ignoreDuplicates(callable $callback)` |
+| `getDropUnknownAttributes()` | `isDroppingUnknownAttributes()` |
+| `getSharedTables()` (database and adapter) | `hasSharedTables()` |
+| `getTenantPerDocument()` (database and adapter) | `isTenantPerDocument()` |
+| `clearDocumentType(string $collection): static` | `clearDocumentType(string $collection): void` |
+| `clearAllDocumentTypes(): static` | `clearDocumentTypes(): void`, which keeps the metadata collection's `Collection` type |
+| `setMigrating(): self`, `setMaxQueryValues(): self`, `setAuthorization(): self` | Return `static` |
+| `silent(callable $callback, ?array $listeners = null)` | `silent(callable $callback, ?array $hooks = null)` |
+| `getKeywords()` | `$database->profile()->limits->keywords` |
+| `getConnectionId(): string` | `getConnectionId(): ?string`, `null` on an adapter without `Feature\Connection` (Memory) |
+| — | `getHostname(): ?string`. `ping()` returns `true` and `reconnect()` does nothing without `Feature\Connection` |
+| Adapter `setDatabase()`, `setSharedTables()`, `setTenant()`, `setTenantPerDocument()` returned `bool` | Return `static` |
+| Adapter `setDebug()`, `getDebug()`, `resetDebug()` | `setMetadata()`, `getMetadata()`, `resetMetadata()`, which also reach the query comments |
+| Adapter `enableAlterLocks(bool $enable)` | `Database::setLocks(bool $locks)` |
+| `Authorization::setDefaultStatus(bool $status)` | `new Authorization(defaultStatus: $status)` |
+| `Authorization::addRole()`, `removeRole()`, `cleanRoles()`, `setStatus()`, `enable()`, `disable()` returned `void` | Return `static` |
+| `new Authorization\Input(string $action, array $permissions)` | `new Authorization\Input(PermissionType $action, array $permissions)` |
+
+`setProfiling(bool)` and `isProfiling()` turn the query profiler on and off (see
+[Pools and profiling](#pools-and-profiling)).
+`setTenant()` and `withTenant()` are unchanged.
+
+```php
+// 7.x
+$database->disableValidation();
+$database->withPreserveDates(fn () => $database->createDocument('logs', $log));
+$database->skipDuplicates(fn () => $database->createDocuments('logs', $logs));
+
+// 8.0
+$database->setValidation(false);
+$database->withPreserveDates(true, fn () => $database->createDocument('logs', $log));
+$database->ignoreDuplicates(fn () => $database->createDocuments('logs', $logs));
+```
 
 ## Coroutines
 
@@ -577,18 +998,18 @@ Under Swoole, several coroutines can share one `Database` and one `Authorization
 whole handle now apply to the calling coroutine and the coroutines it starts; sibling coroutines sharing the handle
 or the `Authorization` do not see them:
 
-- `Authorization::skip()`, `Authorization::withStatus()` and `Authorization::withRoles()`;
-- `silent()`, `skipRelationships()`, `skipRelationshipsExistCheck()`, `skipFilters()`, `skipValidation()`,
-  `withPreserveDates()`, `withPreserveSequence()`, `withTenant()`, `withRequestTimestamp()`, and `skipDuplicates()`
-  on the database and on the adapter.
+- `Authorization::skip()` and `Authorization::withRoles()`;
+- `silent()`, `skipRelationships()`, `skipRelationshipsExistCheck()`, `withFiltering()` and `skipFilters()`,
+  `withValidation()` and `skipValidation()`, `withPreserveDates()`, `withPreserveSequence()`, `withTenant()`,
+  `withRequestTimestamp()`, and `ignoreDuplicates()` on the database and on the adapter.
 
 A plain setter is scoped only by a scope over the same state:
 
-- `Authorization::setStatus()`, `enable()`, `disable()` and `reset()` by `Authorization::skip()` and `withStatus()`;
+- `Authorization::setStatus()`, `enable()`, `disable()` and `reset()` by `Authorization::skip()`;
 - `Authorization::addRole()`, `removeRole()` and `cleanRoles()` by `Authorization::withRoles()`;
 - `setTenant()` by `withTenant()`;
-- `enableValidation()` and `disableValidation()` by `skipValidation()`;
-- `enableFilters()` and `disableFilters()` by `skipFilters()`, with or without filter names;
+- `setValidation()` by `withValidation()` and `skipValidation()`;
+- `setFiltering()` by `withFiltering()` and `skipFilters()`, with or without filter names;
 - `Hook\Relationships::setEnabled()` by `Hook\Relationships::withEnabled()` and `skipRelationships()`;
 - `setPreserveDates()` by `withPreserveDates()`, and `setPreserveSequence()` by `withPreserveSequence()`.
 
@@ -608,7 +1029,7 @@ Swoole cannot report the parent of a coroutine that has finished. In a coroutine
   scope's transaction;
 - writes stay its own: while a scope over that state is open on the handle, even one another coroutine opened, a
   setter changes only what that coroutine and the coroutines it starts see, until it ends, and never the shared
-  value. For `Authorization`, `skip()`, `withStatus()` and `withRoles()` each count as a scope over both the status
+  value. For `Authorization`, `skip()` and `withRoles()` each count as a scope over both the status
   and the roles;
 - with no such scope open, a setter changes the shared value, as in 7.x.
 
@@ -620,7 +1041,7 @@ so it keeps the write local: the same `disable()` there applies only to it and t
 A cut-off coroutine must not change and then restore state with a pair of setters, such as `disable()` then
 `enable()`, or `setTenant($tenant)` then `setTenant($original)`. Each write is shared or local depending on whether a
 scope over that state is open on the handle at that moment, so the restore can stay local while the change stays
-shared. Use `skip()`, `withStatus()`, `withRoles()` or `withTenant()`, or `withSnapshot()`, which always restore the
+shared. Use `skip()`, `withRoles()` or `withTenant()`, or `withSnapshot()`, which always restore the
 value when they end.
 
 While a cut-off coroutine holding such a local write is alive, reads of that state take the slower scoped path in
@@ -633,7 +1054,7 @@ starts and open the scope itself, inside the child, with `withSnapshot()`; a sna
 To run work started in another coroutine under the caller's state, take `$snapshot = $database->snapshot()` in the
 caller and run the work inside `$database->withSnapshot($snapshot, $callback)`. A snapshot carries the authorization
 status and roles, the relationship, silence and filter state, the tenant, the validation, preserve-dates,
-preserve-sequence and skip-duplicates toggles, and the request timestamp. `Hook\Relationships::withEnabled()`,
+preserve-sequence and ignore-duplicates toggles, and the request timestamp. `Hook\Relationships::withEnabled()`,
 `withCheckExist()` and `withSnapshot()` scope the hook's own flags the same way.
 
 Relationship population reads its chunks of related ids concurrently only on `Adapter\Pool`, inside a coroutine and
@@ -647,13 +1068,23 @@ coroutine that opened it and the coroutines it starts; see [Pools and profiling]
 
 ## Errors
 
+- **Exception hierarchy.** `Exception\Schema` is the new parent of `Structure`, `Type`, `Character`, `Truncate`,
+  `Index`, `Dependency`, `Limit` and `Relationship`, so one `catch (Exception\Schema)` handles every schema violation.
+  `Order` and `Operator` now extend `Exception\Query`: a `catch (Exception\Query)` also catches them, so put a
+  `catch` of `Order` or `Operator` before it. `Exception\Transaction` keeps exactly its subtree (`Contention`);
+  `Timeout` and `Unconfirmed` keep their parents, so `withTransaction()` never runs them again.
+- **Exception constructor.** `Exception::__construct(string $message = '', int|string $code = 0, ?\Throwable
+  $previous = null)` takes every argument as optional and keeps a string code, such as the SQLSTATE `HY000`, in
+  `public readonly ?string $state`; a numeric string is also the integer code. `Exception\Order::__construct(string
+  $message, ?string $attribute = null, int|string $code = 0, ?\Throwable $previous = null)` takes the attribute
+  second.
 - **Unique index violations.** Every adapter now reports a unique index violation as
   `Utopia\Database\Exception\Unique` with the message `Document with the requested unique attributes already exists`
   (7.x: `Unique index violation`). The class and its hierarchy are unchanged: `Unique` extends `Duplicate`, and a
   conflicting document `$id` still throws a plain `Duplicate` with `Document already exists`. Match on the class,
   not the message: catch `Unique` before `Duplicate` to tell the two apart. `Exception\Unique` has no constructor of
   its own and never rewrites the message it is given. The message is `Exception\Unique::MESSAGE`.
-- **`skipDuplicates()` on PostgreSQL** skips only a document whose id is stored, as in 7.x: a new id that collides
+- **`ignoreDuplicates()` on PostgreSQL** skips only a document whose id is stored, as in 7.x: a new id that collides
   on another unique index throws `Utopia\Database\Exception\Unique`. MariaDB, MySQL and SQLite cannot name the
   index to ignore and, as in 7.x, skip such a row without error.
 - **Retries of metadata writes.** Schema calls that persist a collection definition (`createAttribute()`,
@@ -741,10 +1172,10 @@ coroutine that opened it and the coroutines it starts; see [Pools and profiling]
   still throws `Exception\Timeout`). Code that treated a failed count as zero has to catch the exception.
 - **Features an adapter lacks.** On an adapter without timeouts (SQLite, Memory, Redis), `Database::setTimeout()` and
   `clearTimeout()` throw `Utopia\Database\Exception` (`Adapter does not support timeouts`). 7.x's SQLite, which
-  inherited them from MariaDB, ignored them. `getConnectionId()` throws `Adapter does not support connection ids`
-  on adapters without `Feature\ConnectionId`. `schema()` throws `Schema builder is not supported by this adapter`
+  inherited them from MariaDB, ignored them. `getConnectionId()` and `getHostname()` return `null` on an adapter
+  without `Feature\Connection` (Memory). `schema()` throws `Schema builder is not supported by this adapter`
   where `from()` throws for the query builder. `getSchemaAttributes()` and `getSchemaIndexes()` return `[]`
-  without the feature.
+  without `Capability::SchemaIntrospection`.
 - **Unknown columns on MariaDB and MySQL.** A statement that names a column the table lacks (1054) now throws
   `Utopia\Database\Exception\NotFound` (`Attribute not found`) instead of a raw `PDOException`, as PostgreSQL
   already did. This includes a table that has drifted from its metadata: `find()`, `count()` and `sum()` that
@@ -789,7 +1220,7 @@ coroutine that opened it and the coroutines it starts; see [Pools and profiling]
 - Use a cache adapter with generations (`Utopia\Cache\Feature\Leasable`) for the document cache too: without them a
   read that overlaps a write can cache the previous row until the next write or the TTL.
 - **Query cache layout.** `find()` results are cached in one hash per collection scope. Each query and role context
-  maps to one of `slots` fields (`new QueryCache($cache, slots: $count)`, 1024 by default), and the value records the
+  maps to one of `slots` fields (`new Cache\Query($cache, slots: $count)`, 1024 by default), and the value records the
   query and the epoch it was filled under, so a hit needs both to match. An invalidation publishes a new epoch and
   deletes nothing: an older result stays until a fill of its slot replaces it. The number of keys and fields no
   longer grows with writes or with distinct queries, and a write's cost does not depend on how many results are
@@ -799,8 +1230,8 @@ coroutine that opened it and the coroutines it starts; see [Pools and profiling]
   without fields (Memory, Filesystem) a collection scope holds one result at a time.
 - **Abandoned writes.** A write that blocks a collection's cache and never finishes its invalidation (a worker killed
   mid-transaction) no longer keeps that cache off until a flush. For the document cache the limit is
-  `$database->setCacheWriterTimeout($seconds)`, for the query cache `new QueryCache($cache, $cacheName,
-  writerTimeout: $seconds)`, both 3600 seconds by default. Reads resume once the unfinished write is older than the
+  `$database->setCacheWriterTimeout($seconds)`, 3600 seconds by default. The query cache takes the writer timeout
+  and the cache name from the `Database` it is set on with `setQueryCache()`. Reads resume once the unfinished write is older than the
   timeout, and the next write re-enables the cache once every other unfinished write is older than the timeout. A
   transaction that runs longer than the timeout is treated as abandoned: raise it above your longest transaction,
   and use the same value in every process (the shortest one applies).
@@ -817,151 +1248,265 @@ coroutine that opened it and the coroutines it starts; see [Pools and profiling]
   `getQueryCacheKey()` as in 7.x. When a query cache is installed with `setQueryCache()`, it now also invalidates the
   collection's `find()` results in that namespace. It returns `false` if either purge fails. It does not throw for a
   cache failure: the error is logged as a warning.
-- **Filters that belong to one handle.** `Database::addFilter()` still registers a filter for every handle in the
-  process. A filter that belongs to one handle goes in the `Database` constructor's `$filters` argument, or on a
-  `TypeRegistry` given to that handle through `setTypeRegistry()` (see [Custom types](#custom-types)).
+- **`delete()` flushes the whole cache.** `Database::delete()` flushes the cache it was given, as in 7.x. On a cache
+  shared with other databases or applications (one Redis), that removes their entries too: give each database
+  handle a cache of its own, or delete databases through `update()` and a cleanup of your own where that matters.
+- **Cache keys.** `getCacheKeys()`, `getCacheBaseKeys()` and `getQueryCacheKey()` stay public.
+  `getQueryCacheField()` is internal.
+- **Filters that belong to one handle** go in the `Database` constructor's `$filters` or on a `Filter\Registry` (see
+  [Filters](#filters)).
+
+## Filters
+
+`Database::addFilter(string $name, callable $encode, callable $decode)` still registers a filter for every handle in
+the process; its callbacks receive the value, the document and the database. A filter that belongs to one handle is
+a `Utopia\Database\Filter\Codec` (`name()`, `encode(mixed $value)`, `decode(mixed $value)`), which receives only the
+value; 7.x passed constructor filters the document and the database as well. `Filter\Callback` builds one from two
+closures.
+
+| 7.x | 8.0 |
+|---|---|
+| `new Database($adapter, $cache, ['name' => ['encode' => $encode, 'decode' => $decode]])` | `new Database($adapter, $cache, [new Filter\Callback('name', $encode, $decode)])`, a list of `Filter\Codec` |
+| `getInstanceFilters()` | The codecs given to the constructor, or `getFilters(): Filter\Registry` |
+
+```php
+// 7.x
+$database = new Database($adapter, $cache, [
+    'trim' => [
+        'encode' => fn (mixed $value) => \trim($value),
+        'decode' => fn (mixed $value) => $value,
+    ],
+]);
+
+// 8.0
+$database = new Database($adapter, $cache, [
+    new Filter\Callback('trim', fn (mixed $value) => \trim($value), fn (mixed $value) => $value),
+]);
+```
+
+- `setFilters(Filter\Registry $filters): static` gives a handle a registry of codecs, which several handles can
+  share; `Filter\Registry::register(Filter\Codec $codec): static`, `get(string $name)` and `has(string $name)` manage
+  it. A codec takes precedence over a global filter of the same name, and the constructor's codecs over both.
+- A codec named after a built-in filter (`Utopia\Database\Filter`: `json`, `datetime`, `point`, `linestring`,
+  `polygon`, `vector`, `object`) throws `Exception\Duplicate`. A codec that needs the document or the database is a
+  global filter: register it with `addFilter()`.
+- List a filter in an attribute's `filters`, by name or as a `Filter` case.
 
 ## Adapters
 
-This section matters if you check adapter capabilities, subclass an adapter or write your own.
+This section matters if you check adapter capabilities, read adapter limits, subclass an adapter or write your own.
+[docs/add-new-adapter.md](docs/add-new-adapter.md) describes the contract a new adapter implements.
 
-### Capabilities and feature interfaces
+### Capabilities and features
 
-The 51 `getSupportFor*()` methods of `Adapter` are removed. A behaviour flag is now a `Utopia\Database\Capability`
-case checked with `$adapter->supports(Capability::X)`. A group of methods an adapter may or may not implement is a
-`Utopia\Database\Adapter\Feature\*` interface, checked with `$adapter->hasFeature(Feature\X::class)`. Prefer
-`hasFeature()` to `instanceof`: `Adapter\Pool` forwards the optional feature methods to the adapter it borrows
+The 51 `getSupportFor*()` methods of `Adapter` are removed. A behaviour flag is a `Utopia\Database\Capability` case
+checked with `$adapter->supports(Capability::X)`. A group of methods an adapter may or may not implement is an
+optional `Utopia\Database\Adapter\Feature\*` interface, checked with `$adapter->hasFeature(Feature\X::class)`. Use
+`hasFeature()`, never `instanceof`: `Adapter\Pool` forwards the optional feature methods to the adapter it borrows
 without implementing their interfaces, so only `hasFeature()` answers correctly for a pooled adapter.
+`$database->profile()` answers both without asking the adapter again (see [Limits and profile](#limits-and-profile)).
 
 | 7.x | 8.0 |
 |---|---|
 | `getSupportForAlterLocks()` | `supports(Capability::AlterLock)` |
 | `getSupportForAttributeResizing()` | `supports(Capability::AttributeResizing)` |
 | `getSupportForAttributes()` | `supports(Capability::DefinedAttributes)` |
-| `getSupportForBatchCreateAttributes()` | `supports(Capability::BatchCreateAttributes)` |
-| `getSupportForBatchOperations()` | `supports(Capability::BatchOperations)` |
-| `getSupportForBoundaryInclusiveContains()` | `supports(Capability::BoundaryInclusive)` |
-| `getSupportForCacheSkipOnFailure()` | `supports(Capability::CacheSkipOnFailure)` |
 | `getSupportForCaching()` | `supports(Capability::Caching)` |
-| `getSupportForCastIndexArray()` | `supports(Capability::CastIndexArray)` |
-| `getSupportForCasting()` | `supports(Capability::Casting)` |
-| `getSupportForDistanceBetweenMultiDimensionGeometryInMeters()` | `supports(Capability::MultiDimensionDistance)` |
-| `getSupportForFulltextIndex()` | `supports(Capability::Fulltext)` |
-| `getSupportForFulltextWildcardIndex()` | `supports(Capability::FulltextWildcard)` |
-| `getSupportForGetConnectionId()` | `hasFeature(Feature\ConnectionId::class)` |
-| `getSupportForHostname()` | `supports(Capability::Hostname)` |
-| `getSupportForIdenticalIndexes()` | `supports(Capability::IdenticalIndexes)` |
-| `getSupportForIndex()` | `supports(Capability::Index)` |
+| `getSupportForCastIndexArray()` | `supports(Capability::IndexArrayCast)` |
+| `getSupportForCasting()` | `! hasFeature(Feature\Casting::class)`: the library casts the values of every adapter that does not implement `Feature\Casting` |
+| `getSupportForFulltextIndex()` | `supports(Capability::IndexFulltext)` |
+| `getSupportForFulltextWildcardIndex()` | `supports(Capability::IndexFulltextWildcard)` |
+| `getSupportForGetConnectionId()`, `getSupportForHostname()`, `getSupportForReconnection()` | `hasFeature(Feature\Connection::class)` |
+| `getSupportForIdenticalIndexes()` | `supports(Capability::IndexIdentical)` |
+| `getSupportForIndex()` | `supports(Capability::IndexKey)` |
 | `getSupportForIndexArray()` | `supports(Capability::IndexArray)` |
 | `getSupportForIntegerBooleans()` | `supports(Capability::IntegerBooleans)` |
-| `getSupportForInternalCasting()` | `hasFeature(Feature\InternalCasting::class)` |
-| `getSupportForJSONOverlaps()` (SQL adapters) | `supports(Capability::JSONOverlaps)` |
-| `getSupportForMultipleFulltextIndexes()` | `supports(Capability::MultipleFulltextIndexes)` |
-| `getSupportForNestedTransactions()` | `supports(Capability::NestedTransactions)` |
-| `getSupportForNumericCasting()` (SQL adapters) | `supports(Capability::NumericCasting)` |
+| `getSupportForInternalCasting()`, `getSupportForUTCCasting()` | `hasFeature(Feature\Casting::class)` |
+| `getSupportForMultipleFulltextIndexes()` | `supports(Capability::IndexFulltextMultiple)` |
+| `getSupportForNestedTransactions()` | `supports(Capability::TransactionNested)` |
 | `getSupportForObject()` | `supports(Capability::Objects)` |
-| `getSupportForObjectIndexes()` | `supports(Capability::ObjectIndexes)` |
+| `getSupportForObjectIndexes()` | `supports(Capability::IndexObject)` |
 | `getSupportForOperators()` | `supports(Capability::Operators)` |
-| `getSupportForOptionalSpatialAttributeWithExistingRows()` | `supports(Capability::OptionalSpatial)` |
 | `getSupportForOrderRandom()` | `supports(Capability::OrderRandom)` |
-| `getSupportForPCRERegex()` | `supports(Capability::PCRE)` |
-| `getSupportForPOSIXRegex()` | `supports(Capability::POSIX)` |
-| `getSupportForQueryContains()` | `supports(Capability::QueryContains)` |
-| `getSupportForReconnection()` | `supports(Capability::Reconnection)` |
-| `getSupportForRegex()` | `supports(Capability::Regex)` |
 | `getSupportForRelationships()` | `hasFeature(Feature\Relationships::class)` |
-| `getSupportForSchemaAttributes()` | `hasFeature(Feature\SchemaAttributes::class)` |
-| `getSupportForSchemaIndexes()` | `hasFeature(Feature\SchemaIndexes::class)` |
+| `getSupportForSchemaAttributes()`, `getSupportForSchemaIndexes()` | `supports(Capability::SchemaIntrospection)` |
 | `getSupportForSchemas()` | `supports(Capability::Schemas)` |
 | `getSupportForSpatialAttributes()` | `hasFeature(Feature\Spatial::class)` |
 | `getSupportForSpatialAxisOrder()` | `supports(Capability::SpatialAxisOrder)` |
-| `getSupportForSpatialIndexNull()` | `supports(Capability::SpatialIndexNull)` |
-| `getSupportForSpatialIndexOrder()` | `supports(Capability::SpatialIndexOrder)` |
-| `getSupportForTTLIndexes()` | `supports(Capability::TTLIndexes)` |
+| `getSupportForSpatialIndexNull()` | `supports(Capability::IndexSpatialNull)` |
+| `getSupportForSpatialIndexOrder()` | `supports(Capability::IndexSpatialOrder)` |
+| `getSupportForTTLIndexes()` | `supports(Capability::IndexTtl)` |
 | `getSupportForTimeouts()` | `hasFeature(Feature\Timeouts::class)` |
 | `getSupportForTransactionRetries()` | `supports(Capability::TransactionRetries)` |
-| `getSupportForTrigramIndex()` | `supports(Capability::TrigramIndex)` |
-| `getSupportForUTCCasting()` | `hasFeature(Feature\UTCCasting::class)` |
-| `getSupportForUniqueIndex()` | `supports(Capability::UniqueIndex)` |
+| `getSupportForTrigramIndex()` | `supports(Capability::IndexTrigram)` |
+| `getSupportForUniqueIndex()` | `supports(Capability::IndexUnique)` |
 | `getSupportForUnsignedBigInt()` | `supports(Capability::UnsignedBigInt)` |
 | `getSupportForUpdateLock()` | `supports(Capability::UpdateLock)` |
 | `getSupportForUpsertOnUniqueIndex()` | `supports(Capability::UpsertOnUniqueIndex)` |
 | `getSupportForUpserts()` | `hasFeature(Feature\Upserts::class)` |
 | `getSupportForVectors()` | `supports(Capability::Vectors)` |
+| `getSupportNonUtfCharacters()` | `supports(Capability::NonUtfCharacters)` |
+| `getSupportForBatchCreateAttributes()`, `getSupportForBatchOperations()`, `getSupportForBoundaryInclusiveContains()`, `getSupportForCacheSkipOnFailure()`, `getSupportForDistanceBetweenMultiDimensionGeometryInMeters()`, `getSupportForJSONOverlaps()`, `getSupportForNumericCasting()`, `getSupportForOptionalSpatialAttributeWithExistingRows()`, `getSupportForPCRERegex()`, `getSupportForPOSIXRegex()`, `getSupportForQueryContains()`, `getSupportForRegex()` | No replacement: every adapter behaves the same way, or nothing branches on the answer |
 
-`Capability::Upserts`, `Capability::Subqueries`, `Capability::CTEs` and `Capability::WindowFunctions`, which the 8.0
-pre-releases had, are removed: check upsert support with `hasFeature(Feature\Upserts::class)`. Every remaining case
-is declared by at least one adapter. SQLite and MongoDB now report `Capability::QueryContains`. On Memory and Redis
-`setSupportForAttributes(false)` returns `true` and changes nothing: they always enforce the collection's
-attributes, and only MongoDB has a schemaless mode.
+`Capability::Joins` and `Capability::Aggregations` are new. `Capability::SchemaIntrospection` is declared by MariaDB,
+MySQL, SQLite and PostgreSQL. Every case is declared by at least one adapter. To list what an adapter reports, call
+`$adapter->capabilities()`.
 
-The methods that went with a feature moved to its interface: `getConnectionId()` (`Feature\ConnectionId`),
-`getSchemaAttributes()` and `getSchemaIndexes()` (`Feature\SchemaAttributes`, `Feature\SchemaIndexes`),
-`setTimeout()` and `clearTimeout()` (`Feature\Timeouts`), `createRelationship()`, `updateRelationship()` and
-`deleteRelationship()` (`Feature\Relationships`), `upsertDocuments()` (`Feature\Upserts`), `getColumnType()`
-(`Feature\ColumnTypes`), `decodePoint()`, `decodeLinestring()` and `decodePolygon()` (`Feature\Spatial`),
-`castingBefore()`, `castingAfter()` and `castingAfterDocuments()` (`Feature\InternalCasting`), and `setUTCDatetime()`
-(`Feature\UTCCasting`).
-An adapter that does not support a feature no longer declares its methods: for example, only MongoDB implements
-`Feature\InternalCasting` and `Feature\UTCCasting`, so the SQL, Memory and Redis adapters no longer have
-`castingBefore()`, `castingAfter()`, `castingAfterDocuments()` or `setUTCDatetime()`. A custom adapter that implements
-`Feature\InternalCasting` has to implement `castingAfterDocuments(Document $collection, array $documents): array`, which
-casts a page of read documents as `castingAfter()` casts one and returns them under the keys they were given with;
-`Database` calls it once per page or batch in `find()`, `createDocuments()`, `updateDocuments()` and
-`upsertDocuments()`. `Adapter\Pool` and `Adapter\ReadWritePool` delegate it in one connection checkout, the latter as a
-read that opens no sticky window. The SQL adapters also implement `Feature\RawQuery`
-(`rawQuery()`, `rawMutation()`) and `Feature\QueryBuilder` (`getBuilder()`, `getSchema()`). To list what an adapter
-reports, call `$adapter->capabilities()`.
+The optional features:
+
+| Interface | Methods | Implemented by |
+|---|---|---|
+| `Feature\Casting` | `castBefore(Document $collection, Document $document): Document`, `castAfter(Document $collection, array $documents): array`, `castDatetime(string $value): mixed` | MongoDB |
+| `Feature\Connection` | `ping(): bool`, `reconnect(): void`, `id(): string`, `hostname(): string` | the SQL adapters, MongoDB, Redis |
+| `Feature\QueryBuilder` | `builder(string $collection): Builder`, `schema(): Schema` | the SQL adapters |
+| `Feature\RawQuery` | `rawQuery(string $query, array $bindings = []): array`, `rawMutation(string $query, array $bindings = []): int` | the SQL adapters |
+| `Feature\Relationships` | `createRelationship(string $collection, Relationship $relationship): bool`, `updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, RelationshipUpdate $update): bool`, `deleteRelationship(string $collection, Relationship $relationship, RelationshipSide $side): bool` | the SQL adapters, MongoDB, Memory, Redis |
+| `Feature\Schemaless` | `setSchemaless(bool $schemaless): static`, `isSchemaless(): bool` | MongoDB |
+| `Feature\Spatial` | `encode(mixed $value, ColumnType $type): string`, `decode(string $value, ColumnType $type): array` | MariaDB, MySQL, PostgreSQL |
+| `Feature\Timeouts` | `setTimeout(int $milliseconds, Event $event = Event::All): void`, `clearTimeout(Event $event = Event::All): void`, `getTimeout(Event $event = Event::All): int` | MariaDB, MySQL, PostgreSQL, MongoDB, `Pool` |
+| `Feature\Upserts` | `upsertDocument(Document $collection, Change $change): Document`, `upsertDocuments(Document $collection, array $changes, ?string $increase = null): array` | the SQL adapters, MongoDB, Redis |
+
+`Change` is `final readonly` with public `old` and `new`; 7.x's `getOld()`, `setOld()`, `getNew()` and `setNew()` are
+removed.
+
+```php
+// 7.x
+if ($adapter->getSupportForFulltextIndex() && $adapter->getSupportForTimeouts()) {
+    $adapter->setTimeout(5000);
+}
+$limit = $adapter->getLimitForAttributes();
+
+// 8.0
+if ($adapter->supports(Capability::IndexFulltext) && $adapter->hasFeature(Feature\Timeouts::class)) {
+    $database->setTimeout(5000);
+}
+$limit = $adapter->limits()->attributes;
+```
+
+### Limits and profile
+
+The 16 per-limit getters of `Adapter` are one `Adapter\Limits` value, `$adapter->limits()`:
+
+| 7.x | `Limits` property |
+|---|---|
+| `getLimitForString()`, `getMaxVarcharLength()` | `string`, `varchar` |
+| `getLimitForInt()`, `getLimitForBigInt()` | `integer`, `bigInteger` |
+| `getLimitForAttributes()`, `getLimitForIndexes()` | `attributes`, `indexes` |
+| `getCountOfDefaultAttributes()`, `getCountOfDefaultIndexes()` | `defaultAttributes`, `defaultIndexes` |
+| `getMaxIndexLength()`, `getMaxUIDLength()`, `getDocumentSizeLimit()` | `indexLength`, `uidLength`, `documentSize` |
+| `getMinDateTime()`, `getMaxDateTime()` | `minDateTime`, `maxDateTime` |
+| `getIdAttributeType()` | `idType` (a `ColumnType`) |
+| `getKeywords()`, `getInternalIndexesKeys()` | `keywords`, `internalIndexKeys` |
+
+`Database` keeps `getLimitForAttributes()`, `getLimitForIndexes()`, `getMaxIndexLength()`, `getMaxVarcharLength()`,
+`getMinDateTime()`, `getMaxDateTime()`, `getIdAttributeType()` and `getMaxUidLength()` (7.x adapters spelled it
+`getMaxUIDLength()`), all read from `limits()`.
+
+`$database->profile(): Adapter\Profile` snapshots the adapter's `limits`, `capabilities`, `features`, `sharedTables`
+and `migrating` once per `Database`, and is rebuilt by `setSharedTables()`, `setMigrating()` and `setSchemaless()`.
+Its `supports()` and `hasFeature()` answer without a call into the adapter, except
+`supports(Capability::DefinedAttributes)`, which it asks the adapter every time, because a pooled connection's
+schema mode can change. The validators take it (see [Validators and helpers](#validators-and-helpers)).
+
+### Schemaless mode
+
+`setSupportForAttributes(bool $support)` is removed from every adapter. Switch MongoDB's schemaless mode with
+`$database->setSchemaless(! $support)` (`Feature\Schemaless`), which also rebuilds the profile;
+`setSchemaless(true)` throws on an adapter that always enforces its attributes. Calling the adapter's
+`setSchemaless()` directly leaves the `Database` profile stale. `Adapter\Pool` puts every borrowed connection in the
+mode.
+
+### Connection feature
+
+- `ping()`, `reconnect()`, `getConnectionId()` and `getHostname()` are `Feature\Connection`'s `ping()`, `reconnect()`,
+  `id()` and `hostname()`. Memory has no connection. `Database::ping()`, `reconnect()`, `getConnectionId()` and
+  `getHostname()` forward them.
+- SQLite and MongoDB report their handle's `spl_object_id()` as the connection id, which is unique only within the
+  process; Redis reports `'0'`.
+- The protected `SQL::getPDO()` is removed: `getDriver(): object` returns the PDO (or proxy). `getDriver()` returns
+  the adapter itself on Memory and the client on Redis.
+- `SQL::getPDOAttributes()` is removed. Pass PDO attributes yourself when you connect (`ATTR_ERRMODE =>
+  ERRMODE_EXCEPTION`, `ATTR_DEFAULT_FETCH_MODE => FETCH_ASSOC`, `ATTR_EMULATE_PREPARES => true`,
+  `ATTR_STRINGIFY_FETCHES => true`, and a timeout as you need).
+- `Adapter::clearTimeouts()` is removed: `clearTimeout(Event::All)` clears every event.
 
 ### Writing or subclassing an adapter
 
-- `Adapter` now implements `Feature\Attributes`, `Feature\Collections`, `Feature\Databases`, `Feature\Documents`,
-  `Feature\Indexes` and `Feature\Transactions`. Report optional behaviour by overriding `capabilities()`, and
-  implement the `Feature` interfaces your adapter supports.
+- The abstract methods of `Adapter` are the whole mandatory contract. 8.0 pre-releases also declared them in six
+  `Feature` interfaces (`Attributes`, `Collections`, `Databases`, `Documents`, `Indexes`, `Transactions`), which are
+  removed. Report optional behaviour by overriding `capabilities()`, and implement the optional `Feature`
+  interfaces your adapter supports.
 - `Adapter\SQLite` now extends `Adapter\SQL` instead of `Adapter\MariaDB`. A check like
   `$adapter instanceof MariaDB` no longer matches SQLite: check capabilities and features instead. The MariaDB
-  methods SQLite inherited in 7.x, such as `getConnectionId()`, `setTimeout()` and `getViolatedKey()`, are no longer
-  available on it.
+  methods SQLite inherited in 7.x, such as `setTimeout()` and `getViolatedKey()`, are no longer available on it.
 - Changed adapter signatures:
 
   | 7.x | 8.0 |
   |---|---|
+  | `exists(string $database, ?string $collection = null): bool` | `exists(string $database): bool` and `collectionExists(string $database, string $collection): bool` |
+  | — | `update(string $name, string $new): bool` (abstract; see [Renaming a database](#renaming-a-database)) |
+  | `createCollection(string $name, array $attributes = [], array $indexes = [])` | `createCollection(string $collection, array $attributes = [], array $indexes = [])` with lists of `Attribute` and `Index` |
+  | `deleteCollection(string $id)` | `deleteCollection(string $collection)` |
   | `createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, bool $required = false)` | `createAttribute(string $collection, Attribute $attribute)` |
-  | `updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null, bool $required = false)` | `updateAttribute(string $collection, Attribute $attribute, ?string $newKey = null)` |
+  | `updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null, bool $required = false)` | `updateAttribute(string $collection, string $key, Attribute $attribute)`; the target key is `$attribute->key` |
+  | `deleteAttribute(string $collection, string $id)` | `deleteAttribute(string $collection, string $key)` |
   | `createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = [], array $collation = [], int $ttl = 1)` | `createIndex(string $collection, Index $index, array $indexAttributeTypes = [], array $collation = [])` |
-  | `createRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay = false, string $id = '', string $twoWayKey = '')` | `createRelationship(Relationship $relationship)` |
-  | `updateRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, string $side, ?string $newKey = null, ?string $newTwoWayKey = null)` | `updateRelationship(Relationship $relationship, ?string $newKey = null, ?string $newTwoWayKey = null)` |
-  | `deleteRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, string $side)` | `deleteRelationship(Relationship $relationship)` |
+  | `deleteIndex(string $collection, string $id)` | `deleteIndex(string $collection, string $key)` |
+  | `createRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay = false, string $id = '', string $twoWayKey = '')` | `Feature\Relationships::createRelationship(string $collection, Relationship $relationship)` |
+  | `updateRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, string $side, ?string $newKey = null, ?string $newTwoWayKey = null)` | `Feature\Relationships::updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, RelationshipUpdate $update)` |
+  | `deleteRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, string $side)` | `Feature\Relationships::deleteRelationship(string $collection, Relationship $relationship, RelationshipSide $side)` |
+  | `deleteDocument(string $collection, string $id)`, `deleteDocuments(string $collection, ...)`, `increaseDocumentAttribute(string $collection, ...)`, `getSequences(string $collection, ...)` | Take the collection `Document`, like every other document method |
+  | `upsertDocuments(Document $collection, string $attribute, array $changes)` | `Feature\Upserts::upsertDocuments(Document $collection, array $changes, ?string $increase = null)`, plus `upsertDocument(Document $collection, Change $change)` |
+  | `getSchemaAttributes(string $collection): array`, `getSchemaIndexes(string $collection): array` | Abstract, returning `list<Schema\Column>` and `list<Schema\Index>` |
+  | `getColumnType(string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string` | `getColumnType(Attribute $attribute): ?string` (abstract; `null` on non-SQL adapters) |
+  | `castingBefore()`, `castingAfter(Document $collection, Document $document)`, `setUTCDatetime()` | `Feature\Casting::castBefore()`, `castAfter(Document $collection, array $documents)` over a page, `castDatetime()` |
+  | `decodePoint()`, `decodeLinestring()`, `decodePolygon()` | `Feature\Spatial::encode()` and `decode(string $value, ColumnType $type)`; the per-shape decoders are protected |
   | `find(..., string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ)` | `find(..., CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read)`; `$orderTypes` holds `OrderDirection` cases |
-  | `setTimeout(int $milliseconds, string $event = Database::EVENT_ALL)`, `clearTimeout(string $event)` | `setTimeout(int $milliseconds, Event $event = Event::All)`, `clearTimeout(Event $event = Event::All)` |
-  | `getTimeout(): int` | `getTimeout(Event $event = Event::All): int` |
+  | `setTimeout(int $milliseconds, string $event = Database::EVENT_ALL)`, `clearTimeout(string $event)`, `getTimeout(): int` | `Feature\Timeouts`, with `Event $event = Event::All` on all three |
   | `increaseDocumentAttribute(..., int\|float $value, ..., int\|float\|null $min = null, int\|float\|null $max = null)` | Numbers may also be numeric strings (`string\|int\|float`), for unsigned 64-bit values |
+  | `supports()` and the getters taking a `$name`/`$id` | Parameters named `$capability`, `$collection` and `$key` |
   | `SQL::__construct(mixed $pdo)` | `SQL::__construct(object $pdo)`: a `Utopia\Database\PDO`, a PDO-compatible proxy or a native `PDO` |
-  | `SQL::deleteAttribute(string $collection, string $id, bool $array = false)` | `deleteAttribute(string $collection, string $id)` |
-  | `SQL::execute(mixed $stmt)` | `execute(mixed $stmt, ?Event $event = null)` |
-  | `SQL::getSQLType(string $type, ...)` | Takes `ColumnType` cases |
-  | `SQL::getOperatorSQL(string $column, Operator $operator, array &$binds)` | `getOperatorSQL(string $column, Operator $operator, int &$bindIndex)` |
+  | `SQL::deleteAttribute(string $collection, string $id, bool $array = false)` | `deleteAttribute(string $collection, string $key)` |
+  | `SQL::execute(mixed $statement)` | `execute(mixed $statement, ?Event $event = null)`, on `Adapter\SQL` only |
+  | `SQL::getSQLType(string $type, ...)` | `getSqlType()`, taking `ColumnType` cases |
+  | `SQL::getOperatorSQL(string $column, Operator $operator, array &$binds)` | `getOperatorSql(string $column, Operator $operator, int &$bindIndex)` |
+  | `setDatabase()`, `setSharedTables()`, `setTenant()`, `setTenantPerDocument()`: `bool` | Return `static` |
 
+- Protected and public methods use camel-cased acronyms and full words. Rename your overrides:
+
+  | 7.x | 8.0 |
+  |---|---|
+  | `getSQLTable()`, `getSQLTableRaw()` | `getTable()`, `getTableRaw()` |
+  | `getSQLType()`, `getSQLIndex()`, `getSpatialSQLType()`, `getOperatorSQL()`, `getPDOType()`, `getSQLReadableDistance()`, `getFTS5Value()` | `getSqlType()`, `getSqlIndex()`, `getSpatialSqlType()` (protected on MySQL too), `getOperatorSql()`, `getPdoType()`, `getSqlReadableDistance()`, `getFts5Value()` |
+  | `convertArrayToWKT()`, `isExtendedISODatetime()`, `convertUTCDateToString()` | `convertArrayToWkt()`, `isExtendedIsoDatetime(string $value)`, `convertUtcDateToString()` |
+  | `bindOperatorParams()`, `getIdentifierQuoteChar()` | `bindOperatorParameters()`, `getIdentifierQuote()` |
+  | `getSpatialGeomFromText()`, `getSpatialAxisOrderSpec()` | `getSpatialGeometryFromText()`, `getSpatialAxisOrder()` |
+  | `replaceChars()` | `replaceCharacters()` |
+  | `Redis::tx()` | `Redis::transaction()` |
+  | `getLockType()` (SQL), `listCollections()` and `getTenantFilters()` (MongoDB) | Protected |
+  | Parameters `$stmt`, `$fn`, `$op`, `$attrs`, `$val`, `$quoteChar` | `$statement`, `$callback`, `$operation`, `$attributes`, `$value`, `$quoteCharacter` |
+
+- `quote()` and `execute()` are declared on `Adapter\SQL` only. Keywords and internal index keys are `Limits` fields.
 - `Adapter::relaxAttributeRequired(string $collection, string $id): bool` is new. The library calls it when an
   attribute becomes optional without a column change; it does nothing by default, and PostgreSQL drops the column's
   `NOT NULL` there.
 - `SQL::getSpatialColumnSrid(): ?int` (protected) is new. It returns the SRID written into spatial column
-  definitions, or `null` for a dialect that cannot declare one (MariaDB). `SQL::getSpatialSQLType()` follows it as
+  definitions, or `null` for a dialect that cannot declare one (MariaDB). `getSpatialSqlType()` follows it as
   well, so a dialect returning `null` declares spatial columns without an SRID on `createCollection()`,
   `createAttribute()`, `createAttributes()` and `updateAttribute()` alike.
 - `SQL::insertOrIgnore(SQLBuilder $builder): Statement`, `SQL::supportsInsertReturning(): bool` and
-  `SQL::documentKeyColumns(): array` (protected) are new. Under `skipDuplicates()` an adapter's `createDocuments()`
+  `SQL::documentKeyColumns(): array` (protected) are new. Under `ignoreDuplicates()` an adapter's `createDocuments()`
   must return only the documents it inserted; the SQL adapters learn them from `RETURNING`, or, where
   `supportsInsertReturning()` is false (MySQL), from reading the ids before and, when rows were skipped, after the
   insert.
 - `SQL` declares `abstract protected function getColumnNames(string $collection): array` (the table's physical
   column names, empty when the table is missing). `SQL::renameAttribute()` and the engines' `updateAttribute()` use
-  it through `isRenamed()` to complete a rename another tenant of a shared table already ran.
+  it to complete a rename another tenant of a shared table already ran.
 - `SQL::getNullOrder(): OrderDirection` (protected) returns the direction in which the engine sorts null before
   every other value (`OrderDirection::Asc` by default; the PostgreSQL adapter returns `OrderDirection::Desc`). A SQL
   adapter for an engine that sorts nulls last in ascending order overrides it, or a cursor over a joined read skips
   or repeats rows holding null.
-- Declare `Capability::NestedTransactions` only when a failed nested transaction rolls back to its savepoint and
+- Declare `Capability::TransactionNested` only when a failed nested transaction rolls back to its savepoint and
   leaves the enclosing transaction open. `Database` drops the `document_purge` events of a failed nested call only
   on such adapters; without it they fire with the enclosing commit.
 - `Adapter::abandonTransaction(): void` (protected, a no-op by default) is new. The outermost `withTransaction()`
@@ -969,23 +1514,65 @@ reports, call `$adapter->capabilities()`.
   adapter whose connection can still hold part of it (a transaction lost with the connection, or one a failed
   rollback left open) ends it there. The SQL adapters roll back whatever the connection still reports.
 - `Adapter::skippingDuplicates(): bool` and `Database::skippingDuplicates(): bool` (protected) report whether the
-  calling coroutine runs under `skipDuplicates()`. Read them instead of the `$skipDuplicates` property hook.
+  calling coroutine runs under `ignoreDuplicates()`.
 - `Utopia\Database\PDOStatement::getQueryString(): string` returns the wrapped statement's `queryString` without
   going through the magic `__get()`.
 - `Adapter::withTenant($tenant, $callback)` scopes the tenant to the calling coroutine. `Database::withTenant()` uses
   it and no longer calls `setTenant()`, so an adapter that overrides `setTenant()` to react to tenant changes has to
   key such state by `getTenant()` instead.
+- Write hooks and the tenant hook are registered by the library. `hasTenantHook()` and `hasPermissionHook()` are
+  removed; `getTenantHook()` and `getWriteHooks()` are internal. `removeWriteHook()` also takes an instance.
+
+### Methods an adapter no longer has
+
+Methods that went with a feature exist only on the adapters that implement it, and the limit getters are gone from
+every adapter. Besides the `getSupportFor*()` methods and the per-limit getters, these public 7.x methods are gone:
+
+| Adapter | Removed public methods | Use instead |
+|---|---|---|
+| Every adapter | `getConnectionId()`, `getHostname()`, `ping()`, `reconnect()` on the base class | `Feature\Connection` (`id()`, `hostname()`, `ping()`, `reconnect()`) where implemented; the `Database` forwards |
+| Every adapter | `setSupportForAttributes()`, `getSupportNonUtfCharacters()`, `clearTimeouts()`, `enableAlterLocks()`, `getKeywords()`, `getInternalIndexesKeys()`, `getTenantQuery()`, `before()`, `setDebug()`, `getDebug()`, `resetDebug()` | See the sections above |
+| Every adapter | `getColumnType(string $type, ...)` | `getColumnType(Attribute $attribute)` |
+| SQL adapters (MariaDB, MySQL, PostgreSQL, SQLite) | `castingBefore()`, `castingAfter()`, `setUTCDatetime()`, `decodePoint()`, `decodeLinestring()`, `decodePolygon()`, `getPDOAttributes()`, `getSpatialTypeFromWKT()`, `getLikeOperator()`, `getRegexOperator()`, `getSQLConditions()` | Library casting; `encode()`/`decode()`; your own PDO attributes; the query builders |
+| MariaDB | `getSpatialSQLType()` (public in 7.4) | Protected `getSpatialSqlType()` |
+| MySQL | `getSpatialSQLType()` (public) | Protected `getSpatialSqlType()` |
+| SQLite | `setEmulateMySQL()`, `getEmulateMySQL()`, and the MariaDB methods it inherited (`setTimeout()`, `getViolatedKey()`, ...) | A subclass with `protected bool $emulateMySQL = true` |
+| MongoDB | `getConnectionId()` is now `id()`; `getSchemaAttributes()` and `getSchemaIndexes()` return `[]`; `castingBefore()`, `castingAfter()`, `setUTCDatetime()`; `listCollections()` and `getTenantFilters()` (now protected); `setSupportForAttributes()` | `id()`; no introspection; `Feature\Casting`; `Database::listCollections()`; `setSchemaless()` |
+| Memory | `getConnectionId()`, `ping()`, `reconnect()`, `getHostname()`, `upsertDocuments()` | None: Memory has no connection and no upserts (`Feature\Upserts`) |
+| Memory, Redis | `castingBefore()`, `castingAfter()`, `setUTCDatetime()`, `decodePoint()`, `decodeLinestring()`, `decodePolygon()` | Library casting; no spatial attributes |
+| Redis | `tx()` | `transaction()` |
+
+### Pool extension points
+
+`Adapter\Pool` subclasses override its protected extension points. These signatures are stable in 8.0; mark every
+override `#[\Override]` so that a later rename fails loudly instead of being skipped. Renamed against 7.x and the
+8.0 pre-releases:
+
+| Before | 8.0 |
+|---|---|
+| `delegate(string $method, array $args): mixed` | `delegate(string $method, array $arguments): mixed` (public) |
+| `delegateFeature(string $feature, string $method, array $args)` | `delegateFeature(string $feature, string $method, array $arguments)`; `$feature` names an optional feature |
+| `borrowAndInvoke(string $method, array $args, ?string $feature = null)` | `borrowAndInvoke(string $method, array $arguments, ?string $feature = null)` |
+| `invokeDelegated(Adapter $adapter, string $method, array $args, ?string $feature = null)` | `invokeDelegated(Adapter $adapter, string $method, array $arguments, ?string $feature = null)` |
+| `syncBorrowedAdapter(Adapter $adapter)` | `syncBorrowed(Adapter $adapter)` |
+| `releaseBorrowedAdapter(Adapter $adapter)` | `releaseBorrowed(Adapter $adapter)` |
+| `getHostname(): string`, `ping(): bool` | `hostname(): string`, `ping(): bool` (`Feature\Connection` methods, which `Pool` forwards) |
+
+`pin()`, `withTransaction()`, `inTransaction()` and `getReadConcurrency()` are unchanged. The protected
+`Pool::$pinnedAdapter` property is removed (see [Pools and profiling](#pools-and-profiling)). `Pool` implements
+`Feature\Timeouts` itself and forwards every other optional feature through `delegateFeature()`.
 
 ### Removed adapter methods
 
-Queries now compile through the utopia-php/query builders (`getBuilder()`, `createBuilder()`), transforms through
-`Hook\Transform`, and tenant and permission conditions through hooks in `Utopia\Database\Hook`. The 7.x methods
+Queries now compile through the utopia-php/query builders (`builder()`, `createBuilder()`), transforms through
+`Hook\Transform`, and tenant and permission conditions through the hooks in `Utopia\Database\Adapter\SQL\Hook` and
+`Utopia\Database\Hook\Mongo`. The 7.x methods
 behind the old string-building path are removed. Nothing in 8.0 calls them, so an adapter subclass that overrides or
 calls one must drop the override or the call.
 
 | Removed | Visibility in 7.x | Replacement |
 |---|---|---|
-| `SQL::getSQLConditions(array $queries, array &$binds, string $separator = 'AND', ?string $forCollection = null)` | public | The adapter's query builder (`getBuilder()` / `createBuilder()`) |
+| `SQL::getSQLConditions(array $queries, array &$binds, string $separator = 'AND', ?string $forCollection = null)` | public | The adapter's query builder (`builder()` / `createBuilder()`) |
 | `SQL::getSQLConditionsForCollection()` | protected | The same |
 | `getSQLCondition(Query $query, array &$binds, ?string $forCollection = null)` on `SQL` (abstract), `MariaDB`, `Postgres` and `SQLite` | protected | The same |
 | `SQL::getSQLOperator()` | protected | The same |
@@ -993,20 +1580,20 @@ calls one must drop the override or the call.
 | `handleDistanceSpatialQueries()` on `MariaDB`, `MySQL` and `Postgres` | protected | The same |
 | `Postgres::handleObjectQueries()` | protected | The same |
 | `SQLite::getLikeCondition()` | protected | The same. SQLite's `LIKE ... ESCAPE` lives in `Utopia\Database\Builder\SQLite` |
-| `getSQLPermissionsCondition()` on `SQL` and `Postgres` | protected | The permission hooks in `Utopia\Database\Hook` (`PermissionFilter` and the join filters) |
+| `getSQLPermissionsCondition()` on `SQL` and `Postgres` | protected | The permission hooks in `Utopia\Database\Adapter\SQL\Hook\Permission` (`Filter`, `Join`, `OuterJoin`) |
 | `getSQLVectorDistance()` on `SQL` and `Postgres` | protected | The query builder |
-| `Adapter::getTenantQuery()` (abstract) and its implementations on `SQL`, `Memory`, `Redis`, `Pool` and `Mongo` | public | `Hook\TenantFilter` (SQL) and `Hook\Mongo\TenantFilter` (MongoDB) |
+| `Adapter::getTenantQuery()` (abstract) and its implementations on `SQL`, `Memory`, `Redis`, `Pool` and `Mongo` | public | `Adapter\SQL\Hook\Tenant\Filter` (SQL) and `Hook\Mongo\Tenant` (MongoDB) |
 | `getInsertKeyword()` on `SQL`, `Postgres` and `SQLite`, and `getInsertSuffix()` and `getInsertPermissionsSuffix()` on `SQL` and `Postgres` | protected | `SQL::insertOrIgnore(SQLBuilder $builder): Statement`, which `Postgres` overrides to name the id as the conflict target |
 | `getUpsertStatement()` on `SQL` (abstract), `MariaDB`, `Postgres` and `SQLite` | protected, public on `MariaDB` and `SQLite` | The same |
-| `SQL::registerOperatorBind()` | protected | `getOperatorSQL()` binds operator values itself |
-| `SQL::getFulltextValue()` and `Postgres::getFulltextValue()` | protected | utopia-php/query's builders normalize search terms (`compileSearchExpr()`) |
+| `SQL::registerOperatorBind()` | protected | `getOperatorSql()` binds operator values itself |
+| `SQL::getFulltextValue()` and `Postgres::getFulltextValue()` | protected | utopia-php/query's builders normalize search terms (`compileSearchExpression()`) |
 | `Adapter::before()` and `Adapter::trigger()` | public, protected | `Hook\Transform`, registered with `Database::addHook()` |
 | `SQL::getLikeOperator()`, `SQL::getRegexOperator()`, `Postgres::getLikeOperator()` and `Postgres::getRegexOperator()` | public | The query builders emit `LIKE`/`ILIKE` and `REGEXP`/`~` |
 | `Adapter::getAttributeProjection()` (abstract) and its implementations on `SQL`, `Memory`, `Redis` and `Pool` (`Mongo` keeps a private one) | protected | The query builders build the projection |
 | `getRandomOrder()` on `SQL` (abstract), `MariaDB`, `Postgres` and `SQLite` | protected | The query builders' `compileRandom()` emits `RAND()`/`RANDOM()` for `Query::orderRandom()` |
 | `SQL::getSpatialTypeFromWKT()` | public | None. The type is the text before the first `(` of the WKT, lower-cased |
 | `getSQLIndexType()` on `SQL` and `SQLite` | protected | Each adapter's `createIndex()`, which builds the whole index statement |
-| `Postgres::getSQLSchema()` | protected | `getSQLTable()`, which qualifies the table with the schema |
+| `Postgres::getSQLSchema()` | protected | `getTable()`, which qualifies the table with the schema |
 | `Postgres::encodeArray()` and `Postgres::decodeArray()` | protected | None. Array attributes are `JSONB` columns |
 | `Memory::unregisterRelationshipField()` | protected | None |
 
@@ -1127,6 +1714,9 @@ of throwing `Exception\Duplicate`, unless the server itself reports the collecti
 outside shared tables. `Database::createCollection()` still throws `Duplicate` for a collection whose metadata
 exists.
 
+`Adapter\Mongo::exists()` reports a database only when the server lists it; it returned `true` for every name.
+`collectionExists()` looks in the database it is given.
+
 ### SQLite
 
 - **Document ids compare case-insensitively.** `getDocument()`, `equal('$id', ...)`, `notEqual('$id', ...)` and joins
@@ -1146,10 +1736,9 @@ exists.
   ```
 
   Plain-table files need nothing.
-- **Regex.** `Query::regex()` works on SQLite through the adapter's `REGEXP` function; patterns are PCRE
-  (`preg_match`, case-sensitive, `u` flag), and `supports(Capability::Regex)` is true whenever that function is
-  registered (`Utopia\Database\PDO` or `Pdo\Sqlite` connections).
-- **`getSchemaIndexes()` returns index ids.** Each entry's `$id` and `indexName` are the index id (`email`,
+- **Regex.** `Query::regex()` works on SQLite through the adapter's `REGEXP` function, which `Utopia\Database\PDO`
+  and `Pdo\Sqlite` connections register; patterns are PCRE (`preg_match`, case-sensitive, `u` flag).
+- **`getSchemaIndexes()` returns index ids.** Each `Schema\Index`'s `name` is the index id (`email`,
   `_index1`), not the SQLite object name (`{namespace}_{tenant}_{collection}_email`) or the FTS5 table
   (`…_{hash}_fts`). To read the physical names, query `sqlite_master`. Under shared tables the list includes indexes
   other tenants created on the shared table, since they cover every tenant's rows.
@@ -1180,7 +1769,7 @@ with the same attributes is the normal case.
 in 7.x, ahead of the registered `Transform` hooks.
 
 - Comments now precede every statement the SQL adapters prepare, including raw queries, `ping()`,
-  `getConnectionId()`, schema introspection and SQLite's transaction statements. 7.x annotated only statements that
+  `id()`, schema introspection and SQLite's transaction statements. 7.x annotated only statements that
   went through an event transformation. Statements PDO issues itself (begin, commit, rollback, `lastInsertId()`),
   savepoints and the timeout session statements carry none.
 - A `Transform` receives the SQL with the comment block first. Do not anchor patterns on the statement keyword at
@@ -1195,6 +1784,22 @@ in 7.x, ahead of the registered `Transform` hooks.
 
 ## Mirror
 
+- **`onError()`.** `onError(callable $callback): static` callbacks receive one `Mirror\Failure`, with the `method`
+  that failed on the destination, its `event` (`?Event`) and the `error`. 7.x passed `(string $action, \Throwable
+  $error)`.
+
+  ```php
+  // 7.x
+  $mirror->onError(fn (string $action, \Throwable $error) => $logger->error($action, ['error' => $error]));
+
+  // 8.0
+  $mirror->onError(fn (Failure $failure) => $logger->error($failure->method, ['error' => $failure->error]));
+  ```
+
+- **Write filters** are `Utopia\Database\Mirror\Filter` (was `Mirroring\Filter`); its `init()` is `initialize()`.
+- **Hooks.** `$mirror->addHook(new Relationships(...))` keeps the given hook and attaches a copy to the source and
+  one to the destination, so its configuration (`prepare`, a subclass) reaches both. `removeHook()` also removes a
+  hook from the source and the destination. `addLifecycleHook()` is protected.
 - **Query cache.** Install the query cache through the mirror: `$mirror->setQueryCache($queryCache)` installs it on
   the source and the destination as well, so writes through the mirror invalidate the cache its reads use. An
   `Invalidator` added with `$mirror->addHook()` is installed on the mirror and the source.
@@ -1202,20 +1807,20 @@ in 7.x, ahead of the registered `Transform` hooks.
   `setTenant()`, `setMaxQueryValues()`, `setCache()`, `setAuthorization()`, validation and the document-type
   setters, a mirror now forwards `setQueryCache()`, `setCacheName()`, `setGlobalCollections()`,
   `resetGlobalCollections()`, `setTenantPerDocument()`, `setCacheWriterTimeout()`, `setTimeout()`, `clearTimeout()`,
-  `setMetadata()`, `resetMetadata()`, `enableFilters()`, `disableFilters()`, `skipFilters()`, `enableLocks()`,
-  `enableProfiling()`, `disableProfiling()`, `setMigrating()` and `setTypeRegistry()` to its source and destination.
-  In 7.x these changed the mirror alone.
+  `setMetadata()`, `resetMetadata()`, `setFiltering()`, `withFiltering()`, `skipFilters()`, `setLocks()`,
+  `setProfiling()`, `setMigrating()` and `setFilters()` to its source and destination. In 7.x these changed the
+  mirror alone.
 - **Timeouts on the destination.** A destination that cannot apply a timeout (MariaDB applies it on the connection)
-  is reported through `onError()` with the action `setTimeout` or `clearTimeout`; the call itself succeeds when the
-  source applied it. `enableLocks()` reports a destination failure the same way, with the action `enableLocks`.
+  is reported through `onError()` with the method `setTimeout` or `clearTimeout`; the call itself succeeds when the
+  source applied it. `setLocks()` reports a destination failure the same way, with the method `setLocks`.
 - **`create()`.** A destination that cannot create the database makes `create()` throw, after the source has
   created it, so a mirror never reports a database its destination lacks. Every other call forwarded to the
   destination reports a destination failure through `onError()` and returns the source's result.
-- **Profiling.** `$mirror->enableProfiling()` enables profiling on the source and the destination, and
+- **Profiling.** `$mirror->setProfiling(true)` enables profiling on the source and the destination, and
   `$mirror->getProfiler()` returns the source's profiler, which records the mirror's queries, because both use the
   source's adapter. The destination's queries are recorded by `$mirror->getDestination()->getProfiler()`.
-- **Scoped setters.** `withTenant()`, `withPreserveDates()`, `withPreserveSequence()`, `skipValidation()` and
-  `skipFilters()` called on a mirror open on the mirror, its source and its destination for the duration of the
+- **Scoped setters.** `withTenant()`, `withPreserveDates()`, `withPreserveSequence()`, `withValidation()`,
+  `skipValidation()`, `withFiltering()` and `skipFilters()` called on a mirror open on the mirror, its source and its destination for the duration of the
   callback. `skipRelationships()`, `skipRelationshipsExistCheck()` and `withRequestTimestamp()` open on the mirror
   and its source only; the destination applies the source's resulting documents with preserved dates.
   `withRequestTimestamp()` now runs its callback once; 7.x ran it once per database when a destination was set.
@@ -1238,9 +1843,10 @@ in 7.x, ahead of the registered `Transform` hooks.
     replication and applies at once.
   - The write filters' document hooks (`beforeCreateDocument()`, ...) run when the replication applies, in its
     coroutine.
-  - `$mirror->awaitReplications()` returns once every replication queued so far has reached the destination or has
-    been reported to `onError()`. Call it before a worker stops, or queued replications are lost. `delete()` waits
-    for them before it deletes the destination database.
+  - `$mirror->awaitReplications(?int $timeout = null)` returns once every replication queued so far has reached
+    the destination or has been reported to `onError()`, or once `$timeout` milliseconds have passed, without an
+    error. Call it before a worker stops, or queued replications are lost. `delete()` waits for them before it
+    deletes the destination database.
 - **Authorization.** `new Mirror($source, $destination)` leaves the source's and the destination's `Authorization` in
   place, and the mirror uses the source's, so roles and `skip()` scopes set on it apply to reads and writes through
   the mirror. In 7.x the mirror started with an `Authorization` of its own, which it also gave the source's adapter.
@@ -1248,58 +1854,72 @@ in 7.x, ahead of the registered `Transform` hooks.
 - **Write filters.** A `null` return from `beforeCreateCollection()`, `beforeUpdateCollection()`,
   `beforeCreateAttribute()`, `beforeUpdateAttribute()` or `beforeCreateIndex()` skips that change on the destination,
   and a collection whose creation was skipped is not replicated. An exception from a filter hook is reported to
-  `onError()` under the write's action and skips that replication; the source change stands.
+  `onError()` under the write's method and skips that replication; the source change stands.
 - **Decorators.** Decorator hooks added through a mirror stay on the mirror: they decorate what its reads and writes
   return (including the documents bulk writes hand `onNext`), and the destination receives undecorated documents.
   `createDocument()` returns the document written to the source, as `updateDocument()` does, instead of the
   destination's copy.
-- **Upserts.** `upsertDocument()` and `upsertDocumentsWithIncrease()` through a mirror now run on the source and are
-  replicated to the destination, like `upsertDocuments()`; in 7.x they were never replicated. Hooks registered
-  through the mirror receive `document_purge` for each upserted document and `documents_upsert` once per call. A
-  failed replication is reported to `onError()` as `upsertDocuments` for a plain upsert, as in 7.x, and as
-  `upsertDocumentsWithIncrease` for an increasing one.
+- **Upserts.** `upsertDocument()` and an increasing `upsertDocuments()` through a mirror now run on the source and
+  are replicated to the destination, like a plain `upsertDocuments()`; in 7.x they were never replicated. Hooks
+  registered through the mirror receive `document_purge` for each upserted document, `document_upsert` for
+  `upsertDocument()` and `documents_upsert` once per `upsertDocuments()` call. A failed replication is reported to
+  `onError()` with the method `upsertDocument` or `upsertDocuments`.
 
 ## Validators and helpers
 
-- `Utopia\Database\Validator\Queries\Documents` has new trailing constructor parameters:
-  `bool $supportForJoins = false`, `bool $supportForAggregations = false` and `bool $sharedTables = false`. By
-  default, a validator you construct yourself accepts only filters, ordering, selection and pagination, as in 7.x.
-  To accept `join`, `leftJoin`, `rightJoin`, `crossJoin` and `fullOuterJoin`, pass `supportForJoins: true`. To
-  accept aggregate functions, `groupBy`, `having` and `distinct`, pass `supportForAggregations: true`. `Database`
-  sets these flags from the adapter's `Capability::Joins`, `Capability::Aggregations` and shared-tables setting.
+The validators that depended on adapter limits and capabilities take the `Adapter\Profile` of the `Database`
+(`$database->profile()`) instead of positional limits and booleans.
+
+| 7.x | 8.0 |
+|---|---|
+| `new Validator\Attribute(array $attributes, array $schemaAttributes = [], int $maxAttributes = 0, int $maxWidth = 0, ... 14 more limits and booleans)` | `new Validator\AttributeDefinition(array $attributes, Adapter\Profile $profile, array $schemaAttributes = [], ?\Closure $attributeCount = null, ?\Closure $attributeWidth = null, ?\Closure $filter = null)` |
+| `new Validator\Index(array $attributes, array $indexes, int $maxLength, array $reservedKeys = [], ... 15 booleans)` | `new Validator\IndexDefinition(array $attributes, array $indexes, Adapter\Profile $profile)` |
+| `new Queries\Documents(array $attributes, array $indexes, string $idAttributeType, int $maxValuesCount = 5000, int $maxUIDLength = 36, \DateTime $minAllowedDate, \DateTime $maxAllowedDate, bool $supportForAttributes = true, bool $supportUnsignedBigInt = true)` | `new Queries\Documents(array $attributes, array $indexes, Adapter\Profile $profile, int $maxValuesCount = 5000)` |
+| `new Queries\Document(array $attributes, bool $supportForAttributes = true)` | `new Queries\Document(array $attributes, Adapter\Profile $profile, int $maxValuesCount = 5000)` |
+| `new Structure(Document $collection, string $idAttributeType, \DateTime $minAllowedDate, \DateTime $maxAllowedDate, bool $supportForAttributes = true, bool $supportUnsignedBigInt = true, ?Document $currentDocument = null)` | `new Structure(Document $collection, Adapter\Profile $profile, ?Document $currentDocument = null, array $storedAttributes = [])` |
+| `new Query\Order(array $attributes = [], bool $supportForAttributes = true)` | `new Query\Order(array $attributes = [], bool $supportForAttributes = true, bool $supportForOrderRandom = true)` |
+| `Validator\Queries`, `Validator\IndexedQueries` | `Validator\Queries\Base`, `Validator\Queries\Indexed` |
+| `Validator\ObjectValidator` | `Validator\ObjectValue` |
+
+```php
+// 7.x
+$validator = new Index($attributes, $indexes, $adapter->getMaxIndexLength(), [], $adapter->getSupportForIndexArray(), ...);
+
+// 8.0
+$validator = new IndexDefinition($attributes, $indexes, $database->profile());
+```
+
+- `Queries\Documents` and `Queries\Document` accept joins, aggregations and `$tenant` exactly as the profile allows:
+  joins with `Capability::Joins`, aggregate functions, `groupBy`, `having` and `distinct` with
+  `Capability::Aggregations`, and `select('$tenant')` under shared tables.
 - `Utopia\Database\Validator\Query\Select`, `Aggregate` and `GroupBy` accept `$tenant` only when constructed with
-  `sharedTables: true` (third constructor argument); `Queries\Documents` and `Queries\Document` take the same flag as
-  their last argument. A validator built directly now rejects `select('$tenant')` unless given the flag;
-  `Database::find()` already rejected it without shared tables in 7.x.
-- `Utopia\Database\Validator\Queries\Document` takes optional `idAttributeType`, `maxValuesCount`, `minAllowedDate`,
-  `maxAllowedDate`, `supportUnsignedBigInt` and `sharedTables` arguments for the join conditions of
-  `getDocument()`, with the same meaning as on `Queries\Documents`. It also takes a trailing
-  `bool $supportForJoins = true`: joins stay accepted by default, as `Database::getDocument()` expects, and with
-  `false` a join query is refused (`Invalid query method: join`), as `Queries\Documents` refuses it without its flag.
+  `sharedTables: true` (third constructor argument). A validator built directly rejects `select('$tenant')` without
+  it; `Database::find()` already rejected it without shared tables in 7.x.
+- `Query\Order` refuses `orderRandom()` when constructed with `supportForOrderRandom: false`.
 - The new `Utopia\Database\Validator\Query\Join` takes the main collection's attributes (`new Join($attributes)`) to
   check the columns of a join condition. `new Join()` accepts any column of the main collection.
-- `Queries\Documents` and `Query\Filter` default `supportUnsignedBigInt` to `true`, as in 7.x.
-- The protected `Database::getDocumentsValidator()` is now
-  `getDocumentsValidator(Document $collection, array $joinedCollections = [])`. Subclasses that override it must add
-  the parameter.
-- Changed validator signatures: `Validator\Attribute`'s `check*()` methods take an `Attribute`, `Validator\Index`'s
-  take an `Index`, `Validator\Attribute::getRequiredFilters()` and `validateDefaultTypes()` take a `ColumnType`,
-  `Structure::addFormat()`, `getFormat()` and `hasFormat()` (and those of `PartialStructure`) take a `ColumnType`,
-  and `Query\Filter::isValidAttributeAndValues()` takes a `Method` case. `Validator\Operator` takes a trailing
-  `bool $supportUnsignedBigInt = true`.
-- `Validator\Permissions` and `Helpers\Permission::aggregate()` take their allowed permission types as
-  `PermissionType` cases; a list of strings throws a `TypeError`. `Validator\Authorization\Input` accepts a
-  `PermissionType` case or a string.
+  `Validator\Query\Joined\Collection` and `Validator\Query\Joined\Attributes` check the joined collections.
+- `Query\Filter` defaults `supportUnsignedBigInt` to `true`, as in 7.x.
+- `Validator\Query\Cursor` accepts a `Document` or a document id, and refuses an array.
+- The protected `Database::getDocumentsValidator(Document $collection, array $joinedCollections = [])` is new in 8.0.
+- Changed validator signatures: `AttributeDefinition`'s `check*()` methods take an `Attribute`,
+  `IndexDefinition`'s take an `Index` (its TTL check is `checkTtlIndexes()`), `getRequiredFilters()` and
+  `validateDefaultTypes()` take a `ColumnType`, `Structure::addFormat()`, `getFormat()` and `hasFormat()` (and those
+  of `PartialStructure`) take a `ColumnType`, `Query\Filter::isValidAttributeAndValues()` takes a `Method` case, and
+  `Validator\Spatial::isWktString()` is the WKT check. `Validator\Operator` takes a trailing
+  `bool $supportUnsignedBigInt = true`. Every `isValid()` takes `mixed $value`.
+- `Validator\Permissions` and `Permission::aggregate()` take their allowed permission types as `PermissionType`
+  cases; a list of strings throws a `TypeError`. `Validator\Authorization\Input` takes a `PermissionType` case.
 - `Validator\Authorization`'s status is no longer a `protected bool $status` property; subclasses read and change it
-  through `getStatus()`, `setStatus()`, `skip()` and `withStatus()`. `skip()` and `withStatus()` are scoped to the
-  calling coroutine and the coroutines it starts; `setStatus()`, `enable()`, `disable()` and `reset()` change the
-  shared status unless called inside such a scope (see [Coroutines](#coroutines)).
-- `Validator\Structure` takes a trailing `array $storedAttributes = []`: the attributes whose values are the stored
-  ones, which it does not validate again. `Database::updateDocument()` passes it.
+  through `getStatus()`, `setStatus()` and `skip()`. `skip()` is scoped to the calling coroutine and the coroutines
+  it starts; `setStatus()`, `enable()`, `disable()` and `reset()` change the shared status unless called inside
+  such a scope (see [Coroutines](#coroutines)). `setDefaultStatus()` is a constructor argument,
+  `new Authorization(bool $defaultStatus = true)`. `restore()` is internal.
+- `Validator\Structure` takes `array $storedAttributes = []`: the attributes whose values are the stored ones, which
+  it does not validate again. `Database::updateDocument()` passes it.
 - `Database::convertQueries()` takes an optional `array $joinedCollections` (join alias => collection). With it,
   filters on `alias.attribute`, the filters of join ON lists and `having()` conditions in the list are converted
   too; aggregates and selects in the list are left as they are. Without it the method converts as before.
-- `Utopia\Database\Storage::joinAlias()` returns the alias an undeclared join is read under (`j0`, `j1`, ...).
 
 ## Removed unused public methods
 
@@ -1308,10 +1928,67 @@ Nothing in the library, Appwrite, Appwrite Cloud or utopia-php/migration calls t
 | Removed | Replacement |
 |---|---|
 | `Adapter\SQL::setFloatPrecision(int $precision)` | Floats are bound with 17 digits. A subclass can set the protected `$floatPrecision` property |
-| `Adapter\SQLite::getEmulateMySQL()` | `setEmulateMySQL()` is kept. A subclass reads the protected `$emulateMySQL` property |
-| `Database::getInstanceFilters()` | The `$filters` given to the constructor. A subclass reads the protected `$instanceFilters` property |
+| `Adapter\SQLite::setEmulateMySQL()`, `getEmulateMySQL()` | A subclass sets the protected `$emulateMySQL` property to `true` |
+| `Database::getInstanceFilters()` | The codecs given to the constructor, or `getFilters()` |
 | `Mirror::getWriteFilters()` | The `$filters` given to the constructor. A subclass reads the protected `$writeFilters` property |
 | `Validator\Structure::getFormats()` | `Structure::hasFormat($name, $type)` and `Structure::getFormat($name, $type)` |
+
+## Changes since the 8.0 pre-releases
+
+Appwrite, Appwrite Cloud and utopia-php/migration built against the unreleased `feat-query-lib` branch. These names
+from those builds changed before 8.0.0; none of them exists in 7.x.
+
+| Pre-release | 8.0.0 |
+|---|---|
+| `new Collection(...)`, `new Attribute(...)`, `new Index(...)`, `new Relationship(...)`, the 18 `Attribute\*` subclasses | `Collection::create()` and the factories; the constructors are private |
+| `Attribute::getKey()`, `getType()`, `isArray()`, `getFormat()` and the other getters, `$attribute->type` through magic `__get()` | Public readonly properties (`$attribute->type`) |
+| `Attribute::persistedType()`, `normalizeType()`, `tryNormalizeType()` | `Attribute::storedType()`, `Attribute::typeFromStored()` |
+| `Attribute::isSpatialType($type)` and the other static `is*Type()`, `getNumericBounds()`, `setFilters()` | `isSpatial()`, `isNumeric()`, `isInteger()`, `bounds()`, `withFilters()` on the value object |
+| `Attribute::linestring()`, `Index::fullText()`, `Index::index()` | `Attribute::lineString()`, `Index::fulltext()`, `Index::key()` |
+| `Attribute::availableTypes(objects:, spatial:, vectors:)` | `Attribute::availableTypes(Adapter\Profile $profile)` |
+| `Index::getIndexedAttributes()`, `setLengths()`, `setOrders()`, orders as `Utopia\Query\Schema\Order` | `$index->attributes`, `withLengths()`, `withOrders()`, orders as `OrderDirection` |
+| `Relationship(collection: ...)`, `getSourceCollection()`, `RelationType`, `RelationSide`, `ForeignKeyAction $onDelete` | `createRelationship($collection, ...)`, `RelationshipType`, `RelationshipSide`, `RelationshipDeleteAction` |
+| `Collection::getDeclaredAttributes()`, `getIndexes()`, `getName()`, `getDeclaredPermissions()`, `hasDocumentSecurity()`, `$metadata`, `isEmpty()` on a missing collection | `attributes()`, `indexes()`, `name()`, `declaredPermissions()`, `documentSecurity()`, `Collection::create(metadata:)`, `findCollection()` |
+| `createRelationship(Relationship $relationship)` | `createRelationship(string $collection, Relationship $relationship)` |
+| `updateAttribute(..., ColumnType\|string\|null $type, ...)`, `updateRelationship(..., ?ForeignKeyAction $onDelete)`, `updateCollection(string $id, ...)` | `AttributeUpdate`, `RelationshipUpdate`, `CollectionUpdate` |
+| `Database::ATTRIBUTE_FILTER_COLUMN_TYPES`, `Database::INTERNAL_ATTRIBUTES`, static `internalAttributes()`, `getInternalAttributes()`, `internalAttributeDocuments()` | The factories add their filters; `$database->internalAttributes()` |
+| `Validator\Attribute`, `Validator\Index` with positional booleans, `Queries\Bounds` | `AttributeDefinition`, `IndexDefinition` with an `Adapter\Profile`; `$profile->limits` |
+| The six mandatory `Feature\{Attributes,Collections,Databases,Documents,Indexes,Transactions}` interfaces | The abstract methods of `Adapter` |
+| `Feature\SchemaAttributes`, `Feature\SchemaIndexes`, `Feature\ColumnTypes` | `Capability::SchemaIntrospection` and the abstract `getSchemaAttributes()`, `getSchemaIndexes()`, `getColumnType()` |
+| `Feature\InternalCasting` (`castingBefore()`, `castingAfter()`, `castingAfterDocuments()`), `Feature\UTCCasting` (`setUTCDatetime()`) | `Feature\Casting` (`castBefore()`, `castAfter()` over a page, `castDatetime()`) |
+| `Feature\ConnectionId` (`getConnectionId()`), `Capability::Hostname`, `Capability::Reconnection` | `Feature\Connection` (`id()`, `hostname()`, `ping()`, `reconnect()`) |
+| `Feature\QueryBuilder::getBuilder()`, `getSchema()`, `createSchemaBuilder()` | `builder()`, `schema()` |
+| `Feature\Spatial::decodePoint()`, `decodeLinestring()`, `decodePolygon()`, `Database::encodeSpatialData()` | `Feature\Spatial::encode()`, `decode()` |
+| `Feature\Upserts::upsertDocuments(Document $collection, string $attribute, array $changes)`, `Change::setOld()`, `setNew()`, `getOld()`, `getNew()` | `upsertDocument()`, `upsertDocuments(Document $collection, array $changes, ?string $increase = null)`, `$change->old`, `$change->new` |
+| `Capability::Casting` | `Feature\Casting`: the library casts unless the adapter implements it |
+| `Capability::AtomicTransactions`, `BatchCreateAttributes`, `BatchOperations`, `BoundaryInclusive`, `CacheSkipOnFailure`, `JSONOverlaps`, `MultiDimensionDistance`, `NumericCasting`, `OptionalSpatial`, `PCRE`, `POSIX`, `QueryContains`, `Regex`, `StatisticalAggregates`, `BitwiseAggregates` | Removed. SQLite refuses the statistical and bitwise aggregates with `Exception\Query` |
+| `Capability::Index`, `UniqueIndex`, `Fulltext`, `FulltextWildcard`, `MultipleFulltextIndexes`, `TrigramIndex`, `TTLIndexes`, `ObjectIndexes`, `CastIndexArray`, `IdenticalIndexes`, `SpatialIndexNull`, `SpatialIndexOrder`, `NestedTransactions` | `IndexKey`, `IndexUnique`, `IndexFulltext`, `IndexFulltextWildcard`, `IndexFulltextMultiple`, `IndexTrigram`, `IndexTtl`, `IndexObject`, `IndexArrayCast`, `IndexIdentical`, `IndexSpatialNull`, `IndexSpatialOrder`, `TransactionNested` |
+| `Adapter::getMaxUIDLength()` and the other limit getters, `Database::getMaxUIDLength()` | `limits()`; `Database::getMaxUidLength()` |
+| `SQL::getPDO()` (public, deprecated) | `getDriver()` |
+| `Database::execute()` | `query()` for reads (a list of `Document`), `mutate()` for writes (the affected row count) |
+| `Database::enableProfiling()`, `disableProfiling()`, `Profiler\QueryProfiler`, `Profiler\QueryLog` | `setProfiling(bool)`, `Utopia\Database\Profiler`, `Profiler\Log` |
+| `Database::setTypeRegistry()`, `Type\Custom`, `Type\TypeRegistry`, an associative constructor `$filters` | `setFilters()`, `Filter\Codec`, `Filter\Registry`, a list of `Filter\Codec` |
+| `Cache\QueryCache` with `$cacheName` and `writerTimeout` arguments | `Cache\Query`, which takes both from the `Database` it is set on |
+| `Authorization::withStatus()` | `skip()`, or `setStatus()` inside `withSnapshot()` |
+| `Hook\Lifecycle::handle(Event $event, mixed $data)` | `handle(Event\Domain $event)` |
+| `Event\Documents\Created`, `Updated`, `Deleted` | `Event\Document\BatchCreated`, `BatchUpdated`, `BatchDeleted` |
+| `Event\Domain::$occurredAt` | Removed |
+| `Cache\Invalidator` as a `Hook\Lifecycle` | A hook of its own kind; `addHook()` still takes it |
+| `Hook\Write` extending `Utopia\Query\Hook\Write`, its row-level `after*(string $table, ...)` methods, the closure-bag write context, `Document::SKIP_PERMISSIONS_UPDATE` | `decorateRow(array $row, Hook\RowMetadata $metadata)`, the document-level `afterDocument*()` methods and `Hook\WriteContext::skipPermissions()` |
+| `new Relationships($database)` | `new Relationships()`, attached by `addHook()` |
+| `Adapter::hasTenantHook()`, `hasPermissionHook()` | Removed |
+| `Hook\PermissionFilter`, `PermissionJoinFilter`, `PermissionAllowNullUid`, `OuterJoinPermissionFilter` | `Adapter\SQL\Hook\Permission\Filter`, `Join`, `AllowNullUid`, `OuterJoin` |
+| `Hook\TenantFilter`, `RawTenantFilter`, `OuterJoinTenantFilter`, `RawOuterJoinTenantFilter` | `Adapter\SQL\Hook\Tenant\Filter`, `Raw`, `OuterJoin`, `RawOuterJoin` |
+| `Hook\JoinChain`, `OuterJoinChainFilter`, `AllowNullColumn` | `Adapter\SQL\Hook\Join\Chain`, `Join\OuterChain`, `Column\AllowNull` |
+| `Hook\Read`, `Hook\Mongo\PermissionFilter`, `Hook\Mongo\TenantFilter` | `Hook\Mongo\Read`, `Hook\Mongo\Permission`, `Hook\Mongo\Tenant` |
+| `Traits\`, `Builder\PostgreSQL`, `State\Scope` | `Trait\`, `Builder\Postgres`, `State\Frame` |
+| `Validator\Query\JoinedCollection`, `JoinedAttributes` | `Validator\Query\Joined\Collection`, `Joined\Attributes` |
+| `Query::join($collection, $left, $right, $operator, $alias)` and the other column-form joins, `getJoinAlias()`, `Storage::joinAlias()` | `Query::join($collection, $alias, [Query::on(...)])`, `getAlias()`; every join names its alias |
+| `Query::groupForDatabase()` | `Query::groupByType()`, which returns a `ParsedQuery` |
+| `Document::INTERNAL_ID` | `Document::SEQUENCE` |
+| `Mirror::onError(callable(string $action, \Throwable $error))`, `awaitReplications()` without a timeout | `onError(callable(Mirror\Failure $failure))`, `awaitReplications(?int $timeout = null)` |
+| `Adapter::setDebug()`, `getDebug()`, `resetDebug()` | `setMetadata()`, `getMetadata()`, `resetMetadata()` |
+| `Exception::__construct(string $message, ...)` with a string code cast to 0 | Every argument optional; a string code kept in `$state` |
 
 ## Rules for features new in 8.0
 
@@ -1319,6 +1996,21 @@ These features do not exist in 7.x. Their rules are listed here because they dif
 API might expect. [CHANGELOG.md](CHANGELOG.md) describes the features themselves.
 
 ### Joins
+
+Every join names its alias and takes its conditions as a list: `Query::join(string $collection, string $alias, array
+$on)`, `leftJoin()`, `rightJoin()` and `fullOuterJoin()` take `Query::on(string $left, string $right, string $operator
+= '=')` conditions and filters, and `crossJoin(string $collection, string $alias)` and `naturalJoin()` take none. In
+`on()` the left column belongs to the main collection or to a join declared before it, and the right one to the
+joined collection. An ON
+list member that is not `on()` or a filter (`limit()`, `select()`, an order, ...) throws
+`Utopia\Query\Exception\ValidationException` when the query is built.
+
+```php
+$database->find('reviews', [
+    Query::join('movies', 'm', [Query::on('movie', '$id')]),
+    Query::select(['body', 'm.name']),
+]);
+```
 
 - A joined collection is read exactly as a direct `find()` on it would be. If the caller holds the collection-level
   permission, every row of the joined collection is visible. If not, and the collection has document security, only
@@ -1390,8 +2082,8 @@ API might expect. [CHANGELOG.md](CHANGELOG.md) describes the features themselves
 - `Database::updateDocuments()` and `Database::deleteDocuments()` do not accept join queries. They throw
   `Utopia\Database\Exception\Query` with `Join queries are not supported for bulk updates` or
   `Join queries are not supported for bulk deletes`.
-- On adapters without joins or aggregations (Memory, MongoDB, Redis), `find()`, `count()` and `sum()` reject those
-  queries during validation with `Invalid query method: <method>`.
+- On adapters without joins or aggregations (Memory, MongoDB, Redis), `find()`, `aggregate()`, `count()` and
+  `sum()` reject those queries during validation with `Invalid query method: <method>`.
 - MariaDB, MySQL and SQLite run a full outer join as two queries joined by `UNION ALL`. They accept one full outer
   join per query, and a right join after it has to join on a table joined before the full outer join or on the full
   outer joined table (directly or through other joins); other chains throw `Utopia\Database\Exception\Query`.
@@ -1412,7 +2104,7 @@ API might expect. [CHANGELOG.md](CHANGELOG.md) describes the features themselves
   of the same name. A read whose `select()` names attributes without `*` has to select every joined value it orders
   by, a paged join's `alias.$id` included, to be paged; `alias.*` selects them all. A read without a select, or
   with `*`, returns them.
-  `cursor()` and `iterate()` check the last row of each full batch before yielding the batch, so such a read throws
+  `cursor()` checks the last row of each full batch before yielding the batch, so such a read throws
   before the first row; a read that fits in one batch is not paged and needs no such value.
 - A value may be null (a row an outer join did not match, a nullable attribute). Nulls keep the engine's position:
   first in ascending order on MariaDB, MySQL and SQLite, last on PostgreSQL, and the cursor pages through them.
@@ -1424,6 +2116,18 @@ API might expect. [CHANGELOG.md](CHANGELOG.md) describes the features themselves
 
 ### Aggregations
 
+Aggregation queries run through `Database::aggregate($collection, $queries)`, which returns the rows as arrays (see
+[Bulk writes and reads](#bulk-writes-and-reads)); `find()` refuses them.
+
+```php
+$rows = $database->aggregate('orders', [
+    Query::count('*', 'orders'),
+    Query::sum('total', 'revenue'),
+    Query::groupBy(['status']),
+]);
+// [['status' => 'paid', 'orders' => 12, 'revenue' => 340.5], ...]
+```
+
 - An aggregation query is one with an aggregate (`count`, `countDistinct`, `sum`, `avg`, `min`, `max`, the
   statistical and the bitwise aggregates) or a `groupBy()`. A `groupBy()` without an aggregate counts. A select in
   an aggregation query may name only the attributes the query groups by; any other select throws
@@ -1432,15 +2136,15 @@ API might expect. [CHANGELOG.md](CHANGELOG.md) describes the features themselves
   Group by the attribute or leave it out of the select. `*` and relationship wildcards (`key.*`, `parent.child.*`)
   are accepted and ignored, so a listing that always adds them keeps working. A join alias's `alias.*` is rejected
   like any ungrouped select. A join alias cannot equal a relationship key of the main collection (see
-  [Joins](#joins)), so `key.*` is always the relationship's wildcard. The rule applies to `find()`, `count()` and
-  `sum()`, which validate their query set the same way.
+  [Joins](#joins)), so `key.*` is always the relationship's wildcard. The rule applies to `aggregate()`, `count()`
+  and `sum()`, which validate their query set the same way.
 - An order in an aggregation query may name only an aggregate alias or an attribute the query groups by, and
   `orderRandom()` is accepted; any other order throws `Utopia\Database\Exception\Query`
   (`Invalid query: Cannot order by "<attribute>": an aggregation query can only order by its groups and aggregates`).
   A grouped attribute that only a joined collection declares matches its bare name and its aliased name alike.
 - A `Utopia\Database\Validator\Query\Select` or `Validator\Query\Order` built directly applies its rule only when
   it is handed the query set's aggregates and groups (`setAggregations()`, `setGroupBy()`), as
-  `Utopia\Database\Validator\Queries` does.
+  `Utopia\Database\Validator\Queries\Base` does.
 - `having()` conditions follow the filter rules. Each condition compares an aggregate alias of the same query, or an
   attribute passed to `groupBy()`. Compare aliases only at the top level of `having()`. `search()` inside `having()`
   needs a fulltext index, and value lists are capped by `setMaxQueryValues()`.
@@ -1455,10 +2159,9 @@ API might expect. [CHANGELOG.md](CHANGELOG.md) describes the features themselves
   one-to-many, the child side of a many-to-one and of a one-way one-to-one, either side of a many-to-many), as filters
   do: `Cannot aggregate virtual relationship attribute: <key>`, `Cannot group by virtual relationship attribute:
   <key>`.
-- `stddev`, `stddevPop`, `stddevSamp`, `variance`, `varPop` and `varSamp` need
-  `Capability::StatisticalAggregates`, and `bitAnd`, `bitOr` and `bitXor` need `Capability::BitwiseAggregates`.
-  SQLite has neither, and `find()` throws `Utopia\Database\Exception\Query` for them there. Check
-  `$database->getAdapter()->supports(...)` before offering them.
+- SQLite has no statistical (`stddev`, `stddevPop`, `stddevSamp`, `variance`, `varPop`, `varSamp`) or bitwise
+  (`bitAnd`, `bitOr`, `bitXor`) aggregate functions, and `aggregate()` throws `Utopia\Database\Exception\Query` for
+  them there.
 - An aggregate alias is an identifier (letters, digits and `_`, not starting with a digit) of at most 63 characters
   (`Validator\Query\Aggregate::MAX_ALIAS_LENGTH`), and it cannot repeat another aggregate's alias or the name a
   grouped attribute is returned under.
@@ -1508,10 +2211,12 @@ A fulltext `search()` only filters, as in 7.x. A search read is ordered by its e
 `$sequence`, and a cursor pages along them. Results are not ranked by relevance and carry no `_relevance`
 attribute.
 
-### Query builder: `from()`, `execute()` and `rawQuery()`
+### Query builder: `from()`, `query()`, `mutate()` and `rawQuery()`
 
-`Database::from($collection)` returns a utopia-php/query builder over the collection's table, and
-`Database::execute($statement)` runs a statement as written. Both are available on the SQL adapters only
+`Database::from($collection)` returns a utopia-php/query builder over the collection's table.
+`Database::query($statement)` runs a read as written and returns a list of `Document`, and
+`Database::mutate($statement)` runs a write and returns the affected row count. They are available on the SQL
+adapters only
 (`Feature\QueryBuilder`); elsewhere they throw `Utopia\Database\Exception`. They are an escape hatch for statements
 the document API cannot express: they check no permissions, bypass the document and query caches (call
 `purgeCachedDocument()` for documents you change: it also invalidates the collection's cached `find()` results),
@@ -1544,7 +2249,7 @@ accept any name.
 
 ### Query cache
 
-`setQueryCache(new QueryCache($cache))` caches `find()` results per hostname, database, namespace, tenant and
+`setQueryCache(new Cache\Query($cache))` caches `find()` results per hostname, database, namespace, tenant and
 collection. Writes through the `Database` invalidate only the scope they write in. `purgeCachedDocument()` and
 `purgeCachedQueries($collection)` invalidate it as well; call one of them after changing data behind the library's
 back.
@@ -1555,35 +2260,26 @@ back.
 - Collection listings (`find('_metadata')`, `listCollections()`) are never cached.
 - Under tenant-per-document, a write invalidates the scope of each written document's tenant.
 
-### Custom types
-
-Implement `Utopia\Database\Type\Custom` (`name()`, `encode()`, `decode()`) and register the type on a
-`Utopia\Database\Type\TypeRegistry`. Give the registry to a `Database` with `setTypeRegistry()`, and list the type's
-name in an attribute's `filters`. The type applies only to handles that share that registry. On those handles it
-takes precedence over a global filter of the same name (`Database::addFilter()`), and filters passed to the
-`Database` constructor take precedence over both. `register()` rejects the built-in filter names
-(`Database::DEFAULT_FILTERS`) with `Utopia\Database\Exception\Duplicate`.
-
 ### Pools and profiling
 
-- **Query profiling.** `Database::enableProfiling()` attaches a `Utopia\Database\Profiler\QueryProfiler` that
-  records the SQL statements the adapter runs. The profiler keeps the newest `QueryProfiler::DEFAULT_CAPACITY`
+- **Query profiling.** `Database::setProfiling(true)` attaches a `Utopia\Database\Profiler` that
+  records the SQL statements the adapter runs. The profiler keeps the newest `Profiler::DEFAULT_CAPACITY`
   (1000) entries; older entries are dropped as new ones arrive. Change the bound with
   `$database->getProfiler()?->setCapacity($entries)` (at least 1). `getQueryCount()` and `getTotalTime()` cover every
   statement logged since the last `reset()`, including dropped ones, so they can exceed what `getLogs()` returns.
-  `disableProfiling()` stops recording and detaches the profiler from the adapter; what was captured stays readable
+  `setProfiling(false)` stops recording and detaches the profiler from the adapter; what was captured stays readable
   through `getProfiler()->getLogs()` until `reset()`. Behind `Adapter\Pool` a connection carries the handle's
   profiler only while it is checked out. A `Pool` subclass that checks connections out itself (with
-  `$this->pool->use(...)`) should call `$this->releaseBorrowedAdapter($adapter)` before giving the connection back.
-  Each `Utopia\Database\Profiler\QueryLog` carries the statement's bound values (`bindings`), the collection it
+  `$this->pool->use(...)`) should call `$this->releaseBorrowed($adapter)` before giving the connection back.
+  Each `Utopia\Database\Profiler\Log` carries the statement's bound values (`bindings`), the collection it
   reads (`collection`, for the statements `getDocument()`, `find()`, `count()` and `sum()` run) and the operation
   that ran it (`operation`, the `Utopia\Database\Event` value, such as `document_find`). Statements that bind by
-  hand (`rawQuery()`, schema changes) log no bindings, and writes log no collection. `QueryLog` has no
+  hand (`rawQuery()`, schema changes) log no bindings, and writes log no collection. `Profiler\Log` has no
   `explainPlan`.
 - **Capability questions behind a `Pool`.** `supports()`, `capabilities()` and `hasFeature()` ask a connection the
   first time and are then answered without one, for every handle built over the same `Utopia\Pools\Pool`.
   `supports(Capability::DefinedAttributes)` is the exception: it reports the schema mode of the connection that
-  answers, so it always asks one. `Database::enableLocks()` reaches every borrowed connection.
+  answers, so it always asks one. `Database::setLocks()` reaches every borrowed connection.
 - **Transactions behind a `Pool`.** `withTransaction()` pins one connection for the coroutine that calls it and the
   coroutines it starts. Other coroutines sharing the handle borrow connections of their own and run outside the
   transaction; in 7.x their statements ran on the pinned connection, inside the transaction, and their own
@@ -1597,9 +2293,9 @@ takes precedence over a global filter of the same name (`Database::addFilter()`)
   `getDocument(..., forUpdate: true)` and `rawQuery()` always use the write pool, since a locking read must run on
   the primary and raw SQL may write; both also open the sticky window. So do the reads that decide a write: the
   batch `updateDocuments()` and `deleteDocuments()` select, and the document `upsertDocuments()` compares against. Calls that touch no data (capability checks
-  such as `supports()`, `capabilities()` and `hasFeature()`, limits, value casting, and configuration such as
-  `setSupportForAttributes()`) are answered wherever a read would be and never open the sticky window.
-  `getHostname()` always names the write pool's host, because it namespaces document and query cache keys, and is
+  such as `supports()`, `capabilities()` and `hasFeature()`, `limits()`, value casting, and configuration such as
+  `setSchemaless()`) are answered wherever a read would be and never open the sticky window.
+  `hostname()` always names the write pool's host, because it namespaces document and query cache keys, and is
   looked up once per handle. `getDriver()` counts as a write: code that runs statements through the raw driver gets
   a write-pool connection.
 

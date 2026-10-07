@@ -10,8 +10,8 @@ use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Attribute;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Index;
-use Utopia\Database\RelationSide;
-use Utopia\Database\RelationType;
+use Utopia\Database\RelationshipSide;
+use Utopia\Database\RelationshipType;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 
@@ -24,14 +24,14 @@ final class PostgresSchemaTest extends TestCase
     {
         $this->adapter()->createCollection('books', [
             Attribute::string('title', size: 64),
-            $this->relationship('tags', RelationType::ManyToMany, twoWay: true, side: RelationSide::Parent),
-            $this->relationship('cover', RelationType::OneToOne, twoWay: false, side: RelationSide::Child),
-            $this->relationship('chapters', RelationType::OneToMany, twoWay: true, side: RelationSide::Parent),
-            $this->relationship('shelf', RelationType::ManyToOne, twoWay: true, side: RelationSide::Child),
-            $this->relationship('isbn', RelationType::OneToOne, twoWay: false, side: RelationSide::Parent),
-            $this->relationship('summary', RelationType::OneToOne, twoWay: true, side: RelationSide::Child),
-            $this->relationship('series', RelationType::OneToMany, twoWay: true, side: RelationSide::Child),
-            $this->relationship('publisher', RelationType::ManyToOne, twoWay: true, side: RelationSide::Parent),
+            $this->relationship('tags', RelationshipType::ManyToMany, twoWay: true, side: RelationshipSide::Parent),
+            $this->relationship('cover', RelationshipType::OneToOne, twoWay: false, side: RelationshipSide::Child),
+            $this->relationship('chapters', RelationshipType::OneToMany, twoWay: true, side: RelationshipSide::Parent),
+            $this->relationship('shelf', RelationshipType::ManyToOne, twoWay: true, side: RelationshipSide::Child),
+            $this->relationship('isbn', RelationshipType::OneToOne, twoWay: false, side: RelationshipSide::Parent),
+            $this->relationship('summary', RelationshipType::OneToOne, twoWay: true, side: RelationshipSide::Child),
+            $this->relationship('series', RelationshipType::OneToMany, twoWay: true, side: RelationshipSide::Child),
+            $this->relationship('publisher', RelationshipType::ManyToOne, twoWay: true, side: RelationshipSide::Parent),
         ]);
 
         $create = $this->statements[0] ?? '';
@@ -52,14 +52,13 @@ final class PostgresSchemaTest extends TestCase
     public static function unknownIndexTypes(): iterable
     {
         yield 'ttl' => [IndexType::Ttl];
-        yield 'index' => [IndexType::Index];
     }
 
     #[DataProvider('unknownIndexTypes')]
     public function testCreateIndexRefusesATypeTheEngineDoesNotCreate(IndexType $type): void
     {
         try {
-            $this->adapter()->createIndex('events', new Index('happened_index', $type, ['happened']));
+            $this->adapter()->createIndex('events', Index::fromArray(['key' => 'happened_index', 'type' => $type, 'attributes' => ['happened'], 'ttl' => 3600]));
             $this->fail('An index type the engine does not create must be refused');
         } catch (DatabaseException $error) {
             $this->assertSame(
@@ -86,7 +85,7 @@ final class PostgresSchemaTest extends TestCase
     public function testANestedObjectIndexPathWithAnInvalidSegmentIsRefused(string $path, string $segment): void
     {
         try {
-            $this->adapter()->createIndex('books', new Index('meta_index', IndexType::Object, [$path]), [$path => ColumnType::Object->value]);
+            $this->adapter()->createIndex('books', Index::object('meta_index', $path), [$path => ColumnType::Object->value]);
             $this->fail('A nested index path with an invalid segment must be refused');
         } catch (DatabaseException $error) {
             $this->assertSame('Invalid JSON key ' . $segment, $error->getMessage());
@@ -97,7 +96,7 @@ final class PostgresSchemaTest extends TestCase
 
     public function testANestedObjectIndexPathIsIndexedAsText(): void
     {
-        $this->adapter()->createIndex('books', new Index('meta_index', IndexType::Object, ['meta.inner.leaf-key']), ['meta.inner.leaf-key' => ColumnType::Object->value]);
+        $this->adapter()->createIndex('books', Index::object('meta_index', 'meta.inner.leaf-key'), ['meta.inner.leaf-key' => ColumnType::Object->value]);
 
         $this->assertSame(
             ['CREATE INDEX "namespace__books_meta_index" ON "database"."namespace_books" USING GIN ((("meta"->\'inner\'->>\'leaf-key\')::text))'],
@@ -107,20 +106,20 @@ final class PostgresSchemaTest extends TestCase
 
     public function testUpdatingAnArrayAttributeKeepsItsColumnJsonb(): void
     {
-        $this->adapter()->updateAttribute('books', Attribute::string('tags', size: 64, array: true));
+        $this->adapter()->updateAttribute('books', 'tags', Attribute::string('tags', size: 64, array: true));
 
         $this->assertSame('ALTER TABLE "database"."namespace_books" ALTER COLUMN "tags" TYPE JSONB', $this->statements[0] ?? '');
     }
 
-    private function relationship(string $key, RelationType $type, bool $twoWay, RelationSide $side): Attribute
+    private function relationship(string $key, RelationshipType $type, bool $twoWay, RelationshipSide $side): Attribute
     {
-        return Attribute::relationship(key: $key, options: [
+        return Attribute::fromArray(['key' => $key, 'type' => ColumnType::Relationship, 'options' => [
             'relatedCollection' => 'related_' . $key,
             'relationType' => $type->value,
             'twoWay' => $twoWay,
             'twoWayKey' => 'back_' . $key,
             'side' => $side->value,
-        ]);
+        ]]);
     }
 
     private function adapter(): Postgres

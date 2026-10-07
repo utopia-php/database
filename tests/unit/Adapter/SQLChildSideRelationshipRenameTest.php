@@ -10,8 +10,9 @@ use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Relationship;
-use Utopia\Database\RelationSide;
-use Utopia\Database\RelationType;
+use Utopia\Database\RelationshipSide;
+use Utopia\Database\RelationshipType;
+use Utopia\Database\RelationshipUpdate;
 
 final class SQLChildSideRelationshipRenameTest extends TestCase
 {
@@ -19,7 +20,7 @@ final class SQLChildSideRelationshipRenameTest extends TestCase
     private array $statements = [];
 
     /**
-     * @return iterable<string, array{class-string<SQL>, RelationType, RelationSide, string|null, string|null, string}>
+     * @return iterable<string, array{class-string<SQL>, RelationshipType, RelationshipSide, string|null, string|null, string}>
      */
     public static function renames(): iterable
     {
@@ -30,10 +31,10 @@ final class SQLChildSideRelationshipRenameTest extends TestCase
 
         foreach ($engines as $engine => [$class, $statement]) {
             $stored = \sprintf($statement, 'books', 'author', 'writer');
-            yield $engine . ' one-to-many key from the child' => [$class, RelationType::OneToMany, RelationSide::Child, 'writer', null, $stored];
-            yield $engine . ' one-to-many two-way key from the parent' => [$class, RelationType::OneToMany, RelationSide::Parent, null, 'writer', $stored];
-            yield $engine . ' many-to-one two-way key from the child' => [$class, RelationType::ManyToOne, RelationSide::Child, null, 'writer', $stored];
-            yield $engine . ' many-to-one key from the parent' => [$class, RelationType::ManyToOne, RelationSide::Parent, 'writer', null, $stored];
+            yield $engine . ' one-to-many key from the child' => [$class, RelationshipType::OneToMany, RelationshipSide::Child, 'writer', null, $stored];
+            yield $engine . ' one-to-many two-way key from the parent' => [$class, RelationshipType::OneToMany, RelationshipSide::Parent, null, 'writer', $stored];
+            yield $engine . ' many-to-one two-way key from the child' => [$class, RelationshipType::ManyToOne, RelationshipSide::Child, null, 'writer', $stored];
+            yield $engine . ' many-to-one key from the parent' => [$class, RelationshipType::ManyToOne, RelationshipSide::Parent, 'writer', null, $stored];
         }
     }
 
@@ -41,25 +42,27 @@ final class SQLChildSideRelationshipRenameTest extends TestCase
      * @param class-string<SQL> $class
      */
     #[DataProvider('renames')]
-    public function testARenameTouchesTheColumnTheSideStores(string $class, RelationType $type, RelationSide $side, ?string $newKey, ?string $newTwoWayKey, string $expected): void
+    public function testARenameTouchesTheColumnTheSideStores(string $class, RelationshipType $type, RelationshipSide $side, ?string $newKey, ?string $newTwoWayKey, string $expected): void
     {
-        $this->assertTrue($this->adapter($class)->updateRelationship($this->relationship($type, $side), $newKey, $newTwoWayKey));
+        [$collection, $relationship] = $this->relationship($type, $side);
+
+        $this->assertTrue($this->adapter($class)->updateRelationship($collection, $relationship, $side, new RelationshipUpdate(key: $newKey, twoWayKey: $newTwoWayKey)));
 
         $this->assertSame([$expected], $this->statements);
     }
 
     /**
-     * @return iterable<string, array{class-string<SQL>, RelationType, RelationSide, string|null, string|null}>
+     * @return iterable<string, array{class-string<SQL>, RelationshipType, RelationshipSide, string|null, string|null}>
      */
     public static function renamesOfColumnsTheSideDoesNotStore(): iterable
     {
         foreach (['MariaDB' => MariaDB::class, 'Postgres' => Postgres::class] as $engine => $class) {
-            yield $engine . ' one-to-many two-way key from the child' => [$class, RelationType::OneToMany, RelationSide::Child, null, 'writer'];
-            yield $engine . ' one-to-many key from the parent' => [$class, RelationType::OneToMany, RelationSide::Parent, 'writer', null];
-            yield $engine . ' many-to-one key from the child' => [$class, RelationType::ManyToOne, RelationSide::Child, 'writer', null];
-            yield $engine . ' many-to-one two-way key from the parent' => [$class, RelationType::ManyToOne, RelationSide::Parent, null, 'writer'];
-            yield $engine . ' unchanged key from the child' => [$class, RelationType::OneToMany, RelationSide::Child, 'author', null];
-            yield $engine . ' unchanged two-way key from the parent' => [$class, RelationType::OneToMany, RelationSide::Parent, null, 'author'];
+            yield $engine . ' one-to-many two-way key from the child' => [$class, RelationshipType::OneToMany, RelationshipSide::Child, null, 'writer'];
+            yield $engine . ' one-to-many key from the parent' => [$class, RelationshipType::OneToMany, RelationshipSide::Parent, 'writer', null];
+            yield $engine . ' many-to-one key from the child' => [$class, RelationshipType::ManyToOne, RelationshipSide::Child, 'writer', null];
+            yield $engine . ' many-to-one two-way key from the parent' => [$class, RelationshipType::ManyToOne, RelationshipSide::Parent, null, 'writer'];
+            yield $engine . ' unchanged key from the child' => [$class, RelationshipType::OneToMany, RelationshipSide::Child, 'author', null];
+            yield $engine . ' unchanged two-way key from the parent' => [$class, RelationshipType::OneToMany, RelationshipSide::Parent, null, 'author'];
         }
     }
 
@@ -67,20 +70,34 @@ final class SQLChildSideRelationshipRenameTest extends TestCase
      * @param class-string<SQL> $class
      */
     #[DataProvider('renamesOfColumnsTheSideDoesNotStore')]
-    public function testARenameOfAColumnTheSideDoesNotStoreSendsNothing(string $class, RelationType $type, RelationSide $side, ?string $newKey, ?string $newTwoWayKey): void
+    public function testARenameOfAColumnTheSideDoesNotStoreSendsNothing(string $class, RelationshipType $type, RelationshipSide $side, ?string $newKey, ?string $newTwoWayKey): void
     {
-        $this->assertTrue($this->adapter($class)->updateRelationship($this->relationship($type, $side), $newKey, $newTwoWayKey));
+        [$collection, $relationship] = $this->relationship($type, $side);
+
+        $this->assertTrue($this->adapter($class)->updateRelationship($collection, $relationship, $side, new RelationshipUpdate(key: $newKey, twoWayKey: $newTwoWayKey)));
 
         $this->assertSame([], $this->statements);
     }
 
-    private function relationship(RelationType $type, RelationSide $side): Relationship
+    /**
+     * @return array{string, Relationship}
+     */
+    private function relationship(RelationshipType $type, RelationshipSide $side): array
     {
-        $booksStoreTheKey = ($type === RelationType::OneToMany) === ($side === RelationSide::Child);
+        $booksStoreTheKey = ($type === RelationshipType::OneToMany) === ($side === RelationshipSide::Child);
 
         return $booksStoreTheKey
-            ? new Relationship(collection: 'books', relatedCollection: 'authors', type: $type, twoWay: true, key: 'author', twoWayKey: 'books', side: $side)
-            : new Relationship(collection: 'authors', relatedCollection: 'books', type: $type, twoWay: true, key: 'books', twoWayKey: 'author', side: $side);
+            ? ['books', self::define($type, relatedCollection: 'authors', key: 'author', twoWayKey: 'books')]
+            : ['authors', self::define($type, relatedCollection: 'books', key: 'books', twoWayKey: 'author')];
+    }
+
+    private static function define(RelationshipType $type, string $relatedCollection, string $key, string $twoWayKey): Relationship
+    {
+        return match ($type) {
+            RelationshipType::OneToMany => Relationship::oneToMany($relatedCollection, $key, twoWay: true, twoWayKey: $twoWayKey),
+            RelationshipType::ManyToOne => Relationship::manyToOne($relatedCollection, $key, twoWay: true, twoWayKey: $twoWayKey),
+            default => throw new \LogicException('Only one-to-many and many-to-one relationships are renamed here'),
+        };
     }
 
     /**

@@ -100,7 +100,7 @@ final class SQLJoinedReadsTest extends TestCase
             'replies' => [Attribute::string('noteId', size: 16), Attribute::string('text', size: 16)],
         ];
         foreach ($collections as $id => $attributes) {
-            $database->createCollection(new Collection(
+            $database->createCollection(Collection::create(
                 id: $id,
                 attributes: $attributes,
                 permissions: [Permission::create(Role::any()), Permission::read(Role::any())],

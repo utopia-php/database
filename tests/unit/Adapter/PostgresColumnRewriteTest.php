@@ -15,7 +15,7 @@ final class PostgresColumnRewriteTest extends TestCase
 
     public function testDatetimeRewriteCastsTheColumnItself(): void
     {
-        $this->createAdapter()->updateAttribute('events', Attribute::datetime(key: 'at'));
+        $this->createAdapter()->updateAttribute('events', 'at', Attribute::datetime(key: 'at'));
 
         $this->assertContains(
             'ALTER TABLE "database"."namespace_events" ALTER COLUMN "at" TYPE TIMESTAMP(3) USING "at"::TIMESTAMP(3)',
@@ -25,7 +25,7 @@ final class PostgresColumnRewriteTest extends TestCase
 
     public function testRenamedDatetimeRewriteCastsTheRenamedColumn(): void
     {
-        $this->createAdapter()->updateAttribute('events', Attribute::datetime(key: 'at'), 'happenedAt');
+        $this->createAdapter()->updateAttribute('events', 'at', Attribute::datetime(key: 'happenedAt'));
 
         $this->assertStringStartsWith('SELECT a.attname FROM pg_attribute a', $this->statements[0]);
         $this->assertSame('ALTER TABLE "database"."namespace_events" RENAME COLUMN "at" TO "happenedAt"', $this->statements[1]);

@@ -15,7 +15,6 @@ use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Validator\Authorization;
-use Utopia\Query\Builder\Statement;
 
 /**
  * A count() or sum() without queries is written out rather than built. It must be the statement
@@ -86,7 +85,7 @@ final class UnfilteredAggregateStatementTest extends TestCase
         ?int $max,
     ): void {
         $adapter = $this->adapter($make, $shared, $tenant, $authorization);
-        $document = new Collection(id: $collection, documentSecurity: $authorization === 'document security');
+        $document = Collection::create(id: $collection, documentSecurity: $authorization === 'document security');
 
         $expected = $adapter->builtAggregate($operation, $document, [], $max);
         $result = $operation === 'count'

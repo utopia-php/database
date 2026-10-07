@@ -92,7 +92,7 @@ final class ColumnRenameTest extends TestCase
     {
         $adapter = $this->createPostgres(['_id', 'years']);
 
-        $this->assertTrue($adapter->updateAttribute('users', Attribute::integer(key: 'age', required: true), 'years'));
+        $this->assertTrue($adapter->updateAttribute('users', 'age', Attribute::integer(key: 'years', required: true)));
 
         $this->assertCount(2, $this->statements);
         $this->assertStringStartsWith(self::POSTGRES_CATALOG, $this->statements[0]);
@@ -103,7 +103,7 @@ final class ColumnRenameTest extends TestCase
     {
         $adapter = $this->createPostgres(['_id', 'age']);
 
-        $this->assertTrue($adapter->updateAttribute('users', Attribute::integer(key: 'age', required: true), 'years'));
+        $this->assertTrue($adapter->updateAttribute('users', 'age', Attribute::integer(key: 'years', required: true)));
 
         $this->assertCount(3, $this->statements);
         $this->assertStringStartsWith(self::POSTGRES_CATALOG, $this->statements[0]);
@@ -118,15 +118,14 @@ final class ColumnRenameTest extends TestCase
         $this->expectException(DuplicateException::class);
         $this->expectExceptionMessage('Attribute already exists');
 
-        $adapter->updateAttribute('users', Attribute::integer(key: 'age', required: true), 'years');
+        $adapter->updateAttribute('users', 'age', Attribute::integer(key: 'years', required: true));
     }
 
     public function testPostgresReadsNoCatalogWithoutARename(): void
     {
         $adapter = $this->createPostgres(['_id', 'age']);
 
-        $this->assertTrue($adapter->updateAttribute('users', Attribute::integer(key: 'age', required: true)));
-        $this->assertTrue($adapter->updateAttribute('users', Attribute::integer(key: 'age', required: true), 'age'));
+        $this->assertTrue($adapter->updateAttribute('users', 'age', Attribute::integer(key: 'age', required: true)));
 
         $this->assertSame([], \array_filter($this->statements, fn (string $statement): bool => \str_starts_with($statement, self::POSTGRES_CATALOG)));
     }
@@ -167,7 +166,7 @@ final class ColumnRenameTest extends TestCase
     {
         $adapter = $this->createMariaDB($adapterClass, ['_id', 'years']);
 
-        $this->assertTrue($adapter->updateAttribute('users', Attribute::integer(key: 'age', required: true), 'years'));
+        $this->assertTrue($adapter->updateAttribute('users', 'age', Attribute::integer(key: 'years', required: true)));
 
         $this->assertCount(2, $this->statements);
         $this->assertStringStartsWith('ALTER TABLE `database`.`namespace_users` MODIFY `years` INT', $this->statements[1]);
@@ -181,7 +180,7 @@ final class ColumnRenameTest extends TestCase
     {
         $adapter = $this->createMariaDB($adapterClass, ['_id', 'age']);
 
-        $this->assertTrue($adapter->updateAttribute('users', Attribute::integer(key: 'age', required: true), 'years'));
+        $this->assertTrue($adapter->updateAttribute('users', 'age', Attribute::integer(key: 'years', required: true)));
 
         $this->assertCount(2, $this->statements);
         $this->assertStringStartsWith('ALTER TABLE `database`.`namespace_users` CHANGE COLUMN `age` `years` INT', $this->statements[1]);
@@ -195,7 +194,7 @@ final class ColumnRenameTest extends TestCase
     {
         $adapter = $this->createMariaDB($adapterClass, ['_id', 'age']);
 
-        $this->assertTrue($adapter->updateAttribute('users', Attribute::integer(key: 'age', required: true)));
+        $this->assertTrue($adapter->updateAttribute('users', 'age', Attribute::integer(key: 'age', required: true)));
 
         $this->assertCount(1, $this->statements);
         $this->assertStringStartsWith('ALTER TABLE `database`.`namespace_users` MODIFY `age` INT', $this->statements[0]);

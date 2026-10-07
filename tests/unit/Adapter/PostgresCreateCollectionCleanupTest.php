@@ -14,8 +14,7 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Index;
-use Utopia\Query\Schema\IndexType;
-use Utopia\Query\Schema\Order;
+use Utopia\Query\OrderDirection;
 
 final class PostgresCreateCollectionCleanupTest extends TestCase
 {
@@ -33,7 +32,7 @@ final class PostgresCreateCollectionCleanupTest extends TestCase
 
         try {
             $this->adapter()->createCollection('books', [Attribute::string('title', size: 64)], [
-                new Index('title_index', IndexType::Key, ['title']),
+                Index::key('title_index', ['title']),
             ]);
             $this->fail('A declared index that fails must fail the collection');
         } catch (NotFoundException $error) {
@@ -57,7 +56,7 @@ final class PostgresCreateCollectionCleanupTest extends TestCase
         $log = StderrCapture::during(function () use (&$error): void {
             try {
                 $this->adapter()->createCollection('books', [Attribute::string('title', size: 64)], [
-                    new Index('title_index', IndexType::Key, ['title']),
+                    Index::key('title_index', ['title']),
                 ]);
             } catch (\Throwable $caught) {
                 $error = $caught;
@@ -76,7 +75,7 @@ final class PostgresCreateCollectionCleanupTest extends TestCase
 
         try {
             $this->adapter()->createCollection('books', [Attribute::string('title', size: 64)], [
-                new Index('title_index', IndexType::Key, ['title']),
+                Index::key('title_index', ['title']),
             ]);
             $this->fail('A declared index that already exists must reach the caller');
         } catch (DuplicateException $error) {
@@ -93,7 +92,7 @@ final class PostgresCreateCollectionCleanupTest extends TestCase
     {
         try {
             $this->adapter()->createCollection('places', [Attribute::point('location', required: true)], [
-                new Index('location_index', IndexType::Spatial, ['location'], orders: [Order::Desc]),
+                Index::spatial('location_index', 'location', order: OrderDirection::Desc),
             ]);
             $this->fail('A spatial index with orders must fail the collection');
         } catch (DatabaseException $error) {

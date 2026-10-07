@@ -42,7 +42,7 @@ final class SQLiteSharedFulltextTest extends TestCase
 
         foreach (self::TENANTS as $tenant) {
             $this->database->setTenant($tenant);
-            $this->database->createCollection(new Collection(
+            $this->database->createCollection(Collection::create(
                 id: 'notes',
                 attributes: [Attribute::string('body', size: 128)],
                 permissions: [

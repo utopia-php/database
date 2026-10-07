@@ -15,7 +15,7 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Relationship;
-use Utopia\Database\RelationType;
+use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\Validator\Authorization;
 
 final class SQLiteChildSideRelationshipTest extends TestCase
@@ -38,7 +38,7 @@ final class SQLiteChildSideRelationshipTest extends TestCase
         $this->database->create();
 
         foreach (['authors', 'books'] as $collection) {
-            $this->database->createCollection(new Collection(
+            $this->database->createCollection(Collection::create(
                 id: $collection,
                 attributes: [Attribute::string('name', size: 64)],
                 permissions: [
@@ -53,16 +53,14 @@ final class SQLiteChildSideRelationshipTest extends TestCase
 
     public function testAOneToManyKeyRenamedFromTheChildSideRenamesItsColumn(): void
     {
-        $this->database->createRelationship(new Relationship(
-            collection: 'authors',
+        $this->database->createRelationship('authors', Relationship::oneToMany(
             relatedCollection: 'books',
-            type: RelationType::OneToMany,
             twoWay: true,
             key: 'books',
             twoWayKey: 'author',
         ));
 
-        $this->assertTrue($this->database->updateRelationship('books', 'author', newKey: 'writer'));
+        $this->database->updateRelationship('books', 'author', new RelationshipUpdate(key: 'writer'));
 
         $this->assertContains('writer', $this->columns('books'));
         $this->assertNotContains('author', $this->columns('books'));
@@ -79,16 +77,14 @@ final class SQLiteChildSideRelationshipTest extends TestCase
 
     public function testAManyToOneTwoWayKeyRenamedFromTheChildSideRenamesTheParentColumn(): void
     {
-        $this->database->createRelationship(new Relationship(
-            collection: 'books',
+        $this->database->createRelationship('books', Relationship::manyToOne(
             relatedCollection: 'authors',
-            type: RelationType::ManyToOne,
             twoWay: true,
             key: 'author',
             twoWayKey: 'books',
         ));
 
-        $this->assertTrue($this->database->updateRelationship('authors', 'books', newTwoWayKey: 'writer'));
+        $this->database->updateRelationship('authors', 'books', new RelationshipUpdate(twoWayKey: 'writer'));
 
         $this->assertContains('writer', $this->columns('books'));
         $this->assertNotContains('author', $this->columns('books'));

@@ -14,10 +14,11 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Index;
-use Utopia\Database\RelationSide;
-use Utopia\Database\RelationType;
+use Utopia\Database\RelationshipSide;
+use Utopia\Database\RelationshipType;
+use Utopia\Query\OrderDirection;
+use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
-use Utopia\Query\Schema\Order;
 
 final class MariaDBSchemaTest extends TestCase
 {
@@ -43,14 +44,14 @@ final class MariaDBSchemaTest extends TestCase
 
         $adapter->createCollection('books', [
             Attribute::string('title', size: 64),
-            $this->relationship('tags', RelationType::ManyToMany, twoWay: true, side: RelationSide::Parent),
-            $this->relationship('cover', RelationType::OneToOne, twoWay: false, side: RelationSide::Child),
-            $this->relationship('chapters', RelationType::OneToMany, twoWay: true, side: RelationSide::Parent),
-            $this->relationship('shelf', RelationType::ManyToOne, twoWay: true, side: RelationSide::Child),
-            $this->relationship('isbn', RelationType::OneToOne, twoWay: false, side: RelationSide::Parent),
-            $this->relationship('summary', RelationType::OneToOne, twoWay: true, side: RelationSide::Child),
-            $this->relationship('series', RelationType::OneToMany, twoWay: true, side: RelationSide::Child),
-            $this->relationship('publisher', RelationType::ManyToOne, twoWay: true, side: RelationSide::Parent),
+            $this->relationship('tags', RelationshipType::ManyToMany, twoWay: true, side: RelationshipSide::Parent),
+            $this->relationship('cover', RelationshipType::OneToOne, twoWay: false, side: RelationshipSide::Child),
+            $this->relationship('chapters', RelationshipType::OneToMany, twoWay: true, side: RelationshipSide::Parent),
+            $this->relationship('shelf', RelationshipType::ManyToOne, twoWay: true, side: RelationshipSide::Child),
+            $this->relationship('isbn', RelationshipType::OneToOne, twoWay: false, side: RelationshipSide::Parent),
+            $this->relationship('summary', RelationshipType::OneToOne, twoWay: true, side: RelationshipSide::Child),
+            $this->relationship('series', RelationshipType::OneToMany, twoWay: true, side: RelationshipSide::Child),
+            $this->relationship('publisher', RelationshipType::ManyToOne, twoWay: true, side: RelationshipSide::Parent),
         ]);
 
         $create = $this->statements[0] ?? '';
@@ -71,7 +72,7 @@ final class MariaDBSchemaTest extends TestCase
 
         try {
             $adapter->createCollection('places', [Attribute::point('location', required: true)], [
-                new Index('location_index', IndexType::Spatial, ['location'], orders: [Order::Desc]),
+                Index::spatial('location_index', 'location', order: OrderDirection::Desc),
             ]);
             $this->fail('A spatial index with orders must be refused where the engine cannot order it');
         } catch (DatabaseException $error) {
@@ -86,7 +87,7 @@ final class MariaDBSchemaTest extends TestCase
         $adapter = $this->adapter(MariaDB::class);
 
         $adapter->createCollection('places', [Attribute::point('location', required: true)], [
-            new Index('location_index', IndexType::Spatial, ['location'], orders: [Order::Desc]),
+            Index::spatial('location_index', 'location', order: OrderDirection::Desc),
         ]);
 
         $this->assertStringContainsString('SPATIAL INDEX `location_index` (`location` DESC)', $this->statements[0] ?? '');
@@ -98,7 +99,7 @@ final class MariaDBSchemaTest extends TestCase
     public static function unknownIndexTypes(): iterable
     {
         foreach (self::engines() as $engine => [$class]) {
-            foreach ([IndexType::Ttl, IndexType::Index, IndexType::Object, IndexType::Trigram, IndexType::HnswCosine] as $type) {
+            foreach ([IndexType::Ttl, IndexType::Object, IndexType::Trigram, IndexType::HnswCosine] as $type) {
                 yield $engine . ' ' . $type->value => [$class, $type];
             }
         }
@@ -113,7 +114,7 @@ final class MariaDBSchemaTest extends TestCase
         $adapter = $this->adapterWithCollection($class);
 
         try {
-            $adapter->createIndex('events', new Index('happened_index', $type, ['happened']));
+            $adapter->createIndex('events', Index::fromArray(['key' => 'happened_index', 'type' => $type, 'attributes' => ['happened'], 'ttl' => 3600]));
             $this->fail('An index type the engine does not create must be refused');
         } catch (DatabaseException $error) {
             $this->assertSame(
@@ -133,7 +134,7 @@ final class MariaDBSchemaTest extends TestCase
     {
         $adapter = $this->adapterWithCollection($class);
 
-        $this->assertTrue($adapter->createIndex('events', new Index('happened_index', IndexType::Key, ['happened'])));
+        $this->assertTrue($adapter->createIndex('events', Index::key('happened_index', ['happened'])));
         $this->assertCount(1, $this->statements);
         $this->assertStringContainsString('`happened_index`', $this->statements[0]);
     }
@@ -147,7 +148,7 @@ final class MariaDBSchemaTest extends TestCase
         $adapter = $this->adapterWithCollection($class);
 
         try {
-            $adapter->createIndex('missing', new Index('happened_index', IndexType::Key, ['happened']));
+            $adapter->createIndex('missing', Index::key('happened_index', ['happened']));
             $this->fail('An index on a collection without a definition must not be created');
         } catch (NotFoundException $error) {
             $this->assertSame('Collection not found', $error->getMessage());
@@ -156,15 +157,15 @@ final class MariaDBSchemaTest extends TestCase
         $this->assertSame([], $this->statements);
     }
 
-    private function relationship(string $key, RelationType $type, bool $twoWay, RelationSide $side): Attribute
+    private function relationship(string $key, RelationshipType $type, bool $twoWay, RelationshipSide $side): Attribute
     {
-        return Attribute::relationship(key: $key, options: [
+        return Attribute::fromArray(['key' => $key, 'type' => ColumnType::Relationship, 'options' => [
             'relatedCollection' => 'related_' . $key,
             'relationType' => $type->value,
             'twoWay' => $twoWay,
             'twoWayKey' => 'back_' . $key,
             'side' => $side->value,
-        ]);
+        ]]);
     }
 
     /**

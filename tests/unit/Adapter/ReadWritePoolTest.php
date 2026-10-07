@@ -24,6 +24,7 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Hook\Write;
+use Utopia\Database\Index;
 use Utopia\Database\Profiler\QueryProfiler;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Pools\Pool as UtopiaPool;
@@ -379,7 +380,7 @@ class ReadWritePoolTest extends TestCase
             ->method('createAttribute')
             ->willReturn(true);
 
-        $attr = new \Utopia\Database\Attribute(key: 'test', type: \Utopia\Query\Schema\ColumnType::String, size: 128);
+        $attr = Attribute::string(key: 'test', size: 128);
         $this->pool->delegate('createAttribute', ['collection', $attr]);
     }
 
@@ -390,7 +391,7 @@ class ReadWritePoolTest extends TestCase
             ->method('createIndex')
             ->willReturn(true);
 
-        $index = new \Utopia\Database\Index(key: 'idx', type: \Utopia\Query\Schema\IndexType::Key, attributes: ['col']);
+        $index = Index::key(key: 'idx', attributes: ['col']);
         $this->pool->delegate('createIndex', ['collection', $index, [], []]);
     }
 
@@ -563,7 +564,7 @@ class ReadWritePoolTest extends TestCase
             ->setNamespace('replication')
             ->setAuthorization(new Authorization());
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: 'posts',
             permissions: [
                 Permission::create(Role::any()),
@@ -735,7 +736,7 @@ class ReadWritePoolTest extends TestCase
             ->setNamespace('replication')
             ->setAuthorization(new Authorization());
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: 'articles',
             attributes: [Attribute::string(key: 'title')],
             permissions: [

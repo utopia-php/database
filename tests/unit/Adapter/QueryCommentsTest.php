@@ -49,7 +49,7 @@ final class QueryCommentsTest extends TestCase
         $this->adapter = new SQLite($this->recordingConnection());
         $this->database = $this->open($this->adapter);
         $this->database->create();
-        $this->database->createCollection(new Collection(
+        $this->database->createCollection(Collection::create(
             id: 'movies',
             attributes: [
                 Attribute::string('title', size: 128),
@@ -177,7 +177,7 @@ final class QueryCommentsTest extends TestCase
         $this->assertSame(2, $this->database->count('movies'));
         $this->assertSame(1965 + 2017, $this->database->sum('movies', 'year'));
         $this->assertTrue($this->database->deleteDocument('movies', 'arrival'));
-        $this->assertTrue($this->database->deleteCollection('movies'));
+        $this->database->deleteCollection('movies');
 
         $this->assertEveryStatementStartsWith("/* user: user-1 */\n");
     }

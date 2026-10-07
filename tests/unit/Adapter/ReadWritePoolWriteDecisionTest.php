@@ -40,7 +40,7 @@ final class ReadWritePoolWriteDecisionTest extends TestCase
         foreach ([$this->primary, $replica] as $adapter) {
             $server = $this->createDatabase($adapter);
             $server->create();
-            $server->createCollection(new Collection(
+            $server->createCollection(Collection::create(
                 id: self::COLLECTION,
                 attributes: [Attribute::string(key: 'expiry', size: 32)],
                 permissions: [

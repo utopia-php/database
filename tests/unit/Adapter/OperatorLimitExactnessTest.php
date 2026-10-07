@@ -47,7 +47,7 @@ final class OperatorLimitExactnessTest extends TestCase
         $database = new Database(new SQLite(new PDO('sqlite::memory:')), new Cache(new NoCache()));
         $database->setDatabase('limits')->setNamespace('limits')->setAuthorization(new Authorization());
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: 'counters',
             attributes: [
                 Attribute::bigInteger('high', default: 8999999999999999990),

@@ -40,7 +40,7 @@ final class SQLiteSchemaTest extends TestCase
             ->setNamespace(self::NAMESPACE)
             ->setAuthorization(new Authorization());
         $this->database->create();
-        $this->database->createCollection(new Collection(
+        $this->database->createCollection(Collection::create(
             id: 'notes',
             attributes: [Attribute::string('title', size: 64)],
             indexes: [Index::key(key: 'title_index', attributes: ['title'])],
@@ -92,7 +92,7 @@ final class SQLiteSchemaTest extends TestCase
 
     public function testALongStringIsStoredWhole(): void
     {
-        $this->database->createCollection(new Collection(
+        $this->database->createCollection(Collection::create(
             id: 'articles',
             attributes: [Attribute::string('body', size: 20000000)],
             permissions: [Permission::create(Role::any()), Permission::read(Role::any())],

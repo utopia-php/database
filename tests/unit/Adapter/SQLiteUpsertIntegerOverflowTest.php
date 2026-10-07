@@ -32,7 +32,7 @@ final class SQLiteUpsertIntegerOverflowTest extends TestCase
             ->setNamespace(self::NAMESPACE)
             ->setAuthorization(new Authorization());
         $this->database->create();
-        $this->database->createCollection(new Collection(
+        $this->database->createCollection(Collection::create(
             id: 'counters',
             attributes: [
                 Attribute::bigInteger('high', default: PHP_INT_MAX - 5),

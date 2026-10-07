@@ -296,7 +296,7 @@ final class PoolTest extends TestCase
             ->setAuthorization(new Authorization());
         $database->enableProfiling();
         $database->create();
-        $database->createCollection(new Collection(id: 'posts'));
+        $database->createCollection(Collection::create(id: 'posts'));
 
         $profiler = $database->getProfiler();
         $this->assertInstanceOf(QueryProfiler::class, $profiler);

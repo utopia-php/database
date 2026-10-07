@@ -152,7 +152,7 @@ final class BaseAdapterStateTest extends TestCase
 
     private function notes(string $id): Collection
     {
-        return new Collection(
+        return Collection::create(
             id: $id,
             attributes: [Attribute::string('body', size: 64)],
             permissions: [

@@ -50,7 +50,7 @@ final class SpatialColumnDefinitionTest extends TestCase
     {
         $attributes = [
             Attribute::point(key: 'location', required: true),
-            Attribute::linestring(key: 'route'),
+            Attribute::lineString(key: 'route'),
             Attribute::polygon(key: 'area', required: true),
         ];
         $adapter = $this->createAdapter($adapterClass);
@@ -75,7 +75,7 @@ final class SpatialColumnDefinitionTest extends TestCase
         $columns = ['`location` POINT NOT NULL', '`route` LINESTRING NULL', '`area` POLYGON NOT NULL'];
         $attributes = [
             Attribute::point(key: 'location', required: true),
-            Attribute::linestring(key: 'route'),
+            Attribute::lineString(key: 'route'),
             Attribute::polygon(key: 'area', required: true),
         ];
 
@@ -87,7 +87,7 @@ final class SpatialColumnDefinitionTest extends TestCase
         $this->statements = [];
         foreach ($attributes as $attribute) {
             $adapter->createAttribute('places', $attribute);
-            $adapter->updateAttribute('places', $attribute);
+            $adapter->updateAttribute('places', $attribute->key, $attribute);
         }
 
         $expected = [];
@@ -104,7 +104,7 @@ final class SpatialColumnDefinitionTest extends TestCase
         $columns = ['`location` POINT SRID 4326 NOT NULL', '`route` LINESTRING SRID 4326 NOT NULL', '`area` POLYGON SRID 4326 NOT NULL'];
         $attributes = [
             Attribute::point(key: 'location', required: true),
-            Attribute::linestring(key: 'route', required: true),
+            Attribute::lineString(key: 'route', required: true),
             Attribute::polygon(key: 'area', required: true),
         ];
 
@@ -115,7 +115,7 @@ final class SpatialColumnDefinitionTest extends TestCase
 
         $this->statements = [];
         foreach ($attributes as $attribute) {
-            $adapter->updateAttribute('places', $attribute);
+            $adapter->updateAttribute('places', $attribute->key, $attribute);
         }
 
         $expected = [];

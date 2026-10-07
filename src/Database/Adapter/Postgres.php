@@ -1376,7 +1376,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             $end = strrpos($wkb, '))');
             $inside = substr($wkb, $start, $end - $start);
 
-            $rings = explode('),(', $inside);
+            $rings = \preg_split('/\)\s*,\s*\(/', $inside) ?: [$inside];
 
             return array_map(function ($ring) {
                 $points = explode(',', $ring);

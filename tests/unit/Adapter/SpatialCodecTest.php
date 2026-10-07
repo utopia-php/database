@@ -45,6 +45,11 @@ final class SpatialCodecTest extends TestCase
     {
         yield 'point' => [ColumnType::Point, [1.5, 2], 'POINT(1.5 2)'];
         yield 'linestring' => [ColumnType::Linestring, [[0, 0], [1, 1], [2, 0.5]], 'LINESTRING(0 0, 1 1, 2 0.5)'];
+        yield 'polygon with a hole' => [
+            ColumnType::Polygon,
+            [[[0, 0], [0, 4], [4, 4], [4, 0], [0, 0]], [[1, 1], [1, 2], [2, 2], [1, 1]]],
+            'POLYGON((0 0, 0 4, 4 4, 4 0, 0 0), (1 1, 1 2, 2 2, 1 1))',
+        ];
         yield 'polygon given as one ring' => [ColumnType::Polygon, [[0, 0], [0, 1], [1, 1], [0, 0]], 'POLYGON((0 0, 0 1, 1 1, 0 0))'];
     }
 

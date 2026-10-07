@@ -112,7 +112,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
      */
     public function update(string $name, string $new): bool
     {
-        if ($this->getSharedTables()) {
+        if ($this->hasSharedTables()) {
             throw new DatabaseException('Cannot rename a database while shared tables are enabled');
         }
 

@@ -2,12 +2,14 @@
 
 namespace Utopia\Database\Traits;
 
+use Closure;
 use Exception;
 use Throwable;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
+use Utopia\Database\AttributeUpdate;
 use Utopia\Database\Capability;
-use Utopia\Database\Database;
+use Utopia\Database\Collection;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
@@ -20,7 +22,6 @@ use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Mismatch as MismatchException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Structure as StructureException;
-use Utopia\Database\Helpers\ID;
 use Utopia\Database\Index;
 use Utopia\Database\SetType;
 use Utopia\Database\Validator\Attribute as AttributeValidator;
@@ -48,73 +49,36 @@ trait Attributes
     ];
 
     /**
-     * Create Attribute
-     *
-     * @param  string  $collection  The collection identifier
-     * @param  Attribute  $attribute  The attribute definition to create
-     * @return bool True if the attribute was created successfully
+     * @return Attribute The attribute as stored
      *
      * @throws DatabaseException
      * @throws DuplicateException
      * @throws LimitException
+     * @throws NotFoundException
      * @throws Exception
      */
-    public function createAttribute(string $collection, Attribute $attribute): bool
+    public function createAttribute(string $collection, Attribute $attribute): Attribute
     {
-        $attribute = clone $attribute;
-        $id = $attribute->getKey();
-        $type = $attribute->getType();
-        $size = $attribute->getSize();
-        $required = $attribute->isRequired();
-        $default = $attribute->getDefault();
-        $signed = $attribute->isSigned();
-        $array = $attribute->isArray();
-        $format = $attribute->getFormat();
-        $formatOptions = $attribute->getFormatOptions();
-        $filters = $attribute->getFilters();
+        $definition = $this->silent(fn () => $this->getCollection($collection));
+        $attribute = self::normalise($attribute);
 
-        $collection = $this->silent(fn () => $this->getCollection($collection));
-
-        if ($collection->isEmpty()) {
-            throw new NotFoundException('Collection not found');
-        }
-
-        if (in_array($type, Database::ATTRIBUTE_FILTER_COLUMN_TYPES, true)) {
-            $filters[] = $type->value;
-            $filters = array_unique($filters);
-            $attribute->setFilters($filters);
-        }
+        $schemaAttributes = $this->adapter->hasFeature(Feature\SchemaAttributes::class)
+            ? $this->getSchemaAttributes($definition->getId())
+            : [];
 
         $existsInSchema = false;
 
-        $schemaAttributes = $this->adapter->hasFeature(Feature\SchemaAttributes::class)
-            ? $this->getSchemaAttributes($collection->getId())
-            : [];
-
         try {
-            $attribute = $this->validateAttribute(
-                $collection,
-                $id,
-                $type->value,
-                $size,
-                $required,
-                $default,
-                $signed,
-                $array,
-                $format,
-                $formatOptions,
-                $filters,
-                $schemaAttributes
-            );
+            $this->validateAttribute($definition, $attribute, $schemaAttributes);
         } catch (DuplicateException $error) {
-            $existsInSchema = $this->reconcileSchemaOnlyColumn($collection, $attribute, $schemaAttributes, $error);
+            $existsInSchema = $this->reconcileSchemaOnlyColumn($definition, $attribute, $schemaAttributes, $error);
         }
 
         $created = false;
 
         if (! $existsInSchema) {
             try {
-                $created = $this->adapter->createAttribute($collection->getId(), $attribute);
+                $created = $this->adapter->createAttribute($definition->getId(), $attribute);
 
                 if (! $created) {
                     throw new DatabaseException('Failed to create attribute');
@@ -122,172 +86,488 @@ trait Attributes
             } catch (MismatchException $error) {
                 throw $error;
             } catch (DuplicateException) {
-                // Attribute not in metadata (orphan detection above confirmed this).
-                // A DuplicateException from the adapter means the column exists only
-                // in physical schema — suppress and proceed to metadata update.
+                // The column exists only in the physical schema (the metadata check above passed),
+                // so the metadata is written for it.
             }
         }
 
-        $collection->setAttribute('attributes', $attribute, SetType::Append);
+        $definition->setAttribute(self::COLLECTION_ATTRIBUTES, $attribute->toDocument(), SetType::Append);
 
         $this->updateMetadata(
-            collection: $collection,
-            rollbackOperation: fn () => $this->cleanupAttribute($collection->getId(), $id),
+            collection: $definition,
+            rollbackOperation: fn () => $this->cleanupAttribute($definition->getId(), $attribute->key),
             shouldRollback: $created,
-            operationDescription: "attribute creation '{$id}'"
+            operationDescription: "attribute creation '{$attribute->key}'"
         );
 
-        $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
-        $this->withRetries(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $collection->getId()));
-
-        $this->triggerHooks(Event::DocumentPurge, new Document([
-            Document::ID => $collection->getId(),
-            Document::COLLECTION => self::METADATA,
-        ]));
+        $this->purgeCollectionCaches($definition->getId());
 
         $this->triggerHooks(
             Event::AttributeCreate,
-            $attribute->toDocument()->setAttribute(Document::COLLECTION, $collection->getId()),
+            $attribute->toDocument()->setAttribute(Document::COLLECTION, $definition->getId()),
         );
 
-        return true;
+        return $attribute;
     }
 
     /**
-     * Create Attributes
-     *
-     * @param  string  $collection  The collection identifier
-     * @param  array<Attribute>  $attributes  The attribute definitions to create
-     * @return bool True if the attributes were created successfully
+     * @param  list<Attribute>  $attributes
+     * @return list<Attribute> The attributes as stored
      *
      * @throws AuthorizationException
      * @throws ConflictException
      * @throws DatabaseException
      * @throws DuplicateException
      * @throws LimitException
+     * @throws NotFoundException
      * @throws StructureException
      * @throws Exception
      */
-    public function createAttributes(string $collection, array $attributes): bool
+    public function createAttributes(string $collection, array $attributes): array
     {
-        if (empty($attributes)) {
+        if ($attributes === []) {
             throw new DatabaseException('No attributes to create');
         }
 
-        $attributes = \array_map(static fn (Attribute $attribute): Attribute => clone $attribute, $attributes);
-
-        $collection = $this->silent(fn () => $this->getCollection($collection));
-
-        if ($collection->isEmpty()) {
-            throw new NotFoundException('Collection not found');
-        }
+        $definition = $this->silent(fn () => $this->getCollection($collection));
 
         $schemaAttributes = $this->adapter->hasFeature(Feature\SchemaAttributes::class)
-            ? $this->getSchemaAttributes($collection->getId())
+            ? $this->getSchemaAttributes($definition->getId())
             : [];
 
-        $attributeModels = [];
-        $attributesToCreate = [];
+        $stored = [];
+        $toCreate = [];
         foreach ($attributes as $attribute) {
-            if (empty($attribute->getKey())) {
+            if ($attribute->key === '') {
                 throw new DatabaseException('Missing attribute key');
             }
 
-            if (in_array($attribute->getType(), Database::ATTRIBUTE_FILTER_COLUMN_TYPES, true)) {
-                $attribute->setFilters(array_values(
-                    array_unique(array_merge($attribute->getFilters(), [$attribute->getType()->value]))
-                ));
-            }
-
+            $attribute = self::normalise($attribute);
             $existsInSchema = false;
 
             try {
-                $attribute = $this->validateAttribute(
-                    $collection,
-                    $attribute->getKey(),
-                    $attribute->getType()->value,
-                    $attribute->getSize(),
-                    $attribute->isRequired(),
-                    $attribute->getDefault(),
-                    $attribute->isSigned(),
-                    $attribute->isArray(),
-                    $attribute->getFormat(),
-                    $attribute->getFormatOptions(),
-                    $attribute->getFilters(),
-                    $schemaAttributes
-                );
+                $this->validateAttribute($definition, $attribute, $schemaAttributes);
             } catch (DuplicateException $error) {
-                $existsInSchema = $this->reconcileSchemaOnlyColumn($collection, $attribute, $schemaAttributes, $error);
+                $existsInSchema = $this->reconcileSchemaOnlyColumn($definition, $attribute, $schemaAttributes, $error);
             }
 
-            $attributeModels[] = $attribute;
+            $stored[] = $attribute;
             if (! $existsInSchema) {
-                $attributesToCreate[] = $attribute;
+                $toCreate[] = $attribute;
             }
         }
 
-        $createdAttributes = [];
+        $created = [];
 
-        if (! empty($attributesToCreate)) {
+        if ($toCreate !== []) {
             try {
-                if (! $this->adapter->createAttributes($collection->getId(), $attributesToCreate)) {
+                if (! $this->adapter->createAttributes($definition->getId(), $toCreate)) {
                     throw new DatabaseException('Failed to create attributes');
                 }
-                $createdAttributes = $attributesToCreate;
+                $created = $toCreate;
             } catch (MismatchException $error) {
                 throw $error;
             } catch (DuplicateException) {
-                // Batch failed because at least one column already exists.
-                // Fallback to per-attribute creation so non-duplicates still land in schema.
-                foreach ($attributesToCreate as $attributeToCreate) {
+                // At least one column already exists, so each is created on its own and the
+                // duplicates are skipped.
+                foreach ($toCreate as $attribute) {
                     try {
-                        $this->adapter->createAttribute(
-                            $collection->getId(),
-                            $attributeToCreate
-                        );
-                        $createdAttributes[] = $attributeToCreate;
+                        $this->adapter->createAttribute($definition->getId(), $attribute);
+                        $created[] = $attribute;
                     } catch (MismatchException $error) {
                         throw $error;
                     } catch (DuplicateException) {
-                        // Column already exists in schema — skip
+                        // Already in the schema.
                     }
                 }
             }
         }
 
-        foreach ($attributeModels as $attributeModel) {
-            $collection->setAttribute('attributes', $attributeModel, SetType::Append);
+        foreach ($stored as $attribute) {
+            $definition->setAttribute(self::COLLECTION_ATTRIBUTES, $attribute->toDocument(), SetType::Append);
         }
 
         $this->updateMetadata(
-            collection: $collection,
-            rollbackOperation: fn () => $this->cleanupAttributes($collection->getId(), $createdAttributes),
-            shouldRollback: $createdAttributes !== [],
+            collection: $definition,
+            rollbackOperation: fn () => $this->cleanupAttributes($definition->getId(), $created),
+            shouldRollback: $created !== [],
             operationDescription: 'attributes creation',
             rollbackReturnsErrors: true
         );
 
-        $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
-        $this->withRetries(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $collection->getId()));
+        $this->purgeCollectionCaches($definition->getId());
+
+        $documents = \array_map(
+            static fn (Attribute $attribute): Document => $attribute->toDocument()
+                ->setAttribute(Document::COLLECTION, $definition->getId()),
+            $stored,
+        );
+
+        foreach ($documents as $document) {
+            $this->triggerHooks(Event::AttributeCreate, $document);
+        }
+
+        $this->triggerHooks(Event::AttributesCreate, $documents);
+
+        return $stored;
+    }
+
+    /**
+     * Applies a sparse update: a null field keeps its value and `default: null` clears the default. An explicit
+     * `required: true` clears the default; a default on a required attribute is refused. `required: false`
+     * relaxes the column's NOT NULL.
+     *
+     * @return Attribute The attribute as stored
+     *
+     * @throws DatabaseException
+     * @throws DependencyException
+     * @throws DuplicateException
+     * @throws IndexException
+     * @throws LimitException
+     * @throws NotFoundException
+     * @throws StructureException
+     * @throws Exception
+     */
+    public function updateAttribute(string $collection, string $key, AttributeUpdate $update): Attribute
+    {
+        $definition = $this->silent(fn () => $this->getCollection($collection));
+
+        if ($definition->getId() === self::METADATA) {
+            throw new DatabaseException('Cannot update metadata attributes');
+        }
+
+        $attributes = $definition->attributes();
+        $position = self::attributePosition($attributes, $key);
+
+        if ($position === null) {
+            throw new NotFoundException('Attribute not found');
+        }
+
+        $stored = $attributes[$position];
+
+        if ($stored->type === ColumnType::Relationship) {
+            throw new DatabaseException('Cannot update relationship as an attribute');
+        }
+
+        if ($update->isEmpty()) {
+            return $stored;
+        }
+
+        $required = $update->required ?? $stored->required;
+        if ($update->required !== true && $required && $update->changesDefault() && $update->default !== null) {
+            throw new DatabaseException('Cannot set a default value on a required attribute');
+        }
+
+        $updated = $stored->apply($update);
+        if ($update->required === true && $updated->default !== null) {
+            $updated = $updated->apply(new AttributeUpdate(default: null));
+        }
+
+        $newKey = $updated->key;
+        $renaming = $newKey !== $key;
+        if ($renaming && self::attributePosition($attributes, $newKey) !== null) {
+            throw new DuplicateException('Attribute name already used');
+        }
+
+        $this->validateAttributeUpdate($updated, $update->size ?? $stored->size ?? 0, $update->array ?? $stored->array);
+
+        $altering = $update->type !== null
+            || $update->size !== null
+            || $update->signed !== null
+            || $update->array !== null
+            || $update->key !== null
+            || ($updated->isSpatial() && ! $this->adapter->supports(Capability::SpatialIndexNull));
+
+        $originalIndexes = $definition->indexes();
+        $attributes = self::replacing($attributes, $key, $updated);
+        $indexes = $renaming ? self::renameIndexedAttribute($originalIndexes, $key, $newKey) : $originalIndexes;
+
+        $this->writeAttributes($definition, $attributes);
+        if ($renaming) {
+            $this->writeIndexes($definition, $indexes);
+        }
+
+        if (
+            $this->adapter->getDocumentSizeLimit() > 0 &&
+            $this->adapter->getAttributeWidth($definition) >= $this->adapter->getDocumentSizeLimit()
+        ) {
+            throw new LimitException('Row width limit reached. Cannot update attribute.');
+        }
+
+        if ($updated->isSpatial() && ! $this->adapter->supports(Capability::SpatialIndexNull)) {
+            $this->assertSpatialIndexesRequired($attributes, $indexes);
+        }
+
+        $updatedInSchema = false;
+
+        if ($altering) {
+            if ($renaming) {
+                $validator = new IndexDependencyValidator(
+                    $indexes,
+                    $this->adapter->supports(Capability::CastIndexArray),
+                );
+
+                if (! $validator->isValid($updated)) {
+                    throw new DependencyException($validator->getDescription());
+                }
+            }
+
+            if ($this->validation()->get()) {
+                $validator = $this->indexValidator($attributes, $originalIndexes);
+
+                foreach ($indexes as $index) {
+                    if (! $validator->isValid($index)) {
+                        throw new IndexException($validator->getDescription());
+                    }
+                }
+            }
+
+            $updatedInSchema = $this->adapter->updateAttribute($definition->getId(), $key, $updated);
+
+            if (! $updatedInSchema) {
+                throw new DatabaseException('Failed to update attribute');
+            }
+        } elseif ($stored->required && ! $updated->required) {
+            // The alter path applies nullability itself. A required-only change relaxes the column on its own,
+            // because the column rewrite re-casts datetime columns on Postgres.
+            if (! $this->adapter->relaxAttributeRequired($definition->getId(), $key)) {
+                throw new DatabaseException('Failed to update attribute');
+            }
+        }
+
+        $this->updateMetadata(
+            collection: $definition,
+            rollbackOperation: fn () => $this->adapter->updateAttribute($definition->getId(), $newKey, $stored),
+            shouldRollback: $updatedInSchema,
+            operationDescription: "attribute update '{$key}'",
+            silentRollback: true
+        );
+
+        if ($altering) {
+            $this->withRetries(fn () => $this->purgeCachedCollection($definition->getId()));
+        }
+        $this->withRetries(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $definition->getId()));
 
         $this->triggerHooks(Event::DocumentPurge, new Document([
-            Document::ID => $collection->getId(),
+            Document::ID => $definition->getId(),
             Document::COLLECTION => self::METADATA,
         ]));
 
-        $createdAttributes = \array_map(
-            static fn (Attribute $attribute): Document => $attribute->toDocument()
-                ->setAttribute(Document::COLLECTION, $collection->getId()),
-            $attributeModels,
+        $this->triggerHooks(
+            Event::AttributeUpdate,
+            $updated->toDocument()->setAttribute(Document::COLLECTION, $definition->getId()),
         );
 
-        foreach ($createdAttributes as $createdAttribute) {
-            $this->triggerHooks(Event::AttributeCreate, $createdAttribute);
+        return $updated;
+    }
+
+    /**
+     * Checks that the attribute can be added to the collection without exceeding its limits.
+     *
+     * @throws LimitException
+     * @throws NotFoundException
+     */
+    public function checkAttribute(string $collection, Attribute $attribute): bool
+    {
+        $definition = clone ($this->silent(fn () => $this->getCollection($collection)));
+
+        $definition->setAttribute(self::COLLECTION_ATTRIBUTES, $attribute->toDocument(), SetType::Append);
+
+        if (
+            $this->adapter->getLimitForAttributes() > 0 &&
+            $this->adapter->getCountOfAttributes($definition) > $this->adapter->getLimitForAttributes()
+        ) {
+            throw new LimitException('Column limit reached. Cannot create new attribute. Current attribute count is '.$this->adapter->getCountOfAttributes($definition).' but the maximum is '.$this->adapter->getLimitForAttributes().'. Remove some attributes to free up space.');
         }
 
-        $this->triggerHooks(Event::AttributesCreate, $createdAttributes);
+        if (
+            $this->adapter->getDocumentSizeLimit() > 0 &&
+            $this->adapter->getAttributeWidth($definition) >= $this->adapter->getDocumentSizeLimit()
+        ) {
+            throw new LimitException('Row width limit reached. Cannot create new attribute. Current row width is '.$this->adapter->getAttributeWidth($definition).' bytes but the maximum is '.$this->adapter->getDocumentSizeLimit().' bytes. Reduce the size of existing attributes or remove some attributes to free up space.');
+        }
 
         return true;
+    }
+
+    /**
+     * @throws ConflictException
+     * @throws DatabaseException
+     * @throws DependencyException
+     * @throws NotFoundException
+     */
+    public function deleteAttribute(string $collection, string $key): void
+    {
+        $definition = $this->silent(fn () => $this->getCollection($collection));
+        $attributes = $definition->attributes();
+        $position = self::attributePosition($attributes, $key);
+
+        if ($position === null) {
+            throw new NotFoundException('Attribute not found');
+        }
+
+        $attribute = $attributes[$position];
+
+        if ($attribute->type === ColumnType::Relationship) {
+            throw new DatabaseException('Cannot delete relationship as an attribute');
+        }
+
+        $indexes = $definition->indexes();
+
+        if ($this->validation()->get()) {
+            $validator = new IndexDependencyValidator(
+                $indexes,
+                $this->adapter->supports(Capability::CastIndexArray),
+            );
+
+            if (! $validator->isValid($attribute)) {
+                throw new DependencyException($validator->getDescription());
+            }
+        }
+
+        unset($attributes[$position]);
+        $this->writeAttributes($definition, \array_values($attributes));
+        $this->writeIndexes($definition, self::withoutIndexedAttribute($indexes, $key));
+
+        $deletedInSchema = false;
+        try {
+            if (! $this->adapter->deleteAttribute($definition->getId(), $key)) {
+                throw new DatabaseException('Failed to delete attribute');
+            }
+            $deletedInSchema = true;
+        } catch (NotFoundException) {
+            // Already absent from the schema; the metadata is still removed below.
+        }
+
+        $this->updateMetadata(
+            collection: $definition,
+            rollbackOperation: fn () => $this->adapter->createAttribute($definition->getId(), $attribute),
+            shouldRollback: $deletedInSchema,
+            operationDescription: "attribute deletion '{$key}'",
+            silentRollback: true
+        );
+
+        $this->purgeCollectionCaches($definition->getId());
+
+        $this->triggerHooks(
+            Event::AttributeDelete,
+            $attribute->toDocument()->setAttribute(Document::COLLECTION, $definition->getId()),
+        );
+    }
+
+    /**
+     * @throws AuthorizationException
+     * @throws ConflictException
+     * @throws DatabaseException
+     * @throws DependencyException
+     * @throws DuplicateException
+     * @throws NotFoundException
+     * @throws StructureException
+     */
+    public function renameAttribute(string $collection, string $old, string $new): void
+    {
+        $definition = $this->silent(fn () => $this->getCollection($collection));
+        $attributes = $definition->attributes();
+        $position = self::attributePosition($attributes, $old);
+
+        if (self::attributePosition($attributes, $new) !== null) {
+            throw new DuplicateException('Attribute name already used');
+        }
+
+        if ($position === null) {
+            throw new NotFoundException('Attribute not found');
+        }
+
+        $indexes = $definition->indexes();
+
+        if ($this->validation()->get()) {
+            $validator = new IndexDependencyValidator(
+                $indexes,
+                $this->adapter->supports(Capability::CastIndexArray),
+            );
+
+            if (! $validator->isValid($attributes[$position])) {
+                throw new DependencyException($validator->getDescription());
+            }
+        }
+
+        $renamed = $attributes[$position]->apply(new AttributeUpdate(key: $new));
+        $attributes = self::replacing($attributes, $old, $renamed);
+
+        try {
+            if (! $this->adapter->renameAttribute($definition->getId(), $old, $new)) {
+                throw new DatabaseException('Failed to rename attribute');
+            }
+        } catch (DuplicateException $error) {
+            throw $error;
+        } catch (Throwable $error) {
+            throw new DatabaseException("Failed to rename attribute '{$old}' to '{$new}': ".$error->getMessage(), previous: $error);
+        }
+
+        $this->writeAttributes($definition, $attributes);
+        $this->writeIndexes($definition, self::renameIndexedAttribute($indexes, $old, $new));
+
+        $this->updateMetadata(
+            collection: $definition,
+            rollbackOperation: fn () => $this->adapter->renameAttribute($definition->getId(), $new, $old),
+            shouldRollback: true,
+            operationDescription: "attribute rename '{$old}' to '{$new}'"
+        );
+
+        $this->withRetries(fn () => $this->purgeCachedCollection($definition->getId()));
+
+        $this->triggerHooks(
+            Event::AttributeUpdate,
+            $renamed->toDocument()->setAttribute(Document::COLLECTION, $definition->getId()),
+        );
+    }
+
+    /**
+     * Rewrites one attribute's metadata without touching the schema; relationships keep their stored
+     * definitions in step through it.
+     *
+     * @param  Closure(Attribute): Attribute  $update
+     *
+     * @throws ConflictException
+     * @throws DatabaseException
+     * @throws NotFoundException
+     */
+    private function updateAttributeMeta(string $collection, string $key, Closure $update, bool $triggerEvent = true): Attribute
+    {
+        $definition = $this->silent(fn () => $this->getCollection($collection));
+
+        if ($definition->getId() === self::METADATA) {
+            throw new DatabaseException('Cannot update metadata attributes');
+        }
+
+        $attributes = $definition->attributes();
+        $position = self::attributePosition($attributes, $key);
+
+        if ($position === null) {
+            throw new NotFoundException('Attribute not found');
+        }
+
+        $attribute = $update($attributes[$position]);
+
+        $this->writeAttributes($definition, self::replacing($attributes, $key, $attribute));
+
+        $this->updateMetadata(
+            collection: $definition,
+            rollbackOperation: null,
+            shouldRollback: false,
+            operationDescription: "attribute metadata update '{$key}'"
+        );
+
+        $this->withRetries(fn () => $this->purgeCachedCollection($definition->getId()));
+
+        if ($triggerEvent) {
+            $this->triggerHooks(
+                Event::AttributeUpdate,
+                $attribute->toDocument()->setAttribute(Document::COLLECTION, $definition->getId()),
+            );
+        }
+
+        return $attribute;
     }
 
     /**
@@ -301,16 +581,14 @@ trait Attributes
      * @throws DuplicateException
      */
     private function reconcileSchemaOnlyColumn(
-        Document $collection,
+        Collection $definition,
         Attribute $attribute,
         array $schemaAttributes,
         DuplicateException $duplicate,
     ): bool {
-        /** @var array<Attribute> $attributes */
-        $attributes = $collection->getAttribute('attributes', []);
-        $key = \strtolower($attribute->getKey());
-        foreach ($attributes as $existing) {
-            if (\strtolower($existing->getKey()) === $key) {
+        $key = \strtolower($attribute->key);
+        foreach ($definition->attributes() as $existing) {
+            if (\strtolower($existing->key) === $key) {
                 throw $duplicate;
             }
         }
@@ -320,17 +598,17 @@ trait Attributes
         }
 
         $expected = $this->adapter->getColumnType(
-            $attribute->getType()->value,
-            $attribute->getSize(),
-            $attribute->isSigned(),
-            $attribute->isArray(),
-            $attribute->isRequired(),
+            $attribute->type->value,
+            $attribute->size ?? 0,
+            $attribute->signed,
+            $attribute->array,
+            $attribute->required,
         );
         if ($expected === '') {
             return true;
         }
 
-        $filteredId = \strtolower($this->adapter->filter($attribute->getKey()));
+        $filteredId = \strtolower($this->adapter->filter($attribute->key));
         foreach ($schemaAttributes as $column) {
             if (\strtolower($column->getId()) !== $filteredId) {
                 continue;
@@ -345,7 +623,7 @@ trait Attributes
                 throw new DuplicateException('Attribute exists in the shared table with another type', previous: $duplicate);
             }
 
-            $this->adapter->deleteAttribute($collection->getId(), $attribute->getKey());
+            $this->adapter->deleteAttribute($definition->getId(), $attribute->key);
 
             return false;
         }
@@ -369,64 +647,20 @@ trait Attributes
     }
 
     /**
-     * @param  array<string, mixed>  $formatOptions
-     * @param  array<string>  $filters
-     * @param  array<Document>|null  $schemaAttributes  Pre-fetched schema attributes, or null to fetch internally
+     * @param  array<Document>  $schemaAttributes
      *
      * @throws DuplicateException
      * @throws LimitException
      * @throws Exception
      */
-    private function validateAttribute(
-        Document $collection,
-        string $id,
-        string $type,
-        int $size,
-        bool $required,
-        mixed $default,
-        bool $signed,
-        bool $array,
-        ?string $format,
-        array $formatOptions,
-        array $filters,
-        ?array $schemaAttributes = null
-    ): Attribute {
-        $type = Attribute::normalizeType($type)->value;
-        if ($type === ColumnType::BigInteger->value) {
-            $size = 0;
-        }
-
-        $attribute = Attribute::fromArray([
-            Document::ID => $id,
-            'key' => $id,
-            'type' => $type,
-            'size' => $size,
-            'required' => $required,
-            'default' => $default,
-            'signed' => $signed,
-            'array' => $array,
-            'format' => $format,
-            'formatOptions' => $formatOptions,
-            'filters' => $filters,
-        ]);
-
-        $collectionClone = clone $collection;
-        $collectionClone->setAttribute('attributes', $attribute, SetType::Append);
-
-        /** @var array<Attribute> $existingAttributes */
-        $existingAttributes = $collection->getAttribute('attributes', []);
-
-        $resolvedSchemaAttributes = $schemaAttributes ?? ($this->adapter->hasFeature(Feature\SchemaAttributes::class)
-            ? $this->getSchemaAttributes($collection->getId())
-            : []);
-        $typedSchemaAttrs = [];
-        foreach ($resolvedSchemaAttributes as $schemaAttribute) {
-            $typedSchemaAttrs[] = Attribute::fromArray($schemaAttribute->getArrayCopy());
-        }
+    private function validateAttribute(Collection $definition, Attribute $attribute, array $schemaAttributes): void
+    {
+        $withAttribute = clone $definition;
+        $withAttribute->setAttribute(self::COLLECTION_ATTRIBUTES, $attribute->toDocument(), SetType::Append);
 
         $validator = new AttributeValidator(
-            attributes: $existingAttributes,
-            schemaAttributes: $typedSchemaAttrs,
+            attributes: $definition->attributes(),
+            schemaAttributes: $schemaAttributes,
             maxAttributes: $this->adapter->getLimitForAttributes(),
             maxWidth: $this->adapter->getDocumentSizeLimit(),
             maxStringLength: $this->adapter->getLimitForString(),
@@ -438,52 +672,139 @@ trait Attributes
             supportForSpatialAttributes: $this->adapter->hasFeature(Feature\Spatial::class),
             supportForObject: $this->adapter->supports(Capability::Objects),
             supportUnsignedBigInt: $this->adapter->supports(Capability::UnsignedBigInt),
-            attributeCountCallback: fn (Document $attrDoc) => $this->adapter->getCountOfAttributes($collectionClone),
-            attributeWidthCallback: fn (Document $attrDoc) => $this->adapter->getAttributeWidth($collectionClone),
-            filterCallback: fn (string $filterId) => $this->adapter->filter($filterId),
+            attributeCountCallback: fn (): int => $this->adapter->getCountOfAttributes($withAttribute),
+            attributeWidthCallback: fn (): int => $this->adapter->getAttributeWidth($withAttribute),
+            filterCallback: fn (string $key): string => $this->adapter->filter($key),
             isMigrating: $this->isMigrating(),
             sharedTables: $this->getSharedTables(),
         );
 
         $validator->isValid($attribute);
-
-        return $attribute;
     }
 
     /**
-     * Get the list of required filters for each data type
+     * Checks the updated attribute against the adapter. Size and array are the requested values, since
+     * the model normalises them away for types that take neither.
      *
-     * @param  string|null  $type  Type of the attribute
-     * @return array<string>
+     * @throws DatabaseException
      */
-    protected function getRequiredFilters(?string $type): array
+    private function validateAttributeUpdate(Attribute $attribute, int $size, bool $array): void
     {
-        return match ($type) {
-            ColumnType::Datetime->value => ['datetime'],
-            default => [],
-        };
+        switch ($attribute->type) {
+            case ColumnType::String:
+                if ($size === 0) {
+                    throw new DatabaseException('Size length is required');
+                }
+                if ($size > $this->adapter->getLimitForString()) {
+                    throw new DatabaseException('Max size allowed for string is: '.\number_format($this->adapter->getLimitForString()));
+                }
+                break;
+
+            case ColumnType::Varchar:
+                if ($size === 0) {
+                    throw new DatabaseException('Size length is required');
+                }
+                if ($size > $this->adapter->getMaxVarcharLength()) {
+                    throw new DatabaseException('Max size allowed for varchar is: '.\number_format($this->adapter->getMaxVarcharLength()));
+                }
+                break;
+
+            case ColumnType::Integer:
+                $limit = $attribute->signed ? $this->adapter->getLimitForInt() / 2 : $this->adapter->getLimitForInt();
+                if ($size > $limit) {
+                    throw new DatabaseException('Max size allowed for int is: '.\number_format($limit));
+                }
+                break;
+
+            case ColumnType::Float:
+            case ColumnType::Double:
+            case ColumnType::Boolean:
+            case ColumnType::Datetime:
+                if ($size !== 0) {
+                    throw new DatabaseException('Size must be empty');
+                }
+                break;
+
+            case ColumnType::Object:
+                if (! $this->adapter->supports(Capability::Objects)) {
+                    throw new DatabaseException('Object attributes are not supported');
+                }
+                if ($size !== 0) {
+                    throw new DatabaseException('Size must be empty for object attributes');
+                }
+                if ($array) {
+                    throw new DatabaseException('Object attributes cannot be arrays');
+                }
+                break;
+
+            case ColumnType::Point:
+            case ColumnType::Linestring:
+            case ColumnType::Polygon:
+                if (! $this->adapter->hasFeature(Feature\Spatial::class)) {
+                    throw new DatabaseException('Spatial attributes are not supported');
+                }
+                if ($size !== 0) {
+                    throw new DatabaseException('Size must be empty for spatial attributes');
+                }
+                if ($array) {
+                    throw new DatabaseException('Spatial attributes cannot be arrays');
+                }
+                break;
+
+            case ColumnType::Vector:
+                if (! $this->adapter->supports(Capability::Vectors)) {
+                    throw new DatabaseException('Vector types are not supported by the current database');
+                }
+                if ($array) {
+                    throw new DatabaseException('Vector type cannot be an array');
+                }
+                if ($size <= 0) {
+                    throw new DatabaseException('Vector dimensions must be a positive integer');
+                }
+                if ($size > self::MAX_VECTOR_DIMENSIONS) {
+                    throw new DatabaseException('Vector dimensions cannot exceed '.self::MAX_VECTOR_DIMENSIONS);
+                }
+                if ($attribute->default !== null) {
+                    if (! \is_array($attribute->default)) {
+                        throw new DatabaseException('Vector default value must be an array');
+                    }
+                    if (\count($attribute->default) !== $size) {
+                        throw new DatabaseException('Vector default value must have exactly '.$size.' elements');
+                    }
+                    foreach ($attribute->default as $component) {
+                        if (! \is_int($component) && ! \is_float($component)) {
+                            throw new DatabaseException('Vector default value must contain only numeric elements');
+                        }
+                    }
+                }
+                break;
+
+            default:
+                break;
+        }
+
+        if ($attribute->format !== null && ! Structure::hasFormat($attribute->format->name, $attribute->type)) {
+            throw new DatabaseException('Format ("'.$attribute->format->name.'") not available for this attribute type ("'.$attribute->type->value.'")');
+        }
+
+        if ($attribute->default !== null) {
+            $this->validateDefaultTypes($attribute->type, $attribute->default, $attribute->signed);
+        }
     }
 
     /**
      * Function to validate if the default value of an attribute matches its attribute type
      *
-     * @param  string  $type  Type of the attribute
-     * @param  mixed  $default  Default value of the attribute
-     *
      * @throws DatabaseException
      */
-    protected function validateDefaultTypes(string $type, mixed $default, bool $signed = true): void
+    protected function validateDefaultTypes(ColumnType $type, mixed $default, bool $signed = true): void
     {
-        $type = Attribute::normalizeType($type);
-        $defaultType = \gettype($default);
-
-        if ($defaultType === 'NULL') {
-            // Disable null. No validation required
+        if ($default === null) {
             return;
         }
 
-        if ($defaultType === 'array') {
-            if (Attribute::isSpatialType($type)) {
+        if (\is_array($default)) {
+            if ($type === ColumnType::Point || $type === ColumnType::Linestring || $type === ColumnType::Polygon) {
                 $spatial = new SpatialValidator($type->value);
                 if (! $spatial->isValid($default)) {
                     throw new DatabaseException('Invalid default value: '.$spatial->getDescription());
@@ -493,75 +814,35 @@ trait Attributes
             }
 
             if ($type !== ColumnType::Object) {
-                /** @var array<mixed> $defaultArr */
-                $defaultArr = $default;
-                foreach ($defaultArr as $value) {
-                    $this->validateDefaultTypes($type->value, $value, $signed);
+                foreach ($default as $value) {
+                    $this->validateDefaultTypes($type, $value, $signed);
                 }
             }
 
             return;
         }
 
-        $defaultStr = \is_scalar($default) ? (string) $default : '[non-scalar]';
+        $matches = match ($type) {
+            ColumnType::String, ColumnType::Varchar, ColumnType::Text, ColumnType::MediumText, ColumnType::LongText, ColumnType::Datetime => \is_string($default),
+            ColumnType::Integer => \is_int($default),
+            ColumnType::Boolean => \is_bool($default),
+            ColumnType::BigInteger => (new BigInt($signed, $this->adapter->supports(Capability::UnsignedBigInt)))->isValid($default),
+            ColumnType::Float, ColumnType::Double => \is_float($default),
+            ColumnType::Vector => \is_int($default) || \is_float($default),
+            default => false,
+        };
 
-        switch ($type) {
-            case ColumnType::String:
-            case ColumnType::Varchar:
-            case ColumnType::Text:
-            case ColumnType::MediumText:
-            case ColumnType::LongText:
-                if ($defaultType !== 'string') {
-                    throw new DatabaseException('Default value '.$defaultStr.' does not match given type '.Attribute::persistedType($type));
-                }
-                break;
-            case ColumnType::Integer:
-            case ColumnType::Boolean:
-                if ($type->value !== $defaultType) {
-                    throw new DatabaseException('Default value '.$defaultStr.' does not match given type '.Attribute::persistedType($type));
-                }
-                break;
-            case ColumnType::BigInteger:
-                if (! (new BigInt($signed, $this->adapter->supports(Capability::UnsignedBigInt)))->isValid($default)) {
-                    throw new DatabaseException('Default value '.$defaultStr.' does not match given type '.Attribute::persistedType($type));
-                }
-                break;
-            case ColumnType::Float:
-            case ColumnType::Double:
-                if ($defaultType !== 'double') {
-                    throw new DatabaseException('Default value '.$defaultStr.' does not match given type '.Attribute::persistedType($type));
-                }
-                break;
-            case ColumnType::Datetime:
-                if ($defaultType !== ColumnType::String->value) {
-                    throw new DatabaseException('Default value '.$defaultStr.' does not match given type '.Attribute::persistedType($type));
-                }
-                break;
-            case ColumnType::Vector:
-                // When validating individual vector components (from recursion), they should be numeric
-                if ($defaultType !== 'double' && $defaultType !== 'integer') {
-                    throw new DatabaseException('Vector components must be numeric values (float or integer)');
-                }
-                break;
-            default:
-                throw \in_array($type, Attribute::TYPES, true)
-                    ? new DatabaseException('Default value '.$defaultStr.' does not match given type '.Attribute::persistedType($type))
-                    : $this->unknownType($type->value);
+        if ($matches) {
+            return;
         }
-    }
 
-    private function unknownType(string $type): DatabaseException
-    {
-        $availableTypes = Attribute::availableTypes(
-            objects: $this->adapter->supports(Capability::Objects),
-            spatial: $this->adapter->hasFeature(Feature\Spatial::class),
-            vectors: $this->adapter->supports(Capability::Vectors),
-        );
+        if ($type === ColumnType::Vector) {
+            throw new DatabaseException('Vector components must be numeric values (float or integer)');
+        }
 
-        return new DatabaseException('Unknown attribute type: '.$type.'. Must be one of '.\implode(', ', \array_map(
-            Attribute::persistedType(...),
-            $availableTypes,
-        )));
+        $value = \is_scalar($default) ? (string) $default : '[non-scalar]';
+
+        throw new DatabaseException('Default value '.$value.' does not match given type '.Attribute::storedType($type));
     }
 
     private function typeValidator(): AttributeValidator
@@ -580,848 +861,219 @@ trait Attributes
     }
 
     /**
-     * Update attribute metadata. Utility method for update attribute methods.
-     *
-     * @param  callable(Attribute, Document, int|string): void  $updateCallback
-     *
-     * @throws ConflictException
-     * @throws DatabaseException
+     * @param  list<Attribute>  $attributes
+     * @param  list<Index>  $indexes
      */
-    protected function updateAttributeMeta(string $collection, string $id, callable $updateCallback, bool $triggerEvent = true): Attribute
+    private function indexValidator(array $attributes, array $indexes): IndexValidator
     {
-        $collection = $this->silent(fn () => $this->getCollection($collection));
-
-        if ($collection->getId() === self::METADATA) {
-            throw new DatabaseException('Cannot update metadata attributes');
-        }
-
-        /** @var array<Attribute> $attributes */
-        $attributes = $collection->getAttribute('attributes', []);
-        $index = \array_search($id, \array_map(fn (Attribute $attribute) => $attribute->getKey(), $attributes), true);
-
-        if ($index === false) {
-            throw new NotFoundException('Attribute not found');
-        }
-
-        $attribute = $attributes[$index];
-
-        $updateCallback($attribute, $collection, $index);
-        $attributes[$index] = $attribute;
-
-        $collection->setAttribute('attributes', $attributes);
-
-        $this->updateMetadata(
-            collection: $collection,
-            rollbackOperation: null,
-            shouldRollback: false,
-            operationDescription: "attribute metadata update '{$id}'"
+        return new IndexValidator(
+            $attributes,
+            $indexes,
+            $this->adapter->getMaxIndexLength(),
+            $this->adapter->getInternalIndexesKeys(),
+            $this->adapter->supports(Capability::IndexArray),
+            $this->adapter->supports(Capability::SpatialIndexNull),
+            $this->adapter->supports(Capability::SpatialIndexOrder),
+            $this->adapter->supports(Capability::Vectors),
+            $this->adapter->supports(Capability::DefinedAttributes),
+            $this->adapter->supports(Capability::MultipleFulltextIndexes),
+            $this->adapter->supports(Capability::IdenticalIndexes),
+            $this->adapter->supports(Capability::ObjectIndexes),
+            $this->adapter->supports(Capability::TrigramIndex),
+            $this->adapter->hasFeature(Feature\Spatial::class),
+            $this->adapter->supports(Capability::Index),
+            $this->adapter->supports(Capability::UniqueIndex),
+            $this->adapter->supports(Capability::Fulltext),
+            $this->adapter->supports(Capability::TTLIndexes),
+            $this->adapter->supports(Capability::Objects)
         );
-
-        $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
-
-        if ($triggerEvent) {
-            $this->triggerHooks(
-                Event::AttributeUpdate,
-                $attribute->toDocument()->setAttribute(Document::COLLECTION, $collection->getId()),
-            );
-        }
-
-        return $attribute;
     }
 
     /**
-     * Update required status of attribute.
+     * Engines without nullable spatial indexes need every attribute a spatial index covers to be required.
      *
-     * @param  string  $collection  The collection identifier
-     * @param  string  $id  The attribute identifier
-     * @param  bool  $required  Whether the attribute should be required
-     * @return Document The updated attribute
+     * @param  list<Attribute>  $attributes
+     * @param  list<Index>  $indexes
      *
-     * @throws Exception
+     * @throws IndexException
      */
-    public function updateAttributeRequired(string $collection, string $id, bool $required): Document
+    private function assertSpatialIndexesRequired(array $attributes, array $indexes): void
     {
-        return $this->updateAttributeMeta($collection, $id, function ($attribute) use ($required) {
-            $attribute->setAttribute('required', $required);
-        })->toDocument();
+        $byKey = [];
+        foreach ($attributes as $attribute) {
+            $byKey[\strtolower($attribute->key)] = $attribute;
+        }
+
+        foreach ($indexes as $index) {
+            if ($index->type !== IndexType::Spatial) {
+                continue;
+            }
+
+            foreach ($index->attributes as $key) {
+                $attribute = $byKey[\strtolower($key)] ?? null;
+                if ($attribute !== null && $attribute->isSpatial() && ! $attribute->required) {
+                    throw new IndexException('Spatial indexes do not allow null values. Mark the attribute "'.$key.'" as required or create the index on a column with no null values.');
+                }
+            }
+        }
     }
 
     /**
-     * Update format of attribute.
-     *
-     * @param  string  $collection  The collection identifier
-     * @param  string  $id  The attribute identifier
-     * @param  string  $format  Validation format of attribute
-     * @return Document The updated attribute
-     *
-     * @throws Exception
+     * @param  list<Attribute>  $attributes
      */
-    public function updateAttributeFormat(string $collection, string $id, string $format): Document
+    private static function attributePosition(array $attributes, string $key): ?int
     {
-        return $this->updateAttributeMeta($collection, $id, function ($attribute) use ($format) {
-            $rawType = $attribute->getAttribute('type');
-            if (! $rawType instanceof ColumnType && ! \is_string($rawType)) {
-                throw new DatabaseException('Unknown attribute type');
+        foreach ($attributes as $position => $attribute) {
+            if ($attribute->key === $key) {
+                return $position;
             }
-            $attrType = Attribute::normalizeType($rawType);
-            if (! Structure::hasFormat($format, $attrType)) {
-                throw new DatabaseException('Format "'.$format.'" not available for attribute type "'.$attrType->value.'"');
-            }
+        }
 
-            $attribute->setAttribute('format', $format);
-        })->toDocument();
+        return null;
     }
 
     /**
-     * Update format options of attribute.
+     * The attribute with every field normalised for its type, as it is stored.
      *
-     * @param  string  $collection  The collection identifier
-     * @param  string  $id  The attribute identifier
-     * @param  array<string, mixed>  $formatOptions  Assoc array with custom options for format validation
-     * @return Document The updated attribute
-     *
-     * @throws Exception
+     * @throws StructureException
      */
-    public function updateAttributeFormatOptions(string $collection, string $id, array $formatOptions): Document
+    private static function normalise(Attribute $attribute): Attribute
     {
-        return $this->updateAttributeMeta($collection, $id, function ($attribute) use ($formatOptions) {
-            $attribute->setAttribute('formatOptions', $formatOptions);
-        })->toDocument();
+        return $attribute->apply(new AttributeUpdate());
     }
 
     /**
-     * Update filters of attribute.
-     *
-     * @param  string  $collection  The collection identifier
-     * @param  string  $id  The attribute identifier
-     * @param  array<string>  $filters  Filter names to apply to the attribute
-     * @return Document The updated attribute
-     *
-     * @throws Exception
+     * @param  list<Attribute>  $attributes
+     * @return list<Attribute>
      */
-    public function updateAttributeFilters(string $collection, string $id, array $filters): Document
+    private static function replacing(array $attributes, string $key, Attribute $replacement): array
     {
-        return $this->updateAttributeMeta($collection, $id, function ($attribute) use ($filters) {
-            $attribute->setAttribute('filters', $filters);
-        })->toDocument();
-    }
-
-    /**
-     * Update default value of attribute.
-     *
-     * @param  string  $collection  The collection identifier
-     * @param  string  $id  The attribute identifier
-     * @param  mixed  $default  The new default value
-     * @return Document The updated attribute
-     *
-     * @throws Exception
-     */
-    public function updateAttributeDefault(string $collection, string $id, mixed $default = null): Document
-    {
-        return $this->updateAttributeMeta($collection, $id, function ($attribute) use ($default) {
-            if ($attribute->getAttribute('required') === true) {
-                throw new DatabaseException('Cannot set a default value on a required attribute');
-            }
-
-            $rawAttrType = $attribute->getAttribute('type');
-            $this->validateDefaultTypes(
-                $rawAttrType instanceof ColumnType || \is_string($rawAttrType) ? Attribute::normalizeType($rawAttrType)->value : '',
-                $default,
-                (bool) $attribute->getAttribute('signed', true),
-            );
-
-            $attribute->setAttribute('default', $default);
-        })->toDocument();
-    }
-
-    /**
-     * Update Attribute. This method is for updating data that causes underlying structure to change. Check out other updateAttribute methods if you are looking for metadata adjustments.
-     *
-     * @param  string  $collection  The collection identifier
-     * @param  string  $id  The attribute identifier
-     * @param  ColumnType|string|null  $type  New column type, or null to keep existing
-     * @param  int|null  $size  New utf8mb4 chars length, or null to keep existing
-     * @param  bool|null  $required  New required status, or null to keep existing
-     * @param  mixed  $default  New default value
-     * @param  bool|null  $signed  New signed status, or null to keep existing
-     * @param  bool|null  $array  New array status, or null to keep existing
-     * @param  string|null  $format  New validation format, or null to keep existing
-     * @param  array<string, mixed>|null  $formatOptions  New format options, or null to keep existing
-     * @param  array<string>|null  $filters  New filters, or null to keep existing
-     * @param  string|null  $newKey  New attribute key for renaming, or null to keep existing
-     * @return Document The updated attribute
-     *
-     * @throws Exception
-     */
-    public function updateAttribute(string $collection, string $id, ColumnType|string|null $type = null, ?int $size = null, ?bool $required = null, mixed $default = null, ?bool $signed = null, ?bool $array = null, ?string $format = null, ?array $formatOptions = null, ?array $filters = null, ?string $newKey = null): Document
-    {
-        $type = $type === null ? null : Attribute::normalizeType($type)->value;
-        $collectionDocument = $this->silent(fn () => $this->getCollection($collection));
-
-        if ($collectionDocument->getId() === self::METADATA) {
-            throw new DatabaseException('Cannot update metadata attributes');
-        }
-
-        /** @var array<Attribute> $attributes */
-        $attributes = $collectionDocument->getAttribute('attributes', []);
-        $attributeIndex = \array_search($id, \array_map(fn (Attribute $attribute) => $attribute->getKey(), $attributes), true);
-
-        if ($attributeIndex === false) {
-            throw new NotFoundException('Attribute not found');
-        }
-
-        $attribute = $attributes[$attributeIndex];
-
-        $rawOriginalType = $attribute->getAttribute('type');
-        if (! $rawOriginalType instanceof ColumnType && ! \is_string($rawOriginalType)) {
-            throw new DatabaseException('Unknown attribute type');
-        }
-        $originalType = Attribute::normalizeType($rawOriginalType)->value;
-        /** @var int $originalSize */
-        $originalSize = $attribute->getAttribute('size');
-        $originalSigned = (bool) $attribute->getAttribute('signed');
-        $originalArray = (bool) $attribute->getAttribute('array');
-        $originalRequired = (bool) $attribute->getAttribute('required');
-        /** @var string $originalKey */
-        $originalKey = $attribute->getAttribute('key');
-
-        $originalIndexes = [];
-        /** @var array<Document> $collectionIndexes */
-        $collectionIndexes = $collectionDocument->getAttribute('indexes', []);
-        foreach ($collectionIndexes as $index) {
-            $originalIndexes[] = clone $index;
-        }
-
-        $altering = ! \is_null($type)
-            || ! \is_null($size)
-            || ! \is_null($signed)
-            || ! \is_null($array)
-            || ! \is_null($newKey);
-        if ($type === null) {
-            $rawType = $attribute->getAttribute('type');
-            if (! $rawType instanceof ColumnType && ! \is_string($rawType)) {
-                throw new DatabaseException('Unknown attribute type');
-            }
-            $type = Attribute::normalizeType($rawType)->value;
-        }
-        if ($size === null) {
-            /** @var int $size */
-            $size = $attribute->getAttribute('size');
-        }
-        $signed ??= (bool) $attribute->getAttribute('signed');
-        $required ??= (bool) $attribute->getAttribute('required');
-        $default ??= $attribute->getAttribute('default');
-        $array ??= (bool) $attribute->getAttribute('array');
-        if ($format === null) {
-            $rawFormat = $attribute->getAttribute('format');
-            $format = \is_string($rawFormat) ? $rawFormat : null;
-        }
-        if ($formatOptions === null) {
-            $rawFormatOptions = $attribute->getAttribute('formatOptions');
-            /** @var array<string, mixed>|null $formatOptions */
-            $formatOptions = \is_array($rawFormatOptions) ? $rawFormatOptions : null;
-        }
-        if ($filters === null) {
-            $rawFilters = $attribute->getAttribute('filters');
-            /** @var array<string>|null $filters */
-            $filters = \is_array($rawFilters) ? $rawFilters : null;
-        }
-
-        if ($type === ColumnType::BigInteger->value) {
-            $size = 0;
-        }
-
-        if ($required === true && ! \is_null($default)) {
-            $default = null;
-        }
-
-        // we need to alter table attribute type to NOT NULL/NULL for change in required
-        if (! $this->adapter->supports(Capability::SpatialIndexNull) && in_array($type, [ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value])) {
-            $altering = true;
-        }
-
-        switch ($type) {
-            case ColumnType::String->value:
-                if (empty($size)) {
-                    throw new DatabaseException('Size length is required');
-                }
-
-                if ($size > $this->adapter->getLimitForString()) {
-                    throw new DatabaseException('Max size allowed for string is: '.number_format($this->adapter->getLimitForString()));
-                }
-                break;
-
-            case ColumnType::Varchar->value:
-                if (empty($size)) {
-                    throw new DatabaseException('Size length is required');
-                }
-
-                if ($size > $this->adapter->getMaxVarcharLength()) {
-                    throw new DatabaseException('Max size allowed for varchar is: '.number_format($this->adapter->getMaxVarcharLength()));
-                }
-                break;
-
-            case ColumnType::Text->value:
-            case ColumnType::MediumText->value:
-            case ColumnType::LongText->value:
-                // Text types don't require size validation as they have fixed max sizes
-                break;
-
-            case ColumnType::Integer->value:
-                $limit = ($signed) ? $this->adapter->getLimitForInt() / 2 : $this->adapter->getLimitForInt();
-                if ($size > $limit) {
-                    throw new DatabaseException('Max size allowed for int is: '.number_format($limit));
-                }
-                break;
-            case ColumnType::Id->value:
-            case ColumnType::BigInteger->value:
-                break;
-            case ColumnType::Float->value:
-            case ColumnType::Double->value:
-            case ColumnType::Boolean->value:
-            case ColumnType::Datetime->value:
-                if (! empty($size)) {
-                    throw new DatabaseException('Size must be empty');
-                }
-                break;
-            case ColumnType::Object->value:
-                if (! $this->adapter->supports(Capability::Objects)) {
-                    throw new DatabaseException('Object attributes are not supported');
-                }
-                if (! empty($size)) {
-                    throw new DatabaseException('Size must be empty for object attributes');
-                }
-                if (! empty($array)) {
-                    throw new DatabaseException('Object attributes cannot be arrays');
-                }
-                break;
-            case ColumnType::Point->value:
-            case ColumnType::Linestring->value:
-            case ColumnType::Polygon->value:
-                if (! $this->adapter->hasFeature(Feature\Spatial::class)) {
-                    throw new DatabaseException('Spatial attributes are not supported');
-                }
-                if (! empty($size)) {
-                    throw new DatabaseException('Size must be empty for spatial attributes');
-                }
-                if (! empty($array)) {
-                    throw new DatabaseException('Spatial attributes cannot be arrays');
-                }
-                break;
-            case ColumnType::Vector->value:
-                if (! $this->adapter->supports(Capability::Vectors)) {
-                    throw new DatabaseException('Vector types are not supported by the current database');
-                }
-                if ($array) {
-                    throw new DatabaseException('Vector type cannot be an array');
-                }
-                if ($size <= 0) {
-                    throw new DatabaseException('Vector dimensions must be a positive integer');
-                }
-                if ($size > self::MAX_VECTOR_DIMENSIONS) {
-                    throw new DatabaseException('Vector dimensions cannot exceed '.self::MAX_VECTOR_DIMENSIONS);
-                }
-                if ($default !== null) {
-                    if (! \is_array($default)) {
-                        throw new DatabaseException('Vector default value must be an array');
-                    }
-                    if (\count($default) !== $size) {
-                        throw new DatabaseException('Vector default value must have exactly '.$size.' elements');
-                    }
-                    foreach ($default as $component) {
-                        if (! \is_int($component) && ! \is_float($component)) {
-                            throw new DatabaseException('Vector default value must contain only numeric elements');
-                        }
-                    }
-                }
-                break;
-            case ColumnType::Relationship->value:
-                throw new DatabaseException('Cannot update relationship as an attribute');
-            default:
-                throw $this->unknownType($type);
-        }
-
-        $requiredFilters = $this->getRequiredFilters($type);
-        if (! empty(array_diff($requiredFilters, (array) $filters))) {
-            throw new DatabaseException("Attribute of type: $type requires the following filters: ".implode(',', $requiredFilters));
-        }
-
-        if ($format) {
-            if (! Structure::hasFormat($format, Attribute::normalizeType($type))) {
-                throw new DatabaseException('Format ("'.$format.'") not available for this attribute type ("'.$type.'")');
-            }
-        }
-
-        if (! \is_null($default)) {
-            $this->validateDefaultTypes($type, $default, $signed);
-        }
-
-        $attribute
-            ->setAttribute(Document::ID, $newKey ?? $id)
-            ->setAttribute('key', $newKey ?? $id)
-            ->setAttribute('type', $type)
-            ->setAttribute('size', $size)
-            ->setAttribute('signed', $signed)
-            ->setAttribute('array', $array)
-            ->setAttribute('format', $format)
-            ->setAttribute('formatOptions', $formatOptions)
-            ->setAttribute('filters', $filters)
-            ->setAttribute('required', $required)
-            ->setAttribute('default', $default);
-
-        /** @var array<Attribute> $attributes */
-        $attributes = $collectionDocument->getAttribute('attributes', []);
-        $attributes[$attributeIndex] = $attribute;
-        $collectionDocument->setAttribute('attributes', $attributes, SetType::Assign);
-
-        if (
-            $this->adapter->getDocumentSizeLimit() > 0 &&
-            $this->adapter->getAttributeWidth($collectionDocument) >= $this->adapter->getDocumentSizeLimit()
-        ) {
-            throw new LimitException('Row width limit reached. Cannot update attribute.');
-        }
-
-        if (in_array($type, [ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value], true) && ! $this->adapter->supports(Capability::SpatialIndexNull)) {
-            /** @var array<string, Attribute> $typedAttributeMap */
-            $typedAttributeMap = [];
-            foreach ($attributes as $typedAttribute) {
-                $typedAttributeMap[\strtolower($typedAttribute->getKey())] = $typedAttribute;
-            }
-
-            /** @var array<Index> $spatialIndexes */
-            $spatialIndexes = $collectionDocument->getAttribute('indexes', []);
-            foreach ($spatialIndexes as $typedIndex) {
-                if ($typedIndex->getType() !== IndexType::Spatial) {
-                    continue;
-                }
-                foreach ($typedIndex->getIndexedAttributes() as $attributeName) {
-                    $lookup = \strtolower($attributeName);
-                    if (! isset($typedAttributeMap[$lookup])) {
-                        continue;
-                    }
-                    $typedAttribute = $typedAttributeMap[$lookup];
-
-                    if (in_array($typedAttribute->getType(), [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon], true) && ! $typedAttribute->isRequired()) {
-                        throw new IndexException('Spatial indexes do not allow null values. Mark the attribute "'.$attributeName.'" as required or create the index on a column with no null values.');
-                    }
-                }
-            }
-        }
-
-        $updated = false;
-
-        if ($altering) {
-            /** @var array<Document> $indexes */
-            $indexes = $collectionDocument->getAttribute('indexes', []);
-
-            if (! \is_null($newKey) && $id !== $newKey) {
-                foreach ($indexes as $index) {
-                    /** @var array<string> $indexAttributes */
-                    $indexAttributes = (array) $index['attributes'];
-                    if (in_array($id, $indexAttributes)) {
-                        $index['attributes'] = array_map(fn ($attribute) => $attribute === $id ? $newKey : $attribute, $indexAttributes);
-                    }
-                }
-                /** @var array<Index> $dependentIndexes */
-                $dependentIndexes = $collectionDocument->getAttribute('indexes', []);
-                $validator = new IndexDependencyValidator(
-                    $dependentIndexes,
-                    $this->adapter->supports(Capability::CastIndexArray),
-                );
-
-                if (! $validator->isValid($attribute)) {
-                    throw new DependencyException($validator->getDescription());
-                }
-            }
-
-            /**
-             * Since we allow changing type & size we need to validate index length
-             */
-            if ($this->validation()->get()) {
-                $validator = new IndexValidator(
-                    $attributes,
-                    $originalIndexes,
-                    $this->adapter->getMaxIndexLength(),
-                    $this->adapter->getInternalIndexesKeys(),
-                    $this->adapter->supports(Capability::IndexArray),
-                    $this->adapter->supports(Capability::SpatialIndexNull),
-                    $this->adapter->supports(Capability::SpatialIndexOrder),
-                    $this->adapter->supports(Capability::Vectors),
-                    $this->adapter->supports(Capability::DefinedAttributes),
-                    $this->adapter->supports(Capability::MultipleFulltextIndexes),
-                    $this->adapter->supports(Capability::IdenticalIndexes),
-                    $this->adapter->supports(Capability::ObjectIndexes),
-                    $this->adapter->supports(Capability::TrigramIndex),
-                    $this->adapter->hasFeature(Feature\Spatial::class),
-                    $this->adapter->supports(Capability::Index),
-                    $this->adapter->supports(Capability::UniqueIndex),
-                    $this->adapter->supports(Capability::Fulltext),
-                    $this->adapter->supports(Capability::TTLIndexes),
-                    $this->adapter->supports(Capability::Objects)
-                );
-
-                foreach ($indexes as $index) {
-                    if (! $validator->isValid($index)) {
-                        throw new IndexException($validator->getDescription());
-                    }
-                }
-            }
-
-            $updatedAttribute = new Attribute(
-                key: $id,
-                type: Attribute::normalizeType($type),
-                size: $size,
-                required: $required,
-                default: $default,
-                signed: $signed,
-                array: $array,
-                format: $format,
-                formatOptions: $formatOptions ?? [],
-                filters: $filters ?? [],
-            );
-            $updated = $this->adapter->updateAttribute($collection, $updatedAttribute, $newKey);
-
-            if (! $updated) {
-                throw new DatabaseException('Failed to update attribute');
-            }
-        } elseif ($originalRequired && ! $required) {
-            // The alter above already applies the new nullability. A required-only change relaxes the
-            // column on its own instead, because the column rewrite re-casts datetime columns on Postgres.
-            if (! $this->adapter->relaxAttributeRequired($collection, $id)) {
-                throw new DatabaseException('Failed to update attribute');
-            }
-        }
-
-        $collectionDocument->setAttribute('attributes', $attributes);
-
-        $rollbackAttribute = new Attribute(
-            key: $newKey ?? $id,
-            type: Attribute::normalizeType($originalType),
-            size: $originalSize,
-            required: $originalRequired,
-            signed: $originalSigned,
-            array: $originalArray,
+        return \array_map(
+            static fn (Attribute $attribute): Attribute => $attribute->key === $key ? $replacement : $attribute,
+            $attributes,
         );
-        $this->updateMetadata(
-            collection: $collectionDocument,
-            rollbackOperation: fn () => $this->adapter->updateAttribute(
-                $collection,
-                $rollbackAttribute,
-                $originalKey
-            ),
-            shouldRollback: $updated,
-            operationDescription: "attribute update '{$id}'",
-            silentRollback: true
-        );
+    }
 
-        if ($altering) {
-            $this->withRetries(fn () => $this->purgeCachedCollection($collection));
+    /**
+     * @param  list<Index>  $indexes
+     * @return list<Index>
+     *
+     * @throws IndexException
+     */
+    private static function renameIndexedAttribute(array $indexes, string $old, string $new): array
+    {
+        $renamed = [];
+        foreach ($indexes as $index) {
+            $renamed[] = \in_array($old, $index->attributes, true)
+                ? self::withIndexedAttributes($index, \array_map(
+                    static fn (string $attribute): string => $attribute === $old ? $new : $attribute,
+                    $index->attributes,
+                ))
+                : $index;
         }
+
+        return $renamed;
+    }
+
+    /**
+     * Drops the attribute from every index on it, and every index left on no attribute.
+     *
+     * @param  list<Index>  $indexes
+     * @return list<Index>
+     *
+     * @throws IndexException
+     */
+    private static function withoutIndexedAttribute(array $indexes, string $key): array
+    {
+        $remaining = [];
+        foreach ($indexes as $index) {
+            if (! \in_array($key, $index->attributes, true)) {
+                $remaining[] = $index;
+                continue;
+            }
+
+            $attributes = \array_values(\array_filter(
+                $index->attributes,
+                static fn (string $attribute): bool => $attribute !== $key,
+            ));
+
+            if ($attributes !== []) {
+                $remaining[] = self::withIndexedAttributes($index, $attributes);
+            }
+        }
+
+        return $remaining;
+    }
+
+    /**
+     * @param  list<string>  $attributes
+     *
+     * @throws IndexException
+     */
+    private static function withIndexedAttributes(Index $index, array $attributes): Index
+    {
+        return Index::fromDocument($index->toDocument()->setAttribute(self::INDEX_ATTRIBUTES, $attributes));
+    }
+
+    /**
+     * @param  list<Attribute>  $attributes
+     */
+    private function writeAttributes(Collection $definition, array $attributes): void
+    {
+        $definition->setAttribute(
+            self::COLLECTION_ATTRIBUTES,
+            \array_map(static fn (Attribute $attribute): Document => $attribute->toDocument(), $attributes),
+        );
+    }
+
+    /**
+     * @param  list<Index>  $indexes
+     */
+    private function writeIndexes(Collection $definition, array $indexes): void
+    {
+        $definition->setAttribute(
+            self::COLLECTION_INDEXES,
+            \array_map(static fn (Index $index): Document => $index->toDocument(), $indexes),
+        );
+    }
+
+    private function purgeCollectionCaches(string $collection): void
+    {
+        $this->withRetries(fn () => $this->purgeCachedCollection($collection));
         $this->withRetries(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $collection));
 
         $this->triggerHooks(Event::DocumentPurge, new Document([
             Document::ID => $collection,
             Document::COLLECTION => self::METADATA,
         ]));
-
-        $attributeDocument = $attribute->toDocument();
-
-        $this->triggerHooks(
-            Event::AttributeUpdate,
-            (clone $attributeDocument)->setAttribute(Document::COLLECTION, $collection),
-        );
-
-        return $attributeDocument;
     }
 
     /**
-     * Checks if attribute can be added to collection without exceeding limits.
-     *
-     * @param  Document  $collection  The collection document
-     * @param  Attribute  $attribute  The attribute to check
-     * @return bool True if the attribute can be added
-     *
-     * @throws LimitException
-     */
-    public function checkAttribute(Document $collection, Attribute $attribute): bool
-    {
-        $collection = clone $collection;
-
-        $collection->setAttribute('attributes', $attribute, SetType::Append);
-
-        if (
-            $this->adapter->getLimitForAttributes() > 0 &&
-            $this->adapter->getCountOfAttributes($collection) > $this->adapter->getLimitForAttributes()
-        ) {
-            throw new LimitException('Column limit reached. Cannot create new attribute. Current attribute count is '.$this->adapter->getCountOfAttributes($collection).' but the maximum is '.$this->adapter->getLimitForAttributes().'. Remove some attributes to free up space.');
-        }
-
-        if (
-            $this->adapter->getDocumentSizeLimit() > 0 &&
-            $this->adapter->getAttributeWidth($collection) >= $this->adapter->getDocumentSizeLimit()
-        ) {
-            throw new LimitException('Row width limit reached. Cannot create new attribute. Current row width is '.$this->adapter->getAttributeWidth($collection).' bytes but the maximum is '.$this->adapter->getDocumentSizeLimit().' bytes. Reduce the size of existing attributes or remove some attributes to free up space.');
-        }
-
-        return true;
-    }
-
-    /**
-     * Delete Attribute
-     *
-     * @param  string  $collection  The collection identifier
-     * @param  string  $id  The attribute identifier to delete
-     * @return bool True if the attribute was deleted successfully
-     *
-     * @throws ConflictException
-     * @throws DatabaseException
-     */
-    public function deleteAttribute(string $collection, string $id): bool
-    {
-        $collection = $this->silent(fn () => $this->getCollection($collection));
-        /** @var array<Attribute> $attributes */
-        $attributes = $collection->getAttribute('attributes', []);
-        /** @var array<Index> $indexes */
-        $indexes = $collection->getAttribute('indexes', []);
-
-        /** @var Attribute|null $attribute */
-        $attribute = null;
-
-        foreach ($attributes as $key => $value) {
-            if ($value->getId() === $id) {
-                $attribute = $value;
-                unset($attributes[$key]);
-                break;
-            }
-        }
-
-        if (\is_null($attribute)) {
-            throw new NotFoundException('Attribute not found');
-        }
-
-        if (Attribute::isRelationship($attribute)) {
-            throw new DatabaseException('Cannot delete relationship as an attribute');
-        }
-
-        if ($this->validation()->get()) {
-            /** @var array<Index> $dependentIndexes */
-            $dependentIndexes = $collection->getAttribute('indexes', []);
-            $validator = new IndexDependencyValidator(
-                $dependentIndexes,
-                $this->adapter->supports(Capability::CastIndexArray),
-            );
-
-            if (! $validator->isValid($attribute)) {
-                throw new DependencyException($validator->getDescription());
-            }
-        }
-
-        foreach ($indexes as $indexKey => $index) {
-            /** @var array<string> $indexAttributes */
-            $indexAttributes = $index->getAttribute('attributes', []);
-
-            $indexAttributes = \array_filter($indexAttributes, fn ($indexAttribute) => $indexAttribute !== $id);
-
-            if (empty($indexAttributes)) {
-                unset($indexes[$indexKey]);
-            } else {
-                $index->setAttribute('attributes', \array_values($indexAttributes));
-            }
-        }
-
-        $collection->setAttribute('attributes', \array_values($attributes));
-        $collection->setAttribute('indexes', \array_values($indexes));
-
-        $shouldRollback = false;
-        try {
-            if (! $this->adapter->deleteAttribute($collection->getId(), $id)) {
-                throw new DatabaseException('Failed to delete attribute');
-            }
-            $shouldRollback = true;
-        } catch (NotFoundException) {
-            // Ignore
-        }
-
-        $storedType = $attribute->getAttribute('type');
-        $storedSize = $attribute->getAttribute('size');
-        /** @var string $rollbackType */
-        $rollbackType = \is_string($storedType) ? $storedType : '';
-        /** @var int $rollbackSize */
-        $rollbackSize = \is_int($storedSize) ? $storedSize : 0;
-        $rollbackAttribute = new Attribute(
-            key: $id,
-            type: Attribute::normalizeType($rollbackType),
-            size: $rollbackSize,
-            required: (bool) ($attribute->getAttribute('required') ?? false),
-            signed: (bool) ($attribute->getAttribute('signed') ?? true),
-            array: (bool) ($attribute->getAttribute('array') ?? false),
-        );
-        $this->updateMetadata(
-            collection: $collection,
-            rollbackOperation: fn () => $this->adapter->createAttribute(
-                $collection->getId(),
-                $rollbackAttribute
-            ),
-            shouldRollback: $shouldRollback,
-            operationDescription: "attribute deletion '{$id}'",
-            silentRollback: true
-        );
-
-        $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
-        $this->withRetries(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $collection->getId()));
-
-        $this->triggerHooks(Event::DocumentPurge, new Document([
-            Document::ID => $collection->getId(),
-            Document::COLLECTION => self::METADATA,
-        ]));
-
-        $this->triggerHooks(
-            Event::AttributeDelete,
-            (clone $attribute)->setAttribute(Document::COLLECTION, $collection->getId()),
-        );
-
-        return true;
-    }
-
-    /**
-     * Rename Attribute
-     *
-     * @param  string  $collection  The collection identifier
-     * @param  string  $old  Current attribute ID
-     * @param  string  $new  New attribute ID
-     * @return bool True if the attribute was renamed successfully
-     *
-     * @throws AuthorizationException
-     * @throws ConflictException
-     * @throws DatabaseException
-     * @throws DuplicateException
-     * @throws StructureException
-     */
-    public function renameAttribute(string $collection, string $old, string $new): bool
-    {
-        $collection = $this->silent(fn () => $this->getCollection($collection));
-
-        /** @var array<Attribute> $attributes */
-        $attributes = $collection->getAttribute('attributes', []);
-
-        /** @var array<Index> $indexes */
-        $indexes = $collection->getAttribute('indexes', []);
-
-        $attribute = null;
-
-        foreach ($attributes as $value) {
-            if ($value->getId() === $old) {
-                $attribute = $value;
-            }
-
-            if ($value->getId() === $new) {
-                throw new DuplicateException('Attribute name already used');
-            }
-        }
-
-        if ($attribute === null) {
-            throw new NotFoundException('Attribute not found');
-        }
-
-        if ($this->validation()->get()) {
-            /** @var array<Index> $dependentIndexes */
-            $dependentIndexes = $collection->getAttribute('indexes', []);
-            $validator = new IndexDependencyValidator(
-                $dependentIndexes,
-                $this->adapter->supports(Capability::CastIndexArray),
-            );
-
-            if (! $validator->isValid($attribute)) {
-                throw new DependencyException($validator->getDescription());
-            }
-        }
-
-        $attribute->setAttribute(Document::ID, $new);
-        $attribute->setAttribute('key', $new);
-
-        foreach ($indexes as $index) {
-            /** @var array<string> $indexAttributes */
-            $indexAttributes = $index->getAttribute('attributes', []);
-
-            $indexAttributes = \array_map(fn ($indexAttribute) => ($indexAttribute === $old) ? $new : $indexAttribute, $indexAttributes);
-
-            $index->setAttribute('attributes', $indexAttributes);
-        }
-
-        $renamed = false;
-        try {
-            $renamed = $this->adapter->renameAttribute($collection->getId(), $old, $new);
-            if (! $renamed) {
-                throw new DatabaseException('Failed to rename attribute');
-            }
-        } catch (DuplicateException $error) {
-            throw $error;
-        } catch (Throwable $error) {
-            throw new DatabaseException("Failed to rename attribute '{$old}' to '{$new}': ".$error->getMessage(), previous: $error);
-        }
-
-        $collection->setAttribute('attributes', $attributes);
-        $collection->setAttribute('indexes', $indexes);
-
-        $this->updateMetadata(
-            collection: $collection,
-            rollbackOperation: fn () => $this->adapter->renameAttribute($collection->getId(), $new, $old),
-            shouldRollback: $renamed,
-            operationDescription: "attribute rename '{$old}' to '{$new}'"
-        );
-
-        $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
-
-        $this->triggerHooks(
-            Event::AttributeUpdate,
-            (clone $attribute)->setAttribute(Document::COLLECTION, $collection->getId()),
-        );
-
-        return $renamed;
-    }
-
-    /**
-     * Cleanup (delete) a single attribute with retry logic
-     *
-     * @param  string  $collectionId  The collection ID
-     * @param  string  $attributeId  The attribute ID
-     * @param  int  $maxAttempts  Maximum retry attempts
-     *
      * @throws DatabaseException If cleanup fails after all retries
      */
-    private function cleanupAttribute(
-        string $collectionId,
-        string $attributeId,
-        int $maxAttempts = 3
-    ): void {
+    private function cleanupAttribute(string $collection, string $key, int $maxAttempts = 3): void
+    {
         $this->cleanup(
-            fn () => $this->adapter->deleteAttribute($collectionId, $attributeId),
+            fn () => $this->adapter->deleteAttribute($collection, $key),
             'attribute',
-            $attributeId,
+            $key,
             $maxAttempts
         );
     }
 
     /**
-     * Cleanup (delete) multiple attributes with retry logic
-     *
-     * @param  string  $collectionId  The collection ID
-     * @param  array<Attribute>  $attributes  The attributes to cleanup
-     * @param  int  $maxAttempts  Maximum retry attempts per attribute
-     * @return array<string> Array of error messages for failed cleanups (empty if all succeeded)
+     * @param  list<Attribute>  $attributes
+     * @return list<string> The errors of the cleanups that failed
      */
-    private function cleanupAttributes(
-        string $collectionId,
-        array $attributes,
-        int $maxAttempts = 3
-    ): array {
+    private function cleanupAttributes(string $collection, array $attributes, int $maxAttempts = 3): array
+    {
         $errors = [];
 
         foreach ($attributes as $attribute) {
             try {
-                $this->cleanupAttribute($collectionId, $attribute->getId(), $maxAttempts);
-            } catch (Exception $e) {
-                $errors[] = $e->getMessage();
+                $this->cleanupAttribute($collection, $attribute->key, $maxAttempts);
+            } catch (Exception $error) {
+                $errors[] = $error->getMessage();
             }
         }
 
@@ -1429,19 +1081,13 @@ trait Attributes
     }
 
     /**
-     * Rollback metadata state by removing specified attributes from collection
-     *
-     * @param  Document  $collection  The collection document
-     * @param  array<string>  $attributeIds  Attribute IDs to remove
+     * @param  list<string>  $keys
      */
-    private function rollbackAttributeMetadata(Document $collection, array $attributeIds): void
+    private function rollbackAttributeMetadata(Collection $definition, array $keys): void
     {
-        /** @var array<Attribute> $attributes */
-        $attributes = $collection->getAttribute('attributes', []);
-        $filteredAttributes = \array_filter(
-            $attributes,
-            fn (Attribute $attr) => ! \in_array($attr->getId(), $attributeIds)
-        );
-        $collection->setAttribute('attributes', \array_values($filteredAttributes));
+        $this->writeAttributes($definition, \array_values(\array_filter(
+            $definition->attributes(),
+            static fn (Attribute $attribute): bool => ! \in_array($attribute->key, $keys, true),
+        )));
     }
 }

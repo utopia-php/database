@@ -20,9 +20,8 @@ use Utopia\Database\Hook\Write;
 use Utopia\Database\Mirroring\Filter;
 use Utopia\Database\Type\TypeRegistry;
 use Utopia\Database\Validator\Authorization;
-use Utopia\Query\Schema\ColumnType;
+use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ForeignKeyAction;
-use Utopia\Query\Schema\Order;
 
 /**
  * Wraps a source Database and replicates write operations to an optional destination Database.
@@ -134,9 +133,14 @@ class Mirror extends Database
      * reads through the source keeps its view of attributes and relationships
      * in lockstep with the authoritative database.
      */
-    public function getCollection(string $id): Collection
+    public function getCollection(string $collection): Collection
     {
-        return $this->source->getCollection($id);
+        return $this->source->getCollection($collection);
+    }
+
+    public function findCollection(string $collection): ?Collection
+    {
+        return $this->source->findCollection($collection);
     }
 
     /**
@@ -706,13 +710,27 @@ class Mirror extends Database
         return $this->source->withTransaction($callback);
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function exists(?string $database = null, ?string $collection = null): bool
+    public function exists(?string $database = null): bool
     {
         /** @var bool $result */
         $result = $this->delegateInOrder(__FUNCTION__, \func_get_args());
+
+        return $result;
+    }
+
+    public function collectionExists(string $collection, ?string $database = null): bool
+    {
+        /** @var bool $result */
+        $result = $this->delegateInOrder(__FUNCTION__, \func_get_args());
+
+        return $result;
+    }
+
+    public function update(string $database, string $new): bool
+    {
+        /** @var bool $result */
+        $result = $this->delegateInOrder(__FUNCTION__, [$database, $new]);
+
         return $result;
     }
 
@@ -816,12 +834,9 @@ class Mirror extends Database
         return $result instanceof Collection ? $result : Collection::fromArray($result->getArrayCopy());
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function updateCollection(string $id, array $permissions, bool $documentSecurity): Document
+    public function updateCollection(string $collection, CollectionUpdate $update): Collection
     {
-        $result = $this->source->updateCollection($id, $permissions, $documentSecurity);
+        $result = $this->source->updateCollection($collection, $update);
 
         $destination = $this->destination;
         if ($destination === null) {
@@ -829,23 +844,21 @@ class Mirror extends Database
         }
 
         try {
-            $result = $this->inOrder(function () use ($destination, $id, $permissions, $documentSecurity, $result): Document {
+            $this->inOrder(function () use ($destination, $collection, $update, $result): void {
                 $filtered = $result;
                 foreach ($this->writeFilters as $filter) {
                     $filtered = $filter->beforeUpdateCollection(
                         source: $this->source,
                         destination: $destination,
-                        collectionId: $id,
+                        collectionId: $collection,
                         collection: $filtered,
                     );
                     if ($filtered === null) {
-                        return $result;
+                        return;
                     }
                 }
 
-                $destination->updateCollection($id, $permissions, $documentSecurity);
-
-                return $filtered;
+                $destination->updateCollection($collection, $update);
             });
         } catch (Throwable $error) {
             $this->logError('updateCollection', $error);
@@ -854,41 +867,33 @@ class Mirror extends Database
         return $result;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function deleteCollection(string $id): bool
+    public function deleteCollection(string $collection): void
     {
-        $result = $this->source->deleteCollection($id);
+        $this->source->deleteCollection($collection);
 
         $destination = $this->destination;
         if ($destination === null) {
-            return $result;
+            return;
         }
 
         try {
-            $this->inOrder(function () use ($destination, $id): void {
-                $destination->deleteCollection($id);
+            $this->inOrder(function () use ($destination, $collection): void {
+                $destination->deleteCollection($collection);
 
                 foreach ($this->writeFilters as $filter) {
                     $filter->beforeDeleteCollection(
                         source: $this->source,
                         destination: $destination,
-                        collectionId: $id,
+                        collectionId: $collection,
                     );
                 }
             });
         } catch (Throwable $error) {
             $this->logError('deleteCollection', $error);
         }
-
-        return $result;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function createAttribute(string $collection, Attribute $attribute): bool
+    public function createAttribute(string $collection, Attribute $attribute): Attribute
     {
         $result = $this->source->createAttribute($collection, $attribute);
 
@@ -898,24 +903,11 @@ class Mirror extends Database
         }
 
         try {
-            $result = $this->inOrder(function () use ($destination, $collection, $attribute, $result): bool {
-                $document = $attribute->toDocument();
-                $attributeId = $attribute->getKey();
-
-                foreach ($this->writeFilters as $filter) {
-                    $document = $filter->beforeCreateAttribute(
-                        source: $this->source,
-                        destination: $destination,
-                        collectionId: $collection,
-                        attributeId: $attributeId,
-                        attribute: $document,
-                    );
-                    if ($document === null) {
-                        return $result;
-                    }
+            $this->inOrder(function () use ($destination, $collection, $result): void {
+                $filtered = $this->filterCreatedAttribute($destination, $collection, $result);
+                if ($filtered !== null) {
+                    $destination->createAttribute($collection, $filtered);
                 }
-
-                return $destination->createAttribute($collection, Attribute::fromDocument($document));
             });
         } catch (Throwable $error) {
             $this->logError('createAttribute', $error);
@@ -925,9 +917,10 @@ class Mirror extends Database
     }
 
     /**
-     * {@inheritdoc}
+     * @param  list<Attribute>  $attributes
+     * @return list<Attribute>
      */
-    public function createAttributes(string $collection, array $attributes): bool
+    public function createAttributes(string $collection, array $attributes): array
     {
         $result = $this->source->createAttributes($collection, $attributes);
 
@@ -937,35 +930,18 @@ class Mirror extends Database
         }
 
         try {
-            $result = $this->inOrder(function () use ($destination, $collection, $attributes, $result): bool {
-                $filteredAttributes = [];
-                foreach ($attributes as $attribute) {
-                    $document = $attribute->toDocument();
-                    $attributeId = $attribute->getKey();
-
-                    foreach ($this->writeFilters as $filter) {
-                        $document = $filter->beforeCreateAttribute(
-                            source: $this->source,
-                            destination: $destination,
-                            collectionId: $collection,
-                            attributeId: $attributeId,
-                            attribute: $document,
-                        );
-                        if ($document === null) {
-                            break;
-                        }
-                    }
-
-                    if ($document !== null) {
-                        $filteredAttributes[] = Attribute::fromDocument($document);
+            $this->inOrder(function () use ($destination, $collection, $result): void {
+                $filtered = [];
+                foreach ($result as $attribute) {
+                    $attribute = $this->filterCreatedAttribute($destination, $collection, $attribute);
+                    if ($attribute !== null) {
+                        $filtered[] = $attribute;
                     }
                 }
 
-                if ($filteredAttributes === []) {
-                    return $result;
+                if ($filtered !== []) {
+                    $destination->createAttributes($collection, $filtered);
                 }
-
-                return $destination->createAttributes($collection, $filteredAttributes);
             });
         } catch (Throwable $error) {
             $this->logError('createAttributes', $error);
@@ -974,79 +950,9 @@ class Mirror extends Database
         return $result;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function updateAttribute(string $collection, string $id, ColumnType|string|null $type = null, ?int $size = null, ?bool $required = null, mixed $default = null, ?bool $signed = null, ?bool $array = null, ?string $format = null, ?array $formatOptions = null, ?array $filters = null, ?string $newKey = null): Document
+    public function updateAttribute(string $collection, string $key, AttributeUpdate $update): Attribute
     {
-        $document = $this->source->updateAttribute(
-            $collection,
-            $id,
-            $type,
-            $size,
-            $required,
-            $default,
-            $signed,
-            $array,
-            $format,
-            $formatOptions,
-            $filters,
-            $newKey,
-        );
-
-        $destination = $this->destination;
-        if ($destination === null) {
-            return $document;
-        }
-
-        try {
-            $document = $this->inOrder(function () use ($destination, $collection, $id, $newKey, $document): Document {
-                $filtered = $document;
-                foreach ($this->writeFilters as $filter) {
-                    $filtered = $filter->beforeUpdateAttribute(
-                        source: $this->source,
-                        destination: $destination,
-                        collectionId: $collection,
-                        attributeId: $id,
-                        attribute: $filtered,
-                    );
-                    if ($filtered === null) {
-                        return $document;
-                    }
-                }
-
-                $typedAttribute = Attribute::fromDocument($filtered);
-
-                $destination->updateAttribute(
-                    $collection,
-                    $id,
-                    $typedAttribute->getType(),
-                    $typedAttribute->getSize(),
-                    $typedAttribute->isRequired(),
-                    $typedAttribute->getDefault(),
-                    $typedAttribute->isSigned(),
-                    $typedAttribute->isArray(),
-                    $typedAttribute->getFormat() ?: null,
-                    $typedAttribute->getFormatOptions() ?: null,
-                    $typedAttribute->getFilters() ?: null,
-                    $newKey,
-                );
-
-                return $filtered;
-            });
-        } catch (Throwable $error) {
-            $this->logError('updateAttribute', $error);
-        }
-
-        return $document;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function deleteAttribute(string $collection, string $id): bool
-    {
-        $result = $this->source->deleteAttribute($collection, $id);
+        $result = $this->source->updateAttribute($collection, $key, $update);
 
         $destination = $this->destination;
         if ($destination === null) {
@@ -1054,29 +960,63 @@ class Mirror extends Database
         }
 
         try {
-            $this->inOrder(function () use ($destination, $collection, $id): void {
+            $this->inOrder(function () use ($destination, $collection, $key, $update, $result): void {
+                $document = $result->toDocument();
+                $filtered = $document;
                 foreach ($this->writeFilters as $filter) {
-                    $filter->beforeDeleteAttribute(
+                    $filtered = $filter->beforeUpdateAttribute(
                         source: $this->source,
                         destination: $destination,
                         collectionId: $collection,
-                        attributeId: $id,
+                        attributeId: $key,
+                        attribute: $filtered,
                     );
+                    if ($filtered === null) {
+                        return;
+                    }
                 }
 
-                $destination->deleteAttribute($collection, $id);
+                $destination->updateAttribute(
+                    $collection,
+                    $key,
+                    $filtered->getArrayCopy() === $document->getArrayCopy() ? $update : self::fullUpdate(Attribute::fromDocument($filtered)),
+                );
             });
         } catch (Throwable $error) {
-            $this->logError('deleteAttribute', $error);
+            $this->logError('updateAttribute', $error);
         }
 
         return $result;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function createIndex(string $collection, Index $index): bool
+    public function deleteAttribute(string $collection, string $key): void
+    {
+        $this->source->deleteAttribute($collection, $key);
+
+        $destination = $this->destination;
+        if ($destination === null) {
+            return;
+        }
+
+        try {
+            $this->inOrder(function () use ($destination, $collection, $key): void {
+                foreach ($this->writeFilters as $filter) {
+                    $filter->beforeDeleteAttribute(
+                        source: $this->source,
+                        destination: $destination,
+                        collectionId: $collection,
+                        attributeId: $key,
+                    );
+                }
+
+                $destination->deleteAttribute($collection, $key);
+            });
+        } catch (Throwable $error) {
+            $this->logError('deleteAttribute', $error);
+        }
+    }
+
+    public function createIndex(string $collection, Index $index): Index
     {
         $result = $this->source->createIndex($collection, $index);
 
@@ -1086,24 +1026,23 @@ class Mirror extends Database
         }
 
         try {
-            $result = $this->inOrder(function () use ($destination, $collection, $index, $result): bool {
-                $document = $index->toDocument();
-                $indexId = $index->getKey();
+            $this->inOrder(function () use ($destination, $collection, $result): void {
+                $document = $result->toDocument();
 
                 foreach ($this->writeFilters as $filter) {
                     $document = $filter->beforeCreateIndex(
                         source: $this->source,
                         destination: $destination,
                         collectionId: $collection,
-                        indexId: $indexId,
+                        indexId: $result->key,
                         index: $document,
                     );
                     if ($document === null) {
-                        return $result;
+                        return;
                     }
                 }
 
-                return $destination->createIndex($collection, Index::fromDocument($document));
+                $destination->createIndex($collection, Index::fromDocument($document));
             });
         } catch (Throwable $error) {
             $this->logError('createIndex', $error);
@@ -1112,36 +1051,72 @@ class Mirror extends Database
         return $result;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function deleteIndex(string $collection, string $id): bool
+    public function deleteIndex(string $collection, string $key): void
     {
-        $result = $this->source->deleteIndex($collection, $id);
+        $this->source->deleteIndex($collection, $key);
 
         $destination = $this->destination;
         if ($destination === null) {
-            return $result;
+            return;
         }
 
         try {
-            $this->inOrder(function () use ($destination, $collection, $id): void {
-                $destination->deleteIndex($collection, $id);
+            $this->inOrder(function () use ($destination, $collection, $key): void {
+                $destination->deleteIndex($collection, $key);
 
                 foreach ($this->writeFilters as $filter) {
                     $filter->beforeDeleteIndex(
                         source: $this->source,
                         destination: $destination,
                         collectionId: $collection,
-                        indexId: $id,
+                        indexId: $key,
                     );
                 }
             });
         } catch (Throwable $error) {
             $this->logError('deleteIndex', $error);
         }
+    }
 
-        return $result;
+    /**
+     * The attribute the write filters let through to the destination, or null when one of them drops it.
+     */
+    private function filterCreatedAttribute(Database $destination, string $collection, Attribute $attribute): ?Attribute
+    {
+        $document = $attribute->toDocument();
+
+        foreach ($this->writeFilters as $filter) {
+            $document = $filter->beforeCreateAttribute(
+                source: $this->source,
+                destination: $destination,
+                collectionId: $collection,
+                attributeId: $attribute->key,
+                attribute: $document,
+            );
+            if ($document === null) {
+                return null;
+            }
+        }
+
+        return Attribute::fromDocument($document);
+    }
+
+    /**
+     * An update that sets every field to the attribute's, for a destination whose write filters changed it.
+     */
+    private static function fullUpdate(Attribute $attribute): AttributeUpdate
+    {
+        return new AttributeUpdate(
+            type: $attribute->type,
+            size: $attribute->size,
+            required: $attribute->required,
+            default: $attribute->default,
+            signed: $attribute->signed,
+            array: $attribute->array,
+            format: $attribute->format,
+            filters: $attribute->filters,
+            key: $attribute->key,
+        );
     }
 
     /**
@@ -1563,64 +1538,9 @@ class Mirror extends Database
         return $modified;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function updateAttributeRequired(string $collection, string $id, bool $required): Document
+    public function renameAttribute(string $collection, string $old, string $new): void
     {
-        /** @var Document $result */
-        $result = $this->delegateInOrder(__FUNCTION__, \func_get_args());
-        return $result;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function updateAttributeFormat(string $collection, string $id, string $format): Document
-    {
-        /** @var Document $result */
-        $result = $this->delegateInOrder(__FUNCTION__, \func_get_args());
-        return $result;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function updateAttributeFormatOptions(string $collection, string $id, array $formatOptions): Document
-    {
-        /** @var Document $result */
-        $result = $this->delegateInOrder(__FUNCTION__, [$collection, $id, $formatOptions]);
-        return $result;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function updateAttributeFilters(string $collection, string $id, array $filters): Document
-    {
-        /** @var Document $result */
-        $result = $this->delegateInOrder(__FUNCTION__, \func_get_args());
-        return $result;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function updateAttributeDefault(string $collection, string $id, mixed $default = null): Document
-    {
-        /** @var Document $result */
-        $result = $this->delegateInOrder(__FUNCTION__, \func_get_args());
-        return $result;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function renameAttribute(string $collection, string $old, string $new): bool
-    {
-        /** @var bool $result */
-        $result = $this->delegateInOrder(__FUNCTION__, \func_get_args());
-        return $result;
+        $this->delegateInOrder(__FUNCTION__, \func_get_args());
     }
 
     /**
@@ -1659,14 +1579,9 @@ class Mirror extends Database
         return $result;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function renameIndex(string $collection, string $old, string $new): bool
+    public function renameIndex(string $collection, string $old, string $new): void
     {
-        /** @var bool $result */
-        $result = $this->delegateInOrder(__FUNCTION__, \func_get_args());
-        return $result;
+        $this->delegateInOrder(__FUNCTION__, \func_get_args());
     }
 
     /**
@@ -1699,18 +1614,16 @@ class Mirror extends Database
      */
     public function createUpgrades(): void
     {
-        $collection = $this->source->getCollection('upgrades');
-
-        if (! $collection->isEmpty()) {
+        if ($this->source->findCollection('upgrades') !== null) {
             return;
         }
 
-        $this->source->createCollection(new Collection(id: 'upgrades', attributes: [
-            Attribute::string(key: 'collectionId', required: true),
-            Attribute::string(key: 'status'),
+        $this->source->createCollection(Collection::create('upgrades', attributes: [
+            Attribute::string('collectionId', required: true),
+            Attribute::string('status'),
         ], indexes: [
-            Index::unique(key: '_unique_collection', attributes: ['collectionId'], lengths: [Database::LENGTH_KEY]),
-            Index::key(key: '_status_index', attributes: ['status'], lengths: [Database::LENGTH_KEY], orders: [Order::Asc]),
+            Index::unique('_unique_collection', ['collectionId'], [Database::LENGTH_KEY]),
+            Index::key('_status_index', ['status'], [Database::LENGTH_KEY], [OrderDirection::Asc]),
         ]));
     }
 

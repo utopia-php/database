@@ -72,7 +72,7 @@ class Index extends Validator
             $typed = $attribute instanceof AttributeVO ? $attribute : AttributeVO::fromDocument($attribute);
             $this->attributes[\strtolower($typed->getKey())] = $typed;
         }
-        foreach (Database::internalAttributes() as $attribute) {
+        foreach (Database::internalAttributesFor(true) as $attribute) {
             $key = \strtolower($attribute->getKey());
             $this->attributes[$key] = $attribute;
         }

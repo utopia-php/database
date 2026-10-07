@@ -248,7 +248,7 @@ class Select extends Base
     private function internalKeys(): array
     {
         $keys = [];
-        foreach (Database::internalAttributes() as $attribute) {
+        foreach (Database::internalAttributesFor(true) as $attribute) {
             if ($this->sharedTables || $attribute->getKey() !== Document::TENANT) {
                 $keys[] = $attribute->getKey();
             }

@@ -101,9 +101,6 @@ trait Documents
     /** @var array<int, array<string, string>> Definition keys of the collections the open invalidation scope wrote, by coroutine id and collection key. */
     private array $documentCacheDefinitions = [];
 
-    /** The metadata collection's definition, built once per process; every read gets a deep clone. */
-    private static ?Document $metadataDefinition = null;
-
     /** @var array<string, array{source: array<string, mixed>, model: Document}> The model built from each definition's cached copy, by its cache key. */
     private static array $definitionModels = [];
 
@@ -478,7 +475,7 @@ trait Documents
     public function getDocument(string $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
         if ($collection === self::METADATA && $id === self::METADATA) {
-            return clone (self::$metadataDefinition ??= new Document(self::collectionMeta()));
+            return self::collectionDefinition();
         }
 
         if (empty($collection)) {
@@ -1023,7 +1020,7 @@ trait Documents
         }
 
         // Always preserve internal attributes (use hashmap for O(1) lookup)
-        $internalKeys = \array_map(fn (array $attr) => $attr[Document::ID] ?? '', $this->getInternalAttributes());
+        $internalKeys = \array_map(static fn (Attribute $attribute): string => $attribute->key, $this->internalAttributes());
         foreach ($internalKeys as $key) {
             /** @var string $key */
             $attributesToKeep[$key] = true;
@@ -2133,7 +2130,7 @@ trait Documents
 
             $internalKeys = \array_map(
                 fn (Attribute $attr) => $attr->getKey(),
-                self::internalAttributes()
+                self::internalAttributesFor(true)
             );
 
             $regularUpdatesUserOnly = \array_diff_key($regularUpdates, \array_flip($internalKeys));
@@ -2173,7 +2170,7 @@ trait Documents
                 if (! $hasChanges) {
                     $internalKeys = \array_map(
                         fn (Attribute $attr) => $attr->getKey(),
-                        self::internalAttributes()
+                        self::internalAttributesFor(true)
                     );
 
                     $oldUserAttributes = array_diff_key($oldAttributes, array_flip($internalKeys));
@@ -4129,7 +4126,7 @@ trait Documents
 
         if ($collection->getId() === self::METADATA) {
             foreach ($results as $index => $node) {
-                $results[$index] = $this->hydrateCollectionModels($node);
+                $results[$index] = $this->toCollection($node);
             }
         }
 
@@ -4486,7 +4483,7 @@ trait Documents
 
     private function declaresSumAttribute(Document $collection, string $attribute): bool
     {
-        foreach (self::internalAttributes() as $internal) {
+        foreach (self::internalAttributesFor(true) as $internal) {
             if ($internal->getKey() === $attribute) {
                 return true;
             }
@@ -5260,8 +5257,8 @@ trait Documents
         // Allow querying internal attributes
         /** @var array<string> $keys */
         $keys = \array_map(
-            fn (array $attribute) => $attribute[Document::ID] ?? '',
-            $this->getInternalAttributes()
+            static fn (Attribute $attribute): string => $attribute->key,
+            $this->internalAttributes()
         );
 
         /** @var array<Document> $collAttrs */

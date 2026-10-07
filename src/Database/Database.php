@@ -167,83 +167,6 @@ class Database
         ColumnType::Object->value,
     ];
 
-    /**
-     * List of Internal attributes
-     *
-     * @var array<array<string, mixed>>
-     */
-    public const INTERNAL_ATTRIBUTES = [
-        [
-            Document::ID => Document::ID,
-            'type' => ColumnType::String->value,
-            'size' => Database::LENGTH_KEY,
-            'required' => true,
-            'signed' => true,
-            'array' => false,
-            'filters' => [],
-        ],
-        [
-            Document::ID => Document::SEQUENCE,
-            'type' => ColumnType::Id->value,
-            'size' => 0,
-            'required' => true,
-            'signed' => true,
-            'array' => false,
-            'filters' => [],
-        ],
-        [
-            Document::ID => Document::COLLECTION,
-            'type' => ColumnType::String->value,
-            'size' => Database::LENGTH_KEY,
-            'required' => true,
-            'signed' => true,
-            'array' => false,
-            'filters' => [],
-        ],
-        [
-            Document::ID => Document::TENANT,
-            'type' => ColumnType::Id->value,
-            'size' => 0,
-            'required' => false,
-            'default' => null,
-            'signed' => true,
-            'array' => false,
-            'filters' => [],
-        ],
-        [
-            Document::ID => Document::CREATED_AT,
-            'type' => ColumnType::Datetime->value,
-            'format' => '',
-            'size' => 0,
-            'signed' => false,
-            'required' => false,
-            'default' => null,
-            'array' => false,
-            'filters' => ['datetime'],
-        ],
-        [
-            Document::ID => Document::UPDATED_AT,
-            'type' => ColumnType::Datetime->value,
-            'format' => '',
-            'size' => 0,
-            'signed' => false,
-            'required' => false,
-            'default' => null,
-            'array' => false,
-            'filters' => ['datetime'],
-        ],
-        [
-            Document::ID => Document::PERMISSIONS,
-            'type' => ColumnType::String->value,
-            'size' => 1_000_000,
-            'signed' => true,
-            'required' => false,
-            'default' => [],
-            'array' => false,
-            'filters' => ['json'],
-        ],
-    ];
-
     public const INTERNAL_ATTRIBUTE_KEYS = [
         Storage::UID,
         Storage::CREATED_AT,
@@ -260,6 +183,33 @@ class Database
         Storage::PERMISSIONS,
     ];
 
+    private const string COLLECTION_NAME = 'name';
+
+    private const string COLLECTION_ATTRIBUTES = 'attributes';
+
+    private const string COLLECTION_INDEXES = 'indexes';
+
+    private const string COLLECTION_DOCUMENT_SECURITY = 'documentSecurity';
+
+    private const string INDEX_ATTRIBUTES = 'attributes';
+
+    /**
+     * Keys of a collection definition that createCollection() sets itself rather than carrying over as metadata.
+     */
+    private const array COLLECTION_RESERVED_KEYS = [
+        Document::ID => true,
+        Document::SEQUENCE => true,
+        Document::COLLECTION => true,
+        Document::TENANT => true,
+        Document::CREATED_AT => true,
+        Document::UPDATED_AT => true,
+        Document::PERMISSIONS => true,
+        self::COLLECTION_NAME => true,
+        self::COLLECTION_ATTRIBUTES => true,
+        self::COLLECTION_INDEXES => true,
+        self::COLLECTION_DOCUMENT_SECURITY => true,
+    ];
+
     protected Adapter $adapter;
 
     protected Cache $cache;
@@ -274,35 +224,11 @@ class Database
     protected static bool $defaultFiltersRegistered = false;
 
     /**
-     * Process-lifetime cache of internal attribute definitions as typed Attribute objects.
-     * Built once from {@see self::INTERNAL_ATTRIBUTES} (a class constant) and reused across calls.
-     *
-     * Returned arrays/objects MUST NOT be mutated by callers — they are shared singletons.
-     *
-     * @var array<Attribute>|null
+     * @var array<int, list<Attribute>>
      */
-    private static ?array $internalAttributes = null;
+    private static array $internalAttributes = [];
 
-    /**
-     * Process-lifetime cache of internal attribute definitions as Document instances.
-     * Built once from {@see self::INTERNAL_ATTRIBUTES} (a class constant) and reused across calls.
-     *
-     * Returned Documents MUST NOT be mutated by callers — they are shared singletons.
-     *
-     * @var array<Document>|null
-     */
-    private static ?array $internalAttributeDocuments = null;
-
-    /**
-     * Process-lifetime cache of internal attribute definitions as raw arrays, keyed by
-     * whether the adapter has shared tables enabled. The shared-tables variant includes
-     * `$tenant`, the other variant excludes it.
-     *
-     * Returned arrays MUST NOT be mutated by callers — they are shared singletons.
-     *
-     * @var array<int, array<array<string, mixed>>>|null
-     */
-    private static ?array $internalAttributeArrays = null;
+    private static ?Collection $definition = null;
 
     /**
      * @var array<string, array{encode: callable, decode: callable, signature: string}>
@@ -1903,7 +1829,7 @@ class Database
         $rawAttributes = $collection->getAttribute('attributes', []);
         $attributes = \is_array($rawAttributes) ? $rawAttributes : [];
         $internalDateAttributes = [Document::CREATED_AT, Document::UPDATED_AT];
-        foreach ($this->getInternalAttributes() as $attribute) {
+        foreach ($this->internalAttributes() as $attribute) {
             $attributes[] = $attribute;
         }
 
@@ -2093,11 +2019,9 @@ class Database
 
         $internalKeys = [];
 
-        foreach ($this->getInternalAttributes() as $attribute) {
+        foreach ($this->internalAttributes() as $attribute) {
             $attributes[] = $attribute;
-            /** @var string $internalKey */
-            $internalKey = $attribute[Document::ID] ?? '';
-            $internalKeys[$internalKey] = true;
+            $internalKeys[$attribute->key] = true;
         }
 
         $hasSelections = ! empty($selections);
@@ -2316,7 +2240,7 @@ class Database
         /** @var array<array<string, mixed>> $attributes */
         $attributes = $collection->getAttribute('attributes', []);
 
-        foreach ($this->getInternalAttributes() as $attribute) {
+        foreach ($this->internalAttributes() as $attribute) {
             $attributes[] = $attribute;
         }
 
@@ -2565,14 +2489,14 @@ class Database
         foreach ($attributes as $attr) {
             $attributesById[$attr->getId()] = $attr;
         }
-        foreach (self::internalAttributeDocuments() as $internal) {
-            $attributesById[$internal->getId()] = $internal;
+        foreach ($this->internalAttributes() as $internal) {
+            $attributesById[$internal->key] = $internal;
         }
 
         foreach ($joinedCollections as $alias => $joined) {
             /** @var array<Document> $joinedAttributes */
             $joinedAttributes = $joined->getAttribute('attributes', []);
-            foreach ([...$joinedAttributes, ...self::internalAttributeDocuments()] as $attribute) {
+            foreach ([...$joinedAttributes, ...$this->internalAttributes()] as $attribute) {
                 $attributesById[$alias.'.'.$attribute->getId()] ??= $attribute;
             }
         }
@@ -2710,138 +2634,50 @@ class Database
     }
 
     /**
-     * Parent collection definition used for system and custom collections.
-     *
-     * @return array<string, mixed>
+     * The definition of the metadata collection, which stores every other collection's definition.
      */
-    public static function collectionDefinition(): array
+    public static function collectionDefinition(): Collection
     {
-        /** @var array<string, mixed> $data */
-        $data = (new Collection(
+        return clone (self::$definition ??= Collection::create(
             id: self::METADATA,
             name: 'collections',
-            documentSecurity: false,
             attributes: [
-                Attribute::string(key: 'name', size: 256, required: true),
-                Attribute::string(key: 'attributes', size: 1_000_000, filters: ['json']),
-                Attribute::string(key: 'indexes', size: 1_000_000, filters: ['json']),
-                Attribute::boolean(key: 'documentSecurity', required: true),
+                Attribute::string(self::COLLECTION_NAME, 256, required: true),
+                Attribute::string(self::COLLECTION_ATTRIBUTES, 1_000_000, filters: [Filter::Json]),
+                Attribute::string(self::COLLECTION_INDEXES, 1_000_000, filters: [Filter::Json]),
+                Attribute::boolean(self::COLLECTION_DOCUMENT_SECURITY, required: true),
             ],
-        ))->getArrayCopy();
-        $data[Document::COLLECTION] = self::METADATA;
-        $data['attributes'] = self::documentArrays($data['attributes'] ?? []);
-        $data['indexes'] = self::documentArrays($data['indexes'] ?? []);
-
-        return $data;
+            documentSecurity: false,
+            metadata: [Document::COLLECTION => self::METADATA],
+        ));
     }
 
     /**
-     * @return array<string, mixed>
-     */
-    protected static function collectionMeta(): array
-    {
-        $collection = self::collectionDefinition();
-        $attributes = [];
-        foreach (self::documentArrays($collection['attributes'] ?? []) as $attribute) {
-            $attributes[] = Attribute::fromArray($attribute);
-        }
-        $collection['attributes'] = $attributes;
-
-        return $collection;
-    }
-
-    /**
-     * @return list<array<string, mixed>>
-     */
-    private static function documentArrays(mixed $values): array
-    {
-        if (! \is_array($values)) {
-            return [];
-        }
-
-        $arrays = [];
-        foreach ($values as $value) {
-            if ($value instanceof Attribute || $value instanceof Index) {
-                $arrays[] = $value->getArrayCopy();
-                continue;
-            }
-            if ($value instanceof Document) {
-                $arrays[] = $value->getArrayCopy();
-                continue;
-            }
-            if (! \is_array($value)) {
-                continue;
-            }
-
-            $typed = [];
-            foreach ($value as $key => $item) {
-                if (\is_string($key)) {
-                    $typed[$key] = $item;
-                }
-            }
-            $arrays[] = $typed;
-        }
-
-        return $arrays;
-    }
-
-    /**
-     * Get the list of internal attribute definitions (e.g., $id, $createdAt, $permissions) as typed Attribute objects.
+     * The attributes every document carries; `$tenant` only under shared tables.
      *
-     * @return array<Attribute>
+     * @return list<Attribute>
      */
-    public static function internalAttributes(): array
+    public function internalAttributes(): array
     {
-        if (self::$internalAttributes === null) {
-            self::$internalAttributes = \array_map(
-                fn (array $attr): Attribute => Attribute::fromArray($attr),
-                self::INTERNAL_ATTRIBUTES
-            );
-        }
-
-        return self::$internalAttributes;
+        return self::internalAttributesFor($this->adapter->getSharedTables());
     }
 
     /**
-     * Get the internal attribute definitions as Document instances. Reuses a
-     * process-lifetime cache to avoid re-allocating these on every read.
+     * @internal for library code without a Database instance; use internalAttributes()
      *
-     * Returned Documents MUST NOT be mutated by callers — they are shared singletons.
-     *
-     * @return array<Document>
+     * @return list<Attribute>
      */
-    private static function internalAttributeDocuments(): array
+    public static function internalAttributesFor(bool $sharedTables): array
     {
-        if (self::$internalAttributeDocuments === null) {
-            self::$internalAttributeDocuments = [];
-            foreach (Database::INTERNAL_ATTRIBUTES as $attribute) {
-                self::$internalAttributeDocuments[] = new Document($attribute);
-            }
-        }
-
-        return self::$internalAttributeDocuments;
-    }
-
-    /**
-     * Get the internal attribute definitions for the current adapter, excluding tenant if shared tables are disabled.
-     *
-     * @return array<array<string, mixed>> The internal attribute configurations.
-     */
-    public function getInternalAttributes(): array
-    {
-        if (self::$internalAttributeArrays === null) {
-            $withTenant = self::INTERNAL_ATTRIBUTES;
-            $withoutTenant = \array_values(\array_filter(
-                self::INTERNAL_ATTRIBUTES,
-                static fn (array $attribute): bool => $attribute[Document::ID] !== Document::TENANT,
-            ));
-            self::$internalAttributeArrays = [
-                0 => $withoutTenant,
-                1 => $withTenant,
-            ];
-        }
-
-        return self::$internalAttributeArrays[$this->adapter->getSharedTables() ? 1 : 0];
+        return self::$internalAttributes[(int) $sharedTables] ??= [
+            Attribute::string(Document::ID, required: true),
+            Attribute::id(Document::SEQUENCE, required: true),
+            Attribute::string(Document::COLLECTION, required: true),
+            ...($sharedTables ? [Attribute::id(Document::TENANT)] : []),
+            Attribute::datetime(Document::CREATED_AT),
+            Attribute::datetime(Document::UPDATED_AT),
+            Attribute::string(Document::PERMISSIONS, 1_000_000, default: [], filters: [Filter::Json]),
+        ];
     }
 
     /**

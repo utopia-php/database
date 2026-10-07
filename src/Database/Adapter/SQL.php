@@ -2534,7 +2534,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      */
     public function getCountOfDefaultAttributes(): int
     {
-        return \count(Database::internalAttributes());
+        return \count(Database::internalAttributesFor(true));
     }
 
     /**
@@ -4908,7 +4908,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         if ($hasAggregation && ! empty($joinTablePrefixes)) {
             $mainAttributes = [];
-            foreach (Database::internalAttributes() as $attribute) {
+            foreach (Database::internalAttributesFor(true) as $attribute) {
                 $mainAttributes[$attribute->getKey()] = true;
             }
             /** @var array<Document> $collectionAttributes */
@@ -6214,7 +6214,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     private function qualifyJoinedOrders(array $orderAttributes, array $cursor, Document $collection, array $joinTablePrefixes): array
     {
         $main = [];
-        foreach (Database::internalAttributes() as $attribute) {
+        foreach (Database::internalAttributesFor(true) as $attribute) {
             $main[$attribute->getKey()] = true;
         }
         /** @var array<Document> $attributes */

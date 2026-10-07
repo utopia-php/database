@@ -592,8 +592,8 @@ trait IndexTests
             Index::key(key: 'index1', attributes: ['title1', 'title2'], lengths: [700]),
         ];
 
-        if ($adapter->supports(Capability::DefinedAttributes) && $adapter->getMaxIndexLength() > 0) {
-            $errorMessage = 'Index length is longer than the maximum: '.$adapter->getMaxIndexLength();
+        if ($adapter->supports(Capability::DefinedAttributes) && $adapter->limits()->indexLength > 0) {
+            $errorMessage = 'Index length is longer than the maximum: '.$adapter->limits()->indexLength;
             $this->assertFalse($validator->isValid($indexes[0]));
             $this->assertSame($errorMessage, $validator->getDescription());
 

@@ -2619,13 +2619,13 @@ trait AttributeTests
         $database = $this->getDatabase();
         $adapter = $database->getAdapter();
 
-        if ($adapter->getLimitForAttributes() === 0) {
+        if ($adapter->limits()->attributes === 0) {
             $this->expectNotToPerformAssertions();
 
             return;
         }
 
-        $limit = $adapter->getLimitForAttributes() - $adapter->getCountOfDefaultAttributes();
+        $limit = $adapter->limits()->attributes - $adapter->limits()->defaultAttributes;
 
         $attributes = [];
         for ($i = 0; $i <= $limit; $i++) {
@@ -2637,7 +2637,7 @@ trait AttributeTests
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
             $this->assertInstanceOf(LimitException::class, $e);
-            $this->assertSame('Attribute limit of '.$adapter->getLimitForAttributes().' exceeded. Cannot create collection.', $e->getMessage());
+            $this->assertSame('Attribute limit of '.$adapter->limits()->attributes.' exceeded. Cannot create collection.', $e->getMessage());
         }
 
         array_pop($attributes);
@@ -2672,7 +2672,7 @@ trait AttributeTests
         $database = $this->getDatabase();
         $adapter = $database->getAdapter();
 
-        if ($adapter->getDocumentSizeLimit() === 0) {
+        if ($adapter->limits()->documentSize === 0) {
             $this->expectNotToPerformAssertions();
 
             return;

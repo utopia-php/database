@@ -24,9 +24,9 @@ use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Index;
 use Utopia\Database\SetType;
-use Utopia\Database\Validator\Attribute as AttributeValidator;
+use Utopia\Database\Validator\AttributeDefinition;
 use Utopia\Database\Validator\BigInt;
-use Utopia\Database\Validator\Index as IndexValidator;
+use Utopia\Database\Validator\IndexDefinition;
 use Utopia\Database\Validator\IndexDependency as IndexDependencyValidator;
 use Utopia\Database\Validator\Spatial as SpatialValidator;
 use Utopia\Database\Validator\Structure;
@@ -658,7 +658,7 @@ trait Attributes
         $withAttribute = clone $definition;
         $withAttribute->setAttribute(self::COLLECTION_ATTRIBUTES, $attribute->toDocument(), SetType::Append);
 
-        $validator = new AttributeValidator(
+        $validator = new AttributeDefinition(
             attributes: $definition->attributes(),
             schemaAttributes: $schemaAttributes,
             maxAttributes: $this->adapter->getLimitForAttributes(),
@@ -845,9 +845,9 @@ trait Attributes
         throw new DatabaseException('Default value '.$value.' does not match given type '.Attribute::storedType($type));
     }
 
-    private function typeValidator(): AttributeValidator
+    private function typeValidator(): AttributeDefinition
     {
-        return new AttributeValidator(
+        return new AttributeDefinition(
             attributes: [],
             maxStringLength: $this->adapter->getLimitForString(),
             maxVarcharLength: $this->adapter->getMaxVarcharLength(),
@@ -864,9 +864,9 @@ trait Attributes
      * @param  list<Attribute>  $attributes
      * @param  list<Index>  $indexes
      */
-    private function indexValidator(array $attributes, array $indexes): IndexValidator
+    private function indexValidator(array $attributes, array $indexes): IndexDefinition
     {
-        return new IndexValidator(
+        return new IndexDefinition(
             $attributes,
             $indexes,
             $this->adapter->getMaxIndexLength(),

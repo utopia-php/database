@@ -22,7 +22,7 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Index as IndexValidator;
+use Utopia\Database\Validator\IndexDefinition;
 use Utopia\Database\Validator\Permissions;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
@@ -82,7 +82,7 @@ trait Collections
         );
 
         if ($this->validation()->get()) {
-            $validator = new IndexValidator(
+            $validator = new IndexDefinition(
                 $attributes,
                 [],
                 $this->adapter->getMaxIndexLength(),

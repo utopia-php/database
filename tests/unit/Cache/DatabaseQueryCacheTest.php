@@ -175,6 +175,27 @@ final class DatabaseQueryCacheTest extends TestCase
         $this->assertSame(['detached'], $this->ids($queryCache->get($after) ?? []), 'A removed query cache must no longer be invalidated by writes');
     }
 
+    public function testOneQueryCacheSharedByDatabasesOfDifferentNamesKeepsTheirResultsApart(): void
+    {
+        $queryCache = new QueryCache(new Cache(new LeasableHashCache()));
+        $namespace = 'cache_'.\uniqid();
+        $first = $this->createNamedDatabase('first', $namespace, $queryCache, 'a');
+        $second = $this->createNamedDatabase('second', $namespace, $queryCache, 'b');
+
+        $this->assertSame(['a'], $this->ids($first->find('users')));
+        $this->assertSame(['b'], $this->ids($second->find('users')), 'A database must not read what a database of another name cached in the shared query cache');
+
+        $first->createDocument('users', new Document(['$id' => 'c']));
+
+        $this->assertSame(['a', 'c'], $this->ids($first->find('users', [Query::orderAsc('$id')])), 'A write must retire what its own database cached');
+        $this->assertSame(['b'], $this->ids($second->find('users')));
+
+        $second->createDocument('users', new Document(['$id' => 'd']));
+
+        $this->assertSame(['b', 'd'], $this->ids($second->find('users', [Query::orderAsc('$id')])), 'Setting the query cache on another database must not take the invalidation of this one');
+        $this->assertSame(['a', 'c'], $this->ids($first->find('users', [Query::orderAsc('$id')])));
+    }
+
     /**
      * @return array<string, array{callable(Database): mixed}>
      */
@@ -658,6 +679,22 @@ final class DatabaseQueryCacheTest extends TestCase
         return [$database, $queryAdapter];
     }
 
+    private function createNamedDatabase(string $name, string $namespace, QueryCache $queryCache, string $document): Database
+    {
+        $database = new Database(new DatabaseMemory(), new Cache(new LeasableHashCache()));
+        $database
+            ->setDatabase('cache-tests')
+            ->setNamespace($namespace)
+            ->setCacheName($name)
+            ->setQueryCache($queryCache);
+        $database->create();
+        $database->getAuthorization()->addRole(Role::any()->toString());
+        $database->createCollection(Collection::create(id: 'users', permissions: self::permissions(), documentSecurity: false));
+        $database->createDocument('users', new Document(['$id' => $document]));
+
+        return $database;
+    }
+
     private function createUsers(Database $database): void
     {
         $database->createCollection(Collection::create(id: 'users', permissions: self::permissions(), documentSecurity: false));
@@ -788,6 +825,8 @@ final class DatabaseQueryCacheTest extends TestCase
             database: $adapter->getDatabase(),
             namespace: $adapter->getNamespace(),
             tenant: $adapter->getTenant(),
+            name: $database->getCacheName(),
+            writerTimeout: $database->getCacheWriterTimeout(),
         );
     }
 

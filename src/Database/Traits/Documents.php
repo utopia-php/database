@@ -15,6 +15,7 @@ use Utopia\Database\Adapter\ReadWritePool;
 use Utopia\Database\Attribute;
 use Utopia\Database\Cache\Epoch;
 use Utopia\Database\Cache\Owners;
+use Utopia\Database\Cache\Scope;
 use Utopia\Database\Capability;
 use Utopia\Database\Change;
 use Utopia\Database\Collection;
@@ -93,7 +94,7 @@ trait Documents
 
     private const string DOCUMENT_CACHE_CHECKED_AT = 'checkedAt';
 
-    private int $cacheWriterTimeout = 3600;
+    private int $cacheWriterTimeout = Scope::WRITER_TIMEOUT;
 
     /** @var array<int, array<string, string>> Definition keys of the collections the open invalidation scope wrote, by coroutine id and collection key. */
     private array $documentCacheDefinitions = [];

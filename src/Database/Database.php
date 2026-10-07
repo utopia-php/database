@@ -212,7 +212,7 @@ class Database
 
     protected Cache $cache;
 
-    protected string $cacheName = 'default';
+    protected string $cacheName = Scope::NAME;
 
     /**
      * @var array<string, array{encode: callable, decode: callable, signature: string}>
@@ -900,8 +900,8 @@ class Database
     }
 
     /**
-     * Cache find() results in the query cache, which takes its name and writer timeout from this database; null stops
-     * caching them.
+     * Cache find() results in the query cache, keyed by this database's cache name and timed by its writer timeout
+     * on each call, so the query cache may be shared with other databases; null stops caching them.
      */
     public function setQueryCache(?QueryCache $queryCache): static
     {
@@ -909,7 +909,6 @@ class Database
         $this->queryCache = $queryCache;
 
         if ($queryCache !== null) {
-            $queryCache->attach($this);
             $this->invalidator = new Invalidator($queryCache);
         }
 
@@ -2815,6 +2814,8 @@ class Database
             database: $this->adapter->getDatabase(),
             namespace: $namespace ?? $this->adapter->getNamespace(),
             tenant: $this->adapter->getTenant(),
+            name: $this->cacheName,
+            writerTimeout: $this->cacheWriterTimeout,
         );
     }
 
@@ -2960,7 +2961,7 @@ class Database
 
         $tokens = $this->getInvalidationTokens($event, $data);
         $invalidator->block($tokens);
-        $invalidator->activate($tokens);
+        $invalidator->activate($tokens, $this->cacheWriterTimeout);
     }
 
     /**
@@ -2989,7 +2990,7 @@ class Database
      */
     protected function activateInvalidation(array $tokens): void
     {
-        $this->invalidator?->activate($tokens);
+        $this->invalidator?->activate($tokens, $this->cacheWriterTimeout);
     }
 
     /**

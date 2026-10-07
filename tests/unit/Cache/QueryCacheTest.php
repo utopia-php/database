@@ -6,9 +6,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\Memory;
-use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
-use Utopia\Database\Adapter\Memory as DatabaseMemory;
 use Utopia\Database\Attribute;
 use Utopia\Database\Cache\Entry;
 use Utopia\Database\Cache\Invalidator;
@@ -45,8 +43,8 @@ class QueryCacheTest extends TestCase
     {
         $adapter = new RedisLeasableCache();
         $default = new QueryCache(new Cache($adapter));
-        $custom = self::attached(new QueryCache(new Cache($adapter)), name: 'custom');
-        $entry = $custom->getEntry(new Scope(), 'users', []);
+        $custom = new QueryCache(new Cache($adapter));
+        $entry = $custom->getEntry(new Scope(name: 'custom'), 'users', []);
         $this->assertNotNull($entry);
         $this->assertTrue($custom->set($entry, [new Document(['$id' => 'custom'])], $custom->getGeneration($entry)));
 
@@ -56,26 +54,37 @@ class QueryCacheTest extends TestCase
 
         $default->invalidateCollection(new Scope(), 'users');
 
-        $after = $custom->getEntry(new Scope(), 'users', []);
+        $after = $custom->getEntry(new Scope(name: 'custom'), 'users', []);
         $this->assertNotNull($after);
         $this->assertSame(['custom'], $this->ids($custom->get($after) ?? []), 'Invalidating one query cache must not retire what a query cache of another name filled');
     }
 
-    public function testTheNameFollowsTheDatabaseItIsAttachedTo(): void
+    public function testOneQueryCacheKeysEachCallByTheNameInItsScope(): void
     {
-        $adapter = new RedisLeasableCache();
-        $renamed = new QueryCache(new Cache($adapter));
-        $database = (new Database(new DatabaseMemory(), new Cache(new None())))->setQueryCache($renamed);
-        $custom = self::attached(new QueryCache(new Cache($adapter)), name: 'custom');
-        $entry = $custom->getEntry(new Scope(), 'users', []);
-        $this->assertNotNull($entry);
-        $this->assertTrue($custom->set($entry, [new Document(['$id' => 'custom'])], $custom->getGeneration($entry)));
+        $queryCache = new QueryCache(new Cache(new RedisLeasableCache()));
+        $first = $queryCache->getEntry(new Scope(name: 'first'), 'users', []);
+        $this->assertNotNull($first);
+        $this->assertTrue($queryCache->set($first, [new Document(['$id' => 'first'])], $queryCache->getGeneration($first)));
 
-        $database->setCacheName('custom');
+        $second = $queryCache->getEntry(new Scope(name: 'second'), 'users', []);
+        $this->assertNotNull($second);
+        $this->assertNull($queryCache->get($second), 'A query cache must not serve the results of one name under another');
 
-        $shared = $renamed->getEntry(new Scope(), 'users', []);
-        $this->assertNotNull($shared);
-        $this->assertSame(['custom'], $this->ids($renamed->get($shared) ?? []), 'A query cache must read under the name its database has now');
+        $queryCache->invalidateCollection(new Scope(name: 'second'), 'users');
+
+        $kept = $queryCache->getEntry(new Scope(name: 'first'), 'users', []);
+        $this->assertNotNull($kept);
+        $this->assertSame(['first'], $this->ids($queryCache->get($kept) ?? []), 'Invalidating under one name must not retire what another name filled');
+    }
+
+    public function testTheWriterTimeoutComesFromTheScopeOfEachCall(): void
+    {
+        $queryCache = new QueryCache(new Cache(new RedisLeasableCache()));
+        $queryCache->blockCollection($queryCache->getCollectionKey(new Scope(), 'users'), $queryCache->createToken());
+
+        $this->assertNull($queryCache->getEntry(new Scope(), 'users', []), 'A write younger than the writer timeout is still in flight');
+        $this->assertNotNull($queryCache->getEntry(new Scope(writerTimeout: 0), 'users', []), 'Under a zero writer timeout the write is abandoned at once');
+        $this->assertNull($queryCache->getEntry(new Scope(), 'users', []), 'A call under a zero writer timeout must not change the timeout of later calls');
     }
 
     public function testSetRegionAndGetRegion(): void
@@ -579,8 +588,8 @@ class QueryCacheTest extends TestCase
     public function testAKilledWriterDoesNotDisableTheQueryCacheForever(): void
     {
         $adapter = new RedisLeasableCache();
-        $queryCache = self::attached(new QueryCache(new Cache($adapter)), writerTimeout: 0);
-        $scope = new Scope(namespace: 'ns');
+        $queryCache = new QueryCache(new Cache($adapter));
+        $scope = new Scope(namespace: 'ns', writerTimeout: 0);
         $key = $queryCache->getCollectionKey($scope, 'users');
         $before = $queryCache->getEntry($scope, 'users', []);
         $this->assertNotNull($before);
@@ -599,20 +608,21 @@ class QueryCacheTest extends TestCase
     {
         $adapter = new RedisLeasableCache();
         $killed = new QueryCache(new Cache($adapter));
-        $writer = self::attached(new QueryCache(new Cache($adapter)), writerTimeout: 0);
+        $writer = new QueryCache(new Cache($adapter));
         $reader = new QueryCache(new Cache($adapter));
         $scope = new Scope(namespace: 'ns');
+        $writerScope = new Scope(namespace: 'ns', writerTimeout: 0);
         $killed->blockCollection($killed->getCollectionKey($scope, 'users'), $killed->createToken());
         $this->assertNull($reader->getEntry($scope, 'users', []));
 
-        $writer->invalidateCollection($scope, 'users');
+        $writer->invalidateCollection($writerScope, 'users');
 
         $entry = $reader->getEntry($scope, 'users', []);
         $this->assertNotNull($entry, 'The next write must reconcile a writer whose registration is older than the writer timeout');
         $this->assertTrue($reader->set($entry, [new Document(['$id' => 'fresh'])], $reader->getGeneration($entry)));
         $this->assertSame(['fresh'], $this->ids($reader->get($entry) ?? []));
 
-        $writer->invalidateCollection($scope, 'users');
+        $writer->invalidateCollection($writerScope, 'users');
 
         $this->assertNotNull($reader->getEntry($scope, 'users', []), 'Later writes must not be held back by the killed writer either');
     }
@@ -640,12 +650,12 @@ class QueryCacheTest extends TestCase
     {
         $adapter = new RedisLeasableCache();
         $live = new QueryCache(new Cache($adapter));
-        $writer = self::attached(new QueryCache(new Cache($adapter)), writerTimeout: 0);
+        $writer = new QueryCache(new Cache($adapter));
         $reader = new QueryCache(new Cache($adapter));
         $scope = new Scope(namespace: 'ns');
         $live->blockCollection($live->getCollectionKey($scope, 'users'), 'token-without-a-time');
 
-        $writer->invalidateCollection($scope, 'users');
+        $writer->invalidateCollection(new Scope(namespace: 'ns', writerTimeout: 0), 'users');
 
         $this->assertNull($reader->getEntry($scope, 'users', []), 'Without a creation time a registration cannot be judged abandoned');
     }
@@ -653,8 +663,8 @@ class QueryCacheTest extends TestCase
     public function testAWriterPastTheTimeoutRetiresWhatReadersFilledWhileItRan(): void
     {
         $adapter = new RedisLeasableCache();
-        $queryCache = self::attached(new QueryCache(new Cache($adapter)), writerTimeout: 0);
-        $scope = new Scope(namespace: 'ns');
+        $queryCache = new QueryCache(new Cache($adapter));
+        $scope = new Scope(namespace: 'ns', writerTimeout: 0);
         $key = $queryCache->getCollectionKey($scope, 'users');
         $token = $queryCache->createToken();
         $queryCache->blockCollection($key, $token);
@@ -662,7 +672,7 @@ class QueryCacheTest extends TestCase
         $this->assertNotNull($during);
         $this->assertTrue($queryCache->set($during, [new Document(['$id' => 'before-commit'])], $queryCache->getGeneration($during)));
 
-        $queryCache->activateCollection($key, $token);
+        $queryCache->activateCollection($key, $token, $scope->writerTimeout);
 
         $after = $queryCache->getEntry($scope, 'users', []);
         $this->assertNotNull($after);
@@ -673,12 +683,12 @@ class QueryCacheTest extends TestCase
     {
         $adapter = new RedisLeasableCache();
         $slow = new QueryCache(new Cache($adapter));
-        $writer = self::attached(new QueryCache(new Cache($adapter)), writerTimeout: 0);
+        $writer = new QueryCache(new Cache($adapter));
         $scope = new Scope(namespace: 'ns');
         $key = $slow->getCollectionKey($scope, 'users');
         $token = $slow->createToken();
         $slow->blockCollection($key, $token);
-        $writer->invalidateCollection($scope, 'users');
+        $writer->invalidateCollection(new Scope(namespace: 'ns', writerTimeout: 0), 'users');
         $during = $slow->getEntry($scope, 'users', []);
         $this->assertNotNull($during);
         $this->assertTrue($slow->set($during, [new Document(['$id' => 'before-commit'])], $slow->getGeneration($during)));
@@ -1078,16 +1088,6 @@ class QueryCacheTest extends TestCase
             $this->assertNotNull($after, "The event must leave '{$collection}' usable");
             $this->assertSame(['cached'], $this->ids($queryCache->get($after) ?? []), "The event must not retire what '{$collection}' filled");
         }
-    }
-
-    private static function attached(QueryCache $queryCache, string $name = 'default', int $writerTimeout = 3600): QueryCache
-    {
-        (new Database(new DatabaseMemory(), new Cache(new None())))
-            ->setCacheName($name)
-            ->setCacheWriterTimeout($writerTimeout)
-            ->setQueryCache($queryCache);
-
-        return $queryCache;
     }
 
     private static function createCache(): Cache&Stub

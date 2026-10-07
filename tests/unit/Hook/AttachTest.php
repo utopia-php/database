@@ -111,4 +111,46 @@ final class AttachTest extends TestCase
         $this->assertInstanceOf(Document::class, $children[0]);
         $this->assertSame('c1', $children[0]->getId());
     }
+    public function testTheRelationshipsHookRefusesToMoveToAnotherDatabase(): void
+    {
+        $hook = new Relationships();
+        $first = new Database(new Memory(), new Cache(new None()));
+        $second = new Database(new Memory(), new Cache(new None()));
+        $first->addHook($hook);
+
+        try {
+            $second->addHook($hook);
+            $this->fail('A relationships hook moved to another database');
+        } catch (DatabaseException $error) {
+            $this->assertSame('This relationships hook is already attached to another database; attach a clone of it instead', $error->getMessage());
+        }
+
+        $this->assertSame($hook, $first->getRelationshipHook());
+        $this->assertNull($second->getRelationshipHook());
+    }
+
+    public function testTheRelationshipsHookCanBeAddedAgainToItsOwnDatabase(): void
+    {
+        $hook = new Relationships();
+        $database = new Database(new Memory(), new Cache(new None()));
+
+        $database->addHook($hook)->addHook($hook);
+
+        $this->assertSame($hook, $database->getRelationshipHook());
+    }
+
+    public function testACloneOfAnAttachedRelationshipsHookAttachesToAnotherDatabase(): void
+    {
+        $hook = new Relationships();
+        $first = new Database(new Memory(), new Cache(new None()));
+        $second = new Database(new Memory(), new Cache(new None()));
+        $first->addHook($hook);
+
+        $clone = clone $hook;
+        $second->addHook($clone);
+
+        $this->assertSame($hook, $first->getRelationshipHook());
+        $this->assertSame($clone, $second->getRelationshipHook());
+    }
+
 }

@@ -371,21 +371,6 @@ trait ManyToManyTests
         // Check metadata for collection
         $collection = $database->getCollection('students');
         foreach ($collection->attributes() as $attribute) {
-            if ($attribute->key === 'students') {
-                $relationship = $attribute->relationship;
-                $this->assertNotNull($relationship);
-                $this->assertEquals(ColumnType::Relationship, $attribute->type);
-                $this->assertEquals('students', $attribute->key);
-                $this->assertSame('students', $relationship->relatedCollection);
-                $this->assertSame(RelationshipType::ManyToMany, $relationship->type);
-                $this->assertSame(true, $relationship->twoWay);
-                $this->assertSame('classes', $relationship->twoWayKey);
-            }
-        }
-
-        // Check metadata for related collection
-        $collection = $database->getCollection('classes');
-        foreach ($collection->attributes() as $attribute) {
             if ($attribute->key === 'classes') {
                 $relationship = $attribute->relationship;
                 $this->assertNotNull($relationship);
@@ -395,6 +380,21 @@ trait ManyToManyTests
                 $this->assertSame(RelationshipType::ManyToMany, $relationship->type);
                 $this->assertSame(true, $relationship->twoWay);
                 $this->assertSame('students', $relationship->twoWayKey);
+            }
+        }
+
+        // Check metadata for related collection
+        $collection = $database->getCollection('classes');
+        foreach ($collection->attributes() as $attribute) {
+            if ($attribute->key === 'students') {
+                $relationship = $attribute->relationship;
+                $this->assertNotNull($relationship);
+                $this->assertEquals(ColumnType::Relationship, $attribute->type);
+                $this->assertEquals('students', $attribute->key);
+                $this->assertSame('students', $relationship->relatedCollection);
+                $this->assertSame(RelationshipType::ManyToMany, $relationship->type);
+                $this->assertSame(true, $relationship->twoWay);
+                $this->assertSame('classes', $relationship->twoWayKey);
             }
         }
 

@@ -282,7 +282,7 @@ class Redis extends Adapter implements
         return true;
     }
 
-/**
+    /**
      * @return array<string, mixed>
      */
     private static function attributeRecord(string $id, Attribute $attribute): array
@@ -306,7 +306,7 @@ class Redis extends Adapter implements
         return \array_map(static fn (?OrderDirection $order): ?string => $order?->value, $index->orders);
     }
 
-        public function deleteCollection(string $id): bool
+    public function deleteCollection(string $id): bool
     {
         $id = $this->filter($id);
         $namespace = $this->getNamespace();

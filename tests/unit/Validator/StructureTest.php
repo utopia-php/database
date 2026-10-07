@@ -15,7 +15,6 @@ use Utopia\Query\Schema\ColumnType;
 
 class StructureTest extends TestCase
 {
-
     /**
      * @var array<string, mixed>
      */

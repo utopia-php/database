@@ -573,7 +573,7 @@ class Database
                 if ($value === null) {
                     return null;
                 }
-                if ($database->adapter->hasFeature(Feature\Spatial::class)) {
+                if ($database->adapterHasFeature(Feature\Spatial::class)) {
                     return $database->adapter->decodePoint($value);
                 }
 
@@ -603,7 +603,7 @@ class Database
                 if (is_null($value)) {
                     return null;
                 }
-                if ($database->adapter->hasFeature(Feature\Spatial::class)) {
+                if ($database->adapterHasFeature(Feature\Spatial::class)) {
                     return $database->adapter->decodeLinestring($value);
                 }
 
@@ -633,7 +633,7 @@ class Database
                 if (is_null($value)) {
                     return null;
                 }
-                if ($database->adapter->hasFeature(Feature\Spatial::class)) {
+                if ($database->adapterHasFeature(Feature\Spatial::class)) {
                     return $database->adapter->decodePolygon($value);
                 }
 
@@ -823,6 +823,21 @@ class Database
     }
 
     /**
+     * Pool answers for the adapter it borrows without implementing the Feature interface, but declares every
+     * Feature method, so a true answer makes those methods callable on the adapter either way.
+     *
+     * @template T of object
+     *
+     * @param  class-string<T>  $feature
+     *
+     * @phpstan-assert-if-true T $this->adapter
+     */
+    private function adapterHasFeature(string $feature): bool
+    {
+        return $this->adapter->hasFeature($feature);
+    }
+
+    /**
      * Get a utopia-php/query Builder over a collection's table, for statements the document API
      * cannot express. Its statements run as written: they check no permissions, read past and never
      * purge the document and query caches (purgeCachedDocument() what they change), keep no `_perms`
@@ -842,7 +857,7 @@ class Database
     {
         $this->requireSkippedAuthorization();
 
-        if (! $this->adapter->hasFeature(Feature\QueryBuilder::class)) {
+        if (! $this->adapterHasFeature(Feature\QueryBuilder::class)) {
             throw new DatabaseException('Query builder is not supported by this adapter');
         }
 
@@ -857,7 +872,7 @@ class Database
      */
     public function schema(): \Utopia\Query\Schema
     {
-        if (! $this->adapter->hasFeature(Feature\QueryBuilder::class)) {
+        if (! $this->adapterHasFeature(Feature\QueryBuilder::class)) {
             throw new DatabaseException('Schema builder is not supported by this adapter');
         }
 
@@ -878,7 +893,7 @@ class Database
     {
         $this->requireSkippedAuthorization();
 
-        if (! $this->adapter->hasFeature(Feature\RawQuery::class)) {
+        if (! $this->adapterHasFeature(Feature\RawQuery::class)) {
             throw new DatabaseException('Raw queries are not supported by this adapter');
         }
 
@@ -1467,9 +1482,21 @@ class Database
      * - {@see Hook\Relationships} — relationship resolution and mutation
      * - {@see Hook\Write} — row-level write interception (permissions, tenant)
      * - {@see Hook\Transform} — raw SQL transformation before execution
+     *
+     * @throws DatabaseException When the hook is none of these
      */
     public function addHook(\Utopia\Query\Hook $hook): static
     {
+        if (
+            ! $hook instanceof Lifecycle
+            && ! $hook instanceof Hook\Decorator
+            && ! $hook instanceof Relationships
+            && ! $hook instanceof Hook\Write
+            && ! $hook instanceof Transform
+        ) {
+            throw new DatabaseException('Unknown hook: '.$hook::class);
+        }
+
         if ($hook instanceof Lifecycle) {
             if ($hook instanceof Invalidator) {
                 $this->lifecycleHooks = \array_values(\array_filter(
@@ -2422,7 +2449,7 @@ class Database
      */
     public function getConnectionId(): string
     {
-        if (! $this->adapter->hasFeature(Feature\ConnectionId::class)) {
+        if (! $this->adapterHasFeature(Feature\ConnectionId::class)) {
             throw new DatabaseException('Adapter does not support connection ids');
         }
 
@@ -2659,7 +2686,7 @@ class Database
                 foreach ($values as $valueIndex => $value) {
                     try {
                         /** @var string $value */
-                        $values[$valueIndex] = $this->adapter->hasFeature(Feature\UTCCasting::class)
+                        $values[$valueIndex] = $this->adapterHasFeature(Feature\UTCCasting::class)
                             ? $this->adapter->setUTCDatetime($value)
                             : DateTime::setTimezone($value);
                     } catch (Throwable $e) {
@@ -2823,7 +2850,7 @@ class Database
      */
     public function getSchemaAttributes(string $collection): array
     {
-        if (! $this->adapter->hasFeature(Feature\SchemaAttributes::class)) {
+        if (! $this->adapterHasFeature(Feature\SchemaAttributes::class)) {
             return [];
         }
 
@@ -2838,7 +2865,7 @@ class Database
      */
     public function getSchemaIndexes(string $collection): array
     {
-        if (! $this->adapter->hasFeature(Feature\SchemaIndexes::class)) {
+        if (! $this->adapterHasFeature(Feature\SchemaIndexes::class)) {
             return [];
         }
 

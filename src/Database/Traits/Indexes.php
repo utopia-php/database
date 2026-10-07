@@ -136,7 +136,7 @@ trait Indexes
                 $this->adapter->supports(Capability::IdenticalIndexes),
                 $this->adapter->supports(Capability::ObjectIndexes),
                 $this->adapter->supports(Capability::TrigramIndex),
-                $this->adapter->hasFeature(Feature\Spatial::class),
+                $this->adapterHasFeature(Feature\Spatial::class),
                 $this->adapter->supports(Capability::Index),
                 $this->adapter->supports(Capability::UniqueIndex),
                 $this->adapter->supports(Capability::Fulltext),
@@ -195,7 +195,7 @@ trait Indexes
      */
     private function reconcileSchemaOnlyIndex(string $collection, Index $index): bool
     {
-        if (! $this->adapter->hasFeature(Feature\SchemaIndexes::class)
+        if (! $this->adapterHasFeature(Feature\SchemaIndexes::class)
             || ($this->getSharedTables() && $this->isMigrating())) {
             return false;
         }

@@ -256,6 +256,14 @@ class Relationships implements Hook
     }
 
     /**
+     * Whether a create whose related documents are all new prepares them instead of creating each one by one.
+     */
+    public function shouldPrepare(): bool
+    {
+        return $this->prepare;
+    }
+
+    /**
      * Run the callback with existence checks on or off for the calling coroutine and the coroutines it starts.
      *
      * @template T

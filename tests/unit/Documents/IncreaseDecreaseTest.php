@@ -3,7 +3,6 @@
 namespace Tests\Unit\Documents;
 
 use DateTime;
-use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
@@ -416,7 +415,7 @@ class IncreaseDecreaseTest extends TestCase
 
     public function testIncreaseDocumentAttributeWithZeroValue(): void
     {
-        $this->expectException(InvalidArgumentException::class);
+        $this->expectException(TypeException::class);
         $this->expectExceptionMessage('Value must be numeric and greater than 0');
 
         $doc = new Document([
@@ -433,7 +432,7 @@ class IncreaseDecreaseTest extends TestCase
 
     public function testIncreaseDocumentAttributeWithNegativeValue(): void
     {
-        $this->expectException(InvalidArgumentException::class);
+        $this->expectException(TypeException::class);
         $this->expectExceptionMessage('Value must be numeric and greater than 0');
 
         $doc = new Document([
@@ -510,7 +509,7 @@ class IncreaseDecreaseTest extends TestCase
 
     public function testDecreaseDocumentAttributeWithZeroValue(): void
     {
-        $this->expectException(InvalidArgumentException::class);
+        $this->expectException(TypeException::class);
         $this->expectExceptionMessage('Value must be numeric and greater than 0');
 
         $doc = new Document([

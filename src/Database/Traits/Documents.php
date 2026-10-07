@@ -6,7 +6,6 @@ use Closure;
 use DateTime as PhpDateTime;
 use Exception;
 use Generator;
-use InvalidArgumentException;
 use RuntimeException;
 use Throwable;
 use Utopia\Console;
@@ -1259,8 +1258,8 @@ trait Documents
      * @param  string  $collection  The collection identifier
      * @param  array<Document>  $documents  The documents to create
      * @param  int  $batchSize  Number of documents per batch insert
-     * @param  (callable(Document): void)|null  $onNext  Callback invoked for each created document
-     * @param  (callable(Throwable): void)|null  $onError  Callback invoked on per-document errors
+     * @param  (callable(Document): void)|null  $onNext  Callback given each created document once its batch is written
+     * @param  (callable(Throwable): void)|null  $onError  Callback given an error $onNext throws, after which the write goes on; without it that error is rethrown. It never sees an error of the write itself, which is always thrown
      * @return int The number of documents created
      *
      * @throws AuthorizationException
@@ -1735,8 +1734,8 @@ trait Documents
      * @param  Document  $updates  The document containing fields to update
      * @param  array<Query>  $queries  Queries to filter documents for update
      * @param  int  $batchSize  Number of documents per batch update
-     * @param  (callable(Document $updated, Document $old): void)|null  $onNext  Callback invoked for each updated document
-     * @param  (callable(Throwable): void)|null  $onError  Callback invoked on per-document errors
+     * @param  (callable(Document $updated, Document $old): void)|null  $onNext  Callback given each updated document once its batch is written, with a copy of the document as it was read before the update
+     * @param  (callable(Throwable): void)|null  $onError  Callback given an error $onNext throws, after which the write goes on; without it that error is rethrown. It never sees an error of the write itself, which is always thrown
      * @return int The number of documents updated
      *
      * @throws AuthorizationException
@@ -2033,8 +2032,8 @@ trait Documents
      * @param  string  $collection  The collection identifier
      * @param  array<Document>  $documents  The documents to create or update
      * @param  int  $batchSize  Number of documents per batch
-     * @param  (callable(Document, ?Document): void)|null  $onNext  Callback invoked for each upserted document with optional old document
-     * @param  (callable(Throwable): void)|null  $onError  Callback invoked on per-document errors
+     * @param  (callable(Document $upserted, ?Document $old): void)|null  $onNext  Callback given each upserted document once its batch is written, with the stored document it updated, or null when it was created
+     * @param  (callable(Throwable): void)|null  $onError  Callback given an error $onNext throws, after which the write goes on; without it that error is rethrown. It never sees an error of the write itself, which is always thrown
      * @return int The number of documents created or updated
      *
      * @throws StructureException
@@ -2063,8 +2062,8 @@ trait Documents
      * @param  string  $collection  The collection identifier
      * @param  string  $attribute  The attribute to increment on update
      * @param  array<Document>  $documents  The documents to create or update
-     * @param  (callable(Document, ?Document): void)|null  $onNext  Callback invoked for each upserted document with optional old document
-     * @param  (callable(Throwable): void)|null  $onError  Callback invoked on per-document errors
+     * @param  (callable(Document $upserted, ?Document $old): void)|null  $onNext  Callback given each upserted document once its batch is written, with the stored document it updated, or null when it was created
+     * @param  (callable(Throwable): void)|null  $onError  Callback given an error $onNext throws, after which the write goes on; without it that error is rethrown. It never sees an error of the write itself, which is always thrown
      * @param  int  $batchSize  Number of documents per batch
      * @return int The number of documents created or updated
      *
@@ -2080,7 +2079,7 @@ trait Documents
         ?callable $onError = null,
         int $batchSize = self::INSERT_BATCH_SIZE
     ): int {
-        if (! $this->adapter->hasFeature(Feature\Upserts::class)) {
+        if (! $this->adapterHasFeature(Feature\Upserts::class)) {
             throw new DatabaseException('Adapter does not support upserts');
         }
 
@@ -2326,7 +2325,7 @@ trait Documents
                 Event::DocumentsUpsert,
                 \array_map(static fn (Change $change): Document => $change->getNew(), $chunk),
                 function () use ($collection, $attribute, $chunk): array {
-                    if (! $this->adapter->hasFeature(Feature\Upserts::class)) {
+                    if (! $this->adapterHasFeature(Feature\Upserts::class)) {
                         throw new DatabaseException('Adapter does not support upserts');
                     }
 
@@ -2482,7 +2481,7 @@ trait Documents
      * @param  string  $collection  The collection ID
      * @param  string  $id  The document ID
      * @param  string  $attribute  The attribute to increase
-     * @param  int|float|string  $value  The value to increase the attribute by, can be a float
+     * @param  int|float|string  $value  The value to increase the attribute by, a number greater than 0
      * @param  int|float|string|null  $max  The maximum value the attribute can reach after the increase, null means no limit
      *
      * @throws AuthorizationException
@@ -2499,11 +2498,7 @@ trait Documents
         int|float|string $value = 1,
         int|float|string|null $max = null
     ): Document {
-        if (! \is_numeric($value) || (\is_string($value) && BigInt::isIntegerString($value)
-            ? BigInt::compare($value, 0) <= 0
-            : (float) $value <= 0)) {
-            throw new InvalidArgumentException('Value must be numeric and greater than 0');
-        }
+        $this->assertPositiveChange($value);
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $numericAttribute = null;
@@ -2609,17 +2604,30 @@ trait Documents
     }
 
     /**
+     * @throws TypeException
+     */
+    private function assertPositiveChange(int|float|string $value): void
+    {
+        if (! \is_numeric($value) || (\is_string($value) && BigInt::isIntegerString($value)
+            ? BigInt::compare($value, 0) <= 0
+            : (float) $value <= 0)) {
+            throw new TypeException('Value must be numeric and greater than 0');
+        }
+    }
+
+    /**
      * Decrease a document attribute by a value.
      *
      * @param  string  $collection  The collection identifier
      * @param  string  $id  The document identifier
      * @param  string  $attribute  The attribute to decrease
-     * @param  int|float|string  $value  The value to decrease the attribute by, must be positive
+     * @param  int|float|string  $value  The value to decrease the attribute by, a number greater than 0
      * @param  int|float|string|null  $min  The minimum value the attribute can reach, null means no limit
      * @return Document The updated document
      *
      * @throws AuthorizationException
      * @throws DatabaseException
+     * @throws TypeException When $value is not a number greater than 0
      */
     public function decreaseDocumentAttribute(
         string $collection,
@@ -2628,11 +2636,7 @@ trait Documents
         int|float|string $value = 1,
         int|float|string|null $min = null
     ): Document {
-        if (! \is_numeric($value) || (\is_string($value) && BigInt::isIntegerString($value)
-            ? BigInt::compare($value, 0) <= 0
-            : (float) $value <= 0)) {
-            throw new InvalidArgumentException('Value must be numeric and greater than 0');
-        }
+        $this->assertPositiveChange($value);
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
@@ -2857,8 +2861,8 @@ trait Documents
      * @param  string  $collection  The collection identifier
      * @param  array<Query>  $queries  Queries to filter documents for deletion
      * @param  int  $batchSize  Number of documents per batch deletion
-     * @param  (callable(Document, Document): void)|null  $onNext  Callback invoked for each deleted document
-     * @param  (callable(Throwable): void)|null  $onError  Callback invoked on per-document errors
+     * @param  (callable(Document $deleted, Document $copy): void)|null  $onNext  Callback given each deleted document once its batch is deleted, and a copy of that same document taken before the delete, not a separately stored version
+     * @param  (callable(Throwable): void)|null  $onError  Callback given an error $onNext throws, after which the write goes on; without it that error is rethrown. It never sees an error of the write itself, which is always thrown
      * @return int The number of documents deleted
      *
      * @throws AuthorizationException
@@ -4144,7 +4148,7 @@ trait Documents
     {
         $this->requireSkippedAuthorization();
 
-        if (! $this->adapter->hasFeature(Feature\RawQuery::class)) {
+        if (! $this->adapterHasFeature(Feature\RawQuery::class)) {
             throw new DatabaseException('Raw queries are not supported by this adapter');
         }
 
@@ -4235,7 +4239,7 @@ trait Documents
      *
      * @param  string  $collection  The collection identifier
      * @param  array<Query>  $queries  Queries for filtering
-     * @return Document The matching document, or an empty Document if none found
+     * @return Document The matching document, or an empty Document if none found, which fires no event
      *
      * @throws DatabaseException
      */
@@ -4247,11 +4251,11 @@ trait Documents
 
         $found = \reset($results);
 
-        $this->trigger(Event::DocumentFind, $found);
-
-        if (! $found) {
+        if ($found === false) {
             return new Document();
         }
+
+        $this->trigger(Event::DocumentFind, $found);
 
         return $found;
     }
@@ -4263,13 +4267,16 @@ trait Documents
      *
      * @param  string  $collection  The collection identifier
      * @param  array<Query>  $queries  Queries for filtering
-     * @param  int|null  $max  Maximum count to return, null for unlimited
+     * @param  int|null  $max  The most documents to count, greater than 0, or null for every match
      * @return int The document count
      *
      * @throws DatabaseException
+     * @throws QueryException When $max is not greater than 0
      */
     public function count(string $collection, array $queries = [], ?int $max = null): int
     {
+        $this->assertMax($max);
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
@@ -4321,18 +4328,21 @@ trait Documents
     /**
      * Sum an attribute
      *
-     * Sum an attribute for all matching documents. Pass $max=0 for unlimited.
+     * Sum an attribute for all matching documents.
      *
      * @param  string  $collection  The collection identifier
      * @param  string  $attribute  The attribute to sum
      * @param  array<Query>  $queries  Queries for filtering
-     * @param  int|null  $max  Maximum number of documents to include in the sum
+     * @param  int|null  $max  The most documents to include in the sum, greater than 0, or null for every match
      * @return float|int The sum of the attribute values
      *
      * @throws DatabaseException
+     * @throws QueryException When $max is not greater than 0
      */
     public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): float|int
     {
+        $this->assertMax($max);
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
@@ -4387,6 +4397,16 @@ trait Documents
         $this->trigger(Event::DocumentSum, $sum);
 
         return $sum;
+    }
+
+    /**
+     * @throws QueryException
+     */
+    private function assertMax(?int $max): void
+    {
+        if ($max !== null && $max <= 0) {
+            throw new QueryException('Max must be greater than 0');
+        }
     }
 
     /**
@@ -5287,7 +5307,7 @@ trait Documents
 
     private function castingBefore(Document $collection, Document $document): Document
     {
-        if ($this->adapter->hasFeature(Feature\InternalCasting::class)) {
+        if ($this->adapterHasFeature(Feature\InternalCasting::class)) {
             return $this->adapter->castingBefore($collection, $document);
         }
 
@@ -5296,7 +5316,7 @@ trait Documents
 
     private function castingAfter(Document $collection, Document $document): Document
     {
-        if ($this->adapter->hasFeature(Feature\InternalCasting::class)) {
+        if ($this->adapterHasFeature(Feature\InternalCasting::class)) {
             return $this->adapter->castingAfter($collection, $document);
         }
 
@@ -5309,7 +5329,7 @@ trait Documents
      */
     private function castingAfterDocuments(Document $collection, array $documents): array
     {
-        if ($documents !== [] && $this->adapter->hasFeature(Feature\InternalCasting::class)) {
+        if ($documents !== [] && $this->adapterHasFeature(Feature\InternalCasting::class)) {
             return $this->adapter->castingAfterDocuments($collection, $documents);
         }
 

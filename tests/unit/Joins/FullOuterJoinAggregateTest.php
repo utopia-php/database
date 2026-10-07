@@ -80,13 +80,13 @@ final class FullOuterJoinAggregateTest extends TestCase
     {
         $database = $this->database(native: false, documentSecurity: false, sharedTables: false);
 
-        $rows = $database->find('main', [
+        $rows = $database->aggregate('main', [
             Query::fullOuterJoin('b', self::LINK, self::LINK, '=', 'b'),
             Query::count('*', 'rows'),
             Query::sum('b.score', 'total'),
         ]);
 
-        $this->assertSame([['rows' => 6, 'total' => 22]], \array_map(static fn (Document $row): array => $row->getArrayCopy(), $rows));
+        $this->assertSame([['rows' => 6, 'total' => 22]], $rows);
     }
 
     public function testDistinctReturnsAValueBothHalvesHoldOnce(): void
@@ -133,12 +133,12 @@ final class FullOuterJoinAggregateTest extends TestCase
         $emulated = $this->database(native: false, documentSecurity: true, sharedTables: true);
         $native = $this->database(native: true, documentSecurity: true, sharedTables: true);
 
-        $totals = $emulated->find('main', [
+        $totals = $emulated->aggregate('main', [
             Query::fullOuterJoin('b', self::LINK, self::LINK, '=', 'b'),
             Query::count('*', 'rows'),
             Query::sum('b.score', 'total'),
         ]);
-        $this->assertSame([['rows' => 6, 'total' => 22]], \array_map(static fn (Document $row): array => $row->getArrayCopy(), $totals));
+        $this->assertSame([['rows' => 6, 'total' => 22]], $totals);
 
         $chains = [];
         foreach ($this->chains() as $label => $chain) {
@@ -150,7 +150,7 @@ final class FullOuterJoinAggregateTest extends TestCase
         $this->assertShapesMatch($emulated, $native, $chains, 150);
     }
 
-    public function testUnaliasedAggregatesKeepTheNamesTheEngineGivesThem(): void
+    public function testUnaliasedAggregatesComeBackUnderTheSameDefaultAliasOnBothJoins(): void
     {
         $emulated = $this->database(native: false, documentSecurity: false, sharedTables: false);
         $native = $this->database(native: true, documentSecurity: false, sharedTables: false);
@@ -391,10 +391,13 @@ final class FullOuterJoinAggregateTest extends TestCase
      */
     private function rows(Database $database, array $queries, bool $ordered): array
     {
-        $rows = \array_values(\array_map(
-            static fn (Document $document): array => $document->getArrayCopy(),
-            $database->find('main', $queries),
-        ));
+        $aggregates = \array_filter(
+            $queries,
+            static fn (Query $query): bool => $query->getMethod()->isAggregate() || $query->getMethod() === Method::GroupBy,
+        );
+        $rows = $aggregates !== []
+            ? $database->aggregate('main', $queries)
+            : \array_values(\array_map(static fn (Document $document): array => $document->getArrayCopy(), $database->find('main', $queries)));
 
         if (! $ordered) {
             \usort($rows, static fn (array $left, array $right): int => \strcmp((string) \json_encode($left), (string) \json_encode($right)));

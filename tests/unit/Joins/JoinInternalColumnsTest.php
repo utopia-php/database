@@ -77,7 +77,7 @@ final class JoinInternalColumnsTest extends TestCase
             $this->useDatabase(new NativeFullOuterJoinSQLite(new PDO('sqlite::memory:')));
         }
 
-        $groups = $this->database->find('customers', [
+        $groups = $this->database->aggregate('customers', [
             $this->join($join),
             Query::count('*', 'rows'),
             Query::groupBy(['note.'.$attribute]),
@@ -85,8 +85,8 @@ final class JoinInternalColumnsTest extends TestCase
 
         $total = 0;
         foreach ($groups as $group) {
-            $this->assertArrayHasKey(Storage::column($attribute), $group->getArrayCopy(), 'a group comes back under its column, as on the main collection');
-            $count = $group->getAttribute('rows');
+            $this->assertArrayHasKey(Storage::column($attribute), $group, 'a group comes back under its column, as on the main collection');
+            $count = $group['rows'];
             $this->assertIsInt($count);
             $total += $count;
         }
@@ -115,14 +115,14 @@ final class JoinInternalColumnsTest extends TestCase
             $this->useDatabase(new NativeFullOuterJoinSQLite(new PDO('sqlite::memory:')));
         }
 
-        $groups = $this->database->find('customers', [
+        $groups = $this->database->aggregate('customers', [
             $this->join($join),
             Query::count('*', 'rows'),
             Query::groupBy(['note.$id']),
             Query::orderAsc('note.$id'),
         ]);
 
-        $this->assertSame($expected, \array_map(static fn (Document $group): mixed => $group->getAttribute(Storage::UID), $groups));
+        $this->assertSame($expected, \array_map(static fn (array $group): mixed => $group[Storage::UID], $groups));
     }
 
     public function testCollectionIsNeitherAggregatedNorGrouped(): void
@@ -169,10 +169,10 @@ final class JoinInternalColumnsTest extends TestCase
         $this->useDatabase(new SQLite(new PDO('sqlite::memory:')), sharedTables: true);
         $note = $this->join(Method::Join);
 
-        $this->assertSame([['total' => 3]], $this->rows($this->database->find('customers', [Query::count('$tenant', 'total')])));
-        $this->assertSame([['rows' => 3, Storage::TENANT => 1]], $this->rows($this->database->find('customers', [Query::count('*', 'rows'), Query::groupBy(['$tenant'])])));
-        $this->assertSame([['total' => 3]], $this->rows($this->database->find('customers', [$note, Query::count('note.$tenant', 'total')])));
-        $this->assertSame([['rows' => 3, Storage::TENANT => 1]], $this->rows($this->database->find('customers', [$note, Query::count('*', 'rows'), Query::groupBy(['note.$tenant'])])));
+        $this->assertSame([['total' => 3]], $this->database->aggregate('customers', [Query::count('$tenant', 'total')]));
+        $this->assertSame([['rows' => 3, Storage::TENANT => 1]], $this->database->aggregate('customers', [Query::count('*', 'rows'), Query::groupBy(['$tenant'])]));
+        $this->assertSame([['total' => 3]], $this->database->aggregate('customers', [$note, Query::count('note.$tenant', 'total')]));
+        $this->assertSame([['rows' => 3, Storage::TENANT => 1]], $this->database->aggregate('customers', [$note, Query::count('*', 'rows'), Query::groupBy(['note.$tenant'])]));
 
         $customers = $this->database->find('customers', [$note, Query::select(['name', 'note.$tenant']), Query::orderAsc('note.$id')]);
         $this->assertSame([self::TENANT, self::TENANT, self::TENANT], \array_map(static fn (Document $customer): mixed => $customer->getAttribute('note.$tenant'), $customers));
@@ -228,7 +228,7 @@ final class JoinInternalColumnsTest extends TestCase
         $persons = $this->database->find('persons', [Query::join('libraries', 'library', '$id', '=', 'lib'), Query::select(['name', 'lib.name'])]);
         $this->assertSame(['Central'], \array_map(static fn (Document $person): mixed => $person->getAttribute('lib.name'), $persons), 'the parent side of a one-to-one relationship holds a column');
 
-        $this->assertSame([['rows' => 2]], $this->rows($this->database->find('persons', [Query::join('books', '$id', 'owner', '=', 'book'), Query::count('*', 'rows')])), 'the child side of a one-to-many relationship holds a column');
+        $this->assertSame([['rows' => 2]], $this->database->aggregate('persons', [Query::join('books', '$id', 'owner', '=', 'book'), Query::count('*', 'rows')]), 'the child side of a one-to-many relationship holds a column');
         $this->assertSame(2, $this->database->count('books', [Query::join('persons', 'owner', '$id', '=', 'person')]));
 
         $this->assertInvalidQuery(
@@ -309,8 +309,8 @@ final class JoinInternalColumnsTest extends TestCase
         ]);
         $this->assertSame(['n1', 'n3'], \array_map(static fn (Document $customer): mixed => $customer->getAttribute('note.$id'), $customers));
 
-        $this->assertSame([['notes' => 3, 'total' => 6]], $this->rows($this->database->find('customers', [$note, Query::count('note.$id', 'notes'), Query::sum('note.score', 'total')])));
-        $this->assertCount(3, $this->database->find('customers', [$note, Query::count('*', 'rows'), Query::groupBy(['note.body'])]));
+        $this->assertSame([['notes' => 3, 'total' => 6]], $this->database->aggregate('customers', [$note, Query::count('note.$id', 'notes'), Query::sum('note.score', 'total')]));
+        $this->assertCount(3, $this->database->aggregate('customers', [$note, Query::count('*', 'rows'), Query::groupBy(['note.body'])]));
     }
 
     private function join(Method $method): Query
@@ -334,15 +334,6 @@ final class JoinInternalColumnsTest extends TestCase
         }
 
         $this->fail($prefix.'the shape was accepted: '.$message);
-    }
-
-    /**
-     * @param  array<Document>  $documents
-     * @return list<array<string, mixed>>
-     */
-    private function rows(array $documents): array
-    {
-        return \array_values(\array_map(static fn (Document $document): array => $document->getArrayCopy(), $documents));
     }
 
     private function useDatabase(SQLite $adapter, bool $sharedTables = false): void

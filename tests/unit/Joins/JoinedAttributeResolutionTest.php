@@ -61,18 +61,18 @@ final class JoinedAttributeResolutionTest extends TestCase
         foreach ([true, false] as $validate) {
             $mode = $validate ? 'validated' : 'unvalidated';
 
-            $totals = $this->findCustomers($validate, [$purchases, Query::sum('amount', 'total'), Query::sum('visits', 'visits'), Query::count('$id', 'customers'), Query::count('*', 'rows')]);
+            $totals = $this->aggregateCustomers($validate, [$purchases, Query::sum('amount', 'total'), Query::sum('visits', 'visits'), Query::count('$id', 'customers'), Query::count('*', 'rows')]);
             $this->assertCount(1, $totals, $mode);
-            $this->assertSame(166, $totals[0]->getAttribute('total'), $mode.': a bare joined attribute sums every order, the one without a customer included');
-            $this->assertSame(4, $totals[0]->getAttribute('visits'), $mode.': a bare main attribute stays on the main table, even aggregated under its own name');
-            $this->assertSame(3, $totals[0]->getAttribute('customers'), $mode.': $id counts the rows that have a customer');
-            $this->assertSame(4, $totals[0]->getAttribute('rows'), $mode);
+            $this->assertSame(166, $totals[0]['total'], $mode.': a bare joined attribute sums every order, the one without a customer included');
+            $this->assertSame(4, $totals[0]['visits'], $mode.': a bare main attribute stays on the main table, even aggregated under its own name');
+            $this->assertSame(3, $totals[0]['customers'], $mode.': $id counts the rows that have a customer');
+            $this->assertSame(4, $totals[0]['rows'], $mode);
 
             $byStatus = [];
-            foreach ($this->findCustomers($validate, [$purchases, Query::sum('amount', 'total'), Query::groupBy(['status'])]) as $group) {
-                $status = $group->getAttribute('status');
+            foreach ($this->aggregateCustomers($validate, [$purchases, Query::sum('amount', 'total'), Query::groupBy(['status'])]) as $group) {
+                $status = $group['status'];
                 $this->assertIsString($status, $mode);
-                $byStatus[$status] = $group->getAttribute('total');
+                $byStatus[$status] = $group['total'];
             }
             \ksort($byStatus);
             $this->assertSame(['lost' => 9, 'open' => 50, 'paid' => 107], $byStatus, $mode.': a bare groupBy attribute groups by the join that declares it');
@@ -89,7 +89,7 @@ final class JoinedAttributeResolutionTest extends TestCase
                 ],
             ] as $message => $queries) {
                 try {
-                    $this->findCustomers($validate, $queries);
+                    $this->aggregateCustomers($validate, $queries);
                     $this->fail("{$mode}: a bare attribute that cannot be resolved was bound: {$message}");
                 } catch (QueryException $error) {
                     $this->assertStringEndsWith($message, $error->getMessage(), $mode);
@@ -100,13 +100,13 @@ final class JoinedAttributeResolutionTest extends TestCase
 
     /**
      * @param  array<Query>  $queries
-     * @return array<Document>
+     * @return list<array<string, mixed>>
      */
-    private function findCustomers(bool $validate, array $queries): array
+    private function aggregateCustomers(bool $validate, array $queries): array
     {
         return $validate
-            ? $this->database->find('customers', $queries)
-            : $this->database->skipValidation(fn (): array => $this->database->find('customers', $queries));
+            ? $this->database->aggregate('customers', $queries)
+            : $this->database->skipValidation(fn (): array => $this->database->aggregate('customers', $queries));
     }
 
     private function useDatabase(SQLite $adapter): void
@@ -159,7 +159,7 @@ final class JoinedAttributeResolutionTest extends TestCase
         $this->expectException(QueryException::class);
         $this->expectExceptionMessage('Invalid query: Attribute not found in schema: anything_at_all');
 
-        $this->database->find('customers', [
+        $this->database->aggregate('customers', [
             Query::leftJoin('orders', '$id', 'customerId', '=', 'j'),
             Query::groupBy(['anything_at_all']),
             Query::sum('also_anything', 'total'),
@@ -171,7 +171,7 @@ final class JoinedAttributeResolutionTest extends TestCase
         $this->expectException(QueryException::class);
         $this->expectExceptionMessage('Invalid query: Attribute "amount" is ambiguous across joins; qualify it with a join alias');
 
-        $this->database->find('customers', [
+        $this->database->aggregate('customers', [
             Query::join('orders', '$id', 'customerId', '=', 'alpha'),
             Query::join('refunds', '$id', 'customerId', '=', 'beta'),
             Query::sum('amount', 'total'),
@@ -183,7 +183,7 @@ final class JoinedAttributeResolutionTest extends TestCase
         $this->expectException(QueryException::class);
         $this->expectExceptionMessage('Invalid query: Attribute "amount" is ambiguous across joins; qualify it with a join alias');
 
-        $this->database->find('customers', [
+        $this->database->aggregate('customers', [
             Query::join('orders', '$id', 'customerId', '=', 'alpha'),
             Query::join('refunds', '$id', 'customerId', '=', 'beta'),
             Query::count('*', 'rows'),
@@ -193,7 +193,7 @@ final class JoinedAttributeResolutionTest extends TestCase
 
     public function testQualifiedAttributesStillPickTheirJoin(): void
     {
-        $results = $this->database->find('customers', [
+        $results = $this->database->aggregate('customers', [
             Query::join('orders', '$id', 'customerId', '=', 'alpha'),
             Query::join('refunds', '$id', 'customerId', '=', 'beta'),
             Query::sum('alpha.amount', 'ordered'),
@@ -201,25 +201,25 @@ final class JoinedAttributeResolutionTest extends TestCase
         ]);
 
         $this->assertCount(1, $results);
-        $this->assertSame(150, $results[0]->getAttribute('ordered'));
-        $this->assertSame(10, $results[0]->getAttribute('refunded'));
+        $this->assertSame(150, $results[0]['ordered']);
+        $this->assertSame(10, $results[0]['refunded']);
     }
 
     public function testBareAggregateAttributeResolvesToTheOneJoinThatDeclaresIt(): void
     {
-        $results = $this->database->find('customers', [
+        $results = $this->database->aggregate('customers', [
             Query::join('notes', '$id', 'customerId', '=', 'note'),
             Query::join('orders', '$id', 'customerId', '=', 'purchase'),
             Query::sum('amount', 'total'),
         ]);
 
         $this->assertCount(1, $results);
-        $this->assertSame(150, $results[0]->getAttribute('total'));
+        $this->assertSame(150, $results[0]['total']);
     }
 
     public function testBareGroupByAttributeResolvesToTheOneJoinThatDeclaresIt(): void
     {
-        $results = $this->database->find('customers', [
+        $results = $this->database->aggregate('customers', [
             Query::join('notes', '$id', 'customerId', '=', 'note'),
             Query::join('orders', '$id', 'customerId', '=', 'purchase'),
             Query::sum('amount', 'total'),
@@ -228,9 +228,9 @@ final class JoinedAttributeResolutionTest extends TestCase
 
         $totals = [];
         foreach ($results as $result) {
-            $status = $result->getAttribute('status');
+            $status = $result['status'];
             $this->assertIsString($status);
-            $totals[$status] = $result->getAttribute('total');
+            $totals[$status] = $result['total'];
         }
         \ksort($totals);
 
@@ -239,46 +239,46 @@ final class JoinedAttributeResolutionTest extends TestCase
 
     public function testBareAttributeResolvesThroughJoinsWithoutAliases(): void
     {
-        $results = $this->database->find('customers', [
+        $results = $this->database->aggregate('customers', [
             Query::join('notes', '$id', 'customerId'),
             Query::join('orders', '$id', 'customerId'),
             Query::sum('amount', 'total'),
         ]);
 
         $this->assertCount(1, $results);
-        $this->assertSame(150, $results[0]->getAttribute('total'));
+        $this->assertSame(150, $results[0]['total']);
     }
 
     public function testBareAttributeOfTheMainCollectionIsNotReboundToAJoin(): void
     {
-        $results = $this->database->find('customers', [
+        $results = $this->database->aggregate('customers', [
             Query::join('profiles', '$id', 'customerId', '=', 'profile'),
             Query::sum('visits', 'total'),
         ]);
 
         $this->assertCount(1, $results);
-        $this->assertSame(1, $results[0]->getAttribute('total'));
+        $this->assertSame(1, $results[0]['total']);
     }
 
     public function testBareInternalAttributeResolvesToTheMainCollection(): void
     {
-        $results = $this->database->find('customers', [
+        $results = $this->database->aggregate('customers', [
             Query::leftJoin('notes', '$id', 'customerId', '=', 'note'),
             Query::count('$id', 'customers'),
         ]);
 
         $this->assertCount(1, $results);
-        $this->assertSame(2, $results[0]->getAttribute('customers'));
+        $this->assertSame(2, $results[0]['customers']);
     }
 
     public function testAdapterResolvesBareAttributesTheSameWayWithoutValidation(): void
     {
-        $results = $this->database->skipValidation(fn () => $this->database->find('customers', [
+        $results = $this->database->skipValidation(fn () => $this->database->aggregate('customers', [
             Query::join('notes', '$id', 'customerId', '=', 'note'),
             Query::join('orders', '$id', 'customerId', '=', 'purchase'),
             Query::sum('amount', 'total'),
         ]));
-        $this->assertSame(150, $results[0]->getAttribute('total'));
+        $this->assertSame(150, $results[0]['total']);
 
         foreach ([
             'Attribute "amount" is ambiguous across joins; qualify it with a join alias' => [
@@ -292,7 +292,7 @@ final class JoinedAttributeResolutionTest extends TestCase
             ],
         ] as $message => $queries) {
             try {
-                $this->database->skipValidation(fn () => $this->database->find('customers', $queries));
+                $this->database->skipValidation(fn () => $this->database->aggregate('customers', $queries));
                 $this->fail('The adapter bound a bare attribute it could not resolve: '.$message);
             } catch (QueryException $error) {
                 $this->assertSame($message, $error->getMessage());
@@ -347,16 +347,16 @@ final class JoinedAttributeResolutionTest extends TestCase
 
     public function testJoinedResolutionDoesNotCarryOverToAFindWithoutJoins(): void
     {
-        $joined = $this->database->find('customers', [
+        $joined = $this->database->aggregate('customers', [
             Query::join('orders', '$id', 'customerId', '=', 'purchase'),
             Query::sum('amount', 'total'),
         ]);
-        $this->assertSame(157, $joined[0]->getAttribute('total'));
+        $this->assertSame(157, $joined[0]['total']);
 
         $this->expectException(QueryException::class);
         $this->expectExceptionMessage('Invalid query: Attribute not found in schema: amount');
 
-        $this->database->find('customers', [Query::sum('amount', 'total')]);
+        $this->database->aggregate('customers', [Query::sum('amount', 'total')]);
     }
 
     /**

@@ -130,7 +130,7 @@ final class JoinResolutionTest extends TestCase
         \sort($expected);
         $this->assertSame(['2024-01-01T09:00:00.000+00:00', '2024-01-01T11:00:00.000+00:00'], $expected);
 
-        $joined = $this->database->find('tickets', [
+        $joined = $this->database->aggregate('tickets', [
             Query::join('themes', 'theme', '$id', '=', 'th'),
             Query::count('*', 'total'),
             Query::groupBy(['th.when']),
@@ -138,7 +138,7 @@ final class JoinResolutionTest extends TestCase
         ]);
         $this->assertCount(2, $joined, 'having on a joined grouped datetime');
 
-        $main = $this->database->find('tickets', [
+        $main = $this->database->aggregate('tickets', [
             Query::count('*', 'total'),
             Query::groupBy(['when']),
             Query::having([Query::greaterThan('when', self::LATER_THAN_EIGHT_UTC)]),
@@ -148,14 +148,14 @@ final class JoinResolutionTest extends TestCase
 
     public function testAMaximumOfADatetimeIsComparedInHavingAsTheDatetimeIs(): void
     {
-        $rows = $this->database->find('tickets', [
+        $rows = $this->database->aggregate('tickets', [
             Query::join('themes', 'theme', '$id', '=', 'th'),
             Query::max('th.when', 'latest'),
             Query::groupBy(['name']),
             Query::having([Query::greaterThan('latest', self::LATER_THAN_EIGHT_UTC)]),
         ]);
 
-        $names = \array_map(static fn (Document $row): mixed => $row->getAttribute('name'), $rows);
+        $names = \array_map(static fn (array $row): mixed => $row['name'], $rows);
         \sort($names);
         $this->assertSame(['first', 'third'], $names);
     }
@@ -186,7 +186,7 @@ final class JoinResolutionTest extends TestCase
         $selfJoin = Query::join('themes', 'th.$id', '$id', '=', 'tx');
         $reads = [
             'find()' => fn (): mixed => $this->database->find('tickets', [$join, Query::containsAny('th.tags', ['a'])]),
-            'find() of an aggregate' => fn (): mixed => $this->database->find('tickets', [$join, Query::sum('th.score', 'total')]),
+            'find() of an aggregate' => fn (): mixed => $this->database->aggregate('tickets', [$join, Query::sum('th.score', 'total')]),
             'find() of a self-join' => fn (): mixed => $this->database->find('tickets', [$join, $selfJoin]),
             'count()' => fn (): mixed => $this->database->count('tickets', [$join, $selfJoin]),
             'sum() of a joined attribute' => fn (): mixed => $this->database->sum('tickets', 'th.score', [$join, $selfJoin]),

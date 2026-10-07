@@ -7,9 +7,13 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
-use Utopia\Database\Hook\Lifecycle;
+use Utopia\Query\Hook;
 
-class Invalidator implements Lifecycle
+/**
+ * The query cache invalidation a database runs for its mutations. It is not a lifecycle hook: it is never silenced,
+ * reads the raw write targets and runs before the hooks; addHook() makes it the database's invalidation.
+ */
+class Invalidator implements Hook
 {
     public function __construct(
         private QueryCache $queryCache,
@@ -106,8 +110,10 @@ class Invalidator implements Lifecycle
             Event::AttributeCreate,
             Event::AttributesCreate,
             Event::AttributeUpdate,
+            Event::AttributeRename,
             Event::AttributeDelete,
             Event::IndexCreate,
+            Event::IndexesCreate,
             Event::IndexRename,
             Event::IndexDelete,
             Event::DocumentPurge,
@@ -115,6 +121,7 @@ class Invalidator implements Lifecycle
             Event::DocumentsCreate,
             Event::DocumentUpdate,
             Event::DocumentsUpdate,
+            Event::DocumentUpsert,
             Event::DocumentsUpsert,
             Event::DocumentDelete,
             Event::DocumentsDelete,
@@ -135,6 +142,7 @@ class Invalidator implements Lifecycle
             Event::AttributeCreate,
             Event::AttributesCreate,
             Event::AttributeUpdate,
+            Event::AttributeRename,
             Event::AttributeDelete,
         ], true);
     }

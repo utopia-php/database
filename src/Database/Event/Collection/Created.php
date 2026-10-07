@@ -2,16 +2,16 @@
 
 namespace Utopia\Database\Event\Collection;
 
-use Utopia\Database\Document;
+use Utopia\Database\Collection;
 use Utopia\Database\Event;
 use Utopia\Database\Event\Domain;
 
-class Created extends Domain
+final readonly class Created extends Domain
 {
     public function __construct(
-        string $collection,
-        public readonly Document $document,
+        public string $collection,
+        public Collection $definition,
     ) {
-        parent::__construct($collection, Event::CollectionCreate);
+        parent::__construct(Event::CollectionCreate);
     }
 }

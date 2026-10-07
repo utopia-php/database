@@ -88,7 +88,7 @@ class AggregationErrorTest extends TestCase
         return $db;
     }
 
-    public function testFindWithAggregationOnUnsupportedAdapterThrows(): void
+    public function testAggregateOnUnsupportedAdapterThrows(): void
     {
         $db = $this->buildDatabase([
             Capability::IndexKey,
@@ -99,10 +99,10 @@ class AggregationErrorTest extends TestCase
 
         $this->expectException(QueryException::class);
         $this->expectExceptionMessage('Aggregation queries are not supported');
-        $db->skipValidation(fn () => $db->find('testCol', [Query::count('*', 'cnt')]));
+        $db->skipValidation(fn () => $db->aggregate('testCol', [Query::count('*', 'cnt')]));
     }
 
-    public function testFindWithAggregationSkipsRelationshipPopulation(): void
+    public function testAggregateSkipsRelationshipPopulation(): void
     {
         $db = $this->buildDatabase([
             Capability::IndexKey,
@@ -112,11 +112,11 @@ class AggregationErrorTest extends TestCase
             Capability::Aggregations,
         ]);
 
-        $results = $db->skipValidation(fn () => $db->find('testCol', [Query::count('*', 'cnt')]));
+        $results = $db->skipValidation(fn () => $db->aggregate('testCol', [Query::count('*', 'cnt')]));
         $this->assertSame([], $results);
     }
 
-    public function testFindWithCursorAndAggregationThrows(): void
+    public function testAggregateWithCursorThrows(): void
     {
         $db = $this->buildDatabase([
             Capability::IndexKey,
@@ -134,7 +134,7 @@ class AggregationErrorTest extends TestCase
 
         $this->expectException(QueryException::class);
         $this->expectExceptionMessage('Cursor pagination is not supported with aggregation');
-        $db->skipValidation(fn () => $db->find('testCol', [
+        $db->skipValidation(fn () => $db->aggregate('testCol', [
             Query::count('*', 'cnt'),
             Query::cursorAfter($cursorDoc),
         ]));

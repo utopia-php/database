@@ -97,13 +97,13 @@ final class AggregateEngineErrorsTest extends TestCase
         $this->assertFailsWith(
             QueryException::class,
             'Aggregate '.$method.' is not supported by this adapter',
-            fn () => $this->database()->find(self::COLLECTION, $queries),
+            fn () => $this->database()->aggregate(self::COLLECTION, $queries),
         );
     }
 
     public function testSQLiteStillAnswersTheAggregatesItHasFunctionsFor(): void
     {
-        $results = $this->database()->find(self::COLLECTION, [
+        $results = $this->database()->aggregate(self::COLLECTION, [
             Query::count('*', 'rows'),
             Query::countDistinct('sensor', 'sensors'),
             Query::sum('value', 'total'),
@@ -113,12 +113,12 @@ final class AggregateEngineErrorsTest extends TestCase
         ]);
 
         $this->assertCount(1, $results);
-        $this->assertSame(3, $results[0]->getAttribute('rows'));
-        $this->assertSame(2, $results[0]->getAttribute('sensors'));
-        $this->assertSame(14, $results[0]->getAttribute('total'));
-        $this->assertEqualsWithDelta(14 / 3, $results[0]->getAttribute('mean'), 1e-9);
-        $this->assertSame(3, $results[0]->getAttribute('least'));
-        $this->assertSame(6, $results[0]->getAttribute('most'));
+        $this->assertSame(3, $results[0]['rows']);
+        $this->assertSame(2, $results[0]['sensors']);
+        $this->assertSame(14, $results[0]['total']);
+        $this->assertEqualsWithDelta(14 / 3, $results[0]['mean'], 1e-9);
+        $this->assertSame(3, $results[0]['least']);
+        $this->assertSame(6, $results[0]['most']);
     }
 
     /**
@@ -200,10 +200,7 @@ final class AggregateEngineErrorsTest extends TestCase
     {
         $alias = \str_repeat('a', 63);
 
-        $results = $this->database()->find(self::COLLECTION, [Query::sum('value', $alias)]);
-
-        $this->assertCount(1, $results);
-        $this->assertSame([$alias => 14], $results[0]->getArrayCopy());
+        $this->assertSame([[$alias => 14]], $this->database()->aggregate(self::COLLECTION, [Query::sum('value', $alias)]));
     }
 
     /**
@@ -224,12 +221,12 @@ final class AggregateEngineErrorsTest extends TestCase
      * @param  list<Query>  $queries
      */
     #[DataProvider('rejectedAliasProvider')]
-    public function testFindRejectsAnInvalidAggregateAlias(array $queries, string $message): void
+    public function testAggregateRejectsAnInvalidAggregateAlias(array $queries, string $message): void
     {
         $this->assertFailsWith(
             QueryException::class,
             $message,
-            fn () => $this->database()->find(self::COLLECTION, $queries),
+            fn () => $this->database()->aggregate(self::COLLECTION, $queries),
         );
     }
 

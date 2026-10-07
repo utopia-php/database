@@ -280,7 +280,7 @@ class CreateDocumentLogicTest extends TestCase
         $this->assertTrue($called);
     }
 
-    public function testCreateDocumentsCallsOnErrorCallbackOnFailure(): void
+    public function testCreateDocumentsLetsAnOnNextFailureReachTheCaller(): void
     {
         $this->setupCollection('testCol');
 
@@ -288,15 +288,12 @@ class CreateDocumentLogicTest extends TestCase
             new Document(['$permissions' => [Permission::read(Role::any())], '$collection' => 'testCol']),
         ];
 
-        $errorCaught = false;
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('onNext error');
+
         $this->database->createDocuments('testCol', $docs, 100, function () {
             throw new \RuntimeException('onNext error');
-        }, function (\Throwable $e) use (&$errorCaught) {
-            $errorCaught = true;
-            $this->assertSame('onNext error', $e->getMessage());
         });
-
-        $this->assertTrue($errorCaught);
     }
 
     public function testCreateDocumentsReturnsZeroForEmptyArray(): void

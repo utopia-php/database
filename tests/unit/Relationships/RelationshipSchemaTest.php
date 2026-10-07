@@ -560,13 +560,13 @@ final class RelationshipSchemaTest extends TestCase
                 parent::__construct($adapter, $cache);
             }
 
-            public function purgeCachedCollection(string $collectionId): bool
+            public function purgeCachedCollection(string $collection): void
             {
-                if ($this->armed && \str_starts_with($collectionId, '_') && \in_array(++$this->junctionPurges, [3, 4, 5], true)) {
+                if ($this->armed && \str_starts_with($collection, '_') && \in_array(++$this->junctionPurges, [3, 4, 5], true)) {
                     throw $this->failure;
                 }
 
-                return parent::purgeCachedCollection($collectionId);
+                parent::purgeCachedCollection($collection);
             }
 
             public function updateDocument(string $collection, string $id, Document $document): Document

@@ -77,7 +77,7 @@ class WithCacheLeaseTest extends TestCase
         $this->assertSame('fresh', $plain());
         $this->assertSame('fresh', $projected());
 
-        $this->assertTrue($this->database->purgeCachedDocument('projects', 'project'));
+        $this->database->purgeCachedDocument('projects', 'project');
 
         $this->assertSame('changed', $plain());
         $this->assertSame('changed', $projected());

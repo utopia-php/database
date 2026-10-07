@@ -198,14 +198,14 @@ final class QueryShapeDatabaseTest extends TestCase
             Query::max('amount', 'most'),
         ];
 
-        $results = $database->find(self::COLLECTION, $queries);
+        $results = $database->aggregate(self::COLLECTION, $queries);
 
         $this->assertCount(1, $results);
-        $this->assertSame(0, $results[0]->getAttribute('rows'));
-        $this->assertSame(0, $results[0]->getAttribute('statuses'));
+        $this->assertSame(0, $results[0]['rows']);
+        $this->assertSame(0, $results[0]['statuses']);
         foreach (['total', 'mean', 'least', 'most'] as $alias) {
-            $this->assertTrue($results[0]->offsetExists($alias), $alias.' must be present');
-            $this->assertNull($results[0]->getAttribute($alias), $alias.' over no rows must be null');
+            $this->assertTrue(\array_key_exists($alias, $results[0]), $alias.' must be present');
+            $this->assertNull($results[0][$alias], $alias.' over no rows must be null');
         }
     }
 
@@ -244,7 +244,7 @@ final class QueryShapeDatabaseTest extends TestCase
             Query::equal('status', ['nonexistent']),
         ];
 
-        $results = $database->find(self::COLLECTION, [
+        $results = $database->aggregate(self::COLLECTION, [
             ...$noRows,
             Query::count('*', 'rows'),
             Query::countDistinct('refund.status', 'statuses'),
@@ -255,11 +255,11 @@ final class QueryShapeDatabaseTest extends TestCase
         ]);
 
         $this->assertCount(1, $results);
-        $this->assertSame(0, $results[0]->getAttribute('rows'));
-        $this->assertSame(0, $results[0]->getAttribute('statuses'));
+        $this->assertSame(0, $results[0]['rows']);
+        $this->assertSame(0, $results[0]['statuses']);
         foreach (['total', 'mean', 'least', 'most'] as $alias) {
-            $this->assertTrue($results[0]->offsetExists($alias), $alias.' must be present');
-            $this->assertNull($results[0]->getAttribute($alias), $alias.' over no rows must be null');
+            $this->assertTrue(\array_key_exists($alias, $results[0]), $alias.' must be present');
+            $this->assertNull($results[0][$alias], $alias.' over no rows must be null');
         }
         $this->assertSame(0, $database->count(self::COLLECTION, $noRows));
         $this->assertSame(0, $database->sum(self::COLLECTION, 'amount', $noRows), 'Database::sum() still answers 0 over no rows');

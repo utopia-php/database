@@ -2,14 +2,15 @@
 
 namespace Utopia\Database\Hook;
 
-use Utopia\Database\Event;
+use Utopia\Database\Event\Domain;
 use Utopia\Query\Hook;
 
 /**
  * Lifecycle hook for fire-and-forget side effects on database events.
  *
- * Implementations receive lifecycle events (document CRUD, collection changes, etc.)
- * and can respond with side effects (auditing, logging, analytics, event dispatch).
+ * Implementations receive one typed event per database event (document CRUD, collection changes, etc.), a
+ * final subclass of {@see Domain} per {@see \Utopia\Database\Event} case, and can respond with side effects
+ * (auditing, logging, analytics, event dispatch). The event is built only when a registered hook handles it.
  *
  * Lifecycle hooks differ from {@see Decorator} hooks in two key ways:
  *
@@ -22,16 +23,9 @@ use Utopia\Query\Hook;
  *    hooks still run. An \Error always reaches the caller. Decorator exceptions always
  *    propagate to the caller.
  *
- * Lifecycle hooks do not receive collection context. Use Decorators when you need to
- * transform documents before they reach the caller.
+ * Use Decorators when you need to transform documents before they reach the caller.
  */
 interface Lifecycle extends Hook
 {
-    /**
-     * Handle a lifecycle event.
-     *
-     * @param  Event  $event  The event type
-     * @param  mixed  $data  The event payload (Document, array, string, int, etc.)
-     */
-    public function handle(Event $event, mixed $data): void;
+    public function handle(Domain $event): void;
 }

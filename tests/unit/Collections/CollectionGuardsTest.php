@@ -230,13 +230,13 @@ final class CollectionGuardsTest extends TestCase
                 return parent::createDocument($collection, $document);
             }
 
-            public function purgeCachedDocument(string $collectionId, ?string $id): bool
+            public function purgeCachedDocument(string $collection, string $id): void
             {
                 if ($id === 'raced') {
                     throw new RuntimeException('the cache is down');
                 }
 
-                return parent::purgeCachedDocument($collectionId, $id);
+                parent::purgeCachedDocument($collection, $id);
             }
         };
         $database->setDatabase('guards')->setNamespace('guards_'.\uniqid());

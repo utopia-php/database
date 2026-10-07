@@ -275,7 +275,7 @@ final class FullOuterJoinAggregateVisibilityTest extends TestCase
      */
     private function readTotals(Database $database): array
     {
-        $documents = $database->find(self::AUTHORS, [
+        $documents = $database->aggregate(self::AUTHORS, [
             $this->join(),
             Query::count('*', 'rows'),
             Query::count('$id', 'authors'),
@@ -287,11 +287,11 @@ final class FullOuterJoinAggregateVisibilityTest extends TestCase
         $totals = $documents[0];
 
         return [
-            'rows' => $this->integerOrNull($totals->getAttribute('rows')) ?? -1,
-            'authors' => $this->integerOrNull($totals->getAttribute('authors')) ?? -1,
-            'books' => $this->integerOrNull($totals->getAttribute('books')) ?? -1,
-            'pages' => $this->integerOrNull($totals->getAttribute('pages')) ?? -1,
-            'ranks' => $this->integerOrNull($totals->getAttribute('ranks')) ?? -1,
+            'rows' => $this->integerOrNull($totals['rows'] ?? null) ?? -1,
+            'authors' => $this->integerOrNull($totals['authors'] ?? null) ?? -1,
+            'books' => $this->integerOrNull($totals['books'] ?? null) ?? -1,
+            'pages' => $this->integerOrNull($totals['pages'] ?? null) ?? -1,
+            'ranks' => $this->integerOrNull($totals['ranks'] ?? null) ?? -1,
         ];
     }
 
@@ -319,11 +319,11 @@ final class FullOuterJoinAggregateVisibilityTest extends TestCase
     private function readGroupCounts(Database $database, string $attribute, string $key): array
     {
         $counts = \array_map(
-            fn (Document $group): array => [
-                $this->stringOrNull($group->getAttribute($key)),
-                $this->integerOrNull($group->getAttribute('rows')) ?? -1,
+            fn (array $group): array => [
+                $this->stringOrNull($group[$key] ?? null),
+                $this->integerOrNull($group['rows'] ?? null) ?? -1,
             ],
-            $database->find(self::AUTHORS, [$this->join(), Query::groupBy([$attribute]), Query::count('*', 'rows')]),
+            $database->aggregate(self::AUTHORS, [$this->join(), Query::groupBy([$attribute]), Query::count('*', 'rows')]),
         );
 
         return $this->sorted(\array_values($counts));

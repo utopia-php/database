@@ -289,7 +289,7 @@ final class DocumentCacheInvalidationTest extends TestCase
             $this->assertFalse($database->getDocument('webhooks', $id)->isEmpty());
             $this->assertTrue($database->deleteDocument('webhooks', $id));
             $this->assertTrue($database->getDocument('webhooks', $id)->isEmpty());
-            $this->assertTrue($database->purgeCachedDocument('webhooks', $id));
+            $database->purgeCachedDocument('webhooks', $id);
         }
 
         $this->assertLessThanOrEqual($keys + $churned, \count($cache->keys()), 'A purge keeps at most one generation-only key per document id ever written');

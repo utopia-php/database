@@ -2,15 +2,16 @@
 
 namespace Utopia\Database\Event\Document;
 
+use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Event\Domain;
 
-class Deleted extends Domain
+final readonly class Deleted extends Domain
 {
     public function __construct(
-        string $collection,
-        public readonly string $documentId,
+        public string $collection,
+        public Document $document,
     ) {
-        parent::__construct($collection, Event::DocumentDelete);
+        parent::__construct(Event::DocumentDelete);
     }
 }

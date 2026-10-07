@@ -80,9 +80,9 @@ final class JoinedColumnValidationTest extends TestCase
             'filter' => [static fn (Database $database): mixed => $database->find('customers', [self::join(), Query::equal('note.nothing', ['x'])])],
             'select' => [static fn (Database $database): mixed => $database->find('customers', [self::join(), Query::select(['name', 'note.nothing'])])],
             'order' => [static fn (Database $database): mixed => $database->find('customers', [self::join(), Query::orderAsc('note.nothing')])],
-            'count aggregate' => [static fn (Database $database): mixed => $database->find('customers', [self::join(), Query::count('note.nothing', 'total')])],
-            'sum aggregate' => [static fn (Database $database): mixed => $database->find('customers', [self::join(), Query::sum('note.nothing', 'total')])],
-            'groupBy' => [static fn (Database $database): mixed => $database->find('customers', [self::join(), Query::count('*', 'rows'), Query::groupBy(['note.nothing'])])],
+            'count aggregate' => [static fn (Database $database): mixed => $database->aggregate('customers', [self::join(), Query::count('note.nothing', 'total')])],
+            'sum aggregate' => [static fn (Database $database): mixed => $database->aggregate('customers', [self::join(), Query::sum('note.nothing', 'total')])],
+            'groupBy' => [static fn (Database $database): mixed => $database->aggregate('customers', [self::join(), Query::count('*', 'rows'), Query::groupBy(['note.nothing'])])],
             'count() filter' => [static fn (Database $database): mixed => $database->count('customers', [self::join(), Query::equal('note.nothing', ['x'])])],
             'sum() filter' => [static fn (Database $database): mixed => $database->sum('customers', 'visits', [self::join(), Query::equal('note.nothing', ['x'])])],
             'getDocument() join condition' => [static fn (Database $database): mixed => $database->getDocument('customers', 'first', [
@@ -178,13 +178,13 @@ final class JoinedColumnValidationTest extends TestCase
             'known column in a filter' => [static fn (Database $database): mixed => $database->find('customers', [self::join(), Query::equal('note.body', ['needle'])])],
             'known column in a select' => [static fn (Database $database): mixed => $database->find('customers', [self::join(), Query::select(['name', 'note.body'])])],
             'known column in an order' => [static fn (Database $database): mixed => $database->find('customers', [self::join(), Query::orderAsc('note.body')])],
-            'known column in a count' => [static fn (Database $database): mixed => $database->find('customers', [self::join(), Query::count('note.body', 'total')])],
-            'known column in a sum' => [static fn (Database $database): mixed => $database->find('customers', [self::join(), Query::sum('note.score', 'total')])],
-            'known column in a groupBy' => [static fn (Database $database): mixed => $database->find('customers', [self::join(), Query::count('*', 'rows'), Query::groupBy(['note.body'])])],
+            'known column in a count' => [static fn (Database $database): mixed => $database->aggregate('customers', [self::join(), Query::count('note.body', 'total')])],
+            'known column in a sum' => [static fn (Database $database): mixed => $database->aggregate('customers', [self::join(), Query::sum('note.score', 'total')])],
+            'known column in a groupBy' => [static fn (Database $database): mixed => $database->aggregate('customers', [self::join(), Query::count('*', 'rows'), Query::groupBy(['note.body'])])],
             'known column in a between' => [static fn (Database $database): mixed => $database->find('customers', [self::join(), Query::between('note.score', 1, 5)])],
             '$id in a filter' => [static fn (Database $database): mixed => $database->find('customers', [self::join(), Query::equal('note.$id', ['note'])])],
             '$id in a select' => [static fn (Database $database): mixed => $database->find('customers', [self::join(), Query::select(['name', 'note.$id'])])],
-            '$id in a count' => [static fn (Database $database): mixed => $database->find('customers', [self::join(), Query::count('note.$id', 'notes')])],
+            '$id in a count' => [static fn (Database $database): mixed => $database->aggregate('customers', [self::join(), Query::count('note.$id', 'notes')])],
             '$createdAt in a between' => [static fn (Database $database): mixed => $database->find('customers', [self::join(), Query::between('note.$createdAt', '1970-01-01', '2099-12-31')])],
             '$permissions, $createdAt, $updatedAt and $sequence in a select' => [static fn (Database $database): mixed => $database->find('customers', [
                 self::join(),
@@ -269,12 +269,12 @@ final class JoinedColumnValidationTest extends TestCase
         $this->expectException(QueryException::class);
         $this->expectExceptionMessage($message);
 
-        $this->database->find('customers', [self::join(), $aggregate]);
+        $this->database->aggregate('customers', [self::join(), $aggregate]);
     }
 
     public function testArithmeticAggregatesOfNumericJoinedAttributesStayValid(): void
     {
-        $results = $this->database->find('customers', [
+        $results = $this->database->aggregate('customers', [
             self::join(),
             Query::sum('note.score', 'total'),
             Query::avg('note.ratio', 'average'),
@@ -282,9 +282,9 @@ final class JoinedColumnValidationTest extends TestCase
         ]);
 
         $this->assertCount(1, $results);
-        $this->assertSame(3, $results[0]->getAttribute('total'));
-        $this->assertSame(0.5, $results[0]->getAttribute('average'));
-        $this->assertSame(3, $results[0]->getAttribute('bare'));
+        $this->assertSame(3, $results[0]['total']);
+        $this->assertSame(0.5, $results[0]['average']);
+        $this->assertSame(3, $results[0]['bare']);
     }
 
     /**

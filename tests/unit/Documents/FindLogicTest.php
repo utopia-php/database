@@ -521,12 +521,23 @@ class FindLogicTest extends TestCase
         $this->database->find('testCol', [Query::cursorAfter($cursorDoc)]);
     }
 
-    public function testFindWithAggregationOnUnsupportedAdapterThrows(): void
+    public function testAggregateOnUnsupportedAdapterThrows(): void
     {
         $this->setupCollectionLookup('testCol');
 
         $this->expectException(QueryException::class);
         $this->expectExceptionMessage('Aggregation queries are not supported');
+        $this->database->skipValidation(fn () => $this->database->aggregate('testCol', [
+            Query::count('*', 'cnt'),
+        ]));
+    }
+
+    public function testFindRefusesAnAggregate(): void
+    {
+        $this->setupCollectionLookup('testCol');
+
+        $this->expectException(QueryException::class);
+        $this->expectExceptionMessage('find() does not run aggregate or groupBy queries: use aggregate()');
         $this->database->skipValidation(fn () => $this->database->find('testCol', [
             Query::count('*', 'cnt'),
         ]));
@@ -543,7 +554,7 @@ class FindLogicTest extends TestCase
         ]));
     }
 
-    public function testFindAggregationWithCursorThrows(): void
+    public function testAggregateWithCursorThrows(): void
     {
         $db = $this->buildDbWithCapabilities(self::createStub(Adapter::class), [
             Capability::IndexKey, Capability::IndexArray, Capability::IndexUnique,
@@ -558,13 +569,13 @@ class FindLogicTest extends TestCase
 
         $this->expectException(QueryException::class);
         $this->expectExceptionMessage('Cursor pagination is not supported with aggregation queries');
-        $db->skipValidation(fn () => $db->find('testCol', [
+        $db->skipValidation(fn () => $db->aggregate('testCol', [
             Query::count('*', 'cnt'),
             Query::cursorAfter($cursorDoc),
         ]));
     }
 
-    public function testFindWithGroupBy(): void
+    public function testAggregateWithGroupBy(): void
     {
         $db = $this->buildDbWithCapabilities($this->createMock(Adapter::class), [
             Capability::IndexKey, Capability::IndexArray, Capability::IndexUnique,
@@ -597,11 +608,11 @@ class FindLogicTest extends TestCase
                 ->willReturn([new Document(['status' => 'active', 'cnt' => 5])]);
         });
 
-        $results = $db->skipValidation(fn () => $db->find('testCol', [
+        $results = $db->skipValidation(fn () => $db->aggregate('testCol', [
             Query::groupBy(['status']),
             Query::count('*', 'cnt'),
         ]));
-        $this->assertCount(1, $results);
+        $this->assertSame([['status' => 'active', 'cnt' => 5]], $results);
     }
 
     public function testFindWithDistinct(): void
@@ -959,7 +970,7 @@ class FindLogicTest extends TestCase
         $this->assertCount(1, $results);
     }
 
-    public function testAggregateDelegatesToFind(): void
+    public function testAggregateReturnsTheAdapterRowsAsArrays(): void
     {
         $db = $this->buildDbWithCapabilities($this->createMock(Adapter::class), [
             Capability::IndexKey, Capability::IndexArray, Capability::IndexUnique,
@@ -971,10 +982,8 @@ class FindLogicTest extends TestCase
                 ->willReturn([$aggResult]);
         });
 
-        /** @var list<Document> $results */
         $results = $db->skipValidation(fn () => $db->aggregate('testCol', [Query::count('*', 'cnt')]));
-        $this->assertCount(1, $results);
-        $this->assertSame(10, $results[0]->getAttribute('cnt'));
+        $this->assertSame([['cnt' => 10]], $results);
     }
 
     public function testFindWithValidationDisabledAllowsUnknownAttributes(): void

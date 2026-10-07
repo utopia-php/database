@@ -107,7 +107,7 @@ final class PoolDelegationTest extends TestCase
             $database->createDocument('books', new Document(['$id' => 'dune', 'title' => 'Dune']));
             $database->createDocument('books', new Document(['$id' => 'emma', 'title' => 'Emma']));
 
-            return $database->execute($database->from('books')->select(['title'])->filter([Query::equal('$id', ['emma'])]));
+            return $database->query($database->from('books')->select(['title'])->filter([Query::equal('$id', ['emma'])]));
         });
 
         $this->assertIsArray($rows);

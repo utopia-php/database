@@ -11,6 +11,7 @@ use Utopia\Async\Promise;
 use Utopia\Cache\Cache;
 use Utopia\Database\Cache\Invalidator;
 use Utopia\Database\Cache\QueryCache;
+use Utopia\Database\Event\Domain;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit;
 use Utopia\Database\Helpers\ID;
@@ -646,23 +647,25 @@ class Mirror extends Database
      */
     public function addLifecycleHook(Lifecycle $hook): static
     {
-        if ($hook instanceof Invalidator) {
-            parent::addHook($hook);
-        }
-
         $this->source->addHook($hook);
 
         return $this;
     }
 
     /**
-     * Invalidates the mirror's own query cache, then lets the source invalidate its own and run
-     * the lifecycle hooks, which are registered there (see addLifecycleHook()).
+     * Lifecycle hooks are registered on the source (see addLifecycleHook()).
      */
-    protected function trigger(Event $event, mixed $data = null): void
+    protected function listens(Event $event): bool
     {
-        parent::trigger($event, $data);
-        $this->source->trigger($event, $data);
+        return $this->source->listens($event);
+    }
+
+    /**
+     * Lifecycle hooks are registered on the source (see addLifecycleHook()).
+     */
+    protected function dispatch(Domain $event): void
+    {
+        $this->source->dispatch($event);
     }
 
     /**
@@ -680,9 +683,9 @@ class Mirror extends Database
     /**
      * Lifecycle hooks are registered on the source (see addLifecycleHook()).
      */
-    protected function triggerPropagatingHooks(Event $event, mixed $data = null): void
+    protected function dispatchPropagating(Domain $event): void
     {
-        $this->source->triggerPropagatingHooks($event, $data);
+        $this->source->dispatchPropagating($event);
     }
 
     /**
@@ -780,11 +783,13 @@ class Mirror extends Database
             Query::offset($offset),
         ]));
 
-        $this->trigger(Event::CollectionList, $result);
-
         $collections = [];
         foreach ($result as $doc) {
             $collections[] = Collection::fromDocument($doc);
+        }
+
+        if ($this->listens(Event::CollectionList)) {
+            $this->dispatch(new Event\Collection\Listed($collections));
         }
 
         return $collections;
@@ -1237,16 +1242,15 @@ class Mirror extends Database
     public function createDocuments(
         string $collection,
         array $documents,
-        int $batchSize = self::INSERT_BATCH_SIZE,
+        int $batchSize = self::BATCH_SIZE,
         ?callable $onNext = null,
-        ?callable $onError = null,
     ): int {
         $onNext = $this->decorating(Event::DocumentsCreate, $collection, $onNext);
         $modified = $this->skippingDuplicates()
             ? $this->source->skipDuplicates(
-                fn () => $this->source->createDocuments($collection, $documents, $batchSize, $onNext, $onError)
+                fn () => $this->source->createDocuments($collection, $documents, $batchSize, $onNext)
             )
-            : $this->source->createDocuments($collection, $documents, $batchSize, $onNext, $onError);
+            : $this->source->createDocuments($collection, $documents, $batchSize, $onNext);
 
         $destination = $this->destination;
         if (
@@ -1355,9 +1359,8 @@ class Mirror extends Database
         string $collection,
         Document $updates,
         array $queries = [],
-        int $batchSize = self::INSERT_BATCH_SIZE,
+        int $batchSize = self::BATCH_SIZE,
         ?callable $onNext = null,
-        ?callable $onError = null,
     ): int {
         $onNext = $this->decorating(Event::DocumentsUpdate, $collection, $onNext);
         $modified = $this->source->updateDocuments(
@@ -1366,7 +1369,6 @@ class Mirror extends Database
             $queries,
             $batchSize,
             $onNext,
-            $onError,
         );
 
         $destination = $this->destination;
@@ -1419,16 +1421,60 @@ class Mirror extends Database
     }
 
     /**
-     * upsertDocument() upserts through this method, so it writes, and fires its events, once on the source.
-     *
+     * {@inheritdoc}
+     */
+    public function upsertDocument(string $collection, Document $document): Document
+    {
+        $upserted = $this->source->upsertDocument($collection, $document);
+
+        $destination = $this->destination;
+        if (
+            \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
+            || $destination === null
+        ) {
+            return $this->decorate(Event::DocumentUpsert, $collection, $upserted);
+        }
+
+        $upgrade = $this->silent(fn () => $this->getUpgradeStatus($collection));
+        if ($upgrade === null || $upgrade->getAttribute('status', '') !== 'upgraded') {
+            return $this->decorate(Event::DocumentUpsert, $collection, $upserted);
+        }
+
+        $clone = clone $document;
+
+        $this->replicate('upsertDocument', function () use ($destination, $collection, $clone): void {
+            foreach ($this->writeFilters as $filter) {
+                $clone = $filter->beforeCreateOrUpdateDocument(
+                    source: $this->source,
+                    destination: $destination,
+                    collectionId: $collection,
+                    document: $clone,
+                );
+            }
+
+            $destination->withPreserveDates(fn (): Document => $destination->upsertDocument($collection, $clone));
+
+            foreach ($this->writeFilters as $filter) {
+                $filter->afterCreateOrUpdateDocument(
+                    source: $this->source,
+                    destination: $destination,
+                    collectionId: $collection,
+                    document: $clone,
+                );
+            }
+        });
+
+        return $this->decorate(Event::DocumentUpsert, $collection, $upserted);
+    }
+
+    /**
      * {@inheritdoc}
      */
     public function upsertDocuments(
         string $collection,
         array $documents,
-        int $batchSize = self::INSERT_BATCH_SIZE,
+        int $batchSize = self::BATCH_SIZE,
         ?callable $onNext = null,
-        ?callable $onError = null,
         ?string $increase = null,
     ): int {
         $onNext = $this->decorating(Event::DocumentsUpsert, $collection, $onNext);
@@ -1437,7 +1483,6 @@ class Mirror extends Database
             $documents,
             $batchSize,
             $onNext,
-            $onError,
             $increase,
         );
 
@@ -1544,16 +1589,14 @@ class Mirror extends Database
     public function deleteDocuments(
         string $collection,
         array $queries = [],
-        int $batchSize = self::DELETE_BATCH_SIZE,
+        int $batchSize = self::BATCH_SIZE,
         ?callable $onNext = null,
-        ?callable $onError = null,
     ): int {
         $modified = $this->source->deleteDocuments(
             $collection,
             $queries,
             $batchSize,
             $onNext,
-            $onError,
         );
 
         $destination = $this->destination;
@@ -1862,7 +1905,10 @@ class Mirror extends Database
      */
     public function addHook(\Utopia\Query\Hook $hook): static
     {
-        if ($hook instanceof Lifecycle) {
+        if ($hook instanceof Invalidator) {
+            parent::addHook($hook);
+            $this->source->addHook($hook);
+        } elseif ($hook instanceof Lifecycle) {
             $this->addLifecycleHook($hook);
         } else {
             parent::addHook($hook);

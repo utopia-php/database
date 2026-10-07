@@ -271,10 +271,9 @@ trait Relationships
             }
         });
 
-        $this->triggerHooks(
-            Event::AttributeCreate,
-            $parent->toDocument()->setAttribute(Document::COLLECTION, $collectionId),
-        );
+        if ($this->listens(Event::AttributeCreate)) {
+            $this->dispatch(new Event\Attribute\Created($collectionId, $parent));
+        }
 
         return $relationship;
     }
@@ -431,11 +430,10 @@ trait Relationships
         $this->withRetries(fn () => $this->purgeCachedCollection($collectionId));
         $this->withRetries(fn () => $this->purgeCachedCollection($relatedCollectionId));
 
-        foreach ($updatedAttributes as [$updatedCollection, $updatedAttribute]) {
-            $this->triggerHooks(
-                Event::AttributeUpdate,
-                $updatedAttribute->toDocument()->setAttribute(Document::COLLECTION, $updatedCollection),
-            );
+        if ($this->listens(Event::AttributeUpdate)) {
+            foreach ($updatedAttributes as [$updatedCollection, $updatedAttribute]) {
+                $this->dispatch(new Event\Attribute\Updated($updatedCollection, $updatedAttribute));
+            }
         }
 
         return $renamed;
@@ -544,10 +542,9 @@ trait Relationships
         $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
         $this->withRetries(fn () => $this->purgeCachedCollection($relatedCollection->getId()));
 
-        $this->triggerHooks(
-            Event::AttributeDelete,
-            $attribute->toDocument()->setAttribute(Document::COLLECTION, $collection->getId()),
-        );
+        if ($this->listens(Event::AttributeDelete)) {
+            $this->dispatch(new Event\Attribute\Deleted($collection->getId(), $attribute));
+        }
     }
 
     private function getJunctionCollection(Document $collection, Document $relatedCollection, RelationshipSide $side): string

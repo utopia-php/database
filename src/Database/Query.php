@@ -3,7 +3,6 @@
 namespace Utopia\Database;
 
 use Utopia\Database\Exception\Query as QueryException;
-use Utopia\Query\CursorDirection;
 use Utopia\Query\Exception as BaseQueryException;
 use Utopia\Query\Method;
 use Utopia\Query\OrderDirection;

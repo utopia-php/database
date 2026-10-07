@@ -2,7 +2,6 @@
 
 namespace Utopia\Database\Traits;
 
-use Closure;
 use Exception;
 use Throwable;
 use Utopia\Database\Adapter\Feature;
@@ -523,54 +522,6 @@ trait Attributes
     }
 
     /**
-     * Rewrites one attribute's metadata without touching the schema; relationships keep their stored
-     * definitions in step through it.
-     *
-     * @param  Closure(Attribute): Attribute  $update
-     *
-     * @throws ConflictException
-     * @throws DatabaseException
-     * @throws NotFoundException
-     */
-    private function updateAttributeMeta(string $collection, string $key, Closure $update, bool $triggerEvent = true): Attribute
-    {
-        $definition = $this->silent(fn () => $this->getCollection($collection));
-
-        if ($definition->getId() === self::METADATA) {
-            throw new DatabaseException('Cannot update metadata attributes');
-        }
-
-        $attributes = $definition->attributes();
-        $position = self::attributePosition($attributes, $key);
-
-        if ($position === null) {
-            throw new NotFoundException('Attribute not found');
-        }
-
-        $attribute = $update($attributes[$position]);
-
-        $this->writeAttributes($definition, self::replacing($attributes, $key, $attribute));
-
-        $this->updateMetadata(
-            collection: $definition,
-            rollbackOperation: null,
-            shouldRollback: false,
-            operationDescription: "attribute metadata update '{$key}'"
-        );
-
-        $this->withRetries(fn () => $this->purgeCachedCollection($definition->getId()));
-
-        if ($triggerEvent) {
-            $this->triggerHooks(
-                Event::AttributeUpdate,
-                $attribute->toDocument()->setAttribute(Document::COLLECTION, $definition->getId()),
-            );
-        }
-
-        return $attribute;
-    }
-
-    /**
      * A column in the schema but not in this collection's metadata is reused when its type
      * matches the request, and dropped to be recreated otherwise. Under shared tables it
      * belongs to another tenant's collection, so a mismatch is refused instead.
@@ -1078,16 +1029,5 @@ trait Attributes
         }
 
         return $errors;
-    }
-
-    /**
-     * @param  list<string>  $keys
-     */
-    private function rollbackAttributeMetadata(Collection $definition, array $keys): void
-    {
-        $this->writeAttributes($definition, \array_values(\array_filter(
-            $definition->attributes(),
-            static fn (Attribute $attribute): bool => ! \in_array($attribute->key, $keys, true),
-        )));
     }
 }

@@ -2430,14 +2430,20 @@ class Database
         return $this->adapter->limits()->uidLength;
     }
 
+    /**
+     * A copy, so a caller that modifies it leaves the adapter's limit as it is.
+     */
     public function getMinDateTime(): NativeDateTime
     {
-        return $this->adapter->limits()->minDateTime;
+        return clone $this->adapter->limits()->minDateTime;
     }
 
+    /**
+     * A copy, so a caller that modifies it leaves the adapter's limit as it is.
+     */
     public function getMaxDateTime(): NativeDateTime
     {
-        return $this->adapter->limits()->maxDateTime;
+        return clone $this->adapter->limits()->maxDateTime;
     }
 
     /**

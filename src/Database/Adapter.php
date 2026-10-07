@@ -237,8 +237,10 @@ abstract class Adapter
      */
     public function setSharedTables(bool $sharedTables): bool
     {
-        $this->sharedTables = $sharedTables;
-        $this->limits = null;
+        if ($this->sharedTables !== $sharedTables) {
+            $this->sharedTables = $sharedTables;
+            $this->limits = null;
+        }
 
         return true;
     }

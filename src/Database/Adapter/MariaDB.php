@@ -65,7 +65,6 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
             Capability::SchemaIntrospection,
             Capability::UpsertOnUniqueIndex,
             Capability::UnsignedBigInt,
-            Capability::SchemaIntrospection,
         ]);
     }
 

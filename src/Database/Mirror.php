@@ -1425,7 +1425,7 @@ class Mirror extends Database
                 );
             }
 
-            $destination->withPreserveDates(fn (): Document => $destination->upsertDocument($collection, $clone));
+            $destination->withPreserveDates(true, fn (): Document => $destination->upsertDocument($collection, $clone));
 
             foreach ($this->writeFilters as $filter) {
                 $filter->afterCreateOrUpdateDocument(

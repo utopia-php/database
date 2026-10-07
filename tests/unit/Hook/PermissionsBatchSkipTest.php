@@ -102,6 +102,24 @@ final class PermissionsBatchSkipTest extends TestCase
         ));
     }
 
+    public function testABulkUpdateRewritesThePermissionsOfOnlyTheDocumentsThatChangeThem(): void
+    {
+        $reader = [Permission::read(Role::user('reader')), Permission::update(Role::any())];
+        $this->database->updateDocument(self::COLLECTION, 'second', new Document([Document::PERMISSIONS => $reader]));
+
+        $statements = $this->statementsDuring(fn (): int => $this->database->updateDocuments(
+            self::COLLECTION,
+            new Document(['title' => 'renamed', Document::PERMISSIONS => self::stored()]),
+        ));
+
+        $this->assertNotSame([], $this->permissionStatements($statements));
+        foreach (['first', 'second'] as $id) {
+            $document = $this->database->getAuthorization()->skip(fn (): Document => $this->database->getDocument(self::COLLECTION, $id));
+            $this->assertSame('renamed', $document->getAttribute('title'));
+            $this->assertEqualsCanonicalizing(self::stored(), $document->getPermissions());
+        }
+    }
+
     public function testTheHookReadsNoPermissionsWhenEveryDocumentKeepsItsOwn(): void
     {
         $adapter = new SQLite($this->pdo);
@@ -116,9 +134,6 @@ final class PermissionsBatchSkipTest extends TestCase
             new Document([Document::ID => 'first', Document::PERMISSIONS => self::stored()]),
             new Document([Document::ID => 'second', Document::PERMISSIONS => self::stored()]),
         ]);
-        foreach ($documents as $document) {
-            $document->setAttribute(Permissions::UNCHANGED, true);
-        }
         $updates = new class ([Document::PERMISSIONS => self::stored()]) extends Document {
             public int $calls = 0;
 
@@ -132,7 +147,7 @@ final class PermissionsBatchSkipTest extends TestCase
         };
 
         $before = \count($this->statements);
-        $adapter->updateDocuments($collection, $updates, $documents);
+        $adapter->updateDocuments($collection, $updates, $documents, ['first' => true, 'second' => true]);
 
         $this->assertSame(0, $updates->calls, 'no document is eligible, so no permission type is read from the update');
         $this->assertSame([], $this->permissionStatements(\array_slice($this->statements, $before)));

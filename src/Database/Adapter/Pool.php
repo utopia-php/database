@@ -891,7 +891,7 @@ class Pool extends Adapter implements Feature\Timeouts
      * {@inheritDoc}
      */
     #[\Override]
-    public function updateDocuments(Document $collection, Document $updates, array $documents): int
+    public function updateDocuments(Document $collection, Document $updates, array $documents, array $skipPermissions = []): int
     {
         /** @var int $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());

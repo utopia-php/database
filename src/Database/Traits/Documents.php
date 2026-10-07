@@ -37,7 +37,6 @@ use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\ID;
-use Utopia\Database\Hook\Permissions as PermissionsHook;
 use Utopia\Database\Operator;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
@@ -1818,6 +1817,8 @@ trait Documents
             $cacheTarget = $collection->getId() === self::METADATA ? $batch : $collection->getId();
             $found = $batch;
             $this->withMutation(Event::DocumentsUpdate, $cacheTarget, function () use ($collection, $updates, $decodedUpdates, $adapterUpdates, &$batch, $found, $currentPermissions) {
+                /** @var array<string, bool> $keepsPermissions */
+                $keepsPermissions = [];
                 foreach ($found as $index => $document) {
                     $skipPermissionsUpdate = true;
 
@@ -1833,7 +1834,9 @@ trait Documents
                         $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
                     }
 
-                    $document->setAttribute(PermissionsHook::UNCHANGED, $skipPermissionsUpdate);
+                    // An id repeats across tenants in a tenant-per-document batch: one that changes its permissions
+                    // keeps the permission rows of every document under that id rewritten.
+                    $keepsPermissions[$document->getId()] = $skipPermissionsUpdate && ($keepsPermissions[$document->getId()] ?? true);
 
                     $updateData = [];
                     foreach ($decodedUpdates->getArrayCopy() as $key => $value) {
@@ -1863,10 +1866,13 @@ trait Documents
                     $batch[$index] = $this->castBefore($collection, $encoded);
                 }
 
+                /** @var array<string, true> $skipPermissions */
+                $skipPermissions = \array_filter($keepsPermissions);
                 $this->adapter->updateDocuments(
                     $collection,
                     $adapterUpdates,
-                    $batch
+                    $batch,
+                    $skipPermissions,
                 );
 
                 foreach ($batch as $document) {
@@ -1897,7 +1903,6 @@ trait Documents
             $batch = $this->decorateDocuments(Event::DocumentsUpdate, $collection, $batch);
 
             foreach ($batch as $index => $doc) {
-                $doc->removeAttribute(PermissionsHook::UNCHANGED);
                 if ($onNext !== null) {
                     $onNext($doc, $old[$index]);
                 }

@@ -1502,7 +1502,7 @@ class Memory extends Adapter implements Feature\Relationships
         return $document;
     }
 
-    public function updateDocuments(Document $collection, Document $updates, array $documents): int
+    public function updateDocuments(Document $collection, Document $updates, array $documents, array $skipPermissions = []): int
     {
         if (empty($documents)) {
             return 0;

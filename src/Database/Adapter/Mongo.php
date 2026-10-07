@@ -1699,10 +1699,11 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      * Updates all documents which match the given query.
      *
      * @param  array<Document>  $documents
+     * @param  array<string, true>  $skipPermissions
      *
      * @throws DatabaseException
      */
-    public function updateDocuments(Document $collection, Document $updates, array $documents): int
+    public function updateDocuments(Document $collection, Document $updates, array $documents, array $skipPermissions = []): int
     {
         $name = $this->getNamespace().'_'.$this->filter($collection->getId());
 

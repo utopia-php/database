@@ -26,6 +26,7 @@ final readonly class WriteContext implements Context
      * @param  Closure(Statement, Event): (PDOStatement|DatabasePDOStatement|PDOStatementProxy)  $prepare
      * @param  Closure(PDOStatement|DatabasePDOStatement|PDOStatementProxy): bool  $execute
      * @param  Closure(array<string, mixed>, Document): array<string, mixed>  $decorateRow
+     * @param  array<string, true>  $skipPermissions  Ids of the documents whose permissions the write keeps
      */
     public function __construct(
         private Closure $builder,
@@ -35,7 +36,7 @@ final readonly class WriteContext implements Context
         private Closure $execute,
         private Closure $decorateRow,
         private bool $ignoreDuplicates,
-        private bool $skipPermissions = false,
+        private array $skipPermissions = [],
     ) {
     }
 
@@ -75,9 +76,9 @@ final readonly class WriteContext implements Context
         return ($this->decorateRow)($row, $document);
     }
 
-    public function skipPermissions(): bool
+    public function skipPermissions(Document $document): bool
     {
-        return $this->skipPermissions;
+        return isset($this->skipPermissions[$document->getId()]);
     }
 
     public function ignoreDuplicates(): bool

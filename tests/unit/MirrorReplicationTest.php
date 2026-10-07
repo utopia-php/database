@@ -826,11 +826,11 @@ final class MirrorReplicationTest extends TestCase
                 });
             }
 
-            public function updateDocuments(Document $collection, Document $updates, array $documents): int
+            public function updateDocuments(Document $collection, Document $updates, array $documents, array $skipPermissions = []): int
             {
-                return $this->busy(function () use ($collection, $updates, $documents): int {
+                return $this->busy(function () use ($collection, $updates, $documents, $skipPermissions): int {
                     $this->wait($updates->getAttribute('title', ''));
-                    $modified = parent::updateDocuments($collection, $updates, $documents);
+                    $modified = parent::updateDocuments($collection, $updates, $documents, $skipPermissions);
                     foreach ($documents as $document) {
                         $this->written($document->getId(), $updates->getAttribute('title', ''));
                     }

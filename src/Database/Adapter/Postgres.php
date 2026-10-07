@@ -1175,7 +1175,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
 
             $this->execute($statement);
 
-            $context = $this->writeContext($skipPermissions);
+            $context = $this->writeContext($skipPermissions ? [$document->getId() => true] : []);
             $this->runWriteHooks(fn ($hook) => $hook->afterDocumentUpdate($name, $id, $document, $context));
         } catch (PDOException $e) {
             throw $this->processException($e);

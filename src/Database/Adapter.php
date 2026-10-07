@@ -774,10 +774,12 @@ abstract class Adapter
      * Updates all documents which match the given query.
      *
      * @param  array<Document>  $documents
+     * @param  array<string, true>  $skipPermissions  Ids of the documents whose permissions the update keeps, so a
+     *                                               permissions write hook leaves their permission rows alone
      *
      * @throws DatabaseException
      */
-    abstract public function updateDocuments(Document $collection, Document $updates, array $documents): int;
+    abstract public function updateDocuments(Document $collection, Document $updates, array $documents, array $skipPermissions = []): int;
 
     /**
      * Increase or decrease attribute value

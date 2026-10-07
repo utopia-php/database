@@ -4428,7 +4428,7 @@ trait Documents
     {
         foreach ($queries as $index => $query) {
             $method = $query->getMethod();
-            if (! $method->isAggregate() || self::aggregateAlias($query) !== '') {
+            if (! $method->isAggregate() || $query->getAlias() !== '') {
                 continue;
             }
 
@@ -4436,17 +4436,10 @@ trait Documents
             $alias = $attribute === '*' || $attribute === '' ? $method->value : $method->value.'_'.$attribute;
             $alias = \substr((string) \preg_replace('/[^A-Za-z0-9_]/', '_', $alias), 0, Aggregate::MAX_ALIAS_LENGTH);
 
-            $queries[$index] = new Query($method, $attribute, [$alias]);
+            $queries[$index] = new Query($method, $attribute, $query->getValues(), $alias);
         }
 
         return $queries;
-    }
-
-    private static function aggregateAlias(Query $query): string
-    {
-        $alias = $query->getValue('');
-
-        return \is_string($alias) ? $alias : '';
     }
 
     /**

@@ -24,6 +24,7 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Contention as ContentionException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
@@ -46,8 +47,8 @@ use Utopia\Database\PDOStatement as DatabasePDOStatement;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
-use Utopia\Database\RelationSide;
-use Utopia\Database\RelationType;
+use Utopia\Database\RelationshipSide;
+use Utopia\Database\RelationshipType;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Database\Validator\Query\Join as JoinValidator;
@@ -530,7 +531,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     {
         $schema = $this->createSchemaBuilder();
         $table = $schema->table($this->getSQLTableRaw($collection));
-        $this->addTableColumn($table, $attribute->getKey(), $attribute->getType(), $attribute->getSize(), $attribute->isSigned(), $attribute->isArray(), $attribute->isRequired());
+        $this->addAttributeColumn($table, $attribute);
         $result = $table->alter();
 
         $sql = $result->query;
@@ -549,7 +550,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     /**
      * Create Attributes
      *
-     * @param  array<Attribute>  $attributes
+     * @param  list<Attribute>  $attributes
      *
      * @throws DatabaseException
      */
@@ -558,15 +559,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $schema = $this->createSchemaBuilder();
         $table = $schema->table($this->getSQLTableRaw($collection));
         foreach ($attributes as $attribute) {
-            $this->addTableColumn(
-                $table,
-                $attribute->getKey(),
-                $attribute->getType(),
-                $attribute->getSize(),
-                $attribute->isSigned(),
-                $attribute->isArray(),
-                $attribute->isRequired(),
-            );
+            $this->addAttributeColumn($table, $attribute);
         }
         $result = $table->alter();
 
@@ -2510,11 +2503,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      */
     public function getCountOfAttributes(Document $collection): int
     {
-        /** @var array<mixed> $attrs */
-        $attrs = $collection->getAttribute('attributes') ?? [];
-        $attributes = \count($attrs);
-
-        return $attributes + $this->getCountOfDefaultAttributes();
+        return \count(self::collectionAttributes($collection)) + $this->getCountOfDefaultAttributes();
     }
 
     /**
@@ -2522,11 +2511,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      */
     public function getCountOfIndexes(Document $collection): int
     {
-        /** @var array<mixed> $idxs */
-        $idxs = $collection->getAttribute('indexes') ?? [];
-        $indexes = \count($idxs);
-
-        return $indexes + $this->getCountOfDefaultIndexes();
+        return \count(self::collectionIndexes($collection)) + $this->getCountOfDefaultIndexes();
     }
 
     /**
@@ -2534,7 +2519,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      */
     public function getCountOfDefaultAttributes(): int
     {
-        return \count(Database::internalAttributes());
+        return \count(Database::internalAttributesFor(true));
     }
 
     /**
@@ -2575,54 +2560,26 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
          */
         $total = 1067;
 
-        /** @var array<int, Attribute|Document|array<string, mixed>> $attributes */
-        $attributes = $collection->getAttributes()['attributes'] ?? [];
-
-        foreach ($attributes as $attribute) {
-            if ($attribute instanceof Attribute) {
-                $isArray = $attribute->isArray();
-                $attributeSize = $attribute->getSize();
-                $attributeType = $attribute->getType()->value;
-            } elseif ($attribute instanceof Document) {
-                $isArray = (bool) $attribute->getAttribute('array', false);
-                $size = $attribute->getAttribute('size', 0);
-                $attributeSize = \is_numeric($size) ? (int) $size : 0;
-                $rawType = $attribute->getAttribute('type', '');
-                if ($rawType instanceof ColumnType) {
-                    $rawType = $rawType->value;
-                }
-                $rawType = \is_scalar($rawType) ? (string) $rawType : '';
-                $normalizedType = Attribute::tryNormalizeType($rawType);
-                $attributeType = $normalizedType instanceof ColumnType ? $normalizedType->value : $rawType;
-            } else {
-                $isArray = (bool) ($attribute['array'] ?? false);
-                $attributeSize = (int) (is_scalar($attribute['size'] ?? 0) ? ($attribute['size'] ?? 0) : 0);
-                $rawType = $attribute['type'] ?? '';
-                if ($rawType instanceof ColumnType) {
-                    $rawType = $rawType->value;
-                }
-                $rawType = \is_scalar($rawType) ? (string) $rawType : '';
-                $normalizedType = Attribute::tryNormalizeType($rawType);
-                $attributeType = $normalizedType instanceof ColumnType ? $normalizedType->value : $rawType;
-            }
+        foreach (self::collectionAttributes($collection) as $attribute) {
+            $attributeSize = $attribute->size ?? 0;
 
             /**
              * Json / Longtext
              * only the pointer contributes 20 bytes
              * data is stored externally
              */
-            if ($isArray) {
+            if ($attribute->array) {
                 $total += 20;
 
                 continue;
             }
 
-            switch ($attributeType) {
-                case ColumnType::Id->value:
+            switch ($attribute->type) {
+                case ColumnType::Id:
                     $total += 8; //  BIGINT 8 bytes
                     break;
 
-                case ColumnType::String->value:
+                case ColumnType::String:
                     /**
                      * Text / Mediumtext / Longtext
                      * only the pointer contributes 20 bytes to the row size
@@ -2636,20 +2593,20 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
                     break;
 
-                case ColumnType::Varchar->value:
+                case ColumnType::Varchar:
                     $total += match (true) {
                         $attributeSize > 255 => $attributeSize * 4 + 2,
                         default => $attributeSize * 4 + 1,
                     };
                     break;
 
-                case ColumnType::Text->value:
-                case ColumnType::MediumText->value:
-                case ColumnType::LongText->value:
+                case ColumnType::Text:
+                case ColumnType::MediumText:
+                case ColumnType::LongText:
                     $total += 20; // Pointer storage for TEXT types
                     break;
 
-                case ColumnType::Integer->value:
+                case ColumnType::Integer:
                     if ($attributeSize >= 8) {
                         $total += 8; //  BIGINT 8 bytes
                     } else {
@@ -2657,24 +2614,24 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     }
                     break;
 
-                case ColumnType::BigInteger->value:
+                case ColumnType::BigInteger:
                     $total += 8;
                     break;
 
-                case ColumnType::Float->value:
-                case ColumnType::Double->value:
+                case ColumnType::Float:
+                case ColumnType::Double:
                     $total += 8; // DOUBLE 8 bytes
                     break;
 
-                case ColumnType::Boolean->value:
+                case ColumnType::Boolean:
                     $total += 1; // TINYINT(1) 1 bytes
                     break;
 
-                case ColumnType::Relationship->value:
+                case ColumnType::Relationship:
                     $total += Database::LENGTH_KEY * 4 + 1; // VARCHAR(<=255)
                     break;
 
-                case ColumnType::Datetime->value:
+                case ColumnType::Datetime:
                     /**
                      * 1 byte year + month
                      * 1 byte for the day
@@ -2684,7 +2641,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     $total += 7;
                     break;
 
-                case ColumnType::Object->value:
+                case ColumnType::Object:
                     /**
                      * JSONB/JSON type
                      * Only the pointer contributes 20 bytes to the row size
@@ -2693,21 +2650,21 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     $total += 20;
                     break;
 
-                case ColumnType::Point->value:
+                case ColumnType::Point:
                     $total += $this->getMaxPointSize();
                     break;
-                case ColumnType::Linestring->value:
-                case ColumnType::Polygon->value:
+                case ColumnType::Linestring:
+                case ColumnType::Polygon:
                     $total += 20;
                     break;
 
-                case ColumnType::Vector->value:
+                case ColumnType::Vector:
                     // Each dimension is typically 4 bytes (float32)
                     $total += $attributeSize * 4;
                     break;
 
                 default:
-                    throw new DatabaseException('Unknown type: ' . $attributeType);
+                    throw new DatabaseException('Unknown type: '.$attribute->type->value);
             }
         }
 
@@ -3355,8 +3312,9 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      */
     public function getColumnType(string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
     {
-        $columnType = Attribute::tryNormalizeType($type);
-        if ($columnType === null) {
+        try {
+            $columnType = Attribute::typeFromStored($type);
+        } catch (StructureException) {
             throw new DatabaseException('Unknown column type: '.$type);
         }
 
@@ -4362,6 +4320,40 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         return $selections;
+    }
+
+    /**
+     * @throws DatabaseException
+     */
+    protected function addAttributeColumn(Table $table, Attribute $attribute): Column
+    {
+        return $this->addTableColumn($table, $attribute->key, $attribute->type, $attribute->size ?? 0, $attribute->signed, $attribute->array, $attribute->required);
+    }
+
+    protected function getAttributeSqlType(Attribute $attribute): string
+    {
+        return $this->getSQLType($attribute->type, $attribute->size ?? 0, $attribute->signed, $attribute->array, $attribute->required);
+    }
+
+    /**
+     * A relationship stores a column on the side that holds the foreign key: never for many-to-many, which uses a
+     * junction table.
+     */
+    protected static function storesColumn(Attribute $attribute): bool
+    {
+        $relationship = $attribute->relationship;
+        if ($relationship === null) {
+            return true;
+        }
+
+        $parent = $attribute->side === RelationshipSide::Parent;
+
+        return match ($relationship->type) {
+            RelationshipType::OneToOne => $parent || $relationship->twoWay,
+            RelationshipType::OneToMany => ! $parent,
+            RelationshipType::ManyToOne => $parent,
+            RelationshipType::ManyToMany => false,
+        };
     }
 
     /**

@@ -32,12 +32,9 @@ use Utopia\Database\OperatorType;
 use Utopia\Database\PDO as DatabasePDO;
 use Utopia\Database\PDOStatement as DatabasePDOStatement;
 use Utopia\Database\Query;
-use Utopia\Database\RelationSide;
-use Utopia\Database\RelationType;
 use Utopia\Database\Storage;
 use Utopia\Query\Builder\SQL as SQLBuilder;
 use Utopia\Query\Query as BaseQuery;
-use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 use Utopia\Query\Schema\MySQL as MySQLSchema;
 
@@ -119,22 +116,21 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
     /**
      * Create Collection
      *
-     * @param  array<Attribute>  $attributes
-     * @param  array<Index>  $indexes
+     * @param  list<Attribute>  $attributes
+     * @param  list<Index>  $indexes
      *
      * @throws Exception
      * @throws PDOException
      */
-    public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
+    public function createCollection(string $collection, array $attributes = [], array $indexes = []): bool
     {
-        $id = $this->filter($name);
+        $id = $this->filter($collection);
         $schema = $this->createSchemaBuilder();
         $sharedTables = $this->sharedTables;
 
         $hash = [];
         foreach ($attributes as $attribute) {
-            $attributeId = $this->filter($attribute->getKey());
-            $hash[$attributeId] = $attribute;
+            $hash[$this->filter($attribute->key)] = $attribute;
         }
 
         $table = $schema->table($this->getSQLTableRaw($id));
@@ -145,43 +141,20 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         $table->mediumText(Storage::PERMISSIONS)->nullable()->default(null);
 
         foreach ($attributes as $attribute) {
-            $attributeId = $this->filter($attribute->getKey());
-
-            if ($attribute->getType() === ColumnType::Relationship) {
-                $options = $attribute->getOptions() ?? [];
-                $relationType = $options['relationType'] ?? null;
-                $twoWay = $options['twoWay'] ?? false;
-                $side = $options['side'] ?? null;
-
-                if (
-                    $relationType === RelationType::ManyToMany->value
-                    || ($relationType === RelationType::OneToOne->value && ! $twoWay && $side === RelationSide::Child->value)
-                    || ($relationType === RelationType::OneToMany->value && $side === RelationSide::Parent->value)
-                    || ($relationType === RelationType::ManyToOne->value && $side === RelationSide::Child->value)
-                ) {
-                    continue;
-                }
+            if (! self::storesColumn($attribute)) {
+                continue;
             }
 
-            $sqlType = $this->getSQLType(
-                $attribute->getType(),
-                $attribute->getSize(),
-                $attribute->isSigned(),
-                $attribute->isArray(),
-                $attribute->isRequired()
-            );
-            $table->rawColumn('`'.$attributeId.'` '.$sqlType);
+            $table->rawColumn('`'.$this->filter($attribute->key).'` '.$this->getAttributeSqlType($attribute));
         }
 
         foreach ($indexes as $index) {
-            $indexId = $this->filter($index->getKey());
-            $indexType = $index->getType();
+            $indexId = $this->filter($index->key);
+            $indexType = $index->type;
             $indexColumns = [];
-            $indexOrders = $index->getOrders();
-            $indexLengths = $index->getLengths();
 
-            foreach ($index->getIndexedAttributes() as $nested => $attribute) {
-                $indexOrder = Index::direction($indexOrders[$nested] ?? null);
+            foreach ($index->attributes as $nested => $attribute) {
+                $indexOrder = ($index->orders[$nested] ?? null)?->value ?? '';
 
                 if ($indexType === IndexType::Spatial && ! $this->supports(Capability::SpatialIndexOrder) && ! empty($indexOrder)) {
                     throw new DatabaseException('Spatial indexes with explicit orders are not supported. Remove the orders to create this index.');
@@ -191,8 +164,8 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
 
                 $indexColumns[] = $this->compileIndexColumn(
                     $indexAttribute,
-                    isset($hash[$indexAttribute]) && $hash[$indexAttribute]->isArray(),
-                    (int) ($indexLengths[$nested] ?? 0),
+                    isset($hash[$indexAttribute]) && $hash[$indexAttribute]->array,
+                    $index->lengths[$nested] ?? 0,
                     $indexType === IndexType::Fulltext ? '' : $indexOrder,
                 );
             }
@@ -403,12 +376,12 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
      *
      * @throws DatabaseException
      */
-    public function updateAttribute(string $collection, Attribute $attribute, ?string $newKey = null): bool
+    public function updateAttribute(string $collection, string $key, Attribute $attribute): bool
     {
         $name = $this->filter($collection);
-        $id = $this->filter($attribute->getKey());
-        $newKey = empty($newKey) ? null : $this->filter($newKey);
-        $sqlType = $this->getSQLType($attribute->getType(), $attribute->getSize(), $attribute->isSigned(), $attribute->isArray(), $attribute->isRequired());
+        $id = $this->filter($key);
+        $newKey = $attribute->key === $key ? null : $this->filter($attribute->key);
+        $sqlType = $this->getAttributeSqlType($attribute);
         $schema = $this->createSchemaBuilder();
         $tableRaw = $this->getSQLTableRaw($name);
 
@@ -452,17 +425,14 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         $storedAttributes = $collection->getAttribute('attributes', []);
         /** @var array<int, array<string, mixed>> $collectionAttributes */
         $collectionAttributes = \is_string($storedAttributes) ? (\json_decode($storedAttributes, true) ?? []) : [];
-        $id = $this->filter($index->getKey());
-        $type = $index->getType();
-        $attributes = $index->getIndexedAttributes();
-        $lengths = $index->getLengths();
-        $orders = $index->getOrders();
+        $id = $this->filter($index->key);
+        $type = $index->type;
 
         $schema = $this->createSchemaBuilder();
         $tableName = $this->getSQLTableRaw($collection->getId());
 
         $columns = [];
-        foreach ($attributes as $position => $key) {
+        foreach ($index->attributes as $position => $key) {
             $attribute = null;
             foreach ($collectionAttributes as $collectionAttribute) {
                 $attributeId = $collectionAttribute[Document::ID] ?? '';
@@ -475,8 +445,8 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
             $columns[] = $this->compileIndexColumn(
                 $this->filter($this->getInternalKeyForAttribute($key)),
                 ! empty($attribute['array']),
-                (int) ($lengths[$position] ?? 0),
-                $type === IndexType::Fulltext ? '' : Index::direction($orders[$position] ?? null),
+                $index->lengths[$position] ?? 0,
+                $type === IndexType::Fulltext ? '' : (($index->orders[$position] ?? null)?->value ?? ''),
             );
         }
 

@@ -22,20 +22,15 @@ interface Attributes
      * Create multiple attributes in a collection at once.
      *
      * @param string $collection The collection identifier.
-     * @param array<Attribute> $attributes The attributes to create.
+     * @param list<Attribute> $attributes The attributes to create.
      * @return bool True on success.
      */
     public function createAttributes(string $collection, array $attributes): bool;
 
     /**
-     * Update an existing attribute in a collection.
-     *
-     * @param string $collection The collection identifier.
-     * @param Attribute $attribute The attribute with updated properties.
-     * @param string|null $newKey Optional new key to rename the attribute.
-     * @return bool True on success.
+     * Alter the column stored under $key to match $attribute, renaming it when $attribute->key differs.
      */
-    public function updateAttribute(string $collection, Attribute $attribute, ?string $newKey = null): bool;
+    public function updateAttribute(string $collection, string $key, Attribute $attribute): bool;
 
     /**
      * Delete an attribute from a collection.

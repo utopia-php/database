@@ -34,8 +34,6 @@ use Utopia\Database\OperatorType;
 use Utopia\Database\PDOStatement as DatabasePDOStatement;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
-use Utopia\Database\RelationSide;
-use Utopia\Database\RelationType;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\ObjectPath;
 use Utopia\Query\Builder\Condition;
@@ -184,15 +182,15 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
     /**
      * Create Collection
      *
-     * @param  array<Attribute>  $attributes
-     * @param  array<Index>  $indexes
+     * @param  list<Attribute>  $attributes
+     * @param  list<Index>  $indexes
      *
      * @throws DuplicateException
      */
-    public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
+    public function createCollection(string $collection, array $attributes = [], array $indexes = []): bool
     {
         $namespace = $this->getNamespace();
-        $id = $this->filter($name);
+        $id = $this->filter($collection);
         $tableRaw = $this->getSQLTableRaw($id);
         $permissionsTableRaw = $this->getSQLTableRaw(Storage::permissionsTable($id));
 
@@ -210,31 +208,9 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         $table->datetime(Storage::UPDATED_AT, 3)->nullable()->default(null);
 
         foreach ($attributes as $attribute) {
-            if ($attribute->getType() === ColumnType::Relationship) {
-                $options = $attribute->getOptions() ?? [];
-                $relationType = $options['relationType'] ?? null;
-                $twoWay = $options['twoWay'] ?? false;
-                $side = $options['side'] ?? null;
-
-                if (
-                    $relationType === RelationType::ManyToMany->value
-                    || ($relationType === RelationType::OneToOne->value && ! $twoWay && $side === RelationSide::Child->value)
-                    || ($relationType === RelationType::OneToMany->value && $side === RelationSide::Parent->value)
-                    || ($relationType === RelationType::ManyToOne->value && $side === RelationSide::Child->value)
-                ) {
-                    continue;
-                }
+            if (self::storesColumn($attribute)) {
+                $this->addAttributeColumn($table, $attribute);
             }
-
-            $this->addTableColumn(
-                $table,
-                $attribute->getKey(),
-                $attribute->getType(),
-                $attribute->getSize(),
-                $attribute->isSigned(),
-                $attribute->isArray(),
-                $attribute->isRequired()
-            );
         }
 
         $table->json(Storage::PERMISSIONS)->nullable()->default(null);
@@ -298,32 +274,21 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             $this->executeStatement($permissionsSql, Event::CollectionCreate);
 
             foreach ($indexes as $index) {
-                $indexId = $this->filter($index->getKey());
-                $indexType = $index->getType();
-                $indexAttributes = $index->getIndexedAttributes();
                 $indexAttributesWithType = [];
-                foreach ($indexAttributes as $indexAttribute) {
+                foreach ($index->attributes as $indexAttribute) {
                     $baseAttribute = \explode('.', $indexAttribute, 2)[0];
                     foreach ($attributes as $attribute) {
-                        if ($attribute->getKey() === $baseAttribute) {
-                            $indexAttributesWithType[$indexAttribute] = $attribute->getType()->value;
+                        if ($attribute->key === $baseAttribute) {
+                            $indexAttributesWithType[$indexAttribute] = $attribute->type->value;
                         }
                     }
                 }
-                $indexOrders = $index->getOrders();
-                $indexTtl = $index->getTtl();
-                if ($indexType === IndexType::Spatial && count($indexOrders)) {
+                if ($index->type === IndexType::Spatial && $index->orders !== []) {
                     throw new DatabaseException('Spatial indexes with explicit orders are not supported. Remove the orders to create this index.');
                 }
                 $this->createIndex(
                     $id,
-                    new Index(
-                        key: $indexId,
-                        type: $indexType,
-                        attributes: $indexAttributes,
-                        orders: $indexOrders,
-                        ttl: $indexTtl,
-                    ),
+                    $index->withKey($this->filter($index->key)),
                     $indexAttributesWithType,
                     event: Event::CollectionCreate,
                 );
@@ -450,20 +415,13 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
      */
     public function createAttribute(string $collection, Attribute $attribute): bool
     {
-        if ($attribute->getType() === ColumnType::Vector) {
-            if ($attribute->getSize() <= 0) {
-                throw new DatabaseException('Vector dimensions must be a positive integer');
-            }
-            if ($attribute->getSize() > Database::MAX_VECTOR_DIMENSIONS) {
-                throw new DatabaseException('Vector dimensions cannot exceed '.Database::MAX_VECTOR_DIMENSIONS);
-            }
-        }
+        self::assertVectorDimensions($attribute);
 
         $this->refuseSharedColumnsOfAnotherType($collection, [$attribute]);
 
         $schema = $this->createSchemaBuilder();
         $table = $schema->table($this->getSQLTableRaw($collection));
-        $this->addTableColumn($table, $attribute->getKey(), $attribute->getType(), $attribute->getSize(), $attribute->isSigned(), $attribute->isArray(), $attribute->isRequired());
+        $this->addAttributeColumn($table, $attribute);
         $result = $table->alter();
 
         // Postgres does not support LOCK= on ALTER TABLE, so no lock type appended
@@ -477,7 +435,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
     }
 
     /**
-     * @param  array<Attribute>  $attributes
+     * @param  list<Attribute>  $attributes
      *
      * @throws DatabaseException
      */
@@ -517,12 +475,12 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         }
 
         foreach ($attributes as $attribute) {
-            $existing = $columns[$this->filter($attribute->getKey())] ?? null;
+            $existing = $columns[$this->filter($attribute->key)] ?? null;
             if ($existing === null) {
                 continue;
             }
 
-            $requested = $this->getSQLType($attribute->getType(), $attribute->getSize(), $attribute->isSigned(), $attribute->isArray(), $attribute->isRequired());
+            $requested = $this->getAttributeSqlType($attribute);
             if (self::canonicalColumnType($existing) !== self::canonicalColumnType($requested)) {
                 throw new MismatchException('Attribute exists in the shared table with another type');
             }
@@ -540,20 +498,13 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
      * @throws Exception
      * @throws PDOException
      */
-    public function updateAttribute(string $collection, Attribute $attribute, ?string $newKey = null): bool
+    public function updateAttribute(string $collection, string $key, Attribute $attribute): bool
     {
         $name = $this->filter($collection);
-        $id = $this->filter($attribute->getKey());
-        $newKey = empty($newKey) ? null : $this->filter($newKey);
+        $id = $this->filter($key);
+        $newKey = $attribute->key === $key ? null : $this->filter($attribute->key);
 
-        if ($attribute->getType() === ColumnType::Vector) {
-            if ($attribute->getSize() <= 0) {
-                throw new DatabaseException('Vector dimensions must be a positive integer');
-            }
-            if ($attribute->getSize() > Database::MAX_VECTOR_DIMENSIONS) {
-                throw new DatabaseException('Vector dimensions cannot exceed '.Database::MAX_VECTOR_DIMENSIONS);
-            }
-        }
+        self::assertVectorDimensions($attribute);
 
         $schema = $this->createSchemaBuilder();
 
@@ -584,7 +535,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             $id = $newKey;
         }
 
-        $sqlType = $this->getSQLType($attribute->getType(), $attribute->getSize(), $attribute->isSigned(), $attribute->isArray(), $attribute->isRequired());
+        $sqlType = $this->getAttributeSqlType($attribute);
         $tableRaw = $this->getSQLTableRaw($name);
 
         if ($sqlType == 'TIMESTAMP(3)') {
@@ -603,7 +554,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             // definition no longer claims. Only the relaxing direction is
             // applied: tightening would fail against rows already holding
             // null, and MySQL does not tighten on update either.
-            if ($ok && ! $attribute->isRequired()) {
+            if ($ok && ! $attribute->required) {
                 $nullable = $schema->alterColumnNullable($tableRaw, $id, true);
                 $ok = $this->executeStatement($nullable->query, Event::AttributeUpdate);
             }
@@ -611,6 +562,25 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             return $ok;
         } catch (PDOException $error) {
             throw $this->processException($error);
+        }
+    }
+
+    /**
+     * @throws DatabaseException
+     */
+    private static function assertVectorDimensions(Attribute $attribute): void
+    {
+        if ($attribute->type !== ColumnType::Vector) {
+            return;
+        }
+
+        $dimensions = $attribute->size ?? 0;
+        if ($dimensions <= 0) {
+            throw new DatabaseException('Vector dimensions must be a positive integer');
+        }
+
+        if ($dimensions > Database::MAX_VECTOR_DIMENSIONS) {
+            throw new DatabaseException('Vector dimensions cannot exceed '.Database::MAX_VECTOR_DIMENSIONS);
         }
     }
 
@@ -721,10 +691,8 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         Event $event = Event::IndexCreate,
     ): bool {
         $collection = $this->filter($collection);
-        $id = $this->filter($index->getKey());
-        $type = $index->getType();
-        $attributes = $index->getIndexedAttributes();
-        $orders = $index->getOrders();
+        $id = $this->filter($index->key);
+        $type = $index->type;
 
         match ($type) {
             IndexType::Key,
@@ -752,12 +720,12 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         };
 
         $columns = [];
-        foreach ($attributes as $position => $attribute) {
+        foreach ($index->attributes as $position => $attribute) {
             $isNestedPath = isset($indexAttributeTypes[$attribute]) && \str_contains($attribute, '.') && $indexAttributeTypes[$attribute] === ColumnType::Object->value;
             $column = $isNestedPath
                 ? $this->buildJsonbPath($attribute, true)
                 : $this->quote($this->filter($this->getInternalKeyForAttribute($attribute)));
-            $order = $type === IndexType::Fulltext ? '' : Index::direction($orders[$position] ?? null);
+            $order = $type === IndexType::Fulltext ? '' : (($index->orders[$position] ?? null)?->value ?? '');
 
             $columns[] = $column
                 .($operatorClass !== '' ? ' '.$operatorClass : '')

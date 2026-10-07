@@ -4,6 +4,7 @@ namespace Utopia\Database\Adapter;
 
 use Throwable;
 use Utopia\Database\Adapter;
+use Utopia\Database\Adapter\SQL\Wkt;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Change;
@@ -1049,11 +1050,13 @@ class Pool extends Adapter implements Feature\Timeouts
         return $result;
     }
 
+    /**
+     * The well-known text does not depend on a connection, so it is built without borrowing one, whichever
+     * adapter the pool holds: hasFeature(Feature\Spatial::class) says whether that adapter stores geometries.
+     */
     public function encode(mixed $value, ColumnType $type): string
     {
-        /** @var string $result */
-        $result = $this->delegateFeature(Feature\Spatial::class, __FUNCTION__, \func_get_args());
-        return $result;
+        return Wkt::encode($value, $type);
     }
 
     /**

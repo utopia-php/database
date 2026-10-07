@@ -8,6 +8,7 @@ use PDOException;
 use PDOStatement;
 use Swoole\Database\PDOStatementProxy;
 use Throwable;
+use Utopia\Database\Adapter\SQL\Wkt;
 use Utopia\Database\Attribute;
 use Utopia\Database\Builder\PostgreSQL as PostgreSQLBuilder;
 use Utopia\Database\Capability;
@@ -1203,7 +1204,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
 
     public function encode(mixed $value, ColumnType $type): string
     {
-        return $this->encodeSpatial($value, $type);
+        return Wkt::encode($value, $type);
     }
 
     /**

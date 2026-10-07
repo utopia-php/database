@@ -472,6 +472,8 @@ class Database
         self::addFilter(
             ColumnType::Point->value,
             /**
+             * An invalid geometry is returned as given, for the structure validator to reject.
+             *
              * @return mixed
              */
             static function (mixed $value, Document $document, Database $database) {
@@ -483,7 +485,7 @@ class Database
 
                 try {
                     return $adapter->encode($value, ColumnType::Point);
-                } catch (Throwable) {
+                } catch (StructureException) {
                     return $value;
                 }
             },
@@ -508,6 +510,8 @@ class Database
         self::addFilter(
             ColumnType::Linestring->value,
             /**
+             * An invalid geometry is returned as given, for the structure validator to reject.
+             *
              * @return mixed
              */
             static function (mixed $value, Document $document, Database $database) {
@@ -519,7 +523,7 @@ class Database
 
                 try {
                     return $adapter->encode($value, ColumnType::Linestring);
-                } catch (Throwable) {
+                } catch (StructureException) {
                     return $value;
                 }
             },
@@ -544,6 +548,8 @@ class Database
         self::addFilter(
             ColumnType::Polygon->value,
             /**
+             * An invalid geometry is returned as given, for the structure validator to reject.
+             *
              * @return mixed
              */
             static function (mixed $value, Document $document, Database $database) {
@@ -555,7 +561,7 @@ class Database
 
                 try {
                     return $adapter->encode($value, ColumnType::Polygon);
-                } catch (Throwable) {
+                } catch (StructureException) {
                     return $value;
                 }
             },

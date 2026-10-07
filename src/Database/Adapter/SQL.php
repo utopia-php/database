@@ -25,7 +25,6 @@ use Utopia\Database\Exception\Contention as ContentionException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
-use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Hook\JoinChain;
@@ -53,7 +52,6 @@ use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Database\Validator\Query\Join as JoinValidator;
-use Utopia\Database\Validator\Spatial as SpatialValidator;
 use Utopia\Query\Builder\Condition;
 use Utopia\Query\Builder\Feature\FullOuterJoins as FullOuterJoinsFeature;
 use Utopia\Query\Builder\Feature\InsertOrIgnore as InsertOrIgnoreFeature;
@@ -3230,62 +3228,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     protected function getSpatialAxisOrder(): string
     {
         return "'axis-order=long-lat'";
-    }
-
-    /**
-     * The well-known text of a spatial value, for the adapters that implement Feature\Spatial. A polygon may be
-     * given as one ring.
-     *
-     * @throws StructureException When the value is not a valid geometry of the type
-     * @throws DatabaseException When the type is not spatial
-     */
-    protected function encodeSpatial(mixed $value, ColumnType $type): string
-    {
-        $validator = new SpatialValidator($type->value);
-        if (! $validator->isValid($value)) {
-            throw new StructureException($validator->getDescription());
-        }
-
-        /** @var array<int, mixed> $value */
-        switch ($type) {
-            case ColumnType::Point:
-                /** @var array{0: float|int, 1: float|int} $value */
-                return "POINT({$value[0]} {$value[1]})";
-
-            case ColumnType::Linestring:
-                $points = [];
-                /** @var array<int, array{0: float|int, 1: float|int}> $value */
-                foreach ($value as $point) {
-                    $points[] = "{$point[0]} {$point[1]}";
-                }
-
-                return 'LINESTRING('.\implode(', ', $points).')';
-
-            case ColumnType::Polygon:
-                $singleRing = \is_array($value[0] ?? null)
-                    && \count($value[0]) === 2
-                    && \is_numeric($value[0][0] ?? null)
-                    && \is_numeric($value[0][1] ?? null);
-
-                if ($singleRing) {
-                    $value = [$value];
-                }
-
-                $rings = [];
-                /** @var array<int, array<int, array{0: float|int, 1: float|int}>> $value */
-                foreach ($value as $ring) {
-                    $points = [];
-                    foreach ($ring as $point) {
-                        $points[] = "{$point[0]} {$point[1]}";
-                    }
-                    $rings[] = '('.\implode(', ', $points).')';
-                }
-
-                return 'POLYGON('.\implode(', ', $rings).')';
-
-            default:
-                throw new DatabaseException('Unknown spatial type: '.$type->value);
-        }
     }
 
     /**

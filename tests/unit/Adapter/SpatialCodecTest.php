@@ -6,6 +6,7 @@ use PDO;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 use stdClass;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
@@ -23,6 +24,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Pools\Adapter\Stack;
 use Utopia\Pools\Pool as UtopiaPool;
 use Utopia\Query\Schema\ColumnType;
 
@@ -101,7 +103,7 @@ final class SpatialCodecTest extends TestCase
         $adapter->decode('POINT(1 2)', ColumnType::String);
     }
 
-    public function testAPoolCodesThroughItsConnection(): void
+    public function testAPoolEncodesAndDecodesAGeometry(): void
     {
         $pool = $this->pool(new MariaDB(new stdClass()));
 
@@ -110,7 +112,29 @@ final class SpatialCodecTest extends TestCase
         $this->assertSame([3.0, 4.0], $pool->decode('POINT(3 4)', ColumnType::Point));
     }
 
-    public function testAPoolOverAnAdapterWithoutSpatialRefusesToCode(): void
+    /**
+     * @param  array<mixed>  $value
+     */
+    #[DataProvider('geometries')]
+    public function testAPoolEncodesWithoutAConnection(ColumnType $type, array $value, string $text): void
+    {
+        $pool = new Pool(new UtopiaPool(new Stack(), 'unreachable', 1, static function (): never {
+            throw new RuntimeException('no connection can be opened');
+        }, timeout: 0.0));
+
+        $this->assertSame($text, $pool->encode($value, $type));
+    }
+
+    public function testAPoolRefusesAnInvalidGeometry(): void
+    {
+        $pool = $this->pool(new MariaDB(new stdClass()));
+
+        $this->expectException(StructureException::class);
+
+        $pool->encode([1], ColumnType::Point);
+    }
+
+    public function testAPoolOverAnAdapterWithoutSpatialRefusesToDecode(): void
     {
         $pool = $this->pool(new SQLite(new PDO('sqlite::memory:')));
 
@@ -118,7 +142,7 @@ final class SpatialCodecTest extends TestCase
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('Adapter does not support spatial');
 
-        $pool->encode([3, 4], ColumnType::Point);
+        $pool->decode('POINT(3 4)', ColumnType::Point);
     }
 
     public function testTheDatabaseEncodesASpatialAttributeThroughItsAdapter(): void
@@ -129,6 +153,36 @@ final class SpatialCodecTest extends TestCase
         $encoded = $database->encode($collection, new Document(['$id' => 'home', 'location' => [5, 6]]));
 
         $this->assertSame('POINT(5 6)', $encoded->getAttribute('location'));
+    }
+
+    public function testTheDatabaseLeavesAnInvalidGeometryForTheStructureValidator(): void
+    {
+        $database = new Database(new MariaDB(new stdClass()), new Cache(new None()));
+        $collection = Collection::create(id: 'places', attributes: [Attribute::point(key: 'location')]);
+
+        $encoded = $database->encode($collection, new Document(['$id' => 'home', 'location' => [5]]));
+
+        $this->assertSame([5], $encoded->getAttribute('location'));
+    }
+
+    public function testAFailingEncoderSurfacesThroughTheDatabase(): void
+    {
+        $adapter = new class (new stdClass()) extends MariaDB {
+            public function encode(mixed $value, ColumnType $type): string
+            {
+                throw new RuntimeException('encoder unavailable');
+            }
+        };
+        $database = new Database($adapter, new Cache(new None()));
+        $collection = Collection::create(id: 'places', attributes: [Attribute::point(key: 'location')]);
+
+        try {
+            $database->encode($collection, new Document(['$id' => 'home', 'location' => [5, 6]]));
+            $this->fail('An encoder failure must not leave the value as given');
+        } catch (DatabaseException $error) {
+            $this->assertSame('encoder unavailable', $error->getMessage());
+            $this->assertInstanceOf(RuntimeException::class, $error->getPrevious());
+        }
     }
 
     public function testWithoutSpatialTheDatabaseLeavesTheValueAsGiven(): void

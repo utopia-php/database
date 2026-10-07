@@ -36,7 +36,7 @@ final class MariaDBVarcharColumnTest extends TestCase
     {
         $adapter = $this->adapter($class);
 
-        $this->assertSame('VARCHAR(' . $size . ')', $adapter->getColumnType('varchar', $size));
+        $this->assertSame('VARCHAR(' . $size . ')', $adapter->getColumnType(Attribute::varchar('code', size: $size)));
 
         $adapter->createCollection('codes', [Attribute::varchar('code', size: $size)]);
         $this->assertStringContainsString('`code` VARCHAR(' . $size . ')', $this->statements[0] ?? '');

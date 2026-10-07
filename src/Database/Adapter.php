@@ -901,6 +901,28 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     abstract public function renameAttribute(string $collection, string $old, string $new): bool;
 
     /**
+     * The columns the engine holds for a collection. Empty where the adapter does not declare
+     * Capability::SchemaIntrospection, which is what tells "not introspectable" from "no columns".
+     *
+     * @return list<Schema\Column>
+     */
+    abstract public function getSchemaAttributes(string $collection): array;
+
+    /**
+     * The indexes the engine holds for a collection. Empty where the adapter does not declare
+     * Capability::SchemaIntrospection.
+     *
+     * @return list<Schema\Index>
+     */
+    abstract public function getSchemaIndexes(string $collection): array;
+
+    /**
+     * The native column type the adapter creates for an attribute, in the spelling of Schema\Column::$type; null where
+     * the engine has no column types.
+     */
+    abstract public function getColumnType(Attribute $attribute): ?string;
+
+    /**
      * @param  array<string, string>  $indexAttributeTypes
      * @param  array<string, mixed>  $collation
      */

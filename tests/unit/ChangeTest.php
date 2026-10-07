@@ -6,7 +6,7 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Database\Change;
 use Utopia\Database\Document;
 
-class ChangeTest extends TestCase
+final class ChangeTest extends TestCase
 {
     public function testConstructorWithOldAndNew(): void
     {
@@ -15,49 +15,34 @@ class ChangeTest extends TestCase
 
         $change = new Change($old, $new);
 
-        $this->assertSame($old, $change->getOld());
-        $this->assertSame($new, $change->getNew());
+        $this->assertSame($old, $change->old);
+        $this->assertSame($new, $change->new);
     }
 
-    public function testGetOldAndGetNew(): void
+    public function testOldAndNewCarryTheirDocuments(): void
     {
         $old = new Document(['$id' => 'test', 'status' => 'draft']);
         $new = new Document(['$id' => 'test', 'status' => 'published']);
 
         $change = new Change($old, $new);
 
-        $this->assertSame('draft', $change->getOld()->getAttribute('status'));
-        $this->assertSame('published', $change->getNew()->getAttribute('status'));
-        $this->assertSame('test', $change->getOld()->getId());
-        $this->assertSame('test', $change->getNew()->getId());
+        $this->assertSame('draft', $change->old->getAttribute('status'));
+        $this->assertSame('published', $change->new->getAttribute('status'));
+        $this->assertSame('test', $change->old->getId());
+        $this->assertSame('test', $change->new->getId());
     }
 
-    public function testSetOld(): void
+    public function testDocumentsCannotBeReplacedOnceSet(): void
     {
-        $old = new Document(['$id' => 'doc', 'val' => 1]);
-        $new = new Document(['$id' => 'doc', 'val' => 2]);
-        $change = new Change($old, $new);
+        $change = new Change(new Document(['$id' => 'doc', 'val' => 1]), new Document(['$id' => 'doc', 'val' => 2]));
 
-        $replacement = new Document(['$id' => 'doc', 'val' => 0]);
-        $change->setOld($replacement);
+        $this->expectException(\Error::class);
+        $this->expectExceptionMessage('Cannot modify readonly property Utopia\Database\Change::$old');
 
-        $this->assertSame($replacement, $change->getOld());
-        $this->assertSame(0, $change->getOld()->getAttribute('val'));
-        $this->assertSame($new, $change->getNew());
-    }
-
-    public function testSetNew(): void
-    {
-        $old = new Document(['$id' => 'doc', 'val' => 1]);
-        $new = new Document(['$id' => 'doc', 'val' => 2]);
-        $change = new Change($old, $new);
-
-        $replacement = new Document(['$id' => 'doc', 'val' => 99]);
-        $change->setNew($replacement);
-
-        $this->assertSame($old, $change->getOld());
-        $this->assertSame($replacement, $change->getNew());
-        $this->assertSame(99, $change->getNew()->getAttribute('val'));
+        (static function (Change $change): void {
+            /** @phpstan-ignore-next-line property.readOnlyAssignOutOfClass */
+            $change->old = new Document(['$id' => 'doc', 'val' => 0]);
+        })($change);
     }
 
     public function testWithEmptyDocuments(): void
@@ -67,7 +52,7 @@ class ChangeTest extends TestCase
 
         $change = new Change($old, $new);
 
-        $this->assertTrue($change->getOld()->isEmpty());
-        $this->assertTrue($change->getNew()->isEmpty());
+        $this->assertTrue($change->old->isEmpty());
+        $this->assertTrue($change->new->isEmpty());
     }
 }

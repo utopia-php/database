@@ -44,18 +44,13 @@ final class FeatureContractTest extends TestCase
         $implements = $this->interfaces(Pool::class);
 
         foreach ([
+            Feature\Casting::class,
             Feature\ConnectionId::class,
-            Feature\InternalCasting::class,
             Feature\Relationships::class,
-            Feature\SchemaAttributes::class,
-            Feature\SchemaIndexes::class,
             Feature\Spatial::class,
-            Feature\Timeouts::class,
             Feature\Upserts::class,
-            Feature\UTCCasting::class,
             Feature\RawQuery::class,
             Feature\QueryBuilder::class,
-            Feature\ColumnTypes::class,
         ] as $feature) {
             $this->assertArrayNotHasKey($feature, $implements, $feature);
         }
@@ -64,7 +59,7 @@ final class FeatureContractTest extends TestCase
 
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('Adapter does not support upserts');
-        $pool->upsertDocuments(new Document(['$id' => 'any']), '', []);
+        $pool->upsertDocuments(new Document(['$id' => 'any']), []);
     }
 
     public function testRedisAdvertisesUpsertsConnectionIdAndRelationships(): void
@@ -82,33 +77,31 @@ final class FeatureContractTest extends TestCase
         $implements = $this->interfaces(SQLite::class);
         $this->assertArrayHasKey(Feature\Upserts::class, $implements);
         $this->assertArrayHasKey(Feature\Relationships::class, $implements);
-        $this->assertArrayHasKey(Feature\SchemaAttributes::class, $implements);
-        $this->assertArrayHasKey(Feature\SchemaIndexes::class, $implements);
         $this->assertArrayHasKey(Feature\RawQuery::class, $implements);
         $this->assertArrayHasKey(Feature\QueryBuilder::class, $implements);
-        $this->assertArrayHasKey(Feature\ColumnTypes::class, $implements);
+        $this->assertTrue($this->adapters()['SQLite']->supports(Capability::SchemaIntrospection));
         $this->assertArrayNotHasKey(Feature\Spatial::class, $implements);
         $this->assertArrayNotHasKey(Feature\Timeouts::class, $implements);
         $this->assertArrayNotHasKey(Feature\ConnectionId::class, $implements);
     }
 
-    public function testMariaDBImplementsSpatialTimeoutsConnectionIdAndSchemaIndexes(): void
+    public function testMariaDBImplementsSpatialTimeoutsAndConnectionIdAndIntrospectsItsSchema(): void
     {
         $implements = $this->interfaces(MariaDB::class);
         $this->assertArrayHasKey(Feature\Spatial::class, $implements);
         $this->assertArrayHasKey(Feature\Timeouts::class, $implements);
         $this->assertArrayHasKey(Feature\ConnectionId::class, $implements);
-        $this->assertArrayHasKey(Feature\SchemaIndexes::class, $implements);
+        $this->assertTrue($this->adapters()['MariaDB']->supports(Capability::SchemaIntrospection));
+        $this->assertTrue($this->adapters()['MySQL']->supports(Capability::SchemaIntrospection));
     }
 
-    public function testPostgresImplementsSpatialTimeoutsAndConnectionIdWithoutSchemaIntrospection(): void
+    public function testPostgresImplementsSpatialTimeoutsAndConnectionIdAndIntrospectsItsSchema(): void
     {
         $implements = $this->interfaces(Postgres::class);
         $this->assertArrayHasKey(Feature\Spatial::class, $implements);
         $this->assertArrayHasKey(Feature\Timeouts::class, $implements);
         $this->assertArrayHasKey(Feature\ConnectionId::class, $implements);
-        $this->assertArrayNotHasKey(Feature\SchemaAttributes::class, $implements);
-        $this->assertArrayNotHasKey(Feature\SchemaIndexes::class, $implements);
+        $this->assertTrue($this->adapters()['Postgres']->supports(Capability::SchemaIntrospection));
     }
 
     public function testEveryCapabilityIsDeclaredByAnAdapter(): void

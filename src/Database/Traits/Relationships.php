@@ -7,6 +7,7 @@ use Utopia\Console;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
 use Utopia\Database\AttributeUpdate;
+use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
@@ -350,7 +351,7 @@ trait Relationships
                     throw new DatabaseException('Failed to update relationship');
                 }
             } catch (Throwable $error) {
-                if (! $this->adapter->hasFeature(Feature\SchemaAttributes::class) || ! $this->hasSchemaColumn($collectionId, $newKey)) {
+                if (! $this->adapter->supports(Capability::SchemaIntrospection) || ! $this->hasSchemaColumn($collectionId, $newKey)) {
                     throw new DatabaseException("Failed to update relationship '{$key}': ".$error->getMessage(), previous: $error);
                 }
 
@@ -796,7 +797,7 @@ trait Relationships
     {
         $filtered = \strtolower($this->adapter->filter($key));
         foreach ($this->getSchemaAttributes($collection) as $column) {
-            if (\strtolower($column->getId()) === $filtered) {
+            if (\strtolower($column->name) === $filtered) {
                 return true;
             }
         }

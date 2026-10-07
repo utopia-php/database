@@ -11,12 +11,16 @@ use Utopia\Database\Document;
 interface Upserts
 {
     /**
-     * Upsert multiple documents, inserting or updating based on a unique attribute.
-     *
-     * @param Document $collection The collection document.
-     * @param string $attribute The unique attribute used to determine insert vs update.
-     * @param array<Change> $changes The old/new document pairs to upsert.
-     * @return array<Document> The resulting documents after upsert.
+     * Insert the change's new document, or update the stored one it replaces.
      */
-    public function upsertDocuments(Document $collection, string $attribute, array $changes): array;
+    public function upsertDocument(Document $collection, Change $change): Document;
+
+    /**
+     * Insert or update each change's new document. With $increase, an update adds the new document's value of that
+     * attribute to the stored one instead of replacing it.
+     *
+     * @param  array<Change>  $changes
+     * @return array<Document> The written documents, in the order of $changes
+     */
+    public function upsertDocuments(Document $collection, array $changes, ?string $increase = null): array;
 }

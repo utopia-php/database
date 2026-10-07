@@ -10,6 +10,7 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Structure as StructureException;
+use Utopia\Database\Schema\Column;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Validator;
 
@@ -47,11 +48,10 @@ class AttributeDefinition extends Validator
     protected array $schemaAttributes = [];
 
     /**
-     * Schema attributes are the engine's physical columns, read only for their names: they carry no
-     * attribute type, so they are never hydrated into attribute models.
+     * Schema attributes are the engine's physical columns, read only for their names.
      *
      * @param  array<Attribute|Document>  $attributes
-     * @param  array<Attribute|Document>  $schemaAttributes
+     * @param  list<Column>  $schemaAttributes
      * @param  callable|null  $attributeCountCallback
      * @param  callable|null  $attributeWidthCallback
      * @param  callable|null  $filterCallback
@@ -84,8 +84,8 @@ class AttributeDefinition extends Validator
             $typed = $attribute instanceof Attribute ? $attribute : Attribute::fromDocument($attribute);
             $this->attributes[\strtolower($typed->key)] = $typed;
         }
-        foreach ($schemaAttributes as $attribute) {
-            $this->schemaAttributes[] = $attribute instanceof Attribute ? $attribute->key : $attribute->getId();
+        foreach ($schemaAttributes as $column) {
+            $this->schemaAttributes[] = $column->name;
         }
     }
 

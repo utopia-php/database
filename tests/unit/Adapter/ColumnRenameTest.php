@@ -13,7 +13,6 @@ use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Attribute;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
-use Utopia\Database\Storage;
 
 final class ColumnRenameTest extends TestCase
 {
@@ -243,7 +242,7 @@ final class ColumnRenameTest extends TestCase
             $statement = $this->createStub(PDOStatement::class);
             $statement->method('execute')->willReturn(true);
             $statement->method('fetchAll')->willReturn(\str_contains($query, self::MARIADB_CATALOG)
-                ? \array_map(static fn (string $column): array => [Storage::SEQUENCE => $column], $columns)
+                ? \array_map(static fn (string $column): array => ['name' => $column, 'type' => 'int', 'length' => null, 'nullable' => 'YES'], $columns)
                 : []);
 
             return $statement;

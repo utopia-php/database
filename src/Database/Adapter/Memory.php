@@ -124,7 +124,6 @@ class Memory extends Adapter implements Feature\Relationships
             Capability::AtomicTransactions,
             Capability::Schemas,
             Capability::Fulltext,
-            Capability::Casting,
             Capability::QueryContains,
             Capability::BatchOperations,
             Capability::BatchCreateAttributes,
@@ -651,6 +650,21 @@ class Memory extends Adapter implements Feature\Relationships
         });
 
         return true;
+    }
+
+    public function getSchemaAttributes(string $collection): array
+    {
+        return [];
+    }
+
+    public function getSchemaIndexes(string $collection): array
+    {
+        return [];
+    }
+
+    public function getColumnType(Attribute $attribute): ?string
+    {
+        return null;
     }
 
     public function renameAttribute(string $collection, string $old, string $new): bool

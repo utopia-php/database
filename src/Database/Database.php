@@ -46,7 +46,6 @@ use Utopia\Database\Type\TypeRegistry;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Authorization\Input;
 use Utopia\Database\Validator\BigInt;
-use Utopia\Database\Validator\Spatial as SpatialValidator;
 use Utopia\Database\Validator\Structure;
 use Utopia\Query\Method;
 use Utopia\Query\Schema\ColumnType;
@@ -461,11 +460,14 @@ class Database
              * @return mixed
              */
             static function (mixed $value, Document $document, Database $database) {
-                if (! is_array($value)) {
+                if (! is_array($value) || ! $database->adapter->hasFeature(Feature\Spatial::class)) {
                     return $value;
                 }
+                /** @var Adapter&Feature\Spatial $adapter */
+                $adapter = $database->adapter;
+
                 try {
-                    return $database->encodeSpatialData($value, ColumnType::Point->value);
+                    return $adapter->encode($value, ColumnType::Point);
                 } catch (Throwable) {
                     return $value;
                 }
@@ -481,7 +483,7 @@ class Database
                     /** @var Adapter&Feature\Spatial $adapter */
                     $adapter = $database->adapter;
 
-                    return $adapter->decodePoint($value);
+                    return $adapter->decode($value, ColumnType::Point);
                 }
 
                 return null;
@@ -494,11 +496,14 @@ class Database
              * @return mixed
              */
             static function (mixed $value, Document $document, Database $database) {
-                if (! is_array($value)) {
+                if (! is_array($value) || ! $database->adapter->hasFeature(Feature\Spatial::class)) {
                     return $value;
                 }
+                /** @var Adapter&Feature\Spatial $adapter */
+                $adapter = $database->adapter;
+
                 try {
-                    return $database->encodeSpatialData($value, ColumnType::Linestring->value);
+                    return $adapter->encode($value, ColumnType::Linestring);
                 } catch (Throwable) {
                     return $value;
                 }
@@ -514,7 +519,7 @@ class Database
                     /** @var Adapter&Feature\Spatial $adapter */
                     $adapter = $database->adapter;
 
-                    return $adapter->decodeLinestring($value);
+                    return $adapter->decode($value, ColumnType::Linestring);
                 }
 
                 return null;
@@ -527,11 +532,14 @@ class Database
              * @return mixed
              */
             static function (mixed $value, Document $document, Database $database) {
-                if (! is_array($value)) {
+                if (! is_array($value) || ! $database->adapter->hasFeature(Feature\Spatial::class)) {
                     return $value;
                 }
+                /** @var Adapter&Feature\Spatial $adapter */
+                $adapter = $database->adapter;
+
                 try {
-                    return $database->encodeSpatialData($value, ColumnType::Polygon->value);
+                    return $adapter->encode($value, ColumnType::Polygon);
                 } catch (Throwable) {
                     return $value;
                 }
@@ -547,7 +555,7 @@ class Database
                     /** @var Adapter&Feature\Spatial $adapter */
                     $adapter = $database->adapter;
 
-                    return $adapter->decodePolygon($value);
+                    return $adapter->decode($value, ColumnType::Polygon);
                 }
 
                 return null;
@@ -759,7 +767,7 @@ class Database
      * inside getAuthorization()->skip().
      *
      * Skipping authorization lifts permissions, never tenancy: under shared tables every statement
-     * stays within the tenant selected when the builder was handed out (see SQL::getBuilder() for
+     * stays within the tenant selected when the builder was handed out (see SQL::builder() for
      * what that covers). Another tenant's rows are read by selecting that tenant, with setTenant()
      * or withTenant().
      *
@@ -774,7 +782,7 @@ class Database
             throw new DatabaseException('Query builder is not supported by this adapter');
         }
 
-        $builder = $this->adapter->getBuilder($collection);
+        $builder = $this->adapter->builder($collection);
         $builder->setExecutor(fn (\Utopia\Query\Builder\Statement $statement) => $this->execute($statement));
 
         return $builder;
@@ -789,7 +797,7 @@ class Database
             throw new DatabaseException('Schema builder is not supported by this adapter');
         }
 
-        $schema = $this->adapter->getSchema();
+        $schema = $this->adapter->schema();
         $schema->setExecutor(fn (\Utopia\Query\Builder\Statement $statement) => $this->execute($statement));
 
         return $schema;
@@ -2090,7 +2098,7 @@ class Database
             $keys = \array_map(\strval(...), \array_keys($row));
 
             $joined = Document::fromRow([...$row, Document::COLLECTION => $collection->getId()]);
-            $joined = $this->castingAfter($collection, $joined);
+            $joined = $this->castAfterDocument($collection, $joined);
             $joined = $this->casting($collection, $joined);
             $joined = $this->decode($collection, $joined, $keys);
 
@@ -2125,7 +2133,7 @@ class Database
 
             $joined = Document::fromRow([...$row, Document::COLLECTION => $collection->getId()]);
             $joined = $this->encode($collection, $joined, applyDefaults: false);
-            $joined = $this->castingBefore($collection, $joined);
+            $joined = $this->castBefore($collection, $joined);
 
             foreach ($keys as $key) {
                 $encoded->setAttribute($alias.'.'.$key, $joined->getAttribute($key));
@@ -2180,7 +2188,7 @@ class Database
      */
     public function casting(Document $collection, Document $document): Document
     {
-        if (! $this->adapter->supports(Capability::Casting)) {
+        if ($this->adapter->hasFeature(Feature\Casting::class)) {
             return $document;
         }
 
@@ -2515,8 +2523,8 @@ class Database
                 foreach ($values as $valueIndex => $value) {
                     try {
                         /** @var string $value */
-                        $values[$valueIndex] = $this->adapterHasFeature(Feature\UTCCasting::class)
-                            ? $this->adapter->setUTCDatetime($value)
+                        $values[$valueIndex] = $this->adapterHasFeature(Feature\Casting::class)
+                            ? $this->adapter->castDatetime($value)
                             : DateTime::setTimezone($value);
                     } catch (Throwable $e) {
                         throw new QueryException($e->getMessage(), $e->getCode(), $e);
@@ -2583,15 +2591,16 @@ class Database
     }
 
     /**
-     * Get Schema Attributes
+     * The columns the engine holds for a collection, read back from its catalog; empty where the adapter does not
+     * support Capability::SchemaIntrospection.
      *
-     * @return array<Document>
+     * @return list<Schema\Column>
      *
      * @throws DatabaseException
      */
     public function getSchemaAttributes(string $collection): array
     {
-        if (! $this->adapterHasFeature(Feature\SchemaAttributes::class)) {
+        if (! $this->adapter->supports(Capability::SchemaIntrospection)) {
             return [];
         }
 
@@ -2599,14 +2608,16 @@ class Database
     }
 
     /**
-     * Get the physical schema indexes for a collection from the database engine.
+     * The indexes the engine holds for a collection, read back from its catalog; empty where the adapter does not
+     * support Capability::SchemaIntrospection.
      *
-     * @param string $collection The collection identifier.
-     * @return array<Document>
+     * @return list<Schema\Index>
+     *
+     * @throws DatabaseException
      */
     public function getSchemaIndexes(string $collection): array
     {
-        if (! $this->adapterHasFeature(Feature\SchemaIndexes::class)) {
+        if (! $this->adapter->supports(Capability::SchemaIntrospection)) {
             return [];
         }
 
@@ -3110,61 +3121,6 @@ class Database
         }
 
         throw new NotFoundException("Filter \"{$filter}\" not found for attribute \"{$attribute}\"");
-    }
-
-    /**
-     * Encode spatial data from array format to WKT (Well-Known Text) format
-     *
-     * @throws DatabaseException
-     */
-    protected function encodeSpatialData(mixed $value, string $type): string
-    {
-        $validator = new SpatialValidator($type);
-        if (! $validator->isValid($value)) {
-            throw new StructureException($validator->getDescription());
-        }
-
-        /** @var array<int, array<int, float|int>|array<int, array<int, float|int>>> $value */
-        switch ($type) {
-            case ColumnType::Point->value:
-                /** @var array{0: float|int, 1: float|int} $value */
-                return "POINT({$value[0]} {$value[1]})";
-
-            case ColumnType::Linestring->value:
-                $points = [];
-                /** @var array<int, array{0: float|int, 1: float|int}> $value */
-                foreach ($value as $point) {
-                    $points[] = "{$point[0]} {$point[1]}";
-                }
-
-                return 'LINESTRING('.implode(', ', $points).')';
-
-            case ColumnType::Polygon->value:
-                /** @var array<int, mixed> $value */
-                // Check if this is a single ring (flat array of points) or multiple rings
-                $isSingleRing = count($value) > 0 && is_array($value[0]) &&
-                    count($value[0]) === 2 && is_numeric($value[0][0]) && is_numeric($value[0][1]);
-
-                if ($isSingleRing) {
-                    // Convert single ring format [[x1,y1], [x2,y2], ...] to multi-ring format
-                    $value = [$value];
-                }
-
-                $rings = [];
-                /** @var array<int, array<int, array{0: float|int, 1: float|int}>> $value */
-                foreach ($value as $ring) {
-                    $points = [];
-                    foreach ($ring as $point) {
-                        $points[] = "{$point[0]} {$point[1]}";
-                    }
-                    $rings[] = '('.implode(', ', $points).')';
-                }
-
-                return 'POLYGON('.implode(', ', $rings).')';
-
-            default:
-                throw new DatabaseException('Unknown spatial type: '.$type);
-        }
     }
 
     /**

@@ -15,7 +15,6 @@ use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\Redis as RedisAdapter;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
-use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Limit as LimitException;
@@ -50,20 +49,25 @@ final class BigIntegerTest extends TestCase
         $mariaDB = new MariaDB(new \stdClass());
         $postgres = new Postgres(new \stdClass());
 
-        $this->assertSame('BIGINT', $mariaDB->getColumnType(ColumnType::BigInteger->value, 0));
-        $this->assertSame('BIGINT', $mariaDB->getColumnType('bigint', 9999));
-        $this->assertSame('BIGINT UNSIGNED', $mariaDB->getColumnType(ColumnType::BigInteger->value, 0, false));
-        $this->assertSame('BIGINT', $postgres->getColumnType(ColumnType::BigInteger->value, 0));
-        $this->assertSame('BIGINT', $postgres->getColumnType('bigint', 9999));
+        $legacy = Attribute::fromDocument(new Document([
+            '$id' => 'total',
+            'key' => 'total',
+            'type' => 'bigint',
+            'size' => 9999,
+        ]));
+
+        $this->assertSame('BIGINT', $mariaDB->getColumnType(Attribute::bigInteger(key: 'total')));
+        $this->assertSame('BIGINT', $mariaDB->getColumnType($legacy));
+        $this->assertSame('BIGINT UNSIGNED', $mariaDB->getColumnType(Attribute::bigInteger(key: 'total', signed: false)));
+        $this->assertSame('BIGINT', $postgres->getColumnType(Attribute::bigInteger(key: 'total')));
+        $this->assertSame('BIGINT', $postgres->getColumnType($legacy));
     }
 
     public function testCastingNormalizesLegacyBigIntegerWithoutPrecisionLoss(): void
     {
         /** @var Adapter&Stub $adapter */
         $adapter = self::createStub(Adapter::class);
-        $adapter->method('supports')->willReturnCallback(
-            static fn (Capability $capability): bool => $capability === Capability::Casting
-        );
+        $adapter->method('hasFeature')->willReturn(false);
         $database = new Database($adapter, new Cache(new None()));
         $collection = new Document([
             'attributes' => [

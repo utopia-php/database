@@ -908,8 +908,8 @@ final class CoreMinorsTest extends TestCase
 
     private function hasSchemaAttribute(Database $database, string $collection, string $key): bool
     {
-        foreach ($database->getSchemaAttributes($collection) as $attribute) {
-            if ($attribute->getId() === $key) {
+        foreach ($database->getSchemaAttributes($collection) as $column) {
+            if ($column->name === $key) {
                 return true;
             }
         }
@@ -920,7 +920,7 @@ final class CoreMinorsTest extends TestCase
     private function hasSchemaIndex(Database $database, string $collection, string $key): bool
     {
         foreach ($database->getSchemaIndexes($collection) as $index) {
-            if (\str_contains($index->getId(), $key)) {
+            if (\str_contains($index->name, $key)) {
                 return true;
             }
         }

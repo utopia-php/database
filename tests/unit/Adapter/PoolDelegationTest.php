@@ -14,6 +14,7 @@ use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\Pool;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
+use Utopia\Database\Change;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -22,6 +23,7 @@ use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Pools\Pool as UtopiaPool;
+use Utopia\Query\Schema\ColumnType;
 
 final class PoolDelegationTest extends TestCase
 {
@@ -32,13 +34,14 @@ final class PoolDelegationTest extends TestCase
     {
         return [
             'raw queries' => [static fn (Pool $pool): mixed => $pool->rawQuery('SELECT 1'), 'Adapter does not support raw queries'],
-            'query builder' => [static fn (Pool $pool): mixed => $pool->getBuilder('books'), 'Adapter does not support query builder'],
-            'schema attributes' => [static fn (Pool $pool): mixed => $pool->getSchemaAttributes('books'), 'Adapter does not support schema attributes'],
-            'schema indexes' => [static fn (Pool $pool): mixed => $pool->getSchemaIndexes('books'), 'Adapter does not support schema indexes'],
-            'column types' => [static fn (Pool $pool): mixed => $pool->getColumnType('string', 32), 'Adapter does not support column types'],
-            'spatial' => [static fn (Pool $pool): mixed => $pool->decodePoint(''), 'Adapter does not support spatial'],
-            'internal casting' => [static fn (Pool $pool): mixed => $pool->castingBefore(new Document(), new Document()), 'Adapter does not support internal casting'],
-            'UTC casting' => [static fn (Pool $pool): mixed => $pool->setUTCDatetime('2026-01-01'), 'Adapter does not support UTC casting'],
+            'query builder' => [static fn (Pool $pool): mixed => $pool->builder('books'), 'Adapter does not support query builder'],
+            'schema builder' => [static fn (Pool $pool): mixed => $pool->schema(), 'Adapter does not support query builder'],
+            'spatial encoding' => [static fn (Pool $pool): mixed => $pool->encode([1, 2], ColumnType::Point), 'Adapter does not support spatial'],
+            'spatial decoding' => [static fn (Pool $pool): mixed => $pool->decode('', ColumnType::Point), 'Adapter does not support spatial'],
+            'casting before a write' => [static fn (Pool $pool): mixed => $pool->castBefore(new Document(), new Document()), 'Adapter does not support casting'],
+            'casting after a read' => [static fn (Pool $pool): mixed => $pool->castAfter(new Document(), [new Document()]), 'Adapter does not support casting'],
+            'datetime casting' => [static fn (Pool $pool): mixed => $pool->castDatetime('2026-01-01'), 'Adapter does not support casting'],
+            'upsert' => [static fn (Pool $pool): mixed => $pool->upsertDocument(new Document(), new Change(new Document(), new Document())), 'Adapter does not support upserts'],
             'connection id' => [static fn (Pool $pool): mixed => $pool->getConnectionId(), 'Adapter does not support connection id'],
             'relationships' => [static fn (Pool $pool): mixed => $pool->createRelationship('books', Relationship::oneToOne(relatedCollection: 'authors', key: 'author')), 'Adapter does not support relationships'],
         ];

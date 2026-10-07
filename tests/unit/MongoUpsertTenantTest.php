@@ -23,7 +23,7 @@ final class MongoUpsertTenantTest extends TestCase
     {
         $adapter = $this->createAdapter(sharedTables: true, tenant: 6);
 
-        $adapter->upsertDocuments($this->collection(), '', [$this->change('shared', tenant: 5)]);
+        $adapter->upsertDocuments($this->collection(), [$this->change('shared', tenant: 5)]);
 
         $this->assertSame(5, $this->filter(0)[Storage::TENANT]);
         $this->assertSame(5, $this->set(0)[Storage::TENANT]);
@@ -33,7 +33,7 @@ final class MongoUpsertTenantTest extends TestCase
     {
         $adapter = $this->createAdapter(sharedTables: true, tenant: 3);
 
-        $adapter->upsertDocuments($this->collection(), '', [$this->change('own', tenant: null)]);
+        $adapter->upsertDocuments($this->collection(), [$this->change('own', tenant: null)]);
 
         $this->assertSame(3, $this->filter(0)[Storage::TENANT]);
         $this->assertSame(3, $this->set(0)[Storage::TENANT]);
@@ -43,7 +43,7 @@ final class MongoUpsertTenantTest extends TestCase
     {
         $adapter = $this->createAdapter(sharedTables: true, tenant: null);
 
-        $adapter->upsertDocuments($this->collection(), '', [
+        $adapter->upsertDocuments($this->collection(), [
             $this->change('shared', tenant: 1),
             $this->change('shared', tenant: 2),
         ]);
@@ -55,7 +55,7 @@ final class MongoUpsertTenantTest extends TestCase
     {
         $adapter = $this->createAdapter(sharedTables: false, tenant: null);
 
-        $adapter->upsertDocuments($this->collection(), '', [$this->change('single', tenant: null)]);
+        $adapter->upsertDocuments($this->collection(), [$this->change('single', tenant: null)]);
 
         $this->assertArrayNotHasKey(Storage::TENANT, $this->filter(0));
         $this->assertArrayNotHasKey(Storage::TENANT, $this->set(0));

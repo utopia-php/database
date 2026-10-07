@@ -894,20 +894,14 @@ trait IndexTests
         }
 
         foreach ($database->getSchemaIndexes($collection) as $schemaIndex) {
-            if ($schemaIndex->getId() !== $index) {
+            if ($schemaIndex->name !== $index) {
                 continue;
             }
 
-            $columns = $schemaIndex->getAttribute('columns');
-            $lengths = $schemaIndex->getAttribute('lengths');
-            $this->assertIsArray($columns);
-            $this->assertIsArray($lengths);
-
             $parts = [];
-            foreach (\array_values($columns) as $position => $column) {
-                $this->assertIsString($column);
-                $length = $lengths[$position] ?? null;
-                $parts[] = \is_int($length) ? $column.'('.$length.')' : $column;
+            foreach ($schemaIndex->columns as $position => $column) {
+                $length = $schemaIndex->lengths[$position] ?? null;
+                $parts[] = $length !== null ? $column.'('.$length.')' : $column;
             }
 
             return $parts;
@@ -1116,7 +1110,7 @@ trait IndexTests
         $database = $this->getDatabase();
         $adapter = $database->getAdapter();
 
-        if (! $adapter->hasFeature(Feature\SchemaIndexes::class) || ! $adapter->supports(Capability::Fulltext)) {
+        if (! $adapter->supports(Capability::SchemaIntrospection) || ! $adapter->supports(Capability::Fulltext) || $adapter instanceof Postgres) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1146,7 +1140,7 @@ trait IndexTests
         $database = $this->getDatabase();
         $adapter = $database->getAdapter();
 
-        if (! $adapter->hasFeature(Feature\SchemaIndexes::class) || ! $adapter->supports(Capability::Fulltext)) {
+        if (! $adapter->supports(Capability::SchemaIntrospection) || ! $adapter->supports(Capability::Fulltext) || $adapter instanceof Postgres) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1209,20 +1203,14 @@ trait IndexTests
     {
         $indexes = [];
         foreach ($database->getSchemaIndexes($collection) as $schemaIndex) {
-            $type = $schemaIndex->getAttribute('indexType');
-            $this->assertIsString($type);
-            if (\strtoupper($type) !== 'FULLTEXT') {
+            if ($schemaIndex->type !== IndexType::Fulltext) {
                 continue;
             }
 
-            $columns = $schemaIndex->getAttribute('columns');
-            $this->assertIsArray($columns);
-            $columns = \array_values(\array_filter(
-                $columns,
-                static fn (mixed $column): bool => \is_string($column) && $column !== '_tenant',
+            $indexes[$schemaIndex->name] = \array_values(\array_filter(
+                $schemaIndex->columns,
+                static fn (string $column): bool => $column !== Storage::TENANT,
             ));
-            /** @var list<string> $columns */
-            $indexes[$schemaIndex->getId()] = $columns;
         }
         \ksort($indexes);
 
@@ -1233,7 +1221,7 @@ trait IndexTests
     {
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->hasFeature(Feature\SchemaIndexes::class)) {
+        if (! $database->getAdapter()->supports(Capability::SchemaIntrospection)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1314,22 +1302,14 @@ trait IndexTests
     private function getSchemaIndexColumns(Database $database, string $collection, string $index): ?array
     {
         foreach ($database->getSchemaIndexes($collection) as $schemaIndex) {
-            if ($schemaIndex->getId() !== $index) {
+            if ($schemaIndex->name !== $index) {
                 continue;
             }
 
-            $columns = $schemaIndex->getAttribute('columns');
-            $this->assertIsArray($columns);
-
-            $names = [];
-            foreach ($columns as $column) {
-                $this->assertIsString($column);
-                if ($column !== Storage::TENANT) {
-                    $names[] = $column;
-                }
-            }
-
-            return $names;
+            return \array_values(\array_filter(
+                $schemaIndex->columns,
+                static fn (string $column): bool => $column !== Storage::TENANT,
+            ));
         }
 
         return null;

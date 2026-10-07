@@ -2,32 +2,29 @@
 
 namespace Utopia\Database\Adapter\Feature;
 
+use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Structure as StructureException;
+use Utopia\Query\Schema\ColumnType;
+
 /**
- * Defines spatial geometry decoding operations for a database adapter.
+ * Converts spatial values between the coordinate arrays documents carry and the form the engine stores.
  */
 interface Spatial
 {
     /**
-     * Decode a WKB-encoded point into coordinates.
+     * Encode a point ([x, y]), linestring ([[x, y], ...]) or polygon ([[[x, y], ...], ...], or one ring) for storage.
      *
-     * @param string $wkb The Well-Known Binary representation.
-     * @return array<float> The point as [longitude, latitude].
+     * @throws StructureException When the value is not a valid geometry of the type
+     * @throws DatabaseException When the type is not spatial
      */
-    public function decodePoint(string $wkb): array;
+    public function encode(mixed $value, ColumnType $type): string;
 
     /**
-     * Decode a WKB-encoded linestring into an array of coordinate pairs.
+     * Decode a stored geometry of the type back into coordinates.
      *
-     * @param string $wkb The Well-Known Binary representation.
-     * @return array<array<float>> Array of [longitude, latitude] pairs.
-     */
-    public function decodeLinestring(string $wkb): array;
-
-    /**
-     * Decode a WKB-encoded polygon into an array of rings, each containing coordinate pairs.
+     * @return array<mixed> [x, y] for a point, a list of points for a linestring, a list of rings for a polygon
      *
-     * @param string $wkb The Well-Known Binary representation.
-     * @return array<array<array<float>>> Array of rings, each an array of [longitude, latitude] pairs.
+     * @throws DatabaseException When the type is not spatial or the value cannot be decoded
      */
-    public function decodePolygon(string $wkb): array;
+    public function decode(string $value, ColumnType $type): array;
 }

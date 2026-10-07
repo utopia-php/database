@@ -187,7 +187,7 @@ final class MongoAdapterPathsTest extends TestCase
         $adapter = $this->adapter();
         $collection = new Document(['attributes' => [['$id' => 'count', 'type' => ColumnType::Integer->value, 'array' => false]]]);
 
-        $document = $adapter->castingBefore($collection, new Document(['count' => Operator::increment('5', '100')]));
+        $document = $adapter->castBefore($collection, new Document(['count' => Operator::increment('5', '100')]));
 
         $operator = $document->getAttribute('count');
         $this->assertInstanceOf(Operator::class, $operator);
@@ -195,7 +195,7 @@ final class MongoAdapterPathsTest extends TestCase
 
         $this->expectException(TypeException::class);
         $this->expectExceptionMessage('outside the signed 64-bit range');
-        $adapter->castingBefore($collection, new Document(['count' => Operator::increment('9223372036854775808')]));
+        $adapter->castBefore($collection, new Document(['count' => Operator::increment('9223372036854775808')]));
     }
 
     public function testArrayAttributesAreDecodedOrWrappedBeforeTheWrite(): void
@@ -207,7 +207,7 @@ final class MongoAdapterPathsTest extends TestCase
         ]]);
 
         $adapter = $this->adapter();
-        $document = $adapter->castingBefore($collection, new Document([
+        $document = $adapter->castBefore($collection, new Document([
             'tags' => '["a","b"]',
             'labels' => 7,
             'meta' => '{"colour":"red"}',
@@ -219,7 +219,7 @@ final class MongoAdapterPathsTest extends TestCase
 
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('Failed to decode JSON for attribute tags');
-        $adapter->castingBefore($collection, new Document(['tags' => 'not json']));
+        $adapter->castBefore($collection, new Document(['tags' => 'not json']));
     }
 
     public function testStoredValuesAreReadBackByTheirAttributeType(): void
@@ -232,13 +232,13 @@ final class MongoAdapterPathsTest extends TestCase
         ]]);
 
         $empty = new Document();
-        $this->assertSame($empty, $adapter->castingAfter($collection, $empty));
+        $this->assertSame($empty, $adapter->castAfter($collection, [$empty])[0]);
 
-        $document = $adapter->castingAfter($collection, new Document([
+        $document = $adapter->castAfter($collection, [new Document([
             'tags' => '["a","b"]',
             'labels' => 7,
             'count' => '42',
-        ]));
+        ])])[0];
 
         $this->assertSame(['a', 'b'], $document->getAttribute('tags'));
         $this->assertSame(['7'], $document->getAttribute('labels'));
@@ -246,7 +246,7 @@ final class MongoAdapterPathsTest extends TestCase
 
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('Failed to decode JSON for attribute tags');
-        $adapter->castingAfter($collection, new Document(['tags' => 'not json']));
+        $adapter->castAfter($collection, [new Document(['tags' => 'not json'])]);
     }
 
     public function testSchemalessCastingKeepsStringsThatAreNotDates(): void
@@ -255,7 +255,7 @@ final class MongoAdapterPathsTest extends TestCase
         $adapter->setSupportForAttributes(false);
         $collection = new Document(['indexes' => [['$id' => 'expiry', 'type' => 'ttl', 'attributes' => ['expiresAt']]]]);
 
-        $document = $adapter->castingBefore($collection, new Document([
+        $document = $adapter->castBefore($collection, new Document([
             'expiresAt' => '2026-13-45T99:99:99Z',
             'label' => 'plain',
         ]));
@@ -269,7 +269,7 @@ final class MongoAdapterPathsTest extends TestCase
     {
         $adapter = $this->adapter();
 
-        $before = $adapter->castingBefore(
+        $before = $adapter->castBefore(
             new Document(['attributes' => [['$id' => 'when', 'type' => ColumnType::Datetime->value, 'array' => false]]]),
             new Document(['when' => '1700000000000']),
         );
@@ -277,10 +277,10 @@ final class MongoAdapterPathsTest extends TestCase
         $this->assertInstanceOf(UTCDateTime::class, $when);
         $this->assertSame('1700000000000', (string) $when);
 
-        $after = $adapter->castingAfter(
+        $after = $adapter->castAfter(
             new Document(['attributes' => [['$id' => 'count', 'type' => ColumnType::BigInteger->value, 'array' => false]]]),
-            new Document(['count' => new Int64('9007199254740993')]),
-        );
+            [new Document(['count' => new Int64('9007199254740993')])],
+        )[0];
         $this->assertSame(9007199254740993, $after->getAttribute('count'));
     }
 

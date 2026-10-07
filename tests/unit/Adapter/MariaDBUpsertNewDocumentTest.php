@@ -36,7 +36,7 @@ final class MariaDBUpsertNewDocumentTest extends TestCase
             'attributes' => [new Document(['$id' => 'counter', 'type' => 'bigint', 'signed' => false, 'default' => self::UNSIGNED_DEFAULT])],
         ]);
 
-        $this->adapter()->upsertDocuments($collection, '', [
+        $this->adapter()->upsertDocuments($collection, [
             new Change(new Document(), new Document(['$id' => 'created', '$permissions' => [], 'counter' => $operator])),
         ]);
 

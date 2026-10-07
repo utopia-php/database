@@ -24,6 +24,7 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Index;
+use Utopia\Database\Schema\Index as SchemaIndex;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationshipSide;
@@ -667,7 +668,7 @@ final class RelationshipSchemaTest extends TestCase
      */
     private function schemaIndexIds(Database $database, string $collection): array
     {
-        $ids = \array_map(static fn (Document $index): string => $index->getId(), $database->getSchemaIndexes($collection));
+        $ids = \array_map(static fn (SchemaIndex $index): string => $index->name, $database->getSchemaIndexes($collection));
         \sort($ids);
 
         return $ids;

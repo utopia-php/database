@@ -341,65 +341,55 @@ trait CollectionTests
 
     public function testSchemaAttributes(): void
     {
-        if (! ($this->getDatabase()->getAdapter()->hasFeature(Feature\SchemaAttributes::class))) {
-            $this->expectNotToPerformAssertions();
+        $db = $this->getDatabase();
+        $adapter = $db->getAdapter();
+
+        if (! $adapter->supports(Capability::SchemaIntrospection)) {
+            $this->assertSame([], $db->getSchemaAttributes('no_such_collection'));
 
             return;
         }
 
         $collection = 'schema_attributes';
-        $db = $this->getDatabase();
 
-        $this->assertEmpty($db->getSchemaAttributes('no_such_collection'));
+        $this->assertSame([], $db->getSchemaAttributes('no_such_collection'));
 
         $db->createCollection(Collection::create(id: $collection));
 
-        $db->createAttribute($collection, Attribute::string(key: 'username', size: 128, required: true));
-        $db->createAttribute($collection, Attribute::string(key: 'story', size: 20000, required: true));
-        $db->createAttribute($collection, Attribute::string(key: 'string_list', size: 128, required: true, array: true));
-        $db->createAttribute($collection, Attribute::datetime(key: 'dob', default: '2000-06-12T14:12:55.000+00:00'));
-
-        $attributes = [];
-        foreach ($db->getSchemaAttributes($collection) as $attribute) {
-            /**
-             * @var Document $attribute
-             */
-            $attributes[$attribute->getId()] = $attribute;
+        $attributes = [
+            Attribute::string(key: 'username', size: 128, required: true),
+            Attribute::string(key: 'story', size: 20000, required: true),
+            Attribute::string(key: 'string_list', size: 128, required: true, array: true),
+            Attribute::datetime(key: 'dob', default: '2000-06-12T14:12:55.000+00:00'),
+        ];
+        foreach ($attributes as $attribute) {
+            $db->createAttribute($collection, $attribute);
         }
 
-        $attribute = $attributes['username'];
-        $this->assertEquals('username', $attribute['$id']);
-        $this->assertEquals('varchar', $attribute['dataType']);
-        $this->assertEquals('varchar(128)', $attribute['columnType']);
-        $this->assertEquals('128', $attribute['characterMaximumLength']);
-        $this->assertEquals('YES', $attribute['isNullable']);
+        $columns = [];
+        foreach ($db->getSchemaAttributes($collection) as $column) {
+            $columns[$column->name] = $column;
+        }
 
-        $attribute = $attributes['story'];
-        $this->assertEquals('story', $attribute['$id']);
-        $this->assertEquals('text', $attribute['dataType']);
-        $this->assertEquals('text', $attribute['columnType']);
-        $this->assertEquals('65535', $attribute['characterMaximumLength']);
+        foreach ($attributes as $attribute) {
+            $this->assertArrayHasKey($attribute->key, $columns);
+            $this->assertSame($adapter->getColumnType($attribute), $columns[$attribute->key]->type, $attribute->key);
+        }
 
-        $attribute = $attributes['string_list'];
-        $this->assertEquals('string_list', $attribute['$id']);
-        $this->assertTrue(in_array($attribute['dataType'], ['json', 'longtext'])); // mysql vs maria
-        $this->assertTrue(in_array($attribute['columnType'], ['json', 'longtext']));
-        $this->assertTrue(in_array($attribute['characterMaximumLength'], [null, '4294967295']));
-        $this->assertEquals('YES', $attribute['isNullable']);
+        $this->assertSame(128, $columns['username']->length);
+        $this->assertTrue($columns['username']->nullable);
+        $this->assertTrue($columns['string_list']->nullable);
+        $this->assertNull($columns['dob']->length);
 
-        $attribute = $attributes['dob'];
-        $this->assertEquals('dob', $attribute['$id']);
-        $this->assertEquals('datetime', $attribute['dataType']);
-        $this->assertEquals('datetime(3)', $attribute['columnType']);
-        $this->assertEquals(null, $attribute['characterMaximumLength']);
-        $this->assertEquals('3', $attribute['datetimePrecision']);
+        foreach ([Storage::SEQUENCE, Storage::UID, Storage::CREATED_AT, Storage::UPDATED_AT, Storage::PERMISSIONS] as $internal) {
+            $this->assertArrayHasKey($internal, $columns, 'The engine-only column '.$internal.' is read back as a column');
+            $this->assertNotSame('', $columns[$internal]->type);
+        }
 
         if ($db->getSharedTables()) {
-            $attribute = $attributes['_tenant'];
-            $this->assertEquals('_tenant', $attribute['$id']);
-            $this->assertEquals('int', $attribute['dataType']);
-            $this->assertEquals('10', $attribute['numericPrecision']);
-            $this->assertTrue(in_array($attribute['columnType'], ['int unsigned', 'int(11) unsigned']));
+            $this->assertArrayHasKey(Storage::TENANT, $columns);
+            $this->assertNull($columns[Storage::TENANT]->length);
+            $this->assertTrue($columns[Storage::TENANT]->nullable);
         }
     }
 

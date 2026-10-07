@@ -12,6 +12,7 @@ use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\RelationshipSide;
 use Utopia\Database\RelationshipType;
+use Utopia\Database\Schema\Column;
 use Utopia\Database\Validator\AttributeDefinition;
 use Utopia\Database\Validator\Structure;
 use Utopia\Query\Schema\ColumnType;
@@ -1264,12 +1265,7 @@ class AttributeTest extends TestCase
         $validator = new AttributeDefinition(
             attributes: [],
             schemaAttributes: [
-                new Document([
-                    '$id' => ID::custom('existing_column'),
-                    'key' => 'existing_column',
-                    'type' => ColumnType::String->value,
-                    'size' => 255,
-                ]),
+                new Column(name: 'existing_column', type: 'VARCHAR(255)', length: 255, nullable: true),
             ],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1299,12 +1295,7 @@ class AttributeTest extends TestCase
         $validator = new AttributeDefinition(
             attributes: [],
             schemaAttributes: [
-                new Document([
-                    '$id' => ID::custom('existing_column'),
-                    'key' => 'existing_column',
-                    'type' => ColumnType::String->value,
-                    'size' => 255,
-                ]),
+                new Column(name: 'existing_column', type: 'VARCHAR(255)', length: 255, nullable: true),
             ],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1939,12 +1930,7 @@ class AttributeTest extends TestCase
         $validator = new AttributeDefinition(
             attributes: [],
             schemaAttributes: [
-                new Document([
-                    '$id' => ID::custom('existing_column'),
-                    'key' => 'existing_column',
-                    'type' => ColumnType::String->value,
-                    'size' => 255,
-                ]),
+                new Column(name: 'existing_column', type: 'VARCHAR(255)', length: 255, nullable: true),
             ],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -2128,12 +2114,7 @@ class AttributeTest extends TestCase
         $validator = new AttributeDefinition(
             attributes: [],
             schemaAttributes: [
-                new Document([
-                    '$id' => ID::custom('_prefix_column'),
-                    'key' => '_prefix_column',
-                    'type' => ColumnType::String->value,
-                    'size' => 255,
-                ]),
+                new Column(name: '_prefix_column', type: 'VARCHAR(255)', length: 255, nullable: true),
             ],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,

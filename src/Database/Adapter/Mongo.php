@@ -55,7 +55,7 @@ use Utopia\Query\Schema\IndexType;
 /**
  * Database adapter for MongoDB, using the Utopia Mongo client for document-based storage.
  */
-class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relationships, Feature\Timeouts, Feature\Upserts, Feature\UTCCasting
+class Mongo extends Adapter implements Feature\Casting, Feature\Relationships, Feature\Timeouts, Feature\Upserts
 {
     /**
      * @var array<string>
@@ -964,6 +964,21 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         return true;
     }
 
+    public function getSchemaAttributes(string $collection): array
+    {
+        return [];
+    }
+
+    public function getSchemaIndexes(string $collection): array
+    {
+        return [];
+    }
+
+    public function getColumnType(Attribute $attribute): ?string
+    {
+        return null;
+    }
+
     /**
      * Rename Attribute.
      *
@@ -1388,7 +1403,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $resultArray = $this->client->toArray($result[0]);
         $result = $this->replaceChars('_', '$', $resultArray ?? []);
         $document = Document::fromStorage($result);
-        $document = $this->castingAfter($collection, $document);
+        $document = $this->castRead($this->getReadCasts($collection), $this->supports(Capability::DefinedAttributes), $document);
 
         // Ensure missing relationship attributes are set to null (MongoDB doesn't store null fields)
         if (! $hasProjection) {
@@ -1945,28 +1960,36 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     }
 
     /**
+     * @throws DatabaseException
+     */
+    public function upsertDocument(Document $collection, Change $change): Document
+    {
+        return $this->upsertDocuments($collection, [$change])[0];
+    }
+
+    /**
      * @param  array<Change>  $changes
      * @return array<Document>
      *
      * @throws DatabaseException
      */
-    public function upsertDocuments(Document $collection, string $attribute, array $changes): array
+    public function upsertDocuments(Document $collection, array $changes, ?string $increase = null): array
     {
-        if (empty($changes)) {
-            return $changes;
+        if ($changes === []) {
+            return [];
         }
 
         $this->syncWriteHooks();
 
         try {
             $name = $this->getNamespace().'_'.$this->filter($collection->getId());
-            $attribute = $this->filter($attribute);
+            $attribute = $this->filter($increase ?? '');
 
             $operations = [];
             $hasPipeline = false;
             foreach ($changes as $change) {
-                $document = $change->getNew();
-                $oldDocument = $change->getOld();
+                $document = $change->new;
+                $oldDocument = $change->old;
                 /** @var array<string, mixed> $attributes */
                 $attributes = $document->getAttributes();
                 $attributes[Storage::UID] = $document->getId();
@@ -2065,7 +2088,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             throw $this->processException($e);
         }
 
-        return \array_map(fn ($change) => $change->getNew(), $changes);
+        return \array_map(static fn (Change $change): Document => $change->new, $changes);
     }
 
     /**
@@ -3004,11 +3027,9 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     }
 
     /**
-     * Returns the document after casting to
-     *
      * @throws Exception
      */
-    public function castingBefore(Document $collection, Document $document): Document
+    public function castBefore(Document $collection, Document $document): Document
     {
         if ($document->isEmpty()) {
             return $document;
@@ -3105,21 +3126,9 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     }
 
     /**
-     * Returns the document after casting from
-     */
-    public function castingAfter(Document $collection, Document $document): Document
-    {
-        if ($document->isEmpty()) {
-            return $document;
-        }
-
-        return $this->castRead($this->getReadCasts($collection), $this->supports(Capability::DefinedAttributes), $document);
-    }
-
-    /**
      * {@inheritDoc}
      */
-    public function castingAfterDocuments(Document $collection, array $documents): array
+    public function castAfter(Document $collection, array $documents): array
     {
         $casts = $this->getReadCasts($collection);
         $defined = $this->supports(Capability::DefinedAttributes);
@@ -3223,13 +3232,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         return $document;
     }
 
-    /**
-     * Convert a datetime string to a MongoDB UTCDateTime object.
-     *
-     * @param string $value The datetime string
-     * @return mixed
-     */
-    public function setUTCDatetime(string $value): mixed
+    public function castDatetime(string $value): mixed
     {
         return new UTCDateTime(new NativeDateTime($value));
     }

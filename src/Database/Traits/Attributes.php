@@ -22,6 +22,7 @@ use Utopia\Database\Exception\Mismatch as MismatchException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Index;
+use Utopia\Database\Schema;
 use Utopia\Database\SetType;
 use Utopia\Database\Validator\AttributeDefinition;
 use Utopia\Database\Validator\BigInt;
@@ -38,16 +39,6 @@ use Utopia\Query\Schema\IndexType;
 trait Attributes
 {
     /**
-     * @var array<string, string>
-     */
-    private const array COLUMN_TYPE_SPELLINGS = [
-        '/\s+/' => ' ',
-        '/ (NOT )?NULL$/' => '',
-        '/^(POINT|LINESTRING|POLYGON)\b.*$/' => '$1',
-        '/\b(TINYINT|SMALLINT|MEDIUMINT|INT|INTEGER|BIGINT)\(\d+\)/' => '$1',
-    ];
-
-    /**
      * @return Attribute The attribute as stored
      *
      * @throws DatabaseException
@@ -61,9 +52,7 @@ trait Attributes
         $definition = $this->silent(fn () => $this->getCollection($collection));
         $attribute = self::normalise($attribute);
 
-        $schemaAttributes = $this->adapter->hasFeature(Feature\SchemaAttributes::class)
-            ? $this->getSchemaAttributes($definition->getId())
-            : [];
+        $schemaAttributes = $this->getSchemaAttributes($definition->getId());
 
         $existsInSchema = false;
 
@@ -130,9 +119,7 @@ trait Attributes
 
         $definition = $this->silent(fn () => $this->getCollection($collection));
 
-        $schemaAttributes = $this->adapter->hasFeature(Feature\SchemaAttributes::class)
-            ? $this->getSchemaAttributes($definition->getId())
-            : [];
+        $schemaAttributes = $this->getSchemaAttributes($definition->getId());
 
         $stored = [];
         $toCreate = [];
@@ -524,7 +511,7 @@ trait Attributes
      * matches the request, and dropped to be recreated otherwise. Under shared tables it
      * belongs to another tenant's collection, so a mismatch is refused instead.
      *
-     * @param  array<Document>  $schemaAttributes
+     * @param  list<Schema\Column>  $schemaAttributes
      * @return bool True when the existing column is reused
      *
      * @throws DuplicateException
@@ -542,29 +529,18 @@ trait Attributes
             }
         }
 
-        if (! $this->adapterHasFeature(Feature\ColumnTypes::class)) {
-            return true;
-        }
-
-        $expected = $this->adapter->getColumnType(
-            $attribute->type->value,
-            $attribute->size ?? 0,
-            $attribute->signed,
-            $attribute->array,
-            $attribute->required,
-        );
-        if ($expected === '') {
+        $expected = $this->adapter->getColumnType($attribute);
+        if ($expected === null) {
             return true;
         }
 
         $filteredId = \strtolower($this->adapter->filter($attribute->key));
         foreach ($schemaAttributes as $column) {
-            if (\strtolower($column->getId()) !== $filteredId) {
+            if (\strtolower($column->name) !== $filteredId) {
                 continue;
             }
 
-            $columnType = $column->getAttribute('columnType', '');
-            if (self::canonicalColumnType(\is_string($columnType) ? $columnType : '') === self::canonicalColumnType($expected)) {
+            if ($column->type === $expected) {
                 return true;
             }
 
@@ -581,22 +557,7 @@ trait Attributes
     }
 
     /**
-     * Engines report integer display widths (int(11)), spatial types without their SRID or
-     * nullability, and MariaDB's JSON as LONGTEXT.
-     */
-    private static function canonicalColumnType(string $columnType): string
-    {
-        $canonical = \preg_replace(
-            \array_keys(self::COLUMN_TYPE_SPELLINGS),
-            \array_values(self::COLUMN_TYPE_SPELLINGS),
-            \strtoupper(\trim($columnType)),
-        ) ?? $columnType;
-
-        return $canonical === 'JSON' ? 'LONGTEXT' : $canonical;
-    }
-
-    /**
-     * @param  array<Document>  $schemaAttributes
+     * @param  list<Schema\Column>  $schemaAttributes
      *
      * @throws DuplicateException
      * @throws LimitException
@@ -616,7 +577,7 @@ trait Attributes
             maxVarcharLength: $this->adapter->getMaxVarcharLength(),
             maxIntLength: $this->adapter->getLimitForInt(),
             maxBigIntLength: $this->adapter->getLimitForBigInt(),
-            supportForSchemaAttributes: $this->adapter->hasFeature(Feature\SchemaAttributes::class),
+            supportForSchemaAttributes: $this->adapter->supports(Capability::SchemaIntrospection),
             supportForVectors: $this->adapter->supports(Capability::Vectors),
             supportForSpatialAttributes: $this->adapter->hasFeature(Feature\Spatial::class),
             supportForObject: $this->adapter->supports(Capability::Objects),

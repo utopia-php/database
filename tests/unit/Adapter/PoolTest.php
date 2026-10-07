@@ -201,7 +201,7 @@ final class PoolTest extends TestCase
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('Adapter does not support upserts');
 
-        $pool->upsertDocuments(new Document(), 'id', []);
+        $pool->upsertDocuments(new Document(), [], 'id');
     }
 
     /**

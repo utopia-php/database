@@ -6,11 +6,13 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
+use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
+use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Limit as LimitException;
@@ -69,7 +71,7 @@ final class NumericUpdateGuardsTest extends TestCase
     #[DataProvider('storedValuesOutsideTheArithmetic')]
     public function testAStoredValueTheArithmeticCannotUseIsRefused(string $attribute, mixed $stored, bool $increase, string $exception, string $message): void
     {
-        $database = $this->database($this->without(Capability::Casting));
+        $database = $this->database($this->castingItself());
         $database->skipValidation(fn (): Document => $database->createDocument(self::COLLECTION, new Document([Document::ID => 'ledger', $attribute => $stored])));
 
         $this->assertRefused($exception, $message, fn (): Document => $increase
@@ -174,6 +176,26 @@ final class NumericUpdateGuardsTest extends TestCase
     private function schemaless(): Memory
     {
         return $this->without(Capability::DefinedAttributes);
+    }
+
+    private function castingItself(): Memory
+    {
+        return new class () extends Memory implements Feature\Casting {
+            public function castBefore(Document $collection, Document $document): Document
+            {
+                return $document;
+            }
+
+            public function castAfter(Document $collection, array $documents): array
+            {
+                return $documents;
+            }
+
+            public function castDatetime(string $value): mixed
+            {
+                return DateTime::setTimezone($value);
+            }
+        };
     }
 
     private function without(Capability $missing): Memory

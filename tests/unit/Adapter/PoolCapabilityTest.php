@@ -116,7 +116,7 @@ final class PoolCapabilityTest extends TestCase
     {
         $pool = $this->pool($this->connections(new Memory()));
 
-        $this->assertTrue($pool->supports(Capability::Casting));
+        $this->assertTrue($pool->supports(Capability::Operators));
         $this->assertFalse($pool->supports(Capability::Hostname));
         $this->assertSame((new Memory())->capabilities(), $pool->capabilities());
         $this->assertSame(1, $this->checkouts);
@@ -125,13 +125,13 @@ final class PoolCapabilityTest extends TestCase
     public function testEveryHandleOverOnePoolSharesTheAnswers(): void
     {
         $connections = $this->connections(new Memory());
-        $this->assertTrue($this->pool($connections)->supports(Capability::Casting));
+        $this->assertTrue($this->pool($connections)->supports(Capability::Operators));
 
         $this->checkouts = 0;
         $this->down = true;
 
         $handle = $this->pool($connections);
-        $this->assertTrue($handle->supports(Capability::Casting));
+        $this->assertTrue($handle->supports(Capability::Operators));
         $this->assertTrue($handle->supports(Capability::Fulltext));
         $this->assertSame(0, $this->checkouts);
     }
@@ -210,17 +210,17 @@ final class PoolCapabilityTest extends TestCase
 
         $caught = null;
         try {
-            $pool->supports(Capability::Casting);
+            $pool->supports(Capability::Operators);
         } catch (RuntimeException $exception) {
             $caught = $exception;
         }
         $this->assertSame('backing unreachable', $caught?->getMessage(), 'A capability question with no answer yet must fail while the backing is down');
 
         $this->down = false;
-        $this->assertTrue($pool->supports(Capability::Casting));
+        $this->assertTrue($pool->supports(Capability::Operators));
 
         $this->down = true;
-        $this->assertTrue($pool->supports(Capability::Casting));
+        $this->assertTrue($pool->supports(Capability::Operators));
     }
 
     /**

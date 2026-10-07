@@ -92,7 +92,6 @@ final class SQLiteUpsertArrayOperatorLimitTest extends TestCase
 
         $this->adapter->upsertDocuments(
             $this->database->getCollection('lists'),
-            '',
             [new Change($existing, new Document([
                 '$id' => 'first',
                 '$permissions' => [],

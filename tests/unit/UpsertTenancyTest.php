@@ -106,7 +106,7 @@ final class UpsertTenancyTest extends TestCase
         $adapter = $this->adapter();
         $database = $this->database($adapter);
 
-        $adapter->upsertDocuments($database->getCollection(self::COLLECTION), '', [
+        $adapter->upsertDocuments($database->getCollection(self::COLLECTION), [
             new Change(new Document(), $this->note('upserted')),
         ]);
 

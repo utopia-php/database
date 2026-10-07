@@ -1408,27 +1408,26 @@ class Mirror extends Database
     }
 
     /**
-     * upsertDocument() and upsertDocuments() upsert through this method, so each of them writes,
-     * and fires its events, once on the source.
+     * upsertDocument() upserts through this method, so it writes, and fires its events, once on the source.
      *
      * {@inheritdoc}
      */
-    public function upsertDocumentsWithIncrease(
+    public function upsertDocuments(
         string $collection,
-        string $attribute,
         array $documents,
+        int $batchSize = self::INSERT_BATCH_SIZE,
         ?callable $onNext = null,
         ?callable $onError = null,
-        int $batchSize = self::INSERT_BATCH_SIZE,
+        ?string $increase = null,
     ): int {
         $onNext = $this->decorating(Event::DocumentsUpsert, $collection, $onNext);
-        $modified = $this->source->upsertDocumentsWithIncrease(
+        $modified = $this->source->upsertDocuments(
             $collection,
-            $attribute,
             $documents,
+            $batchSize,
             $onNext,
             $onError,
-            $batchSize,
+            $increase,
         );
 
         $destination = $this->destination;
@@ -1445,9 +1444,8 @@ class Mirror extends Database
         }
 
         $clones = \array_map(static fn (Document $document): Document => clone $document, $documents);
-        $action = $attribute === '' ? 'upsertDocuments' : 'upsertDocumentsWithIncrease';
 
-        $this->replicate($action, function () use ($destination, $collection, $attribute, $clones, $batchSize): void {
+        $this->replicate('upsertDocuments', function () use ($destination, $collection, $increase, $clones, $batchSize): void {
             foreach ($clones as $index => $clone) {
                 foreach ($this->writeFilters as $filter) {
                     $clone = $filter->beforeCreateOrUpdateDocument(
@@ -1461,11 +1459,11 @@ class Mirror extends Database
             }
 
             $destination->withPreserveDates(
-                fn (): int => $destination->upsertDocumentsWithIncrease(
+                fn (): int => $destination->upsertDocuments(
                     $collection,
-                    $attribute,
                     $clones,
-                    batchSize: $batchSize,
+                    $batchSize,
+                    increase: $increase,
                 )
             );
 

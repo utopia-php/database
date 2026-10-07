@@ -40,7 +40,6 @@ final class PoolCastingTest extends TestCase
         $this->assertCount(1, $one);
         $this->assertCount(5, $five);
         $this->assertSame($checkoutsForOne, $this->checkouts, 'Casting a page must not check out a connection per document');
-        $this->assertSame(0, $adapter->singles);
         $this->assertSame([['a'], ['a', 'b', 'c', 'd', 'e']], $adapter->batches);
     }
 
@@ -52,7 +51,6 @@ final class PoolCastingTest extends TestCase
 
         $adapter->reset();
         $this->assertSame([], $database->find('posts', [Query::equal('title', ['none'])]));
-        $this->assertSame(0, $adapter->singles);
         $this->assertSame([], $adapter->batches);
     }
 
@@ -72,7 +70,6 @@ final class PoolCastingTest extends TestCase
         $this->assertSame(2, $database->upsertDocuments('posts', $this->posts(['d', 'e'])));
         $this->assertSame([['d', 'e']], $adapter->batches);
 
-        $this->assertSame(0, $adapter->singles);
         $this->assertSame(['renamed', 'renamed', 'renamed', 'd', 'e'], \array_map(
             fn (Document $document): mixed => $document->getAttribute('title'),
             $database->find('posts', [Query::orderAsc('$id')]),

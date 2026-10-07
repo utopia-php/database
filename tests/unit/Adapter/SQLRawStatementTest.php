@@ -10,7 +10,7 @@ use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Adapter\SQLite;
-use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Attribute;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\PDO as DatabasePDO;
 
@@ -80,17 +80,14 @@ final class SQLRawStatementTest extends TestCase
     }
 
     #[DataProvider('adapters')]
-    public function testAnUnknownColumnTypeSpellingIsRefused(SQL $adapter): void
+    public function testAColumnTypeIsSpelledAsTheCatalogReportsIt(SQL $adapter): void
     {
-        $this->expectException(DatabaseException::class);
-        $this->expectExceptionMessage('Unknown column type: not-a-type');
-
-        $adapter->getColumnType('not-a-type', 0);
+        $this->assertSame('VARCHAR(64)', $adapter->getColumnType(Attribute::string(key: 'title', size: 64)));
     }
 
     #[DataProvider('adapters')]
-    public function testAKnownColumnTypeSpellingIsMapped(SQL $adapter): void
+    public function testAKnownColumnTypeIsMapped(SQL $adapter): void
     {
-        $this->assertNotSame('', $adapter->getColumnType('integer', 0));
+        $this->assertNotNull($adapter->getColumnType(Attribute::integer(key: 'count')));
     }
 }

@@ -1359,9 +1359,9 @@ trait DocumentTests
         $documents[0]->setAttribute('integer', 1);
         $documents[1]->setAttribute('integer', 1);
 
-        $database->upsertDocumentsWithIncrease(
+        $database->upsertDocuments(
             collection: __FUNCTION__,
-            attribute: 'integer',
+            increase: 'integer',
             documents: $documents
         );
 
@@ -1374,9 +1374,9 @@ trait DocumentTests
         $documents[0]->setAttribute('integer', -1);
         $documents[1]->setAttribute('integer', -1);
 
-        $database->upsertDocumentsWithIncrease(
+        $database->upsertDocuments(
             collection: __FUNCTION__,
-            attribute: 'integer',
+            increase: 'integer',
             documents: $documents
         );
 
@@ -5084,7 +5084,7 @@ trait DocumentTests
         if (! $adapter->hasFeature(Feature\RawQuery::class)) {
             // The statements an adapter issues are only counted in the SQL base,
             // so there is no boundary to measure here. The batching itself lives
-            // in Database::upsertDocumentsWithIncrease, which every adapter runs,
+            // in Database::upsertDocuments, which every adapter runs,
             // so the SQL lanes cover the regression for all of them.
             $this->markTestSkipped($adapter::class.' issues no countable statements.');
         }
@@ -8685,12 +8685,12 @@ trait DocumentTests
             $database->enableValidation();
         }
 
-        // 4) upsertDocumentsWithIncrease with null required should fail when validation enabled, pass when disabled
+        // 4) upsertDocuments with an increase and a null required should fail when validation enabled, pass when disabled
         if ($database->getAdapter()->hasFeature(Feature\Upserts::class)) {
             try {
-                $database->upsertDocumentsWithIncrease(
+                $database->upsertDocuments(
                     collection: $collection,
-                    attribute: 'value',
+                    increase: 'value',
                     documents: [new Document([
                         '$id' => 'u1',
                         'name' => null, // required null
@@ -8703,9 +8703,9 @@ trait DocumentTests
             }
 
             $database->disableValidation();
-            $ucount = $database->upsertDocumentsWithIncrease(
+            $ucount = $database->upsertDocuments(
                 collection: $collection,
-                attribute: 'value',
+                increase: 'value',
                 documents: [new Document([
                     '$id' => 'u1',
                     'name' => null,

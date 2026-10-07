@@ -15,7 +15,9 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
+use Utopia\Database\Schema\Index as SchemaIndex;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Query\Schema\IndexType;
 
 /**
  * SQLite names its physical indexes after the namespace, tenant and collection. The adapter
@@ -54,7 +56,7 @@ final class OrphanIndexTest extends TestCase
 
         $this->assertSame(self::INDEX, $database->createIndex(self::COLLECTION, Index::unique(key: self::INDEX, attributes: ['email']))->key);
 
-        $this->assertSame([['email'], 0], $this->schemaIndex($database));
+        $this->assertSame([['email'], IndexType::Unique], $this->schemaIndex($database));
         $database->createDocument(self::COLLECTION, new Document(['email' => 'user@example.com']));
         $this->expectException(DuplicateException::class);
         $database->createDocument(self::COLLECTION, new Document(['email' => 'user@example.com']));
@@ -67,7 +69,7 @@ final class OrphanIndexTest extends TestCase
 
         $this->assertSame(self::INDEX, $database->createIndex(self::COLLECTION, Index::key(key: self::INDEX, attributes: ['name']))->key);
 
-        $this->assertSame([['name'], 1], $this->schemaIndex($database));
+        $this->assertSame([['name'], IndexType::Key], $this->schemaIndex($database));
         $this->assertSame([self::INDEX], $this->indexKeys($database));
     }
 
@@ -84,7 +86,7 @@ final class OrphanIndexTest extends TestCase
             $this->assertSame('Index exists in the shared table with another definition', $error->getMessage());
         }
 
-        $this->assertSame([['_tenant', 'name'], 1], $this->schemaIndex($first));
+        $this->assertSame([['_tenant', 'name'], IndexType::Key], $this->schemaIndex($first));
         $this->assertSame([], $this->indexKeys($second));
     }
 
@@ -96,7 +98,7 @@ final class OrphanIndexTest extends TestCase
 
         $this->assertSame(self::INDEX, $second->createIndex(self::COLLECTION, Index::key(key: self::INDEX, attributes: ['name']))->key);
 
-        $this->assertSame([['_tenant', 'name'], 1], $this->schemaIndex($first));
+        $this->assertSame([['_tenant', 'name'], IndexType::Key], $this->schemaIndex($first));
         $this->assertSame([self::INDEX], $this->indexKeys($second));
     }
 
@@ -139,7 +141,12 @@ final class OrphanIndexTest extends TestCase
                 $prefix = '/^'.\preg_quote($this->getNamespace(), '/').'_[^_]*_'.\preg_quote($this->filter($collection), '/').'_/';
 
                 return \array_map(
-                    fn (Document $index): Document => $index->setAttribute(Document::ID, \preg_replace($prefix, '', $index->getId()) ?? $index->getId()),
+                    static fn (SchemaIndex $index): SchemaIndex => new SchemaIndex(
+                        \preg_replace($prefix, '', $index->name) ?? $index->name,
+                        $index->type,
+                        $index->columns,
+                        $index->lengths,
+                    ),
                     parent::getSchemaIndexes($collection),
                 );
             }
@@ -147,18 +154,13 @@ final class OrphanIndexTest extends TestCase
     }
 
     /**
-     * @return array{list<string>, int}
+     * @return array{list<string>, IndexType}
      */
     private function schemaIndex(Database $database): array
     {
         foreach ($database->getSchemaIndexes(self::COLLECTION) as $index) {
-            if ($index->getId() === self::INDEX) {
-                /** @var list<string> $columns */
-                $columns = $index->getAttribute('columns');
-                /** @var int $nonUnique */
-                $nonUnique = $index->getAttribute('nonUnique');
-
-                return [$columns, $nonUnique];
+            if ($index->name === self::INDEX) {
+                return [$index->columns, $index->type];
             }
         }
 

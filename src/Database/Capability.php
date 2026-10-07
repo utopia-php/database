@@ -19,7 +19,6 @@ enum Capability
     case Caching;
     case CacheSkipOnFailure;
     case CastIndexArray;
-    case Casting;
     case DefinedAttributes;
     case Fulltext;
     case FulltextWildcard;
@@ -48,6 +47,11 @@ enum Capability
     case QueryContains;
     case Reconnection;
     case Regex;
+    /**
+     * The adapter reads its columns and indexes back from the engine's catalog (Adapter::getSchemaAttributes() and
+     * getSchemaIndexes()), so schema objects missing from the metadata are reconciled.
+     */
+    case SchemaIntrospection;
     case Schemas;
     case SpatialAxisOrder;
     case SpatialIndexNull;

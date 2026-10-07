@@ -106,7 +106,7 @@ final class UpsertNewDocumentOperatorTest extends TestCase
         $collection = $this->database->getCollection('tasks');
 
         $this->assertSame([], $adapter->createDocuments($collection, []));
-        $this->assertSame([], $adapter->upsertDocuments($collection, '', []));
+        $this->assertSame([], $adapter->upsertDocuments($collection, []));
         $this->assertSame([], $this->database->find('tasks'));
     }
 

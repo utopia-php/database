@@ -575,6 +575,10 @@ class Redis extends Adapter implements
                 }
                 break;
             case RelationshipType::ManyToMany:
+                $junction = $this->resolveJunctionCollection($collection, $relatedCollection, $side);
+                if ($junction !== null) {
+                    $this->deleteCollection($junction);
+                }
                 break;
         }
 

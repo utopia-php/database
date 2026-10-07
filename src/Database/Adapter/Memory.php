@@ -854,6 +854,10 @@ class Memory extends Adapter implements Feature\Relationships
                 }
                 break;
             case RelationshipType::ManyToMany:
+                $junction = $this->resolveJunctionCollection($collection, $relatedCollection, $side);
+                if ($junction !== null) {
+                    $this->deleteCollection($junction);
+                }
                 break;
         }
 

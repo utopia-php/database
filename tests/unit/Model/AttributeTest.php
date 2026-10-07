@@ -23,7 +23,7 @@ final class AttributeTest extends TestCase
 
     public function testTypesListsTheEighteenAttributeTypes(): void
     {
-        $this->assertCount(18, Attribute::TYPES);
+        $this->assertCount(18, \array_filter(ColumnType::cases(), $this->hydratesAsAttributeType(...)));
         $this->assertSame(Attribute::TYPES, \array_values(\array_unique(Attribute::TYPES, \SORT_REGULAR)));
         $this->assertContains(ColumnType::Relationship, Attribute::TYPES);
         $this->assertNotContains(ColumnType::Tuple, Attribute::TYPES);
@@ -136,7 +136,14 @@ final class AttributeTest extends TestCase
 
     public function testWithFiltersCanClearFilters(): void
     {
-        $this->assertSame([], Attribute::datetime('a')->withFilters([])->filters);
+        $this->assertSame([], Attribute::string('a', filters: ['encrypt'])->withFilters([])->filters);
+    }
+
+    public function testWithFiltersKeepsTheTypeFilter(): void
+    {
+        $this->assertSame(['datetime'], Attribute::datetime('a')->withFilters([])->filters);
+        $this->assertSame(['vector', 'encrypt'], Attribute::vector('a', 3)->withFilters(['encrypt'])->filters);
+        $this->assertSame(['encrypt', 'object'], Attribute::object('a')->withFilters(['encrypt', Filter::Object])->filters);
     }
 
     public function testIsRelationshipReadsTheRawStoredType(): void
@@ -183,5 +190,16 @@ final class AttributeTest extends TestCase
         $this->expectException(Structure::class);
 
         Attribute::typeFromStored('BIGINT');
+    }
+
+    private function hydratesAsAttributeType(ColumnType $type): bool
+    {
+        try {
+            Attribute::typeFromStored($type->value);
+
+            return true;
+        } catch (Structure) {
+            return false;
+        }
     }
 }

@@ -2,12 +2,14 @@
 
 namespace Tests\Unit\Model;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Attribute;
 use Utopia\Database\AttributeUpdate;
 use Utopia\Database\Exception\Structure;
 use Utopia\Database\Filter;
 use Utopia\Database\Format;
+use Utopia\Database\IntegerWidth;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationshipSide;
 use Utopia\Database\Unchanged;
@@ -21,7 +23,9 @@ final class AttributeUpdateTest extends TestCase
 
         $this->assertTrue($update->isEmpty());
         $this->assertFalse($update->changesDefault());
+        $this->assertFalse($update->changesFormat());
         $this->assertSame(Unchanged::Value, $update->default);
+        $this->assertSame(Unchanged::Value, $update->format);
     }
 
     public function testNullDefaultIsAChange(): void
@@ -42,6 +46,7 @@ final class AttributeUpdateTest extends TestCase
             new AttributeUpdate(signed: false),
             new AttributeUpdate(array: false),
             new AttributeUpdate(format: new Format('email')),
+            new AttributeUpdate(format: null),
             new AttributeUpdate(filters: []),
             new AttributeUpdate(key: 'renamed'),
         ];
@@ -118,7 +123,13 @@ final class AttributeUpdateTest extends TestCase
 
     public function testEmptyFiltersClearTheFilters(): void
     {
-        $this->assertSame([], Attribute::datetime('at')->apply(new AttributeUpdate(filters: []))->filters);
+        $this->assertSame([], Attribute::string('name', filters: ['lowercase'])->apply(new AttributeUpdate(filters: []))->filters);
+    }
+
+    public function testClearingFiltersKeepsTheTypeFilter(): void
+    {
+        $this->assertSame(['datetime'], Attribute::datetime('at')->apply(new AttributeUpdate(filters: []))->filters);
+        $this->assertSame(['point', 'encrypt'], Attribute::point('at')->apply(new AttributeUpdate(filters: ['encrypt']))->filters);
     }
 
     public function testFormatReplacesTheFormat(): void
@@ -126,7 +137,33 @@ final class AttributeUpdateTest extends TestCase
         $updated = Attribute::string('name', format: new Format('email'))->apply(new AttributeUpdate(format: new Format('url', ['scheme' => 'https'])));
 
         $this->assertSame('url', $updated->format?->name);
-        $this->assertSame(['scheme' => 'https'], $updated->format?->options);
+        $this->assertSame(['scheme' => 'https'], $updated->format->options);
+    }
+
+    public function testNullFormatIsAChange(): void
+    {
+        $update = new AttributeUpdate(format: null);
+
+        $this->assertTrue($update->changesFormat());
+        $this->assertFalse($update->isEmpty());
+    }
+
+    public function testNullFormatRemovesTheFormat(): void
+    {
+        $updated = Attribute::string('name', format: new Format('email', ['strict' => true]))->apply(new AttributeUpdate(format: null));
+
+        $this->assertNull($updated->format);
+        $this->assertNull($updated->toDocument()->getAttribute('format'));
+        $this->assertSame([], $updated->toDocument()->getAttribute('formatOptions'));
+    }
+
+    public function testOmittedFormatKeepsTheFormat(): void
+    {
+        $format = new Format('email', ['strict' => true]);
+
+        $updated = Attribute::string('name', format: $format)->apply(new AttributeUpdate(size: 32));
+
+        $this->assertSame($format, $updated->format);
     }
 
     public function testSignedAndArrayChange(): void
@@ -144,6 +181,82 @@ final class AttributeUpdateTest extends TestCase
         $this->assertSame(ColumnType::Text, $updated->type);
         $this->assertSame('text', $updated->toDocument()->getAttribute('type'));
         $this->assertSame(100, $updated->size);
+    }
+
+    /**
+     * @return array<string, array{Attribute, ColumnType, Attribute}>
+     */
+    public static function typeChanges(): array
+    {
+        $string = Attribute::string('field', 64);
+        $integer = Attribute::integer('field', signed: false, array: true, width: IntegerWidth::Bits64);
+        $datetime = Attribute::datetime('field', array: true);
+        $point = Attribute::point('field');
+
+        return [
+            'string to varchar' => [$string, ColumnType::Varchar, Attribute::varchar('field', 64)],
+            'string to text' => [$string, ColumnType::Text, Attribute::text('field', 64)],
+            'string to mediumText' => [$string, ColumnType::MediumText, Attribute::mediumText('field', 64)],
+            'string to longText' => [$string, ColumnType::LongText, Attribute::longText('field', 64)],
+            'string to integer' => [$string, ColumnType::Integer, Attribute::integer('field', width: IntegerWidth::Bits64)],
+            'string to bigInteger' => [$string, ColumnType::BigInteger, Attribute::bigInteger('field')],
+            'string to float' => [$string, ColumnType::Float, Attribute::float('field')],
+            'string to double' => [$string, ColumnType::Double, Attribute::double('field')],
+            'string to boolean' => [$string, ColumnType::Boolean, Attribute::boolean('field')],
+            'string to datetime' => [$string, ColumnType::Datetime, Attribute::datetime('field')],
+            'string to id' => [$string, ColumnType::Id, Attribute::id('field')],
+            'string to point' => [$string, ColumnType::Point, Attribute::point('field')],
+            'string to lineString' => [$string, ColumnType::Linestring, Attribute::lineString('field')],
+            'string to polygon' => [$string, ColumnType::Polygon, Attribute::polygon('field')],
+            'string to object' => [$string, ColumnType::Object, Attribute::object('field')],
+            'string to vector' => [$string, ColumnType::Vector, Attribute::vector('field', 64)],
+            'unsigned integer to string' => [$integer, ColumnType::String, Attribute::string('field', 8, array: true)],
+            'unsigned integer to integer of another width' => [Attribute::integer('field', signed: false), ColumnType::BigInteger, Attribute::bigInteger('field', signed: false)],
+            'unsigned integer to double' => [$integer, ColumnType::Double, Attribute::double('field', signed: false, array: true)],
+            'unsigned integer to boolean' => [$integer, ColumnType::Boolean, Attribute::boolean('field', array: true)],
+            'unsigned integer to id' => [$integer, ColumnType::Id, Attribute::id('field', array: true)],
+            'unsigned integer to datetime' => [$integer, ColumnType::Datetime, Attribute::datetime('field', array: true)],
+            'integer array to point' => [$integer, ColumnType::Point, Attribute::point('field')],
+            'integer array to vector' => [$integer, ColumnType::Vector, Attribute::vector('field', 8)],
+            'datetime to integer' => [$datetime, ColumnType::Integer, Attribute::integer('field', signed: false, array: true)],
+            'datetime to string' => [$datetime, ColumnType::String, Attribute::string('field', 0, array: true)],
+            'point to text' => [$point, ColumnType::Text, Attribute::text('field')],
+            'point to polygon' => [$point, ColumnType::Polygon, Attribute::polygon('field')],
+        ];
+    }
+
+    #[DataProvider('typeChanges')]
+    public function testTypeChangeProducesWhatTheTargetFactoryProduces(Attribute $source, ColumnType $type, Attribute $expected): void
+    {
+        $updated = $source->apply(new AttributeUpdate(type: $type));
+
+        $this->assertSame($expected->toDocument()->getArrayCopy(), $updated->toDocument()->getArrayCopy());
+    }
+
+    public function testTypeChangeKeepsUserFiltersAndSwapsTheTypeFilter(): void
+    {
+        $updated = Attribute::string('field', filters: ['encrypt'])
+            ->apply(new AttributeUpdate(type: ColumnType::Datetime))
+            ->apply(new AttributeUpdate(type: ColumnType::Polygon));
+
+        $this->assertSame(['polygon', 'encrypt'], $updated->filters);
+    }
+
+    public function testExplicitFiltersOnATypeChangeAreKept(): void
+    {
+        $updated = Attribute::datetime('field')->apply(new AttributeUpdate(type: ColumnType::String, filters: ['datetime']));
+
+        $this->assertSame(['datetime'], $updated->filters);
+    }
+
+    public function testUpdatesCannotBreakTheTypeInvariants(): void
+    {
+        $this->assertTrue(Attribute::string('name')->apply(new AttributeUpdate(signed: false))->signed);
+        $this->assertFalse(Attribute::datetime('at')->apply(new AttributeUpdate(signed: true))->signed);
+        $this->assertFalse(Attribute::point('at')->apply(new AttributeUpdate(array: true))->array);
+        $this->assertNull(Attribute::boolean('flag')->apply(new AttributeUpdate(size: 4))->size);
+        $this->assertSame(8, Attribute::integer('count')->apply(new AttributeUpdate(size: 20))->size);
+        $this->assertNull(Attribute::integer('count', width: IntegerWidth::Bits64)->apply(new AttributeUpdate(size: 4))->size);
     }
 
     public function testTypeOutsideTheAttributeTypesIsRejected(): void
@@ -182,7 +295,7 @@ final class AttributeUpdateTest extends TestCase
 
         $this->assertSame('writer', $renamed->key);
         $this->assertSame('writer', $renamed->relationship?->key);
-        $this->assertSame('users', $renamed->relationship?->relatedCollection);
+        $this->assertSame('users', $renamed->relationship->relatedCollection);
         $this->assertSame(RelationshipSide::Parent, $renamed->side);
     }
 }

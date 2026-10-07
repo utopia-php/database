@@ -440,6 +440,14 @@ class SQLite extends SQL
     }
 
     /**
+     * SQLite keeps no database name in storage: every name addresses the same tables, so a rename moves nothing.
+     */
+    public function update(string $name, string $new): bool
+    {
+        return true;
+    }
+
+    /**
      * @throws DatabaseException
      */
     #[Override]

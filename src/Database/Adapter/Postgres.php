@@ -151,6 +151,31 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         return $dbCreation;
     }
 
+    /**
+     * A Postgres database is a schema, which renames in place with everything it holds.
+     *
+     * @throws DatabaseException
+     */
+    public function update(string $name, string $new): bool
+    {
+        $name = $this->filter($name);
+        $new = $this->filter($new);
+
+        if (! $this->exists($name)) {
+            throw new NotFoundException('Database not found');
+        }
+
+        if ($this->exists($new)) {
+            throw new DuplicateException('Database already exists');
+        }
+
+        try {
+            return $this->execute($this->prepareStatement("ALTER SCHEMA {$this->quote($name)} RENAME TO {$this->quote($new)}"));
+        } catch (PDOException $error) {
+            throw $this->processException($error);
+        }
+    }
+
     #[\Override]
     public function exists(string $database): bool
     {

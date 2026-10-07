@@ -621,6 +621,14 @@ class Pool extends Adapter implements Feature\Timeouts
         return $result;
     }
 
+    public function update(string $name, string $new): bool
+    {
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+
+        return $result;
+    }
+
     /**
      * {@inheritDoc}
      */

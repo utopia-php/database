@@ -106,6 +106,82 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Spatial, Feat
     }
 
     /**
+     * MariaDB and MySQL cannot rename a database, so every table moves into a new one in a single atomic
+     * `RENAME TABLE` and the emptied database is dropped. Grants on the old database do not move.
+     *
+     * @throws DatabaseException
+     */
+    public function update(string $name, string $new): bool
+    {
+        $name = $this->filter($name);
+        $new = $this->filter($new);
+
+        if (! $this->exists($name)) {
+            throw new NotFoundException('Database not found');
+        }
+
+        if ($this->exists($new)) {
+            throw new DuplicateException('Database already exists');
+        }
+
+        $tables = $this->getTables($name);
+        $schema = $this->schema();
+
+        $this->executeStatement($schema->createDatabase($new)->query, Event::DatabaseCreate);
+
+        if ($tables !== []) {
+            $moves = \array_map(
+                fn (string $table): string => "{$this->quote($name)}.{$this->quote($table)} TO {$this->quote($new)}.{$this->quote($table)}",
+                $tables,
+            );
+
+            try {
+                $this->execute($this->prepareStatement('RENAME TABLE '.\implode(', ', $moves)));
+            } catch (Throwable $error) {
+                $this->executeStatement($schema->dropDatabase($new)->query, Event::DatabaseDelete);
+
+                throw $error instanceof PDOException ? $this->processException($error) : $error;
+            }
+        }
+
+        return $this->executeStatement($schema->dropDatabase($name)->query, Event::DatabaseDelete);
+    }
+
+    /**
+     * @return list<string>
+     *
+     * @throws DatabaseException
+     */
+    private function getTables(string $database): array
+    {
+        $result = $this->createBuilder()
+            ->from('INFORMATION_SCHEMA.TABLES')
+            ->selectRaw('TABLE_NAME')
+            ->filter([BaseQuery::equal('TABLE_SCHEMA', [$database])])
+            ->build();
+
+        $statement = $this->executeResult($result, Event::DatabaseList);
+
+        try {
+            $this->execute($statement);
+            $rows = $statement->fetchAll();
+            $statement->closeCursor();
+        } catch (PDOException $error) {
+            throw $this->processException($error);
+        }
+
+        $tables = [];
+        foreach ($rows as $row) {
+            $table = \is_array($row) ? ($row['TABLE_NAME'] ?? $row['table_name'] ?? null) : null;
+            if (\is_string($table)) {
+                $tables[] = $table;
+            }
+        }
+
+        return $tables;
+    }
+
+    /**
      * Create Collection
      *
      * @param  list<Attribute>  $attributes

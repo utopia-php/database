@@ -12,8 +12,10 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Index;
 use Utopia\Database\Query;
 use Utopia\Database\Storage;
 use Utopia\Mongo\Client;
@@ -225,6 +227,76 @@ class MongoDBTest extends Base
         });
 
         $this->assertSame($definitions, $database->getAuthorization()->skip($listed));
+    }
+
+    public function testUpdateMovesEveryCollectionIntoTheNewDatabase(): void
+    {
+        $suffix = \substr(\uniqid(), -6);
+        $source = $this->testDatabase.'_from'.$suffix;
+        $target = $this->testDatabase.'_to'.$suffix;
+        $occupied = $this->testDatabase.'_taken'.$suffix;
+        $collection = 'renamedBooks';
+
+        $sourceDatabase = $this->databaseBoundTo($source);
+        $targetDatabase = $this->databaseBoundTo($target);
+        $occupiedDatabase = $this->databaseBoundTo($occupied);
+        $authorization = $sourceDatabase->getAuthorization();
+
+        try {
+            $sourceDatabase->create();
+            $authorization->skip(function () use ($sourceDatabase, $collection): void {
+                $sourceDatabase->createCollection(Collection::create(
+                    id: $collection,
+                    attributes: [Attribute::string(key: 'title', size: 64)],
+                    indexes: [Index::unique(key: 'byTitle', attributes: ['title'])],
+                    permissions: [],
+                    documentSecurity: true,
+                ));
+                $sourceDatabase->createDocument($collection, new Document([
+                    '$id' => 'hobbit',
+                    'title' => 'The Hobbit',
+                    '$permissions' => [Permission::read(Role::user('reader'))],
+                ]));
+            });
+            $this->assertNotNull($sourceDatabase->findCollection($collection));
+
+            $this->assertTrue($sourceDatabase->update($source, $target));
+
+            $sourceDatabase->setDatabase($source);
+            $this->assertNull($sourceDatabase->findCollection($collection), 'The definition cached under the old name must not outlive the rename');
+
+            $moved = $targetDatabase->findCollection($collection);
+            $this->assertNotNull($moved);
+            $this->assertContains('byTitle', \array_map(static fn (Index $index): string => $index->key, $moved->indexes()));
+            $this->assertSame('The Hobbit', $authorization->skip(fn (): Document => $targetDatabase->getDocument($collection, 'hobbit'))->getAttribute('title'));
+            $this->actAs('stranger', function () use ($targetDatabase, $collection): void {
+                $this->assertSame([], $targetDatabase->find($collection));
+            });
+            $this->actAs('reader', function () use ($targetDatabase, $collection): void {
+                $this->assertSame(['hobbit'], \array_map(static fn (Document $book): string => $book->getId(), $targetDatabase->find($collection)));
+            });
+
+            $occupiedDatabase->create();
+            $this->expectException(DuplicateException::class);
+            $occupiedDatabase->update($occupied, $target);
+        } finally {
+            $sourceDatabase->delete($source);
+            $targetDatabase->delete($target);
+            $occupiedDatabase->delete($occupied);
+        }
+    }
+
+    private function databaseBoundTo(string $name): Database
+    {
+        $database = new Database(new Mongo(new Client($name, 'mongo', 27017, 'root', 'password', false)), $this->getDatabase()->getCache());
+        $database->getAdapter()->setSupportForAttributes(true);
+        assert(self::$authorization !== null);
+        $database
+            ->setAuthorization(self::$authorization)
+            ->setDatabase($name)
+            ->setNamespace(static::$namespace);
+
+        return $database;
     }
 
     protected function deleteColumn(string $collection, string $column): bool

@@ -9,6 +9,8 @@ use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Contention as ContentionException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Index as IndexException;
+use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Hook\Transform;
@@ -837,12 +839,10 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     abstract public function delete(string $name): bool;
 
     /**
-     * Create Collection
-     *
-     * @param  array<Attribute>  $attributes  (optional)
-     * @param  array<Index>  $indexes  (optional)
+     * @param  list<Attribute>  $attributes
+     * @param  list<Index>  $indexes
      */
-    abstract public function createCollection(string $name, array $attributes = [], array $indexes = []): bool;
+    abstract public function createCollection(string $collection, array $attributes = [], array $indexes = []): bool;
 
     /**
      * Delete Collection
@@ -865,7 +865,7 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     /**
      * Create Attributes
      *
-     * @param  array<Attribute>  $attributes
+     * @param  list<Attribute>  $attributes
      *
      * @throws TimeoutException
      * @throws DuplicateException
@@ -873,9 +873,9 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     abstract public function createAttributes(string $collection, array $attributes): bool;
 
     /**
-     * Update Attribute
+     * Alter the column stored under $key to match $attribute, renaming it when $attribute->key differs.
      */
-    abstract public function updateAttribute(string $collection, Attribute $attribute, ?string $newKey = null): bool;
+    abstract public function updateAttribute(string $collection, string $key, Attribute $attribute): bool;
 
     /**
      * Relax a column's null constraint when an attribute stops being required.
@@ -1107,6 +1107,30 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
      * Get current attribute count from collection document
      */
     abstract public function getCountOfAttributes(Document $collection): int;
+
+    /**
+     * @return list<Attribute>
+     *
+     * @throws StructureException
+     */
+    protected static function collectionAttributes(Document $collection): array
+    {
+        return $collection instanceof Collection
+            ? $collection->attributes()
+            : Collection::fromArray($collection->getArrayCopy())->attributes();
+    }
+
+    /**
+     * @return list<Index>
+     *
+     * @throws IndexException
+     */
+    protected static function collectionIndexes(Document $collection): array
+    {
+        return $collection instanceof Collection
+            ? $collection->indexes()
+            : Collection::fromArray($collection->getArrayCopy())->indexes();
+    }
 
     /**
      * Get current index count from collection document

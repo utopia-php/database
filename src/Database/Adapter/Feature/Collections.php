@@ -11,14 +11,10 @@ use Utopia\Database\Index;
 interface Collections
 {
     /**
-     * Create a new collection with optional attributes and indexes.
-     *
-     * @param string $name The collection name.
-     * @param array<Attribute> $attributes Initial attributes for the collection.
-     * @param array<Index> $indexes Initial indexes for the collection.
-     * @return bool True on success.
+     * @param list<Attribute> $attributes
+     * @param list<Index> $indexes
      */
-    public function createCollection(string $name, array $attributes = [], array $indexes = []): bool;
+    public function createCollection(string $collection, array $attributes = [], array $indexes = []): bool;
 
     /**
      * Delete a collection by its identifier.

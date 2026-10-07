@@ -2,9 +2,9 @@
 
 namespace Utopia\Database\Validator;
 
-use Utopia\Database\Attribute as AttributeVO;
+use Utopia\Database\Attribute;
 use Utopia\Database\Document;
-use Utopia\Database\Index as IndexVO;
+use Utopia\Database\Index;
 use Utopia\Validator;
 
 /**
@@ -17,19 +17,19 @@ class IndexDependency extends Validator
     protected bool $castIndexSupport;
 
     /**
-     * @var array<IndexVO>
+     * @var list<Index>
      */
     protected array $indexes;
 
     /**
-     * @param  array<IndexVO|Document>  $indexes
+     * @param  array<Index|Document>  $indexes
      */
     public function __construct(array $indexes, bool $castIndexSupport)
     {
         $this->castIndexSupport = $castIndexSupport;
         $this->indexes = [];
         foreach ($indexes as $index) {
-            $this->indexes[] = $index instanceof IndexVO ? $index : IndexVO::fromDocument($index);
+            $this->indexes[] = $index instanceof Index ? $index : Index::fromDocument($index);
         }
     }
 
@@ -44,7 +44,7 @@ class IndexDependency extends Validator
     /**
      * Is valid.
      *
-     * @param  AttributeVO|Document  $value
+     * @param  Attribute|Document  $value
      */
     public function isValid($value): bool
     {
@@ -52,16 +52,16 @@ class IndexDependency extends Validator
             return true;
         }
 
-        $attribute = $value instanceof AttributeVO ? $value : AttributeVO::fromDocument($value);
+        $attribute = $value instanceof Attribute ? $value : Attribute::fromDocument($value);
 
-        if (! $attribute->isArray()) {
+        if (! $attribute->array) {
             return true;
         }
 
-        $key = \strtolower($attribute->getKey());
+        $key = \strtolower($attribute->key);
 
         foreach ($this->indexes as $index) {
-            foreach ($index->getIndexedAttributes() as $indexedAttribute) {
+            foreach ($index->attributes as $indexedAttribute) {
                 if ($key === \strtolower($indexedAttribute)) {
                     return false;
                 }

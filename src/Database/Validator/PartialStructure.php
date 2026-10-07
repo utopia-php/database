@@ -11,10 +11,6 @@ use Utopia\Database\Document;
 class PartialStructure extends Structure
 {
     /**
-     * Is valid.
-     *
-     * Returns true if valid or false if not.
-     *
      * @param  mixed  $document
      */
     public function isValid($document): bool
@@ -31,37 +27,24 @@ class PartialStructure extends Structure
             return false;
         }
 
-        $keys = [];
         $structure = $document->getArrayCopy();
-        /** @var array<string, mixed> $collectionAttributes */
-        $collectionAttributes = $this->collection->getAttribute('attributes', []);
-        /** @var array<string, mixed> $attributes */
-        $attributes = \array_merge($this->attributes, $collectionAttributes);
+        $definitions = $this->definitions();
 
-        foreach ($attributes as $attribute) {
-            /** @var array<string, mixed> $attribute */
-            /** @var string $name */
-            $name = $attribute[Document::ID] ?? '';
-            $keys[$name] = $attribute;
-        }
-        $requiredAttributes = [];
-        foreach ($this->attributes as $attribute) {
-            /** @var array<string, mixed> $attribute */
-            /** @var string $attrId */
-            $attrId = $attribute[Document::ID] ?? '';
-            if ($attribute['required'] === true && $document->offsetExists($attrId)) {
-                $requiredAttributes[] = $attribute;
+        $required = [];
+        foreach (self::internalAttributes() as $attribute) {
+            if ($attribute->required && $document->offsetExists($attribute->key)) {
+                $required[] = $attribute;
             }
         }
 
-        if (! $this->checkForAllRequiredValues($structure, $requiredAttributes, $keys)) {
+        if (! $this->checkForAllRequiredValues($structure, $required)) {
             return false;
         }
-        if (! $this->checkForUnknownAttributes($structure, $keys)) {
+        if (! $this->checkForUnknownAttributes($structure, $definitions)) {
             return false;
         }
 
-        if (! $this->checkForInvalidAttributeValues($document, $structure, $keys)) {
+        if (! $this->checkForInvalidAttributeValues($document, $structure, $definitions)) {
             return false;
         }
 

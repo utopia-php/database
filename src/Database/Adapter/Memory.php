@@ -372,9 +372,13 @@ class Memory extends Adapter implements Feature\Relationships
         return true;
     }
 
-    public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
+    /**
+     * @param  list<Attribute>  $attributes
+     * @param  list<Index>  $indexes
+     */
+    public function createCollection(string $collection, array $attributes = [], array $indexes = []): bool
     {
-        $key = $this->key($name);
+        $key = $this->key($collection);
         if (isset($this->data[$key])) {
             throw new DuplicateException('Collection already exists');
         }
@@ -393,29 +397,16 @@ class Memory extends Adapter implements Feature\Relationships
             if (! isset($this->databases[$database])) {
                 $this->databases[$database] = [];
             }
-            $databaseSlot = $this->filter($name);
+            $databaseSlot = $this->filter($collection);
             $this->databases[$database][$databaseSlot] = $key;
         }
 
         foreach ($attributes as $attribute) {
-            $attributeId = $this->filter($attribute->getKey());
-            $this->data[$key]['attributes'][$attributeId] = [
-                'type' => $attribute->getType()->value,
-                'size' => $attribute->getSize(),
-                'signed' => $attribute->isSigned(),
-                'array' => $attribute->isArray(),
-                'required' => $attribute->isRequired(),
-            ];
+            $this->data[$key]['attributes'][$this->filter($attribute->key)] = self::attributeEntry($attribute);
         }
 
         foreach ($indexes as $index) {
-            $indexId = $this->filter($index->getKey());
-            $this->data[$key]['indexes'][$indexId] = [
-                'type' => $index->getType()->value,
-                'attributes' => $index->getIndexedAttributes(),
-                'lengths' => $index->getLengths(),
-                'orders' => $index->getAttribute('orders', []),
-            ];
+            $this->data[$key]['indexes'][$this->filter($index->key)] = self::indexEntry($index);
         }
 
         $this->journal(function () use ($key, $database, $databaseSlot): void {
@@ -434,7 +425,34 @@ class Memory extends Adapter implements Feature\Relationships
         return true;
     }
 
-    public function deleteCollection(string $id): bool
+/**
+     * @return array{type: string, size: int, signed: bool, array: bool, required: bool}
+     */
+    private static function attributeEntry(Attribute $attribute): array
+    {
+        return [
+            'type' => $attribute->type->value,
+            'size' => $attribute->size ?? 0,
+            'signed' => $attribute->signed,
+            'array' => $attribute->array,
+            'required' => $attribute->required,
+        ];
+    }
+
+    /**
+     * @return array{type: string, attributes: list<string>, lengths: list<?int>, orders: list<?string>}
+     */
+    private static function indexEntry(Index $index): array
+    {
+        return [
+            'type' => $index->type->value,
+            'attributes' => $index->attributes,
+            'lengths' => $index->lengths,
+            'orders' => \array_map(static fn (?OrderDirection $order): ?string => $order?->value, $index->orders),
+        ];
+    }
+
+        public function deleteCollection(string $id): bool
     {
         $key = $this->key($id);
         $previousData = $this->data[$key] ?? null;
@@ -495,15 +513,9 @@ class Memory extends Adapter implements Feature\Relationships
             throw new NotFoundException('Collection not found');
         }
 
-        $id = $this->filter($attribute->getKey());
+        $id = $this->filter($attribute->key);
         $previous = $this->data[$key]['attributes'][$id] ?? null;
-        $this->data[$key]['attributes'][$id] = [
-            'type' => $attribute->getType()->value,
-            'size' => $attribute->getSize(),
-            'signed' => $attribute->isSigned(),
-            'array' => $attribute->isArray(),
-            'required' => $attribute->isRequired(),
-        ];
+        $this->data[$key]['attributes'][$id] = self::attributeEntry($attribute);
 
         $this->journal(function () use ($key, $id, $previous): void {
             if ($previous === null) {
@@ -516,6 +528,9 @@ class Memory extends Adapter implements Feature\Relationships
         return true;
     }
 
+    /**
+     * @param  list<Attribute>  $attributes
+     */
     public function createAttributes(string $collection, array $attributes): bool
     {
         foreach ($attributes as $attribute) {
@@ -525,33 +540,27 @@ class Memory extends Adapter implements Feature\Relationships
         return true;
     }
 
-    public function updateAttribute(string $collection, Attribute $attribute, ?string $newKey = null): bool
+    public function updateAttribute(string $collection, string $key, Attribute $attribute): bool
     {
-        $key = $this->key($collection);
-        if (! isset($this->data[$key])) {
+        $collectionKey = $this->key($collection);
+        if (! isset($this->data[$collectionKey])) {
             throw new NotFoundException('Collection not found');
         }
 
-        $id = $this->filter($attribute->getKey());
-        if (! empty($newKey) && $newKey !== $id) {
-            $this->renameAttribute($collection, $id, $newKey);
-            $id = $this->filter($newKey);
+        $id = $this->filter($key);
+        if ($attribute->key !== $key) {
+            $this->renameAttribute($collection, $id, $attribute->key);
+            $id = $this->filter($attribute->key);
         }
 
-        $previous = $this->data[$key]['attributes'][$id] ?? null;
-        $this->data[$key]['attributes'][$id] = [
-            'type' => $attribute->getType()->value,
-            'size' => $attribute->getSize(),
-            'signed' => $attribute->isSigned(),
-            'array' => $attribute->isArray(),
-            'required' => $attribute->isRequired(),
-        ];
+        $previous = $this->data[$collectionKey]['attributes'][$id] ?? null;
+        $this->data[$collectionKey]['attributes'][$id] = self::attributeEntry($attribute);
 
-        $this->journal(function () use ($key, $id, $previous): void {
+        $this->journal(function () use ($collectionKey, $id, $previous): void {
             if ($previous === null) {
-                unset($this->data[$key]['attributes'][$id]);
+                unset($this->data[$collectionKey]['attributes'][$id]);
             } else {
-                $this->data[$key]['attributes'][$id] = $previous;
+                $this->data[$collectionKey]['attributes'][$id] = $previous;
             }
         });
 
@@ -1026,11 +1035,8 @@ class Memory extends Adapter implements Feature\Relationships
             throw new NotFoundException('Collection not found');
         }
 
-        $id = $index->getKey();
-        $type = $index->getType()->value;
-        $attributes = $index->getIndexedAttributes();
-        $lengths = $index->getLengths();
-        $orders = $index->getAttribute('orders', []);
+        $type = $index->type->value;
+        $attributes = $index->attributes;
 
         $hashTable = [];
         if ($type === IndexType::Unique->value && ! empty($attributes)) {
@@ -1062,13 +1068,8 @@ class Memory extends Adapter implements Feature\Relationships
             }
         }
 
-        $id = $this->filter($id);
-        $this->data[$key]['indexes'][$id] = [
-            'type' => $type,
-            'attributes' => $attributes,
-            'lengths' => $lengths,
-            'orders' => $orders,
-        ];
+        $id = $this->filter($index->key);
+        $this->data[$key]['indexes'][$id] = self::indexEntry($index);
         if ($type === IndexType::Unique->value && ! empty($attributes)) {
             $this->uniqueIndexHashes[$key][$id] = $hashTable;
         }
@@ -1910,16 +1911,12 @@ class Memory extends Adapter implements Feature\Relationships
 
     public function getCountOfAttributes(Document $collection): int
     {
-        $attributes = $collection->getAttribute('attributes', []);
-
-        return (\is_array($attributes) ? \count($attributes) : 0) + $this->getCountOfDefaultAttributes();
+        return \count(self::collectionAttributes($collection)) + $this->getCountOfDefaultAttributes();
     }
 
     public function getCountOfIndexes(Document $collection): int
     {
-        $indexes = $collection->getAttribute('indexes', []);
-
-        return (\is_array($indexes) ? \count($indexes) : 0) + $this->getCountOfDefaultIndexes();
+        return \count(self::collectionIndexes($collection)) + $this->getCountOfDefaultIndexes();
     }
 
     public function getCountOfDefaultAttributes(): int

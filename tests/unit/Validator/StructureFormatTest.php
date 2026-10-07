@@ -4,6 +4,7 @@ namespace Tests\Unit\Validator;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Utopia\Database\Attribute;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -59,7 +60,7 @@ final class StructureFormatTest extends TestCase
     }
 
     #[DataProvider('codes')]
-    public function testAFormatSeesAnAttributeDefinedAsAPlainArrayAsItIs(string $code, bool $valid): void
+    public function testAFormatSeesAnAttributeDefinedAsAPlainArrayInItsStoredShape(string $code, bool $valid): void
     {
         $definition = $this->definition();
         $collection = $this->collection();
@@ -68,11 +69,11 @@ final class StructureFormatTest extends TestCase
         $validator = new Structure($collection, ColumnType::Integer->value);
 
         $this->assertSame($valid, $validator->isValid($this->document($code)), $validator->getDescription());
-        $this->assertSame([$definition], $this->received, 'the format callback receives the stored array unchanged');
+        $this->assertSame([$this->storedShape($definition)], $this->received, 'the format callback receives the attribute in its stored shape');
     }
 
     #[DataProvider('codes')]
-    public function testAFormatSeesAnAttributeDefinedAsADocumentAsAnArray(string $code, bool $valid): void
+    public function testAFormatSeesAnAttributeDefinedAsADocumentInItsStoredShape(string $code, bool $valid): void
     {
         $definition = $this->definition();
         $collection = $this->collection();
@@ -81,7 +82,7 @@ final class StructureFormatTest extends TestCase
         $validator = new Structure($collection, ColumnType::Integer->value);
 
         $this->assertSame($valid, $validator->isValid($this->document($code)), $validator->getDescription());
-        $this->assertSame([$definition], $this->received);
+        $this->assertSame([$this->storedShape($definition)], $this->received);
     }
 
     /**
@@ -100,6 +101,15 @@ final class StructureFormatTest extends TestCase
             'array' => false,
             'filters' => [],
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $definition
+     * @return array<string, mixed>
+     */
+    private function storedShape(array $definition): array
+    {
+        return Attribute::fromArray($definition)->toDocument()->getArrayCopy();
     }
 
     private function collection(): Document

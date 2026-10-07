@@ -653,9 +653,10 @@ class Pool extends Adapter
     }
 
     /**
-     * {@inheritDoc}
+     * @param  list<Attribute>  $attributes
+     * @param  list<Index>  $indexes
      */
-    public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
+    public function createCollection(string $collection, array $attributes = [], array $indexes = []): bool
     {
         /** @var bool $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());
@@ -693,7 +694,7 @@ class Pool extends Adapter
     }
 
     /**
-     * {@inheritDoc}
+     * @param  list<Attribute>  $attributes
      */
     public function createAttributes(string $collection, array $attributes): bool
     {
@@ -702,10 +703,7 @@ class Pool extends Adapter
         return $result;
     }
 
-    /**
-     * {@inheritDoc}
-     */
-    public function updateAttribute(string $collection, Attribute $attribute, ?string $newKey = null): bool
+    public function updateAttribute(string $collection, string $key, Attribute $attribute): bool
     {
         /** @var bool $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());

@@ -488,31 +488,21 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
     /**
      * Create Collection
      *
-     * @param  array<Attribute>  $attributes
-     * @param  array<Index>  $indexes
+     * @param  list<Attribute>  $attributes
+     * @param  list<Index>  $indexes
      *
      * @throws Exception
      * @throws PDOException
      */
-    public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
+    public function createCollection(string $collection, array $attributes = [], array $indexes = []): bool
     {
-        $id = $this->filter($name);
+        $id = $this->filter($collection);
 
         /** @var array<string> $attributeStrings */
         $attributeStrings = [];
 
         foreach ($attributes as $key => $attribute) {
-            $attributeId = $this->filter($attribute->getKey());
-
-            $sqlType = $this->getSQLType(
-                $attribute->getType(),
-                $attribute->getSize(),
-                $attribute->isSigned(),
-                $attribute->isArray(),
-                $attribute->isRequired()
-            );
-
-            $attributeStrings[$key] = '`'.$attributeId.'` '.$sqlType.', ';
+            $attributeStrings[$key] = '`'.$this->filter($attribute->key).'` '.$this->getAttributeSqlType($attribute).', ';
         }
 
         // SQLite stores integers regardless of declared type, but
@@ -523,7 +513,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         $tenantType = $this->emulateMySQL ? '"INT(11) UNSIGNED"' : 'INTEGER';
         $tenantQuery = $this->sharedTables ? "{$this->quote(Storage::TENANT)} {$tenantType} DEFAULT NULL," : '';
 
-        $collection = "
+        $table = "
 			CREATE TABLE {$this->getSQLTable($id)} (
 				{$this->quote(Storage::SEQUENCE)} INTEGER PRIMARY KEY AUTOINCREMENT,
 				{$this->quote(Storage::UID)} VARCHAR(36) NOT NULL,
@@ -548,7 +538,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         $created = false;
 
         try {
-            $this->execute($this->prepare($collection, event: Event::CollectionCreate));
+            $this->execute($this->prepare($table, event: Event::CollectionCreate));
             $created = true;
 
             $this->execute($this->prepare($permissions, event: Event::CollectionCreate));
@@ -565,14 +555,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             }
 
             foreach ($indexes as $index) {
-                $this->createIndex($id, new Index(
-                    key: $this->filter($index->getKey()),
-                    type: $index->getType(),
-                    attributes: $index->getIndexedAttributes(),
-                    lengths: $index->getLengths(),
-                    orders: $index->getOrders(),
-                    ttl: $index->getTtl(),
-                ), event: Event::CollectionCreate);
+                $this->createIndex($id, $index->withKey($this->filter($index->key)), event: Event::CollectionCreate);
             }
         } catch (Throwable $error) {
             if ($error instanceof PDOException) {
@@ -703,10 +686,10 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
      * @throws Exception
      * @throws PDOException
      */
-    public function updateAttribute(string $collection, Attribute $attribute, ?string $newKey = null): bool
+    public function updateAttribute(string $collection, string $key, Attribute $attribute): bool
     {
-        if (! empty($newKey) && $newKey !== $attribute->getKey()) {
-            return $this->renameAttribute($collection, $attribute->getKey(), $newKey);
+        if ($attribute->key !== $key) {
+            return $this->renameAttribute($collection, $key, $attribute->key);
         }
 
         // SQLite is dynamically typed — `ALTER TABLE ... MODIFY COLUMN` is
@@ -715,9 +698,10 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         // raise the same TruncateException MariaDB throws. Off-
         // emulation the declared size is metadata-only, so skip the
         // scan and let the rename branch (if any) handle the rest.
-        if ($this->emulateMySQL && $attribute->getType() === ColumnType::String && $attribute->getSize() > 0 && ! $attribute->isArray()) {
+        $size = $attribute->size ?? 0;
+        if ($this->emulateMySQL && $attribute->type === ColumnType::String && $size > 0 && ! $attribute->array) {
             $name = $this->filter($collection);
-            $column = $this->filter($attribute->getKey());
+            $column = $this->filter($attribute->key);
 
             // Under shared tables the underlying table is shared across
             // tenants; scoping the scan by `_tenant` keeps tenant A's
@@ -727,7 +711,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             $sql = "SELECT 1 FROM {$this->getSQLTable($name)} WHERE LENGTH(`{$column}`) > :max{$tenantClause} LIMIT 1";
 
             $statement = $this->prepare($sql, event: Event::AttributeUpdate);
-            $statement->bindValue(':max', $attribute->getSize(), PDO::PARAM_INT);
+            $statement->bindValue(':max', $size, PDO::PARAM_INT);
             if ($this->sharedTables) {
                 $statement->bindValue(':'.Storage::TENANT, $this->currentTenant(), \is_int($this->currentTenant()) ? PDO::PARAM_INT : PDO::PARAM_STR);
             }
@@ -740,7 +724,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             }
 
             if ($exceeds) {
-                throw new TruncateException("Attribute '{$attribute->getKey()}' has values exceeding new size {$attribute->getSize()}");
+                throw new TruncateException("Attribute '{$attribute->key}' has values exceeding new size {$size}");
             }
         }
 
@@ -817,9 +801,9 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         Event $event = Event::IndexCreate,
     ): bool {
         $name = $this->filter($collection);
-        $id = $this->filter($index->getKey());
-        $type = $index->getType();
-        $attributes = $index->getIndexedAttributes();
+        $id = $this->filter($index->key);
+        $type = $index->type;
+        $attributes = $index->attributes;
 
         if ($type === IndexType::Fulltext) {
             return $this->createFulltextIndex($name, $id, $attributes, $event);
@@ -2539,7 +2523,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
      * shared SQL implementation that joins many ADD COLUMN clauses with
      * commas doesn't parse here. Loop over createAttribute instead.
      *
-     * @param array<Attribute> $attributes
+     * @param list<Attribute> $attributes
      */
     public function createAttributes(string $collection, array $attributes): bool
     {

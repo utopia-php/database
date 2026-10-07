@@ -4,9 +4,10 @@ namespace Utopia\Database\Validator;
 
 use Exception;
 use Throwable;
-use Utopia\Database\Attribute as AttributeVO;
+use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
 use Utopia\Database\Document;
-use Utopia\Database\Index as IndexVO;
+use Utopia\Database\Index;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Query\Base;
 use Utopia\Query\Method;
@@ -25,22 +26,23 @@ class IndexedQueries extends Queries
     private const string UPDATED_AT_INDEX = '_updated_at_';
 
     /**
-     * @var array<AttributeVO>
+     * @var list<Index>|null
+     */
+    private static ?array $internalIndexes = null;
+
+    /**
+     * @var list<Attribute>
      */
     protected array $attributes = [];
 
     /**
-     * @var array<IndexVO>
+     * @var list<Index>
      */
     protected array $indexes = [];
 
     /**
-     * Expression constructor
-     *
-     * This Queries Validator filters indexes for only available indexes
-     *
-     * @param  array<AttributeVO|Document>  $attributes
-     * @param  array<IndexVO|Document>  $indexes
+     * @param  array<Attribute|Document>  $attributes
+     * @param  array<Index|Document>  $indexes
      * @param  array<Base>  $validators
      *
      * @throws Exception
@@ -48,15 +50,17 @@ class IndexedQueries extends Queries
     public function __construct(array $attributes = [], array $indexes = [], array $validators = [])
     {
         foreach ($attributes as $attribute) {
-            $this->attributes[] = $attribute instanceof AttributeVO ? $attribute : AttributeVO::fromDocument($attribute);
+            $this->attributes[] = $attribute instanceof Attribute ? $attribute : Attribute::fromDocument($attribute);
         }
 
-        $this->indexes[] = new IndexVO(key: self::UID_INDEX, type: IndexType::Unique, attributes: [Document::ID]);
-        $this->indexes[] = new IndexVO(key: self::CREATED_AT_INDEX, type: IndexType::Key, attributes: [Document::CREATED_AT]);
-        $this->indexes[] = new IndexVO(key: self::UPDATED_AT_INDEX, type: IndexType::Key, attributes: [Document::UPDATED_AT]);
+        $this->indexes = self::$internalIndexes ??= [
+            Index::unique(self::UID_INDEX, [Document::ID]),
+            Index::key(self::CREATED_AT_INDEX, [Document::CREATED_AT]),
+            Index::key(self::UPDATED_AT_INDEX, [Document::UPDATED_AT]),
+        ];
 
         foreach ($indexes as $index) {
-            $this->indexes[] = $index instanceof IndexVO ? $index : IndexVO::fromDocument($index);
+            $this->indexes[] = $index instanceof Index ? $index : Index::fromDocument($index);
         }
 
         parent::__construct($validators);
@@ -90,7 +94,7 @@ class IndexedQueries extends Queries
 
     /**
      * @param  array<BaseQuery>  $queries
-     * @return array<string, list<IndexVO>> The indexes of the collection each join alias names
+     * @return array<string, list<Index>> The indexes of the collection each join alias names
      */
     private function joinIndexes(array $queries): array
     {
@@ -106,13 +110,13 @@ class IndexedQueries extends Queries
                 continue;
             }
 
-            /** @var array<IndexVO|Document> $definitions */
-            $definitions = $this->getJoinedCollection($query->getAttribute())?->getAttribute('indexes', []) ?? [];
+            $collection = $this->getJoinedCollection($query->getAttribute());
 
-            $indexes[$alias] = [];
-            foreach ($definitions as $index) {
-                $indexes[$alias][] = $index instanceof IndexVO ? $index : IndexVO::fromDocument($index);
-            }
+            $indexes[$alias] = match (true) {
+                $collection === null => [],
+                $collection instanceof Collection => $collection->indexes(),
+                default => Collection::fromArray($collection->getArrayCopy())->indexes(),
+            };
         }
 
         return $indexes;
@@ -156,7 +160,7 @@ class IndexedQueries extends Queries
 
     /**
      * @param  array<BaseQuery>  $queries
-     * @param  array<string, list<IndexVO>>  $joinIndexes
+     * @param  array<string, list<Index>>  $joinIndexes
      */
     private function validateSearchIndexes(array $queries, array $joinIndexes): bool
     {
@@ -179,8 +183,8 @@ class IndexedQueries extends Queries
 
                 foreach ($indexes as $index) {
                     if (
-                        $index->getType() === IndexType::Fulltext
-                        && $index->getIndexedAttributes() === [$column]
+                        $index->type === IndexType::Fulltext
+                        && $index->attributes === [$column]
                     ) {
                         $matched = true;
                     }

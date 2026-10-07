@@ -228,9 +228,13 @@ class Redis extends Adapter implements
         return true;
     }
 
-    public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
+    /**
+     * @param  list<Attribute>  $attributes
+     * @param  list<Index>  $indexes
+     */
+    public function createCollection(string $collection, array $attributes = [], array $indexes = []): bool
     {
-        $id = $this->filter($name);
+        $id = $this->filter($collection);
         $colsKey = $this->key($this->ns(), 'cols');
         $metaKey = $this->key($this->ns(), 'meta', $id);
         $idxKey = $this->idxKey($id);
@@ -241,32 +245,24 @@ class Redis extends Adapter implements
 
         $attributePayload = [];
         foreach ($attributes as $attribute) {
-            $attributePayload[] = [
-                Document::ID => $attribute->getKey(),
-                'key' => $attribute->getKey(),
-                'type' => Attribute::persistedType($attribute->getType()),
-                'size' => $attribute->getSize(),
-                'signed' => $attribute->isSigned(),
-                'array' => $attribute->isArray(),
-                'required' => $attribute->isRequired(),
-            ];
+            $attributePayload[] = self::attributeRecord($attribute->key, $attribute);
         }
 
         $indexPayload = [];
         foreach ($indexes as $index) {
             $indexPayload[] = [
-                Document::ID => $index->getKey(),
-                'key' => $index->getKey(),
-                'type' => $index->getType()->value,
-                'attributes' => $index->getIndexedAttributes(),
-                'lengths' => $index->getLengths(),
-                'orders' => $index->getAttribute('orders', []),
+                Document::ID => $index->key,
+                'key' => $index->key,
+                'type' => $index->type->value,
+                'attributes' => $index->attributes,
+                'lengths' => $index->lengths,
+                'orders' => self::orderValues($index),
             ];
         }
 
         $schema = new Document([
             Document::ID => $id,
-            'name' => $name,
+            'name' => $collection,
             'attributes' => $attributePayload,
             'indexes' => $indexPayload,
         ]);
@@ -286,7 +282,31 @@ class Redis extends Adapter implements
         return true;
     }
 
-    public function deleteCollection(string $id): bool
+/**
+     * @return array<string, mixed>
+     */
+    private static function attributeRecord(string $id, Attribute $attribute): array
+    {
+        return [
+            Document::ID => $id,
+            'key' => $id,
+            'type' => Attribute::storedType($attribute->type),
+            'size' => $attribute->size ?? 0,
+            'signed' => $attribute->signed,
+            'array' => $attribute->array,
+            'required' => $attribute->required,
+        ];
+    }
+
+    /**
+     * @return list<?string>
+     */
+    private static function orderValues(Index $index): array
+    {
+        return \array_map(static fn (?OrderDirection $order): ?string => $order?->value, $index->orders);
+    }
+
+        public function deleteCollection(string $id): bool
     {
         $id = $this->filter($id);
         $namespace = $this->getNamespace();
@@ -319,22 +339,14 @@ class Redis extends Adapter implements
     public function createAttribute(string $collection, Attribute $attribute): bool
     {
         $collection = $this->filter($collection);
-        $id = $this->filter($attribute->getKey());
+        $id = $this->filter($attribute->key);
         $metaKey = $this->key($this->ns(), 'meta', $collection);
 
         if ((bool) $this->client->exists($metaKey) === false) {
             throw new NotFoundException('Collection not found');
         }
 
-        $record = [
-            Document::ID => $id,
-            'key' => $id,
-            'type' => Attribute::persistedType($attribute->getType()),
-            'size' => $attribute->getSize(),
-            'signed' => $attribute->isSigned(),
-            'array' => $attribute->isArray(),
-            'required' => $attribute->isRequired(),
-        ];
+        $record = self::attributeRecord($id, $attribute);
 
         $this->tx(function (RedisClient $client) use ($metaKey, $record): void {
             $attrs = $this->readAttributesField($client, $metaKey);
@@ -345,6 +357,9 @@ class Redis extends Adapter implements
         return true;
     }
 
+    /**
+     * @param  list<Attribute>  $attributes
+     */
     public function createAttributes(string $collection, array $attributes): bool
     {
         foreach ($attributes as $attribute) {
@@ -354,30 +369,22 @@ class Redis extends Adapter implements
         return true;
     }
 
-    public function updateAttribute(string $collection, Attribute $attribute, ?string $newKey = null): bool
+    public function updateAttribute(string $collection, string $key, Attribute $attribute): bool
     {
         $collection = $this->filter($collection);
-        $id = $this->filter($attribute->getKey());
+        $id = $this->filter($key);
         $metaKey = $this->key($this->ns(), 'meta', $collection);
 
         if ((bool) $this->client->exists($metaKey) === false) {
             throw new NotFoundException('Collection not found');
         }
 
-        if (! empty($newKey) && $newKey !== $id) {
-            $this->renameAttribute($collection, $id, $newKey);
-            $id = $this->filter($newKey);
+        if ($attribute->key !== $key) {
+            $this->renameAttribute($collection, $id, $attribute->key);
+            $id = $this->filter($attribute->key);
         }
 
-        $record = [
-            Document::ID => $id,
-            'key' => $id,
-            'type' => Attribute::persistedType($attribute->getType()),
-            'size' => $attribute->getSize(),
-            'signed' => $attribute->isSigned(),
-            'array' => $attribute->isArray(),
-            'required' => $attribute->isRequired(),
-        ];
+        $record = self::attributeRecord($id, $attribute);
 
         $this->tx(function (RedisClient $client) use ($metaKey, $record): void {
             $attrs = $this->readAttributesField($client, $metaKey);
@@ -577,17 +584,17 @@ class Redis extends Adapter implements
     public function createIndex(string $collection, Index $index, array $indexAttributeTypes = [], array $collation = []): bool
     {
         $collection = $this->filter($collection);
-        $id = $this->filter($index->getKey());
+        $id = $this->filter($index->key);
         $metaKey = $this->key($this->ns(), 'meta', $collection);
 
         if ((bool) $this->client->exists($metaKey) === false) {
             throw new NotFoundException('Collection not found');
         }
 
-        $type = $index->getType()->value;
-        $attributes = $index->getIndexedAttributes();
-        $lengths = $index->getLengths();
-        $orders = $index->getAttribute('orders', []);
+        $type = $index->type->value;
+        $attributes = $index->attributes;
+        $lengths = $index->lengths;
+        $orders = self::orderValues($index);
 
         $this->tx(function (RedisClient $client) use ($metaKey, $collection, $id, $type, $attributes, $lengths, $orders): void {
             $indexes = $this->readIndexesField($client, $metaKey);
@@ -652,9 +659,9 @@ class Redis extends Adapter implements
                 Document::ID => $id,
                 'key' => $id,
                 'type' => $type,
-                'attributes' => \array_values($attributes),
-                'lengths' => \array_values($lengths),
-                'orders' => \array_values(\is_array($orders) ? $orders : []),
+                'attributes' => $attributes,
+                'lengths' => $lengths,
+                'orders' => $orders,
             ];
 
             $client->hSet($metaKey, 'indexes', \json_encode($indexes, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
@@ -1499,16 +1506,12 @@ class Redis extends Adapter implements
 
     public function getCountOfAttributes(Document $collection): int
     {
-        $attributes = $collection->getAttribute('attributes', []);
-
-        return (\is_array($attributes) ? \count($attributes) : 0) + $this->getCountOfDefaultAttributes();
+        return \count(self::collectionAttributes($collection)) + $this->getCountOfDefaultAttributes();
     }
 
     public function getCountOfIndexes(Document $collection): int
     {
-        $indexes = $collection->getAttribute('indexes', []);
-
-        return (\is_array($indexes) ? \count($indexes) : 0) + $this->getCountOfDefaultIndexes();
+        return \count(self::collectionIndexes($collection)) + $this->getCountOfDefaultIndexes();
     }
 
     public function getCountOfDefaultAttributes(): int

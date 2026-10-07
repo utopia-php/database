@@ -4,9 +4,10 @@ namespace Utopia\Database\Traits;
 
 use Exception;
 use Throwable;
+use Utopia\Console;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
-use Utopia\Database\Capability;
+use Utopia\Database\Collection;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
@@ -17,12 +18,8 @@ use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Structure as StructureException;
-use Utopia\Database\Helpers\ID;
 use Utopia\Database\Index;
-use Utopia\Database\SetType;
 use Utopia\Database\Storage;
-use Utopia\Database\Validator\Index as IndexValidator;
-use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 
 /**
@@ -31,155 +28,354 @@ use Utopia\Query\Schema\IndexType;
 trait Indexes
 {
     /**
-     * Create Index
-     *
-     * @param  string  $collection  The collection identifier
-     * @param  Index  $index  The index definition to create
-     * @return bool True if the index was created successfully
+     * @return Index The index as stored
      *
      * @throws AuthorizationException
      * @throws ConflictException
      * @throws DatabaseException
      * @throws DuplicateException
+     * @throws IndexException
      * @throws LimitException
+     * @throws NotFoundException
      * @throws StructureException
      * @throws Exception
      */
-    public function createIndex(string $collection, Index $index): bool
+    public function createIndex(string $collection, Index $index): Index
     {
-        $id = $index->getKey();
-        $type = $index->getType();
-        $attributes = $index->getIndexedAttributes();
-        $lengths = $index->getLengths();
-        $orders = $index->getOrders();
-        $ttl = $index->getTtl();
+        return $this->storeIndexes($collection, [$index])[0];
+    }
 
-        if (empty($attributes)) {
-            throw new DatabaseException('Missing attributes');
+    /**
+     * Every index is validated before any is created, and the metadata is written once. When the engine fails
+     * part way, the indexes this call already created are dropped again.
+     *
+     * @param  list<Index>  $indexes
+     * @return list<Index> The indexes as stored
+     *
+     * @throws AuthorizationException
+     * @throws ConflictException
+     * @throws DatabaseException
+     * @throws DuplicateException
+     * @throws IndexException
+     * @throws LimitException
+     * @throws NotFoundException
+     * @throws StructureException
+     * @throws Exception
+     */
+    public function createIndexes(string $collection, array $indexes): array
+    {
+        if ($indexes === []) {
+            return [];
         }
 
-        $collection = $this->silent(fn () => $this->getCollection($collection));
-        // index IDs are case-insensitive
-        $indexes = $collection->getAttribute('indexes', []);
+        return $this->storeIndexes($collection, $indexes);
+    }
 
-        /** @var array<Document> $indexes */
-        foreach ($indexes as $existingIndex) {
-            if (\strtolower($existingIndex->getId()) === \strtolower($id)) {
+    /**
+     * @throws AuthorizationException
+     * @throws ConflictException
+     * @throws DatabaseException
+     * @throws DuplicateException
+     * @throws NotFoundException
+     * @throws StructureException
+     */
+    public function renameIndex(string $collection, string $old, string $new): void
+    {
+        $definition = $this->silent(fn () => $this->getCollection($collection));
+        $indexes = $definition->indexes();
+
+        $position = self::indexPosition($indexes, $old);
+        if ($position === null) {
+            throw new NotFoundException('Index not found');
+        }
+
+        if (self::indexPosition($indexes, $new) !== null) {
+            throw new DuplicateException('Index name already used');
+        }
+
+        $renamed = $indexes[$position]->withKey($new);
+        $indexes[$position] = $renamed;
+        $this->writeIndexList($definition, $indexes);
+
+        $renamedInSchema = false;
+        try {
+            $renamedInSchema = $this->adapter->renameIndex($definition->getId(), $old, $new);
+            if (! $renamedInSchema) {
+                throw new DatabaseException('Failed to rename index');
+            }
+        } catch (Throwable $error) {
+            $renamedInSchema = $this->completePriorIndexRename($definition->getId(), $old, $new, $error);
+        }
+
+        $this->updateMetadata(
+            collection: $definition,
+            rollbackOperation: fn () => $this->adapter->renameIndex($definition->getId(), $new, $old),
+            shouldRollback: $renamedInSchema,
+            operationDescription: "index rename '{$old}' to '{$new}'"
+        );
+
+        $this->withRetries(fn () => $this->purgeCachedCollection($definition->getId()));
+
+        $this->triggerHooks(
+            Event::IndexRename,
+            $renamed->toDocument()->setAttribute(Document::COLLECTION, $definition->getId()),
+        );
+    }
+
+    /**
+     * @throws AuthorizationException
+     * @throws ConflictException
+     * @throws DatabaseException
+     * @throws NotFoundException
+     * @throws StructureException
+     */
+    public function deleteIndex(string $collection, string $key): void
+    {
+        $definition = $this->silent(fn () => $this->getCollection($collection));
+        $indexes = $definition->indexes();
+
+        $position = self::indexPosition($indexes, $key);
+        if ($position === null) {
+            throw new NotFoundException('Index not found');
+        }
+
+        $deleted = $indexes[$position];
+
+        $deletedInSchema = false;
+        try {
+            if (! $this->adapter->deleteIndex($definition->getId(), $key)) {
+                throw new DatabaseException('Failed to delete index');
+            }
+            $deletedInSchema = true;
+        } catch (NotFoundException) {
+            // Already absent from the schema; the metadata is still removed below.
+        }
+
+        unset($indexes[$position]);
+        $this->writeIndexList($definition, \array_values($indexes));
+
+        $attributeTypes = self::indexAttributeTypes($deleted, $definition->attributes());
+
+        $this->updateMetadata(
+            collection: $definition,
+            rollbackOperation: fn () => $this->adapter->createIndex($definition->getId(), $deleted, $attributeTypes),
+            shouldRollback: $deletedInSchema,
+            operationDescription: "index deletion '{$key}'",
+            silentRollback: true
+        );
+
+        $this->withRetries(fn () => $this->purgeCachedCollection($definition->getId()));
+
+        $this->triggerHooks(
+            Event::IndexDelete,
+            $deleted->toDocument()->setAttribute(Document::COLLECTION, $definition->getId()),
+        );
+    }
+
+    /**
+     * @param  non-empty-list<Index>  $indexes
+     * @return non-empty-list<Index>
+     *
+     * @throws DatabaseException
+     * @throws DuplicateException
+     * @throws IndexException
+     * @throws LimitException
+     * @throws Exception
+     */
+    private function storeIndexes(string $collection, array $indexes): array
+    {
+        $definition = $this->silent(fn () => $this->getCollection($collection));
+        $attributes = $definition->attributes();
+        $existing = $definition->indexes();
+
+        $prepared = $this->prepareIndexes($definition, $attributes, $existing, $indexes);
+
+        $created = [];
+        try {
+            foreach ($prepared as $index) {
+                if ($this->createIndexInSchema($definition->getId(), $index, $attributes)) {
+                    $created[] = $index->key;
+                }
+            }
+        } catch (Throwable $error) {
+            try {
+                $this->cleanupIndexes($definition->getId(), $created);
+            } catch (Throwable $cleanupError) {
+                Console::error('Failed to roll back indexes created before the failure: '.$cleanupError->getMessage());
+            }
+
+            throw $error;
+        }
+
+        $this->writeIndexList($definition, [...$existing, ...$prepared]);
+
+        $keys = \implode("', '", \array_map(static fn (Index $index): string => $index->key, $prepared));
+
+        $this->updateMetadata(
+            collection: $definition,
+            rollbackOperation: fn () => $this->cleanupIndexes($definition->getId(), $created),
+            shouldRollback: $created !== [],
+            operationDescription: "index creation '{$keys}'"
+        );
+
+        $this->withRetries(fn () => $this->purgeCachedCollection($definition->getId()));
+
+        foreach ($prepared as $index) {
+            $this->triggerHooks(
+                Event::IndexCreate,
+                $index->toDocument()->setAttribute(Document::COLLECTION, $definition->getId()),
+            );
+        }
+
+        return $prepared;
+    }
+
+    /**
+     * Fits each index to its attributes and validates it against the stored indexes and the ones before it.
+     *
+     * @param  list<Attribute>  $attributes
+     * @param  list<Index>  $existing
+     * @param  non-empty-list<Index>  $indexes
+     * @return non-empty-list<Index>
+     *
+     * @throws DatabaseException
+     * @throws DuplicateException
+     * @throws IndexException
+     * @throws LimitException
+     */
+    private function prepareIndexes(Collection $definition, array $attributes, array $existing, array $indexes): array
+    {
+        $keys = [];
+        foreach ($existing as $index) {
+            $keys[\strtolower($index->key)] = true;
+        }
+
+        foreach ($indexes as $index) {
+            if ($index->attributes === []) {
+                throw new DatabaseException('Missing attributes');
+            }
+
+            $key = \strtolower($index->key);
+            if (isset($keys[$key])) {
                 throw new DuplicateException('Index already exists');
             }
+            $keys[$key] = true;
         }
 
-        if ($this->adapter->getCountOfIndexes($collection) >= $this->adapter->getLimitForIndexes()) {
+        if ($this->adapter->getCountOfIndexes($definition) + \count($indexes) > $this->adapter->getLimitForIndexes()) {
             throw new LimitException('Index limit reached. Cannot create new index.');
         }
 
-        /** @var array<Attribute> $collectionAttributes */
-        $collectionAttributes = $collection->getAttribute('attributes', []);
-        $indexAttributesWithTypes = [];
-        foreach ($attributes as $position => $attribute) {
-            // Support nested paths on object attributes using dot notation:
-            // attribute.key.nestedKey -> base attribute "attribute"
-            $baseAttribute = $attribute;
-            if (\str_contains($attribute, '.')) {
-                $baseAttribute = \explode('.', $attribute, 2)[0];
+        $prepared = [];
+        foreach ($indexes as $index) {
+            $index = $this->fitIndexToAttributes($index, $attributes);
+
+            if ($this->validation()->get()) {
+                $validator = $this->indexValidator($attributes, [...$existing, ...$prepared]);
+                if (! $validator->isValid($index)) {
+                    throw new IndexException($validator->getDescription());
+                }
             }
 
-            foreach ($collectionAttributes as $typedAttribute) {
-                if ($typedAttribute->getKey() === $baseAttribute) {
+            $prepared[] = $index;
+        }
 
-                    $indexAttributesWithTypes[$attribute] = $typedAttribute->getType()->value;
+        return $prepared;
+    }
 
-                    /**
-                     * mysql does not save length in collection when length = attributes size
-                     */
-                    if ($typedAttribute->getType() === ColumnType::String) {
-                        if (! empty($lengths[$position]) && $lengths[$position] === $typedAttribute->getSize() && $this->adapter->getMaxIndexLength() > 0) {
-                            $lengths[$position] = null;
-                        }
-                    }
+    /**
+     * @param  list<Attribute>  $attributes
+     * @return bool True when this call created the index, false when the schema already held it
+     *
+     * @throws DatabaseException
+     * @throws DuplicateException
+     */
+    private function createIndexInSchema(string $collection, Index $index, array $attributes): bool
+    {
+        if ($this->reconcileSchemaOnlyIndex($collection, $index)) {
+            return false;
+        }
 
-                    if ($typedAttribute->isArray()) {
-                        if ($this->adapter->getMaxIndexLength() > 0) {
-                            $lengths[$position] = self::MAX_ARRAY_INDEX_LENGTH;
-                        }
-                        $orders[$position] = null;
-                    }
+        try {
+            if (! $this->adapter->createIndex($collection, $index, self::indexAttributeTypes($index, $attributes))) {
+                throw new DatabaseException('Failed to create index');
+            }
+        } catch (DuplicateException) {
+            // The metadata holds no index under this key, so the schema's copy is an orphan of a
+            // partial failure: it is kept and the metadata written for it.
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Index attributes by the type of the attribute they index; a dotted path into an object attribute
+     * takes the object attribute's type.
+     *
+     * @param  list<Attribute>  $attributes
+     * @return array<string, string>
+     */
+    private static function indexAttributeTypes(Index $index, array $attributes): array
+    {
+        $types = [];
+        foreach ($index->attributes as $indexed) {
+            $base = \explode('.', $indexed, 2)[0];
+            foreach ($attributes as $attribute) {
+                if ($attribute->key === $base) {
+                    $types[$indexed] = $attribute->type->value;
                     break;
                 }
             }
         }
 
-        $index = new Index(
-            key: $id,
-            type: $type,
-            attributes: $attributes,
-            lengths: $lengths,
-            orders: $orders,
-            ttl: $ttl
-        );
+        return $types;
+    }
 
-        if ($this->validation()->get()) {
-            /** @var array<Index> $collectionIndexes */
-            $collectionIndexes = $collection->getAttribute('indexes', []);
-
-            $validator = new IndexValidator(
-                $collectionAttributes,
-                $collectionIndexes,
-                $this->adapter->getMaxIndexLength(),
-                $this->adapter->getInternalIndexesKeys(),
-                $this->adapter->supports(Capability::IndexArray),
-                $this->adapter->supports(Capability::SpatialIndexNull),
-                $this->adapter->supports(Capability::SpatialIndexOrder),
-                $this->adapter->supports(Capability::Vectors),
-                $this->adapter->supports(Capability::DefinedAttributes),
-                $this->adapter->supports(Capability::MultipleFulltextIndexes),
-                $this->adapter->supports(Capability::IdenticalIndexes),
-                $this->adapter->supports(Capability::ObjectIndexes),
-                $this->adapter->supports(Capability::TrigramIndex),
-                $this->adapter->hasFeature(Feature\Spatial::class),
-                $this->adapter->supports(Capability::Index),
-                $this->adapter->supports(Capability::UniqueIndex),
-                $this->adapter->supports(Capability::Fulltext),
-                $this->adapter->supports(Capability::TTLIndexes),
-                $this->adapter->supports(Capability::Objects)
-            );
-            if (! $validator->isValid($index)) {
-                throw new IndexException($validator->getDescription());
+    /**
+     * @param  list<Index>  $indexes
+     */
+    private static function indexPosition(array $indexes, string $key): ?int
+    {
+        foreach ($indexes as $position => $index) {
+            if ($index->key === $key) {
+                return $position;
             }
         }
 
-        $created = false;
+        return null;
+    }
 
-        if (! $this->reconcileSchemaOnlyIndex($collection->getId(), $index)) {
-            try {
-                $created = $this->adapter->createIndex($collection->getId(), $index, $indexAttributesWithTypes);
+    /**
+     * @param  list<Index>  $indexes
+     */
+    private function writeIndexList(Collection $definition, array $indexes): void
+    {
+        $definition->setAttribute(
+            self::COLLECTION_INDEXES,
+            \array_map(static fn (Index $index): Document => $index->toDocument(), $indexes),
+        );
+    }
 
-                if (! $created) {
-                    throw new DatabaseException('Failed to create index');
-                }
-            } catch (DuplicateException) {
-                // Metadata check (lines above) already verified index is absent
-                // from metadata. A DuplicateException from the adapter means the
-                // index exists only in physical schema — an orphan from a prior
-                // partial failure. Skip creation and proceed to metadata update.
+    /**
+     * A failed rename may follow a prior partial failure whose rename reached the schema while its metadata
+     * update and rollback failed. Renaming back and forth again proves the schema holds the index under the
+     * new name and completes the rename.
+     *
+     * @throws DatabaseException
+     */
+    private function completePriorIndexRename(string $collection, string $old, string $new, Throwable $error): bool
+    {
+        try {
+            if (! $this->adapter->renameIndex($collection, $new, $old)) {
+                throw new DatabaseException('Failed to rename index');
             }
+            if (! $this->adapter->renameIndex($collection, $old, $new)) {
+                throw new DatabaseException('Failed to rename index');
+            }
+        } catch (Throwable) {
+            throw new DatabaseException("Failed to rename index '{$old}' to '{$new}': ".$error->getMessage(), previous: $error);
         }
-
-        $collection->setAttribute('indexes', $index, SetType::Append);
-
-        $this->updateMetadata(
-            collection: $collection,
-            rollbackOperation: fn () => $this->cleanupIndex($collection->getId(), $id),
-            shouldRollback: $created,
-            operationDescription: "index creation '{$id}'"
-        );
-
-        $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
-
-        $this->triggerHooks(
-            Event::IndexCreate,
-            $index->toDocument()->setAttribute(Document::COLLECTION, $collection->getId()),
-        );
 
         return true;
     }
@@ -200,7 +396,7 @@ trait Indexes
             return false;
         }
 
-        $id = \strtolower($this->adapter->filter($index->getKey()));
+        $id = \strtolower($this->adapter->filter($index->key));
         foreach ($this->adapter->getInternalIndexesKeys() as $internal) {
             if (\strtolower($this->adapter->filter($internal)) === $id) {
                 return false;
@@ -221,7 +417,7 @@ trait Indexes
             }
 
             try {
-                $this->adapter->deleteIndex($collection, $index->getKey());
+                $this->adapter->deleteIndex($collection, $index->key);
             } catch (NotFoundException) {
                 // Already absent from the schema
             }
@@ -251,20 +447,18 @@ trait Indexes
             \array_shift($lengths);
         }
 
-        $indexedAttributes = $index->getIndexedAttributes();
-        if (\count($columns) !== \count($indexedAttributes)) {
+        if (\count($columns) !== \count($index->attributes)) {
             return false;
         }
 
-        $indexLengths = $index->getLengths();
-        foreach (\array_values($indexedAttributes) as $position => $attribute) {
+        foreach ($index->attributes as $position => $attribute) {
             if ($columns[$position] === '') {
                 continue;
             }
             if ($columns[$position] !== \strtolower($this->adapter->filter(Storage::column($attribute)))) {
                 return false;
             }
-            if ($lengths[$position] !== (int) ($indexLengths[$position] ?? 0)) {
+            if ($lengths[$position] !== ($index->lengths[$position] ?? 0)) {
                 return false;
             }
         }
@@ -276,261 +470,35 @@ trait Indexes
             'SPATIAL' => IndexType::Spatial,
             default => \is_numeric($nonUnique) && (int) $nonUnique === 0 ? IndexType::Unique : IndexType::Key,
         };
-        $requestedType = $index->getType() === IndexType::Index ? IndexType::Key : $index->getType();
 
-        return $schemaType === $requestedType;
+        return $schemaType === $index->type;
     }
 
     /**
-     * Rename Index
+     * Drops indexes created in the adapter whose metadata could not be stored.
      *
-     * @param  string  $collection  The collection identifier
-     * @param  string  $old  Current index ID
-     * @param  string  $new  New index ID
-     * @return bool True if the index was renamed successfully
+     * @param  list<string>  $keys
      *
-     * @throws AuthorizationException
-     * @throws ConflictException
-     * @throws DatabaseException
-     * @throws DuplicateException
-     * @throws StructureException
+     * @throws DatabaseException If a cleanup fails after all retries
      */
-    public function renameIndex(string $collection, string $old, string $new): bool
+    private function cleanupIndexes(string $collection, array $keys, int $maxAttempts = 3): void
     {
-        $collection = $this->silent(fn () => $this->getCollection($collection));
-
-        /** @var array<Document> $indexes */
-        $indexes = $collection->getAttribute('indexes', []);
-
-        $index = \in_array($old, \array_map(fn ($idx) => $idx[Document::ID], $indexes));
-
-        if ($index === false) {
-            throw new NotFoundException('Index not found');
-        }
-
-        $indexNewExists = \in_array($new, \array_map(fn ($idx) => $idx[Document::ID], $indexes));
-
-        if ($indexNewExists !== false) {
-            throw new DuplicateException('Index name already used');
-        }
-
-        /** @var Document|null $indexNew */
-        $indexNew = null;
-        foreach ($indexes as $key => $value) {
-            if ($value->getId() === $old) {
-                $value->setAttribute('key', $new);
-                $value->setAttribute(Document::ID, $new);
-                $indexNew = $value;
-                $indexes[$key] = $value;
-                break;
-            }
-        }
-
-        if ($indexNew === null) {
-            throw new NotFoundException('Index not found');
-        }
-
-        $collection->setAttribute('indexes', $indexes);
-
-        $renamed = false;
-        try {
-            $renamed = $this->adapter->renameIndex($collection->getId(), $old, $new);
-            if (! $renamed) {
-                throw new DatabaseException('Failed to rename index');
-            }
-        } catch (Throwable $e) {
-            // Check if the rename already happened in schema (orphan from prior
-            // partial failure where rename succeeded but metadata update and
-            // rollback both failed). Verify by attempting a reverse rename — if
-            // $new exists in schema, the reverse succeeds confirming a prior rename.
+        $failure = null;
+        foreach ($keys as $key) {
             try {
-                if (! $this->adapter->renameIndex($collection->getId(), $new, $old)) {
-                    throw new DatabaseException('Failed to rename index');
-                }
-                // Reverse succeeded — index was at $new. Re-rename to complete.
-                $renamed = $this->adapter->renameIndex($collection->getId(), $old, $new);
-                if (! $renamed) {
-                    throw new DatabaseException('Failed to rename index');
-                }
-            } catch (Throwable) {
-                // Reverse also failed — genuine error
-                throw new DatabaseException("Failed to rename index '{$old}' to '{$new}': ".$e->getMessage(), previous: $e);
+                $this->cleanup(
+                    fn () => $this->adapter->deleteIndex($collection, $key),
+                    'index',
+                    $key,
+                    $maxAttempts
+                );
+            } catch (Throwable $error) {
+                $failure ??= $error;
             }
         }
 
-        $this->updateMetadata(
-            collection: $collection,
-            rollbackOperation: fn () => $this->adapter->renameIndex($collection->getId(), $new, $old),
-            shouldRollback: $renamed,
-            operationDescription: "index rename '{$old}' to '{$new}'"
-        );
-
-        $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
-
-        $this->triggerHooks(
-            Event::IndexRename,
-            (clone $indexNew)->setAttribute(Document::COLLECTION, $collection->getId()),
-        );
-
-        return true;
-    }
-
-    /**
-     * Delete Index
-     *
-     * @param  string  $collection  The collection identifier
-     * @param  string  $id  The index identifier to delete
-     * @return bool True if the index was deleted successfully
-     *
-     * @throws AuthorizationException
-     * @throws ConflictException
-     * @throws DatabaseException
-     * @throws StructureException
-     */
-    public function deleteIndex(string $collection, string $id): bool
-    {
-        $collection = $this->silent(fn () => $this->getCollection($collection));
-
-        /** @var array<Index> $indexes */
-        $indexes = $collection->getAttribute('indexes', []);
-
-        /** @var Index|null $indexDeleted */
-        $indexDeleted = null;
-        foreach ($indexes as $key => $value) {
-            if ($value->getId() === $id) {
-                $indexDeleted = $value;
-                unset($indexes[$key]);
-            }
+        if ($failure !== null) {
+            throw $failure;
         }
-
-        if (\is_null($indexDeleted)) {
-            throw new NotFoundException('Index not found');
-        }
-
-        $shouldRollback = false;
-        $deleted = false;
-        try {
-            $deleted = $this->adapter->deleteIndex($collection->getId(), $id);
-
-            if (! $deleted) {
-                throw new DatabaseException('Failed to delete index');
-            }
-            $shouldRollback = true;
-        } catch (NotFoundException) {
-            // Index already absent from schema; treat as deleted
-            $deleted = true;
-        }
-
-        $collection->setAttribute('indexes', \array_values($indexes));
-
-        /** @var array<Attribute> $collectionAttributes */
-        $collectionAttributes = $collection->getAttribute('attributes', []);
-        $typedDeletedIndex = $indexDeleted;
-        /** @var array<string, string> $indexAttributeTypes */
-        $indexAttributeTypes = [];
-        foreach ($typedDeletedIndex->getIndexedAttributes() as $attribute) {
-            $baseAttribute = \str_contains($attribute, '.') ? \explode('.', $attribute, 2)[0] : $attribute;
-            foreach ($collectionAttributes as $collectionAttribute) {
-                if ($collectionAttribute->getKey() === $baseAttribute) {
-                    $indexAttributeTypes[$attribute] = $collectionAttribute->getType()->value;
-                    break;
-                }
-            }
-        }
-
-        $rollbackIndex = new Index(
-            key: $id,
-            type: $typedDeletedIndex->getType(),
-            attributes: $typedDeletedIndex->getIndexedAttributes(),
-            lengths: $typedDeletedIndex->getLengths(),
-            orders: $typedDeletedIndex->getOrders(),
-            ttl: $typedDeletedIndex->getTtl()
-        );
-        $this->updateMetadata(
-            collection: $collection,
-            rollbackOperation: fn () => $this->adapter->createIndex(
-                $collection->getId(),
-                $rollbackIndex,
-                $indexAttributeTypes,
-            ),
-            shouldRollback: $shouldRollback,
-            operationDescription: "index deletion '{$id}'",
-            silentRollback: true
-        );
-
-        $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
-
-        $this->triggerHooks(
-            Event::IndexDelete,
-            $indexDeleted->toDocument()->setAttribute(Document::COLLECTION, $collection->getId()),
-        );
-
-        return $deleted;
-    }
-
-    /**
-     * Update index metadata. Utility method for update index methods.
-     *
-     * @param  callable(Index, Document, int|string): void  $updateCallback
-     *
-     * @throws ConflictException
-     * @throws DatabaseException
-     */
-    protected function updateIndexMeta(string $collection, string $id, callable $updateCallback): Index
-    {
-        $collection = $this->silent(fn () => $this->getCollection($collection));
-
-        if ($collection->getId() === self::METADATA) {
-            throw new DatabaseException('Cannot update metadata indexes');
-        }
-
-        /** @var array<Index> $indexes */
-        $indexes = $collection->getAttribute('indexes', []);
-        $index = \array_search($id, \array_map(fn (Index $candidate) => $candidate->getKey(), $indexes), true);
-
-        if ($index === false) {
-            throw new NotFoundException('Index not found');
-        }
-
-        $indexModel = $indexes[$index];
-
-        $updateCallback($indexModel, $collection, $index);
-        $indexes[$index] = $indexModel;
-
-        $collection->setAttribute('indexes', $indexes);
-
-        $this->updateMetadata(
-            collection: $collection,
-            rollbackOperation: null,
-            shouldRollback: false,
-            operationDescription: "index metadata update '{$id}'"
-        );
-
-        $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
-
-        return $indexModel;
-    }
-
-    /**
-     * Cleanup an index that was created in the adapter but whose metadata
-     * persistence failed.
-     *
-     * @param  string  $collectionId  The collection ID
-     * @param  string  $indexId  The index ID
-     * @param  int  $maxAttempts  Maximum retry attempts
-     *
-     * @throws DatabaseException If cleanup fails after all retries
-     */
-    private function cleanupIndex(
-        string $collectionId,
-        string $indexId,
-        int $maxAttempts = 3
-    ): void {
-        $this->cleanup(
-            fn () => $this->adapter->deleteIndex($collectionId, $indexId),
-            'index',
-            $indexId,
-            $maxAttempts
-        );
     }
 }

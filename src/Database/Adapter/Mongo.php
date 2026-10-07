@@ -24,6 +24,7 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Query as QueryException;
+use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Type as TypeException;
@@ -714,19 +715,19 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     /**
      * Create Collection
      *
-     * @param  array<Attribute>  $attributes
-     * @param  array<Index>  $indexes
+     * @param  list<Attribute>  $attributes
+     * @param  list<Index>  $indexes
      *
      * @throws Exception
      */
-    public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
+    public function createCollection(string $collection, array $attributes = [], array $indexes = []): bool
     {
-        $id = $this->getNamespace().'_'.$this->filter($name);
+        $id = $this->getNamespace().'_'.$this->filter($collection);
 
         // In shared-tables mode or for metadata, the physical collection may
         // already exist for another tenant. Return early to avoid a
         // "Collection Exists" exception from the client.
-        if (! $this->inTransaction && ($this->getSharedTables() || $name === Database::METADATA) && $this->exists($this->getNamespace(), $name)) {
+        if (! $this->inTransaction && ($this->getSharedTables() || $collection === Database::METADATA) && $this->exists($this->getNamespace(), $collection)) {
             return true;
         }
 
@@ -738,7 +739,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 return true;
             }
             $error = $this->processException($error);
-            if ($error instanceof DuplicateException && ($this->getSharedTables() || $name === Database::METADATA)) {
+            if ($error instanceof DuplicateException && ($this->getSharedTables() || $collection === Database::METADATA)) {
                 return true;
             }
             throw $error;
@@ -792,35 +793,29 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
              */
             $newIndexes = [];
 
-            $collectionAttributes = $attributes;
-
             foreach ($indexes as $indexPosition => $index) {
                 $key = [];
                 $unique = false;
-                $attributes = $index->getIndexedAttributes();
-                $orders = $index->getOrders();
-                $indexType = $index->getType();
+                $indexType = $index->type;
 
                 if ($this->shouldAddTenantToIndex($index)) {
                     $key[Storage::TENANT] = $this->getOrder(OrderDirection::Asc);
                 }
 
-                foreach ($attributes as $attributePosition => $attribute) {
-                    $attribute = $this->filter($this->getInternalKeyForAttribute((string) $attribute));
+                foreach ($index->attributes as $attributePosition => $attribute) {
+                    $attribute = $this->filter($this->getInternalKeyForAttribute($attribute));
 
                     switch ($indexType) {
                         case IndexType::Key:
-                            $order = $this->getOrder(OrderDirection::tryFrom(Index::direction($orders[$attributePosition] ?? null)) ?? OrderDirection::Asc);
+                        case IndexType::Ttl:
+                            $order = $this->getOrder($index->orders[$attributePosition] ?? OrderDirection::Asc);
                             break;
                         case IndexType::Fulltext:
                             $order = 'text';
                             break;
                         case IndexType::Unique:
-                            $order = $this->getOrder(OrderDirection::tryFrom(Index::direction($orders[$attributePosition] ?? null)) ?? OrderDirection::Asc);
+                            $order = $this->getOrder($index->orders[$attributePosition] ?? OrderDirection::Asc);
                             $unique = true;
-                            break;
-                        case IndexType::Ttl:
-                            $order = $this->getOrder(OrderDirection::tryFrom(Index::direction($orders[$attributePosition] ?? null)) ?? OrderDirection::Asc);
                             break;
                         default:
                             return false;
@@ -831,7 +826,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
                 $newIndexes[$indexPosition] = [
                     'key' => $key,
-                    'name' => $this->filter($index->getKey()),
+                    'name' => $this->filter($index->key),
                     'unique' => $unique,
                 ];
 
@@ -839,20 +834,17 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                     $newIndexes[$indexPosition]['default_language'] = 'none';
                 }
 
-                if ($indexType === IndexType::Ttl) {
-                    $ttl = $index->getTtl();
-                    if ($ttl > 0) {
-                        $newIndexes[$indexPosition]['expireAfterSeconds'] = $ttl;
-                    }
+                if ($indexType === IndexType::Ttl && $index->ttl > 0) {
+                    $newIndexes[$indexPosition]['expireAfterSeconds'] = $index->ttl;
                 }
 
                 if (in_array($indexType, [IndexType::Unique, IndexType::Key])) {
                     $fields = [];
-                    foreach ($attributes as $indexedAttribute) {
+                    foreach ($index->attributes as $indexedAttribute) {
                         $attributeType = ColumnType::String;
-                        foreach ($collectionAttributes as $collectionAttribute) {
-                            if ($collectionAttribute->getKey() === $indexedAttribute) {
-                                $attributeType = $collectionAttribute->getType();
+                        foreach ($attributes as $collectionAttribute) {
+                            if ($collectionAttribute->key === $indexedAttribute) {
+                                $attributeType = $collectionAttribute->type;
                                 break;
                             }
                         }
@@ -936,7 +928,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     /**
      * Create Attributes
      *
-     * @param  array<Attribute>  $attributes
+     * @param  list<Attribute>  $attributes
      *
      * @throws DatabaseException
      */
@@ -948,10 +940,10 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     /**
      * Update Attribute.
      */
-    public function updateAttribute(string $collection, Attribute $attribute, ?string $newKey = null): bool
+    public function updateAttribute(string $collection, string $key, Attribute $attribute): bool
     {
-        if (! empty($newKey) && $newKey !== $attribute->getKey()) {
-            return $this->renameAttribute($collection, $attribute->getKey(), $newKey);
+        if ($attribute->key !== $key) {
+            return $this->renameAttribute($collection, $key, $attribute->key);
         }
 
         return true;
@@ -1157,12 +1149,11 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     public function createIndex(string $collection, Index $index, array $indexAttributeTypes = [], array $collation = []): bool
     {
         $name = $this->getNamespace().'_'.$this->filter($collection);
-        $id = $this->filter($index->getKey());
-        $type = $index->getType();
-        $indexedAttributes = $index->getIndexedAttributes();
+        $id = $this->filter($index->key);
+        $type = $index->type;
+        $indexedAttributes = $index->attributes;
         $attributes = $indexedAttributes;
-        $orders = $index->getOrders();
-        $ttl = $index->getTtl();
+        $ttl = $index->ttl;
         /** @var array<string, mixed> $indexes */
         $indexes = [];
         $options = [];
@@ -1176,8 +1167,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         }
 
         foreach ($attributes as $position => $attribute) {
-            $attribute = (string) $attribute;
-
             if (isset($indexAttributeTypes[$attribute]) && \str_contains($attribute, '.') && $indexAttributeTypes[$attribute] === ColumnType::Object->value) {
                 $dottedAttributes = \explode('.', $attribute);
                 $expandedAttributes = array_map(fn (string $part): string => $this->filter($part), $dottedAttributes);
@@ -1186,7 +1175,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 $attributes[$position] = $this->filter($this->getInternalKeyForAttribute($attribute));
             }
 
-            $orderType = $this->getOrder(OrderDirection::tryFrom(Index::direction($orders[$position] ?? null)) ?? OrderDirection::Asc);
+            $orderType = $this->getOrder($index->orders[$position] ?? OrderDirection::Asc);
             $indexKey[$attributes[$position]] = $orderType;
 
             switch ($type) {
@@ -1237,7 +1226,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         if (in_array($type, [IndexType::Unique, IndexType::Key])) {
             $fields = [];
             foreach ($attributes as $position => $filteredAttribute) {
-                $fields[$filteredAttribute] = Attribute::tryNormalizeType($indexAttributeTypes[$indexedAttributes[$position]] ?? '') ?? ColumnType::String;
+                $fields[$filteredAttribute] = self::indexedColumnType($indexAttributeTypes[$indexedAttributes[$position]] ?? '');
             }
             if (! empty($fields)) {
                 $indexes['partialFilterExpression'] = $this->getPartialFilterExpression($type, $fields);
@@ -2887,11 +2876,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      */
     public function getCountOfAttributes(Document $collection): int
     {
-        $rawAttrCount = $collection->getAttribute('attributes');
-        $attrArray = \is_array($rawAttrCount) ? $rawAttrCount : [];
-        $attributes = \count($attrArray);
-
-        return $attributes + static::getCountOfDefaultAttributes();
+        return \count(self::collectionAttributes($collection)) + $this->getCountOfDefaultAttributes();
     }
 
     /**
@@ -2899,16 +2884,11 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      */
     public function getCountOfIndexes(Document $collection): int
     {
-        $rawIdxCount = $collection->getAttribute('indexes');
-        $idxArray = \is_array($rawIdxCount) ? $rawIdxCount : [];
-        $indexes = \count($idxArray);
-
-        return $indexes + static::getCountOfDefaultIndexes();
+        return \count(self::collectionIndexes($collection)) + $this->getCountOfDefaultIndexes();
     }
 
     /**
      * Returns number of attributes used by default.
-     *p
      */
     public function getCountOfDefaultAttributes(): int
     {
@@ -3843,6 +3823,15 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         };
     }
 
+    private static function indexedColumnType(string $type): ColumnType
+    {
+        try {
+            return Attribute::typeFromStored($type);
+        } catch (StructureException) {
+            return ColumnType::String;
+        }
+    }
+
     /**
      * Check if tenant should be added to index
      *
@@ -3855,7 +3844,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         }
 
         if ($indexOrType instanceof Index) {
-            $indexType = $indexOrType->getType();
+            $indexType = $indexOrType->type;
         } elseif ($indexOrType instanceof Document) {
             $rawIndexType = $indexOrType->getAttribute('type');
             $indexTypeValue = \is_string($rawIndexType) ? $rawIndexType : (\is_scalar($rawIndexType) ? (string) $rawIndexType : '');

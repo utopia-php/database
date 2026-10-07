@@ -1376,7 +1376,7 @@ trait Documents
                 : $insert();
 
             if ($onNext !== null || $hasRelationships) {
-                $batch = $this->adapter->getSequences($collection->getId(), $batch);
+                $batch = $this->adapter->getSequences($collection, $batch);
             }
 
             $hook = $this->relationshipHook;
@@ -2332,7 +2332,7 @@ trait Documents
             }
 
             if ($onNext !== null || $hasRelationships) {
-                $batch = $this->adapter->getSequences($collection->getId(), $batch);
+                $batch = $this->adapter->getSequences($collection, $batch);
             }
 
             foreach ($chunk as $change) {
@@ -2540,7 +2540,7 @@ trait Documents
             }
 
             $this->adapter->increaseDocumentAttribute(
-                $collection->getId(),
+                $collection,
                 $id,
                 $attribute,
                 $numericAttribute?->isInteger() === true
@@ -2661,7 +2661,7 @@ trait Documents
             }
 
             $this->adapter->increaseDocumentAttribute(
-                $collection->getId(),
+                $collection,
                 $id,
                 $attribute,
                 $numericAttribute?->isInteger() === true
@@ -2744,7 +2744,7 @@ trait Documents
                 $changed = $this->silent(fn () => $this->relationshipHook->beforeDocumentDelete($collection, $document, $report));
             }
 
-            $result = $this->authorization->skip(fn () => $this->adapter->deleteDocument($collection->getId(), $id));
+            $result = $this->authorization->skip(fn () => $this->adapter->deleteDocument($collection, $id));
 
             $this->purgeCachedDocumentInternal($collection->getId(), $id);
 
@@ -2921,7 +2921,7 @@ trait Documents
                 }
 
                 $this->adapter->deleteDocuments(
-                    $collection->getId(),
+                    $collection,
                     $sequences,
                     $permissionIds
                 );

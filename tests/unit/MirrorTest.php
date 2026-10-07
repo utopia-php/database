@@ -16,6 +16,7 @@ use Throwable;
 use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
+use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
@@ -619,7 +620,7 @@ class MirrorTest extends TestCase
     public function testDestinationTimeoutFailureIsReportedNotThrown(string $action, Closure $call, Closure $read, mixed $expected): void
     {
         $source = new Database(self::configurableAdapter(), new Cache(new None()));
-        $destination = new Database(new class () extends Memory {
+        $destination = new Database(new class () extends Memory implements Feature\Timeouts {
             public function setTimeout(int $milliseconds, Event $event = Event::All): void
             {
                 throw new RuntimeException('destination unreachable');
@@ -862,7 +863,7 @@ class MirrorTest extends TestCase
 
     private static function configurableAdapter(): Memory
     {
-        return new class () extends Memory {
+        return new class () extends Memory implements Feature\Timeouts {
             /**
              * @return array<Capability>
              */
@@ -1698,14 +1699,14 @@ class MirrorTest extends TestCase
                 return parent::upsertDocuments($collection, $attribute, $changes);
             }
 
-            public function deleteDocument(string $collection, string $id): bool
+            public function deleteDocument(Document $collection, string $id): bool
             {
                 $this->reach();
 
                 return parent::deleteDocument($collection, $id);
             }
 
-            public function deleteDocuments(string $collection, array $sequences, array $permissionIds): int
+            public function deleteDocuments(Document $collection, array $sequences, array $permissionIds): int
             {
                 $this->reach();
 

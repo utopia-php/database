@@ -34,9 +34,9 @@ final class CollectionGuardsTest extends TestCase
         $adapter = new Memory();
         $database = $this->database($adapter);
 
-        $this->assertTrue($adapter->exists('guards', Database::METADATA));
+        $this->assertTrue($adapter->collectionExists('guards', Database::METADATA));
         $database->deleteCollection(Database::METADATA);
-        $this->assertFalse($adapter->exists('guards', Database::METADATA));
+        $this->assertFalse($adapter->collectionExists('guards', Database::METADATA));
     }
 
     public function testDeletingTheMetadataCollectionDropsItsTableOnSQLite(): void
@@ -45,7 +45,7 @@ final class CollectionGuardsTest extends TestCase
         $database = $this->database($adapter);
 
         $database->deleteCollection(Database::METADATA);
-        $this->assertFalse($adapter->exists('guards', Database::METADATA));
+        $this->assertFalse($adapter->collectionExists('guards', Database::METADATA));
     }
 
     public function testAMetadataFailureWhoseCleanupAlsoFailsKeepsTheMetadataFailure(): void
@@ -160,7 +160,7 @@ final class CollectionGuardsTest extends TestCase
             $this->assertSame($cause, $error->getPrevious());
         }
 
-        $this->assertTrue($adapter->exists('guards', self::COLLECTION), 'the table is created again');
+        $this->assertTrue($adapter->collectionExists('guards', self::COLLECTION), 'the table is created again');
         $this->assertNotNull($database->findCollection(self::COLLECTION));
         $this->assertSame([], $database->find(self::COLLECTION), 'the restored table is empty: only its definition survives');
     }
@@ -255,7 +255,7 @@ final class CollectionGuardsTest extends TestCase
         $this->assertSame('Collection raced already exists', $error->getMessage());
         $this->assertSame($winner, $error->getPrevious());
         $this->assertStringContainsString('Warning: Failed to purge stale collection cache: the cache is down', $log);
-        $this->assertTrue($adapter->exists('guards', 'raced'), 'the table the winner described is kept');
+        $this->assertTrue($adapter->collectionExists('guards', 'raced'), 'the table the winner described is kept');
     }
 
     public function testADefinitionThatCannotBeDeletedKeepsItsFailureWhenTheTableCannotBeRestored(): void
@@ -299,7 +299,7 @@ final class CollectionGuardsTest extends TestCase
             $this->assertSame($cause, $error->getPrevious());
         }
 
-        $this->assertFalse($adapter->exists('guards', self::COLLECTION), 'the table stays dropped');
+        $this->assertFalse($adapter->collectionExists('guards', self::COLLECTION), 'the table stays dropped');
         $this->assertNotNull($database->findCollection(self::COLLECTION), 'the definition stays');
     }
 

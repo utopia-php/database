@@ -31,7 +31,7 @@ final class MongoCursorTest extends TestCase
         ));
         $adapter->setNamespace('cursor');
 
-        [$first, $second, $third] = $adapter->getSequences(self::COLLECTION, [
+        [$first, $second, $third] = $adapter->getSequences(new Document(['$id' => self::COLLECTION]), [
             new Document(['$id' => 'first']),
             new Document(['$id' => 'second']),
             new Document(['$id' => 'third']),

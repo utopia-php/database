@@ -4,7 +4,7 @@ To get started with implementing a new adapter, start by reviewing the [specific
 
 An adapter describes what it supports in three ways:
 
-- **Required methods.** `Utopia\Database\Adapter` implements the `Adapter\Feature\Attributes`, `Collections`, `Databases`, `Documents`, `Indexes` and `Transactions` interfaces and declares their methods abstract, so every adapter implements them.
+- **Required methods.** The mandatory contract is the abstract methods of `Utopia\Database\Adapter` (databases, collections, attributes, indexes, documents and transactions), so every adapter implements them. The document methods take the collection `Document`. SQL-only helpers such as `quote()` and `execute()` live on `Adapter\SQL`.
 - **Optional features.** A group of methods an adapter may or may not provide is an interface in `src/Database/Adapter/Feature/`: `ColumnTypes`, `ConnectionId`, `InternalCasting`, `QueryBuilder`, `RawQuery`, `Relationships`, `SchemaAttributes`, `SchemaIndexes`, `Spatial`, `Timeouts`, `Upserts` and `UTCCasting`. Implement the ones your database supports. Callers check them with `$adapter->hasFeature(Feature\Upserts::class)`.
 - **Capabilities.** A behaviour flag is a `Utopia\Database\Capability` case. Override `capabilities()` and return the cases your adapter supports (start from `parent::capabilities()`); callers check them with `$adapter->supports(Capability::Fulltext)`. The base adapter reports `Index`, `IndexArray` and `UniqueIndex`.
 

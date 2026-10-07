@@ -168,7 +168,7 @@ final class MongoAdapterPathsTest extends TestCase
             'id' => 0,
         ]];
 
-        $documents = $this->adapter()->getSequences('books', [new Document(['$id' => 'first']), new Document(['$id' => 'second'])]);
+        $documents = $this->adapter()->getSequences(new Document(['$id' => 'books']), [new Document(['$id' => 'first']), new Document(['$id' => 'second'])]);
 
         $this->assertSame(['one', 'two'], \array_map(static fn (Document $document): ?string => $document->getSequence(), $documents));
         $this->assertSame([7], \array_map(static fn (array $arguments): mixed => $arguments[0] ?? null, $this->argumentsOf('getMore')));
@@ -179,7 +179,7 @@ final class MongoAdapterPathsTest extends TestCase
         $this->replies['find'] = static fn (): never => throw new MongoException('operation exceeded time limit', 50);
 
         $this->expectException(TimeoutException::class);
-        $this->adapter()->getSequences('books', [new Document(['$id' => 'first'])]);
+        $this->adapter()->getSequences(new Document(['$id' => 'books']), [new Document(['$id' => 'first'])]);
     }
 
     public function testIntegerOperatorOperandsAreCastBeforeTheWrite(): void

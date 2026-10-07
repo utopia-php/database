@@ -201,7 +201,7 @@ final class NullNumericIncrementTest extends TestCase
     public function testABoundThatExcludesZeroLeavesAnUnsetNumberUnset(string $attribute, int|float $value, int|float|null $max, int|float|null $min): void
     {
         $this->sqlite()->getAdapter()->increaseDocumentAttribute(
-            self::COLLECTION,
+            new Document(['$id' => self::COLLECTION]),
             self::DOCUMENT,
             $attribute,
             $value,

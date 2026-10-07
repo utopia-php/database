@@ -48,8 +48,8 @@ final class MongoFilterScopeTest extends TestCase
                 'count' => 1,
             ])),
         ]);
-        $adapter->deleteDocument(self::COLLECTION, 'first');
-        $adapter->deleteDocuments(self::COLLECTION, ['sequence-first'], []);
+        $adapter->deleteDocument(new Document(['$id' => self::COLLECTION]), 'first');
+        $adapter->deleteDocuments(new Document(['$id' => self::COLLECTION]), ['sequence-first'], []);
 
         $this->assertCount(2, $this->filters['update'] ?? []);
         $this->assertCount(1, $this->filters['upsert'] ?? []);
@@ -62,8 +62,8 @@ final class MongoFilterScopeTest extends TestCase
     {
         $adapter = $this->createAdapter();
 
-        $adapter->increaseDocumentAttribute(self::COLLECTION, 'first', 'count', 5, '2026-01-01 00:00:00.000');
-        $adapter->increaseDocumentAttribute(self::COLLECTION, 'first', 'count', -2, '2026-01-01 00:00:00.000', min: 0);
+        $adapter->increaseDocumentAttribute(new Document(['$id' => self::COLLECTION]), 'first', 'count', 5, '2026-01-01 00:00:00.000');
+        $adapter->increaseDocumentAttribute(new Document(['$id' => self::COLLECTION]), 'first', 'count', -2, '2026-01-01 00:00:00.000', min: 0);
 
         $this->assertCount(2, $this->filters['update'] ?? []);
         $this->assertTenantScopeOnly(['update']);

@@ -17,7 +17,7 @@ final class MongoNameFilterTest extends TestCase
 
         $adapter->createCollection('audit.logs');
 
-        $this->assertTrue($adapter->exists('app', 'audit.logs'));
+        $this->assertTrue($adapter->collectionExists('app', 'audit.logs'));
     }
 
     public function testCollectionWithNulByteInItsIdExistsAfterCreation(): void
@@ -26,7 +26,7 @@ final class MongoNameFilterTest extends TestCase
 
         $adapter->createCollection("audit\0logs");
 
-        $this->assertTrue($adapter->exists('app', "audit\0logs"));
+        $this->assertTrue($adapter->collectionExists('app', "audit\0logs"));
     }
 
     public function testCollectionThatWasNeverCreatedDoesNotExist(): void
@@ -35,7 +35,7 @@ final class MongoNameFilterTest extends TestCase
 
         $adapter->createCollection('audit.logs');
 
-        $this->assertFalse($adapter->exists('app', 'audit.events'));
+        $this->assertFalse($adapter->collectionExists('app', 'audit.events'));
     }
 
     public function testDeleteDropsTheDatabaseThatSetDatabaseSelects(): void

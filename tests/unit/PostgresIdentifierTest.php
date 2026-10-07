@@ -117,7 +117,7 @@ final class PostgresIdentifierTest extends TestCase
         $adapter->setDatabase('appwrite');
         $adapter->setNamespace(self::NAMESPACE);
 
-        $this->assertTrue($adapter->exists('appwrite', $collection));
+        $this->assertTrue($adapter->collectionExists('appwrite', $collection));
         $this->assertSame('appwrite', $bound[1] ?? null);
         $physical = $bound[2] ?? null;
         $this->assertIsString($physical);

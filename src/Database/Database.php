@@ -1044,12 +1044,7 @@ class Database
      */
     public function setTimeout(int $milliseconds, Event $event = Event::All): static
     {
-        // Not hasFeature(): on a pool that is a delegated call, so guarding
-        // with it dials the database just to configure a handle. A pool holds
-        // the timeout without checking out and defers the backing adapter's
-        // refusal to the moment it is applied, which is why the method's
-        // presence -- not the feature interface -- is what is asked here.
-        if (! \method_exists($this->adapter, 'setTimeout')) {
+        if (! $this->adapterHasFeature(Feature\Timeouts::class)) {
             throw new DatabaseException('Adapter does not support timeouts');
         }
 
@@ -1063,7 +1058,7 @@ class Database
      */
     public function clearTimeout(Event $event = Event::All): void
     {
-        if (! \method_exists($this->adapter, 'clearTimeout')) {
+        if (! $this->adapterHasFeature(Feature\Timeouts::class)) {
             throw new DatabaseException('Adapter does not support timeouts');
         }
 

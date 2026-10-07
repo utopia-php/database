@@ -143,7 +143,7 @@ final class TransactionStateTest extends TestCase
                     if ($attempt === 1) {
                         $connection->lockWaitTimeout();
                     }
-                    $adapter->exists('database', 'aggregations');
+                    $adapter->collectionExists('database', 'aggregations');
 
                     return $stored;
                 });
@@ -217,7 +217,7 @@ final class TransactionStateTest extends TestCase
             if ($nested === 1) {
                 $connection->lockWaitTimeout();
             }
-            $adapter->exists('database', 'aggregations');
+            $adapter->collectionExists('database', 'aggregations');
 
             return $stored;
         });
@@ -302,7 +302,7 @@ final class TransactionStateTest extends TestCase
                     if ($attempt === 1) {
                         $connection->deadlock();
                     }
-                    $adapter->exists('database', 'aggregations');
+                    $adapter->collectionExists('database', 'aggregations');
 
                     return $stored;
                 });
@@ -339,7 +339,7 @@ final class TransactionStateTest extends TestCase
                 $attempts++;
                 $adapter->withTransaction(function () use ($adapter, $connection): void {
                     $connection->deadlock();
-                    $adapter->exists('database', 'aggregations');
+                    $adapter->collectionExists('database', 'aggregations');
                 });
             });
         });
@@ -367,7 +367,7 @@ final class TransactionStateTest extends TestCase
             if ($attempts === 1) {
                 $connection->deadlock();
             }
-            $adapter->exists('database', 'aggregations');
+            $adapter->collectionExists('database', 'aggregations');
         });
 
         $this->assertSame(2, $attempts);
@@ -528,7 +528,7 @@ final class TransactionStateTest extends TestCase
                 $adapter->withTransaction(function () use ($adapter, $lock, &$nested): void {
                     $nested++;
                     $lock();
-                    $adapter->exists('database', 'aggregations');
+                    $adapter->collectionExists('database', 'aggregations');
                 });
             });
         });

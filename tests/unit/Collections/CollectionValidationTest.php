@@ -509,7 +509,7 @@ class CollectionValidationTest extends TestCase
     public function testCollectionExistsDelegatesToAdapter(): void
     {
         $this->adapter->method('getDatabase')->willReturn('testdb');
-        $this->adapter->method('exists')->willReturn(true);
+        $this->adapter->method('collectionExists')->willReturn(true);
 
         $result = $this->database->collectionExists('testCol', 'testdb');
         $this->assertTrue($result);

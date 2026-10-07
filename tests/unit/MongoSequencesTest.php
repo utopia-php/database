@@ -33,7 +33,7 @@ final class MongoSequencesTest extends TestCase
             $this->row('shared', 'sequence-two', tenant: 2),
         ];
 
-        [$one, $two] = $adapter->getSequences(self::COLLECTION, [
+        [$one, $two] = $adapter->getSequences(new Document(['$id' => self::COLLECTION]), [
             new Document(['$id' => 'shared', '$tenant' => 1]),
             new Document(['$id' => 'shared', '$tenant' => 2]),
         ]);
@@ -50,7 +50,7 @@ final class MongoSequencesTest extends TestCase
             $this->row('second', 'sequence-second', tenant: 5),
         ];
 
-        [$first, $second] = $adapter->getSequences(self::COLLECTION, [
+        [$first, $second] = $adapter->getSequences(new Document(['$id' => self::COLLECTION]), [
             new Document(['$id' => 'first']),
             new Document(['$id' => 'second', '$tenant' => 5]),
         ]);
@@ -66,7 +66,7 @@ final class MongoSequencesTest extends TestCase
             $this->row('shared', 'sequence-other', tenant: 2),
         ];
 
-        [$document] = $adapter->getSequences(self::COLLECTION, [
+        [$document] = $adapter->getSequences(new Document(['$id' => self::COLLECTION]), [
             new Document(['$id' => 'shared', '$tenant' => 1]),
         ]);
 
@@ -86,7 +86,7 @@ final class MongoSequencesTest extends TestCase
             $this->row('generated', $objectId, tenant: null),
         ];
 
-        [$document] = $adapter->getSequences(self::COLLECTION, [
+        [$document] = $adapter->getSequences(new Document(['$id' => self::COLLECTION]), [
             new Document(['$id' => 'generated']),
         ]);
 
@@ -97,7 +97,7 @@ final class MongoSequencesTest extends TestCase
     {
         $adapter = $this->createAdapter(sharedTables: false, tenant: null);
 
-        [$document] = $adapter->getSequences(self::COLLECTION, [
+        [$document] = $adapter->getSequences(new Document(['$id' => self::COLLECTION]), [
             new Document(['$id' => 'known', '$sequence' => 'sequence-known']),
         ]);
 

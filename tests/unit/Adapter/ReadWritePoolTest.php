@@ -92,6 +92,7 @@ class ReadWritePoolTest extends TestCase
             'count',
             'sum',
             'exists',
+            'collectionExists',
             'list',
             'getSchemaAttributes',
             'getSchemaIndexes',
@@ -157,7 +158,7 @@ class ReadWritePoolTest extends TestCase
             ->method('deleteDocument')
             ->willReturn(true);
 
-        $this->pool->delegate('deleteDocument', ['collection', 'id']);
+        $this->pool->delegate('deleteDocument', [new Document(), 'id']);
     }
 
     public function testUpdateDocumentRoutesToWritePool(): void
@@ -291,7 +292,7 @@ class ReadWritePoolTest extends TestCase
             ->willReturn(true);
 
         $this->pool->delegate('createDocument', [new Document(), new Document()]);
-        $this->pool->delegate('deleteDocument', ['collection', 'id']);
+        $this->pool->delegate('deleteDocument', [new Document(), 'id']);
 
         $writeAdapter->expects($this->once())
             ->method('ping')
@@ -356,6 +357,9 @@ class ReadWritePoolTest extends TestCase
     {
         /** @var Adapter&Feature\Timeouts&MockObject $readAdapter */
         $readAdapter = $this->createMock(FeatureAdapterStub::class);
+        $readAdapter->method('hasFeature')->willReturnCallback(
+            static fn (string $feature): bool => $feature === Feature\Timeouts::class,
+        );
         $readAdapter->expects($this->once())
             ->method('clearTimeout');
         $readAdapter->expects($this->once())
@@ -617,7 +621,7 @@ class ReadWritePoolTest extends TestCase
             'getLimitForString', 'getLimitForInt', 'getLimitForBigInt',
             'getLimitForAttributes', 'getLimitForIndexes', 'getMaxIndexLength',
             'getMaxVarcharLength', 'getMaxUIDLength' => 0,
-            'exists', 'ping', 'supports', 'hasFeature' => true,
+            'exists', 'collectionExists', 'ping', 'supports', 'hasFeature' => true,
             'getConnectionId', 'getIdAttributeType' => 'string',
             'getMinDateTime' => new \DateTime(),
             'getSchemaAttributes', 'getSchemaIndexes', 'getKeywords',
@@ -640,7 +644,8 @@ class ReadWritePoolTest extends TestCase
             'getDocument' => [new Document(), 'id', [], false],
             'count' => [new Document(), [], null],
             'sum' => [new Document(), 'attr', [], null],
-            'exists' => ['db', null],
+            'exists' => ['db'],
+            'collectionExists' => ['db', 'collection'],
             'list' => [],
             'getSizeOfCollection', 'getSizeOfCollectionOnDisk' => ['collection'],
             'ping' => [],

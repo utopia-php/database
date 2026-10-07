@@ -90,7 +90,7 @@ final class SQLDeleteFailureTest extends TestCase
         $this->blockDeletes();
 
         try {
-            $this->adapter->deleteDocument('notes', 'first');
+            $this->adapter->deleteDocument(new Document(['$id' => 'notes']), 'first');
             $this->fail('A delete the engine refuses must not be reported as done');
         } catch (DatabaseException $error) {
             $this->assertSame('Failed to delete document', $error->getMessage());
@@ -110,7 +110,7 @@ final class SQLDeleteFailureTest extends TestCase
         }
 
         try {
-            $this->adapter->deleteDocuments('notes', $sequences, ['first', 'second']);
+            $this->adapter->deleteDocuments(new Document(['$id' => 'notes']), $sequences, ['first', 'second']);
             $this->fail('A bulk delete the engine refuses must not be reported as done');
         } catch (DatabaseException $error) {
             $this->assertSame('Failed to delete documents', $error->getMessage());

@@ -230,14 +230,12 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
     }
 
     /**
-     * Delete collection
-     *
      * @throws Exception
      * @throws PDOException
      */
-    public function deleteCollection(string $id): bool
+    public function deleteCollection(string $collection): bool
     {
-        $id = $this->filter($id);
+        $id = $this->filter($collection);
 
         $schema = $this->createSchemaBuilder();
         $main = $schema->table($this->getSQLTableRaw($id))->drop();
@@ -498,15 +496,13 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
     }
 
     /**
-     * Delete Index
-     *
      * @throws Exception
      * @throws PDOException
      */
-    public function deleteIndex(string $collection, string $id): bool
+    public function deleteIndex(string $collection, string $key): bool
     {
         $name = $this->filter($collection);
-        $id = $this->filter($id);
+        $id = $this->filter($key);
 
         $schema = $this->createSchemaBuilder();
         $result = $schema->dropIndex($this->getSQLTableRaw($name), $id);

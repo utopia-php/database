@@ -27,10 +27,10 @@ final class MemorySchemaPathsTest extends TestCase
 
         $adapter->startTransaction();
         $this->assertTrue($adapter->createCollection('rolled'));
-        $this->assertTrue($adapter->exists(self::DATABASE, 'rolled'));
+        $this->assertTrue($adapter->collectionExists(self::DATABASE, 'rolled'));
         $adapter->rollbackTransaction();
 
-        $this->assertFalse($adapter->exists(self::DATABASE, 'rolled'), 'A rolled-back collection must leave its database');
+        $this->assertFalse($adapter->collectionExists(self::DATABASE, 'rolled'), 'A rolled-back collection must leave its database');
         $this->assertTrue($adapter->createCollection('rolled'));
     }
 

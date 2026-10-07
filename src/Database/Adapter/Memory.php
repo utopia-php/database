@@ -289,16 +289,13 @@ class Memory extends Adapter implements Feature\Relationships
         return true;
     }
 
-    public function exists(string $database, ?string $collection = null): bool
+    public function exists(string $database): bool
     {
-        if ($collection === null) {
-            return isset($this->databases[$database]);
-        }
+        return isset($this->databases[$database]);
+    }
 
-        if (! isset($this->databases[$database])) {
-            return false;
-        }
-
+    public function collectionExists(string $database, string $collection): bool
+    {
         return isset($this->databases[$database][$this->filter($collection)]);
     }
 
@@ -452,9 +449,9 @@ class Memory extends Adapter implements Feature\Relationships
         ];
     }
 
-    public function deleteCollection(string $id): bool
+    public function deleteCollection(string $collection): bool
     {
-        $key = $this->key($id);
+        $key = $this->key($collection);
         $previousData = $this->data[$key] ?? null;
         $previousPermissions = $this->permissions[$key] ?? null;
         $previousByDocument = $this->permissionsByDocument[$key] ?? null;
@@ -468,7 +465,7 @@ class Memory extends Adapter implements Feature\Relationships
             $this->permissionsByPermission[$key],
             $this->uniqueIndexHashes[$key],
         );
-        $filtered = $this->filter($id);
+        $filtered = $this->filter($collection);
         $databaseSlots = [];
         foreach ($this->databases as $name => $collections) {
             if (isset($collections[$filtered]) && $collections[$filtered] === $key) {
@@ -567,23 +564,23 @@ class Memory extends Adapter implements Feature\Relationships
         return true;
     }
 
-    public function deleteAttribute(string $collection, string $id): bool
+    public function deleteAttribute(string $collection, string $key): bool
     {
-        $key = $this->key($collection);
-        if (! isset($this->data[$key])) {
+        $table = $this->key($collection);
+        if (! isset($this->data[$table])) {
             return true;
         }
 
-        $id = $this->filter($id);
-        $previousAttribute = $this->data[$key]['attributes'][$id] ?? null;
+        $id = $this->filter($key);
+        $previousAttribute = $this->data[$table]['attributes'][$id] ?? null;
         if ($previousAttribute === null) {
             // Nothing to do; attribute was never registered.
             return true;
         }
 
         $previousValues = [];
-        unset($this->data[$key]['attributes'][$id]);
-        foreach ($this->data[$key]['documents'] as $storageKey => &$document) {
+        unset($this->data[$table]['attributes'][$id]);
+        foreach ($this->data[$table]['documents'] as $storageKey => &$document) {
             if (\array_key_exists($id, $document)) {
                 $previousValues[$storageKey] = $document[$id];
                 unset($document[$id]);
@@ -593,7 +590,7 @@ class Memory extends Adapter implements Feature\Relationships
 
         $previousIndexes = [];
         $previousUniqueHashes = [];
-        foreach ($this->data[$key]['indexes'] as $indexId => $index) {
+        foreach ($this->data[$table]['indexes'] as $indexId => $index) {
             $attributes = \is_array($index['attributes'] ?? null) ? $index['attributes'] : [];
             $indexLengths = \is_array($index['lengths'] ?? null) ? $index['lengths'] : [];
             $indexOrders = \is_array($index['orders'] ?? null) ? $index['orders'] : [];
@@ -621,32 +618,32 @@ class Memory extends Adapter implements Feature\Relationships
             if ($touched) {
                 $previousIndexes[$indexId] = $index;
                 if (($index['type'] ?? '') === IndexType::Unique->value
-                    && isset($this->uniqueIndexHashes[$key][$indexId])) {
-                    $previousUniqueHashes[$indexId] = $this->uniqueIndexHashes[$key][$indexId];
-                    unset($this->uniqueIndexHashes[$key][$indexId]);
+                    && isset($this->uniqueIndexHashes[$table][$indexId])) {
+                    $previousUniqueHashes[$indexId] = $this->uniqueIndexHashes[$table][$indexId];
+                    unset($this->uniqueIndexHashes[$table][$indexId]);
                 }
             }
             $index['attributes'] = $filtered;
             $index['lengths'] = $lengths;
             $index['orders'] = $orders;
-            $this->data[$key]['indexes'][$indexId] = $index;
+            $this->data[$table]['indexes'][$indexId] = $index;
         }
 
-        $this->journal(function () use ($key, $id, $previousAttribute, $previousValues, $previousIndexes, $previousUniqueHashes): void {
-            if (! isset($this->data[$key])) {
+        $this->journal(function () use ($table, $id, $previousAttribute, $previousValues, $previousIndexes, $previousUniqueHashes): void {
+            if (! isset($this->data[$table])) {
                 return;
             }
-            $this->data[$key]['attributes'][$id] = $previousAttribute;
+            $this->data[$table]['attributes'][$id] = $previousAttribute;
             foreach ($previousValues as $storageKey => $value) {
-                if (isset($this->data[$key]['documents'][$storageKey])) {
-                    $this->data[$key]['documents'][$storageKey][$id] = $value;
+                if (isset($this->data[$table]['documents'][$storageKey])) {
+                    $this->data[$table]['documents'][$storageKey][$id] = $value;
                 }
             }
             foreach ($previousIndexes as $indexId => $previousIndex) {
-                $this->data[$key]['indexes'][$indexId] = $previousIndex;
+                $this->data[$table]['indexes'][$indexId] = $previousIndex;
             }
             foreach ($previousUniqueHashes as $indexId => $hashes) {
-                $this->uniqueIndexHashes[$key][$indexId] = $hashes;
+                $this->uniqueIndexHashes[$table][$indexId] = $hashes;
             }
         });
 
@@ -1088,27 +1085,27 @@ class Memory extends Adapter implements Feature\Relationships
         return true;
     }
 
-    public function deleteIndex(string $collection, string $id): bool
+    public function deleteIndex(string $collection, string $key): bool
     {
-        $key = $this->key($collection);
-        if (! isset($this->data[$key])) {
+        $table = $this->key($collection);
+        if (! isset($this->data[$table])) {
             return true;
         }
 
-        $id = $this->filter($id);
-        $previousIndex = $this->data[$key]['indexes'][$id] ?? null;
-        $previousHash = $this->uniqueIndexHashes[$key][$id] ?? null;
+        $id = $this->filter($key);
+        $previousIndex = $this->data[$table]['indexes'][$id] ?? null;
+        $previousHash = $this->uniqueIndexHashes[$table][$id] ?? null;
         unset(
-            $this->data[$key]['indexes'][$id],
-            $this->uniqueIndexHashes[$key][$id],
+            $this->data[$table]['indexes'][$id],
+            $this->uniqueIndexHashes[$table][$id],
         );
 
-        $this->journal(function () use ($key, $id, $previousIndex, $previousHash): void {
+        $this->journal(function () use ($table, $id, $previousIndex, $previousHash): void {
             if ($previousIndex !== null) {
-                $this->data[$key]['indexes'][$id] = $previousIndex;
+                $this->data[$table]['indexes'][$id] = $previousIndex;
             }
             if ($previousHash !== null) {
-                $this->uniqueIndexHashes[$key][$id] = $previousHash;
+                $this->uniqueIndexHashes[$table][$id] = $previousHash;
             }
         });
 
@@ -1575,9 +1572,9 @@ class Memory extends Adapter implements Feature\Relationships
         return \count($prepared);
     }
 
-    public function getSequences(string $collection, array $documents): array
+    public function getSequences(Document $collection, array $documents): array
     {
-        $key = $this->key($collection);
+        $key = $this->key($collection->getId());
         if (! isset($this->data[$key])) {
             return $documents;
         }
@@ -1598,9 +1595,9 @@ class Memory extends Adapter implements Feature\Relationships
         return $documents;
     }
 
-    public function deleteDocument(string $collection, string $id): bool
+    public function deleteDocument(Document $collection, string $id): bool
     {
-        $key = $this->key($collection);
+        $key = $this->key($collection->getId());
         if (! isset($this->data[$key])) {
             // MariaDB throws when the collection itself is gone (PDO unknown
             // table → NotFoundException). A missing document inside an existing
@@ -1637,9 +1634,9 @@ class Memory extends Adapter implements Feature\Relationships
         return true;
     }
 
-    public function deleteDocuments(string $collection, array $sequences, array $permissionIds): int
+    public function deleteDocuments(Document $collection, array $sequences, array $permissionIds): int
     {
-        $key = $this->key($collection);
+        $key = $this->key($collection->getId());
         if (! isset($this->data[$key])) {
             throw new NotFoundException('Collection not found');
         }
@@ -1778,9 +1775,9 @@ class Memory extends Adapter implements Feature\Relationships
         return $isFloat ? (float) $sum : (int) $sum;
     }
 
-    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float|string $value, string $updatedAt, int|float|string|null $min = null, int|float|string|null $max = null): bool
+    public function increaseDocumentAttribute(Document $collection, string $id, string $attribute, int|float|string $value, string $updatedAt, int|float|string|null $min = null, int|float|string|null $max = null): bool
     {
-        $key = $this->key($collection);
+        $key = $this->key($collection->getId());
         $docKey = $this->documentKey($id);
         if (! isset($this->data[$key]['documents'][$docKey])) {
             throw new NotFoundException('Document not found');
@@ -1943,24 +1940,20 @@ class Memory extends Adapter implements Feature\Relationships
         return 0;
     }
 
-    public function getKeywords(): array
+    /**
+     * @return array<Document>
+     */
+    public function getSchemaAttributes(string $collection): array
     {
         return [];
     }
 
-    public function getInternalIndexesKeys(): array
+    /**
+     * @return array<Document>
+     */
+    public function getSchemaIndexes(string $collection): array
     {
         return [];
-    }
-
-    protected function execute(mixed $statement): bool
-    {
-        return true;
-    }
-
-    protected function quote(string $string): string
-    {
-        return '"'.$string.'"';
     }
 
     /**

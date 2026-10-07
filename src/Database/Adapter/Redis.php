@@ -168,24 +168,20 @@ class Redis extends Adapter implements
         return true;
     }
 
-    public function exists(string $database, ?string $collection = null): bool
+    public function exists(string $database): bool
     {
-        $database = $this->filter($database);
-        $dbsKey = $this->key($this->nsBase(), 'dbs');
+        return (bool) $this->client->sIsMember($this->key($this->nsBase(), 'dbs'), $this->filter($database));
+    }
 
-        if ((bool) $this->client->sIsMember($dbsKey, $database) === false) {
+    public function collectionExists(string $database, string $collection): bool
+    {
+        if (! $this->exists($database)) {
             return false;
         }
 
-        if ($collection === null) {
-            return true;
-        }
+        $collections = $this->key($this->nsFor($this->getNamespace(), $this->filter($database)), 'cols');
 
-        $collection = $this->filter($collection);
-        $namespace = $this->getNamespace();
-        $colsKey = $this->key($this->nsFor($namespace, $database), 'cols');
-
-        return (bool) $this->client->sIsMember($colsKey, $collection);
+        return (bool) $this->client->sIsMember($collections, $this->filter($collection));
     }
 
     public function list(): array
@@ -306,9 +302,9 @@ class Redis extends Adapter implements
         return \array_map(static fn (?OrderDirection $order): ?string => $order?->value, $index->orders);
     }
 
-    public function deleteCollection(string $id): bool
+    public function deleteCollection(string $collection): bool
     {
-        $id = $this->filter($id);
+        $id = $this->filter($collection);
         $namespace = $this->getNamespace();
         $database = $this->getDatabase();
         $colsKey = $this->key($this->ns(), 'cols');
@@ -395,10 +391,10 @@ class Redis extends Adapter implements
         return true;
     }
 
-    public function deleteAttribute(string $collection, string $id): bool
+    public function deleteAttribute(string $collection, string $key): bool
     {
         $collection = $this->filter($collection);
-        $id = $this->filter($id);
+        $id = $this->filter($key);
         $metaKey = $this->key($this->ns(), 'meta', $collection);
 
         if ((bool) $this->client->exists($metaKey) === false) {
@@ -674,10 +670,10 @@ class Redis extends Adapter implements
         return true;
     }
 
-    public function deleteIndex(string $collection, string $id): bool
+    public function deleteIndex(string $collection, string $key): bool
     {
         $collection = $this->filter($collection);
-        $id = $this->filter($id);
+        $id = $this->filter($key);
         $metaKey = $this->key($this->ns(), 'meta', $collection);
 
         if ((bool) $this->client->exists($metaKey) === false) {
@@ -1142,13 +1138,13 @@ class Redis extends Adapter implements
         });
     }
 
-    public function getSequences(string $collection, array $documents): array
+    public function getSequences(Document $collection, array $documents): array
     {
         if (empty($documents)) {
             return $documents;
         }
 
-        $col = $this->filter($collection);
+        $col = $this->filter($collection->getId());
 
         $this->client->multi(\Redis::PIPELINE);
         try {
@@ -1197,27 +1193,27 @@ class Redis extends Adapter implements
         return $documents;
     }
 
-    public function deleteDocument(string $collection, string $id): bool
+    public function deleteDocument(Document $collection, string $id): bool
     {
-        $collection = $this->filter($collection);
-        $docKey = $this->docKey($collection, $id);
-        $idxKey = $this->idxKey($collection);
+        $collectionId = $this->filter($collection->getId());
+        $docKey = $this->docKey($collectionId, $id);
+        $idxKey = $this->idxKey($collectionId);
 
-        return $this->tx(function (RedisClient $redis) use ($collection, $id, $docKey, $idxKey): bool {
+        return $this->tx(function (RedisClient $redis) use ($collectionId, $id, $docKey, $idxKey): bool {
             $payload = $redis->get($docKey);
             if (! \is_string($payload) || $payload === '') {
                 return false;
             }
 
             $this->journal('deleteDoc', [
-                'collection' => $collection,
+                'collection' => $collectionId,
                 'id' => $id,
                 'payload' => $payload,
                 'docKey' => $docKey,
                 'idxKey' => $idxKey,
             ]);
 
-            $this->clearPermissions($collection, $id);
+            $this->clearPermissions($collectionId, $id);
             $redis->del($docKey);
             $redis->sRem($idxKey, \strtolower($id));
 
@@ -1225,16 +1221,16 @@ class Redis extends Adapter implements
         });
     }
 
-    public function deleteDocuments(string $collection, array $sequences, array $permissionIds): int
+    public function deleteDocuments(Document $collection, array $sequences, array $permissionIds): int
     {
         if (empty($sequences) && empty($permissionIds)) {
             return 0;
         }
 
-        $collection = $this->filter($collection);
-        $idxKey = $this->idxKey($collection);
+        $collectionId = $this->filter($collection->getId());
+        $idxKey = $this->idxKey($collectionId);
 
-        return $this->tx(function (RedisClient $redis) use ($collection, $sequences, $permissionIds, $idxKey): int {
+        return $this->tx(function (RedisClient $redis) use ($collectionId, $sequences, $permissionIds, $idxKey): int {
             $sequenceSet = [];
             foreach ($sequences as $sequence) {
                 $sequenceSet[(string) $sequence] = true;
@@ -1248,7 +1244,7 @@ class Redis extends Adapter implements
             $docKeys = [];
             $redis->multi(\Redis::PIPELINE);
             foreach ($allIds as $id) {
-                $docKey = $this->docKey($collection, (string) $id);
+                $docKey = $this->docKey($collectionId, (string) $id);
                 $docKeys[(string) $id] = $docKey;
                 $redis->get($docKey);
             }
@@ -1273,13 +1269,13 @@ class Redis extends Adapter implements
             foreach ($deleted as $documentId => $deleteEntry) {
                 $deletedDocKey = $deleteEntry['docKey'];
                 $this->journal('deleteDoc', [
-                    'collection' => $collection,
+                    'collection' => $collectionId,
                     'id' => (string) $documentId,
                     'payload' => $deleteEntry['payload'],
                     'docKey' => $deletedDocKey,
                     'idxKey' => $idxKey,
                 ]);
-                $this->clearPermissions($collection, (string) $documentId);
+                $this->clearPermissions($collectionId, (string) $documentId);
                 $redis->del($deletedDocKey);
                 $redis->sRem($idxKey, \strtolower((string) $documentId));
             }
@@ -1289,7 +1285,7 @@ class Redis extends Adapter implements
                 if (isset($deleted[$documentId])) {
                     continue;
                 }
-                $this->clearPermissions($collection, $documentId);
+                $this->clearPermissions($collectionId, $documentId);
             }
 
             return \count($deleted);
@@ -1404,12 +1400,12 @@ class Redis extends Adapter implements
         });
     }
 
-    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float|string $value, string $updatedAt, int|float|string|null $min = null, int|float|string|null $max = null): bool
+    public function increaseDocumentAttribute(Document $collection, string $id, string $attribute, int|float|string $value, string $updatedAt, int|float|string|null $min = null, int|float|string|null $max = null): bool
     {
-        $collection = $this->filter($collection);
-        $docKey = $this->docKey($collection, $id);
+        $collectionId = $this->filter($collection->getId());
+        $docKey = $this->docKey($collectionId, $id);
 
-        return $this->tx(function (RedisClient $redis) use ($collection, $id, $attribute, $value, $updatedAt, $min, $max, $docKey): bool {
+        return $this->tx(function (RedisClient $redis) use ($collectionId, $id, $attribute, $value, $updatedAt, $min, $max, $docKey): bool {
             $payload = $redis->get($docKey);
             if (! \is_string($payload) || $payload === '') {
                 throw new NotFoundException('Document not found');
@@ -1447,7 +1443,7 @@ class Redis extends Adapter implements
             $redis->set($docKey, $this->encode($document));
 
             $this->journal('updateDoc', [
-                'collection' => $collection,
+                'collection' => $collectionId,
                 'id' => $id,
                 'newId' => $id,
                 'payload' => $payload,
@@ -1538,12 +1534,18 @@ class Redis extends Adapter implements
         return 0;
     }
 
-    public function getKeywords(): array
+    /**
+     * @return array<Document>
+     */
+    public function getSchemaAttributes(string $collection): array
     {
         return [];
     }
 
-    public function getInternalIndexesKeys(): array
+    /**
+     * @return array<Document>
+     */
+    public function getSchemaIndexes(string $collection): array
     {
         return [];
     }
@@ -1557,16 +1559,6 @@ class Redis extends Adapter implements
     public function getConnectionId(): string
     {
         return '0';
-    }
-
-    protected function execute(mixed $statement): bool
-    {
-        return true;
-    }
-
-    protected function quote(string $string): string
-    {
-        return '"'.$string.'"';
     }
 
     private function key(string ...$parts): string

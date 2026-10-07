@@ -216,13 +216,13 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         return $this->supportForAttributes;
     }
 
-    public function supports(Capability $feature): bool
+    public function supports(Capability $capability): bool
     {
-        if ($feature === Capability::DefinedAttributes) {
+        if ($capability === Capability::DefinedAttributes) {
             return $this->supportForAttributes;
         }
 
-        return parent::supports($feature);
+        return parent::supports($capability);
     }
 
     protected function syncWriteHooks(): void
@@ -638,36 +638,31 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     }
 
     /**
-     * Check if database exists
-     * Optionally check if collection exists in database
-     *
-     * @param  string  $database  database name
-     * @param  string|null  $collection  (optional) collection name
-     *
      * @throws Exception
      */
-    public function exists(string $database, ?string $collection = null): bool
+    public function exists(string $database): bool
     {
-        if (! \is_null($collection)) {
-            $collection = $this->getNamespace().'_'.$this->filter($collection);
-            try {
-                /** @var \stdClass $result */
-                $result = $this->getClient()->query([
-                    'listCollections' => 1,
-                    'filter' => ['name' => $collection],
-                ]);
-
-                /** @var \stdClass $cursor */
-                $cursor = $result->cursor;
-                /** @var array<mixed> $firstBatch */
-                $firstBatch = $cursor->firstBatch;
-                return ! empty($firstBatch);
-            } catch (Exception $e) {
-                return false;
-            }
-        }
-
         return $this->getClient()->selectDatabase() != null;
+    }
+
+    public function collectionExists(string $database, string $collection): bool
+    {
+        try {
+            /** @var \stdClass $result */
+            $result = $this->getClient()->query([
+                'listCollections' => 1,
+                'filter' => ['name' => $this->getNamespace().'_'.$this->filter($collection)],
+            ]);
+
+            /** @var \stdClass $cursor */
+            $cursor = $result->cursor;
+            /** @var array<mixed> $firstBatch */
+            $firstBatch = $cursor->firstBatch;
+
+            return ! empty($firstBatch);
+        } catch (Exception) {
+            return false;
+        }
     }
 
     /**
@@ -721,7 +716,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         // In shared-tables mode or for metadata, the physical collection may
         // already exist for another tenant. Return early to avoid a
         // "Collection Exists" exception from the client.
-        if (! $this->inTransaction && ($this->getSharedTables() || $collection === Database::METADATA) && $this->exists($this->getNamespace(), $collection)) {
+        if (! $this->inTransaction && ($this->getSharedTables() || $collection === Database::METADATA) && $this->collectionExists($this->getNamespace(), $collection)) {
             return true;
         }
 
@@ -873,7 +868,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      *
      * @throws Exception
      */
-    public function listCollections(): array
+    protected function listCollections(): array
     {
         /** @var array<Document> $list */
         $list = [];
@@ -892,13 +887,11 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     }
 
     /**
-     * Delete Collection
-     *
      * @throws Exception
      */
-    public function deleteCollection(string $id): bool
+    public function deleteCollection(string $collection): bool
     {
-        $id = $this->getNamespace().'_'.$this->filter($id);
+        $id = $this->getNamespace().'_'.$this->filter($collection);
 
         return (bool) $this->getClient()->dropCollection($id);
     }
@@ -944,24 +937,37 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     }
 
     /**
-     * Delete Attribute
-     *
-     *
      * @throws DatabaseException
      * @throws MongoException
      */
-    public function deleteAttribute(string $collection, string $id): bool
+    public function deleteAttribute(string $collection, string $key): bool
     {
         $collection = $this->getNamespace().'_'.$this->filter($collection);
 
         $this->getClient()->update(
             $collection,
             [],
-            ['$unset' => [$this->escapeMongoFieldName($this->getInternalKeyForAttribute($id)) => '']],
+            ['$unset' => [$this->escapeMongoFieldName($this->getInternalKeyForAttribute($key)) => '']],
             multi: true
         );
 
         return true;
+    }
+
+    /**
+     * @return array<Document>
+     */
+    public function getSchemaAttributes(string $collection): array
+    {
+        return [];
+    }
+
+    /**
+     * @return array<Document>
+     */
+    public function getSchemaIndexes(string $collection): array
+    {
+        return [];
     }
 
     /**
@@ -1286,15 +1292,12 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     }
 
     /**
-     * Delete Index
-     *
-     *
      * @throws Exception
      */
-    public function deleteIndex(string $collection, string $id): bool
+    public function deleteIndex(string $collection, string $key): bool
     {
         $name = $this->getNamespace().'_'.$this->filter($collection);
-        $id = $this->filter($id);
+        $id = $this->filter($key);
         $this->getClient()->dropIndexes($name, [$id]);
 
         return true;
@@ -2074,12 +2077,13 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      *
      * @throws Exception
      */
-    public function deleteDocument(string $collection, string $id): bool
+    public function deleteDocument(Document $collection, string $id): bool
     {
-        $name = $this->getNamespace().'_'.$this->filter($collection);
+        $collectionId = $collection->getId();
+        $name = $this->getNamespace().'_'.$this->filter($collectionId);
 
         $filters = [Storage::UID => $id];
-        $filters = $this->applyTenantFilter($filters, $collection);
+        $filters = $this->applyTenantFilter($filters, $collectionId);
 
         $options = $this->getTransactionOptions();
         $result = $this->client->delete($name, $filters, 1, [], $options);
@@ -2095,9 +2099,10 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      *
      * @throws DatabaseException
      */
-    public function deleteDocuments(string $collection, array $sequences, array $permissionIds): int
+    public function deleteDocuments(Document $collection, array $sequences, array $permissionIds): int
     {
-        $name = $this->getNamespace().'_'.$this->filter($collection);
+        $collectionId = $collection->getId();
+        $name = $this->getNamespace().'_'.$this->filter($collectionId);
 
         foreach ($sequences as $index => $sequence) {
             $sequences[$index] = $sequence;
@@ -2105,7 +2110,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
         /** @var array<string, mixed> $filters */
         $filters = $this->buildFilters([new Query(Method::Equal, Storage::SEQUENCE, $sequences)]);
-        $filters = $this->applyTenantFilter($filters, $collection);
+        $filters = $this->applyTenantFilter($filters, $collectionId);
 
         $filters = $this->replaceInternalIdsKeys($filters, '$', '_', $this->operators);
 
@@ -2130,8 +2135,9 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      * @throws MongoException
      * @throws Exception
      */
-    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float|string $value, string $updatedAt, int|float|string|null $min = null, int|float|string|null $max = null): bool
+    public function increaseDocumentAttribute(Document $collection, string $id, string $attribute, int|float|string $value, string $updatedAt, int|float|string|null $min = null, int|float|string|null $max = null): bool
     {
+        $collectionId = $collection->getId();
         $value = $this->normalizeAtomicNumber($value, 'value');
         $min = $min === null ? null : $this->normalizeAtomicNumber($min, 'minimum');
         $max = $max === null ? null : $this->normalizeAtomicNumber($max, 'maximum');
@@ -2139,7 +2145,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $attribute = $this->filter($attribute);
         $current = ['$ifNull' => ['$'.$attribute, 0]];
         $filters = [Storage::UID => $id];
-        $filters = $this->applyTenantFilter($filters, $collection);
+        $filters = $this->applyTenantFilter($filters, $collectionId);
 
         $bounds = [];
         if ($max !== null) {
@@ -2159,7 +2165,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
         try {
             $this->updateWithPipeline(
-                $this->getNamespace().'_'.$this->filter($collection),
+                $this->getNamespace().'_'.$this->filter($collectionId),
                 $filters,
                 $pipeline,
                 $this->getTransactionOptions(),
@@ -2587,8 +2593,9 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      * @throws DatabaseException
      * @throws MongoException
      */
-    public function getSequences(string $collection, array $documents): array
+    public function getSequences(Document $collection, array $documents): array
     {
+        $collectionId = $collection->getId();
         $documentIds = [];
         $documentTenants = [];
         foreach ($documents as $document) {
@@ -2606,12 +2613,12 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         }
 
         $sequences = [];
-        $name = $this->getNamespace().'_'.$this->filter($collection);
+        $name = $this->getNamespace().'_'.$this->filter($collectionId);
 
         $filters = [Storage::UID => ['$in' => \array_values(\array_unique($documentIds))]];
 
         if ($this->sharedTables) {
-            $filters[Storage::TENANT] = $this->getTenantFilters($collection, \array_values(\array_unique($documentTenants)));
+            $filters[Storage::TENANT] = $this->getTenantFilters($collectionId, \array_values(\array_unique($documentTenants)));
         }
         try {
             // Use cursor paging for large result sets
@@ -2876,26 +2883,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     public function getAttributeWidth(Document $collection): int
     {
         return 0;
-    }
-
-    /**
-     * Get reserved keywords that cannot be used as identifiers. MongoDB has none.
-     *
-     * @return array<string>
-     */
-    public function getKeywords(): array
-    {
-        return [];
-    }
-
-    /**
-     * Get the keys of internally managed indexes. MongoDB has none exposed.
-     *
-     * @return array<string>
-     */
-    public function getInternalIndexesKeys(): array
-    {
-        return [];
     }
 
     /**
@@ -3882,16 +3869,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         }
 
         return $matches[1];
-    }
-
-    protected function quote(string $string): string
-    {
-        return '';
-    }
-
-    protected function execute(mixed $statement): bool
-    {
-        return true;
     }
 
     protected function isExtendedISODatetime(string $val): bool

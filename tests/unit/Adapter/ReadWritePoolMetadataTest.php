@@ -42,7 +42,6 @@ final class ReadWritePoolMetadataTest extends TestCase
         $calls = [
             'supports' => [Capability::Index],
             'capabilities' => [],
-            'hasFeature' => [Feature\Spatial::class],
             'setSupportForAttributes' => [true],
             'getSupportNonUtfCharacters' => [],
             'getLimitForString' => [],
@@ -73,7 +72,6 @@ final class ReadWritePoolMetadataTest extends TestCase
             'castingAfter' => [new Document(), new Document()],
             'castingAfterDocuments' => [new Document(), [new Document()]],
             'setUTCDatetime' => ['2026-09-23 00:00:00'],
-            'quote' => ['posts'],
         ];
 
         foreach ($calls as $method => $args) {
@@ -88,12 +86,11 @@ final class ReadWritePoolMetadataTest extends TestCase
     {
         $calls = [
             'getDriver' => [],
-            'getSequences' => ['posts', []],
+            'getSequences' => [new Document(['$id' => 'posts']), []],
             'analyzeCollection' => ['posts'],
             'startTransaction' => [],
             'commitTransaction' => [],
             'rollbackTransaction' => [],
-            'execute' => [null],
         ];
 
         foreach ($calls as $method => $args) {
@@ -120,6 +117,35 @@ final class ReadWritePoolMetadataTest extends TestCase
         $pool->delegate($method, $args);
 
         $this->assertTrue($pool->ping(), "{$method}() sent the next read to the primary");
+    }
+
+    /**
+     * The pool asks each connection it borrows whether it takes timeouts, so the delegated question is told apart
+     * from that probe by the feature it names.
+     */
+    public function testFeatureQuestionIsAnsweredWhereReadsGoWithoutOpeningTheStickyWindow(): void
+    {
+        $primary = $this->createMock(CastingAdapterStub::class);
+        $replica = $this->createMock(CastingAdapterStub::class);
+        $pool = $this->createPool($primary, $replica);
+
+        $asked = [];
+        $replica->method('hasFeature')->willReturnCallback(static function (string $feature) use (&$asked): bool {
+            $asked[] = $feature;
+
+            return false;
+        });
+        $primary->expects($this->never())->method('hasFeature');
+        $replica->expects($this->once())->method('ping')->willReturn(true);
+        $primary->expects($this->never())->method('ping');
+
+        $pool->delegate('hasFeature', [Feature\Spatial::class]);
+
+        $this->assertTrue($pool->ping(), 'hasFeature() sent the next read to the primary');
+        $this->assertSame([Feature\Spatial::class], \array_values(\array_filter(
+            $asked,
+            static fn (string $feature): bool => $feature !== Feature\Timeouts::class,
+        )));
     }
 
     /**

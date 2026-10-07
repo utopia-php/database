@@ -85,7 +85,7 @@ class CustomDocumentTypeTest extends TestCase
             fn (callable $callback) => $callback()
         );
         $this->adapter->method('getSequences')->willReturnCallback(
-            fn (string $collection, array $documents) => $documents
+            fn (Document $collection, array $documents) => $documents
         );
 
         $cache = new Cache(new NoneAdapter());

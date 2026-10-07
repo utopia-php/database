@@ -170,7 +170,7 @@ class IndexDefinition extends Validator
         if (! $this->checkKeyUniqueFulltextSupport($index)) {
             return false;
         }
-        if (! $this->checkTTLIndexes($index)) {
+        if (! $this->checkTtlIndexes($index)) {
             return false;
         }
 
@@ -426,7 +426,7 @@ class IndexDefinition extends Validator
             $attribute = $this->findAttribute($attributeName);
 
             if ($attribute !== null && $attribute->array) {
-                // Database::INDEX_UNIQUE Is not allowed! since mariaDB VS MySQL makes the unique Different on values
+                // MariaDB and MySQL disagree on what makes array values unique, so an array attribute takes only a key index
                 if ($indexType !== IndexType::Key) {
                     $this->message = '"'.ucfirst($indexType->value).'" index is forbidden on array attributes';
 
@@ -890,7 +890,7 @@ class IndexDefinition extends Validator
      * @param Index $index The index to validate
      * @return bool
      */
-    public function checkTTLIndexes(Index $index): bool
+    public function checkTtlIndexes(Index $index): bool
     {
         $type = $index->type;
 

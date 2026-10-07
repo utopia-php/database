@@ -74,12 +74,12 @@ class SpatialTest extends TestCase
 
     public function test_wkt_strings(): void
     {
-        $this->assertTrue(Spatial::isWKTString('POINT(1 2)'));
-        $this->assertTrue(Spatial::isWKTString('LINESTRING(0 0,1 1)'));
-        $this->assertTrue(Spatial::isWKTString('POLYGON((0 0,1 0,1 1,0 1,0 0))'));
+        $this->assertTrue(Spatial::isWktString('POINT(1 2)'));
+        $this->assertTrue(Spatial::isWktString('LINESTRING(0 0,1 1)'));
+        $this->assertTrue(Spatial::isWktString('POLYGON((0 0,1 0,1 1,0 1,0 0))'));
 
-        $this->assertFalse(Spatial::isWKTString('CIRCLE(0 0,1)'));
-        $this->assertFalse(Spatial::isWKTString('POINT1(1 2)'));
+        $this->assertFalse(Spatial::isWktString('CIRCLE(0 0,1)'));
+        $this->assertFalse(Spatial::isWktString('POINT1(1 2)'));
     }
 
     public function test_invalid_coordinate(): void

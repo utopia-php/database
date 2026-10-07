@@ -9,6 +9,7 @@ use Generator;
 use RuntimeException;
 use Throwable;
 use Utopia\Console;
+use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\ReadWritePool;
 use Utopia\Database\Attribute;
@@ -1259,7 +1260,8 @@ trait Documents
      * @param  array<Document>  $documents  The documents to create
      * @param  int  $batchSize  Number of documents per batch insert
      * @param  (callable(Document): void)|null  $onNext  Callback given each created document once its batch is written
-     * @param  (callable(Throwable): void)|null  $onError  Callback given an error $onNext throws, after which the write goes on; without it that error is rethrown. It never sees an error of the write itself, which is always thrown
+     * @param  (callable(Throwable): void)|null  $onError  Given an error $onNext throws; the write continues. Without it the
+     *                                                    error is rethrown. Write errors are always thrown.
      * @return int The number of documents created
      *
      * @throws AuthorizationException
@@ -1735,7 +1737,8 @@ trait Documents
      * @param  array<Query>  $queries  Queries to filter documents for update
      * @param  int  $batchSize  Number of documents per batch update
      * @param  (callable(Document $updated, Document $old): void)|null  $onNext  Callback given each updated document once its batch is written, with a copy of the document as it was read before the update
-     * @param  (callable(Throwable): void)|null  $onError  Callback given an error $onNext throws, after which the write goes on; without it that error is rethrown. It never sees an error of the write itself, which is always thrown
+     * @param  (callable(Throwable): void)|null  $onError  Given an error $onNext throws; the write continues. Without it the
+     *                                                    error is rethrown. Write errors are always thrown.
      * @return int The number of documents updated
      *
      * @throws AuthorizationException
@@ -2033,7 +2036,8 @@ trait Documents
      * @param  array<Document>  $documents  The documents to create or update
      * @param  int  $batchSize  Number of documents per batch
      * @param  (callable(Document $upserted, ?Document $old): void)|null  $onNext  Callback given each upserted document once its batch is written, with the stored document it updated, or null when it was created
-     * @param  (callable(Throwable): void)|null  $onError  Callback given an error $onNext throws, after which the write goes on; without it that error is rethrown. It never sees an error of the write itself, which is always thrown
+     * @param  (callable(Throwable): void)|null  $onError  Given an error $onNext throws; the write continues. Without it the
+     *                                                    error is rethrown. Write errors are always thrown.
      * @return int The number of documents created or updated
      *
      * @throws StructureException
@@ -2063,7 +2067,8 @@ trait Documents
      * @param  string  $attribute  The attribute to increment on update
      * @param  array<Document>  $documents  The documents to create or update
      * @param  (callable(Document $upserted, ?Document $old): void)|null  $onNext  Callback given each upserted document once its batch is written, with the stored document it updated, or null when it was created
-     * @param  (callable(Throwable): void)|null  $onError  Callback given an error $onNext throws, after which the write goes on; without it that error is rethrown. It never sees an error of the write itself, which is always thrown
+     * @param  (callable(Throwable): void)|null  $onError  Given an error $onNext throws; the write continues. Without it the
+     *                                                    error is rethrown. Write errors are always thrown.
      * @param  int  $batchSize  Number of documents per batch
      * @return int The number of documents created or updated
      *
@@ -2862,7 +2867,8 @@ trait Documents
      * @param  array<Query>  $queries  Queries to filter documents for deletion
      * @param  int  $batchSize  Number of documents per batch deletion
      * @param  (callable(Document $deleted, Document $copy): void)|null  $onNext  Callback given each deleted document once its batch is deleted, and a copy of that same document taken before the delete, not a separately stored version
-     * @param  (callable(Throwable): void)|null  $onError  Callback given an error $onNext throws, after which the write goes on; without it that error is rethrown. It never sees an error of the write itself, which is always thrown
+     * @param  (callable(Throwable): void)|null  $onError  Given an error $onNext throws; the write continues. Without it the
+     *                                                    error is rethrown. Write errors are always thrown.
      * @return int The number of documents deleted
      *
      * @throws AuthorizationException
@@ -5307,8 +5313,11 @@ trait Documents
 
     private function castingBefore(Document $collection, Document $document): Document
     {
-        if ($this->adapterHasFeature(Feature\InternalCasting::class)) {
-            return $this->adapter->castingBefore($collection, $document);
+        if ($this->adapter->hasFeature(Feature\InternalCasting::class)) {
+            /** @var Adapter&Feature\InternalCasting $adapter */
+            $adapter = $this->adapter;
+
+            return $adapter->castingBefore($collection, $document);
         }
 
         return $document;
@@ -5316,8 +5325,11 @@ trait Documents
 
     private function castingAfter(Document $collection, Document $document): Document
     {
-        if ($this->adapterHasFeature(Feature\InternalCasting::class)) {
-            return $this->adapter->castingAfter($collection, $document);
+        if ($this->adapter->hasFeature(Feature\InternalCasting::class)) {
+            /** @var Adapter&Feature\InternalCasting $adapter */
+            $adapter = $this->adapter;
+
+            return $adapter->castingAfter($collection, $document);
         }
 
         return $document;
@@ -5329,8 +5341,11 @@ trait Documents
      */
     private function castingAfterDocuments(Document $collection, array $documents): array
     {
-        if ($documents !== [] && $this->adapterHasFeature(Feature\InternalCasting::class)) {
-            return $this->adapter->castingAfterDocuments($collection, $documents);
+        if ($documents !== [] && $this->adapter->hasFeature(Feature\InternalCasting::class)) {
+            /** @var Adapter&Feature\InternalCasting $adapter */
+            $adapter = $this->adapter;
+
+            return $adapter->castingAfterDocuments($collection, $documents);
         }
 
         return $documents;

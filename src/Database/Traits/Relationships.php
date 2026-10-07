@@ -499,7 +499,7 @@ trait Relationships
                 // Check if the rename already happened in schema (orphan from prior
                 // partial failure where adapter succeeded but metadata+rollback failed).
                 // If the new column names already exist, the prior rename completed.
-                if ($this->adapterHasFeature(Feature\SchemaAttributes::class)) {
+                if ($this->adapter->hasFeature(Feature\SchemaAttributes::class)) {
                     $schemaAttributes = $this->getSchemaAttributes($collection->getId());
                     $filteredNewKey = $this->adapter->filter($actualNewKey);
                     $newKeyExists = false;

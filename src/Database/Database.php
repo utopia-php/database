@@ -573,8 +573,11 @@ class Database
                 if ($value === null) {
                     return null;
                 }
-                if ($database->adapterHasFeature(Feature\Spatial::class)) {
-                    return $database->adapter->decodePoint($value);
+                if ($database->adapter->hasFeature(Feature\Spatial::class)) {
+                    /** @var Adapter&Feature\Spatial $adapter */
+                    $adapter = $database->adapter;
+
+                    return $adapter->decodePoint($value);
                 }
 
                 return null;
@@ -603,8 +606,11 @@ class Database
                 if (is_null($value)) {
                     return null;
                 }
-                if ($database->adapterHasFeature(Feature\Spatial::class)) {
-                    return $database->adapter->decodeLinestring($value);
+                if ($database->adapter->hasFeature(Feature\Spatial::class)) {
+                    /** @var Adapter&Feature\Spatial $adapter */
+                    $adapter = $database->adapter;
+
+                    return $adapter->decodeLinestring($value);
                 }
 
                 return null;
@@ -633,8 +639,11 @@ class Database
                 if (is_null($value)) {
                     return null;
                 }
-                if ($database->adapterHasFeature(Feature\Spatial::class)) {
-                    return $database->adapter->decodePolygon($value);
+                if ($database->adapter->hasFeature(Feature\Spatial::class)) {
+                    /** @var Adapter&Feature\Spatial $adapter */
+                    $adapter = $database->adapter;
+
+                    return $adapter->decodePolygon($value);
                 }
 
                 return null;

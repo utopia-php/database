@@ -87,7 +87,7 @@ trait Attributes
 
         $existsInSchema = false;
 
-        $schemaAttributes = $this->adapterHasFeature(Feature\SchemaAttributes::class)
+        $schemaAttributes = $this->adapter->hasFeature(Feature\SchemaAttributes::class)
             ? $this->getSchemaAttributes($collection->getId())
             : [];
 
@@ -182,7 +182,7 @@ trait Attributes
             throw new NotFoundException('Collection not found');
         }
 
-        $schemaAttributes = $this->adapterHasFeature(Feature\SchemaAttributes::class)
+        $schemaAttributes = $this->adapter->hasFeature(Feature\SchemaAttributes::class)
             ? $this->getSchemaAttributes($collection->getId())
             : [];
 
@@ -416,7 +416,7 @@ trait Attributes
         /** @var array<Attribute> $existingAttributes */
         $existingAttributes = $collection->getAttribute('attributes', []);
 
-        $resolvedSchemaAttributes = $schemaAttributes ?? ($this->adapterHasFeature(Feature\SchemaAttributes::class)
+        $resolvedSchemaAttributes = $schemaAttributes ?? ($this->adapter->hasFeature(Feature\SchemaAttributes::class)
             ? $this->getSchemaAttributes($collection->getId())
             : []);
         $typedSchemaAttrs = [];
@@ -433,9 +433,9 @@ trait Attributes
             maxVarcharLength: $this->adapter->getMaxVarcharLength(),
             maxIntLength: $this->adapter->getLimitForInt(),
             maxBigIntLength: $this->adapter->getLimitForBigInt(),
-            supportForSchemaAttributes: $this->adapterHasFeature(Feature\SchemaAttributes::class),
+            supportForSchemaAttributes: $this->adapter->hasFeature(Feature\SchemaAttributes::class),
             supportForVectors: $this->adapter->supports(Capability::Vectors),
-            supportForSpatialAttributes: $this->adapterHasFeature(Feature\Spatial::class),
+            supportForSpatialAttributes: $this->adapter->hasFeature(Feature\Spatial::class),
             supportForObject: $this->adapter->supports(Capability::Objects),
             supportUnsignedBigInt: $this->adapter->supports(Capability::UnsignedBigInt),
             attributeCountCallback: fn (Document $attrDoc) => $this->adapter->getCountOfAttributes($collectionClone),
@@ -554,7 +554,7 @@ trait Attributes
     {
         $availableTypes = Attribute::availableTypes(
             objects: $this->adapter->supports(Capability::Objects),
-            spatial: $this->adapterHasFeature(Feature\Spatial::class),
+            spatial: $this->adapter->hasFeature(Feature\Spatial::class),
             vectors: $this->adapter->supports(Capability::Vectors),
         );
 
@@ -573,7 +573,7 @@ trait Attributes
             maxIntLength: $this->adapter->getLimitForInt(),
             maxBigIntLength: $this->adapter->getLimitForBigInt(),
             supportForVectors: $this->adapter->supports(Capability::Vectors),
-            supportForSpatialAttributes: $this->adapterHasFeature(Feature\Spatial::class),
+            supportForSpatialAttributes: $this->adapter->hasFeature(Feature\Spatial::class),
             supportForObject: $this->adapter->supports(Capability::Objects),
             supportUnsignedBigInt: $this->adapter->supports(Capability::UnsignedBigInt),
         );
@@ -898,7 +898,7 @@ trait Attributes
             case ColumnType::Point->value:
             case ColumnType::Linestring->value:
             case ColumnType::Polygon->value:
-                if (! $this->adapterHasFeature(Feature\Spatial::class)) {
+                if (! $this->adapter->hasFeature(Feature\Spatial::class)) {
                     throw new DatabaseException('Spatial attributes are not supported');
                 }
                 if (! empty($size)) {
@@ -1052,7 +1052,7 @@ trait Attributes
                     $this->adapter->supports(Capability::IdenticalIndexes),
                     $this->adapter->supports(Capability::ObjectIndexes),
                     $this->adapter->supports(Capability::TrigramIndex),
-                    $this->adapterHasFeature(Feature\Spatial::class),
+                    $this->adapter->hasFeature(Feature\Spatial::class),
                     $this->adapter->supports(Capability::Index),
                     $this->adapter->supports(Capability::UniqueIndex),
                     $this->adapter->supports(Capability::Fulltext),

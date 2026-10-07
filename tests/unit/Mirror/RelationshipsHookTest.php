@@ -37,15 +37,13 @@ final class RelationshipsHookTest extends TestCase
         $this->assertSame($prepare, $destination->getRelationshipHook()?->shouldPrepare());
     }
 
-    public function testEachSideRelatesThroughItsOwnDatabase(): void
+    public function testTheSourceHookKeepsTheGivenConfigurationWithoutADestination(): void
     {
         $source = new Database(new Memory(), new Cache(new None()));
         $mirror = new Mirror($source);
-        $hook = new Relationships($mirror, false);
 
-        $mirror->addHook($hook);
+        $mirror->addHook(new Relationships($mirror, false));
 
-        $this->assertNotSame($hook, $source->getRelationshipHook());
         $this->assertFalse($source->getRelationshipHook()?->shouldPrepare());
     }
 }

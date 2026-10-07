@@ -32,10 +32,14 @@ final class AddUnknownHookTest extends TestCase
     public function testAnUnknownHookIsRefusedThroughAMirror(): void
     {
         $mirror = new Mirror(HookFixture::memory(), new Database(new Memory(), new Cache(new None())));
+        $hook = new class () implements Hook {};
 
-        $this->expectException(DatabaseException::class);
-
-        $mirror->addHook(new class () implements Hook {});
+        try {
+            $mirror->addHook($hook);
+            $this->fail('An unknown hook was accepted');
+        } catch (DatabaseException $error) {
+            $this->assertSame('Unknown hook: '.$hook::class, $error->getMessage());
+        }
     }
 
     public function testAKnownHookIsRegistered(): void

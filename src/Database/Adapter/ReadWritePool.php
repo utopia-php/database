@@ -10,7 +10,7 @@ use Utopia\Pools\Pool as UtopiaPool;
 
 class ReadWritePool extends Pool
 {
-    private const READ_METHODS = [
+    protected const array READ_METHODS = [
         'find',
         'getDocument',
         'count',
@@ -29,7 +29,7 @@ class ReadWritePool extends Pool
      * Calls that neither read nor write data. They go wherever a read would and never open
      * the sticky window, so a call that writes, or must see the latest write, never belongs here.
      */
-    private const METADATA_METHODS = [
+    protected const array METADATA_METHODS = [
         'supports',
         'capabilities',
         'hasFeature',
@@ -70,7 +70,7 @@ class ReadWritePool extends Pool
      * Metadata the write pool answers however reads are routed: the hostname namespaces
      * document and query cache keys, so it must not change with the pool a read goes to.
      */
-    private const WRITE_POOL_METADATA_METHODS = [
+    protected const array WRITE_POOL_METADATA_METHODS = [
         'getHostname',
     ];
 

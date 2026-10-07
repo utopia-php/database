@@ -1,6 +1,6 @@
 <?php
 
-namespace Tests\Unit\PHPStan;
+namespace Tests\Unit\Adapter;
 
 use PHPStan\Testing\TypeInferenceTestCase;
 use PHPUnit\Framework\Attributes\DataProvider;

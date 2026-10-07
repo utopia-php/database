@@ -7,7 +7,7 @@ parameters:
         - src
         - tests
     excludePaths:
-        - tests/unit/PHPStan/Data
+        - tests/unit/Adapter/Data
     scanFiles:
         - stubs/Swoole/Database/DetectsLostConnections.stub.php
         - stubs/Swoole/Database/PDOProxy.stub.php
@@ -16,11 +16,3 @@ parameters:
         - stubs/Swoole/Database/DetectsLostConnections.stub.php
         - stubs/Swoole/Database/PDOProxy.stub.php
         - stubs/Swoole/Database/PDOStatementProxy.stub.php
-
-services:
-    -
-        class: Tests\Unit\PHPStan\MagicPropertyFetchRule
-        arguments:
-            sourceDirectory: %rootDir%/../../../src
-        tags:
-            - phpstan.rules.rule

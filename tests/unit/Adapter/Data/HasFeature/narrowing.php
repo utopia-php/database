@@ -1,6 +1,6 @@
 <?php
 
-namespace Tests\Unit\PHPStan\Data\HasFeature;
+namespace Tests\Unit\Adapter\Data\HasFeature;
 
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\Feature\Spatial;

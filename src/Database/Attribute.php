@@ -388,10 +388,9 @@ final readonly class Attribute
     public function bounds(): ?NumericBounds
     {
         return match ($this->type) {
-            ColumnType::Integer => new NumericBounds(
-                $this->signed ? Database::MIN_INT : 0,
-                Database::MAX_INT,
-            ),
+            ColumnType::Integer => $this->width() === IntegerWidth::Bits64
+                ? new NumericBounds($this->signed ? \PHP_INT_MIN : 0, Database::MAX_BIG_INT)
+                : new NumericBounds($this->signed ? Database::MIN_INT : 0, Database::MAX_INT),
             ColumnType::BigInteger => new NumericBounds(
                 $this->signed ? \PHP_INT_MIN : 0,
                 $this->signed ? Database::MAX_BIG_INT : BigInt::UNSIGNED_MAX,

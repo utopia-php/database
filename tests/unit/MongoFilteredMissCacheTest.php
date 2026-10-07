@@ -12,6 +12,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\PermissionType;
 
 /**
  * The document cache is shared by every caller, so a miss may only become a negative entry once the
@@ -66,7 +67,7 @@ final class MongoFilteredMissCacheTest extends TestCase
                     $document->isEmpty()
                     || $collection->getId() === Database::METADATA
                     || ! $this->authorization->getStatus()
-                    || \array_intersect($document->getRead(), $this->authorization->getRoles()) !== []
+                    || \array_intersect($document->getPermissionsByType(PermissionType::Read), $this->authorization->getRoles()) !== []
                 ) {
                     return $document;
                 }

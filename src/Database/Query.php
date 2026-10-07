@@ -141,7 +141,8 @@ class Query extends BaseQuery
     }
 
     /**
-     * @param  Document  $value
+     * @param  Document|string  $value  A document a read returned, or the ID of one. Database reads take the
+     *                                  document; a consumer resolves an ID to its document before the read.
      */
     public static function cursorAfter(mixed $value): static
     {
@@ -149,7 +150,8 @@ class Query extends BaseQuery
     }
 
     /**
-     * @param  Document  $value
+     * @param  Document|string  $value  A document a read returned, or the ID of one. Database reads take the
+     *                                  document; a consumer resolves an ID to its document before the read.
      */
     public static function cursorBefore(mixed $value): static
     {

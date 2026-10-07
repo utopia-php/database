@@ -18,7 +18,13 @@ use Utopia\Query\Query;
  */
 class Permissions extends Interceptor
 {
-    private const PERM_TYPES = [
+    /**
+     * @internal Marks a batch-updated document whose permissions the update keeps, so its permission rows are
+     *           neither read nor rewritten. Database sets it before the adapter write and removes it after.
+     */
+    public const string UNCHANGED = '$skipPermissionsUpdate';
+
+    private const array PERM_TYPES = [
         PermissionType::Create,
         PermissionType::Read,
         PermissionType::Update,
@@ -124,7 +130,7 @@ class Permissions extends Interceptor
 
         $eligible = [];
         foreach ($documents as $document) {
-            if ($document->getAttribute(Document::SKIP_PERMISSIONS_UPDATE, false)) {
+            if ($document->getAttribute(self::UNCHANGED, false)) {
                 continue;
             }
             $eligible[] = $document;

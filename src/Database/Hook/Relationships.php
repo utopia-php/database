@@ -3009,8 +3009,8 @@ class Relationships implements Hook
         $authorization = $this->database->getAuthorization();
 
         if (! $authorization->isValid(new Input(PermissionType::Update, [
-            ...$collection->getUpdate(),
-            ...($collection->getAttribute('documentSecurity', false) ? $related->getUpdate() : []),
+            ...$collection->getPermissionsByType(PermissionType::Update),
+            ...($collection->getAttribute('documentSecurity', false) ? $related->getPermissionsByType(PermissionType::Update) : []),
         ]))) {
             throw new AuthorizationException($authorization->getDescription());
         }

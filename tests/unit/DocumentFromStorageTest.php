@@ -18,6 +18,7 @@ use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Filter;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\PermissionType;
 
 final class DocumentFromStorageTest extends TestCase
 {
@@ -41,8 +42,8 @@ final class DocumentFromStorageTest extends TestCase
             [Permission::read(Role::any()), Permission::update(Role::users())],
             $document->getAttribute(Document::PERMISSIONS),
         );
-        $this->assertSame(['any'], $document->getRead());
-        $this->assertSame(['users'], $document->getUpdate());
+        $this->assertSame(['any'], $document->getPermissionsByType(PermissionType::Read));
+        $this->assertSame(['users'], $document->getPermissionsByType(PermissionType::Update));
     }
 
     public function testTheConstructorStillRejectsNonStringPermissions(): void

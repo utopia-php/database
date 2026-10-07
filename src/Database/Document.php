@@ -31,10 +31,6 @@ class Document extends ArrayObject
 
     public const string DELETED_AT = '$deletedAt';
 
-    public const string SKIP_PERMISSIONS_UPDATE = '$skipPermissionsUpdate';
-
-    public const string INTERNAL_ID = '$internalId';
-
     /** @var array<string, true>|null */
     private static ?array $internalKeySet = null;
 
@@ -264,60 +260,6 @@ class Document extends ArrayObject
     public function getPermissions(): array
     {
         return $this->parsePermissions()['permissions'];
-    }
-
-    /**
-     * Get roles with read permission on this document.
-     *
-     * @return array<string>
-     */
-    public function getRead(): array
-    {
-        return $this->getPermissionsByType(PermissionType::Read);
-    }
-
-    /**
-     * Get roles with create permission on this document.
-     *
-     * @return array<string>
-     */
-    public function getCreate(): array
-    {
-        return $this->getPermissionsByType(PermissionType::Create);
-    }
-
-    /**
-     * Get roles with update permission on this document.
-     *
-     * @return array<string>
-     */
-    public function getUpdate(): array
-    {
-        return $this->getPermissionsByType(PermissionType::Update);
-    }
-
-    /**
-     * Get roles with delete permission on this document.
-     *
-     * @return array<string>
-     */
-    public function getDelete(): array
-    {
-        return $this->getPermissionsByType(PermissionType::Delete);
-    }
-
-    /**
-     * Get roles with full write permission (create, update, and delete) on this document.
-     *
-     * @return array<string>
-     */
-    public function getWrite(): array
-    {
-        return \array_unique(\array_intersect(
-            $this->getCreate(),
-            $this->getUpdate(),
-            $this->getDelete()
-        ));
     }
 
     /**
@@ -580,116 +522,6 @@ class Document extends ArrayObject
     }
 
     /**
-     * Find.
-     *
-     * @param  mixed  $find
-     */
-    public function find(string $key, $find, string $subject = ''): mixed
-    {
-        /** @var array<mixed>|self $resolved */
-        $resolved = $this->resolveSubject($subject);
-
-        if (is_array($resolved)) {
-            foreach ($resolved as $i => $value) {
-                if (\is_array($value) && isset($value[$key]) && $value[$key] === $find) {
-                    return $value;
-                }
-                if ($value instanceof self && isset($value[$key]) && $value[$key] === $find) {
-                    return $value;
-                }
-            }
-
-            return false;
-        }
-
-        if (isset($resolved[$key]) && $resolved[$key] === $find) {
-            return $resolved;
-        }
-
-        return false;
-    }
-
-    /**
-     * Find and Replace.
-     *
-     * Get array child by key and value match
-     *
-     * @param  mixed  $find
-     * @param  mixed  $replace
-     */
-    public function findAndReplace(string $key, $find, $replace, string $subject = ''): bool
-    {
-        $target = $this->resolveSubject($subject);
-
-        if (\is_array($target)) {
-            /** @var array<mixed> $subjectArray */
-            $subjectArray = &$this[$subject];
-            foreach ($subjectArray as $i => &$value) {
-                if (\is_array($value) && isset($value[$key]) && $value[$key] === $find) {
-                    $value = $replace;
-                    return true;
-                }
-                if ($value instanceof self && isset($value[$key]) && $value[$key] === $find) {
-                    $subjectArray[$i] = $replace;
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        if (! $target instanceof self || ! isset($target[$key]) || $target[$key] !== $find) {
-            return false;
-        }
-
-        $target[$key] = $replace;
-
-        return true;
-    }
-
-    /**
-     * Find and Remove.
-     *
-     * Get array child by key and value match
-     *
-     * @param  mixed  $find
-     */
-    public function findAndRemove(string $key, $find, string $subject = ''): bool
-    {
-        $target = $this->resolveSubject($subject);
-
-        if (\is_array($target)) {
-            /** @var array<mixed> $subjectArray */
-            $subjectArray = &$this[$subject];
-            foreach ($subjectArray as $i => &$value) {
-                if (\is_array($value) && isset($value[$key]) && $value[$key] === $find) {
-                    unset($subjectArray[$i]);
-                    return true;
-                }
-                if ($value instanceof self && isset($value[$key]) && $value[$key] === $find) {
-                    unset($subjectArray[$i]);
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        if (! $target instanceof self || ! isset($target[$key]) || $target[$key] !== $find) {
-            return false;
-        }
-
-        unset($target[$key]);
-
-        return true;
-    }
-
-    private function resolveSubject(string $subject): mixed
-    {
-        $value = $subject !== '' ? ($this[$subject] ?? null) : null;
-
-        return empty($value) ? $this : $value;
-    }
-
-    /**
      * Checks if document has data.
      */
     public function isEmpty(): bool
@@ -706,36 +538,54 @@ class Document extends ArrayObject
     }
 
     /**
-     * Get Array Copy.
+     * The document as a PHP array, with every nested document converted to an array too.
      *
-     * Outputs entity as a PHP array
-     *
-     * @param  array<string>  $allow
-     * @param  array<string>  $disallow
      * @return array<string, mixed>
      */
-    public function getArrayCopy(array $allow = [], array $disallow = []): array
+    #[\Override]
+    public function getArrayCopy(): array
     {
-        $array = parent::getArrayCopy();
+        return self::export(parent::getArrayCopy());
+    }
 
+    /**
+     * The given top-level keys of getArrayCopy(), in the document's order.
+     *
+     * @param  array<string>  $keys
+     * @return array<string, mixed>
+     */
+    public function only(array $keys): array
+    {
+        return self::export(\array_intersect_key(parent::getArrayCopy(), \array_flip($keys)));
+    }
+
+    /**
+     * getArrayCopy() without the given top-level keys.
+     *
+     * @param  array<string>  $keys
+     * @return array<string, mixed>
+     */
+    public function except(array $keys): array
+    {
+        return self::export(\array_diff_key(parent::getArrayCopy(), \array_flip($keys)));
+    }
+
+    /**
+     * @param  array<string, mixed>  $values
+     * @return array<string, mixed>
+     */
+    private static function export(array $values): array
+    {
         $output = [];
-
-        foreach ($array as $key => $value) {
-            if (! empty($allow) && ! \in_array($key, $allow)) { // Export only allow fields
-                continue;
-            }
-
-            if (! empty($disallow) && \in_array($key, $disallow)) { // Don't export disallowed fields
-                continue;
-            }
-
+        foreach ($values as $key => $value) {
             if ($value instanceof self) {
-                $output[$key] = $value->getArrayCopy($allow, $disallow);
+                $output[$key] = $value->getArrayCopy();
             } elseif (\is_array($value)) {
-                $output[$key] = \array_map(
-                    fn ($item) => $item instanceof self ? $item->getArrayCopy($allow, $disallow) : $item,
-                    $value
-                );
+                $items = [];
+                foreach ($value as $index => $item) {
+                    $items[$index] = $item instanceof self ? $item->getArrayCopy() : $item;
+                }
+                $output[$key] = $items;
             } else {
                 $output[$key] = $value;
             }

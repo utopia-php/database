@@ -120,7 +120,7 @@ final class PermissionsTest extends TestCase
         $adapter->updateDocument($collection, 'dupes', $update, false);
 
         $document = $adapter->getDocument($collection, 'dupes');
-        $this->assertSame(['any', 'guests'], $document->getCreate());
+        $this->assertSame(['any', 'guests'], $document->getPermissionsByType(PermissionType::Create));
     }
 
     public function testUpdateDoesNotDuplicatePermissionsWhenDocumentIdCasingDiffers(): void
@@ -154,8 +154,8 @@ final class PermissionsTest extends TestCase
 
         $document = $adapter->getDocument($collection, 'CaseSensitive');
         $this->assertSame('CaseSensitive', $document->getId());
-        $this->assertSame(['any', 'guests'], $document->getCreate());
-        $this->assertSame(['any', 'guests'], $document->getRead());
+        $this->assertSame(['any', 'guests'], $document->getPermissionsByType(PermissionType::Create));
+        $this->assertSame(['any', 'guests'], $document->getPermissionsByType(PermissionType::Read));
     }
 
     public function testBatchUpdateDeduplicatesPermissionAdditions(): void

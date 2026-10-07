@@ -117,7 +117,7 @@ final class PermissionsBatchSkipTest extends TestCase
             new Document([Document::ID => 'second', Document::PERMISSIONS => self::stored()]),
         ]);
         foreach ($documents as $document) {
-            $document->setAttribute(Document::SKIP_PERMISSIONS_UPDATE, true);
+            $document->setAttribute(Permissions::UNCHANGED, true);
         }
         $updates = new class ([Document::PERMISSIONS => self::stored()]) extends Document {
             public int $calls = 0;

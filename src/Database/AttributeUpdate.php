@@ -16,7 +16,7 @@ final readonly class AttributeUpdate
         public mixed $default = Unchanged::Value,
         public ?bool $signed = null,
         public ?bool $array = null,
-        public ?Format $format = null,
+        public Format|Unchanged|null $format = Unchanged::Value,
         public ?array $filters = null,
         public ?string $key = null,
     ) {
@@ -27,6 +27,11 @@ final readonly class AttributeUpdate
         return $this->default !== Unchanged::Value;
     }
 
+    public function changesFormat(): bool
+    {
+        return $this->format !== Unchanged::Value;
+    }
+
     public function isEmpty(): bool
     {
         return $this->type === null
@@ -35,7 +40,7 @@ final readonly class AttributeUpdate
             && ! $this->changesDefault()
             && $this->signed === null
             && $this->array === null
-            && $this->format === null
+            && ! $this->changesFormat()
             && $this->filters === null
             && $this->key === null;
     }

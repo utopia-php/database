@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Model;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
@@ -353,13 +354,11 @@ final class CollectionTest extends TestCase
     public function testAppendRefreshesTheMemo(): void
     {
         $collection = $this->collection();
-        $attributes = $collection->attributes();
-        $indexes = $collection->indexes();
+        $collection->attributes();
+        $collection->indexes();
 
         $collection->append('unkeyed');
 
-        $this->assertNotSame($attributes[0], $collection->attributes()[0]);
-        $this->assertNotSame($indexes[0], $collection->indexes()[0]);
         $this->assertSame(['title'], $this->attributeKeys($collection));
         $this->assertSame(['by_title'], $this->indexKeys($collection));
     }
@@ -392,6 +391,92 @@ final class CollectionTest extends TestCase
 
         $this->assertSame(['title', 'pages'], $this->attributeKeys($clone));
         $this->assertSame(['title'], $this->attributeKeys($collection));
+    }
+
+    public function testACloneHasTheOriginalListsUntilItIsMutated(): void
+    {
+        $collection = $this->collection();
+        $attributes = $this->attributeDocuments($collection);
+        $indexes = $this->indexDocuments($collection);
+
+        $clone = clone $collection;
+
+        $this->assertSame($attributes, $this->attributeDocuments($clone));
+        $this->assertSame($indexes, $this->indexDocuments($clone));
+
+        $clone->setAttribute('attributes', Attribute::integer('pages')->toDocument(), SetType::Append);
+        $clone->setAttribute('indexes', [Index::unique('by_pages', ['pages'])->toDocument()]);
+
+        $this->assertSame(['title', 'pages'], $this->attributeKeys($clone));
+        $this->assertSame(['by_pages'], $this->indexKeys($clone));
+        $this->assertSame($attributes, $this->attributeDocuments($collection));
+        $this->assertSame($indexes, $this->indexDocuments($collection));
+    }
+
+    public function testACloneOfAnUnreadCollectionHydratesItsOwnLists(): void
+    {
+        $collection = $this->collection();
+
+        $clone = clone $collection;
+        $clone->setAttribute('name', 'Copy');
+
+        $this->assertSame(['title'], $this->attributeKeys($clone));
+        $this->assertSame(['by_title'], $this->indexKeys($clone));
+        $this->assertSame(['title'], $this->attributeKeys($collection));
+    }
+
+    public function testInPlaceNestedMutationNeedsTheListSetBack(): void
+    {
+        $collection = $this->collection();
+        $collection->attributes();
+
+        $collection->getDocuments('attributes')[0]->setAttribute('key', 'heading');
+
+        $this->assertSame(['title'], $this->attributeKeys($collection));
+
+        $collection->setAttribute('attributes', $collection->getAttribute('attributes'));
+
+        $this->assertSame(['heading'], $this->attributeKeys($collection));
+    }
+
+    public function testAttributeModelsWrittenStraightIntoStorageAreRejected(): void
+    {
+        $collection = $this->collection();
+        $collection->setAttribute('attributes', [Attribute::integer('pages')]);
+
+        $this->expectException(StructureException::class);
+
+        $collection->attributes();
+    }
+
+    public function testIndexModelsWrittenStraightIntoStorageAreRejected(): void
+    {
+        $collection = $this->collection();
+        $collection->setAttribute('indexes', [Index::key('by_pages', ['pages'])]);
+
+        $this->expectException(IndexException::class);
+
+        $collection->indexes();
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function coreKeys(): array
+    {
+        return [
+            'attributes' => ['attributes'],
+            'indexes' => ['indexes'],
+            'documentSecurity' => ['documentSecurity'],
+        ];
+    }
+
+    #[DataProvider('coreKeys')]
+    public function testCreateRejectsCoreKeysInMetadata(string $key): void
+    {
+        $this->expectException(StructureException::class);
+
+        Collection::create('books', metadata: [$key => []]);
     }
 
     public function testStorageWritesToOtherKeysKeepTheListsCorrect(): void
@@ -428,5 +513,21 @@ final class CollectionTest extends TestCase
     private function indexKeys(Collection $collection): array
     {
         return \array_map(static fn (Index $index): string => $index->key, $collection->indexes());
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function attributeDocuments(Collection $collection): array
+    {
+        return \array_map(static fn (Attribute $attribute): array => $attribute->toDocument()->getArrayCopy(), $collection->attributes());
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function indexDocuments(Collection $collection): array
+    {
+        return \array_map(static fn (Index $index): array => $index->toDocument()->getArrayCopy(), $collection->indexes());
     }
 }

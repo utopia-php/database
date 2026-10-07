@@ -58,18 +58,6 @@ final readonly class Attribute
 
     private const string OPTIONS = 'options';
 
-    private const string SIDE = 'side';
-
-    private const string RELATED_COLLECTION = 'relatedCollection';
-
-    private const string RELATION_TYPE = 'relationType';
-
-    private const string TWO_WAY = 'twoWay';
-
-    private const string TWO_WAY_KEY = 'twoWayKey';
-
-    private const string ON_DELETE = 'onDelete';
-
     /**
      * @param  list<string>  $filters
      */
@@ -178,7 +166,7 @@ final readonly class Attribute
      */
     public static function datetime(string $key, bool $required = false, string|array|null $default = null, bool $array = false): self
     {
-        return new self($key, ColumnType::Datetime, null, $required, $default, false, $array, null, [Filter::Datetime->value], null, null);
+        return self::scalar($key, ColumnType::Datetime, null, $required, $default, false, $array, null, []);
     }
 
     /**
@@ -186,7 +174,7 @@ final readonly class Attribute
      */
     public static function point(string $key, bool $required = false, ?array $default = null): self
     {
-        return self::filtered($key, ColumnType::Point, null, $required, $default, Filter::Point);
+        return self::scalar($key, ColumnType::Point, null, $required, $default, true, false, null, []);
     }
 
     /**
@@ -194,7 +182,7 @@ final readonly class Attribute
      */
     public static function lineString(string $key, bool $required = false, ?array $default = null): self
     {
-        return self::filtered($key, ColumnType::Linestring, null, $required, $default, Filter::LineString);
+        return self::scalar($key, ColumnType::Linestring, null, $required, $default, true, false, null, []);
     }
 
     /**
@@ -202,7 +190,7 @@ final readonly class Attribute
      */
     public static function polygon(string $key, bool $required = false, ?array $default = null): self
     {
-        return self::filtered($key, ColumnType::Polygon, null, $required, $default, Filter::Polygon);
+        return self::scalar($key, ColumnType::Polygon, null, $required, $default, true, false, null, []);
     }
 
     /**
@@ -210,7 +198,7 @@ final readonly class Attribute
      */
     public static function vector(string $key, int $dimensions, bool $required = false, ?array $default = null): self
     {
-        return self::filtered($key, ColumnType::Vector, $dimensions, $required, $default, Filter::Vector);
+        return self::scalar($key, ColumnType::Vector, $dimensions, $required, $default, true, false, null, []);
     }
 
     /**
@@ -218,7 +206,7 @@ final readonly class Attribute
      */
     public static function object(string $key, bool $required = false, ?array $default = null): self
     {
-        return self::filtered($key, ColumnType::Object, null, $required, $default, Filter::Object);
+        return self::scalar($key, ColumnType::Object, null, $required, $default, true, false, null, []);
     }
 
     public static function id(string $key, bool $required = false, int|string|null $default = null, bool $array = false): self
@@ -237,7 +225,7 @@ final readonly class Attribute
             throw new Structure('Relationship key "'.$relationship->key.'" does not match attribute key "'.$key.'"');
         }
 
-        return new self($key, ColumnType::Relationship, null, false, null, true, false, null, [], $relationship, $side);
+        return self::normalised($key, ColumnType::Relationship, null, false, null, true, false, null, [], $relationship, $side);
     }
 
     /**
@@ -302,15 +290,8 @@ final readonly class Attribute
             self::FILTERS => $this->filters,
         ];
 
-        if ($this->relationship !== null) {
-            $data[self::OPTIONS] = [
-                self::RELATED_COLLECTION => $this->relationship->relatedCollection,
-                self::RELATION_TYPE => $this->relationship->type->value,
-                self::TWO_WAY => $this->relationship->twoWay,
-                self::TWO_WAY_KEY => $this->relationship->twoWayKey,
-                self::ON_DELETE => $this->relationship->onDelete->value,
-                self::SIDE => $this->side?->value,
-            ];
+        if ($this->relationship !== null && $this->side !== null) {
+            $data[self::OPTIONS] = $this->relationship->toOptions($this->side);
         }
 
         return new Document($data);
@@ -335,16 +316,22 @@ final readonly class Attribute
             $relationship = $relationship->apply(new RelationshipUpdate(key: $key));
         }
 
-        return new self(
+        $filters = match (true) {
+            $update->filters !== null => Filter::names($update->filters),
+            $type !== $this->type => self::withoutTypeFilter($this->type, $this->filters),
+            default => $this->filters,
+        };
+
+        return self::normalised(
             $key,
             $type,
-            self::normalizeSize($update->size ?? $this->size),
+            $update->size ?? $this->size,
             $update->required ?? $this->required,
             $update->changesDefault() ? $update->default : $this->default,
             $update->signed ?? $this->signed,
             $update->array ?? $this->array,
-            $update->format ?? $this->format,
-            $update->filters === null ? $this->filters : Filter::names($update->filters),
+            $update->format instanceof Unchanged ? $this->format : $update->format,
+            $filters,
             $relationship,
             $this->side,
         );
@@ -355,19 +342,7 @@ final readonly class Attribute
      */
     public function withFilters(array $filters): self
     {
-        return new self(
-            $this->key,
-            $this->type,
-            $this->size,
-            $this->required,
-            $this->default,
-            $this->signed,
-            $this->array,
-            $this->format,
-            Filter::names($filters),
-            $this->relationship,
-            $this->side,
-        );
+        return clone($this, ['filters' => self::withTypeFilter($this->type, Filter::names($filters))]);
     }
 
     public function width(): ?IntegerWidth
@@ -486,20 +461,105 @@ final readonly class Attribute
      */
     private static function scalar(string $key, ColumnType $type, ?int $size, bool $required, mixed $default, bool $signed, bool $array, ?Format $format, array $filters): self
     {
-        return new self($key, $type, self::normalizeSize($size), $required, $default, $signed, $array, $format, Filter::names($filters), null, null);
+        return self::normalised($key, $type, $size, $required, $default, $signed, $array, $format, $filters, null, null);
     }
 
     /**
-     * @param  array<mixed>|null  $default
+     * @param  list<Filter|string>  $filters
      */
-    private static function filtered(string $key, ColumnType $type, ?int $size, bool $required, ?array $default, Filter $filter): self
-    {
-        return new self($key, $type, self::normalizeSize($size), $required, $default, true, false, null, [$filter->value], null, null);
+    private static function normalised(
+        string $key,
+        ColumnType $type,
+        ?int $size,
+        bool $required,
+        mixed $default,
+        bool $signed,
+        bool $array,
+        ?Format $format,
+        array $filters,
+        ?Relationship $relationship,
+        ?RelationshipSide $side,
+    ): self {
+        return new self(
+            $key,
+            $type,
+            self::normalisedSize($type, $size),
+            $required,
+            $default,
+            self::normalisedSigned($type, $signed),
+            self::normalisedArray($type, $array),
+            $format,
+            self::withTypeFilter($type, Filter::names($filters)),
+            $relationship,
+            $side,
+        );
     }
 
-    private static function normalizeSize(?int $size): ?int
+    private static function normalisedSize(ColumnType $type, ?int $size): ?int
     {
-        return $size === 0 ? null : $size;
+        return match ($type) {
+            ColumnType::String, ColumnType::Varchar, ColumnType::Text, ColumnType::MediumText, ColumnType::LongText, ColumnType::Vector => $size === 0 ? null : $size,
+            ColumnType::Integer => IntegerWidth::fromSize($size)->size(),
+            default => null,
+        };
+    }
+
+    private static function normalisedSigned(ColumnType $type, bool $signed): bool
+    {
+        return match ($type) {
+            ColumnType::Integer, ColumnType::BigInteger, ColumnType::Float, ColumnType::Double => $signed,
+            ColumnType::Datetime => false,
+            default => true,
+        };
+    }
+
+    private static function normalisedArray(ColumnType $type, bool $array): bool
+    {
+        return match ($type) {
+            ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon, ColumnType::Vector, ColumnType::Object, ColumnType::Relationship => false,
+            default => $array,
+        };
+    }
+
+    private static function typeFilter(ColumnType $type): ?Filter
+    {
+        return match ($type) {
+            ColumnType::Datetime => Filter::Datetime,
+            ColumnType::Point => Filter::Point,
+            ColumnType::Linestring => Filter::LineString,
+            ColumnType::Polygon => Filter::Polygon,
+            ColumnType::Vector => Filter::Vector,
+            ColumnType::Object => Filter::Object,
+            default => null,
+        };
+    }
+
+    /**
+     * @param  list<string>  $filters
+     * @return list<string>
+     */
+    private static function withTypeFilter(ColumnType $type, array $filters): array
+    {
+        $filter = self::typeFilter($type)?->value;
+        if ($filter === null || \in_array($filter, $filters, true)) {
+            return $filters;
+        }
+
+        return [$filter, ...$filters];
+    }
+
+    /**
+     * @param  list<string>  $filters
+     * @return list<string>
+     */
+    private static function withoutTypeFilter(ColumnType $type, array $filters): array
+    {
+        $filter = self::typeFilter($type)?->value;
+        if ($filter === null) {
+            return $filters;
+        }
+
+        return \array_values(\array_filter($filters, static fn (string $name): bool => $name !== $filter));
     }
 
     /**
@@ -557,7 +617,7 @@ final readonly class Attribute
         return new self(
             $key,
             $columnType,
-            self::normalizeSize(\is_numeric($size) ? (int) $size : null),
+            self::storedSize($size),
             (bool) ($required ?? false),
             $default,
             (bool) ($signed ?? true),
@@ -567,6 +627,13 @@ final readonly class Attribute
             $relationship,
             $side,
         );
+    }
+
+    private static function storedSize(mixed $size): ?int
+    {
+        $size = \is_numeric($size) ? (int) $size : null;
+
+        return $size === 0 ? null : $size;
     }
 
     private static function hydrateFormat(mixed $format, mixed $options): ?Format
@@ -609,13 +676,13 @@ final readonly class Attribute
             throw new Structure('Relationship attribute "'.$key.'" has no relationship options');
         }
 
-        $side = $options[self::SIDE] ?? RelationshipSide::Parent->value;
+        $side = $options[Relationship::SIDE] ?? RelationshipSide::Parent->value;
         $side = $side instanceof RelationshipSide ? $side : RelationshipSide::tryFrom(\is_string($side) ? $side : '');
         if ($side === null) {
             throw new Structure('Relationship attribute "'.$key.'" has an unknown side');
         }
 
-        unset($options[self::SIDE]);
+        unset($options[Relationship::SIDE]);
         $options[self::KEY] = $key;
 
         /** @var array<string, mixed> $options */

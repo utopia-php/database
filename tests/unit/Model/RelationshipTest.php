@@ -160,6 +160,30 @@ final class RelationshipTest extends TestCase
         $this->assertSame(RelationshipDeleteAction::SetNull, $relationship->onDelete);
     }
 
+    public function testToOptionsIsTheStoredShapeWithoutTheKeyPlusTheSide(): void
+    {
+        $relationship = Relationship::manyToMany('tags', key: 'tags', twoWay: true, twoWayKey: 'posts', onDelete: RelationshipDeleteAction::SetNull);
+
+        $this->assertSame([
+            'relatedCollection' => 'tags',
+            'relationType' => 'manyToMany',
+            'twoWay' => true,
+            'twoWayKey' => 'posts',
+            'onDelete' => 'setNull',
+            'side' => 'child',
+        ], $relationship->toOptions(RelationshipSide::Child));
+    }
+
+    public function testToOptionsHydratesBackWithTheKey(): void
+    {
+        $relationship = Relationship::oneToMany('comments', key: 'comments', twoWayKey: 'post');
+
+        $options = $relationship->toOptions(RelationshipSide::Parent);
+        unset($options[Relationship::SIDE]);
+
+        $this->assertSameRelationship($relationship, Relationship::fromArray([...$options, 'key' => 'comments']));
+    }
+
     public function testSupportedForeignKeyActionIsAccepted(): void
     {
         $relationship = Relationship::fromArray(['relatedCollection' => 'users', 'relationType' => 'oneToOne', 'onDelete' => ForeignKeyAction::Cascade]);
@@ -182,6 +206,7 @@ final class RelationshipTest extends TestCase
             'non-string key' => [['relatedCollection' => 'users', 'relationType' => 'oneToOne', 'key' => 5]],
             'non-string two-way key' => [['relatedCollection' => 'users', 'relationType' => 'oneToOne', 'twoWayKey' => ['posts']]],
             'unknown delete action' => [['relatedCollection' => 'users', 'relationType' => 'oneToOne', 'onDelete' => 'explode']],
+            'unrelated enum as delete action' => [['relatedCollection' => 'users', 'relationType' => 'oneToOne', 'onDelete' => RelationshipSide::Parent]],
         ];
     }
 

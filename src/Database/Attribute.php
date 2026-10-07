@@ -58,18 +58,6 @@ final readonly class Attribute
 
     private const string OPTIONS = 'options';
 
-    private const string SIDE = 'side';
-
-    private const string RELATED_COLLECTION = 'relatedCollection';
-
-    private const string RELATION_TYPE = 'relationType';
-
-    private const string TWO_WAY = 'twoWay';
-
-    private const string TWO_WAY_KEY = 'twoWayKey';
-
-    private const string ON_DELETE = 'onDelete';
-
     /**
      * @param  list<string>  $filters
      */
@@ -302,15 +290,8 @@ final readonly class Attribute
             self::FILTERS => $this->filters,
         ];
 
-        if ($this->relationship !== null) {
-            $data[self::OPTIONS] = [
-                self::RELATED_COLLECTION => $this->relationship->relatedCollection,
-                self::RELATION_TYPE => $this->relationship->type->value,
-                self::TWO_WAY => $this->relationship->twoWay,
-                self::TWO_WAY_KEY => $this->relationship->twoWayKey,
-                self::ON_DELETE => $this->relationship->onDelete->value,
-                self::SIDE => $this->side?->value,
-            ];
+        if ($this->relationship !== null && $this->side !== null) {
+            $data[self::OPTIONS] = $this->relationship->toOptions($this->side);
         }
 
         return new Document($data);
@@ -609,13 +590,13 @@ final readonly class Attribute
             throw new Structure('Relationship attribute "'.$key.'" has no relationship options');
         }
 
-        $side = $options[self::SIDE] ?? RelationshipSide::Parent->value;
+        $side = $options[Relationship::SIDE] ?? RelationshipSide::Parent->value;
         $side = $side instanceof RelationshipSide ? $side : RelationshipSide::tryFrom(\is_string($side) ? $side : '');
         if ($side === null) {
             throw new Structure('Relationship attribute "'.$key.'" has an unknown side');
         }
 
-        unset($options[self::SIDE]);
+        unset($options[Relationship::SIDE]);
         $options[self::KEY] = $key;
 
         /** @var array<string, mixed> $options */

@@ -2,11 +2,13 @@
 
 namespace Utopia\Database;
 
-use BackedEnum;
 use Utopia\Database\Exception\Relationship as RelationshipException;
+use Utopia\Query\Schema\ForeignKeyAction;
 
 final readonly class Relationship
 {
+    public const string SIDE = 'side';
+
     private const string RELATED_COLLECTION = 'relatedCollection';
 
     private const string RELATION_TYPE = 'relationType';
@@ -120,14 +122,34 @@ final readonly class Relationship
 
     public function toDocument(): Document
     {
-        return new Document([
+        return new Document($this->fields());
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function toOptions(RelationshipSide $side): array
+    {
+        $options = $this->fields();
+        unset($options[self::KEY]);
+        $options[self::SIDE] = $side->value;
+
+        return $options;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function fields(): array
+    {
+        return [
             self::RELATED_COLLECTION => $this->relatedCollection,
             self::RELATION_TYPE => $this->type->value,
             self::TWO_WAY => $this->twoWay,
             self::KEY => $this->key,
             self::TWO_WAY_KEY => $this->twoWayKey,
             self::ON_DELETE => $this->onDelete->value,
-        ]);
+        ];
     }
 
     /**
@@ -197,7 +219,7 @@ final readonly class Relationship
             return $onDelete;
         }
 
-        if ($onDelete instanceof BackedEnum) {
+        if ($onDelete instanceof ForeignKeyAction) {
             $onDelete = $onDelete->value;
         }
 

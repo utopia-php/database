@@ -1656,6 +1656,8 @@ class Database
      * Run the callback under a snapshot's state. The state is scoped to the calling coroutine and the coroutines it
      * starts, so what the callback changes never reaches the coroutine the snapshot was taken in.
      *
+     * @internal
+     *
      * @template T
      *
      * @param  callable(): T  $callback
@@ -2243,11 +2245,9 @@ class Database
     }
 
     /**
-     * Cast document attribute values to their proper PHP types based on the collection schema.
+     * Cast document attribute values to their PHP types by the collection's attributes.
      *
-     * @param Document $collection The collection definition containing attribute type information.
-     * @param Document $document The document whose attributes will be cast.
-     * @return Document The document with correctly typed attribute values.
+     * @internal
      */
     public function casting(Document $collection, Document $document): Document
     {

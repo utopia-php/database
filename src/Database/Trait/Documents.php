@@ -955,6 +955,8 @@ trait Documents
     /**
      * Strip non-selected attributes from documents based on select queries.
      *
+     * @internal
+     *
      * @param  array<Document>  $documents
      * @param  array<Query>  $selectQueries
      */

@@ -170,10 +170,18 @@ class Redis extends Adapter implements
 
     /**
      * Renames every key of the database within the current namespace. A permission grant set records the
-     * keys it guards, so its members are moved to the new key space too.
+     * keys it guards, so its members are moved to the new key space too. A failure part way moves the keys
+     * already moved back, newest first, and is thrown. Shared tables refuse the rename: other tenants'
+     * keys share the database.
+     *
+     * @throws DatabaseException
      */
     public function update(string $name, string $new): bool
     {
+        if ($this->getSharedTables()) {
+            throw new DatabaseException('Cannot rename a database while shared tables are enabled');
+        }
+
         $name = $this->filter($name);
         $new = $this->filter($new);
         $namespace = $this->getNamespace();
@@ -189,27 +197,52 @@ class Redis extends Adapter implements
 
         $from = $this->nsFor($namespace, $name).self::SEP;
         $to = $this->nsFor($namespace, $new).self::SEP;
-        $grants = $to.'grants'.self::SEP;
+        $grants = 'grants'.self::SEP;
 
         $this->transaction(function (RedisClient $client) use ($dbsKey, $name, $new, $from, $to, $grants): void {
-            foreach ($this->scanKeys($client, $from.'*') as $key) {
-                if (! \str_starts_with($key, $from)) {
-                    continue;
+            $moved = [];
+            try {
+                foreach ($this->scanKeys($client, $from.'*') as $key) {
+                    if (! \str_starts_with($key, $from)) {
+                        continue;
+                    }
+
+                    $target = $to.\substr($key, \strlen($from));
+                    $this->renameKey($client, $key, $target);
+                    $moved[$key] = $target;
+
+                    if (\str_starts_with($target, $to.$grants)) {
+                        $this->moveGrantMembers($client, $target, $from, $to);
+                    }
                 }
 
-                $target = $to.\substr($key, \strlen($from));
-                $client->rename($key, $target);
-
-                if (\str_starts_with($target, $grants)) {
-                    $this->moveGrantMembers($client, $target, $from, $to);
+                $client->sRem($dbsKey, $name);
+                $client->sAdd($dbsKey, $new);
+            } catch (\Throwable $error) {
+                foreach (\array_reverse($moved, true) as $key => $target) {
+                    if (\str_starts_with($target, $to.$grants)) {
+                        $this->moveGrantMembers($client, $target, $to, $from);
+                    }
+                    $this->renameKey($client, $target, $key);
                 }
+                $client->sRem($dbsKey, $new);
+                $client->sAdd($dbsKey, $name);
+
+                throw $error;
             }
-
-            $client->sRem($dbsKey, $name);
-            $client->sAdd($dbsKey, $new);
         });
 
         return true;
+    }
+
+    /**
+     * @throws DatabaseException When the key is gone
+     */
+    private function renameKey(RedisClient $client, string $key, string $target): void
+    {
+        if ($client->rename($key, $target) === false) {
+            throw new DatabaseException('Failed to move '.$key.' to '.$target);
+        }
     }
 
     /**

@@ -163,10 +163,10 @@ final class ParentConflictRetryTest extends TestCase
             Permission::delete(Role::any()),
         ];
         foreach (['parents', 'children', 'toys'] as $collection) {
-            $database->createCollection(new Collection(id: $collection, attributes: [Attribute::string(key: 'name', size: 64)], permissions: $permissions, documentSecurity: false));
+            $database->createCollection(Collection::create(id: $collection, attributes: [Attribute::string(key: 'name', size: 64)], permissions: $permissions, documentSecurity: false));
         }
-        $database->createRelationship(Relationship::oneToMany(collection: 'parents', relatedCollection: 'children', twoWay: true, key: 'children', twoWayKey: 'parent'));
-        $database->createRelationship(Relationship::oneToMany(collection: 'children', relatedCollection: 'toys', twoWay: true, key: 'toys', twoWayKey: 'child'));
+        $database->createRelationship('parents', Relationship::oneToMany(relatedCollection: 'children', twoWay: true, key: 'children', twoWayKey: 'parent'));
+        $database->createRelationship('children', Relationship::oneToMany(relatedCollection: 'toys', twoWay: true, key: 'toys', twoWayKey: 'child'));
 
         return $database;
     }

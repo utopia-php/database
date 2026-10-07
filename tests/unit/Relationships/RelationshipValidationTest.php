@@ -22,7 +22,8 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Operator;
 use Utopia\Database\Relationship;
-use Utopia\Database\RelationType;
+use Utopia\Database\RelationshipType;
+use Utopia\Database\RelationshipUpdate;
 use Utopia\Query\Schema\ColumnType;
 
 /** @internal */
@@ -186,7 +187,7 @@ class RelationshipValidationTest extends TestCase
             'signed' => true, 'array' => false, 'filters' => [],
             'options' => [
                 'relatedCollection' => 'structure_2',
-                'relationType' => RelationType::OneToOne,
+                'relationType' => RelationshipType::OneToOne,
                 'twoWay' => false,
                 'twoWayKey' => 'structure_1',
                 'onDelete' => 'restrict',
@@ -262,7 +263,7 @@ class RelationshipValidationTest extends TestCase
             'signed' => true, 'array' => false, 'filters' => [],
             'options' => [
                 'relatedCollection' => 'creatures',
-                'relationType' => RelationType::OneToOne,
+                'relationType' => RelationshipType::OneToOne,
                 'twoWay' => true,
                 'twoWayKey' => 'species',
                 'onDelete' => 'restrict',
@@ -338,7 +339,7 @@ class RelationshipValidationTest extends TestCase
         $this->expectException(NotFoundException::class);
         $this->expectExceptionMessage('Collection not found');
 
-        $db->createRelationship(Relationship::oneToMany(collection: 'missing', relatedCollection: 'missing', twoWay: true));
+        $db->createRelationship('missing', Relationship::oneToMany(relatedCollection: 'missing', twoWay: true));
     }
 
     public function testCreateRelationshipMissingRelatedCollection(): void
@@ -348,7 +349,7 @@ class RelationshipValidationTest extends TestCase
         $this->expectException(NotFoundException::class);
         $this->expectExceptionMessage('Related collection not found');
 
-        $db->createRelationship(Relationship::oneToMany(collection: 'test', relatedCollection: 'missing', twoWay: true));
+        $db->createRelationship('test', Relationship::oneToMany(relatedCollection: 'missing', twoWay: true));
     }
 
     public function testCreateDuplicateRelationship(): void
@@ -360,7 +361,7 @@ class RelationshipValidationTest extends TestCase
             'signed' => true, 'array' => false, 'filters' => [],
             'options' => [
                 'relatedCollection' => 'test2',
-                'relationType' => RelationType::OneToMany,
+                'relationType' => RelationshipType::OneToMany,
                 'twoWay' => true, 'twoWayKey' => 'test1',
                 'onDelete' => 'restrict', 'side' => 'parent',
             ],
@@ -374,14 +375,15 @@ class RelationshipValidationTest extends TestCase
         $this->expectException(DuplicateException::class);
         $this->expectExceptionMessage('Attribute already exists');
 
-        $db->createRelationship(Relationship::oneToMany(collection: 'test1', relatedCollection: 'test2', twoWay: true));
+        $db->createRelationship('test1', Relationship::oneToMany(relatedCollection: 'test2', twoWay: true));
     }
 
     public function testCreateInvalidRelationship(): void
     {
-        $this->expectException(\TypeError::class);
+        $this->expectException(RelationshipException::class);
+        $this->expectExceptionMessage('Unknown relationship type "invalid"');
 
-        (new \ReflectionClass(Relationship::class))->newInstance('test3', 'test4', 'invalid', true);
+        Relationship::fromArray(['relatedCollection' => 'test4', 'relationType' => 'invalid', 'twoWay' => true]);
     }
 
     public function testDeleteMissingRelationship(): void
@@ -403,7 +405,7 @@ class RelationshipValidationTest extends TestCase
             'signed' => true, 'array' => false, 'filters' => [],
             'options' => [
                 'relatedCollection' => 'invalid2',
-                'relationType' => RelationType::OneToOne,
+                'relationType' => RelationshipType::OneToOne,
                 'twoWay' => true, 'twoWayKey' => 'invalid1',
                 'onDelete' => 'restrict', 'side' => 'parent',
             ],
@@ -432,7 +434,7 @@ class RelationshipValidationTest extends TestCase
             'signed' => true, 'array' => false, 'filters' => [],
             'options' => [
                 'relatedCollection' => 'invalid2',
-                'relationType' => RelationType::OneToOne,
+                'relationType' => RelationshipType::OneToOne,
                 'twoWay' => true, 'twoWayKey' => 'invalid1',
                 'onDelete' => 'restrict', 'side' => 'parent',
             ],
@@ -461,7 +463,7 @@ class RelationshipValidationTest extends TestCase
             'signed' => true, 'array' => false, 'filters' => [],
             'options' => [
                 'relatedCollection' => 'invalid2',
-                'relationType' => RelationType::OneToMany,
+                'relationType' => RelationshipType::OneToMany,
                 'twoWay' => true, 'twoWayKey' => 'invalid4',
                 'onDelete' => 'restrict', 'side' => 'parent',
             ],
@@ -490,7 +492,7 @@ class RelationshipValidationTest extends TestCase
             'signed' => true, 'array' => false, 'filters' => [],
             'options' => [
                 'relatedCollection' => 'reverse1',
-                'relationType' => RelationType::OneToOne,
+                'relationType' => RelationshipType::OneToOne,
                 'twoWay' => false, 'twoWayKey' => 'reverse2',
                 'onDelete' => 'restrict', 'side' => 'child',
             ],
@@ -519,7 +521,7 @@ class RelationshipValidationTest extends TestCase
             'signed' => true, 'array' => false, 'filters' => [],
             'options' => [
                 'relatedCollection' => 'null2',
-                'relationType' => RelationType::OneToOne,
+                'relationType' => RelationshipType::OneToOne,
                 'twoWay' => true, 'twoWayKey' => 'null1',
                 'onDelete' => 'restrict', 'side' => 'parent',
             ],
@@ -552,7 +554,7 @@ class RelationshipValidationTest extends TestCase
             'signed' => true, 'array' => false, 'filters' => [],
             'options' => [
                 'relatedCollection' => 'cakes',
-                'relationType' => RelationType::OneToMany,
+                'relationType' => RelationshipType::OneToMany,
                 'twoWay' => true, 'twoWayKey' => 'oven',
                 'onDelete' => 'restrict', 'side' => 'parent',
             ],
@@ -564,7 +566,7 @@ class RelationshipValidationTest extends TestCase
             'signed' => true, 'array' => false, 'filters' => [],
             'options' => [
                 'relatedCollection' => 'ovens',
-                'relationType' => RelationType::OneToMany,
+                'relationType' => RelationshipType::OneToMany,
                 'twoWay' => true, 'twoWayKey' => 'cakes',
                 'onDelete' => 'restrict', 'side' => 'child',
             ],
@@ -578,7 +580,7 @@ class RelationshipValidationTest extends TestCase
         $this->expectException(DuplicateException::class);
         $this->expectExceptionMessage('Relationship already exists');
 
-        $db->updateRelationship('ovens', 'cakes', newKey: 'owner');
+        $db->updateRelationship('ovens', 'cakes', new RelationshipUpdate(key: 'owner'));
     }
 
     public function testOneToOneRelationshipRejectsArrayOperators(): void
@@ -595,7 +597,7 @@ class RelationshipValidationTest extends TestCase
             'signed' => true, 'array' => false, 'filters' => [],
             'options' => [
                 'relatedCollection' => 'profile_o2o',
-                'relationType' => RelationType::OneToOne,
+                'relationType' => RelationshipType::OneToOne,
                 'twoWay' => true, 'twoWayKey' => 'user',
                 'onDelete' => 'restrict', 'side' => 'parent',
             ],
@@ -636,7 +638,7 @@ class RelationshipValidationTest extends TestCase
             'signed' => true, 'array' => false, 'filters' => [],
             'options' => [
                 'relatedCollection' => 'article',
-                'relationType' => RelationType::OneToMany,
+                'relationType' => RelationshipType::OneToMany,
                 'twoWay' => true, 'twoWayKey' => 'author',
                 'onDelete' => 'restrict', 'side' => 'parent',
             ],
@@ -648,7 +650,7 @@ class RelationshipValidationTest extends TestCase
             'signed' => true, 'array' => false, 'filters' => [],
             'options' => [
                 'relatedCollection' => 'author',
-                'relationType' => RelationType::OneToMany,
+                'relationType' => RelationshipType::OneToMany,
                 'twoWay' => true, 'twoWayKey' => 'articles',
                 'onDelete' => 'restrict', 'side' => 'child',
             ],
@@ -688,7 +690,7 @@ class RelationshipValidationTest extends TestCase
             'signed' => true, 'array' => false, 'filters' => [],
             'options' => [
                 'relatedCollection' => 'parent_o2m',
-                'relationType' => RelationType::OneToMany,
+                'relationType' => RelationshipType::OneToMany,
                 'twoWay' => true, 'twoWayKey' => 'children',
                 'onDelete' => 'restrict', 'side' => 'child',
             ],
@@ -729,7 +731,7 @@ class RelationshipValidationTest extends TestCase
             'signed' => true, 'array' => false, 'filters' => [],
             'options' => [
                 'relatedCollection' => 'book',
-                'relationType' => RelationType::ManyToMany,
+                'relationType' => RelationshipType::ManyToMany,
                 'twoWay' => true, 'twoWayKey' => 'libraries',
                 'onDelete' => 'restrict', 'side' => 'parent',
             ],

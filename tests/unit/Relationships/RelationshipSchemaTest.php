@@ -26,6 +26,8 @@ use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
+use Utopia\Database\RelationshipSide;
+use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\Validator\Authorization;
 
 final class RelationshipSchemaTest extends TestCase
@@ -48,11 +50,11 @@ final class RelationshipSchemaTest extends TestCase
     public function testRenamingARelationshipWhoseIndexIsGoneKeepsTheOldKey(Closure $adapter): void
     {
         $database = $this->database($adapter());
-        $database->createRelationship(Relationship::manyToOne(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books'));
+        $database->createRelationship('books', Relationship::manyToOne(relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books'));
         $database->deleteIndex('books', '_index_author');
 
         try {
-            $database->updateRelationship('books', 'author', newKey: 'writer');
+            $database->updateRelationship('books', 'author', new RelationshipUpdate(key: 'writer'));
             $this->fail('a relationship whose index is gone cannot be renamed');
         } catch (DatabaseException $error) {
             $this->assertSame("Failed to update relationship indexes for 'author': Index not found", $error->getMessage());
@@ -65,27 +67,22 @@ final class RelationshipSchemaTest extends TestCase
         $this->assertSame('author', $this->relationship($database, 'authors', 'books')->twoWayKey);
     }
 
-    public function testIndexMetadataOfTheMetadataCollectionCannotBeUpdated(): void
+    public function testIndexesOfTheMetadataCollectionCannotBeRenamed(): void
     {
-        $database = new class (new Memory(), new Cache(new None())) extends Database {
-            public function renameIndexAttributes(string $collection, string $id): Index
-            {
-                return $this->updateIndexMeta($collection, $id, static function (Index $index): void {
-                    $index->setAttribute('attributes', ['changed']);
-                });
-            }
-        };
-        $this->prepare($database);
+        $database = $this->database(new Memory());
+        $before = $this->indexKeys($database, Database::METADATA);
 
         try {
-            $database->renameIndexAttributes(Database::METADATA, '_key_title');
+            $database->renameIndex(Database::METADATA, '_key_title', 'renamed');
             $this->fail('the metadata collection\'s indexes must not be changed');
-        } catch (DatabaseException $error) {
-            $this->assertSame('Cannot update metadata indexes', $error->getMessage());
+        } catch (NotFoundException $error) {
+            $this->assertSame('Index not found', $error->getMessage());
         }
 
+        $this->assertSame($before, $this->indexKeys($database, Database::METADATA));
+
         try {
-            $database->renameIndexAttributes('books', 'missing');
+            $database->renameIndex('books', 'missing', 'renamed');
             $this->fail('an unknown index cannot be changed');
         } catch (NotFoundException $error) {
             $this->assertSame('Index not found', $error->getMessage());
@@ -108,13 +105,13 @@ final class RelationshipSchemaTest extends TestCase
                 throw $failure;
             }
         });
-        $database->createRelationship(Relationship::manyToOne(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books'));
+        $database->createRelationship('books', Relationship::manyToOne(relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books'));
 
         try {
-            $database->updateRelationship('books', 'author', newKey: 'writer');
+            $database->updateRelationship('books', 'author', new RelationshipUpdate(key: 'writer'));
             $this->fail('a failed definition update must fail the rename');
-        } catch (RuntimeException $error) {
-            $this->assertSame($failure, $error);
+        } catch (DatabaseException $error) {
+            $this->assertSame($failure, $error->getPrevious());
         }
 
         $this->assertSame(['author->writer', 'writer->author'], $renames);
@@ -132,13 +129,13 @@ final class RelationshipSchemaTest extends TestCase
                 throw $failure;
             }
         });
-        $database->createRelationship(Relationship::manyToMany(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'writers', twoWayKey: 'works'));
+        $database->createRelationship('books', Relationship::manyToMany(relatedCollection: 'authors', twoWay: true, key: 'writers', twoWayKey: 'works'));
 
         try {
-            $database->updateRelationship('books', 'writers', newKey: 'authors_of', newTwoWayKey: 'written');
+            $database->updateRelationship('books', 'writers', new RelationshipUpdate(key: 'authors_of', twoWayKey: 'written'));
             $this->fail('a failed junction definition update must fail the rename');
-        } catch (RuntimeException $error) {
-            $this->assertSame($failure, $error);
+        } catch (DatabaseException $error) {
+            $this->assertSame($failure, $error->getPrevious());
         }
 
         $this->assertContains('writers', $this->attributeKeys($database, 'books'));
@@ -156,12 +153,12 @@ final class RelationshipSchemaTest extends TestCase
     public function testAFailedSecondIndexRenameReversesTheFirstAndTheDefinitions(Closure $adapter): void
     {
         $database = $this->database($adapter());
-        $database->createRelationship(Relationship::oneToOne(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'library', twoWayKey: 'owner'));
+        $database->createRelationship('books', Relationship::oneToOne(relatedCollection: 'authors', twoWay: true, key: 'library', twoWayKey: 'owner'));
         $database->deleteIndex('authors', '_index_owner');
         $physical = $this->schemaIndexIds($database, 'books');
 
         try {
-            $database->updateRelationship('books', 'library', newKey: 'shelf', newTwoWayKey: 'keeper');
+            $database->updateRelationship('books', 'library', new RelationshipUpdate(key: 'shelf', twoWayKey: 'keeper'));
             $this->fail('a rename whose second index is gone must fail');
         } catch (DatabaseException $error) {
             $this->assertSame("Failed to update relationship indexes for 'library': Index not found", $error->getMessage());
@@ -181,9 +178,9 @@ final class RelationshipSchemaTest extends TestCase
         $database = new Database($this->createStub(Adapter::class), new Cache(new None()));
 
         foreach ([
-            static fn (): bool => $database->createRelationship(Relationship::manyToOne(collection: 'books', relatedCollection: 'authors')),
-            static fn (): bool => $database->updateRelationship('books', 'author', newKey: 'writer'),
-            static fn (): bool => $database->deleteRelationship('books', 'author'),
+            static fn (): Relationship => $database->createRelationship('books', Relationship::manyToOne(relatedCollection: 'authors')),
+            static fn (): Relationship => $database->updateRelationship('books', 'author', new RelationshipUpdate(key: 'writer')),
+            static fn () => $database->deleteRelationship('books', 'author'),
         ] as $change) {
             try {
                 $change();
@@ -205,7 +202,7 @@ final class RelationshipSchemaTest extends TestCase
         $error = null;
         $log = StderrCapture::during(function () use ($database, &$error): void {
             try {
-                $database->createRelationship(Relationship::manyToMany(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'writers', twoWayKey: 'works'));
+                $database->createRelationship('books', Relationship::manyToMany(relatedCollection: 'authors', twoWay: true, key: 'writers', twoWayKey: 'works'));
             } catch (DatabaseException $caught) {
                 $error = $caught;
             }
@@ -224,7 +221,7 @@ final class RelationshipSchemaTest extends TestCase
             'createRelationship' => static fn (): never => throw new DuplicateException('Relationship already exists in the schema'),
         ]));
 
-        $this->assertTrue($database->createRelationship(Relationship::manyToOne(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books')));
+        $this->assertSame('author', $database->createRelationship('books', Relationship::manyToOne(relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books'))->key);
         $this->assertContains('author', $this->attributeKeys($database, 'books'));
         $this->assertContains('books', $this->attributeKeys($database, 'authors'));
 
@@ -250,7 +247,7 @@ final class RelationshipSchemaTest extends TestCase
         $error = null;
         $log = StderrCapture::during(function () use ($database, &$error): void {
             try {
-                $database->createRelationship(Relationship::manyToMany(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'writers', twoWayKey: 'works'));
+                $database->createRelationship('books', Relationship::manyToMany(relatedCollection: 'authors', twoWay: true, key: 'writers', twoWayKey: 'works'));
             } catch (DatabaseException $caught) {
                 $error = $caught;
             }
@@ -281,7 +278,7 @@ final class RelationshipSchemaTest extends TestCase
         $error = null;
         $log = StderrCapture::during(function () use ($database, &$error): void {
             try {
-                $database->createRelationship(Relationship::oneToOne(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'library', twoWayKey: 'owner'));
+                $database->createRelationship('books', Relationship::oneToOne(relatedCollection: 'authors', twoWay: true, key: 'library', twoWayKey: 'owner'));
             } catch (DatabaseException $caught) {
                 $error = $caught;
             }
@@ -303,7 +300,7 @@ final class RelationshipSchemaTest extends TestCase
         $error = null;
         $log = StderrCapture::during(function () use ($database, &$error): void {
             try {
-                $database->createRelationship(Relationship::oneToOne(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'library', twoWayKey: 'owner'));
+                $database->createRelationship('books', Relationship::oneToOne(relatedCollection: 'authors', twoWay: true, key: 'library', twoWayKey: 'owner'));
             } catch (DatabaseException $caught) {
                 $error = $caught;
             }
@@ -323,14 +320,14 @@ final class RelationshipSchemaTest extends TestCase
     public function testAnUpdateWithoutChangesIsAcceptedAndAnUnknownRelationshipIsNotFound(Closure $adapter): void
     {
         $database = $this->database($adapter());
-        $database->createRelationship(Relationship::manyToOne(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books'));
+        $database->createRelationship('books', Relationship::manyToOne(relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books'));
         $before = $this->relationship($database, 'books', 'author');
 
-        $this->assertTrue($database->updateRelationship('books', 'author'));
-        $this->assertEquals($before, $this->relationship($database, 'books', 'author'));
+        $this->assertSame($before->toDocument()->getArrayCopy(), $database->updateRelationship('books', 'author', new RelationshipUpdate())->toDocument()->getArrayCopy());
+        $this->assertSame($before->toDocument()->getArrayCopy(), $this->relationship($database, 'books', 'author')->toDocument()->getArrayCopy());
 
         try {
-            $database->updateRelationship('books', 'missing', newKey: 'other');
+            $database->updateRelationship('books', 'missing', new RelationshipUpdate(key: 'other'));
             $this->fail('an unknown relationship cannot be updated');
         } catch (NotFoundException $error) {
             $this->assertSame('Relationship not found', $error->getMessage());
@@ -344,11 +341,11 @@ final class RelationshipSchemaTest extends TestCase
     public function testRenamingFromTheChildSideOfAOneToManyRenamesItsIndex(Closure $adapter): void
     {
         $database = $this->database($adapter());
-        $database->createRelationship(Relationship::oneToMany(collection: 'authors', relatedCollection: 'books', twoWay: true, key: 'books', twoWayKey: 'author'));
+        $database->createRelationship('authors', Relationship::oneToMany(relatedCollection: 'books', twoWay: true, key: 'books', twoWayKey: 'author'));
         $database->createDocument('authors', new Document([Document::ID => 'ada', 'name' => 'Ada']));
         $database->createDocument('books', new Document([Document::ID => 'notes', 'title' => 'Notes', 'author' => 'ada']));
 
-        $this->assertTrue($database->updateRelationship('books', 'author', newKey: 'writer'));
+        $this->assertSame('writer', $database->updateRelationship('books', 'author', new RelationshipUpdate(key: 'writer'))->key);
 
         $this->assertSame(['writer'], $this->indexAttributes($database, 'books', '_index_writer'));
         $this->assertNull($this->index($database, 'books', '_index_author'));
@@ -365,9 +362,9 @@ final class RelationshipSchemaTest extends TestCase
     public function testRenamingTheParentKeyFromTheChildSideOfAManyToOneRenamesItsIndex(Closure $adapter): void
     {
         $database = $this->database($adapter());
-        $database->createRelationship(Relationship::manyToOne(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books'));
+        $database->createRelationship('books', Relationship::manyToOne(relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books'));
 
-        $this->assertTrue($database->updateRelationship('authors', 'books', newTwoWayKey: 'writer'));
+        $this->assertSame('writer', $database->updateRelationship('authors', 'books', new RelationshipUpdate(twoWayKey: 'writer'))->twoWayKey);
 
         $this->assertSame(['writer'], $this->indexAttributes($database, 'books', '_index_writer'));
         $this->assertNull($this->index($database, 'books', '_index_author'));
@@ -381,10 +378,10 @@ final class RelationshipSchemaTest extends TestCase
     public function testAnAdapterThatDoesNotUpdateTheRelationshipFailsTheUpdate(Closure $adapter): void
     {
         $database = $this->database($this->refusingUpdates($adapter()));
-        $database->createRelationship(Relationship::manyToOne(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books'));
+        $database->createRelationship('books', Relationship::manyToOne(relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books'));
 
         try {
-            $database->updateRelationship('books', 'author', newKey: 'writer');
+            $database->updateRelationship('books', 'author', new RelationshipUpdate(key: 'writer'));
             $this->fail('an adapter that does not update the relationship must fail the update');
         } catch (DatabaseException $error) {
             $this->assertSame("Failed to update relationship 'author': Failed to update relationship", $error->getMessage());
@@ -397,17 +394,17 @@ final class RelationshipSchemaTest extends TestCase
     public function testARenameTheSchemaAlreadyAppliedIsCompleted(): void
     {
         $adapter = new class (new PDO('sqlite::memory:')) extends SQLite {
-            public function updateRelationship(Relationship $relationship, ?string $newKey = null, ?string $newTwoWayKey = null): bool
+            public function updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, RelationshipUpdate $update): bool
             {
-                parent::updateRelationship($relationship, $newKey, $newTwoWayKey);
+                parent::updateRelationship($collection, $relationship, $side, $update);
 
                 throw new RuntimeException('the connection dropped after the rename');
             }
         };
         $database = $this->database($adapter);
-        $database->createRelationship(Relationship::manyToOne(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books'));
+        $database->createRelationship('books', Relationship::manyToOne(relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books'));
 
-        $this->assertTrue($database->updateRelationship('books', 'author', newKey: 'writer'));
+        $this->assertSame('writer', $database->updateRelationship('books', 'author', new RelationshipUpdate(key: 'writer'))->key);
 
         $this->assertContains('writer', $this->attributeKeys($database, 'books'));
         $this->assertSame('writer', $this->relationship($database, 'authors', 'books')->twoWayKey);
@@ -420,12 +417,12 @@ final class RelationshipSchemaTest extends TestCase
     public function testAFailedJunctionIndexRenameRestoresTheJunctionDefinitions(Closure $adapter): void
     {
         $database = $this->database($adapter());
-        $database->createRelationship(Relationship::manyToMany(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'writers', twoWayKey: 'works'));
+        $database->createRelationship('books', Relationship::manyToMany(relatedCollection: 'authors', twoWay: true, key: 'writers', twoWayKey: 'works'));
         $junction = $this->junction($database);
         $database->deleteIndex($junction, '_index_writers');
 
         try {
-            $database->updateRelationship('books', 'writers', newKey: 'authors_of', newTwoWayKey: 'written');
+            $database->updateRelationship('books', 'writers', new RelationshipUpdate(key: 'authors_of', twoWayKey: 'written'));
             $this->fail('a rename whose junction index is gone must fail');
         } catch (DatabaseException $error) {
             $this->assertSame("Failed to update relationship indexes for 'writers': Index not found", $error->getMessage());
@@ -444,9 +441,9 @@ final class RelationshipSchemaTest extends TestCase
     {
         $inner = $adapter();
         $database = $this->database($this->missingRelationships($inner));
-        $database->createRelationship(Relationship::manyToOne(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books'));
+        $database->createRelationship('books', Relationship::manyToOne(relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books'));
 
-        $this->assertTrue($database->deleteRelationship('books', 'author'));
+        $database->deleteRelationship('books', 'author');
 
         $this->assertNotContains('author', $this->attributeKeys($database, 'books'));
         $this->assertNotContains('books', $this->attributeKeys($database, 'authors'));
@@ -455,7 +452,7 @@ final class RelationshipSchemaTest extends TestCase
     public function testAnAdapterThatDoesNotDeleteTheRelationshipFailsTheDelete(): void
     {
         $database = $this->database($this->memory(['deleteRelationship' => static fn (): bool => false]));
-        $database->createRelationship(Relationship::manyToOne(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books'));
+        $database->createRelationship('books', Relationship::manyToOne(relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books'));
 
         try {
             $database->deleteRelationship('books', 'author');
@@ -490,7 +487,7 @@ final class RelationshipSchemaTest extends TestCase
                 throw new RuntimeException('the junction definition could not be restored');
             }
         });
-        $database->createRelationship(Relationship::manyToMany(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'writers', twoWayKey: 'works'));
+        $database->createRelationship('books', Relationship::manyToMany(relatedCollection: 'authors', twoWay: true, key: 'writers', twoWayKey: 'works'));
         $armed = true;
 
         try {
@@ -525,7 +522,7 @@ final class RelationshipSchemaTest extends TestCase
                 throw $failure;
             }
         });
-        $database->createRelationship(Relationship::manyToOne(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books'));
+        $database->createRelationship('books', Relationship::manyToOne(relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books'));
         $armed = true;
 
         try {
@@ -571,22 +568,22 @@ final class RelationshipSchemaTest extends TestCase
                 return parent::purgeCachedCollection($collectionId);
             }
 
-            protected function updateAttributeMeta(string $collection, string $id, callable $updateCallback, bool $triggerEvent = true): Attribute
+            public function updateDocument(string $collection, string $id, Document $document): Document
             {
-                if ($this->armed && $collection === 'books' && $id === 'authors_of') {
+                if ($this->armed && $collection === self::METADATA && $id === 'books' && RelationshipSchemaTest::replacedAttribute($this, $id, $document) === 'authors_of') {
                     throw new RuntimeException('the definition could not be restored');
                 }
 
-                return parent::updateAttributeMeta($collection, $id, $updateCallback, $triggerEvent);
+                return parent::updateDocument($collection, $id, $document);
             }
         };
         $this->prepare($database);
-        $database->createRelationship(Relationship::manyToMany(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'writers', twoWayKey: 'works'));
+        $database->createRelationship('books', Relationship::manyToMany(relatedCollection: 'authors', twoWay: true, key: 'writers', twoWayKey: 'works'));
         $junction = $this->junction($database);
         $database->armed = true;
 
         try {
-            $database->updateRelationship('books', 'writers', newKey: 'authors_of', newTwoWayKey: 'written');
+            $database->updateRelationship('books', 'writers', new RelationshipUpdate(key: 'authors_of', twoWayKey: 'written'));
             $this->fail('a failed junction purge must fail the rename');
         } catch (RuntimeException $error) {
             $this->assertSame($failure, $error);
@@ -616,7 +613,7 @@ final class RelationshipSchemaTest extends TestCase
             /** @var list<string> */
             public array $rollbacks = [];
 
-            public function renameIndex(string $collection, string $old, string $new): bool
+            public function renameIndex(string $collection, string $old, string $new): void
             {
                 if ($this->armed && $new === '_index_writers') {
                     $this->rollbacks[] = "index {$old}->{$new}";
@@ -624,27 +621,31 @@ final class RelationshipSchemaTest extends TestCase
                     throw new RuntimeException('the index rename could not be reversed');
                 }
 
-                return parent::renameIndex($collection, $old, $new);
+                parent::renameIndex($collection, $old, $new);
             }
 
-            protected function updateAttributeMeta(string $collection, string $id, callable $updateCallback, bool $triggerEvent = true): Attribute
+            public function updateDocument(string $collection, string $id, Document $document): Document
             {
-                if ($this->armed && \in_array($id, ['authors_of', 'written'], true)) {
-                    $this->rollbacks[] = (\str_starts_with($collection, '_') ? 'junction' : $collection).' '.$id;
+                $replaced = $this->armed && $collection === self::METADATA ? RelationshipSchemaTest::replacedAttribute($this, $id, $document) : null;
+                if ($replaced !== null && \in_array($replaced, ['authors_of', 'written'], true)) {
+                    $step = (\str_starts_with($id, '_') ? 'junction' : $id).' '.$replaced;
+                    if (\end($this->rollbacks) !== $step) {
+                        $this->rollbacks[] = $step;
+                    }
 
                     throw new RuntimeException('the definition could not be restored');
                 }
 
-                return parent::updateAttributeMeta($collection, $id, $updateCallback, $triggerEvent);
+                return parent::updateDocument($collection, $id, $document);
             }
         };
         $this->prepare($database);
-        $database->createRelationship(Relationship::manyToMany(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'writers', twoWayKey: 'works'));
+        $database->createRelationship('books', Relationship::manyToMany(relatedCollection: 'authors', twoWay: true, key: 'writers', twoWayKey: 'works'));
         $database->deleteIndex($this->junction($database), '_index_works');
         $database->armed = true;
 
         try {
-            $database->updateRelationship('books', 'writers', newKey: 'authors_of', newTwoWayKey: 'written');
+            $database->updateRelationship('books', 'writers', new RelationshipUpdate(key: 'authors_of', twoWayKey: 'written'));
             $this->fail('a rename whose second junction index is gone must fail');
         } catch (DatabaseException $error) {
             $this->assertSame("Failed to update relationship indexes for 'writers': Index not found", $error->getMessage());
@@ -686,8 +687,8 @@ final class RelationshipSchemaTest extends TestCase
     private function relationship(Database $database, string $collection, string $key): Relationship
     {
         foreach ($this->attributes($database, $collection) as $attribute) {
-            if ($attribute->key === $key) {
-                return Relationship::fromArray(['collection' => $collection] + $attribute->getArrayCopy());
+            if ($attribute->key === $key && $attribute->relationship !== null) {
+                return $attribute->relationship;
             }
         }
 
@@ -695,14 +696,46 @@ final class RelationshipSchemaTest extends TestCase
     }
 
     /**
-     * @return array<Attribute>
+     * The key of the one stored attribute $definition replaces in the stored definition of $collection, or null when
+     * the write adds, removes or changes no attribute.
+     */
+    public static function replacedAttribute(Database $database, string $collection, Document $definition): ?string
+    {
+        $stored = self::attributeDefinitions($database->silent(fn (): Document => $database->getDocument(Database::METADATA, $collection)));
+        $written = self::attributeDefinitions($definition);
+
+        if (\count($stored) !== \count($written)) {
+            return null;
+        }
+
+        foreach ($stored as $key => $attribute) {
+            if (($written[$key] ?? null) !== $attribute) {
+                return $key;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array<string, array<string, mixed>>
+     */
+    private static function attributeDefinitions(Document $definition): array
+    {
+        $definitions = [];
+        foreach (Collection::fromDocument($definition)->attributes() as $attribute) {
+            $definitions[$attribute->key] = $attribute->toDocument()->getArrayCopy();
+        }
+
+        return $definitions;
+    }
+
+    /**
+     * @return list<Attribute>
      */
     private function attributes(Database $database, string $collection): array
     {
-        /** @var array<Attribute> $attributes */
-        $attributes = $database->getCollection($collection)->getAttribute('attributes', []);
-
-        return $attributes;
+        return $database->getCollection($collection)->attributes();
     }
 
     private function database(Adapter $adapter): Database
@@ -722,8 +755,8 @@ final class RelationshipSchemaTest extends TestCase
         $database->addHook(new Relationships($database));
 
         $permissions = [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any()), Permission::delete(Role::any())];
-        $database->createCollection(new Collection(id: 'books', attributes: [Attribute::string(key: 'title', size: 64)], permissions: $permissions));
-        $database->createCollection(new Collection(id: 'authors', attributes: [Attribute::string(key: 'name', size: 64)], permissions: $permissions));
+        $database->createCollection(Collection::create(id: 'books', attributes: [Attribute::string(key: 'title', size: 64)], permissions: $permissions));
+        $database->createCollection(Collection::create(id: 'authors', attributes: [Attribute::string(key: 'name', size: 64)], permissions: $permissions));
 
         return $database;
     }
@@ -742,19 +775,19 @@ final class RelationshipSchemaTest extends TestCase
                 parent::__construct();
             }
 
-            public function createRelationship(Relationship $relationship): bool
+            public function createRelationship(string $collection, Relationship $relationship): bool
             {
-                return $this->intercept(__FUNCTION__, [$relationship]) ?? parent::createRelationship($relationship);
+                return $this->intercept(__FUNCTION__, [$relationship]) ?? parent::createRelationship($collection, $relationship);
             }
 
-            public function updateRelationship(Relationship $relationship, ?string $newKey = null, ?string $newTwoWayKey = null): bool
+            public function updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, RelationshipUpdate $update): bool
             {
-                return $this->intercept(__FUNCTION__, [$relationship, $newKey, $newTwoWayKey]) ?? parent::updateRelationship($relationship, $newKey, $newTwoWayKey);
+                return $this->intercept(__FUNCTION__, [$relationship, $update->key, $update->twoWayKey]) ?? parent::updateRelationship($collection, $relationship, $side, $update);
             }
 
-            public function deleteRelationship(Relationship $relationship): bool
+            public function deleteRelationship(string $collection, Relationship $relationship, RelationshipSide $side): bool
             {
-                return $this->intercept(__FUNCTION__, [$relationship]) ?? parent::deleteRelationship($relationship);
+                return $this->intercept(__FUNCTION__, [$relationship]) ?? parent::deleteRelationship($collection, $relationship, $side);
             }
 
             public function deleteCollection(string $id): bool
@@ -813,6 +846,11 @@ final class RelationshipSchemaTest extends TestCase
                     ($this->update)($collection, $id, $document);
                 }
 
+                $replaced = $this->attributeMeta === null || $collection !== self::METADATA ? null : RelationshipSchemaTest::replacedAttribute($this, $id, $document);
+                if ($replaced !== null) {
+                    ($this->attributeMeta)($id, $replaced);
+                }
+
                 return parent::updateDocument($collection, $id, $document);
             }
 
@@ -824,15 +862,6 @@ final class RelationshipSchemaTest extends TestCase
 
                 return parent::createDocument($collection, $document);
             }
-
-            protected function updateAttributeMeta(string $collection, string $id, callable $updateCallback, bool $triggerEvent = true): Attribute
-            {
-                if ($this->attributeMeta !== null) {
-                    ($this->attributeMeta)($collection, $id);
-                }
-
-                return parent::updateAttributeMeta($collection, $id, $updateCallback, $triggerEvent);
-            }
         };
 
         return $this->prepare($database);
@@ -840,9 +869,7 @@ final class RelationshipSchemaTest extends TestCase
 
     private function index(Database $database, string $collection, string $key): ?Index
     {
-        /** @var array<Index> $indexes */
-        $indexes = $database->getCollection($collection)->getAttribute('indexes', []);
-        foreach ($indexes as $index) {
+        foreach ($database->getCollection($collection)->indexes() as $index) {
             if ($index->key === $key) {
                 return $index;
             }
@@ -860,6 +887,14 @@ final class RelationshipSchemaTest extends TestCase
         $this->assertNotNull($index, "{$collection} has no index {$key}");
 
         return $index->attributes;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function indexKeys(Database $database, string $collection): array
+    {
+        return \array_map(static fn (Index $index): string => $index->key, $database->getCollection($collection)->indexes());
     }
 
     /**
@@ -887,7 +922,7 @@ final class RelationshipSchemaTest extends TestCase
     {
         if ($adapter instanceof SQLite) {
             return new class (new PDO('sqlite::memory:')) extends SQLite {
-                public function updateRelationship(Relationship $relationship, ?string $newKey = null, ?string $newTwoWayKey = null): bool
+                public function updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, RelationshipUpdate $update): bool
                 {
                     return false;
                 }
@@ -901,7 +936,7 @@ final class RelationshipSchemaTest extends TestCase
     {
         if ($adapter instanceof SQLite) {
             return new class (new PDO('sqlite::memory:')) extends SQLite {
-                public function deleteRelationship(Relationship $relationship): bool
+                public function deleteRelationship(string $collection, Relationship $relationship, RelationshipSide $side): bool
                 {
                     throw new NotFoundException('Relationship not found in the schema');
                 }

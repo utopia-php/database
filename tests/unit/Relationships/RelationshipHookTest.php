@@ -30,10 +30,11 @@ use Utopia\Database\Operator;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
-use Utopia\Database\RelationType;
+use Utopia\Database\RelationshipDeleteAction;
+use Utopia\Database\RelationshipType;
+use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\CursorDirection;
-use Utopia\Query\Schema\ForeignKeyAction;
 
 final class RelationshipHookTest extends TestCase
 {
@@ -55,7 +56,7 @@ final class RelationshipHookTest extends TestCase
     public function testOneToManyCascadeDeletesMoreChildrenThanTheQueryValueLimit(Closure $adapter): void
     {
         $database = $this->database($adapter);
-        $this->relate($database, Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::Cascade));
+        $this->relate($database, Relationship::oneToMany(relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: RelationshipDeleteAction::Cascade));
 
         $database->createDocument('parent', new Document(['$id' => 'parent1']));
         foreach (['child1', 'child2', 'child3'] as $id) {
@@ -76,7 +77,7 @@ final class RelationshipHookTest extends TestCase
     public function testManyToOneCascadeDeletesMoreChildrenThanTheQueryValueLimit(Closure $adapter): void
     {
         $database = $this->database($adapter);
-        $this->relate($database, Relationship::manyToOne(collection: 'child', relatedCollection: 'parent', twoWay: true, key: 'parent', twoWayKey: 'children', onDelete: ForeignKeyAction::Cascade));
+        $this->relate($database, Relationship::manyToOne(relatedCollection: 'parent', twoWay: true, key: 'parent', twoWayKey: 'children', onDelete: RelationshipDeleteAction::Cascade));
 
         $database->createDocument('parent', new Document(['$id' => 'parent1']));
         foreach (['child1', 'child2', 'child3'] as $id) {
@@ -97,7 +98,7 @@ final class RelationshipHookTest extends TestCase
     public function testManyToManyCascadeDeletesMoreRelatedDocumentsThanTheQueryValueLimit(Closure $adapter): void
     {
         $database = $this->database($adapter);
-        $this->relate($database, Relationship::manyToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: ForeignKeyAction::Cascade));
+        $this->relate($database, Relationship::manyToMany(relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: RelationshipDeleteAction::Cascade));
 
         foreach (['child1', 'child2', 'child3'] as $id) {
             $database->createDocument('child', new Document(['$id' => $id]));
@@ -118,7 +119,7 @@ final class RelationshipHookTest extends TestCase
     public function testManyToManySetNullDeletesMoreJunctionRowsThanTheQueryValueLimit(Closure $adapter): void
     {
         $database = $this->database($adapter);
-        $this->relate($database, Relationship::manyToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: ForeignKeyAction::SetNull));
+        $this->relate($database, Relationship::manyToMany(relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: RelationshipDeleteAction::SetNull));
 
         foreach (['child1', 'child2', 'child3'] as $id) {
             $database->createDocument('child', new Document(['$id' => $id]));
@@ -145,7 +146,7 @@ final class RelationshipHookTest extends TestCase
         $database = $this->database($adapter);
         $this->relate(
             $database,
-            Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::Cascade),
+            Relationship::oneToMany(relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: RelationshipDeleteAction::Cascade),
             [Permission::create(Role::any()), Permission::read(Role::any())],
         );
 
@@ -173,7 +174,7 @@ final class RelationshipHookTest extends TestCase
         $database = $this->database($adapter);
         $this->relate(
             $database,
-            Relationship::manyToOne(collection: 'child', relatedCollection: 'parent', twoWay: true, key: 'parent', twoWayKey: 'children', onDelete: ForeignKeyAction::Cascade),
+            Relationship::manyToOne(relatedCollection: 'parent', twoWay: true, key: 'parent', twoWayKey: 'children', onDelete: RelationshipDeleteAction::Cascade),
             [Permission::create(Role::any()), Permission::read(Role::any())],
         );
 
@@ -201,7 +202,7 @@ final class RelationshipHookTest extends TestCase
         $database = $this->database($adapter);
         $this->relate(
             $database,
-            Relationship::manyToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: ForeignKeyAction::Cascade),
+            Relationship::manyToMany(relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: RelationshipDeleteAction::Cascade),
             [Permission::create(Role::any()), Permission::read(Role::any())],
         );
 
@@ -229,7 +230,7 @@ final class RelationshipHookTest extends TestCase
         $database = $this->database($adapter);
         $this->relate(
             $database,
-            Relationship::manyToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: ForeignKeyAction::Cascade),
+            Relationship::manyToMany(relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: RelationshipDeleteAction::Cascade),
             [Permission::create(Role::any()), Permission::read(Role::any())],
         );
 
@@ -251,9 +252,9 @@ final class RelationshipHookTest extends TestCase
     public function testCascadeRetriedAfterAFailedCascadeStillDeletesTheChildren(Closure $adapter): void
     {
         $database = $this->database($adapter);
-        $this->relate($database, Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::Cascade));
-        $database->createCollection(new Collection(id: 'grandchild', permissions: $this->permissions(), documentSecurity: false));
-        $database->createRelationship(Relationship::oneToMany(collection: 'child', relatedCollection: 'grandchild', twoWay: true, key: 'grandchildren', twoWayKey: 'child', onDelete: ForeignKeyAction::Restrict));
+        $this->relate($database, Relationship::oneToMany(relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: RelationshipDeleteAction::Cascade));
+        $database->createCollection(Collection::create(id: 'grandchild', permissions: $this->permissions(), documentSecurity: false));
+        $database->createRelationship('child', Relationship::oneToMany(relatedCollection: 'grandchild', twoWay: true, key: 'grandchildren', twoWayKey: 'child', onDelete: RelationshipDeleteAction::Restrict));
 
         $database->createDocument('parent', new Document(['$id' => 'parent1']));
         $database->createDocument('child', new Document(['$id' => 'child1', 'parent' => 'parent1']));
@@ -280,7 +281,7 @@ final class RelationshipHookTest extends TestCase
         $database = $this->database($adapter);
         $this->relate(
             $database,
-            Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull),
+            Relationship::oneToMany(relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: RelationshipDeleteAction::SetNull),
             [Permission::create(Role::any()), Permission::read(Role::any())],
         );
 
@@ -312,11 +313,11 @@ final class RelationshipHookTest extends TestCase
         $database = $this->database($adapter);
         $this->relate(
             $database,
-            Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull),
+            Relationship::oneToMany(relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: RelationshipDeleteAction::SetNull),
             [Permission::create(Role::any()), Permission::read(Role::any())],
         );
-        $database->createCollection(new Collection(id: 'grandparent', permissions: $this->permissions(), documentSecurity: false));
-        $database->createRelationship(Relationship::oneToOne(collection: 'grandparent', relatedCollection: 'parent', key: 'parent', onDelete: ForeignKeyAction::SetNull));
+        $database->createCollection(Collection::create(id: 'grandparent', permissions: $this->permissions(), documentSecurity: false));
+        $database->createRelationship('grandparent', Relationship::oneToOne(relatedCollection: 'parent', key: 'parent', onDelete: RelationshipDeleteAction::SetNull));
 
         $database->createDocument('child', new Document(['$id' => 'readonly', '$permissions' => [Permission::update(Role::user('admin'))]]));
         $database->createDocument('parent', new Document(['$id' => 'parent1']));
@@ -338,7 +339,7 @@ final class RelationshipHookTest extends TestCase
     #[DataProvider('adapters')]
     public function testLinkingAChildGivenAsADocumentThroughANestedUpdateNeedsUpdatePermission(Closure $adapter): void
     {
-        $database = $this->nestedLinkDatabase($adapter, Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull));
+        $database = $this->nestedLinkDatabase($adapter, Relationship::oneToMany(relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: RelationshipDeleteAction::SetNull));
 
         $this->assertLinkRejected(fn () => $database->updateDocument('grandparent', 'grandparent1', new Document([
             'parent' => new Document(['$id' => 'parent1', 'children' => [new Document(['$id' => 'readonly'])]]),
@@ -353,7 +354,7 @@ final class RelationshipHookTest extends TestCase
     #[DataProvider('adapters')]
     public function testLinkingExistingChildrenThroughANestedCreateNeedsUpdatePermission(Closure $adapter): void
     {
-        $database = $this->nestedLinkDatabase($adapter, Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull));
+        $database = $this->nestedLinkDatabase($adapter, Relationship::oneToMany(relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: RelationshipDeleteAction::SetNull));
 
         $this->assertLinkRejected(fn () => $database->createDocument('grandparent', new Document([
             '$id' => 'grandparent2',
@@ -369,7 +370,7 @@ final class RelationshipHookTest extends TestCase
     #[DataProvider('adapters')]
     public function testLinkingAPartnerThroughANestedTwoWayOneToOneUpdateNeedsUpdatePermission(Closure $adapter): void
     {
-        $database = $this->nestedLinkDatabase($adapter, Relationship::oneToOne(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'partner', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull));
+        $database = $this->nestedLinkDatabase($adapter, Relationship::oneToOne(relatedCollection: 'child', twoWay: true, key: 'partner', twoWayKey: 'parent', onDelete: RelationshipDeleteAction::SetNull));
 
         $this->assertLinkRejected(fn () => $database->updateDocument('grandparent', 'grandparent1', new Document([
             'parent' => new Document(['$id' => 'parent1', 'partner' => 'readonly']),
@@ -387,7 +388,7 @@ final class RelationshipHookTest extends TestCase
         $database = $this->database($adapter);
         $this->relate(
             $database,
-            Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull),
+            Relationship::oneToMany(relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: RelationshipDeleteAction::SetNull),
             [Permission::create(Role::any()), Permission::read(Role::any())],
             false,
         );
@@ -410,7 +411,7 @@ final class RelationshipHookTest extends TestCase
         $database = $this->database($adapter);
         $this->relate(
             $database,
-            Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull),
+            Relationship::oneToMany(relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: RelationshipDeleteAction::SetNull),
             [Permission::create(Role::any()), Permission::read(Role::any())],
         );
 
@@ -430,7 +431,7 @@ final class RelationshipHookTest extends TestCase
     public function testRelationshipMaintenanceKeepsTheTenantOfEveryRelatedDocument(Closure $adapter): void
     {
         $database = $this->database($adapter, sharedTables: true);
-        $this->relate($database, Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull));
+        $this->relate($database, Relationship::oneToMany(relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: RelationshipDeleteAction::SetNull));
         $database->setTenant(1);
 
         $database->createDocument('parent', new Document(['$id' => 'parent1', '$tenant' => 1]));
@@ -460,7 +461,7 @@ final class RelationshipHookTest extends TestCase
     #[DataProvider('adapters')]
     public function testCascadeDeletesAGrandchildTheCallerCannotRead(Closure $adapter): void
     {
-        $database = $this->nestedCascadeDatabase($adapter, [Permission::create(Role::any()), Permission::delete(Role::any())], ForeignKeyAction::Cascade);
+        $database = $this->nestedCascadeDatabase($adapter, [Permission::create(Role::any()), Permission::delete(Role::any())], RelationshipDeleteAction::Cascade);
 
         $this->assertTrue($database->deleteDocument('parent', 'parent1'));
 
@@ -474,7 +475,7 @@ final class RelationshipHookTest extends TestCase
     #[DataProvider('adapters')]
     public function testCascadeIsRestrictedByAGrandchildTheCallerCannotRead(Closure $adapter): void
     {
-        $database = $this->nestedCascadeDatabase($adapter, [Permission::create(Role::any()), Permission::delete(Role::any())], ForeignKeyAction::Restrict);
+        $database = $this->nestedCascadeDatabase($adapter, [Permission::create(Role::any()), Permission::delete(Role::any())], RelationshipDeleteAction::Restrict);
 
         try {
             $database->deleteDocument('parent', 'parent1');
@@ -493,7 +494,7 @@ final class RelationshipHookTest extends TestCase
     #[DataProvider('adapters')]
     public function testCascadeRollsBackWhenAGrandchildTheCallerCannotReadIsProtected(Closure $adapter): void
     {
-        $database = $this->nestedCascadeDatabase($adapter, [Permission::create(Role::any()), Permission::delete(Role::user('admin'))], ForeignKeyAction::Cascade);
+        $database = $this->nestedCascadeDatabase($adapter, [Permission::create(Role::any()), Permission::delete(Role::user('admin'))], RelationshipDeleteAction::Cascade);
 
         $this->assertDeleteRejected($database, 'parent', 'parent1');
 
@@ -509,7 +510,7 @@ final class RelationshipHookTest extends TestCase
     public function testUpdateRelationshipFiresStringOptions(Closure $adapter): void
     {
         $database = $this->database($adapter);
-        $this->relate($database, Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::Cascade));
+        $this->relate($database, Relationship::oneToMany(relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: RelationshipDeleteAction::Cascade));
 
         $updates = new class () implements Lifecycle {
             /** @var array<string, mixed> */
@@ -524,7 +525,9 @@ final class RelationshipHookTest extends TestCase
         };
         $database->addHook($updates);
 
-        $this->assertTrue($database->updateRelationship('parent', 'children', newKey: 'kids', onDelete: ForeignKeyAction::SetNull));
+        $updated = $database->updateRelationship('parent', 'children', new RelationshipUpdate(key: 'kids', onDelete: RelationshipDeleteAction::SetNull));
+        $this->assertSame('kids', $updated->key);
+        $this->assertSame(RelationshipDeleteAction::SetNull, $updated->onDelete);
 
         $this->assertSame(
             [
@@ -553,15 +556,15 @@ final class RelationshipHookTest extends TestCase
      * @param  Closure(): Adapter  $adapter
      * @param  array<string>  $grandchildPermissions
      */
-    private function nestedCascadeDatabase(Closure $adapter, array $grandchildPermissions, ForeignKeyAction $onDelete): Database
+    private function nestedCascadeDatabase(Closure $adapter, array $grandchildPermissions, RelationshipDeleteAction $onDelete): Database
     {
         $database = $this->database($adapter);
         $this->relate(
             $database,
-            Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::Cascade),
+            Relationship::oneToMany(relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: RelationshipDeleteAction::Cascade),
         );
-        $database->createCollection(new Collection(id: 'grandchild', permissions: $grandchildPermissions, documentSecurity: false));
-        $database->createRelationship(Relationship::oneToMany(collection: 'child', relatedCollection: 'grandchild', twoWay: true, key: 'grandchildren', twoWayKey: 'child', onDelete: $onDelete));
+        $database->createCollection(Collection::create(id: 'grandchild', permissions: $grandchildPermissions, documentSecurity: false));
+        $database->createRelationship('child', Relationship::oneToMany(relatedCollection: 'grandchild', twoWay: true, key: 'grandchildren', twoWayKey: 'child', onDelete: $onDelete));
 
         $database->getAuthorization()->skip(function () use ($database): void {
             $database->createDocument('parent', new Document(['$id' => 'parent1']));
@@ -605,9 +608,9 @@ final class RelationshipHookTest extends TestCase
      */
     private function relate(Database $database, Relationship $relationship, array $childPermissions = [], bool $childDocumentSecurity = true): void
     {
-        $database->createCollection(new Collection(id: 'parent', attributes: [Attribute::string(key: 'name', size: 64)], permissions: $this->permissions(), documentSecurity: false));
-        $database->createCollection(new Collection(id: 'child', permissions: $childPermissions === [] ? $this->permissions() : $childPermissions, documentSecurity: $childDocumentSecurity));
-        $database->createRelationship($relationship);
+        $database->createCollection(Collection::create(id: 'parent', attributes: [Attribute::string(key: 'name', size: 64)], permissions: $this->permissions(), documentSecurity: false));
+        $database->createCollection(Collection::create(id: 'child', permissions: $childPermissions === [] ? $this->permissions() : $childPermissions, documentSecurity: $childDocumentSecurity));
+        $database->createRelationship($relationship->relatedCollection === 'parent' ? 'child' : 'parent', $relationship);
     }
 
     /**
@@ -617,8 +620,8 @@ final class RelationshipHookTest extends TestCase
     {
         $database = $this->database($adapter);
         $this->relate($database, $relationship, [Permission::create(Role::any()), Permission::read(Role::any())]);
-        $database->createCollection(new Collection(id: 'grandparent', permissions: $this->permissions(), documentSecurity: false));
-        $database->createRelationship(Relationship::oneToOne(collection: 'grandparent', relatedCollection: 'parent', key: 'parent', onDelete: ForeignKeyAction::SetNull));
+        $database->createCollection(Collection::create(id: 'grandparent', permissions: $this->permissions(), documentSecurity: false));
+        $database->createRelationship('grandparent', Relationship::oneToOne(relatedCollection: 'parent', key: 'parent', onDelete: RelationshipDeleteAction::SetNull));
 
         $database->createDocument('child', new Document(['$id' => 'readonly', '$permissions' => [Permission::update(Role::user('admin'))]]));
         $database->createDocument('parent', new Document(['$id' => 'parent1']));
@@ -727,13 +730,13 @@ final class RelationshipHookTest extends TestCase
     private function writeStackDatabase(Closure $adapter): Database
     {
         $database = $this->database($adapter);
-        $database->createCollection(new Collection(id: 'owner', permissions: $this->permissions(), documentSecurity: false));
-        $database->createCollection(new Collection(id: 'solo', attributes: [Attribute::string(key: 'name', size: 64)], permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: false));
-        $database->createCollection(new Collection(id: 'item', permissions: $this->permissions(), documentSecurity: false));
-        $database->createCollection(new Collection(id: 'detail', permissions: $this->permissions(), documentSecurity: false));
-        $database->createRelationship(Relationship::oneToOne(collection: 'owner', relatedCollection: 'solo', twoWay: true, key: 'solo', twoWayKey: 'owner', onDelete: ForeignKeyAction::SetNull));
-        $database->createRelationship(Relationship::oneToMany(collection: 'owner', relatedCollection: 'item', twoWay: true, key: 'items', twoWayKey: 'owner', onDelete: ForeignKeyAction::SetNull));
-        $database->createRelationship(Relationship::oneToMany(collection: 'item', relatedCollection: 'detail', twoWay: true, key: 'details', twoWayKey: 'item', onDelete: ForeignKeyAction::SetNull));
+        $database->createCollection(Collection::create(id: 'owner', permissions: $this->permissions(), documentSecurity: false));
+        $database->createCollection(Collection::create(id: 'solo', attributes: [Attribute::string(key: 'name', size: 64)], permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: false));
+        $database->createCollection(Collection::create(id: 'item', permissions: $this->permissions(), documentSecurity: false));
+        $database->createCollection(Collection::create(id: 'detail', permissions: $this->permissions(), documentSecurity: false));
+        $database->createRelationship('owner', Relationship::oneToOne(relatedCollection: 'solo', twoWay: true, key: 'solo', twoWayKey: 'owner', onDelete: RelationshipDeleteAction::SetNull));
+        $database->createRelationship('owner', Relationship::oneToMany(relatedCollection: 'item', twoWay: true, key: 'items', twoWayKey: 'owner', onDelete: RelationshipDeleteAction::SetNull));
+        $database->createRelationship('item', Relationship::oneToMany(relatedCollection: 'detail', twoWay: true, key: 'details', twoWayKey: 'item', onDelete: RelationshipDeleteAction::SetNull));
 
         $database->getAuthorization()->skip(function () use ($database): void {
             $database->createDocument('owner', new Document(['$id' => 'owner1']));
@@ -761,7 +764,7 @@ final class RelationshipHookTest extends TestCase
     {
         foreach ($this->deletePairs() as $type => [$relationship, $link]) {
             $database = $this->database($adapter);
-            $this->relate($database, $relationship(ForeignKeyAction::Cascade));
+            $this->relate($database, $relationship(RelationshipDeleteAction::Cascade));
             $link($database, 'parent1', 'child1');
             $link($database, 'parent2', 'child2');
 
@@ -781,7 +784,7 @@ final class RelationshipHookTest extends TestCase
     {
         foreach ($this->deletePairs() as $type => [$relationship, $link]) {
             $database = $this->database($adapter);
-            $this->relate($database, $relationship(ForeignKeyAction::Restrict));
+            $this->relate($database, $relationship(RelationshipDeleteAction::Restrict));
             $link($database, 'parent1', 'child1');
             $link($database, 'parent2', 'child2');
 
@@ -803,7 +806,7 @@ final class RelationshipHookTest extends TestCase
     public function testDeleteDocumentsWithASelectCascadesFromTheChildSideOfATwoWayOneToOne(Closure $adapter): void
     {
         $database = $this->database($adapter);
-        $this->relate($database, Relationship::oneToOne(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'child', twoWayKey: 'parent', onDelete: ForeignKeyAction::Cascade));
+        $this->relate($database, Relationship::oneToOne(relatedCollection: 'child', twoWay: true, key: 'child', twoWayKey: 'parent', onDelete: RelationshipDeleteAction::Cascade));
         foreach (['1', '2'] as $suffix) {
             $database->createDocument('child', new Document(['$id' => "child{$suffix}"]));
             $database->createDocument('parent', new Document(['$id' => "parent{$suffix}", 'child' => "child{$suffix}"]));
@@ -835,19 +838,19 @@ final class RelationshipHookTest extends TestCase
 
         return [
             'one-to-one' => [
-                fn (ForeignKeyAction $onDelete): Relationship => Relationship::oneToOne(collection: 'parent', relatedCollection: 'child', key: 'child', twoWayKey: 'parent', onDelete: $onDelete),
+                fn (RelationshipDeleteAction $onDelete): Relationship => Relationship::oneToOne(relatedCollection: 'child', key: 'child', twoWayKey: 'parent', onDelete: $onDelete),
                 $parentHoldsChild,
             ],
             'one-to-many' => [
-                fn (ForeignKeyAction $onDelete): Relationship => Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: $onDelete),
+                fn (RelationshipDeleteAction $onDelete): Relationship => Relationship::oneToMany(relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: $onDelete),
                 $childHoldsKey,
             ],
             'many-to-one' => [
-                fn (ForeignKeyAction $onDelete): Relationship => Relationship::manyToOne(collection: 'child', relatedCollection: 'parent', twoWay: true, key: 'parent', twoWayKey: 'children', onDelete: $onDelete),
+                fn (RelationshipDeleteAction $onDelete): Relationship => Relationship::manyToOne(relatedCollection: 'parent', twoWay: true, key: 'parent', twoWayKey: 'children', onDelete: $onDelete),
                 $childHoldsKey,
             ],
             'many-to-many' => [
-                fn (ForeignKeyAction $onDelete): Relationship => Relationship::manyToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: $onDelete),
+                fn (RelationshipDeleteAction $onDelete): Relationship => Relationship::manyToMany(relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: $onDelete),
                 $parentListsChild,
             ],
         ];
@@ -954,7 +957,7 @@ final class RelationshipHookTest extends TestCase
 
     private function manyToManyLink(): Relationship
     {
-        return Relationship::manyToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: ForeignKeyAction::SetNull);
+        return Relationship::manyToMany(relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: RelationshipDeleteAction::SetNull);
     }
 
     /**
@@ -964,7 +967,7 @@ final class RelationshipHookTest extends TestCase
     public function testANewNestedManyToManyDocumentKeepsItsOwnPermissions(Closure $adapter): void
     {
         $database = $this->database($adapter);
-        $this->relate($database, Relationship::manyToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: ForeignKeyAction::SetNull));
+        $this->relate($database, Relationship::manyToMany(relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: RelationshipDeleteAction::SetNull));
 
         $database->createDocument('parent', new Document(['$id' => 'parent1', '$permissions' => [Permission::read(Role::any())]]));
 
@@ -985,7 +988,7 @@ final class RelationshipHookTest extends TestCase
     public function testANewNestedManyToManyDocumentWithoutPermissionsTakesTheParentPermissions(Closure $adapter): void
     {
         $database = $this->database($adapter);
-        $this->relate($database, Relationship::manyToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: ForeignKeyAction::SetNull));
+        $this->relate($database, Relationship::manyToMany(relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: RelationshipDeleteAction::SetNull));
 
         $parentPermissions = [Permission::read(Role::any()), Permission::update(Role::user('owner'))];
         $database->createDocument('parent', new Document(['$id' => 'parent1', '$permissions' => $parentPermissions]));
@@ -1034,16 +1037,16 @@ final class RelationshipHookTest extends TestCase
         };
 
         $database = $this->database(fn (): Adapter => $adapter);
-        $database->createCollection(new Collection(id: 'parent', permissions: $this->permissions(), documentSecurity: false));
-        $database->createCollection(new Collection(id: 'child', permissions: $this->permissions(), documentSecurity: false));
-        $database->createCollection(new Collection(id: 'tag', permissions: $this->permissions(), documentSecurity: false));
-        $database->createCollection(new Collection(id: 'label', attributes: [Attribute::string(key: 'name', size: 64)], permissions: $this->permissions(), documentSecurity: false));
-        $database->createCollection(new Collection(id: 'owner', attributes: [Attribute::string(key: 'name', size: 64)], permissions: $this->permissions(), documentSecurity: false));
-        $database->createRelationship(Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull));
-        $database->createRelationship(Relationship::manyToMany(collection: 'child', relatedCollection: 'tag', twoWay: true, key: 'tags', twoWayKey: 'children', onDelete: ForeignKeyAction::SetNull));
-        $database->createRelationship(Relationship::oneToMany(collection: 'tag', relatedCollection: 'label', twoWay: true, key: 'labels', twoWayKey: 'tag', onDelete: ForeignKeyAction::SetNull));
-        $database->createRelationship(Relationship::manyToOne(collection: 'child', relatedCollection: 'owner', twoWay: true, key: 'owner', twoWayKey: 'children', onDelete: ForeignKeyAction::SetNull));
-        $database->createRelationship(Relationship::manyToMany(collection: 'parent', relatedCollection: 'tag', twoWay: true, key: 'topics', twoWayKey: 'parents', onDelete: ForeignKeyAction::SetNull));
+        $database->createCollection(Collection::create(id: 'parent', permissions: $this->permissions(), documentSecurity: false));
+        $database->createCollection(Collection::create(id: 'child', permissions: $this->permissions(), documentSecurity: false));
+        $database->createCollection(Collection::create(id: 'tag', permissions: $this->permissions(), documentSecurity: false));
+        $database->createCollection(Collection::create(id: 'label', attributes: [Attribute::string(key: 'name', size: 64)], permissions: $this->permissions(), documentSecurity: false));
+        $database->createCollection(Collection::create(id: 'owner', attributes: [Attribute::string(key: 'name', size: 64)], permissions: $this->permissions(), documentSecurity: false));
+        $database->createRelationship('parent', Relationship::oneToMany(relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: RelationshipDeleteAction::SetNull));
+        $database->createRelationship('child', Relationship::manyToMany(relatedCollection: 'tag', twoWay: true, key: 'tags', twoWayKey: 'children', onDelete: RelationshipDeleteAction::SetNull));
+        $database->createRelationship('tag', Relationship::oneToMany(relatedCollection: 'label', twoWay: true, key: 'labels', twoWayKey: 'tag', onDelete: RelationshipDeleteAction::SetNull));
+        $database->createRelationship('child', Relationship::manyToOne(relatedCollection: 'owner', twoWay: true, key: 'owner', twoWayKey: 'children', onDelete: RelationshipDeleteAction::SetNull));
+        $database->createRelationship('parent', Relationship::manyToMany(relatedCollection: 'tag', twoWay: true, key: 'topics', twoWayKey: 'parents', onDelete: RelationshipDeleteAction::SetNull));
 
         foreach (\range(1, 6) as $number) {
             $name = $number === 6 ? 'other' : 'match';
@@ -1089,7 +1092,7 @@ final class RelationshipHookTest extends TestCase
         $database = $this->database($adapter);
         $this->relate(
             $database,
-            Relationship::manyToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: ForeignKeyAction::Cascade),
+            Relationship::manyToMany(relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: RelationshipDeleteAction::Cascade),
             [Permission::create(Role::any()), Permission::read(Role::any())],
             false,
         );
@@ -1116,7 +1119,7 @@ final class RelationshipHookTest extends TestCase
     public function testCreatingWithAListOnTheChildSideOfAOneWayOneToOneIsRejected(Closure $adapter): void
     {
         $database = $this->database($adapter);
-        $this->relate($database, Relationship::oneToOne(collection: 'parent', relatedCollection: 'child', key: 'partner', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull));
+        $this->relate($database, Relationship::oneToOne(relatedCollection: 'child', key: 'partner', twoWayKey: 'parent', onDelete: RelationshipDeleteAction::SetNull));
         $database->createDocument('parent', new Document(['$id' => 'parent1']));
 
         try {
@@ -1134,11 +1137,11 @@ final class RelationshipHookTest extends TestCase
      */
     public static function invalidRelationshipUpdates(): iterable
     {
-        $oneToOne = Relationship::oneToOne(collection: 'parent', relatedCollection: 'child', key: 'partner', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull);
-        $twoWayOneToOne = Relationship::oneToOne(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'partner', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull);
-        $oneToMany = Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull);
-        $manyToOne = Relationship::manyToOne(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'child', twoWayKey: 'parents', onDelete: ForeignKeyAction::SetNull);
-        $manyToMany = Relationship::manyToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: ForeignKeyAction::SetNull);
+        $oneToOne = Relationship::oneToOne(relatedCollection: 'child', key: 'partner', twoWayKey: 'parent', onDelete: RelationshipDeleteAction::SetNull);
+        $twoWayOneToOne = Relationship::oneToOne(relatedCollection: 'child', twoWay: true, key: 'partner', twoWayKey: 'parent', onDelete: RelationshipDeleteAction::SetNull);
+        $oneToMany = Relationship::oneToMany(relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: RelationshipDeleteAction::SetNull);
+        $manyToOne = Relationship::manyToOne(relatedCollection: 'child', twoWay: true, key: 'child', twoWayKey: 'parents', onDelete: RelationshipDeleteAction::SetNull);
+        $manyToMany = Relationship::manyToMany(relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: RelationshipDeleteAction::SetNull);
 
         $cases = [
             'one-way one-to-one child side' => [$oneToOne, 'child', false, ['parent' => 'parent1'], 'Invalid relationship value. Cannot set a value from the child side of a oneToOne relationship when twoWay is false.', false],
@@ -1196,9 +1199,9 @@ final class RelationshipHookTest extends TestCase
     public function testSelectingNestedAttributesThroughTheChildSideOfAManyToOne(Closure $adapter): void
     {
         $database = $this->database($adapter);
-        $database->createCollection(new Collection(id: 'store', attributes: [Attribute::string(key: 'name', size: 64)], permissions: $this->permissions(), documentSecurity: false));
-        $database->createCollection(new Collection(id: 'product', attributes: [Attribute::string(key: 'name', size: 64), Attribute::string(key: 'sku', size: 64)], permissions: $this->permissions(), documentSecurity: false));
-        $database->createRelationship(Relationship::manyToOne(collection: 'product', relatedCollection: 'store', twoWay: true, key: 'store', twoWayKey: 'products', onDelete: ForeignKeyAction::SetNull));
+        $database->createCollection(Collection::create(id: 'store', attributes: [Attribute::string(key: 'name', size: 64)], permissions: $this->permissions(), documentSecurity: false));
+        $database->createCollection(Collection::create(id: 'product', attributes: [Attribute::string(key: 'name', size: 64), Attribute::string(key: 'sku', size: 64)], permissions: $this->permissions(), documentSecurity: false));
+        $database->createRelationship('product', Relationship::manyToOne(relatedCollection: 'store', twoWay: true, key: 'store', twoWayKey: 'products', onDelete: RelationshipDeleteAction::SetNull));
 
         $database->createDocument('store', new Document(['$id' => 'store1', 'name' => 'Store 1']));
         foreach (['product1', 'product2'] as $id) {
@@ -1235,9 +1238,9 @@ final class RelationshipHookTest extends TestCase
     public function testRelationshipFilterConversionEdgeCases(Closure $adapter): void
     {
         $database = $this->database($adapter);
-        $database->createCollection(new Collection(id: 'project', permissions: $this->permissions(), documentSecurity: false));
-        $database->createCollection(new Collection(id: 'developer', attributes: [Attribute::string(key: 'devName', size: 64)], permissions: $this->permissions(), documentSecurity: false));
-        $database->createRelationship(Relationship::manyToMany(collection: 'project', relatedCollection: 'developer', twoWay: true, key: 'developers', twoWayKey: 'projects', onDelete: ForeignKeyAction::SetNull));
+        $database->createCollection(Collection::create(id: 'project', permissions: $this->permissions(), documentSecurity: false));
+        $database->createCollection(Collection::create(id: 'developer', attributes: [Attribute::string(key: 'devName', size: 64)], permissions: $this->permissions(), documentSecurity: false));
+        $database->createRelationship('project', Relationship::manyToMany(relatedCollection: 'developer', twoWay: true, key: 'developers', twoWayKey: 'projects', onDelete: RelationshipDeleteAction::SetNull));
 
         foreach (['dev1' => 'Alice', 'dev2' => 'Bob', 'dev3' => 'Carol'] as $id => $name) {
             $database->createDocument('developer', new Document(['$id' => $id, 'devName' => $name]));
@@ -1276,8 +1279,8 @@ final class RelationshipHookTest extends TestCase
     public static function manySideRelationships(): iterable
     {
         foreach (self::adapters() as $adapterName => [$adapter]) {
-            yield "{$adapterName}: one-to-many" => [$adapter, Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull)];
-            yield "{$adapterName}: many-to-many" => [$adapter, Relationship::manyToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: ForeignKeyAction::SetNull)];
+            yield "{$adapterName}: one-to-many" => [$adapter, Relationship::oneToMany(relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: RelationshipDeleteAction::SetNull)];
+            yield "{$adapterName}: many-to-many" => [$adapter, Relationship::manyToMany(relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: RelationshipDeleteAction::SetNull)];
         }
     }
 
@@ -1306,7 +1309,7 @@ final class RelationshipHookTest extends TestCase
 
             $this->assertSame($expected, $this->relatedIds($database->getDocument('parent', 'parent1'), 'children'), "After {$step}");
             foreach (['child1', 'child2', 'child3'] as $id) {
-                $linked = $relationship->type === RelationType::OneToMany
+                $linked = $relationship->type === RelationshipType::OneToMany
                     ? $database->getDocument('child', $id)->getDocument('parent')->getId() === 'parent1'
                     : $this->relatedIds($database->getDocument('child', $id), 'parents') === ['parent1'];
                 $this->assertSame(\in_array($id, $expected, true), $linked, "After {$step}, {$id} seen from its own side");
@@ -1329,7 +1332,7 @@ final class RelationshipHookTest extends TestCase
 
         $this->relate(
             $database,
-            Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull),
+            Relationship::oneToMany(relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: RelationshipDeleteAction::SetNull),
             [Permission::create(Role::any()), Permission::read(Role::any())],
         );
 

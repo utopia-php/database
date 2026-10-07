@@ -31,6 +31,8 @@ use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Hook\Permissions;
+use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Operator;
 use Utopia\Database\PDO;
 use Utopia\Database\Query;
@@ -65,7 +67,7 @@ $cli
                 'pass' => 'password',
                 'dsn' => static fn (string $host, int $port) => "mysql:host={$host};port={$port};charset=utf8mb4",
                 'adapter' => MariaDB::class,
-                'attrs' => MariaDB::getPDOAttributes(),
+                'attrs' => PDO_ATTRIBUTES,
             ],
             'mysql' => [
                 'host' => 'mysql',
@@ -74,7 +76,7 @@ $cli
                 'pass' => 'password',
                 'dsn' => static fn (string $host, int $port) => "mysql:host={$host};port={$port};charset=utf8mb4",
                 'adapter' => MySQL::class,
-                'attrs' => MySQL::getPDOAttributes(),
+                'attrs' => PDO_ATTRIBUTES,
             ],
             'postgres' => [
                 'host' => 'postgres',
@@ -83,7 +85,7 @@ $cli
                 'pass' => 'password',
                 'dsn' => static fn (string $host, int $port) => "pgsql:host={$host};port={$port}",
                 'adapter' => Postgres::class,
-                'attrs' => Postgres::getPDOAttributes(),
+                'attrs' => PDO_ATTRIBUTES,
             ],
             'sqlite' => [
                 'host' => ':memory:',
@@ -109,7 +111,10 @@ $cli
             // Initialize database connection
             $pdo = new PDO($dsn, $cfg['user'], $cfg['pass'], $cfg['attrs']);
 
-            $database = (new Database(new ($cfg['adapter'])($pdo), $cache))
+            $database = new Database(new ($cfg['adapter'])($pdo), $cache);
+            $database
+                ->addHook(new Permissions())
+                ->addHook(new Relationships($database))
                 ->setDatabase($name)
                 ->setNamespace($namespace);
 
@@ -151,7 +156,7 @@ function setupTestEnvironment(Database $database, string $name, int $seed): void
     $database->getAuthorization()->addRole(Role::any()->toString());
 
     // Create test collection
-    $database->createCollection(new Collection(id: 'operators_test', permissions: [
+    $database->createCollection(Collection::create(id: 'operators_test', permissions: [
         Permission::create(Role::any()),
         Permission::read(Role::any()),
         Permission::update(Role::any()),
@@ -160,12 +165,12 @@ function setupTestEnvironment(Database $database, string $name, int $seed): void
 
     // Create attributes for all operator types
     // Numeric attributes
-    $database->createAttribute('operators_test', Attribute::integer(key: 'counter', size: 0, required: false, default: 0));
-    $database->createAttribute('operators_test', Attribute::float(key: 'score', size: 0, required: false, default: 0.0));
-    $database->createAttribute('operators_test', Attribute::float(key: 'multiplier', size: 0, required: false, default: 1.0));
-    $database->createAttribute('operators_test', Attribute::float(key: 'divider', size: 0, required: false, default: 100.0));
-    $database->createAttribute('operators_test', Attribute::integer(key: 'modulo_val', size: 0, required: false, default: 100));
-    $database->createAttribute('operators_test', Attribute::float(key: 'power_val', size: 0, required: false, default: 2.0));
+    $database->createAttribute('operators_test', Attribute::integer(key: 'counter', required: false, default: 0));
+    $database->createAttribute('operators_test', Attribute::float(key: 'score', required: false, default: 0.0));
+    $database->createAttribute('operators_test', Attribute::float(key: 'multiplier', required: false, default: 1.0));
+    $database->createAttribute('operators_test', Attribute::float(key: 'divider', required: false, default: 100.0));
+    $database->createAttribute('operators_test', Attribute::integer(key: 'modulo_val', required: false, default: 100));
+    $database->createAttribute('operators_test', Attribute::float(key: 'power_val', required: false, default: 2.0));
 
     // String attributes
     $database->createAttribute('operators_test', Attribute::string(key: 'name', size: 200, required: false, default: 'test'));
@@ -173,16 +178,16 @@ function setupTestEnvironment(Database $database, string $name, int $seed): void
     $database->createAttribute('operators_test', Attribute::string(key: 'description', size: 500, required: false, default: 'foo bar baz'));
 
     // Boolean attributes
-    $database->createAttribute('operators_test', Attribute::boolean(key: 'active', size: 0, required: false, default: true));
+    $database->createAttribute('operators_test', Attribute::boolean(key: 'active', required: false, default: true));
 
     // Array attributes
-    $database->createAttribute('operators_test', Attribute::string(key: 'tags', size: 50, required: false, default: null, signed: true, array: true));
-    $database->createAttribute('operators_test', Attribute::integer(key: 'numbers', size: 0, required: false, default: null, signed: true, array: true));
-    $database->createAttribute('operators_test', Attribute::string(key: 'items', size: 50, required: false, default: null, signed: true, array: true));
+    $database->createAttribute('operators_test', Attribute::string(key: 'tags', size: 50, required: false, default: null, array: true));
+    $database->createAttribute('operators_test', Attribute::integer(key: 'numbers', required: false, default: null, signed: true, array: true));
+    $database->createAttribute('operators_test', Attribute::string(key: 'items', size: 50, required: false, default: null, array: true));
 
     // Date attributes
-    $database->createAttribute('operators_test', Attribute::datetime(key: 'created_at', size: 0, required: false, default: null, signed: false, array: false, format: null, formatOptions: [], filters: ['datetime']));
-    $database->createAttribute('operators_test', Attribute::datetime(key: 'updated_at', size: 0, required: false, default: null, signed: false, array: false, format: null, formatOptions: [], filters: ['datetime']));
+    $database->createAttribute('operators_test', Attribute::datetime(key: 'created_at', required: false, default: null, array: false));
+    $database->createAttribute('operators_test', Attribute::datetime(key: 'updated_at', required: false, default: null, array: false));
 
     // Seed documents if requested
     if ($seed > 0) {

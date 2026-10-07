@@ -20,11 +20,13 @@ use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Hook\Permissions;
+use Utopia\Database\Hook\Relationships;
+use Utopia\Database\IntegerWidth;
 use Utopia\Database\PDO;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
-use Utopia\Database\RelationType;
-use Utopia\Query\Schema\ForeignKeyAction;
+use Utopia\Database\RelationshipDeleteAction;
 use Utopia\Validator\Boolean;
 use Utopia\Validator\Integer;
 use Utopia\Validator\Text;
@@ -59,18 +61,18 @@ $cli
             }
             $database->getAuthorization()->addRole(Role::any()->toString());
             $database->create();
-            $database->createCollection(new Collection(id: 'authors', permissions: [
+            $database->createCollection(Collection::create(id: 'authors', permissions: [
                 Permission::create(Role::any()),
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
             ]));
             $database->createAttribute('authors', Attribute::string(key: 'name', size: 256, required: true));
-            $database->createAttribute('authors', Attribute::datetime(key: 'created', size: 0, required: true, filters: ['datetime']));
+            $database->createAttribute('authors', Attribute::datetime(key: 'created', required: true));
             $database->createAttribute('authors', Attribute::string(key: 'bio', size: 5000, required: true));
             $database->createAttribute('authors', Attribute::string(key: 'avatar', size: 256, required: true));
             $database->createAttribute('authors', Attribute::string(key: 'website', size: 256, required: true));
 
-            $database->createCollection(new Collection(id: 'articles', permissions: [
+            $database->createCollection(Collection::create(id: 'articles', permissions: [
                 Permission::create(Role::any()),
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
@@ -78,10 +80,10 @@ $cli
             $database->createAttribute('articles', Attribute::string(key: 'title', size: 256, required: true));
             $database->createAttribute('articles', Attribute::string(key: 'text', size: 5000, required: true));
             $database->createAttribute('articles', Attribute::string(key: 'genre', size: 256, required: true));
-            $database->createAttribute('articles', Attribute::integer(key: 'views', size: 0, required: true));
+            $database->createAttribute('articles', Attribute::integer(key: 'views', required: true));
             $database->createAttribute('articles', Attribute::string(key: 'tags', size: 0, required: true, array: true));
 
-            $database->createCollection(new Collection(id: 'users', permissions: [
+            $database->createCollection(Collection::create(id: 'users', permissions: [
                 Permission::create(Role::any()),
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
@@ -90,24 +92,24 @@ $cli
             $database->createAttribute('users', Attribute::string(key: 'email', size: 256, required: true));
             $database->createAttribute('users', Attribute::string(key: 'password', size: 256, required: true));
 
-            $database->createCollection(new Collection(id: 'comments', permissions: [
+            $database->createCollection(Collection::create(id: 'comments', permissions: [
                 Permission::create(Role::any()),
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
             ]));
             $database->createAttribute('comments', Attribute::string(key: 'content', size: 256, required: true));
-            $database->createAttribute('comments', Attribute::integer(key: 'likes', size: 8, required: true, signed: false));
+            $database->createAttribute('comments', Attribute::integer(key: 'likes', width: IntegerWidth::Bits64, required: true, signed: false));
 
-            $database->createCollection(new Collection(id: 'profiles', permissions: [
+            $database->createCollection(Collection::create(id: 'profiles', permissions: [
                 Permission::create(Role::any()),
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
             ]));
             $database->createAttribute('profiles', Attribute::string(key: 'bio_extended', size: 10000, required: true));
             $database->createAttribute('profiles', Attribute::string(key: 'social_links', size: 256, required: true, array: true));
-            $database->createAttribute('profiles', Attribute::boolean(key: 'verified', size: 0, required: true));
+            $database->createAttribute('profiles', Attribute::boolean(key: 'verified', required: true));
 
-            $database->createCollection(new Collection(id: 'categories', permissions: [
+            $database->createCollection(Collection::create(id: 'categories', permissions: [
                 Permission::create(Role::any()),
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
@@ -115,11 +117,11 @@ $cli
             $database->createAttribute('categories', Attribute::string(key: 'name', size: 256, required: true));
             $database->createAttribute('categories', Attribute::string(key: 'description', size: 1000, required: true));
 
-            $database->createRelationship(new Relationship(collection: 'authors', relatedCollection: 'articles', type: RelationType::ManyToMany, twoWay: true, onDelete: ForeignKeyAction::SetNull));
-            $database->createRelationship(new Relationship(collection: 'articles', relatedCollection: 'comments', type: RelationType::OneToMany, twoWay: true, twoWayKey: 'article', onDelete: ForeignKeyAction::Cascade));
-            $database->createRelationship(new Relationship(collection: 'users', relatedCollection: 'comments', type: RelationType::OneToMany, twoWay: true, twoWayKey: 'user', onDelete: ForeignKeyAction::Cascade));
-            $database->createRelationship(new Relationship(collection: 'authors', relatedCollection: 'profiles', type: RelationType::OneToOne, twoWay: true, twoWayKey: 'author', onDelete: ForeignKeyAction::Cascade));
-            $database->createRelationship(new Relationship(collection: 'articles', relatedCollection: 'categories', type: RelationType::ManyToOne, twoWay: true, key: 'category', twoWayKey: 'articles', onDelete: ForeignKeyAction::SetNull));
+            $database->createRelationship('authors', Relationship::manyToMany(relatedCollection: 'articles', twoWay: true, onDelete: RelationshipDeleteAction::SetNull));
+            $database->createRelationship('articles', Relationship::oneToMany(relatedCollection: 'comments', twoWay: true, twoWayKey: 'article', onDelete: RelationshipDeleteAction::Cascade));
+            $database->createRelationship('users', Relationship::oneToMany(relatedCollection: 'comments', twoWay: true, twoWayKey: 'user', onDelete: RelationshipDeleteAction::Cascade));
+            $database->createRelationship('authors', Relationship::oneToOne(relatedCollection: 'profiles', twoWay: true, twoWayKey: 'author', onDelete: RelationshipDeleteAction::Cascade));
+            $database->createRelationship('articles', Relationship::manyToOne(relatedCollection: 'categories', twoWay: true, key: 'category', twoWayKey: 'articles', onDelete: RelationshipDeleteAction::SetNull));
         };
 
         $dbAdapters = [
@@ -130,7 +132,7 @@ $cli
                 'pass' => 'password',
                 'dsn' => static fn (string $host, int $port) => "mysql:host={$host};port={$port};charset=utf8mb4",
                 'adapter' => MariaDB::class,
-                'attrs' => MariaDB::getPDOAttributes(),
+                'attrs' => PDO_ATTRIBUTES,
             ],
             'mysql' => [
                 'host' => 'mysql',
@@ -139,7 +141,7 @@ $cli
                 'pass' => 'password',
                 'dsn' => static fn (string $host, int $port) => "mysql:host={$host};port={$port};charset=utf8mb4",
                 'adapter' => MySQL::class,
-                'attrs' => MySQL::getPDOAttributes(),
+                'attrs' => PDO_ATTRIBUTES,
             ],
             'postgres' => [
                 'host' => 'postgres',
@@ -148,7 +150,7 @@ $cli
                 'pass' => 'password',
                 'dsn' => static fn (string $host, int $port) => "pgsql:host={$host};port={$port}",
                 'adapter' => Postgres::class,
-                'attrs' => Postgres::getPDOAttributes(),
+                'attrs' => PDO_ATTRIBUTES,
             ],
         ];
 
@@ -167,7 +169,10 @@ $cli
             $cfg['attrs']
         );
 
-        $database = (new Database(new ($cfg['adapter'])($pdo), $cache))
+        $database = new Database(new ($cfg['adapter'])($pdo), $cache);
+        $database
+            ->addHook(new Permissions())
+            ->addHook(new Relationships($database))
             ->setDatabase($name)
             ->setNamespace($namespace)
             ->setSharedTables($sharedTables);
@@ -197,7 +202,10 @@ $cli
                 try {
                     $pdo = $pool->get();
 
-                    $database = (new Database(new ($cfg['adapter'])($pdo), $cache))
+                    $database = new Database(new ($cfg['adapter'])($pdo), $cache);
+                    $database
+                        ->addHook(new Permissions())
+                        ->addHook(new Relationships($database))
                         ->setDatabase($name)
                         ->setNamespace($namespace)
                         ->setSharedTables($sharedTables);

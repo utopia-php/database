@@ -69,11 +69,6 @@ abstract class Adapter
     }
 
     /**
-     * @var array<string, mixed>
-     */
-    protected array $debug = [];
-
-    /**
      * @var array<string, Transform>
      */
     protected array $transforms = [];
@@ -346,42 +341,6 @@ abstract class Adapter
     public function getTenantPerDocument(): bool
     {
         return $this->tenantPerDocument;
-    }
-
-    /**
-     * Set a debug key-value pair for diagnostic purposes.
-     *
-     * @param string $key The debug key.
-     * @param mixed $value The debug value.
-     * @return $this
-     */
-    public function setDebug(string $key, mixed $value): static
-    {
-        $this->debug[$key] = $value;
-
-        return $this;
-    }
-
-    /**
-     * Get all collected debug data.
-     *
-     * @return array<string, mixed>
-     */
-    public function getDebug(): array
-    {
-        return $this->debug;
-    }
-
-    /**
-     * Reset all debug data.
-     *
-     * @return $this
-     */
-    public function resetDebug(): static
-    {
-        $this->debug = [];
-
-        return $this;
     }
 
     /**

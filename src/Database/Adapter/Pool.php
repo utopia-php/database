@@ -184,10 +184,6 @@ class Pool extends Adapter implements Feature\Timeouts
         }
 
         $this->syncTimeouts($adapter);
-        $adapter->resetDebug();
-        foreach ($this->getDebug() as $key => $value) {
-            $adapter->setDebug($key, $value);
-        }
         $adapter->resetMetadata();
         foreach ($this->getMetadata() as $key => $value) {
             $adapter->setMetadata($key, $value);

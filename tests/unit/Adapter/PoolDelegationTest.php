@@ -63,15 +63,15 @@ final class PoolDelegationTest extends TestCase
         $call($this->pool($adapter));
     }
 
-    public function testDebugEntriesReachTheBorrowedAdapter(): void
+    public function testMetadataEntriesReachTheBorrowedAdapter(): void
     {
         $adapter = new Memory();
-        $adapter->setDebug('stale', 'entry');
+        $adapter->setMetadata('stale', 'entry');
         $pool = $this->pool($adapter);
-        $pool->setDebug('request', 'r-1');
+        $pool->setMetadata('request', 'r-1');
 
         $this->assertSame([], $pool->list());
-        $this->assertSame(['request' => 'r-1'], $adapter->getDebug());
+        $this->assertSame(['request' => 'r-1'], $adapter->getMetadata());
     }
 
     public function testTheIntrospectedIndexTypeIsTheBorrowedAdapters(): void

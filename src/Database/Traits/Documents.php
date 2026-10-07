@@ -4263,13 +4263,16 @@ trait Documents
      *
      * @param  string  $collection  The collection identifier
      * @param  array<Query>  $queries  Queries for filtering
-     * @param  int|null  $max  Maximum count to return, null for unlimited
+     * @param  int|null  $max  The most documents to count, greater than 0, or null for every match
      * @return int The document count
      *
      * @throws DatabaseException
+     * @throws QueryException When $max is not greater than 0
      */
     public function count(string $collection, array $queries = [], ?int $max = null): int
     {
+        $this->assertMax($max);
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
@@ -4321,18 +4324,21 @@ trait Documents
     /**
      * Sum an attribute
      *
-     * Sum an attribute for all matching documents. Pass $max=0 for unlimited.
+     * Sum an attribute for all matching documents.
      *
      * @param  string  $collection  The collection identifier
      * @param  string  $attribute  The attribute to sum
      * @param  array<Query>  $queries  Queries for filtering
-     * @param  int|null  $max  Maximum number of documents to include in the sum
+     * @param  int|null  $max  The most documents to include in the sum, greater than 0, or null for every match
      * @return float|int The sum of the attribute values
      *
      * @throws DatabaseException
+     * @throws QueryException When $max is not greater than 0
      */
     public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): float|int
     {
+        $this->assertMax($max);
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
@@ -4387,6 +4393,16 @@ trait Documents
         $this->trigger(Event::DocumentSum, $sum);
 
         return $sum;
+    }
+
+    /**
+     * @throws QueryException
+     */
+    private function assertMax(?int $max): void
+    {
+        if ($max !== null && $max <= 0) {
+            throw new QueryException('Max must be greater than 0');
+        }
     }
 
     /**

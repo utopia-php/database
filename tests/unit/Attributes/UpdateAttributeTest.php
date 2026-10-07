@@ -92,31 +92,63 @@ final class UpdateAttributeTest extends TestCase
 
     public function testMakingAnAttributeOptionalRelaxesItsColumn(): void
     {
-        $adapter = new class () extends Memory {
-            /**
-             * @var list<string>
-             */
-            public array $relaxed = [];
+        $database = $this->database(new class () extends Memory {
+            private bool $codeNullable = false;
 
             #[\Override]
             public function relaxAttributeRequired(string $collection, string $id): bool
             {
-                $this->relaxed[] = $collection.'.'.$id;
+                $this->codeNullable = $this->codeNullable || $id === 'code';
 
                 return parent::relaxAttributeRequired($collection, $id);
             }
-        };
-        $database = $this->database($adapter);
+
+            #[\Override]
+            public function createDocument(Document $collection, Document $document): Document
+            {
+                if ($collection->getId() === 'items' && ! $this->codeNullable && $document->getAttribute('code') === null) {
+                    throw new DatabaseException('Column code is NOT NULL');
+                }
+
+                return parent::createDocument($collection, $document);
+            }
+        });
 
         $database->updateAttribute('items', 'code', new AttributeUpdate(required: false));
-
-        $this->assertSame(['items.code'], $adapter->relaxed);
-        $this->assertFalse($this->stored($database, 'code')->required);
 
         $created = $database->createDocument('items', new Document([
             '$permissions' => [Permission::read(Role::any())],
         ]));
+
         $this->assertNull($created->getAttribute('code'));
+        $this->assertFalse($this->stored($database, 'code')->required);
+        $this->assertNull($database->getDocument('items', $created->getId())->getAttribute('code'));
+    }
+
+    public function testAnExplicitDefaultWhileMakingAnAttributeRequiredIsRefused(): void
+    {
+        $database = $this->database();
+
+        try {
+            $database->updateAttribute('items', 'name', new AttributeUpdate(required: true, default: 'kept'));
+            $this->fail('Expected a default together with required: true to be refused');
+        } catch (DatabaseException $error) {
+            $this->assertSame('Cannot set a default value on a required attribute', $error->getMessage());
+        }
+
+        $stored = $this->stored($database, 'name');
+        $this->assertFalse($stored->required);
+        $this->assertSame('none', $stored->default);
+    }
+
+    public function testMakingAnAttributeRequiredWithANullDefaultIsAccepted(): void
+    {
+        $database = $this->database();
+
+        $updated = $database->updateAttribute('items', 'name', new AttributeUpdate(required: true, default: null));
+
+        $this->assertTrue($updated->required);
+        $this->assertNull($this->stored($database, 'name')->default);
     }
 
     public function testFormatAndFiltersAreReplaced(): void

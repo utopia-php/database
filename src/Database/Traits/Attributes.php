@@ -213,8 +213,8 @@ trait Attributes
 
     /**
      * Applies a sparse update: a null field keeps its value and `default: null` clears the default. An explicit
-     * `required: true` clears the default; a default on a required attribute is refused. `required: false`
-     * relaxes the column's NOT NULL.
+     * `required: true` clears the default; a default on an attribute that is or becomes required is refused.
+     * `required: false` relaxes the column's NOT NULL.
      *
      * @return Attribute The attribute as stored
      *
@@ -253,7 +253,7 @@ trait Attributes
         }
 
         $required = $update->required ?? $stored->required;
-        if ($update->required !== true && $required && $update->changesDefault() && $update->default !== null) {
+        if ($required && $update->changesDefault() && $update->default !== null) {
             throw new DatabaseException('Cannot set a default value on a required attribute');
         }
 
@@ -327,8 +327,6 @@ trait Attributes
                 throw new DatabaseException('Failed to update attribute');
             }
         } elseif ($stored->required && ! $updated->required) {
-            // The alter path applies nullability itself. A required-only change relaxes the column on its own,
-            // because the column rewrite re-casts datetime columns on Postgres.
             if (! $this->adapter->relaxAttributeRequired($definition->getId(), $key)) {
                 throw new DatabaseException('Failed to update attribute');
             }

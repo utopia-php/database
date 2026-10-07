@@ -36,8 +36,8 @@ final class CursorDocumentTest extends TestCase
     {
         $validator = new Cursor();
 
-        $this->assertTrue($validator->isValid(Query::cursorAfter('movie1')));
-        $this->assertTrue($validator->isValid(Query::cursorBefore('movie1')));
+        $this->assertTrue($validator->isValid(new Query(Method::CursorAfter, values: ['movie1'])));
+        $this->assertTrue($validator->isValid(new Query(Method::CursorBefore, values: ['movie1'])));
     }
 
     public function testAnArrayIsRejected(): void

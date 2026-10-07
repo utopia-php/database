@@ -1834,15 +1834,6 @@ trait JoinComboTests
     }
 
     /**
-     * @param  list<array<string, mixed>>  $rows
-     * @return list<Document>
-     */
-    private static function rowDocuments(array $rows): array
-    {
-        return \array_map(static fn (array $row): Document => new Document($row), $rows);
-    }
-
-    /**
      * @param array<Document> $documents
      */
     private function assertComboSecretsHidden(array $documents): void

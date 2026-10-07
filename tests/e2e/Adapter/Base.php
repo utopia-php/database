@@ -33,6 +33,7 @@ use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Database;
+use Utopia\Database\Document;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Validator\Authorization;
@@ -109,6 +110,15 @@ abstract class Base extends TestCase
     protected static function getTestToken(): string
     {
         return getenv('TEST_TOKEN') ?: getenv('UNIQUE_TEST_TOKEN') ?: (string) getmypid();
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<Document>
+     */
+    protected static function rowDocuments(array $rows): array
+    {
+        return \array_map(static fn (array $row): Document => new Document($row), $rows);
     }
 
     /**

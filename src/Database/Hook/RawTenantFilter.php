@@ -41,7 +41,7 @@ final class RawTenantFilter implements Filter, JoinFilter
         private readonly int|string|null $tenant,
         private readonly string $table,
         private readonly bool $metadata,
-        private readonly string $quoteChar,
+        private readonly string $quoteCharacter,
     ) {
     }
 
@@ -99,7 +99,7 @@ final class RawTenantFilter implements Filter, JoinFilter
         }
 
         $conditions = [$this->allowMissing($this->main($this->table), $this->table), $this->joined($table)];
-        $preceding = (new OuterJoinChainFilter($chain, $earlier, $this->quoteChar))->filterJoin($table, $joinType);
+        $preceding = (new OuterJoinChainFilter($chain, $earlier, $this->quoteCharacter))->filterJoin($table, $joinType);
         if ($preceding !== null) {
             $conditions[] = $preceding->condition;
         }
@@ -132,11 +132,11 @@ final class RawTenantFilter implements Filter, JoinFilter
 
     private function allowMissing(Condition $condition, string $table): Condition
     {
-        return AllowNullColumn::wrap($condition, $table.'.'.Storage::UID, $this->quoteChar);
+        return AllowNullColumn::wrap($condition, $table.'.'.Storage::UID, $this->quoteCharacter);
     }
 
     private function column(string $table): string
     {
-        return AllowNullColumn::quote($table, $this->quoteChar).'.'.Storage::TENANT;
+        return AllowNullColumn::quote($table, $this->quoteCharacter).'.'.Storage::TENANT;
     }
 }

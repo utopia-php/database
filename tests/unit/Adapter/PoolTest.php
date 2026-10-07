@@ -36,7 +36,7 @@ final class PoolTest extends TestCase
         $hook = new Tenancy('new');
         $pool->addWriteHook($hook);
 
-        $this->assertTrue($pool->ping());
+        $this->assertSame([], $pool->list());
         $this->assertSame([$hook], $adapter->getWriteHooks());
         $this->assertSame([Storage::TENANT => 'new'], $adapter->getTenantHook()?->decorateRow([]));
     }
@@ -63,11 +63,11 @@ final class PoolTest extends TestCase
 
         $hook = new Permissions();
         $pool->addWriteHook($hook);
-        $this->assertTrue($pool->ping());
+        $this->assertSame([], $pool->list());
         $this->assertSame([$hook], $adapter->getWriteHooks());
 
         $pool->removeWriteHook(Permissions::class);
-        $this->assertTrue($pool->ping());
+        $this->assertSame([], $pool->list());
         $this->assertSame([], $adapter->getWriteHooks());
     }
 
@@ -131,18 +131,18 @@ final class PoolTest extends TestCase
             $pool->setNamespace('new_ns');
             $pool->setTenant(2);
 
-            $this->assertTrue($pool->ping());
+            $this->assertSame([], $pool->list());
             $this->assertSame('new_db', $adapter->getDatabase());
             $this->assertSame('new_ns', $adapter->getNamespace());
             $this->assertSame(2, $adapter->getTenant());
         });
     }
 
-    public function testMemoryPoolPingDoesNotRequireTimeouts(): void
+    public function testMemoryPoolDelegatesWithoutRequiringTimeouts(): void
     {
         $pool = $this->createPool(new Memory());
 
-        $this->assertTrue($pool->ping());
+        $this->assertSame([], $pool->list());
     }
 
     public function testDefinedAttributesSupportPropagatesAcrossBorrowedAdapters(): void

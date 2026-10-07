@@ -54,8 +54,8 @@ class Permissions extends Interceptor
             } else {
                 $result = $permBuilder->insert();
             }
-            $stmt = ($context->executeResult)($result, Event::PermissionsCreate);
-            ($context->execute)($stmt);
+            $statement = ($context->executeResult)($result, Event::PermissionsCreate);
+            ($context->execute)($statement);
         }
     }
 

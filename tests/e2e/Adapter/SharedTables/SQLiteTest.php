@@ -47,7 +47,7 @@ class SQLiteTest extends Base
 
         $dsn = $db;
         // $dsn = 'memory'; // Overwrite for fast tests
-        $pdo = new PDO('sqlite:'.$dsn, null, null, SQLite::getPDOAttributes());
+        $pdo = new PDO('sqlite:'.$dsn, null, null, self::PDO_ATTRIBUTES);
 
         $redis = new Redis();
         $redis->connect('redis');
@@ -55,8 +55,9 @@ class SQLiteTest extends Base
 
         $cache = new Cache((new RedisAdapter($redis))->setMaxRetries(3));
 
-        $adapter = new SQLite($pdo);
-        $adapter->setEmulateMySQL(true);
+        $adapter = new class ($pdo) extends SQLite {
+            protected bool $emulateMySQL = true;
+        };
 
         $database = new Database($adapter, $cache);
         assert(self::$authorization !== null);

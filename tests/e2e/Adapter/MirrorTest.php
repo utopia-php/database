@@ -51,7 +51,7 @@ class MirrorTest extends Base
         $dbUser = 'root';
         $dbPass = 'password';
 
-        $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MariaDB::getPDOAttributes());
+        $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, self::PDO_ATTRIBUTES);
 
         $redis = new Redis();
         $redis->connect('redis');
@@ -66,7 +66,7 @@ class MirrorTest extends Base
         $mirrorUser = 'root';
         $mirrorPass = 'password';
 
-        $mirrorPdo = new PDO("mysql:host={$mirrorHost};port={$mirrorPort};charset=utf8mb4", $mirrorUser, $mirrorPass, MariaDB::getPDOAttributes());
+        $mirrorPdo = new PDO("mysql:host={$mirrorHost};port={$mirrorPort};charset=utf8mb4", $mirrorUser, $mirrorPass, self::PDO_ATTRIBUTES);
 
         $mirrorRedis = new Redis();
         $mirrorRedis->connect('redis-mirror');

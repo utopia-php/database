@@ -2,6 +2,7 @@
 
 namespace Tests\E2E\Adapter;
 
+use PDO;
 use PHPUnit\Framework\TestCase;
 use Tests\E2E\Adapter\Scopes\AggregationTests;
 use Tests\E2E\Adapter\Scopes\AttributeTests;
@@ -46,6 +47,18 @@ abstract class Base extends TestCase
     use SchemalessTests;
     use SpatialTests;
     use VectorTests;
+
+    /**
+     * @var array<int, mixed>
+     */
+    protected const array PDO_ATTRIBUTES = [
+        PDO::ATTR_TIMEOUT => 3,
+        PDO::ATTR_PERSISTENT => true,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_EMULATE_PREPARES => true,
+        PDO::ATTR_STRINGIFY_FETCHES => true,
+    ];
 
     protected static string $namespace;
 

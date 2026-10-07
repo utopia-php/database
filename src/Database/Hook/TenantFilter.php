@@ -31,7 +31,7 @@ class TenantFilter implements Filter, JoinFilter
      *                                outer join produced without a main-table match. It must be a
      *                                NOT NULL column such as `_uid`, never `_tenant`, or a stored row
      *                                that has no tenant would pass as if it were missing
-     * @param string $quoteChar The adapter's identifier quote: tables are named quoted with it, as the
+     * @param string $quoteCharacter The adapter's identifier quote: tables are named quoted with it, as the
      *                          builder declares them
      */
     public function __construct(
@@ -39,7 +39,7 @@ class TenantFilter implements Filter, JoinFilter
         private string $metadataCollection = '',
         private string $collection = '',
         private string $allowNullColumn = '',
-        private string $quoteChar = '`',
+        private string $quoteCharacter = '`',
     ) {
         if (! \is_array($tenant)) {
             $tenant = [$tenant];
@@ -55,8 +55,8 @@ class TenantFilter implements Filter, JoinFilter
 
     public function filter(string $table): Condition
     {
-        $prefix = (! \str_contains($table, '.') && ! \str_contains($table, $this->quoteChar))
-            ? AllowNullColumn::quote($table, $this->quoteChar).'.'
+        $prefix = (! \str_contains($table, '.') && ! \str_contains($table, $this->quoteCharacter))
+            ? AllowNullColumn::quote($table, $this->quoteCharacter).'.'
             : '';
 
         $name = $this->collection !== '' ? $this->collection : $table;
@@ -84,7 +84,7 @@ class TenantFilter implements Filter, JoinFilter
             return $condition;
         }
 
-        return AllowNullColumn::wrap($condition, $this->allowNullColumn, $this->quoteChar);
+        return AllowNullColumn::wrap($condition, $this->allowNullColumn, $this->quoteCharacter);
     }
 
     /**
@@ -106,7 +106,7 @@ class TenantFilter implements Filter, JoinFilter
             $condition = AllowNullColumn::wrap(
                 $condition,
                 $table.'.'.Storage::UID,
-                $this->quoteChar,
+                $this->quoteCharacter,
             );
         }
 
@@ -118,7 +118,7 @@ class TenantFilter implements Filter, JoinFilter
      */
     public function joined(string $table): Condition
     {
-        $column = AllowNullColumn::quote($table, $this->quoteChar).'.'.Storage::TENANT;
+        $column = AllowNullColumn::quote($table, $this->quoteCharacter).'.'.Storage::TENANT;
 
         return new Condition("{$column} IN ({$this->placeholders()})", $this->tenants);
     }

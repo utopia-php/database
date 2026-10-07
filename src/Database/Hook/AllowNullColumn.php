@@ -14,7 +14,7 @@ final readonly class AllowNullColumn implements Filter
     public function __construct(
         private Filter $filter,
         private string $column,
-        private string $quoteChar = '`',
+        private string $quoteCharacter = '`',
     ) {
         if (! \preg_match(self::IDENTIFIER_PATTERN, $column)) {
             throw new InvalidArgumentException('Invalid column name: '.$column);
@@ -23,26 +23,26 @@ final readonly class AllowNullColumn implements Filter
 
     public function filter(string $table): Condition
     {
-        return self::wrap($this->filter->filter($table), $this->column, $this->quoteChar);
+        return self::wrap($this->filter->filter($table), $this->column, $this->quoteCharacter);
     }
 
-    public static function wrap(Condition $condition, string $column, string $quoteChar = '`'): Condition
+    public static function wrap(Condition $condition, string $column, string $quoteCharacter = '`'): Condition
     {
         if (! \preg_match(self::IDENTIFIER_PATTERN, $column)) {
             throw new DatabaseException('Invalid column name: '.$column);
         }
 
         return new Condition(
-            '('.$condition->expression.' OR '.self::quote($column, $quoteChar).' IS NULL)',
+            '('.$condition->expression.' OR '.self::quote($column, $quoteCharacter).' IS NULL)',
             $condition->bindings,
         );
     }
 
-    public static function quote(string $identifier, string $quoteChar = '`'): string
+    public static function quote(string $identifier, string $quoteCharacter = '`'): string
     {
         $parts = \explode('.', $identifier);
         $quoted = \array_map(
-            fn (string $part): string => $quoteChar.\str_replace($quoteChar, $quoteChar.$quoteChar, $part).$quoteChar,
+            fn (string $part): string => $quoteCharacter.\str_replace($quoteCharacter, $quoteCharacter.$quoteCharacter, $part).$quoteCharacter,
             $parts,
         );
 

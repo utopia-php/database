@@ -3,10 +3,11 @@
 namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
+use Tests\Unit\Adapter\FeatureAdapterStub;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
-use Utopia\Database\Capability;
+use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -24,12 +25,7 @@ class CacheKeyTest extends TestCase
     private function createDatabase(array $instanceFilters = [], string $database = 'test'): Database
     {
         $adapter = self::createStub(Adapter::class);
-        $adapter->method('supports')->willReturnCallback(function (Capability $capability) {
-            return match ($capability) {
-                Capability::Hostname => false,
-                default => false,
-            };
-        });
+        $adapter->method('supports')->willReturn(false);
         $adapter->method('getTenant')->willReturn(null);
         $adapter->method('getNamespace')->willReturn('test');
         $adapter->method('getDatabase')->willReturn($database);
@@ -45,11 +41,11 @@ class CacheKeyTest extends TestCase
 
     public function testBaseKeysMatchScopedVariantKeys(): void
     {
-        $adapter = self::createStub(Adapter::class);
-        $adapter->method('supports')->willReturnCallback(
-            fn (Capability $capability): bool => $capability === Capability::Hostname
+        $adapter = self::createStub(FeatureAdapterStub::class);
+        $adapter->method('hasFeature')->willReturnCallback(
+            fn (string $feature): bool => $feature === Feature\Connection::class
         );
-        $adapter->method('getHostname')->willReturn('mysql-project');
+        $adapter->method('hostname')->willReturn('mysql-project');
         $adapter->method('getNamespace')->willReturn('project');
         $adapter->method('getTenant')->willReturn(42);
         $adapter->method('getSharedTables')->willReturn(true);
@@ -185,11 +181,11 @@ class CacheKeyTest extends TestCase
 
     public function testQueryCacheKeyUsesQueryCacheShape(): void
     {
-        $adapter = self::createStub(Adapter::class);
-        $adapter->method('supports')->willReturnCallback(
-            fn (Capability $capability): bool => $capability === Capability::Hostname
+        $adapter = self::createStub(FeatureAdapterStub::class);
+        $adapter->method('hasFeature')->willReturnCallback(
+            fn (string $feature): bool => $feature === Feature\Connection::class
         );
-        $adapter->method('getHostname')->willReturn('mysql-console');
+        $adapter->method('hostname')->willReturn('mysql-console');
         $adapter->method('getDatabase')->willReturn('console');
         $adapter->method('getNamespace')->willReturn('_39');
         $adapter->method('getTenant')->willReturn(null);
@@ -204,11 +200,11 @@ class CacheKeyTest extends TestCase
 
     public function testQueryCacheKeyCanOverrideNamespaceSegment(): void
     {
-        $adapter = self::createStub(Adapter::class);
-        $adapter->method('supports')->willReturnCallback(
-            fn (Capability $capability): bool => $capability === Capability::Hostname
+        $adapter = self::createStub(FeatureAdapterStub::class);
+        $adapter->method('hasFeature')->willReturnCallback(
+            fn (string $feature): bool => $feature === Feature\Connection::class
         );
-        $adapter->method('getHostname')->willReturn('mysql-console');
+        $adapter->method('hostname')->willReturn('mysql-console');
         $adapter->method('getDatabase')->willReturn('console');
         $adapter->method('getNamespace')->willReturn('');
         $adapter->method('getTenant')->willReturn(null);
@@ -359,14 +355,11 @@ class CacheKeyTest extends TestCase
     {
         $hostname = 'database_db_nyc3_self_hosted_0_0';
 
-        $adapter = self::createStub(Adapter::class);
-        $adapter->method('supports')->willReturnCallback(function (Capability $capability) {
-            return match ($capability) {
-                Capability::Hostname => true,
-                default => false,
-            };
-        });
-        $adapter->method('getHostname')->willReturn($hostname);
+        $adapter = self::createStub(FeatureAdapterStub::class);
+        $adapter->method('hasFeature')->willReturnCallback(
+            fn (string $feature): bool => $feature === Feature\Connection::class
+        );
+        $adapter->method('hostname')->willReturn($hostname);
         $adapter->method('getDatabase')->willReturn('appwrite');
         $adapter->method('getTenant')->willReturn(999);
         $adapter->method('getSharedTables')->willReturn(true);

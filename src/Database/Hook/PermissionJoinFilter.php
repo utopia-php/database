@@ -25,7 +25,7 @@ final readonly class PermissionJoinFilter implements JoinFilter
     public function __construct(
         private PermissionFilter $filter,
         private string $alias,
-        private string $quoteChar = '`',
+        private string $quoteCharacter = '`',
         private bool $preservingOuterJoin = false,
     ) {
     }
@@ -46,7 +46,7 @@ final readonly class PermissionJoinFilter implements JoinFilter
             $condition = AllowNullColumn::wrap(
                 $condition,
                 $this->alias.'.'.Storage::UID,
-                $this->quoteChar,
+                $this->quoteCharacter,
             );
         }
 

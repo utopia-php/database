@@ -38,7 +38,7 @@ class MariaDBTest extends Base
         $dbUser = 'root';
         $dbPass = 'password';
 
-        $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MariaDB::getPDOAttributes());
+        $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, self::PDO_ATTRIBUTES);
         $redis = new Redis();
         $redis->connect('redis', 6379);
         $redis->select(7);
@@ -52,7 +52,7 @@ class MariaDBTest extends Base
             ->setSharedTables(true)
             ->setTenant(999)
             ->setNamespace(static::$namespace = 'st_'.static::getTestToken())
-            ->enableLocks(true);
+            ->setLocks(true);
 
         if ($database->exists()) {
             $database->delete();

@@ -42,15 +42,15 @@ class PermissionFilter implements Filter, JoinFilter
         protected string $type = 'read',
         protected ?array $columns = null,
         protected string $documentColumn = 'id',
-        protected string $permDocumentColumn = 'document_id',
-        protected string $permRoleColumn = 'role',
-        protected string $permTypeColumn = 'type',
-        protected string $permColumnColumn = 'column',
+        protected string $permissionDocumentColumn = 'document_id',
+        protected string $permissionRoleColumn = 'role',
+        protected string $permissionTypeColumn = 'type',
+        protected string $scopeColumn = 'column',
         protected ?Filter $subqueryFilter = null,
-        protected string $quoteChar = '`',
+        protected string $quoteCharacter = '`',
         protected bool $semiJoin = true,
     ) {
-        foreach ([$documentColumn, $permDocumentColumn, $permRoleColumn, $permTypeColumn, $permColumnColumn] as $col) {
+        foreach ([$documentColumn, $permissionDocumentColumn, $permissionRoleColumn, $permissionTypeColumn, $scopeColumn] as $col) {
             if (! \preg_match(self::IDENTIFIER_PATTERN, $col)) {
                 throw new InvalidArgumentException('Invalid column name: '.$col);
             }
@@ -77,8 +77,8 @@ class PermissionFilter implements Filter, JoinFilter
             throw new DatabaseException('Invalid permissions table name: '.$permTable);
         }
 
-        $quotedPermTable = AllowNullColumn::quote($permTable, $this->quoteChar);
-        $quotedDocumentColumn = AllowNullColumn::quote($this->documentColumn, $this->quoteChar);
+        $quotedPermTable = AllowNullColumn::quote($permTable, $this->quoteCharacter);
+        $quotedDocumentColumn = AllowNullColumn::quote($this->documentColumn, $this->quoteCharacter);
 
         $rolePlaceholders = \implode(', ', \array_fill(0, \count($this->roles), '?'));
 
@@ -87,10 +87,10 @@ class PermissionFilter implements Filter, JoinFilter
 
         if ($this->columns !== null) {
             if (empty($this->columns)) {
-                $columnClause = " AND {$this->permColumnColumn} IS NULL";
+                $columnClause = " AND {$this->scopeColumn} IS NULL";
             } else {
                 $colPlaceholders = \implode(', ', \array_fill(0, \count($this->columns), '?'));
-                $columnClause = " AND ({$this->permColumnColumn} IS NULL OR {$this->permColumnColumn} IN ({$colPlaceholders}))";
+                $columnClause = " AND ({$this->scopeColumn} IS NULL OR {$this->scopeColumn} IN ({$colPlaceholders}))";
                 $columnBindings = $this->columns;
             }
         }
@@ -106,7 +106,7 @@ class PermissionFilter implements Filter, JoinFilter
         $hint = $this->semiJoin ? '' : self::NO_SEMIJOIN;
 
         return new Condition(
-            "{$quotedDocumentColumn}{$this->documentCollation} IN (SELECT {$hint}{$this->permDocumentColumn} FROM {$quotedPermTable} WHERE {$this->permRoleColumn} IN ({$rolePlaceholders}) AND {$this->permTypeColumn} = ?{$columnClause}{$subFilterClause})",
+            "{$quotedDocumentColumn}{$this->documentCollation} IN (SELECT {$hint}{$this->permissionDocumentColumn} FROM {$quotedPermTable} WHERE {$this->permissionRoleColumn} IN ({$rolePlaceholders}) AND {$this->permissionTypeColumn} = ?{$columnClause}{$subFilterClause})",
             [...$this->roles, $this->type, ...$columnBindings, ...$subFilterBindings],
         );
     }

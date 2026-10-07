@@ -23,7 +23,6 @@ enum Capability
     case DefinedAttributes;
     case Fulltext;
     case FulltextWildcard;
-    case Hostname;
     case IdenticalIndexes;
     case Index;
     case IndexArray;
@@ -46,7 +45,6 @@ enum Capability
     case PCRE;
     case POSIX;
     case QueryContains;
-    case Reconnection;
     case Regex;
     case Schemas;
     case SpatialAxisOrder;

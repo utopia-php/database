@@ -169,7 +169,7 @@ class MySQL extends MariaDB
      * @param bool $required Whether the column is NOT NULL
      * @return string
      */
-    protected function getSpatialSQLType(string $type, bool $required): string
+    protected function getSpatialSqlType(string $type, bool $required): string
     {
         switch ($type) {
             case ColumnType::Point->value:
@@ -222,7 +222,7 @@ class MySQL extends MariaDB
      * Get the spatial axis order specification string for MySQL
      * MySQL with SRID 4326 expects lat-long by default, but our data is in long-lat format
      */
-    protected function getSpatialAxisOrderSpec(): string
+    protected function getSpatialAxisOrder(): string
     {
         return "'axis-order=long-lat'";
     }
@@ -231,7 +231,7 @@ class MySQL extends MariaDB
      * Get SQL expression for operator
      * Override for MySQL-specific operator implementations
      */
-    protected function getOperatorSQL(string $column, Operator $operator, int &$bindIndex): ?string
+    protected function getOperatorSql(string $column, Operator $operator, int &$bindIndex): ?string
     {
         $quotedColumn = $this->quote($column);
         $method = $operator->getMethod();
@@ -261,6 +261,6 @@ class MySQL extends MariaDB
         }
 
         // For all other operators, use parent implementation
-        return parent::getOperatorSQL($column, $operator, $bindIndex);
+        return parent::getOperatorSql($column, $operator, $bindIndex);
     }
 }

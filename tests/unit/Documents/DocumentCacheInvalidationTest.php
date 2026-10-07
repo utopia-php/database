@@ -201,8 +201,13 @@ final class DocumentCacheInvalidationTest extends TestCase
         }
 
         try {
-            $attributes = SQLite::getPDOAttributes();
-            $attributes[\PDO::ATTR_PERSISTENT] = false;
+            $attributes = [
+                \PDO::ATTR_PERSISTENT => false,
+                \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
+                \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
+                \PDO::ATTR_EMULATE_PREPARES => true,
+                \PDO::ATTR_STRINGIFY_FETCHES => true,
+            ];
             $writerConnection = new \PDO('sqlite:'.$path, null, null, $attributes);
             $readerConnection = new \PDO('sqlite:'.$path, null, null, $attributes);
             $writerConnection->exec('PRAGMA journal_mode = WAL');

@@ -39,7 +39,7 @@ final class PoolDelegationTest extends TestCase
             'spatial' => [static fn (Pool $pool): mixed => $pool->decodePoint(''), 'Adapter does not support spatial'],
             'internal casting' => [static fn (Pool $pool): mixed => $pool->castingBefore(new Document(), new Document()), 'Adapter does not support internal casting'],
             'UTC casting' => [static fn (Pool $pool): mixed => $pool->setUTCDatetime('2026-01-01'), 'Adapter does not support UTC casting'],
-            'connection id' => [static fn (Pool $pool): mixed => $pool->getConnectionId(), 'Adapter does not support connection id'],
+            'connection' => [static fn (Pool $pool): mixed => $pool->id(), 'Adapter does not support connections'],
             'relationships' => [static fn (Pool $pool): mixed => $pool->createRelationship('books', Relationship::oneToOne(relatedCollection: 'authors', key: 'author')), 'Adapter does not support relationships'],
         ];
     }
@@ -65,7 +65,7 @@ final class PoolDelegationTest extends TestCase
         $pool = $this->pool($adapter);
         $pool->setDebug('request', 'r-1');
 
-        $this->assertTrue($pool->ping());
+        $this->assertSame([], $pool->list());
         $this->assertSame(['request' => 'r-1'], $adapter->getDebug());
     }
 

@@ -104,7 +104,7 @@ class ReadWritePoolTest extends TestCase
             'getSizeOfCollection',
             'getSizeOfCollectionOnDisk',
             'ping',
-            'getConnectionId',
+            'id',
             'getDocumentSizeLimit',
             'getAttributeWidth',
             'getCountOfAttributes',
@@ -345,7 +345,7 @@ class ReadWritePoolTest extends TestCase
             $pool->setNamespace('new_ns');
             $pool->setTenant(2);
 
-            $this->assertTrue($pool->ping());
+            $pool->list();
             $this->assertSame('new_db', $writeAdapter->getDatabase());
             $this->assertSame('new_ns', $writeAdapter->getNamespace());
             $this->assertSame(2, $writeAdapter->getTenant());
@@ -356,6 +356,9 @@ class ReadWritePoolTest extends TestCase
     {
         /** @var Adapter&Feature\Timeouts&MockObject $readAdapter */
         $readAdapter = $this->createMock(FeatureAdapterStub::class);
+        $readAdapter->method('hasFeature')->willReturnCallback(
+            static fn (string $feature): bool => $feature === Feature\Timeouts::class,
+        );
         $readAdapter->expects($this->once())
             ->method('clearTimeout');
         $readAdapter->expects($this->once())
@@ -618,7 +621,7 @@ class ReadWritePoolTest extends TestCase
             'getLimitForAttributes', 'getLimitForIndexes', 'getMaxIndexLength',
             'getMaxVarcharLength', 'getMaxUIDLength' => 0,
             'exists', 'ping', 'supports', 'hasFeature' => true,
-            'getConnectionId', 'getIdAttributeType' => 'string',
+            'id', 'getIdAttributeType' => 'string',
             'getMinDateTime' => new \DateTime(),
             'getSchemaAttributes', 'getSchemaIndexes', 'getKeywords',
             'getInternalIndexesKeys', 'capabilities', 'decodePoint',
@@ -644,7 +647,7 @@ class ReadWritePoolTest extends TestCase
             'list' => [],
             'getSizeOfCollection', 'getSizeOfCollectionOnDisk' => ['collection'],
             'ping' => [],
-            'getConnectionId' => [],
+            'id' => [],
             'getDocumentSizeLimit' => [],
             'getAttributeWidth' => [new Document()],
             'getCountOfAttributes' => [new Document()],

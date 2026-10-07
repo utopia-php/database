@@ -7,7 +7,7 @@ use Utopia\Database\Adapter\Feature;
 
 abstract class FeatureAdapterStub extends Adapter implements
     Feature\ColumnTypes,
-    Feature\ConnectionId,
+    Feature\Connection,
     Feature\QueryBuilder,
     Feature\RawQuery,
     Feature\SchemaAttributes,

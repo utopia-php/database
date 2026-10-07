@@ -44,13 +44,12 @@ final class FeatureContractTest extends TestCase
         $implements = $this->interfaces(Pool::class);
 
         foreach ([
-            Feature\ConnectionId::class,
+            Feature\Connection::class,
             Feature\InternalCasting::class,
             Feature\Relationships::class,
             Feature\SchemaAttributes::class,
             Feature\SchemaIndexes::class,
             Feature\Spatial::class,
-            Feature\Timeouts::class,
             Feature\Upserts::class,
             Feature\UTCCasting::class,
             Feature\RawQuery::class,
@@ -67,17 +66,17 @@ final class FeatureContractTest extends TestCase
         $pool->upsertDocuments(new Document(['$id' => 'any']), '', []);
     }
 
-    public function testRedisAdvertisesUpsertsConnectionIdAndRelationships(): void
+    public function testRedisAdvertisesUpsertsConnectionAndRelationships(): void
     {
         $implements = $this->interfaces(Redis::class);
         $this->assertArrayHasKey(Feature\Upserts::class, $implements);
-        $this->assertArrayHasKey(Feature\ConnectionId::class, $implements);
+        $this->assertArrayHasKey(Feature\Connection::class, $implements);
         $this->assertArrayHasKey(Feature\Relationships::class, $implements);
         $this->assertArrayNotHasKey(Feature\Spatial::class, $implements);
         $this->assertArrayNotHasKey(Feature\RawQuery::class, $implements);
     }
 
-    public function testSQLiteImplementsSqlFeaturesButNotSpatialTimeoutsOrConnectionId(): void
+    public function testSQLiteImplementsSqlFeaturesAndConnectionButNotSpatialOrTimeouts(): void
     {
         $implements = $this->interfaces(SQLite::class);
         $this->assertArrayHasKey(Feature\Upserts::class, $implements);
@@ -89,24 +88,24 @@ final class FeatureContractTest extends TestCase
         $this->assertArrayHasKey(Feature\ColumnTypes::class, $implements);
         $this->assertArrayNotHasKey(Feature\Spatial::class, $implements);
         $this->assertArrayNotHasKey(Feature\Timeouts::class, $implements);
-        $this->assertArrayNotHasKey(Feature\ConnectionId::class, $implements);
+        $this->assertArrayHasKey(Feature\Connection::class, $implements);
     }
 
-    public function testMariaDBImplementsSpatialTimeoutsConnectionIdAndSchemaIndexes(): void
+    public function testMariaDBImplementsSpatialTimeoutsConnectionAndSchemaIndexes(): void
     {
         $implements = $this->interfaces(MariaDB::class);
         $this->assertArrayHasKey(Feature\Spatial::class, $implements);
         $this->assertArrayHasKey(Feature\Timeouts::class, $implements);
-        $this->assertArrayHasKey(Feature\ConnectionId::class, $implements);
+        $this->assertArrayHasKey(Feature\Connection::class, $implements);
         $this->assertArrayHasKey(Feature\SchemaIndexes::class, $implements);
     }
 
-    public function testPostgresImplementsSpatialTimeoutsAndConnectionIdWithoutSchemaIntrospection(): void
+    public function testPostgresImplementsSpatialTimeoutsAndConnectionWithoutSchemaIntrospection(): void
     {
         $implements = $this->interfaces(Postgres::class);
         $this->assertArrayHasKey(Feature\Spatial::class, $implements);
         $this->assertArrayHasKey(Feature\Timeouts::class, $implements);
-        $this->assertArrayHasKey(Feature\ConnectionId::class, $implements);
+        $this->assertArrayHasKey(Feature\Connection::class, $implements);
         $this->assertArrayNotHasKey(Feature\SchemaAttributes::class, $implements);
         $this->assertArrayNotHasKey(Feature\SchemaIndexes::class, $implements);
     }

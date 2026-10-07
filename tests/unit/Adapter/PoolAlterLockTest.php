@@ -21,11 +21,11 @@ final class PoolAlterLockTest extends TestCase
     /** @var list<string> */
     private array $statements = [];
 
-    public function testEnableLocksReachesTheBorrowedAdapter(): void
+    public function testSetLocksReachesTheBorrowedAdapter(): void
     {
         [$database, $pool] = $this->database();
 
-        $database->enableLocks(true);
+        $database->setLocks(true);
         $pool->createAttribute('posts', Attribute::string(key: 'title', size: 64));
 
         $this->assertCount(1, $this->statements);
@@ -37,8 +37,8 @@ final class PoolAlterLockTest extends TestCase
     {
         [$database, $pool] = $this->database();
 
-        $database->enableLocks(true);
-        $database->enableLocks(false);
+        $database->setLocks(true);
+        $database->setLocks(false);
         $pool->createAttribute('posts', Attribute::string(key: 'title', size: 64));
 
         $this->assertCount(1, $this->statements);

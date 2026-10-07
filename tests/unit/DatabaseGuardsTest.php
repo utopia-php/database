@@ -90,18 +90,9 @@ final class DatabaseGuardsTest extends TestCase
         $database->clearTimeout();
     }
 
-    /**
-     * @param  \Closure(): Adapter  $adapter
-     */
-    #[DataProvider('adaptersWithoutTimeouts')]
-    public function testGetConnectionIdIsRefusedWithoutConnectionIds(\Closure $adapter): void
+    public function testGetConnectionIdIsNullWithoutAConnection(): void
     {
-        $database = $this->database($adapter());
-
-        $this->expectException(DatabaseException::class);
-        $this->expectExceptionMessage('Adapter does not support connection ids');
-
-        $database->getConnectionId();
+        $this->assertNull($this->database(new Memory())->getConnectionId());
     }
 
     public function testSchemaIntrospectionWithoutTheFeatureListsNothing(): void

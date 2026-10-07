@@ -130,13 +130,16 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         parent::reconnect();
 
         $this->pcreRegistered = false;
-        $this->capabilitySet = null;
+        $this->capabilities = null;
         $this->registerUserFunctions();
     }
 
-    protected function getPDO(): DatabasePDO|PDOProxy|PDO
+    /**
+     * SQLite has no server-side connection id; the handle's object id names the connection within the process.
+     */
+    public function id(): string
     {
-        return parent::getPDO();
+        return (string) \spl_object_id($this->getDriver());
     }
 
     /**
@@ -169,7 +172,6 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         $remove = [
             Capability::Schemas,
             Capability::UpdateLock,
-            Capability::Hostname,
             Capability::UpsertOnUniqueIndex,
             Capability::StatisticalAggregates,
             Capability::BitwiseAggregates,
@@ -199,19 +201,6 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             )),
             $extras
         );
-    }
-
-    /**
-     * Toggle MariaDB/MySQL emulation. See $emulateMySQL for what this
-     * actually changes.
-     */
-    public function setEmulateMySQL(bool $emulate): static
-    {
-        $this->emulateMySQL = $emulate;
-        // Capability set is computed from $emulateMySQL — invalidate the cache.
-        $this->capabilitySet = null;
-
-        return $this;
     }
 
     public function setTenant(int|string|null $tenant): bool
@@ -286,7 +275,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         };
 
         try {
-            $pdo = $this->getPDO();
+            $pdo = $this->getDriver();
             $registered = false;
 
             if ($pdo instanceof DatabasePDO) {
@@ -301,7 +290,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
 
             $this->pcreRegistered = true;
             // Capability::PCRE is conditional on UDF registration — invalidate cache.
-            $this->capabilitySet = null;
+            $this->capabilities = null;
         } catch (\Throwable) {
         }
     }
@@ -329,7 +318,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
     {
         try {
             if ($this->inTransaction === 0) {
-                if ($this->getPDO()->inTransaction()) {
+                if ($this->getDriver()->inTransaction()) {
                     $this
                         ->prepare('ROLLBACK')
                         ->execute();
@@ -455,14 +444,14 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
 			WHERE type='table' AND name = :table
 		";
 
-        $stmt = $this->prepare($sql, 'Failed to prepare collection existence query', Event::CollectionRead);
+        $statement = $this->prepare($sql, 'Failed to prepare collection existence query', Event::CollectionRead);
 
-        $stmt->bindValue(':table', "{$this->getNamespace()}_{$collection}", PDO::PARAM_STR);
+        $statement->bindValue(':table', "{$this->getNamespace()}_{$collection}", PDO::PARAM_STR);
 
-        $this->execute($stmt);
+        $this->execute($statement);
 
-        $document = $stmt->fetchAll();
-        $stmt->closeCursor();
+        $document = $statement->fetchAll();
+        $statement->closeCursor();
         if (! empty($document)) {
             /** @var array<string, mixed> $firstDoc */
             $firstDoc = $document[0];
@@ -514,7 +503,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         $tenantQuery = $this->sharedTables ? "{$this->quote(Storage::TENANT)} {$tenantType} DEFAULT NULL," : '';
 
         $table = "
-			CREATE TABLE {$this->getSQLTable($id)} (
+			CREATE TABLE {$this->getTable($id)} (
 				{$this->quote(Storage::SEQUENCE)} INTEGER PRIMARY KEY AUTOINCREMENT,
 				{$this->quote(Storage::UID)} VARCHAR(36) NOT NULL,
 				{$tenantQuery}
@@ -526,7 +515,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
 		';
 
         $permissions = "
-			CREATE TABLE {$this->getSQLTable(Storage::permissionsTable($id))} (
+			CREATE TABLE {$this->getTable(Storage::permissionsTable($id))} (
 				{$this->quote(Storage::SEQUENCE)} INTEGER PRIMARY KEY AUTOINCREMENT,
 				{$tenantQuery}
 				{$this->quote(Storage::PERM_TYPE)} VARCHAR(12) NOT NULL,
@@ -584,7 +573,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
 
         try {
             foreach ([$name, Storage::permissionsTable($name)] as $table) {
-                $this->executeStatement('ANALYZE '.$this->getSQLTable($table), Event::CollectionUpdate);
+                $this->executeStatement('ANALYZE '.$this->getTable($table), Event::CollectionUpdate);
             }
         } catch (PDOException $e) {
             throw $this->processException($e);
@@ -610,24 +599,24 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         // shadow tables; sum (pgsize - unused) over all of them.
         $ftsPattern = $this->escapeLikePattern($ftsPrefix) . '%' . $this->escapeLikePattern(self::FTS_TABLE_SUFFIX) . '%';
 
-        $stmt = $this->prepare("
+        $statement = $this->prepare("
              SELECT COALESCE(SUM(\"pgsize\" - \"unused\"), 0)
              FROM \"dbstat\"
              WHERE name = :name OR name = :perms OR name LIKE :fts_pattern ESCAPE '\\';
         ", event: Event::CollectionRead);
 
-        $stmt->bindParam(':name', $name);
-        $stmt->bindParam(':perms', $permissions);
-        $stmt->bindParam(':fts_pattern', $ftsPattern);
+        $statement->bindParam(':name', $name);
+        $statement->bindParam(':perms', $permissions);
+        $statement->bindParam(':fts_pattern', $ftsPattern);
 
         try {
-            $this->execute($stmt);
-            $result = $stmt->fetchColumn();
+            $this->execute($statement);
+            $result = $statement->fetchColumn();
             if (! \is_int($result) && (! \is_string($result) || ! \is_numeric($result))) {
                 throw new DatabaseException('Failed to get collection size: invalid database result');
             }
             $size = (int) $result;
-            $stmt->closeCursor();
+            $statement->closeCursor();
         } catch (PDOException $e) {
             throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
         }
@@ -667,11 +656,11 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             $this->execute($this->prepare($sql, event: Event::CollectionDelete));
         }
 
-        $sql = "DROP TABLE IF EXISTS {$this->getSQLTable($id)}";
+        $sql = "DROP TABLE IF EXISTS {$this->getTable($id)}";
 
         $this->execute($this->prepare($sql, event: Event::CollectionDelete));
 
-        $sql = "DROP TABLE IF EXISTS {$this->getSQLTable(Storage::permissionsTable($id))}";
+        $sql = "DROP TABLE IF EXISTS {$this->getTable(Storage::permissionsTable($id))}";
 
         $this->execute($this->prepare($sql, event: Event::CollectionDelete));
 
@@ -708,7 +697,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             // resize from being blocked (and tenant A's metadata from
             // leaking) by an oversized value owned by tenant B.
             $tenantClause = $this->sharedTables ? ' AND '.$this->quote(Storage::TENANT).' = :'.Storage::TENANT : '';
-            $sql = "SELECT 1 FROM {$this->getSQLTable($name)} WHERE LENGTH(`{$column}`) > :max{$tenantClause} LIMIT 1";
+            $sql = "SELECT 1 FROM {$this->getTable($name)} WHERE LENGTH(`{$column}`) > :max{$tenantClause} LIMIT 1";
 
             $statement = $this->prepare($sql, event: Event::AttributeUpdate);
             $statement->bindValue(':max', $size, PDO::PARAM_INT);
@@ -763,7 +752,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             }
         }
 
-        $sql = "ALTER TABLE {$this->getSQLTable($name)} DROP COLUMN `{$id}`";
+        $sql = "ALTER TABLE {$this->getTable($name)} DROP COLUMN `{$id}`";
 
         try {
             return $this->execute($this->prepare($sql, event: Event::AttributeDelete));
@@ -814,7 +803,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             return true;
         }
 
-        $sql = $this->getSQLIndex($name, $id, $type, $attributes);
+        $sql = $this->getSqlIndex($name, $id, $type, $attributes);
 
         return $this->execute($this->prepare($sql, event: $event));
     }
@@ -836,15 +825,15 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         $ftsTable = $this->getFulltextTableName($collection, $attributes);
         $parentTable = "{$this->getNamespace()}_{$collection}";
 
-        $stmt = $this->prepare("
+        $statement = $this->prepare("
             SELECT name
             FROM sqlite_master
             WHERE type='table' AND name=:_table;
         ", event: $event);
-        $stmt->bindValue(':_table', $ftsTable);
-        $this->execute($stmt);
-        $exists = !empty($stmt->fetch());
-        $stmt->closeCursor();
+        $statement->bindValue(':_table', $ftsTable);
+        $this->execute($statement);
+        $exists = !empty($statement->fetch());
+        $statement->closeCursor();
         if ($exists) {
             return true;
         }
@@ -926,10 +915,9 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
      */
     protected function getFulltextTableName(string $collection, array|string $attributes): string
     {
-        $attrs = \is_array($attributes) ? $attributes : [$attributes];
-        $attrs = \array_map(fn (string $attr) => $this->filter($attr), $attrs);
-        \sort($attrs);
-        $key = \substr(\hash('sha1', \implode("\0", $attrs)), 0, 16);
+        $names = \array_map($this->filter(...), \is_array($attributes) ? $attributes : [$attributes]);
+        \sort($names);
+        $key = \substr(\hash('sha1', \implode("\0", $names)), 0, 16);
 
         return $this->getFulltextTablePrefix($collection) . $key . self::FTS_TABLE_SUFFIX;
     }
@@ -969,7 +957,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             return (string) $this->currentTenant();
         }
 
-        $pdo = $this->getPDO();
+        $pdo = $this->getDriver();
         $quoted = $pdo instanceof PDOProxy
             ? $pdo->__call('quote', [(string) $this->currentTenant()])
             : $pdo->quote((string) $this->currentTenant());
@@ -996,17 +984,17 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         // table (whose name is keyed off attributes, not the id) or
         // already absent — try the FTS5 path before erroring.
         $regularIndex = "{$this->getNamespace()}_{$this->getTenantSegment()}_{$name}_{$id}";
-        $stmt = $this->prepare("
+        $statement = $this->prepare("
             SELECT name FROM sqlite_master WHERE type='index' AND name=:_index
         ", event: $event);
-        $stmt->bindValue(':_index', $regularIndex);
-        $this->execute($stmt);
-        $hasRegular = $stmt->fetchColumn() !== false;
+        $statement->bindValue(':_index', $regularIndex);
+        $this->execute($statement);
+        $hasRegular = $statement->fetchColumn() !== false;
         // Free the read cursor before issuing DDL — SQLite holds a SHARED
         // lock on the database while a statement has unfetched rows, and
         // any subsequent DROP INDEX / ALTER TABLE under emulated prepares
         // will trip "database table is locked".
-        $stmt->closeCursor();
+        $statement->closeCursor();
 
         if (! $hasRegular && $this->dropFulltextIndexById($name, $id, $event)) {
             return true;
@@ -1166,17 +1154,17 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
     {
         // ESCAPE '\\' so the literal `_` separators in the prefix don't
         // act as LIKE wildcards (e.g. `db_users_` matching `db_usersA_`).
-        $stmt = $this->prepare("
+        $statement = $this->prepare("
             SELECT name FROM sqlite_master
             WHERE type='table'
               AND name LIKE :_prefix ESCAPE '\\'
               AND name LIKE :_suffix ESCAPE '\\'
         ");
-        $stmt->bindValue(':_prefix', $this->escapeLikePattern($this->getFulltextTablePrefix($collection)) . '%');
-        $stmt->bindValue(':_suffix', '%' . $this->escapeLikePattern(self::FTS_TABLE_SUFFIX));
-        $stmt->execute();
-        $tables = $stmt->fetchAll(PDO::FETCH_COLUMN);
-        $stmt->closeCursor();
+        $statement->bindValue(':_prefix', $this->escapeLikePattern($this->getFulltextTablePrefix($collection)) . '%');
+        $statement->bindValue(':_suffix', '%' . $this->escapeLikePattern(self::FTS_TABLE_SUFFIX));
+        $statement->execute();
+        $tables = $statement->fetchAll(PDO::FETCH_COLUMN);
+        $statement->closeCursor();
 
         return \array_map(fn (mixed $t): string => \is_string($t) ? $t : '', $tables);
     }
@@ -1211,7 +1199,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
 
             $name = $this->filter($collection);
 
-            $builder = $this->createBuilder()->into($this->getSQLTableRaw($name));
+            $builder = $this->createBuilder()->into($this->getTableRaw($name));
             $row = [Storage::UID => $document->getId()];
 
             if (! empty($document->getSequence())) {
@@ -1231,11 +1219,11 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             $row = $this->decorateRow($row, $this->documentMetadata($document));
             $builder->set($row);
             $result = $builder->insert();
-            $stmt = $this->executeResult($result, Event::DocumentCreate);
+            $statement = $this->executeResult($result, Event::DocumentCreate);
 
-            $this->execute($stmt);
+            $this->execute($statement);
 
-            $document[Document::SEQUENCE] = $this->getPDO()->lastInsertId();
+            $document[Document::SEQUENCE] = $this->getDriver()->lastInsertId();
 
             if (empty($document[Document::SEQUENCE])) {
                 throw new DatabaseException('Error creating document empty "'.Document::SEQUENCE.'"');
@@ -1288,17 +1276,17 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
                 $column = $this->filter($attribute);
 
                 if (isset($operators[$attribute])) {
-                    $op = $operators[$attribute];
-                    if ($op instanceof Operator) {
-                        $opResult = $this->getOperatorBuilderExpression($column, $op);
+                    $operation = $operators[$attribute];
+                    if ($operation instanceof Operator) {
+                        $opResult = $this->getOperatorBuilderExpression($column, $operation);
                         $builder->setRaw($column, $opResult['expression'], $opResult['bindings']);
                     }
                 } elseif ($this instanceof Feature\Spatial && \in_array($attribute, $spatialAttributes, true)) {
                     if (\is_array($value)) {
-                        $value = $this->convertArrayToWKT($value);
+                        $value = $this->convertArrayToWkt($value);
                     }
                     $value = (is_bool($value)) ? (int) $value : $value;
-                    $builder->setRaw($column, $this->getSpatialGeomFromText('?'), [$value]);
+                    $builder->setRaw($column, $this->getSpatialGeometryFromText('?'), [$value]);
                 } else {
                     if (is_array($value)) {
                         $value = json_encode($value);
@@ -1312,9 +1300,9 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             $filters = [BaseQuery::equal(Storage::UID, [$id])];
             $builder->filter($filters);
             $result = $builder->update();
-            $stmt = $this->executeResult($result, Event::DocumentUpdate);
+            $statement = $this->executeResult($result, Event::DocumentUpdate);
 
-            $this->execute($stmt);
+            $this->execute($statement);
 
             $ctx = $this->buildWriteContext($name, $id);
             $this->runWriteHooks(fn ($hook) => $hook->afterDocumentUpdate($name, $document, $skipPermissions, $ctx));
@@ -1504,7 +1492,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         return parent::newPermissionHook($collection, $roles, $type, $documentColumn)->collate(SQLiteBuilder::COLLATION);
     }
 
-    protected function getSQLType(ColumnType $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
+    protected function getSqlType(ColumnType $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
     {
         if (in_array($type, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon], true)) {
             return '';
@@ -1561,10 +1549,10 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
     }
 
     /**
-     * Override getSpatialGeomFromText to return placeholder unchanged for SQLite
+     * Override getSpatialGeometryFromText to return placeholder unchanged for SQLite
      * SQLite does not support ST_GeomFromText, so we return the raw placeholder
      */
-    protected function getSpatialGeomFromText(string $wktPlaceholder, ?int $srid = null): string
+    protected function getSpatialGeometryFromText(string $wktPlaceholder, ?int $srid = null): string
     {
         return $wktPlaceholder;
     }
@@ -1576,7 +1564,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
      *
      * @throws Exception
      */
-    protected function getSQLIndex(string $collection, string $id, IndexType $type, array $attributes): string
+    protected function getSqlIndex(string $collection, string $id, IndexType $type, array $attributes): string
     {
         [$sqlType, $postfix] = match ($type) {
             IndexType::Key => ['INDEX', ''],
@@ -1605,7 +1593,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
     /**
      * Get SQL table
      */
-    protected function getSQLTable(string $name): string
+    protected function getTable(string $name): string
     {
         return $this->quote("{$this->getNamespace()}_{$this->filter($name)}");
     }
@@ -1613,7 +1601,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
     /**
      * SQLite doesn't use database-qualified table names.
      */
-    protected function getSQLTableRaw(string $name): string
+    protected function getTableRaw(string $name): string
     {
         return $this->getNamespace().'_'.$this->filter($name);
     }
@@ -1632,16 +1620,16 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
 
         try {
             // Test if POWER function exists by attempting to use it
-            $pdo = $this->getPDO();
-            $stmt = $pdo instanceof PDOProxy
+            $pdo = $this->getDriver();
+            $statement = $pdo instanceof PDOProxy
                 ? $pdo->__call('query', ['SELECT POWER(2, 3) as test'])
                 : $pdo->query('SELECT POWER(2, 3) as test');
-            if (! $stmt instanceof PDOStatement && ! $stmt instanceof PDOStatementProxy) {
+            if (! $statement instanceof PDOStatement && ! $statement instanceof PDOStatementProxy) {
                 $available = false;
 
                 return false;
             }
-            $result = $stmt->fetch();
+            $result = $statement->fetch();
             /** @var array<string, mixed>|false $result */
             $testVal = \is_array($result) ? ($result['test'] ?? null) : null;
             $available = ($testVal == 8);
@@ -1686,7 +1674,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         if (\is_scalar($queryValue)) {
             $rawValue = (string) $queryValue;
         }
-        $ftsValue = $this->getFTS5Value($rawValue);
+        $ftsValue = $this->getFts5Value($rawValue);
 
         if ($ftsValue === '') {
             return [
@@ -1798,15 +1786,15 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
      * Bind operator parameters to statement
      * Override to handle SQLite-specific operator bindings
      */
-    protected function bindOperatorParams(PDOStatement|DatabasePDOStatement|PDOStatementProxy $stmt, Operator $operator, int &$bindIndex): void
+    protected function bindOperatorParameters(PDOStatement|DatabasePDOStatement|PDOStatementProxy $statement, Operator $operator, int &$bindIndex): void
     {
         $method = $operator->getMethod();
 
         // For operators that SQLite doesn't use bind parameters for, skip binding entirely
-        // Note: The bindIndex increment happens in getOperatorSQL(), NOT here
+        // Note: The bindIndex increment happens in getOperatorSql(), NOT here
         if (in_array($method, [OperatorType::Toggle, OperatorType::DateSetNow, OperatorType::ArrayUnique])) {
             // These operators don't bind any parameters - they're handled purely in SQL
-            // DO NOT increment bindIndex here as it's already handled in getOperatorSQL()
+            // DO NOT increment bindIndex here as it's already handled in getOperatorSql()
             return;
         }
 
@@ -1822,7 +1810,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
                 if (in_array($filterType, $comparisonTypes)) {
                     $bindKey = "op_{$bindIndex}";
                     $value = (is_bool($filterValue)) ? (int) $filterValue : $filterValue;
-                    $stmt->bindValue(":{$bindKey}", $value, $this->getPDOType($value));
+                    $statement->bindValue(":{$bindKey}", $value, $this->getPdoType($value));
                     $bindIndex++;
                 }
             }
@@ -1831,7 +1819,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         }
 
         // For all other operators, use parent implementation
-        parent::bindOperatorParams($stmt, $operator, $bindIndex);
+        parent::bindOperatorParameters($statement, $operator, $bindIndex);
     }
 
     /**
@@ -1841,7 +1829,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
     {
         if ($operator->getMethod() === OperatorType::ArrayFilter) {
             $bindIndex = 0;
-            $fullExpression = $this->getOperatorSQL($column, $operator, $bindIndex);
+            $fullExpression = $this->getOperatorSql($column, $operator, $bindIndex);
 
             if ($fullExpression === null) {
                 throw new DatabaseException('Operator cannot be expressed in SQL: '.$operator->getMethod()->value);
@@ -1905,7 +1893,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
      * This is inherent to SQLite's JSON implementation and affects: ARRAY_APPEND, ARRAY_PREPEND,
      * ARRAY_UNIQUE, ARRAY_INTERSECT, ARRAY_DIFF, ARRAY_INSERT, and ARRAY_REMOVE.
      */
-    protected function getOperatorSQL(string $column, Operator $operator, int &$bindIndex): ?string
+    protected function getOperatorSql(string $column, Operator $operator, int &$bindIndex): ?string
     {
         $quotedColumn = $this->quote($column);
         $method = $operator->getMethod();
@@ -2373,7 +2361,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
 
                 if (in_array($attributeKey, $spatialAttributes) && $attrValue !== null) {
                     $bindKey = 'key_'.$bindIndex;
-                    $bindKeys[] = $this->getSpatialGeomFromText(':'.$bindKey);
+                    $bindKeys[] = $this->getSpatialGeometryFromText(':'.$bindKey);
                 } else {
                     if ($this->supports(Capability::IntegerBooleans)) {
                         $attrValue = (\is_bool($attrValue)) ? (int) $attrValue : $attrValue;
@@ -2426,7 +2414,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
                 $filteredAttr = $this->filter($attr);
 
                 if (isset($operators[$attr])) {
-                    $operatorSQL = $this->getOperatorSQL($filteredAttr, $operators[$attr], $bindIndex);
+                    $operatorSQL = $this->getOperatorSql($filteredAttr, $operators[$attr], $bindIndex);
                     if ($operatorSQL !== null) {
                         $updateColumns[] = $operatorSQL;
                     }
@@ -2438,7 +2426,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             }
         }
 
-        // getSQLIndex prepends `_tenant` to every index column list
+        // getSqlIndex prepends `_tenant` to every index column list
         // under shared tables, so the actual UNIQUE on the documents
         // table is (_tenant, _uid). SQLite's ON CONFLICT clause needs
         // the same column order to match a UNIQUE constraint.
@@ -2446,8 +2434,8 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             ? '('.Storage::TENANT.', '.Storage::UID.')'
             : '('.Storage::UID.')';
 
-        $stmt = $this->prepare(
-            "INSERT INTO {$this->getSQLTable($name)} {$columns}
+        $statement = $this->prepare(
+            "INSERT INTO {$this->getTable($name)} {$columns}
             VALUES ".\implode(', ', $batchKeys)."
             ON CONFLICT {$conflictKeys} DO UPDATE
                 SET ".\implode(', ', $updateColumns),
@@ -2455,18 +2443,18 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         );
 
         foreach ($bindValues as $key => $binding) {
-            $stmt->bindValue($key, $binding, $this->getPDOType($binding));
+            $statement->bindValue($key, $binding, $this->getPdoType($binding));
         }
 
         $opIndexForBinding = 0;
         foreach (array_keys($regularAttributes) as $attr) {
             if (isset($operators[$attr])) {
-                $this->bindOperatorParams($stmt, $operators[$attr], $opIndexForBinding);
+                $this->bindOperatorParameters($statement, $operators[$attr], $opIndexForBinding);
             }
         }
 
-        $this->execute($stmt);
-        $stmt->closeCursor();
+        $this->execute($statement);
+        $statement->closeCursor();
     }
 
     public function getSupportNonUtfCharacters(): bool
@@ -2513,11 +2501,11 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
      */
     public function createRelationship(string $collection, Relationship $relationship): bool
     {
-        $table = $this->getSQLTable($this->filter($collection));
-        $relatedTable = $this->getSQLTable($this->filter($relationship->relatedCollection));
+        $table = $this->getTable($this->filter($collection));
+        $relatedTable = $this->getTable($this->filter($relationship->relatedCollection));
         $key = $this->filter($relationship->key ?? '');
         $twoWayKey = $this->filter($relationship->twoWayKey ?? '');
-        $sqlType = $this->getSQLType(ColumnType::Relationship, 0, false, false, false);
+        $sqlType = $this->getSqlType(ColumnType::Relationship, 0, false, false, false);
 
         $statements = match ($relationship->type) {
             RelationshipType::OneToOne => $relationship->twoWay
@@ -2540,8 +2528,8 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
 
     public function updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, RelationshipUpdate $update): bool
     {
-        $table = $this->getSQLTable($this->filter($collection));
-        $relatedTable = $this->getSQLTable($this->filter($relationship->relatedCollection));
+        $table = $this->getTable($this->filter($collection));
+        $relatedTable = $this->getTable($this->filter($relationship->relatedCollection));
         $key = $this->filter($relationship->key ?? '');
         $twoWayKey = $this->filter($relationship->twoWayKey ?? '');
         $twoWay = $update->twoWay ?? $relationship->twoWay;
@@ -2578,7 +2566,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
                 }
                 break;
             case RelationshipType::ManyToMany:
-                $junction = $this->getSQLTable($this->getJunctionName($collection, $relationship->relatedCollection, $side));
+                $junction = $this->getTable($this->getJunctionName($collection, $relationship->relatedCollection, $side));
 
                 if ($newKey !== null && $key !== $newKey) {
                     $statements[] = "ALTER TABLE {$junction} RENAME COLUMN `{$key}` TO `{$newKey}`";
@@ -2598,8 +2586,8 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
 
     public function deleteRelationship(string $collection, Relationship $relationship, RelationshipSide $side): bool
     {
-        $table = $this->getSQLTable($this->filter($collection));
-        $relatedTable = $this->getSQLTable($this->filter($relationship->relatedCollection));
+        $table = $this->getTable($this->filter($collection));
+        $relatedTable = $this->getTable($this->filter($relationship->relatedCollection));
         $key = $this->filter($relationship->key ?? '');
         $twoWayKey = $this->filter($relationship->twoWayKey ?? '');
         $twoWay = $relationship->twoWay;
@@ -2633,8 +2621,8 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             case RelationshipType::ManyToMany:
                 $junctionBase = $this->getJunctionName($collection, $relationship->relatedCollection, $side);
 
-                $statements[] = "DROP TABLE {$this->getSQLTable($junctionBase)}";
-                $statements[] = "DROP TABLE {$this->getSQLTable(Storage::permissionsTable($junctionBase))}";
+                $statements[] = "DROP TABLE {$this->getTable($junctionBase)}";
+                $statements[] = "DROP TABLE {$this->getTable(Storage::permissionsTable($junctionBase))}";
                 break;
         }
 
@@ -2658,10 +2646,10 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
     {
         $table = "{$this->getNamespace()}_{$this->filter($collection)}";
 
-        $stmt = $this->prepare("PRAGMA table_info(`{$table}`)", event: Event::CollectionRead);
-        $this->execute($stmt);
-        $rows = $stmt->fetchAll();
-        $stmt->closeCursor();
+        $statement = $this->prepare("PRAGMA table_info(`{$table}`)", event: Event::CollectionRead);
+        $this->execute($statement);
+        $rows = $statement->fetchAll();
+        $statement->closeCursor();
 
         $results = [];
         foreach ($rows as $row) {
@@ -2717,10 +2705,10 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         $own = "{$this->getNamespace()}_{$this->getTenantSegment()}_{$filtered}_";
         $anyTenant = '/^'.\preg_quote($this->getNamespace(), '/').'_[A-Za-z0-9_-]*?_'.\preg_quote($filtered, '/').'_(.+)$/';
 
-        $stmt = $this->prepare("PRAGMA index_list(`{$table}`)", event: Event::CollectionRead);
-        $this->execute($stmt);
-        $indexes = $stmt->fetchAll();
-        $stmt->closeCursor();
+        $statement = $this->prepare("PRAGMA index_list(`{$table}`)", event: Event::CollectionRead);
+        $this->execute($statement);
+        $indexes = $statement->fetchAll();
+        $statement->closeCursor();
 
         $results = [];
         foreach ($indexes as $index) {
@@ -3058,7 +3046,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
      * Format a SEARCH term as MariaDB BOOLEAN MODE: OR-joined tokens with
      * the trailing token prefix-matched. Empty when no token survives.
      */
-    protected function getFTS5Value(string $value): string
+    protected function getFts5Value(string $value): string
     {
         // Balanced wrapping `"..."` triggers exact-phrase mode.
         $exact = \strlen($value) >= 2

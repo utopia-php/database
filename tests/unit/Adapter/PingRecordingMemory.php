@@ -4,9 +4,10 @@ namespace Tests\Unit\Adapter;
 
 use Closure;
 use Swoole\Coroutine;
+use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\Memory;
 
-final class PingRecordingMemory extends Memory
+final class PingRecordingMemory extends Memory implements Feature\Connection
 {
     /**
      * @var list<array{coroutine: int, before: int|string|null, after: int|string|null}>
@@ -34,5 +35,19 @@ final class PingRecordingMemory extends Memory
         $this->pings[] = ['coroutine' => $coroutine, 'before' => $before, 'after' => $this->getTenant()];
 
         return true;
+    }
+
+    public function reconnect(): void
+    {
+    }
+
+    public function id(): string
+    {
+        return 'ping-recording';
+    }
+
+    public function hostname(): string
+    {
+        return '';
     }
 }

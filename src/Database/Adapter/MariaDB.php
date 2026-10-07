@@ -41,8 +41,10 @@ use Utopia\Query\Schema\MySQL as MySQLSchema;
 /**
  * Database adapter for MariaDB, extending the base SQL adapter with MariaDB-specific features.
  */
-class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttributes, Feature\SchemaIndexes, Feature\Spatial, Feature\Timeouts
+class MariaDB extends SQL implements Feature\SchemaAttributes, Feature\SchemaIndexes, Feature\Spatial, Feature\Timeouts
 {
+    use Timeout;
+
     /**
      * Get the list of capabilities supported by the MariaDB adapter.
      *
@@ -74,12 +76,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         return true;
     }
 
-    /**
-     * Get the current database connection ID.
-     *
-     * @return string
-     */
-    public function getConnectionId(): string
+    public function id(): string
     {
         $result = $this->createBuilder()->fromNone()->selectRaw('CONNECTION_ID()')->build();
         $statement = $this->prepareStatement($result->query);
@@ -133,7 +130,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
             $hash[$this->filter($attribute->key)] = $attribute;
         }
 
-        $table = $schema->table($this->getSQLTableRaw($id));
+        $table = $schema->table($this->getTableRaw($id));
         $table->id(Storage::SEQUENCE);
         $table->string(Storage::UID, 255);
         $table->datetime(Storage::CREATED_AT, 3)->nullable()->default(null);
@@ -192,7 +189,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         $collectionResult = $table->create();
         $collection = $collectionResult->query;
 
-        $permissionsTable = $schema->table($this->getSQLTableRaw(Storage::permissionsTable($id)));
+        $permissionsTable = $schema->table($this->getTableRaw(Storage::permissionsTable($id)));
         $permissionsTable->id(Storage::SEQUENCE);
         $permissionsTable->string(Storage::PERM_TYPE, 12);
         $permissionsTable->string(Storage::PERM_PERMISSION, 255);
@@ -240,8 +237,8 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         $id = $this->filter($id);
 
         $schema = $this->createSchemaBuilder();
-        $main = $schema->table($this->getSQLTableRaw($id))->drop();
-        $permissions = $schema->table($this->getSQLTableRaw(Storage::permissionsTable($id)))->dropIfExists();
+        $main = $schema->table($this->getTableRaw($id))->drop();
+        $permissions = $schema->table($this->getTableRaw(Storage::permissionsTable($id)))->dropIfExists();
 
         try {
             return $this->executeStatement($main->query.'; '.$permissions->query, Event::CollectionDelete);
@@ -264,7 +261,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
     {
         $name = $this->filter($collection);
 
-        $result = $this->createSchemaBuilder()->analyzeTable($this->getSQLTableRaw($name));
+        $result = $this->createSchemaBuilder()->analyzeTable($this->getTableRaw($name));
         $sql = $result->query;
 
         return $this->executeStatement($sql, Event::CollectionUpdate);
@@ -383,7 +380,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         $newKey = $attribute->key === $key ? null : $this->filter($attribute->key);
         $sqlType = $this->getAttributeSqlType($attribute);
         $schema = $this->createSchemaBuilder();
-        $tableRaw = $this->getSQLTableRaw($name);
+        $tableRaw = $this->getTableRaw($name);
 
         if (! empty($newKey) && $this->isRenamed($collection, $id, $newKey)) {
             $id = $newKey;
@@ -427,7 +424,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         $type = $index->type;
 
         $schema = $this->createSchemaBuilder();
-        $tableName = $this->getSQLTableRaw($collection->getId());
+        $tableName = $this->getTableRaw($collection->getId());
 
         $columns = [];
         foreach ($index->attributes as $position => $key) {
@@ -509,7 +506,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         $id = $this->filter($id);
 
         $schema = $this->createSchemaBuilder();
-        $result = $schema->dropIndex($this->getSQLTableRaw($name), $id);
+        $result = $schema->dropIndex($this->getTableRaw($name), $id);
 
         $sql = $result->query;
 
@@ -535,7 +532,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         $old = $this->filter($old);
         $new = $this->filter($new);
 
-        $result = $this->createSchemaBuilder()->renameIndex($this->getSQLTableRaw($collection), $old, $new);
+        $result = $this->createSchemaBuilder()->renameIndex($this->getTableRaw($collection), $old, $new);
         $sql = $result->query;
 
         return $this->executeStatement($sql, Event::IndexRename);
@@ -564,7 +561,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
 
             // Build document INSERT using query builder
             // Spatial columns use insertColumnExpression() for ST_GeomFromText() wrapping
-            $builder = $this->createBuilder()->into($this->getSQLTableRaw($name));
+            $builder = $this->createBuilder()->into($this->getTableRaw($name));
             $row = [Storage::UID => $document->getId()];
 
             if (! empty($document->getSequence())) {
@@ -580,7 +577,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
                     $value = $this->encodeSpatialWriteValue($value);
                     $value = (\is_bool($value)) ? (int) $value : $value;
                     $row[$column] = $value;
-                    $builder->insertColumnExpression($column, $this->getSpatialGeomFromText('?'));
+                    $builder->insertColumnExpression($column, $this->getSpatialGeometryFromText('?'));
                 } else {
                     if (\is_array($value)) {
                         $value = \json_encode($value);
@@ -593,11 +590,11 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
             $row = $this->decorateRow($row, $this->documentMetadata($document));
             $builder->set($row);
             $result = $builder->insert();
-            $stmt = $this->executeResult($result, Event::DocumentCreate);
+            $statement = $this->executeResult($result, Event::DocumentCreate);
 
-            $this->execute($stmt);
+            $this->execute($statement);
 
-            $document[Document::SEQUENCE] = $this->getPDO()->lastInsertId();
+            $document[Document::SEQUENCE] = $this->getDriver()->lastInsertId();
 
             if (empty($document[Document::SEQUENCE])) {
                 throw new DatabaseException('Error creating document empty "'.Document::SEQUENCE.'"');
@@ -673,15 +670,15 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
                 $column = $this->filter($attribute);
 
                 if (isset($operators[$attribute])) {
-                    $op = $operators[$attribute];
-                    if ($op instanceof Operator) {
-                        $opResult = $this->getOperatorBuilderExpression($column, $op);
+                    $operation = $operators[$attribute];
+                    if ($operation instanceof Operator) {
+                        $opResult = $this->getOperatorBuilderExpression($column, $operation);
                         $builder->setRaw($column, $opResult['expression'], $opResult['bindings']);
                     }
                 } elseif (isset($spatialMap[$attribute])) {
                     $value = $this->encodeSpatialWriteValue($value);
                     $value = (\is_bool($value)) ? (int) $value : $value;
-                    $builder->setRaw($column, $this->getSpatialGeomFromText('?'), [$value]);
+                    $builder->setRaw($column, $this->getSpatialGeometryFromText('?'), [$value]);
                 } else {
                     if (\is_array($value)) {
                         $value = \json_encode($value);
@@ -695,9 +692,9 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
             $filters = [BaseQuery::equal(Storage::SEQUENCE, [$document->getSequence()])];
             $builder->filter($filters);
             $result = $builder->update();
-            $stmt = $this->executeResult($result, Event::DocumentUpdate);
+            $statement = $this->executeResult($result, Event::DocumentUpdate);
 
-            $this->execute($stmt);
+            $this->execute($statement);
 
             $ctx = $this->buildWriteContext($name, $id);
             $this->runWriteHooks(fn ($hook) => $hook->afterDocumentUpdate($name, $document, $skipPermissions, $ctx));
@@ -1110,7 +1107,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         $collection = $this->getNamespace().'_'.$this->filter($collection);
 
         try {
-            $stmt = $this->prepareStatement('
+            $statement = $this->prepareStatement('
                 SELECT
                 COLUMN_NAME as '.Storage::SEQUENCE.',
                 COLUMN_DEFAULT as columnDefault,
@@ -1126,11 +1123,11 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
                 FROM INFORMATION_SCHEMA.COLUMNS
                 WHERE TABLE_SCHEMA = :schema AND TABLE_NAME = :table
             ', Event::CollectionRead);
-            $stmt->bindParam(':schema', $schema);
-            $stmt->bindParam(':table', $collection);
-            $this->execute($stmt);
-            $results = $stmt->fetchAll();
-            $stmt->closeCursor();
+            $statement->bindParam(':schema', $schema);
+            $statement->bindParam(':table', $collection);
+            $this->execute($statement);
+            $results = $statement->fetchAll();
+            $statement->closeCursor();
 
             $docs = [];
             foreach ($results as $document) {
@@ -1166,7 +1163,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
      * Get operator SQL
      * Override to handle MariaDB/MySQL-specific operators
      */
-    protected function getOperatorSQL(string $column, Operator $operator, int &$bindIndex): ?string
+    protected function getOperatorSql(string $column, Operator $operator, int &$bindIndex): ?string
     {
         $quotedColumn = $this->quote($column);
         $method = $operator->getMethod();
@@ -1410,7 +1407,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         $collection = $this->getNamespace() . '_' . $this->filter($collection);
 
         try {
-            $stmt = $this->prepareStatement('
+            $statement = $this->prepareStatement('
                 SELECT
                     INDEX_NAME as indexName,
                     COLUMN_NAME as columnName,
@@ -1422,11 +1419,11 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
                 WHERE TABLE_SCHEMA = :schema AND TABLE_NAME = :table
                 ORDER BY INDEX_NAME, SEQ_IN_INDEX
             ', Event::CollectionRead);
-            $stmt->bindParam(':schema', $schema);
-            $stmt->bindParam(':table', $collection);
-            $this->execute($stmt);
-            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            $stmt->closeCursor();
+            $statement->bindParam(':schema', $schema);
+            $statement->bindParam(':table', $collection);
+            $this->execute($statement);
+            $rows = $statement->fetchAll(PDO::FETCH_ASSOC);
+            $statement->closeCursor();
 
             $grouped = [];
             foreach ($rows as $row) {

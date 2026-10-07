@@ -55,8 +55,10 @@ use Utopia\Query\Schema\IndexType;
 /**
  * Database adapter for MongoDB, using the Utopia Mongo client for document-based storage.
  */
-class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relationships, Feature\Timeouts, Feature\Upserts, Feature\UTCCasting
+class Mongo extends Adapter implements Feature\Connection, Feature\InternalCasting, Feature\Relationships, Feature\Timeouts, Feature\Upserts, Feature\UTCCasting
 {
+    use Timeout;
+
     /**
      * @var array<string>
      */
@@ -141,16 +143,20 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $this->client->connect();
     }
 
-    public function getHostname(): string
+    public function hostname(): string
     {
         return $this->client->getHost();
     }
 
     /**
-     * Returns the current Mongo client
-     * @return mixed
+     * The wire protocol has no connection id, so the client's object id names the connection within the process.
      */
-    public function getDriver(): mixed
+    public function id(): string
+    {
+        return (string) \spl_object_id($this->client);
+    }
+
+    public function getDriver(): Client
     {
         return $this->client;
     }
@@ -170,7 +176,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             Capability::QueryContains,
             Capability::BatchCreateAttributes,
             Capability::Caching,
-            Capability::Hostname,
             Capability::PCRE,
             Capability::Operators,
             Capability::TransactionRetries,
@@ -211,7 +216,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     public function setSupportForAttributes(bool $support): bool
     {
         $this->supportForAttributes = $support;
-        $this->capabilitySet = null;
+        $this->capabilities = null;
 
         return $this->supportForAttributes;
     }
@@ -242,7 +247,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     {
         $tenantFilter = new MongoTenantFilter(
             $this->sharedTables,
-            fn (string $collection, array $tenants = []) => $this->getTenantFilters($collection, $tenants),
+            $this->getTenantFilters(...),
         );
 
         return $tenantFilter->applyFilters($filters, $collection);
@@ -265,8 +270,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     }
 
     /**
-     * Ping Database
-     *
      * @throws Exception
      * @throws MongoException
      */
@@ -285,11 +288,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         return false;
     }
 
-    /**
-     * Reconnect to the MongoDB server.
-     *
-     * @return void
-     */
     public function reconnect(): void
     {
         $this->client->connect();
@@ -1386,7 +1384,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
         /** @var array<string, mixed>|null $resultArray */
         $resultArray = $this->client->toArray($result[0]);
-        $result = $this->replaceChars('_', '$', $resultArray ?? []);
+        $result = $this->replaceCharacters('_', '$', $resultArray ?? []);
         $document = Document::fromStorage($result);
         $document = $this->castingAfter($collection, $document);
 
@@ -1416,7 +1414,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
         /** @var array<string, mixed> $documentArray */
         $documentArray = (array) $document;
-        $record = $this->replaceChars('$', '_', $documentArray);
+        $record = $this->replaceCharacters('$', '_', $documentArray);
         $record = $this->decorateRow($record, $this->documentMetadata($document));
 
         // Insert manual id if set
@@ -1425,7 +1423,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         }
         $options = $this->getTransactionOptions();
         $result = $this->insertDocument($name, $this->removeNullKeys($record), $options);
-        $result = $this->replaceChars('_', '$', $result);
+        $result = $this->replaceCharacters('_', '$', $result);
         // in order to keep the original object refrence.
         foreach ($result as $key => $value) {
             $document->setAttribute($key, $value);
@@ -1465,7 +1463,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
             /** @var array<string, mixed> $documentArr */
             $documentArr = (array) $document;
-            $record = $this->replaceChars('$', '_', $documentArr);
+            $record = $this->replaceCharacters('$', '_', $documentArr);
             $record = $this->decorateRow($record, $this->documentMetadata($document));
 
             if (! empty($sequence)) {
@@ -1541,7 +1539,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         foreach ($documents as $index => $document) {
             /** @var array<string, mixed> $toArrayResult */
             $toArrayResult = $this->client->toArray($document) ?? [];
-            $documents[$index] = $this->replaceChars('_', '$', $toArrayResult);
+            $documents[$index] = $this->replaceCharacters('_', '$', $toArrayResult);
             $documents[$index] = new Document($documents[$index]);
         }
 
@@ -1559,7 +1557,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $name = $this->getNamespace().'_'.$this->filter($collection->getId());
 
         $record = $document->getArrayCopy();
-        $record = $this->replaceChars('$', '_', $record);
+        $record = $this->replaceCharacters('$', '_', $record);
 
         $filters = [Storage::UID => $id];
         $filters = $this->applyTenantFilter($filters, $collection->getId());
@@ -1608,7 +1606,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $filters = $this->applyTenantFilter($filters, $collection->getId());
 
         $record = $updates->getArrayCopy();
-        $record = $this->replaceChars('$', '_', $record);
+        $record = $this->replaceCharacters('$', '_', $record);
 
         try {
             $pipeline = $this->buildOperatorPipeline($record);
@@ -1986,7 +1984,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                     $filters[Storage::TENANT] = $this->getTenantFilters($collection->getId(), [$tenant]);
                 }
 
-                $record = $this->replaceChars('$', '_', $attributes);
+                $record = $this->replaceCharacters('$', '_', $attributes);
                 $record = $this->decorateRow($record, $this->documentMetadata($document));
 
                 unset($record[Storage::SEQUENCE]); // Don't update _id
@@ -2321,7 +2319,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             foreach ($results as $result) {
                 /** @var array<string, mixed> $resultCast */
                 $resultCast = (array) $result;
-                $record = $this->replaceChars('_', '$', $resultCast);
+                $record = $this->replaceCharacters('_', '$', $resultCast);
                 /** @var array<string, mixed> $convertedRecord */
                 $convertedRecord = $this->convertStdClassToArray($record);
                 $found[] = Document::fromStorage($convertedRecord);
@@ -2354,7 +2352,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 foreach ($moreResults as $result) {
                     /** @var array<string, mixed> $resultCast */
                     $resultCast = (array) $result;
-                    $record = $this->replaceChars('_', '$', $resultCast);
+                    $record = $this->replaceCharacters('_', '$', $resultCast);
                     /** @var array<string, mixed> $convertedRecord */
                     $convertedRecord = $this->convertStdClassToArray($record);
                     $found[] = Document::fromStorage($convertedRecord);
@@ -2963,7 +2961,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      * @param  array<int|string|null>  $tenants
      * @return int|string|null|array<string, array<int|string|null>>
      */
-    public function getTenantFilters(
+    protected function getTenantFilters(
         string $collection,
         array $tenants = [],
     ): int|string|null|array {
@@ -3090,7 +3088,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 if (in_array($this->getInternalKeyForAttribute($key), Database::INTERNAL_ATTRIBUTE_KEYS)) {
                     continue;
                 }
-                if (is_string($value) && $this->isExtendedISODatetime($value)) {
+                if (is_string($value) && $this->isExtendedIsoDatetime($value)) {
                     try {
                         $newValue = new UTCDateTime(new NativeDateTime($value));
                         $document->setAttribute($key, $newValue);
@@ -3192,7 +3190,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                     ColumnType::String, ColumnType::Id => \is_string($node) ? $node : (\is_scalar($node) ? (string) $node : $node),
                     ColumnType::Float, ColumnType::Double => \is_float($node) ? $node : (\is_numeric($node) ? (float) $node : 0.0),
                     ColumnType::Boolean => \is_scalar($node) ? (bool) $node : $node,
-                    ColumnType::Datetime => $this->convertUTCDateToString($node),
+                    ColumnType::Datetime => $this->convertUtcDateToString($node),
                     ColumnType::Object => is_object($node) && get_class($node) === stdClass::class
                         ? $this->convertStdClassToArray($node)
                         : $node,
@@ -3215,7 +3213,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 if (is_object($value) && get_class($value) === stdClass::class) {
                     $document->setAttribute($key, $this->convertStdClassToArray($value));
                 } elseif ($value instanceof UTCDateTime) {
-                    $document->setAttribute($key, $this->convertUTCDateToString($value));
+                    $document->setAttribute($key, $this->convertUtcDateToString($value));
                 }
             }
         }
@@ -3353,13 +3351,13 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      * @param  array<mixed>  $array  A document's fields, or a nested value of one (a list keeps its keys)
      * @return array<string, mixed>
      */
-    protected function replaceChars(string $from, string $to, array $array): array
+    protected function replaceCharacters(string $from, string $to, array $array): array
     {
         // First pass: recursively process array values and collect keys to rename
         $keysToRename = [];
         foreach ($array as $k => $v) {
             if (is_array($v)) {
-                $array[$k] = $this->replaceChars($from, $to, $v);
+                $array[$k] = $this->replaceCharacters($from, $to, $v);
             }
 
             if (\is_int($k)) {
@@ -3496,7 +3494,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         if (! $this->supports(Capability::DefinedAttributes) || \in_array($query->getAttribute(), [Document::CREATED_AT, Document::UPDATED_AT], true)) {
             $values = $query->getValues();
             foreach ($values as $k => $value) {
-                if (is_string($value) && $this->isExtendedISODatetime($value)) {
+                if (is_string($value) && $this->isExtendedIsoDatetime($value)) {
                     try {
                         $values[$k] = $this->toMongoDatetime($value);
                     } catch (Throwable $th) {
@@ -3568,10 +3566,10 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             if (in_array($query->getMethod(), [Method::Contains, Method::ContainsAny]) && ! $query->onArray()) {
                 // contains support array values
                 if (is_array($value)) {
-                    $filter['$or'] = array_map(fn ($val) => [
+                    $filter['$or'] = array_map(fn ($item) => [
                         $attribute => [
                             '$regex' => $this->createSafeRegex(
-                                \is_string($val) ? $val : (\is_scalar($val) ? (string) $val : ''),
+                                \is_string($item) ? $item : (\is_scalar($item) ? (string) $item : ''),
                                 '.*%s.*',
                                 'i'
                             ),
@@ -3894,7 +3892,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         return true;
     }
 
-    protected function isExtendedISODatetime(string $val): bool
+    protected function isExtendedIsoDatetime(string $value): bool
     {
         /**
          * Min:
@@ -3905,43 +3903,43 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
          *   YYYY-MM-DDTHH:mm:ss.fffffZ       (26)
          *   YYYY-MM-DDTHH:mm:ss.fffff+HH:MM  (31)
          */
-        $len = strlen($val);
+        $length = strlen($value);
 
         // absolute minimum
-        if ($len < 20) {
+        if ($length < 20) {
             return false;
         }
 
         // fixed datetime fingerprints
         if (
-            ! isset($val[19]) ||
-            $val[4] !== '-' ||
-            $val[7] !== '-' ||
-            $val[10] !== 'T' ||
-            $val[13] !== ':' ||
-            $val[16] !== ':'
+            ! isset($value[19]) ||
+            $value[4] !== '-' ||
+            $value[7] !== '-' ||
+            $value[10] !== 'T' ||
+            $value[13] !== ':' ||
+            $value[16] !== ':'
         ) {
             return false;
         }
 
         // timezone detection
-        $hasZ = ($val[$len - 1] === 'Z');
+        $hasZ = ($value[$length - 1] === 'Z');
 
         $hasOffset = (
-            $len >= 25 &&
-            ($val[$len - 6] === '+' || $val[$len - 6] === '-') &&
-            $val[$len - 3] === ':'
+            $length >= 25 &&
+            ($value[$length - 6] === '+' || $value[$length - 6] === '-') &&
+            $value[$length - 3] === ':'
         );
 
         if (! $hasZ && ! $hasOffset) {
             return false;
         }
 
-        if ($hasOffset && $len > 31) {
+        if ($hasOffset && $length > 31) {
             return false;
         }
 
-        if ($hasZ && $len > 26) {
+        if ($hasZ && $length > 26) {
             return false;
         }
 
@@ -3954,11 +3952,11 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             17, 18,
         ];
 
-        $timeEnd = $hasZ ? $len - 1 : $len - 6;
+        $timeEnd = $hasZ ? $length - 1 : $length - 6;
 
         // fractional seconds
         if ($timeEnd > 19) {
-            if ($val[19] !== '.' || $timeEnd < 21) {
+            if ($value[19] !== '.' || $timeEnd < 21) {
                 return false;
             }
             for ($i = 20; $i < $timeEnd; $i++) {
@@ -3968,13 +3966,13 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
         // timezone offset numeric digits
         if ($hasOffset) {
-            foreach ([$len - 5, $len - 4, $len - 2, $len - 1] as $i) {
+            foreach ([$length - 5, $length - 4, $length - 2, $length - 1] as $i) {
                 $digitPositions[] = $i;
             }
         }
 
         foreach ($digitPositions as $i) {
-            if (! ctype_digit($val[$i])) {
+            if (! ctype_digit($value[$i])) {
                 return false;
             }
         }
@@ -3982,7 +3980,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         return true;
     }
 
-    protected function convertUTCDateToString(mixed $node): mixed
+    protected function convertUtcDateToString(mixed $node): mixed
     {
         if ($node instanceof UTCDateTime) {
             // Handle UTCDateTime objects
@@ -4316,7 +4314,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 continue;
             }
 
-            $transformed = $this->replaceChars('$', '_', [$originalKey => $originalValue]);
+            $transformed = $this->replaceCharacters('$', '_', [$originalKey => $originalValue]);
             $dbKey = array_key_first($transformed);
 
             if ($dbKey && ! array_key_exists($dbKey, $record) && ! in_array($dbKey, $protectedFields)) {

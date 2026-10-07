@@ -143,7 +143,7 @@ final class ParentConflictRetryTest extends TestCase
                 }
 
                 $this->conflicted = true;
-                $this->getPDO()->exec('ROLLBACK');
+                $this->getDriver()->exec('ROLLBACK');
 
                 throw new Contention('Deadlock found when trying to get lock');
             }

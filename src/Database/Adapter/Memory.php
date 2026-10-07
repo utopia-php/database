@@ -110,9 +110,12 @@ class Memory extends Adapter implements Feature\Relationships
         // No external resources to initialise
     }
 
-    public function getDriver(): mixed
+    /**
+     * The adapter holds its data itself, so it is its own driver.
+     */
+    public function getDriver(): static
     {
-        return 'memory';
+        return $this;
     }
 
     /**
@@ -190,16 +193,6 @@ class Memory extends Adapter implements Feature\Relationships
         }
 
         return null;
-    }
-
-    public function ping(): bool
-    {
-        return true;
-    }
-
-    public function reconnect(): void
-    {
-        // No-op
     }
 
     public function startTransaction(): bool
@@ -1301,8 +1294,8 @@ class Memory extends Adapter implements Feature\Relationships
         // Resolve any Operator-typed attributes against the existing row before
         // computing the new payload so unique-index checks see the post-update
         // values, matching MariaDB's atomic UPDATE semantics.
-        $resolvedAttrs = $this->applyOperators($document->getAttributes(), $existing);
-        foreach ($resolvedAttrs as $attribute => $value) {
+        $resolved = $this->applyOperators($document->getAttributes(), $existing);
+        foreach ($resolved as $attribute => $value) {
             $document->setAttribute($attribute, $value);
         }
 
@@ -1441,11 +1434,11 @@ class Memory extends Adapter implements Feature\Relationships
             throw new NotFoundException('Collection not found');
         }
 
-        $attrs = $updates->getAttributes();
+        $attributes = $updates->getAttributes();
         $hasCreatedAt = ! empty($updates->getCreatedAt());
         $hasUpdatedAt = ! empty($updates->getUpdatedAt());
         $hasPermissions = $updates->offsetExists(Document::PERMISSIONS);
-        if (empty($attrs) && ! $hasCreatedAt && ! $hasUpdatedAt && ! $hasPermissions) {
+        if (empty($attributes) && ! $hasCreatedAt && ! $hasUpdatedAt && ! $hasPermissions) {
             return 0;
         }
 
@@ -1463,14 +1456,14 @@ class Memory extends Adapter implements Feature\Relationships
             $existingRow = $this->data[$key]['documents'][$docKey];
 
             // Resolve operators per-row — each document's existing values feed
-            // back into operator evaluation, so $attrs cannot be evaluated
+            // back into operator evaluation, so $attributes cannot be evaluated
             // once and reused.
-            $resolvedAttrs = $this->applyOperators($attrs, $existingRow);
+            $resolved = $this->applyOperators($attributes, $existingRow);
 
-            $merged = ! empty($resolvedAttrs)
+            $merged = ! empty($resolved)
                 ? Document::fromStorage(\array_merge(
                     $this->rowToDocument($existingRow),
-                    $resolvedAttrs,
+                    $resolved,
                     [Document::ID => $uid]
                 ))
                 : null;
@@ -1481,7 +1474,7 @@ class Memory extends Adapter implements Feature\Relationships
             $prepared[] = [
                 'uid' => $uid,
                 'docKey' => $docKey,
-                'attrs' => $resolvedAttrs,
+                'attrs' => $resolved,
                 'newSignatures' => $newSignatures,
                 'oldSignatures' => $oldSignatures,
             ];
@@ -1522,12 +1515,12 @@ class Memory extends Adapter implements Feature\Relationships
         foreach ($prepared as $entry) {
             $uid = $entry['uid'];
             $docKey = $entry['docKey'];
-            $resolvedAttrs = $entry['attrs'];
+            $resolved = $entry['attrs'];
 
             $previousRow = $this->data[$key]['documents'][$docKey];
 
             $row = &$this->data[$key]['documents'][$docKey];
-            foreach ($resolvedAttrs as $attribute => $value) {
+            foreach ($resolved as $attribute => $value) {
                 $row[$this->filter($attribute)] = $value;
             }
 
@@ -3281,7 +3274,7 @@ class Memory extends Adapter implements Feature\Relationships
 
     /**
      * Apply a single Operator to a stored row value and return the new value.
-     * Mirrors the semantics implemented in MariaDB::getOperatorSQL — the SQL
+     * Mirrors the semantics implemented in MariaDB::getOperatorSql — the SQL
      * version uses CASE/JSON helpers; this is the in-PHP equivalent.
      */
     protected function applyOperator(mixed $current, Operator $operator): mixed
@@ -3592,19 +3585,19 @@ class Memory extends Adapter implements Feature\Relationships
     }
 
     /**
-     * Filter out any Operator-typed values from $attrs and apply them against
+     * Filter out any Operator-typed values from $attributes and apply them against
      * the stored row, returning the remaining (regular) attributes plus the
      * operator-derived assignments. The split mirrors how MariaDB's UPDATE
      * separates operator SQL fragments from bound parameters.
      *
-     * @param  array<string, mixed>  $attrs  Incoming attributes (mix of operators and scalars)
+     * @param  array<string, mixed>  $attributes  Incoming attributes (mix of operators and scalars)
      * @param  array<string, mixed>  $row  Stored row (post-filter on rowToDocument)
      * @return array<string, mixed> Regular attributes ready for write
      */
-    protected function applyOperators(array $attrs, array $row): array
+    protected function applyOperators(array $attributes, array $row): array
     {
         $result = [];
-        foreach ($attrs as $attribute => $value) {
+        foreach ($attributes as $attribute => $value) {
             if (Operator::isOperator($value)) {
                 /** @var Operator $value */
                 $current = $row[$this->filter($attribute)] ?? null;

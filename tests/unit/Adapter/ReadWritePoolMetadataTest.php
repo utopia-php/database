@@ -42,7 +42,6 @@ final class ReadWritePoolMetadataTest extends TestCase
         $calls = [
             'supports' => [Capability::Index],
             'capabilities' => [],
-            'hasFeature' => [Feature\Spatial::class],
             'setSupportForAttributes' => [true],
             'getSupportNonUtfCharacters' => [],
             'getLimitForString' => [],
@@ -123,6 +122,35 @@ final class ReadWritePoolMetadataTest extends TestCase
     }
 
     /**
+     * The pool asks each connection it borrows whether it takes timeouts, so the delegated question is told apart
+     * from that probe by the feature it names.
+     */
+    public function testFeatureQuestionIsAnsweredWhereReadsGoWithoutOpeningTheStickyWindow(): void
+    {
+        $primary = $this->createMock(CastingAdapterStub::class);
+        $replica = $this->createMock(CastingAdapterStub::class);
+        $pool = $this->createPool($primary, $replica);
+
+        $asked = [];
+        $replica->method('hasFeature')->willReturnCallback(static function (string $feature) use (&$asked): bool {
+            $asked[] = $feature;
+
+            return false;
+        });
+        $primary->expects($this->never())->method('hasFeature');
+        $replica->expects($this->once())->method('ping')->willReturn(true);
+        $primary->expects($this->never())->method('ping');
+
+        $pool->delegate('hasFeature', [Feature\Spatial::class]);
+
+        $this->assertTrue($pool->ping(), 'hasFeature() sent the next read to the primary');
+        $this->assertSame([Feature\Spatial::class], \array_values(\array_filter(
+            $asked,
+            static fn (string $feature): bool => $feature !== Feature\Timeouts::class,
+        )));
+    }
+
+    /**
      * @param  non-empty-string  $method
      * @param  array<mixed>  $args
      */
@@ -148,8 +176,8 @@ final class ReadWritePoolMetadataTest extends TestCase
         $primary = $this->createMock(CastingAdapterStub::class);
         $replica = $this->createMock(CastingAdapterStub::class);
 
-        $primary->expects($this->exactly(3))->method('getHostname')->willReturn('primary');
-        $replica->expects($this->never())->method('getHostname');
+        $primary->expects($this->exactly(3))->method('hostname')->willReturn('primary');
+        $replica->expects($this->never())->method('hostname');
         $primary->method('createDocument')->willReturn(new Document());
         $primary->method('withTransaction')->willReturnCallback(
             static fn (callable $callback): mixed => $callback(),
@@ -161,15 +189,15 @@ final class ReadWritePoolMetadataTest extends TestCase
         $primary->expects($this->never())->method('ping');
 
         $outside = $this->createPool($primary, $replica);
-        $this->assertSame('primary', $outside->getHostname());
+        $this->assertSame('primary', $outside->hostname());
         $this->assertTrue($outside->ping(), 'Naming the host sent the next read to the primary');
 
         $inside = $this->createPool($primary, $replica);
         $inside->createDocument(new Document(), new Document());
-        $this->assertSame('primary', $inside->getHostname(), 'Inside the sticky window the hostname must still name the write pool');
+        $this->assertSame('primary', $inside->hostname(), 'Inside the sticky window the hostname must still name the write pool');
 
         $pinned = $this->createPool($primary, $replica);
-        $this->assertSame('primary', $pinned->withTransaction(static fn (): string => $pinned->getHostname()));
+        $this->assertSame('primary', $pinned->withTransaction(static fn (): string => $pinned->hostname()));
     }
 
     public function testHostnameIsLookedUpOncePerHandle(): void
@@ -178,11 +206,11 @@ final class ReadWritePoolMetadataTest extends TestCase
         $replica = $this->createMock(CastingAdapterStub::class);
         $pool = $this->createPool($primary, $replica);
 
-        $primary->expects($this->once())->method('getHostname')->willReturn('primary');
-        $replica->expects($this->never())->method('getHostname');
+        $primary->expects($this->once())->method('hostname')->willReturn('primary');
+        $replica->expects($this->never())->method('hostname');
 
-        $this->assertSame('primary', $pool->getHostname());
-        $this->assertSame('primary', $pool->getHostname());
+        $this->assertSame('primary', $pool->hostname());
+        $this->assertSame('primary', $pool->hostname());
     }
 
     public function testReadsReachTheReplicaAfterTheStickyWindowWhileCacheKeysNameTheHost(): void
@@ -190,11 +218,11 @@ final class ReadWritePoolMetadataTest extends TestCase
         $database = $this->createReplicatedDatabase(new HostnameSQLite('primary'), new HostnameSQLite('replica'));
         $database->setQueryCache(new QueryCache(new Cache(new MemoryCache())));
 
-        $this->assertTrue(
-            $database->getAdapter()->supports(Capability::Hostname),
+        $this->assertSame(
+            'primary',
+            $database->getHostname(),
             'The cache keys must name the host, as they do on MariaDB, MySQL, PostgreSQL and MongoDB',
         );
-        $this->assertSame('primary', $database->getAdapter()->getHostname());
 
         $database->createDocument('posts', new Document(['$id' => 'draft', 'server' => 'primary']));
 

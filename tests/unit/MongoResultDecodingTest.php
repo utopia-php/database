@@ -34,7 +34,7 @@ final class MongoResultDecodingTest extends TestCase
              */
             public function restore(array $record): array
             {
-                return $this->replaceChars('_', '$', $record);
+                return $this->replaceCharacters('_', '$', $record);
             }
         };
 
@@ -72,7 +72,7 @@ final class MongoResultDecodingTest extends TestCase
              */
             public function store(array $document): array
             {
-                return $this->replaceChars('$', '_', $document);
+                return $this->replaceCharacters('$', '_', $document);
             }
         };
 

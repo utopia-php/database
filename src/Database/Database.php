@@ -340,7 +340,7 @@ class Database
 
     protected ?QueryCache $queryCache = null;
 
-    protected ?Invalidator $queryCacheInvalidator = null;
+    protected ?Invalidator $invalidator = null;
 
     protected ?QueryProfiler $profiler = null;
 
@@ -847,11 +847,11 @@ class Database
             $this->lifecycleHooks,
             static fn (Lifecycle $hook): bool => ! $hook instanceof Invalidator,
         ));
-        $this->queryCacheInvalidator = null;
+        $this->invalidator = null;
         $this->queryCache = $queryCache;
 
         if ($queryCache !== null) {
-            $this->queryCacheInvalidator = new Invalidator($queryCache);
+            $this->invalidator = new Invalidator($queryCache);
         }
 
         return $this;
@@ -1044,12 +1044,7 @@ class Database
      */
     public function setTimeout(int $milliseconds, Event $event = Event::All): static
     {
-        // Not hasFeature(): on a pool that is a delegated call, so guarding
-        // with it dials the database just to configure a handle. A pool holds
-        // the timeout without checking out and defers the backing adapter's
-        // refusal to the moment it is applied, which is why the method's
-        // presence -- not the feature interface -- is what is asked here.
-        if (! \method_exists($this->adapter, 'setTimeout')) {
+        if (! $this->adapterHasFeature(Feature\Timeouts::class)) {
             throw new DatabaseException('Adapter does not support timeouts');
         }
 
@@ -1063,7 +1058,7 @@ class Database
      */
     public function clearTimeout(Event $event = Event::All): void
     {
-        if (! \method_exists($this->adapter, 'clearTimeout')) {
+        if (! $this->adapterHasFeature(Feature\Timeouts::class)) {
             throw new DatabaseException('Adapter does not support timeouts');
         }
 
@@ -1325,14 +1320,12 @@ class Database
     }
 
     /**
-     * Enable or disable LOCK=SHARED during ALTER TABLE operation
-     *
-     * Set lock mode when altering tables
+     * Whether ALTER TABLE statements take LOCK=SHARED, on adapters that support it.
      */
-    public function enableLocks(bool $enabled): static
+    public function setLocks(bool $locks): static
     {
         if ($this->adapter->supports(Capability::AlterLock)) {
-            $this->adapter->enableAlterLocks($enabled);
+            $this->adapter->setLocks($locks);
         }
 
         return $this;
@@ -1416,7 +1409,7 @@ class Database
                     $this->lifecycleHooks,
                     static fn (Lifecycle $registered): bool => ! $registered instanceof Invalidator,
                 ));
-                $this->queryCacheInvalidator = $hook;
+                $this->invalidator = $hook;
             } else {
                 $this->registerLifecycleHook($hook);
             }
@@ -2286,33 +2279,49 @@ class Database
     }
 
     /**
-     * Get getConnection Id
-     *
-     * @throws Exception
+     * The id of the adapter's connection, or null for an adapter without one.
      */
-    public function getConnectionId(): string
+    public function getConnectionId(): ?string
     {
-        if (! $this->adapterHasFeature(Feature\ConnectionId::class)) {
-            throw new DatabaseException('Adapter does not support connection ids');
+        if (! $this->adapterHasFeature(Feature\Connection::class)) {
+            return null;
         }
 
-        return $this->adapter->getConnectionId();
+        return $this->adapter->id();
     }
 
     /**
-     * Ping Database
+     * The host the adapter is connected to, or null for an adapter without a connection.
+     */
+    public function getHostname(): ?string
+    {
+        if (! $this->adapterHasFeature(Feature\Connection::class)) {
+            return null;
+        }
+
+        return $this->adapter->hostname();
+    }
+
+    /**
+     * Whether the adapter's connection answers. An adapter without a connection is always reachable.
      */
     public function ping(): bool
     {
+        if (! $this->adapterHasFeature(Feature\Connection::class)) {
+            return true;
+        }
+
         return $this->adapter->ping();
     }
 
     /**
-     * Reconnect to the database, re-establishing any dropped connections.
+     * Re-establish the adapter's connection; nothing to do for an adapter without one.
      */
     public function reconnect(): void
     {
-        $this->adapter->reconnect();
+        if ($this->adapterHasFeature(Feature\Connection::class)) {
+            $this->adapter->reconnect();
+        }
     }
 
     /**
@@ -2618,9 +2627,7 @@ class Database
      */
     public function getCacheBaseKeys(string $collectionId, ?string $documentId = null): array
     {
-        if ($this->adapter->supports(Capability::Hostname)) {
-            $hostname = $this->adapter->getHostname();
-        }
+        $hostname = $this->getHostname();
 
         $tenantSegment = $this->adapter->getTenant();
 
@@ -2679,14 +2686,10 @@ class Database
      */
     public function getQueryCacheKey(string $collectionId, ?string $namespace = null): string
     {
-        $hostname = $this->adapter->supports(Capability::Hostname)
-            ? $this->adapter->getHostname()
-            : '';
-
         return \sprintf(
             '%s-cache-%s:%s:%s:%s:collection:%s:query',
             $this->cacheName,
-            $hostname,
+            $this->getHostname() ?? '',
             $this->adapter->getDatabase(),
             $namespace ?? $this->getNamespace(),
             $this->adapter->getTenant(),
@@ -2697,7 +2700,7 @@ class Database
     protected function getQueryCacheScope(?string $namespace = null): Scope
     {
         return new Scope(
-            hostname: $this->adapter->supports(Capability::Hostname) ? $this->adapter->getHostname() : '',
+            hostname: $this->getHostname() ?? '',
             database: $this->adapter->getDatabase(),
             namespace: $namespace ?? $this->adapter->getNamespace(),
             tenant: $this->adapter->getTenant(),
@@ -2855,7 +2858,7 @@ class Database
      */
     protected function invalidate(Event $event, mixed $data = null): void
     {
-        $invalidator = $this->queryCacheInvalidator;
+        $invalidator = $this->invalidator;
         if ($invalidator === null || ! $invalidator->isMutation($event)) {
             return;
         }
@@ -2870,7 +2873,7 @@ class Database
      */
     protected function getInvalidationTokens(Event $event, mixed $data = null): array
     {
-        return $this->queryCacheInvalidator?->tokens(
+        return $this->invalidator?->tokens(
             $event,
             $data,
             $this->getQueryCacheScope(),
@@ -2883,7 +2886,7 @@ class Database
      */
     protected function blockInvalidation(array $tokens): void
     {
-        $this->queryCacheInvalidator?->block($tokens);
+        $this->invalidator?->block($tokens);
     }
 
     /**
@@ -2891,7 +2894,7 @@ class Database
      */
     protected function activateInvalidation(array $tokens): void
     {
-        $this->queryCacheInvalidator?->activate($tokens);
+        $this->invalidator?->activate($tokens);
     }
 
     /**

@@ -58,7 +58,7 @@ class PoolTest extends Base
                 dsn: "mysql:host={$dbHost};port={$dbPort};charset=utf8mb4",
                 username: $dbUser,
                 password: $dbPass,
-                config: MySQL::getPDOAttributes(),
+                config: self::PDO_ATTRIBUTES,
             ));
         }, timeout: 0.0);
 

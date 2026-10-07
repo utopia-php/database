@@ -225,7 +225,7 @@ final class PreparedCreateTest extends TestCase
             {
                 if (! $this->conflicted && $collection->getId() === 'children') {
                     $this->conflicted = true;
-                    $this->getPDO()->exec('ROLLBACK');
+                    $this->getDriver()->exec('ROLLBACK');
 
                     throw new Contention('Deadlock found when trying to get lock');
                 }
@@ -295,7 +295,7 @@ final class PreparedCreateTest extends TestCase
             {
                 if ($this->failSavepointCommit && $this->inTransaction > 1) {
                     $this->failSavepointCommit = false;
-                    $this->getPDO()->exec('ROLLBACK');
+                    $this->getDriver()->exec('ROLLBACK');
                     $this->inTransaction = 0;
 
                     throw new Contention('Deadlock found when trying to get lock');

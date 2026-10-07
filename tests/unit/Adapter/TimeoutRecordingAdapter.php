@@ -4,10 +4,13 @@ namespace Tests\Unit\Adapter;
 
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\Memory;
+use Utopia\Database\Adapter\Timeout;
 use Utopia\Database\Event;
 
 final class TimeoutRecordingAdapter extends Memory implements Feature\Timeouts
 {
+    use Timeout;
+
     public function setTimeout(int $milliseconds, Event $event = Event::All): void
     {
         $this->setTimeoutState($milliseconds, $event);

@@ -54,7 +54,7 @@ final class JoinAliasQuotingTest extends TestCase
     #[DataProvider('quoteCharacters')]
     public function testTenantFilterQuotesTheTableItQualifies(string $quote): void
     {
-        $filter = new TenantFilter(7, Database::METADATA, 'authors', quoteChar: $quote);
+        $filter = new TenantFilter(7, Database::METADATA, 'authors', quoteCharacter: $quote);
 
         $this->assertSame($this->quoted('"Main"._tenant IN (?)', $quote), $filter->filter(self::SOURCE)->expression);
         $this->assertSame($this->quoted('"Book"._tenant IN (?)', $quote), $filter->joined(self::ALIAS)->expression);
@@ -64,7 +64,7 @@ final class JoinAliasQuotingTest extends TestCase
     #[DataProvider('quoteCharacters')]
     public function testTenantFilterQuotesTheTableOfATenantlessMetadataRow(string $quote): void
     {
-        $filter = new TenantFilter(7, Database::METADATA, Database::METADATA, quoteChar: $quote);
+        $filter = new TenantFilter(7, Database::METADATA, Database::METADATA, quoteCharacter: $quote);
 
         $this->assertSame(
             $this->quoted('("Main"._tenant IN (?) OR "Main"._tenant IS NULL)', $quote),
@@ -78,7 +78,7 @@ final class JoinAliasQuotingTest extends TestCase
     #[DataProvider('quoteCharacters')]
     public function testTenantFilterDoesNotQualifyWithARawTableName(string $quote): void
     {
-        $filter = new TenantFilter(7, Database::METADATA, 'authors', quoteChar: $quote);
+        $filter = new TenantFilter(7, Database::METADATA, 'authors', quoteCharacter: $quote);
 
         $this->assertSame('_tenant IN (?)', $filter->filter('database.namespace_authors')->expression);
         $this->assertSame('_tenant IN (?)', $filter->filter($quote.'namespace_authors'.$quote)->expression);
@@ -87,7 +87,7 @@ final class JoinAliasQuotingTest extends TestCase
     #[DataProvider('joins')]
     public function testTenantFilterQuotesTheAliasOfEveryJoin(JoinType $joinType, string $quote): void
     {
-        $filter = new TenantFilter(7, allowNullColumn: self::SOURCE.'.'.Storage::UID, quoteChar: $quote);
+        $filter = new TenantFilter(7, allowNullColumn: self::SOURCE.'.'.Storage::UID, quoteCharacter: $quote);
 
         $result = $filter->filterJoin(self::ALIAS, $joinType);
 
@@ -119,7 +119,7 @@ final class JoinAliasQuotingTest extends TestCase
     public function testOuterJoinChainFilterQuotesEveryEarlierTable(string $quote): void
     {
         $chain = new JoinChain([self::EARLIER => JoinType::Cross, self::ALIAS => JoinType::Right]);
-        $tenants = new TenantFilter(7, quoteChar: $quote);
+        $tenants = new TenantFilter(7, quoteCharacter: $quote);
         $permission = $this->permission(self::EARLIER, $quote);
 
         $tenant = (new OuterJoinChainFilter($chain, [self::EARLIER => $tenants->joined(self::EARLIER)], $quote))
@@ -185,10 +185,10 @@ final class JoinAliasQuotingTest extends TestCase
             roles: ['any'],
             permissionsTable: static fn (string $table): string => 'database.namespace_books_perms',
             documentColumn: $alias.'.'.Storage::UID,
-            permDocumentColumn: Storage::PERM_DOCUMENT,
-            permRoleColumn: Storage::PERM_PERMISSION,
-            permTypeColumn: Storage::PERM_TYPE,
-            quoteChar: $quote,
+            permissionDocumentColumn: Storage::PERM_DOCUMENT,
+            permissionRoleColumn: Storage::PERM_PERMISSION,
+            permissionTypeColumn: Storage::PERM_TYPE,
+            quoteCharacter: $quote,
         );
     }
 

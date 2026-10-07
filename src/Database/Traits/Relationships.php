@@ -6,6 +6,7 @@ use Throwable;
 use Utopia\Console;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
+use Utopia\Database\AttributeUpdate;
 use Utopia\Database\Collection;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
@@ -15,17 +16,13 @@ use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
-use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Structure as StructureException;
-use Utopia\Database\Helpers\ID;
 use Utopia\Database\Index;
 use Utopia\Database\Relationship;
-use Utopia\Database\RelationSide;
-use Utopia\Database\RelationType;
+use Utopia\Database\RelationshipSide;
+use Utopia\Database\RelationshipType;
+use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\SetType;
-use Utopia\Query\Schema\ColumnType;
-use Utopia\Query\Schema\ForeignKeyAction;
-use Utopia\Query\Schema\IndexType;
 
 /**
  * Provides relationship attribute management including creation, update, deletion, and traversal control.
@@ -67,176 +64,106 @@ trait Relationships
     }
 
     /**
-     * Cleanup a relationship on failure
-     *
-     * @param  string  $collectionId  The collection ID
-     * @param  string  $relatedCollectionId  The related collection ID
-     * @param  RelationType  $type  The relationship type
-     * @param  bool  $twoWay  Whether the relationship is two-way
-     * @param  string  $key  The relationship key
-     * @param  string  $twoWayKey  The two-way relationship key
-     * @param  RelationSide  $side  The relationship side
-     * @param  int  $maxAttempts  Maximum retry attempts
+     * Drop the storage of a relationship created by createRelationship() whose metadata could not be written.
      *
      * @throws DatabaseException If cleanup fails after all retries
      */
-    private function cleanupRelationship(
-        string $collectionId,
-        string $relatedCollectionId,
-        RelationType $type,
-        bool $twoWay,
-        string $key,
-        string $twoWayKey,
-        RelationSide $side = RelationSide::Parent,
-        int $maxAttempts = 3
-    ): void {
+    private function cleanupRelationship(string $collection, Relationship $relationship, int $maxAttempts = 3): void
+    {
         if (! $this->adapterHasFeature(Feature\Relationships::class)) {
             throw new DatabaseException('Adapter does not support relationships');
         }
         $adapter = $this->adapter;
 
-        $relationshipModel = new Relationship(
-            collection: $collectionId,
-            relatedCollection: $relatedCollectionId,
-            type: $type,
-            twoWay: $twoWay,
-            key: $key,
-            twoWayKey: $twoWayKey,
-            side: $side,
-        );
         $this->cleanup(
-            fn () => $adapter->deleteRelationship($relationshipModel),
+            fn () => $adapter->deleteRelationship($collection, $relationship, RelationshipSide::Parent),
             'relationship',
-            $key,
+            $relationship->key ?? '',
             $maxAttempts
         );
     }
 
     /**
-     * Create a relationship attribute between two collections.
+     * Create a relationship from $collection, its parent side, to the related collection.
      *
-     * @param  Relationship  $relationship  The relationship definition
-     * @return bool True if the relationship was created successfully
+     * A key left null is derived from the id of the collection on the other side, and stored resolved.
+     *
+     * @return Relationship The stored relationship, from the parent side, with both keys resolved
      *
      * @throws AuthorizationException
      * @throws ConflictException
      * @throws DatabaseException
      * @throws DuplicateException
      * @throws LimitException
+     * @throws NotFoundException
      * @throws StructureException
      */
-    public function createRelationship(
-        Relationship $relationship
-    ): bool {
+    public function createRelationship(string $collection, Relationship $relationship): Relationship
+    {
         if (! $this->adapterHasFeature(Feature\Relationships::class)) {
             throw new DatabaseException('Adapter does not support relationships');
         }
+        $adapter = $this->adapter;
 
-        $collection = $this->silent(fn () => $this->getCollection($relationship->getSourceCollection()));
-        $relatedCollection = $this->silent(fn () => $this->getCollection($relationship->getRelatedCollection()));
+        $collection = $this->silent(fn () => $this->findCollection($collection))
+            ?? throw new NotFoundException('Collection not found');
+        $relatedCollection = $this->silent(fn () => $this->findCollection($relationship->relatedCollection))
+            ?? throw new NotFoundException('Related collection not found');
 
-        /** @var Document $collection */
-        /** @var Document $relatedCollection */
-        if ($collection->isEmpty()) {
-            throw new NotFoundException('Collection not found');
-        }
-        if ($relatedCollection->isEmpty()) {
-            throw new NotFoundException('Related collection not found');
-        }
-
-        $type = $relationship->getType();
-        $twoWay = $relationship->isTwoWay();
-        $id = ! empty($relationship->getKey()) ? $relationship->getKey() : $this->adapter->filter($relatedCollection->getId());
-        $twoWayKey = ! empty($relationship->getTwoWayKey()) ? $relationship->getTwoWayKey() : $this->adapter->filter($collection->getId());
-        $onDelete = $relationship->getOnDelete();
-
-        /** @var array<Attribute> $attributes */
-        $attributes = $collection->getAttribute('attributes', []);
         $collectionId = $collection->getId();
         $relatedCollectionId = $relatedCollection->getId();
-        foreach ($attributes as $attribute) {
-            if (\strtolower($attribute->getKey()) === \strtolower($id)) {
+        $key = $relationship->key ?: $adapter->filter($relatedCollectionId);
+        $twoWayKey = $relationship->twoWayKey ?: $adapter->filter($collectionId);
+        $relationship = $relationship->apply(new RelationshipUpdate(key: $key, twoWayKey: $twoWayKey));
+        $type = $relationship->type;
+
+        foreach ($collection->attributes() as $attribute) {
+            if (\strtolower($attribute->key) === \strtolower($key)) {
                 throw new DuplicateException('Attribute already exists');
             }
 
-            if ($attribute->getType() === ColumnType::Relationship) {
-                $existingRelationship = Relationship::fromArray(['collection' => $collectionId] + $attribute->getArrayCopy());
-                if (
-                    \strtolower($existingRelationship->getTwoWayKey()) === \strtolower($twoWayKey)
-                    && $existingRelationship->getRelatedCollection() === $relatedCollectionId
-                ) {
-                    throw new DuplicateException('Related attribute already exists');
-                }
+            $existing = $attribute->relationship;
+            if (
+                $existing !== null
+                && \strtolower($existing->twoWayKey ?? '') === \strtolower($twoWayKey)
+                && $existing->relatedCollection === $relatedCollectionId
+            ) {
+                throw new DuplicateException('Related attribute already exists');
             }
         }
 
-        $relationship = Attribute::relationship(
-            key: $id,
-            options: [
-                'relatedCollection' => $relatedCollection->getId(),
-                'relationType' => $type->value,
-                'twoWay' => $twoWay,
-                'twoWayKey' => $twoWayKey,
-                'onDelete' => $onDelete->value,
-                'side' => RelationSide::Parent->value,
-            ],
-        );
+        $parent = Attribute::relationship($key, $relationship, RelationshipSide::Parent);
+        $child = Attribute::relationship($twoWayKey, $relationship->inverse($collectionId), RelationshipSide::Child);
 
-        $twoWayRelationship = Attribute::relationship(
-            key: $twoWayKey,
-            options: [
-                'relatedCollection' => $collection->getId(),
-                'relationType' => $type->value,
-                'twoWay' => $twoWay,
-                'twoWayKey' => $id,
-                'onDelete' => $onDelete->value,
-                'side' => RelationSide::Child->value,
-            ],
-        );
+        $this->checkAttribute($collectionId, $parent);
+        $this->checkAttribute($relatedCollectionId, $child);
 
-        $this->checkAttribute($collection, $relationship);
-        $this->checkAttribute($relatedCollection, $twoWayRelationship);
-
-        /** @var ?string $junctionCollection */
         $junctionCollection = null;
-        if ($type === RelationType::ManyToMany) {
+        if ($type === RelationshipType::ManyToMany) {
             $junctionCollection = '_'.$collection->getSequence().'_'.$relatedCollection->getSequence();
             $junctionAttributes = [
-                Attribute::string(key: $id, required: true),
+                Attribute::string(key: $key, required: true),
                 Attribute::string(key: $twoWayKey, required: true),
             ];
             $junctionIndexes = [
-                Index::key(key: '_index_'.$id, attributes: [$id]),
+                Index::key(key: '_index_'.$key, attributes: [$key]),
                 Index::key(key: '_index_'.$twoWayKey, attributes: [$twoWayKey]),
             ];
             try {
-                $this->silent(fn () => $this->createCollection(new Collection(id: $junctionCollection, attributes: $junctionAttributes, indexes: $junctionIndexes)));
+                $this->silent(fn () => $this->createCollection(Collection::create($junctionCollection, attributes: $junctionAttributes, indexes: $junctionIndexes)));
             } catch (DuplicateException) {
-                // Junction metadata already exists from a prior partial failure.
-                // Ensure the physical schema also exists.
                 try {
-                    $this->adapter->createCollection($junctionCollection, $junctionAttributes, $junctionIndexes);
+                    $adapter->createCollection($junctionCollection, $junctionAttributes, $junctionIndexes);
                 } catch (DuplicateException) {
-                    // Schema already exists — ignore
+                    // The junction's metadata and schema both survive a prior partial failure.
                 }
             }
         }
 
         $created = false;
 
-        $adapterRelationship = new Relationship(
-            collection: $collection->getId(),
-            relatedCollection: $relatedCollection->getId(),
-            type: $type,
-            twoWay: $twoWay,
-            key: $id,
-            twoWayKey: $twoWayKey,
-            onDelete: $onDelete,
-            side: RelationSide::Parent,
-        );
-
         try {
-            $created = $this->adapter->createRelationship($adapterRelationship);
+            $created = $adapter->createRelationship($collectionId, $relationship);
 
             if (! $created) {
                 if ($junctionCollection !== null) {
@@ -249,16 +176,14 @@ trait Relationships
                 throw new DatabaseException('Failed to create relationship');
             }
         } catch (DuplicateException) {
-            // Metadata checks (above) already verified relationship is absent
-            // from metadata. A DuplicateException from the adapter means the
-            // relationship exists only in physical schema — an orphan from a
-            // prior partial failure. Skip creation and proceed to metadata update.
+            // The metadata checks above found no such relationship, so the schema holds an orphan of a prior partial
+            // failure: keep it and write the metadata.
         }
 
-        $collection->setAttribute('attributes', $relationship, SetType::Append);
-        $relatedCollection->setAttribute('attributes', $twoWayRelationship, SetType::Append);
+        $collection->setAttribute('attributes', $parent->toDocument(), SetType::Append);
+        $relatedCollection->setAttribute('attributes', $child->toDocument(), SetType::Append);
 
-        $this->silent(function () use ($collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey, $junctionCollection, $created) {
+        $this->silent(function () use ($collection, $relatedCollection, $relationship, $key, $twoWayKey, $junctionCollection, $created) {
             $committedFailure = null;
             try {
                 $this->withRetries(function () use ($collection, $relatedCollection) {
@@ -269,31 +194,11 @@ trait Relationships
                 });
             } catch (Throwable $error) {
                 if (! $this->mayHaveCommitted($error)) {
-                    $this->rollbackAttributeMetadata($collection, [$id]);
-                    $this->rollbackAttributeMetadata($relatedCollection, [$twoWayKey]);
+                    $this->forgetAttribute($collection, $key);
+                    $this->forgetAttribute($relatedCollection, $twoWayKey);
 
                     if ($created) {
-                        try {
-                            $this->cleanupRelationship(
-                                $collection->getId(),
-                                $relatedCollection->getId(),
-                                $type,
-                                $twoWay,
-                                $id,
-                                $twoWayKey,
-                                RelationSide::Parent
-                            );
-                        } catch (Throwable $cleanupError) {
-                            Console::error("Failed to cleanup relationship '{$id}': ".$cleanupError->getMessage());
-                        }
-
-                        if ($junctionCollection !== null) {
-                            try {
-                                $this->cleanupCollection($junctionCollection);
-                            } catch (Throwable $cleanupError) {
-                                Console::error("Failed to cleanup junction collection '{$junctionCollection}': ".$cleanupError->getMessage());
-                            }
-                        }
+                        $this->cleanupCreatedRelationship($collection->getId(), $relationship, $junctionCollection);
                     }
 
                     throw new DatabaseException('Failed to create relationship: '.$error->getMessage(), previous: $error);
@@ -302,18 +207,18 @@ trait Relationships
                 $committedFailure = $error;
             }
 
-            $indexKey = '_index_'.$id;
+            $indexKey = '_index_'.$key;
             $twoWayIndexKey = '_index_'.$twoWayKey;
-            $indexes = match ($type) {
-                RelationType::OneToOne => $twoWay
+            $indexes = match ($relationship->type) {
+                RelationshipType::OneToOne => $relationship->twoWay
                     ? [
-                        [$collection->getId(), Index::unique(key: $indexKey, attributes: [$id])],
+                        [$collection->getId(), Index::unique(key: $indexKey, attributes: [$key])],
                         [$relatedCollection->getId(), Index::unique(key: $twoWayIndexKey, attributes: [$twoWayKey])],
                     ]
-                    : [[$collection->getId(), Index::unique(key: $indexKey, attributes: [$id])]],
-                RelationType::OneToMany => [[$relatedCollection->getId(), Index::key(key: $twoWayIndexKey, attributes: [$twoWayKey])]],
-                RelationType::ManyToOne => [[$collection->getId(), Index::key(key: $indexKey, attributes: [$id])]],
-                RelationType::ManyToMany => [],
+                    : [[$collection->getId(), Index::unique(key: $indexKey, attributes: [$key])]],
+                RelationshipType::OneToMany => [[$relatedCollection->getId(), Index::key(key: $twoWayIndexKey, attributes: [$twoWayKey])]],
+                RelationshipType::ManyToOne => [[$collection->getId(), Index::key(key: $indexKey, attributes: [$key])]],
+                RelationshipType::ManyToMany => [],
             };
             $indexesCreated = [];
 
@@ -328,57 +233,33 @@ trait Relationships
 
                         $committedFailure ??= $error;
                     }
-                    $indexesCreated[] = ['collection' => $indexCollection, 'index' => $index->getKey()];
+                    $indexesCreated[] = [$indexCollection, $index->key];
                 }
             } catch (Throwable $error) {
-                foreach ($indexesCreated as $indexInfo) {
+                foreach ($indexesCreated as [$createdCollection, $createdKey]) {
                     try {
-                        $this->deleteIndex($indexInfo['collection'], $indexInfo['index']);
+                        $this->deleteIndex($createdCollection, $createdKey);
                     } catch (Throwable $cleanupError) {
-                        Console::error("Failed to cleanup index '{$indexInfo['index']}': ".$cleanupError->getMessage());
+                        Console::error("Failed to cleanup index '{$createdKey}': ".$cleanupError->getMessage());
                     }
                 }
 
                 $definitionsRemoved = true;
                 try {
-                    $this->withTransaction(function () use ($collection, $relatedCollection, $id, $twoWayKey) {
-                        /** @var array<Attribute> $attributes */
-                        $attributes = $collection->getAttribute('attributes', []);
-                        $collection->setAttribute('attributes', array_filter($attributes, fn (Attribute $existing) => $existing->getId() !== $id));
+                    $this->withTransaction(function () use ($collection, $relatedCollection, $key, $twoWayKey) {
+                        $this->forgetAttribute($collection, $key);
                         $this->updateDocument(self::METADATA, $collection->getId(), $collection);
 
-                        /** @var array<Attribute> $relatedAttributes */
-                        $relatedAttributes = $relatedCollection->getAttribute('attributes', []);
-                        $relatedCollection->setAttribute('attributes', array_filter($relatedAttributes, fn (Attribute $existing) => $existing->getId() !== $twoWayKey));
+                        $this->forgetAttribute($relatedCollection, $twoWayKey);
                         $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
                     });
                 } catch (Throwable $cleanupError) {
                     $definitionsRemoved = $this->failedAfterCommit($cleanupError);
-                    Console::error("Failed to cleanup metadata for relationship '{$id}': ".$cleanupError->getMessage());
+                    Console::error("Failed to cleanup metadata for relationship '{$key}': ".$cleanupError->getMessage());
                 }
 
                 if ($definitionsRemoved) {
-                    try {
-                        $this->cleanupRelationship(
-                            $collection->getId(),
-                            $relatedCollection->getId(),
-                            $type,
-                            $twoWay,
-                            $id,
-                            $twoWayKey,
-                            RelationSide::Parent
-                        );
-                    } catch (Throwable $cleanupError) {
-                        Console::error("Failed to cleanup relationship '{$id}': ".$cleanupError->getMessage());
-                    }
-
-                    if ($junctionCollection !== null) {
-                        try {
-                            $this->cleanupCollection($junctionCollection);
-                        } catch (Throwable $cleanupError) {
-                            Console::error("Failed to cleanup junction collection '{$junctionCollection}': ".$cleanupError->getMessage());
-                        }
-                    }
+                    $this->cleanupCreatedRelationship($collection->getId(), $relationship, $junctionCollection);
                 }
 
                 throw new DatabaseException('Failed to create relationship indexes: '.$error->getMessage(), previous: $error);
@@ -391,508 +272,221 @@ trait Relationships
 
         $this->triggerHooks(
             Event::AttributeCreate,
-            (clone $relationship)->setAttribute(Document::COLLECTION, $collection->getId()),
+            $parent->toDocument()->setAttribute(Document::COLLECTION, $collectionId),
         );
 
-        return true;
+        return $relationship;
     }
 
     /**
-     * Update a relationship attribute's keys, two-way status, or on-delete behavior.
+     * Update the relationship stored under $key on $collection, from either of its sides.
      *
-     * @param  string  $collection  The collection identifier
-     * @param  string  $id  The relationship attribute identifier
-     * @param  string|null  $newKey  New key for the relationship attribute
-     * @param  string|null  $newTwoWayKey  New key for the two-way relationship attribute
-     * @param  bool|null  $twoWay  Whether the relationship should be two-way
-     * @param  ForeignKeyAction|null  $onDelete  Action to take on related document deletion
-     * @return bool True if the relationship was updated successfully
+     * The update is read from that side: its key renames $key, its twoWayKey the key on the related collection.
+     *
+     * @return Relationship The stored relationship, from the side of $collection
      *
      * @throws ConflictException
      * @throws DatabaseException
+     * @throws DuplicateException
+     * @throws NotFoundException
      */
-    public function updateRelationship(
-        string $collection,
-        string $id,
-        ?string $newKey = null,
-        ?string $newTwoWayKey = null,
-        ?bool $twoWay = null,
-        ?ForeignKeyAction $onDelete = null
-    ): bool {
+    public function updateRelationship(string $collection, string $key, RelationshipUpdate $update): Relationship
+    {
         if (! $this->adapterHasFeature(Feature\Relationships::class)) {
             throw new DatabaseException('Adapter does not support relationships');
         }
-
-        if (
-            $newKey === null
-            && $newTwoWayKey === null
-            && $twoWay === null
-            && $onDelete === null
-        ) {
-            return true;
-        }
+        $adapter = $this->adapter;
 
         $collection = $this->getCollection($collection);
-        /** @var array<Attribute> $attributes */
-        $attributes = $collection->getAttribute('attributes', []);
+        $attributes = $collection->attributes();
 
-        if (
-            $newKey !== null
-            && \in_array($newKey, \array_map(fn (Attribute $attribute) => $attribute->getKey(), $attributes), true)
-        ) {
+        if ($update->key !== null && \in_array($update->key, self::attributeKeys($attributes), true)) {
             throw new DuplicateException('Relationship already exists');
         }
 
-        $attributeIndex = array_search($id, array_map(fn (Attribute $attribute) => $attribute->getKey(), $attributes), true);
-
-        if ($attributeIndex === false) {
+        $attribute = self::relationshipAttribute($attributes, $key);
+        $current = $attribute?->relationship;
+        $side = $attribute?->side;
+        if ($attribute === null || $current === null || $side === null) {
             throw new NotFoundException('Relationship not found');
         }
 
-        $attribute = $attributes[$attributeIndex];
-        $oldRelationship = Relationship::fromArray(['collection' => $collection->getId()] + $attribute->getArrayCopy());
+        if ($update->key === null && $update->twoWayKey === null && $update->twoWay === null && $update->onDelete === null) {
+            return $current;
+        }
 
-        $relatedCollectionId = $oldRelationship->getRelatedCollection();
-        $relatedCollection = $this->getCollection($relatedCollectionId);
+        $collectionId = $collection->getId();
+        $relatedCollection = $this->getCollection($current->relatedCollection);
+        $relatedCollectionId = $relatedCollection->getId();
+        $relatedAttributes = $relatedCollection->attributes();
+        $oldTwoWayKey = $current->twoWayKey ?? '';
 
-        $oldTwoWayKey = $oldRelationship->getTwoWayKey();
-        $altering = ($newKey !== null && $newKey !== $id)
-            || ($newTwoWayKey !== null && $newTwoWayKey !== $oldTwoWayKey);
-
-        /** @var array<Attribute> $relatedCollectionAttributes */
-        $relatedCollectionAttributes = $relatedCollection->getAttribute('attributes', []);
-        if (
-            $newTwoWayKey !== null
-            && \in_array($newTwoWayKey, \array_map(fn (Attribute $attribute) => $attribute->getKey(), $relatedCollectionAttributes), true)
-        ) {
+        if ($update->twoWayKey !== null && \in_array($update->twoWayKey, self::attributeKeys($relatedAttributes), true)) {
             throw new DuplicateException('Related attribute already exists');
         }
 
-        $actualNewKey = $newKey ?? $id;
-        $actualNewTwoWayKey = $newTwoWayKey ?? $oldTwoWayKey;
-        $actualTwoWay = $twoWay ?? $oldRelationship->isTwoWay();
-        $actualOnDelete = $onDelete ?? $oldRelationship->getOnDelete();
+        $inverse = self::relationshipAttribute($relatedAttributes, $oldTwoWayKey);
+        if ($inverse === null || $inverse->side === null) {
+            throw new NotFoundException('Attribute not found');
+        }
+
+        $updated = $current->apply($update);
+        $newKey = $update->key ?? $key;
+        $newTwoWayKey = $update->twoWayKey ?? $oldTwoWayKey;
+        $altering = $newKey !== $key || $newTwoWayKey !== $oldTwoWayKey;
+        $renamed = $updated->apply(new RelationshipUpdate(key: $newKey, twoWayKey: $newTwoWayKey));
 
         $adapterUpdated = false;
         if ($altering) {
             try {
-                $current = new Relationship(
-                    collection: $collection->getId(),
-                    relatedCollection: $relatedCollection->getId(),
-                    type: $oldRelationship->getType(),
-                    twoWay: $actualTwoWay,
-                    key: $id,
-                    twoWayKey: $oldTwoWayKey,
-                    onDelete: $actualOnDelete,
-                    side: $oldRelationship->getSide(),
-                );
-                $adapterUpdated = $this->adapter->updateRelationship(
+                $adapterUpdated = $adapter->updateRelationship(
+                    $collectionId,
                     $current,
-                    $actualNewKey,
-                    $actualNewTwoWayKey
+                    $side,
+                    new RelationshipUpdate(key: $newKey, twoWayKey: $newTwoWayKey, twoWay: $updated->twoWay),
                 );
 
                 if (! $adapterUpdated) {
                     throw new DatabaseException('Failed to update relationship');
                 }
             } catch (Throwable $error) {
-                // Check if the rename already happened in schema (orphan from prior
-                // partial failure where adapter succeeded but metadata+rollback failed).
-                // If the new column names already exist, the prior rename completed.
-                if ($this->adapter->hasFeature(Feature\SchemaAttributes::class)) {
-                    $schemaAttributes = $this->getSchemaAttributes($collection->getId());
-                    $filteredNewKey = $this->adapter->filter($actualNewKey);
-                    $newKeyExists = false;
-                    foreach ($schemaAttributes as $schemaAttribute) {
-                        if (\strtolower($schemaAttribute->getId()) === \strtolower($filteredNewKey)) {
-                            $newKeyExists = true;
-                            break;
-                        }
-                    }
-                    if ($newKeyExists) {
-                        $adapterUpdated = true;
-                    } else {
-                        throw new DatabaseException("Failed to update relationship '{$id}': ".$error->getMessage(), previous: $error);
-                    }
-                } else {
-                    throw new DatabaseException("Failed to update relationship '{$id}': ".$error->getMessage(), previous: $error);
+                if (! $this->adapter->hasFeature(Feature\SchemaAttributes::class) || ! $this->hasSchemaColumn($collectionId, $newKey)) {
+                    throw new DatabaseException("Failed to update relationship '{$key}': ".$error->getMessage(), previous: $error);
                 }
+
+                $adapterUpdated = true;
             }
         }
 
+        $parentAfter = Attribute::relationship($newKey, $renamed, $side);
+        $inverseAfter = Attribute::relationship($newTwoWayKey, $renamed->inverse($collectionId), $inverse->side);
+        $junction = $current->type === RelationshipType::ManyToMany
+            ? $this->getJunctionCollection($collection, $relatedCollection, $side)
+            : null;
+
+        /** @var list<array{string, Attribute}> $updatedAttributes */
         $updatedAttributes = [];
+        /** @var list<callable(): mixed> $restores */
+        $restores = [];
 
         try {
-            $updatedAttributes[] = [$collection->getId(), $this->updateAttributeMeta($collection->getId(), $id, function ($attribute) use ($actualNewKey, $actualNewTwoWayKey, $actualTwoWay, $actualOnDelete, $relatedCollection, $oldRelationship) {
-                $attribute->setAttribute(Document::ID, $actualNewKey);
-                $attribute->setAttribute('key', $actualNewKey);
-                $attribute->setAttribute('options', [
-                    'relatedCollection' => $relatedCollection->getId(),
-                    'relationType' => $oldRelationship->getType()->value,
-                    'twoWay' => $actualTwoWay,
-                    'twoWayKey' => $actualNewTwoWayKey,
-                    'onDelete' => $actualOnDelete->value,
-                    'side' => $oldRelationship->getSide()->value,
-                ]);
-            }, triggerEvent: false)];
+            $this->replaceAttribute($collectionId, $key, $parentAfter);
+            $updatedAttributes[] = [$collectionId, $parentAfter];
+            $restores[] = fn () => $this->replaceAttribute($collectionId, $newKey, $attribute);
 
-            $updatedAttributes[] = [$relatedCollection->getId(), $this->updateAttributeMeta($relatedCollection->getId(), $oldTwoWayKey, function (Document $twoWayAttribute) use ($actualNewKey, $actualNewTwoWayKey, $actualTwoWay, $actualOnDelete) {
-                /** @var array<string, mixed> $options */
-                $options = $twoWayAttribute->getAttribute('options', []);
-                $options['twoWayKey'] = $actualNewKey;
-                $options['twoWay'] = $actualTwoWay;
-                $options['onDelete'] = $actualOnDelete->value;
+            $this->replaceAttribute($relatedCollectionId, $oldTwoWayKey, $inverseAfter);
+            $updatedAttributes[] = [$relatedCollectionId, $inverseAfter];
+            $restores[] = fn () => $this->replaceAttribute($relatedCollectionId, $newTwoWayKey, $inverse);
 
-                $twoWayAttribute->setAttribute(Document::ID, $actualNewTwoWayKey);
-                $twoWayAttribute->setAttribute('key', $actualNewTwoWayKey);
-                $twoWayAttribute->setAttribute('options', $options);
-            }, triggerEvent: false)];
-
-            if ($oldRelationship->getType() === RelationType::ManyToMany) {
-                $junction = $this->getJunctionCollection($collection, $relatedCollection, $oldRelationship->getSide());
-
-                $updatedAttributes[] = [$junction, $this->updateAttributeMeta($junction, $id, function ($junctionAttribute) use ($actualNewKey) {
-                    $junctionAttribute->setAttribute(Document::ID, $actualNewKey);
-                    $junctionAttribute->setAttribute('key', $actualNewKey);
-                }, triggerEvent: false)];
-                $updatedAttributes[] = [$junction, $this->updateAttributeMeta($junction, $oldTwoWayKey, function ($junctionAttribute) use ($actualNewTwoWayKey) {
-                    $junctionAttribute->setAttribute(Document::ID, $actualNewTwoWayKey);
-                    $junctionAttribute->setAttribute('key', $actualNewTwoWayKey);
-                }, triggerEvent: false)];
+            if ($junction !== null) {
+                $updatedAttributes[] = [$junction, $this->renameStoredAttribute($junction, $key, $newKey)];
+                $restores[] = fn () => $this->renameStoredAttribute($junction, $newKey, $key);
+                $updatedAttributes[] = [$junction, $this->renameStoredAttribute($junction, $oldTwoWayKey, $newTwoWayKey)];
+                $restores[] = fn () => $this->renameStoredAttribute($junction, $newTwoWayKey, $oldTwoWayKey);
 
                 $this->withRetries(fn () => $this->purgeCachedCollection($junction));
             }
         } catch (Throwable $error) {
-            $restores = [
-                fn () => $this->updateAttributeMeta($collection->getId(), $actualNewKey, function ($attribute) use ($id, $oldRelationship) {
-                    $attribute->setAttribute(Document::ID, $id);
-                    $attribute->setAttribute('key', $id);
-                    $attribute->setAttribute('options', $oldRelationship->toDocument()->getArrayCopy());
-                }, triggerEvent: false),
-                fn () => $this->updateAttributeMeta($relatedCollection->getId(), $actualNewTwoWayKey, function (Document $twoWayAttribute) use ($oldTwoWayKey, $id, $oldRelationship) {
-                    /** @var array<string, mixed> $options */
-                    $options = $twoWayAttribute->getAttribute('options', []);
-                    $options['twoWayKey'] = $id;
-                    $options['twoWay'] = $oldRelationship->isTwoWay();
-                    $options['onDelete'] = $oldRelationship->getOnDelete()->value;
-                    $twoWayAttribute->setAttribute(Document::ID, $oldTwoWayKey);
-                    $twoWayAttribute->setAttribute('key', $oldTwoWayKey);
-                    $twoWayAttribute->setAttribute('options', $options);
-                }, triggerEvent: false),
-                fn () => $this->updateAttributeMeta($this->getJunctionCollection($collection, $relatedCollection, $oldRelationship->getSide()), $actualNewKey, function ($junctionAttribute) use ($id) {
-                    $junctionAttribute->setAttribute(Document::ID, $id);
-                    $junctionAttribute->setAttribute('key', $id);
-                }, triggerEvent: false),
-                fn () => $this->updateAttributeMeta($this->getJunctionCollection($collection, $relatedCollection, $oldRelationship->getSide()), $actualNewTwoWayKey, function ($junctionAttribute) use ($oldTwoWayKey) {
-                    $junctionAttribute->setAttribute(Document::ID, $oldTwoWayKey);
-                    $junctionAttribute->setAttribute('key', $oldTwoWayKey);
-                }, triggerEvent: false),
-            ];
-            foreach (\array_slice($restores, 0, \count($updatedAttributes)) as $restore) {
-                try {
-                    $restore();
-                } catch (Throwable) {
-                    // Best effort
-                }
+            self::bestEffort($restores);
+
+            if ($adapterUpdated) {
+                self::bestEffort([fn () => $adapter->updateRelationship(
+                    $collectionId,
+                    $renamed,
+                    $side,
+                    new RelationshipUpdate(key: $key, twoWayKey: $oldTwoWayKey, twoWay: $updated->twoWay),
+                )]);
             }
 
-            if ($adapterUpdated && $this->adapterHasFeature(Feature\Relationships::class)) {
-                try {
-                    $renamed = new Relationship(
-                        collection: $collection->getId(),
-                        relatedCollection: $relatedCollection->getId(),
-                        type: $oldRelationship->getType(),
-                        twoWay: $actualTwoWay,
-                        key: $actualNewKey,
-                        twoWayKey: $actualNewTwoWayKey,
-                        onDelete: $actualOnDelete,
-                        side: $oldRelationship->getSide(),
-                    );
-                    $this->adapter->updateRelationship(
-                        $renamed,
-                        $id,
-                        $oldTwoWayKey
-                    );
-                } catch (Throwable) {
-                    // Ignore
-                }
-            }
             throw $error;
         }
-
-        $renameIndex = function (string $collection, string $key, string $newKey) {
-            $this->updateIndexMeta(
-                $collection,
-                '_index_'.$key,
-                function ($index) use ($newKey) {
-                    $index->setAttribute('attributes', [$newKey]);
-                }
-            );
-            $this->silent(
-                fn () => $this->renameIndex($collection, '_index_'.$key, '_index_'.$newKey)
-            );
-        };
 
         $indexRenamesCompleted = [];
 
         try {
-            switch ($oldRelationship->getType()) {
-                case RelationType::OneToOne:
-                    if ($id !== $actualNewKey) {
-                        $renameIndex($collection->getId(), $id, $actualNewKey);
-                        $indexRenamesCompleted[] = [$collection->getId(), $actualNewKey, $id];
-                    }
-                    if ($actualTwoWay && $oldTwoWayKey !== $actualNewTwoWayKey) {
-                        $renameIndex($relatedCollection->getId(), $oldTwoWayKey, $actualNewTwoWayKey);
-                        $indexRenamesCompleted[] = [$relatedCollection->getId(), $actualNewTwoWayKey, $oldTwoWayKey];
-                    }
-                    break;
-                case RelationType::OneToMany:
-                    if ($oldRelationship->getSide() === RelationSide::Parent) {
-                        if ($oldTwoWayKey !== $actualNewTwoWayKey) {
-                            $renameIndex($relatedCollection->getId(), $oldTwoWayKey, $actualNewTwoWayKey);
-                            $indexRenamesCompleted[] = [$relatedCollection->getId(), $actualNewTwoWayKey, $oldTwoWayKey];
-                        }
-                    } else {
-                        if ($id !== $actualNewKey) {
-                            $renameIndex($collection->getId(), $id, $actualNewKey);
-                            $indexRenamesCompleted[] = [$collection->getId(), $actualNewKey, $id];
-                        }
-                    }
-                    break;
-                case RelationType::ManyToOne:
-                    if ($oldRelationship->getSide() === RelationSide::Parent) {
-                        if ($id !== $actualNewKey) {
-                            $renameIndex($collection->getId(), $id, $actualNewKey);
-                            $indexRenamesCompleted[] = [$collection->getId(), $actualNewKey, $id];
-                        }
-                    } else {
-                        if ($oldTwoWayKey !== $actualNewTwoWayKey) {
-                            $renameIndex($relatedCollection->getId(), $oldTwoWayKey, $actualNewTwoWayKey);
-                            $indexRenamesCompleted[] = [$relatedCollection->getId(), $actualNewTwoWayKey, $oldTwoWayKey];
-                        }
-                    }
-                    break;
-                case RelationType::ManyToMany:
-                    $junction = $this->getJunctionCollection($collection, $relatedCollection, $oldRelationship->getSide());
-
-                    if ($id !== $actualNewKey) {
-                        $renameIndex($junction, $id, $actualNewKey);
-                        $indexRenamesCompleted[] = [$junction, $actualNewKey, $id];
-                    }
-                    if ($oldTwoWayKey !== $actualNewTwoWayKey) {
-                        $renameIndex($junction, $oldTwoWayKey, $actualNewTwoWayKey);
-                        $indexRenamesCompleted[] = [$junction, $actualNewTwoWayKey, $oldTwoWayKey];
-                    }
-                    break;
-                default:
-                    throw new RelationshipException('Invalid relationship type.');
+            foreach (self::relationshipIndexRenames($current->type, $side, $updated->twoWay, $collectionId, $relatedCollectionId, $junction, $key, $newKey, $oldTwoWayKey, $newTwoWayKey) as [$indexedCollection, $from, $to]) {
+                $this->renameRelationshipIndex($indexedCollection, $from, $to);
+                $indexRenamesCompleted[] = [$indexedCollection, $to, $from];
             }
         } catch (Throwable $error) {
-            if ($adapterUpdated && $this->adapterHasFeature(Feature\Relationships::class)) {
-                try {
-                    $renamed = new Relationship(
-                        collection: $collection->getId(),
-                        relatedCollection: $relatedCollection->getId(),
-                        type: $oldRelationship->getType(),
-                        twoWay: $oldRelationship->isTwoWay(),
-                        key: $actualNewKey,
-                        twoWayKey: $actualNewTwoWayKey,
-                        onDelete: $oldRelationship->getOnDelete(),
-                        side: $oldRelationship->getSide(),
-                    );
-                    $this->adapter->updateRelationship(
-                        $renamed,
-                        $id,
-                        $oldTwoWayKey
-                    );
-                } catch (Throwable) {
-                    // Best effort
-                }
+            if ($adapterUpdated) {
+                self::bestEffort([fn () => $adapter->updateRelationship(
+                    $collectionId,
+                    $renamed,
+                    $side,
+                    new RelationshipUpdate(key: $key, twoWayKey: $oldTwoWayKey, twoWay: $current->twoWay),
+                )]);
             }
 
-            foreach (\array_reverse($indexRenamesCompleted) as [$indexedCollection, $from, $to]) {
-                try {
-                    $renameIndex($indexedCollection, $from, $to);
-                } catch (Throwable) {
-                    // Best effort
-                }
-            }
+            self::bestEffort(\array_map(
+                fn (array $rename): callable => fn () => $this->renameRelationshipIndex(...$rename),
+                \array_reverse($indexRenamesCompleted),
+            ));
+            self::bestEffort($restores);
 
-            try {
-                $this->updateAttributeMeta($collection->getId(), $actualNewKey, function ($attribute) use ($id, $oldRelationship) {
-                    $attribute->setAttribute(Document::ID, $id);
-                    $attribute->setAttribute('key', $id);
-                    $attribute->setAttribute('options', $oldRelationship->toDocument()->getArrayCopy());
-                }, triggerEvent: false);
-            } catch (Throwable) {
-                // Best effort
-            }
-
-            try {
-                $this->updateAttributeMeta($relatedCollection->getId(), $actualNewTwoWayKey, function (Document $twoWayAttribute) use ($oldTwoWayKey, $id, $oldRelationship) {
-                    /** @var array<string, mixed> $options */
-                    $options = $twoWayAttribute->getAttribute('options', []);
-                    $options['twoWayKey'] = $id;
-                    $options['twoWay'] = $oldRelationship->isTwoWay();
-                    $options['onDelete'] = $oldRelationship->getOnDelete()->value;
-                    $twoWayAttribute->setAttribute(Document::ID, $oldTwoWayKey);
-                    $twoWayAttribute->setAttribute('key', $oldTwoWayKey);
-                    $twoWayAttribute->setAttribute('options', $options);
-                }, triggerEvent: false);
-            } catch (Throwable) {
-                // Best effort
-            }
-
-            if ($oldRelationship->getType() === RelationType::ManyToMany) {
-                $junctionId = $this->getJunctionCollection($collection, $relatedCollection, $oldRelationship->getSide());
-                try {
-                    $this->updateAttributeMeta($junctionId, $actualNewKey, function ($junctionAttribute) use ($id) {
-                        $junctionAttribute->setAttribute(Document::ID, $id);
-                        $junctionAttribute->setAttribute('key', $id);
-                    }, triggerEvent: false);
-                } catch (Throwable) {
-                    // Best effort
-                }
-                try {
-                    $this->updateAttributeMeta($junctionId, $actualNewTwoWayKey, function ($junctionAttribute) use ($oldTwoWayKey) {
-                        $junctionAttribute->setAttribute(Document::ID, $oldTwoWayKey);
-                        $junctionAttribute->setAttribute('key', $oldTwoWayKey);
-                    }, triggerEvent: false);
-                } catch (Throwable) {
-                    // Best effort
-                }
-            }
-
-            throw new DatabaseException("Failed to update relationship indexes for '{$id}': ".$error->getMessage(), previous: $error);
+            throw new DatabaseException("Failed to update relationship indexes for '{$key}': ".$error->getMessage(), previous: $error);
         }
 
-        $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
-        $this->withRetries(fn () => $this->purgeCachedCollection($relatedCollection->getId()));
+        $this->withRetries(fn () => $this->purgeCachedCollection($collectionId));
+        $this->withRetries(fn () => $this->purgeCachedCollection($relatedCollectionId));
 
-        foreach ($updatedAttributes as [$updatedCollection, $attribute]) {
+        foreach ($updatedAttributes as [$updatedCollection, $updatedAttribute]) {
             $this->triggerHooks(
                 Event::AttributeUpdate,
-                $attribute->toDocument()->setAttribute(Document::COLLECTION, $updatedCollection),
+                $updatedAttribute->toDocument()->setAttribute(Document::COLLECTION, $updatedCollection),
             );
         }
 
-        return true;
+        return $renamed;
     }
 
     /**
-     * Delete a relationship attribute and its inverse from both collections.
-     *
-     * @param  string  $collection  The collection identifier
-     * @param  string  $id  The relationship attribute identifier
-     * @return bool True if the relationship was deleted successfully
+     * Delete the relationship stored under $key on $collection, from either of its sides, and its inverse.
      *
      * @throws AuthorizationException
      * @throws ConflictException
      * @throws DatabaseException
+     * @throws NotFoundException
      * @throws StructureException
      */
-    public function deleteRelationship(string $collection, string $id): bool
+    public function deleteRelationship(string $collection, string $key): void
     {
         if (! $this->adapterHasFeature(Feature\Relationships::class)) {
             throw new DatabaseException('Adapter does not support relationships');
         }
+        $adapter = $this->adapter;
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
-        /** @var array<int|string, Attribute> $attributes */
-        $attributes = $collection->getAttribute('attributes', []);
-        $relationship = null;
-
-        foreach ($attributes as $name => $attribute) {
-            if ($attribute->getKey() === $id) {
-                $relationship = $attribute;
-                unset($attributes[$name]);
-                break;
-            }
-        }
-
-        if ($relationship === null) {
+        $attribute = self::relationshipAttribute($collection->attributes(), $key);
+        $relationship = $attribute?->relationship;
+        $side = $attribute?->side;
+        if ($attribute === null || $relationship === null || $side === null) {
             throw new NotFoundException('Relationship not found');
         }
 
-        $collection->setAttribute('attributes', \array_values($attributes));
+        $relatedCollection = $this->silent(fn () => $this->getCollection($relationship->relatedCollection));
+        $twoWayKey = $relationship->twoWayKey ?? '';
 
-        $definition = Relationship::fromArray(['collection' => $collection->getId()] + $relationship->getArrayCopy());
+        $collectionAttributes = self::attributeDocuments($collection->attributes(), $key);
+        $relatedCollectionAttributes = self::attributeDocuments($relatedCollection->attributes(), $twoWayKey);
 
-        $relatedCollection = $this->silent(fn () => $this->getCollection($definition->getRelatedCollection()));
-        /** @var array<int|string, Attribute> $relatedAttributes */
-        $relatedAttributes = $relatedCollection->getAttribute('attributes', []);
-
-        $twoWayKey = $definition->getTwoWayKey();
-        foreach ($relatedAttributes as $name => $attribute) {
-            if ($attribute->getKey() === $twoWayKey) {
-                unset($relatedAttributes[$name]);
-                break;
-            }
-        }
-
-        $relatedCollection->setAttribute('attributes', \array_values($relatedAttributes));
-
-        $collectionAttributes = $collection->getAttribute('attributes');
-        $relatedCollectionAttributes = $relatedCollection->getAttribute('attributes');
-
-        // Delete indexes BEFORE dropping columns to avoid referencing non-existent columns
+        /** @var list<array{string, Index}> $deletedIndexes */
         $deletedIndexes = [];
         $deletedJunction = null;
 
-        $this->silent(function () use ($collection, $relatedCollection, $definition, $id, &$deletedIndexes, &$deletedJunction) {
-            $indexKey = '_index_'.$id;
-            $twoWayIndexKey = '_index_'.$definition->getTwoWayKey();
+        $this->silent(function () use ($collection, $relatedCollection, $relationship, $side, $key, $twoWayKey, &$deletedIndexes, &$deletedJunction) {
+            if ($relationship->type === RelationshipType::ManyToMany) {
+                $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
-            switch ($definition->getType()) {
-                case RelationType::OneToOne:
-                    if ($definition->getSide() === RelationSide::Parent) {
-                        $this->deleteIndex($collection->getId(), $indexKey);
-                        $deletedIndexes[] = ['collection' => $collection->getId(), 'key' => $indexKey, 'type' => IndexType::Unique, 'attributes' => [$id]];
-                        if ($definition->isTwoWay()) {
-                            $this->deleteIndex($relatedCollection->getId(), $twoWayIndexKey);
-                            $deletedIndexes[] = ['collection' => $relatedCollection->getId(), 'key' => $twoWayIndexKey, 'type' => IndexType::Unique, 'attributes' => [$definition->getTwoWayKey()]];
-                        }
-                    }
-                    if ($definition->getSide() === RelationSide::Child) {
-                        $this->deleteIndex($relatedCollection->getId(), $twoWayIndexKey);
-                        $deletedIndexes[] = ['collection' => $relatedCollection->getId(), 'key' => $twoWayIndexKey, 'type' => IndexType::Unique, 'attributes' => [$definition->getTwoWayKey()]];
-                        if ($definition->isTwoWay()) {
-                            $this->deleteIndex($collection->getId(), $indexKey);
-                            $deletedIndexes[] = ['collection' => $collection->getId(), 'key' => $indexKey, 'type' => IndexType::Unique, 'attributes' => [$id]];
-                        }
-                    }
-                    break;
-                case RelationType::OneToMany:
-                    if ($definition->getSide() === RelationSide::Parent) {
-                        $this->deleteIndex($relatedCollection->getId(), $twoWayIndexKey);
-                        $deletedIndexes[] = ['collection' => $relatedCollection->getId(), 'key' => $twoWayIndexKey, 'type' => IndexType::Key, 'attributes' => [$definition->getTwoWayKey()]];
-                    } else {
-                        $this->deleteIndex($collection->getId(), $indexKey);
-                        $deletedIndexes[] = ['collection' => $collection->getId(), 'key' => $indexKey, 'type' => IndexType::Key, 'attributes' => [$id]];
-                    }
-                    break;
-                case RelationType::ManyToOne:
-                    if ($definition->getSide() === RelationSide::Parent) {
-                        $this->deleteIndex($collection->getId(), $indexKey);
-                        $deletedIndexes[] = ['collection' => $collection->getId(), 'key' => $indexKey, 'type' => IndexType::Key, 'attributes' => [$id]];
-                    } else {
-                        $this->deleteIndex($relatedCollection->getId(), $twoWayIndexKey);
-                        $deletedIndexes[] = ['collection' => $relatedCollection->getId(), 'key' => $twoWayIndexKey, 'type' => IndexType::Key, 'attributes' => [$definition->getTwoWayKey()]];
-                    }
-                    break;
-                case RelationType::ManyToMany:
-                    $junction = $this->getJunctionCollection(
-                        $collection,
-                        $relatedCollection,
-                        $definition->getSide()
-                    );
+                $deletedJunction = $this->silent(fn () => $this->getDocument(self::METADATA, $junction));
+                $this->deleteDocument(self::METADATA, $junction);
 
-                    $deletedJunction = $this->silent(fn () => $this->getDocument(self::METADATA, $junction));
-                    $this->deleteDocument(self::METADATA, $junction);
-                    break;
-                default:
-                    throw new RelationshipException('Invalid relationship type.');
+                return;
+            }
+
+            foreach (self::relationshipIndexes($relationship->type, $side, $relationship->twoWay, $collection->getId(), $relatedCollection->getId(), $key, $twoWayKey) as [$indexCollection, $index]) {
+                $this->deleteIndex($indexCollection, $index->key);
+                $deletedIndexes[] = [$indexCollection, $index];
             }
         });
 
@@ -901,26 +495,16 @@ trait Relationships
         $collection->setAttribute('attributes', $collectionAttributes);
         $relatedCollection->setAttribute('attributes', $relatedCollectionAttributes);
 
-        $dropped = new Relationship(
-            collection: $collection->getId(),
-            relatedCollection: $relatedCollection->getId(),
-            type: $definition->getType(),
-            twoWay: $definition->isTwoWay(),
-            key: $id,
-            twoWayKey: $definition->getTwoWayKey(),
-            side: $definition->getSide(),
-        );
-
         $shouldRollback = false;
         try {
-            $deleted = $this->adapter->deleteRelationship($dropped);
+            $deleted = $adapter->deleteRelationship($collection->getId(), $relationship, $side);
 
             if (! $deleted) {
                 throw new DatabaseException('Failed to delete relationship');
             }
             $shouldRollback = true;
         } catch (NotFoundException) {
-            // Ignore — relationship already absent from schema
+            // The relationship is already absent from the schema.
         }
 
         try {
@@ -933,49 +517,25 @@ trait Relationships
                 });
             });
         } catch (Throwable $error) {
+            $rollbacks = [];
             if ($shouldRollback) {
-                try {
-                    $restored = new Relationship(
-                        collection: $collection->getId(),
-                        relatedCollection: $relatedCollection->getId(),
-                        type: $definition->getType(),
-                        twoWay: $definition->isTwoWay(),
-                        key: $id,
-                        twoWayKey: $definition->getTwoWayKey(),
-                        onDelete: $definition->getOnDelete(),
-                        side: RelationSide::Parent,
-                    );
-                    $this->adapter->createRelationship($restored);
-                } catch (Throwable) {
-                    // Silent rollback — best effort to restore consistency
-                }
+                $rollbacks[] = $side === RelationshipSide::Parent
+                    ? fn () => $adapter->createRelationship($collection->getId(), $relationship)
+                    : fn () => $adapter->createRelationship($relatedCollection->getId(), $relationship->inverse($collection->getId()));
             }
 
-            foreach ($deletedIndexes as $indexInfo) {
-                try {
-                    $this->createIndex(
-                        $indexInfo['collection'],
-                        new Index(
-                            key: $indexInfo['key'],
-                            type: $indexInfo['type'],
-                            attributes: $indexInfo['attributes']
-                        )
-                    );
-                } catch (Throwable) {
-                    // Silent rollback — best effort
-                }
+            foreach ($deletedIndexes as [$indexCollection, $index]) {
+                $rollbacks[] = fn () => $this->createIndex($indexCollection, $index);
             }
 
             if ($deletedJunction !== null && ! $deletedJunction->isEmpty()) {
-                try {
-                    $this->silent(fn () => $this->createDocument(self::METADATA, $deletedJunction));
-                } catch (Throwable) {
-                    // Silent rollback — best effort
-                }
+                $rollbacks[] = fn () => $this->silent(fn () => $this->createDocument(self::METADATA, $deletedJunction));
             }
 
+            self::bestEffort($rollbacks);
+
             throw new DatabaseException(
-                "Failed to persist metadata after retries for relationship deletion '{$id}': ".$error->getMessage(),
+                "Failed to persist metadata after retries for relationship deletion '{$key}': ".$error->getMessage(),
                 previous: $error
             );
         }
@@ -985,16 +545,274 @@ trait Relationships
 
         $this->triggerHooks(
             Event::AttributeDelete,
-            (clone $relationship)->setAttribute(Document::COLLECTION, $collection->getId()),
+            $attribute->toDocument()->setAttribute(Document::COLLECTION, $collection->getId()),
         );
-
-        return true;
     }
 
-    private function getJunctionCollection(Document $collection, Document $relatedCollection, RelationSide $side): string
+    private function getJunctionCollection(Document $collection, Document $relatedCollection, RelationshipSide $side): string
     {
-        return $side === RelationSide::Parent
+        return $side === RelationshipSide::Parent
             ? '_'.$collection->getSequence().'_'.$relatedCollection->getSequence()
             : '_'.$relatedCollection->getSequence().'_'.$collection->getSequence();
+    }
+
+    /**
+     * Drop what createRelationship() created for a relationship whose metadata it then had to remove.
+     */
+    private function cleanupCreatedRelationship(string $collection, Relationship $relationship, ?string $junctionCollection): void
+    {
+        try {
+            $this->cleanupRelationship($collection, $relationship);
+        } catch (Throwable $cleanupError) {
+            Console::error("Failed to cleanup relationship '{$relationship->key}': ".$cleanupError->getMessage());
+        }
+
+        if ($junctionCollection === null) {
+            return;
+        }
+
+        try {
+            $this->cleanupCollection($junctionCollection);
+        } catch (Throwable $cleanupError) {
+            Console::error("Failed to cleanup junction collection '{$junctionCollection}': ".$cleanupError->getMessage());
+        }
+    }
+
+    /**
+     * The indexes createRelationship() creates for a relationship, by the collection each is on, seen from $side.
+     *
+     * @return list<array{string, Index}>
+     */
+    private static function relationshipIndexes(
+        RelationshipType $type,
+        RelationshipSide $side,
+        bool $twoWay,
+        string $collection,
+        string $relatedCollection,
+        string $key,
+        string $twoWayKey,
+    ): array {
+        $parent = $side === RelationshipSide::Parent;
+        $own = [$collection, '_index_'.$key, $key];
+        $other = [$relatedCollection, '_index_'.$twoWayKey, $twoWayKey];
+
+        [$unique, $keyed] = match ($type) {
+            RelationshipType::OneToOne => [$twoWay ? ($parent ? [$own, $other] : [$other, $own]) : [$parent ? $own : $other], []],
+            RelationshipType::OneToMany => [[], [$parent ? $other : $own]],
+            RelationshipType::ManyToOne => [[], [$parent ? $own : $other]],
+            RelationshipType::ManyToMany => [[], []],
+        };
+
+        $indexes = [];
+        foreach ($unique as [$indexCollection, $indexKey, $indexed]) {
+            $indexes[] = [$indexCollection, Index::unique(key: $indexKey, attributes: [$indexed])];
+        }
+        foreach ($keyed as [$indexCollection, $indexKey, $indexed]) {
+            $indexes[] = [$indexCollection, Index::key(key: $indexKey, attributes: [$indexed])];
+        }
+
+        return $indexes;
+    }
+
+    /**
+     * The relationship indexes a rename of its keys renames, as [collection, from key, to key].
+     *
+     * @return list<array{string, string, string}>
+     */
+    private static function relationshipIndexRenames(
+        RelationshipType $type,
+        RelationshipSide $side,
+        bool $twoWay,
+        string $collection,
+        string $relatedCollection,
+        ?string $junction,
+        string $key,
+        string $newKey,
+        string $twoWayKey,
+        string $newTwoWayKey,
+    ): array {
+        $own = $key !== $newKey ? [[$collection, $key, $newKey]] : [];
+        $other = $twoWayKey !== $newTwoWayKey ? [[$relatedCollection, $twoWayKey, $newTwoWayKey]] : [];
+
+        return match ($type) {
+            RelationshipType::OneToOne => [...$own, ...($twoWay ? $other : [])],
+            RelationshipType::OneToMany => $side === RelationshipSide::Parent ? $other : $own,
+            RelationshipType::ManyToOne => $side === RelationshipSide::Parent ? $own : $other,
+            RelationshipType::ManyToMany => $junction === null ? [] : [
+                ...($key !== $newKey ? [[$junction, $key, $newKey]] : []),
+                ...($twoWayKey !== $newTwoWayKey ? [[$junction, $twoWayKey, $newTwoWayKey]] : []),
+            ],
+        };
+    }
+
+    /**
+     * Point the relationship index on $key at $newKey and rename it after it.
+     */
+    private function renameRelationshipIndex(string $collection, string $key, string $newKey): void
+    {
+        $definition = $this->silent(fn () => $this->getCollection($collection));
+        $indexKey = '_index_'.$key;
+
+        $indexes = $definition->indexes();
+        $found = false;
+        foreach ($indexes as $position => $index) {
+            if ($index->key === $indexKey) {
+                $indexes[$position] = Index::fromDocument($index->toDocument()->setAttribute('attributes', [$newKey]));
+                $found = true;
+                break;
+            }
+        }
+
+        if (! $found) {
+            throw new NotFoundException('Index not found');
+        }
+
+        $definition->setAttribute('indexes', \array_map(static fn (Index $index): Document => $index->toDocument(), $indexes));
+        $this->updateMetadata(
+            collection: $definition,
+            rollbackOperation: null,
+            shouldRollback: false,
+            operationDescription: "index metadata update '{$indexKey}'"
+        );
+        $this->withRetries(fn () => $this->purgeCachedCollection($collection));
+
+        $this->silent(fn () => $this->renameIndex($collection, $indexKey, '_index_'.$newKey));
+    }
+
+    /**
+     * Store $attribute in place of the attribute stored under $key on $collection.
+     *
+     * @throws NotFoundException
+     */
+    private function replaceAttribute(string $collection, string $key, Attribute $attribute): Attribute
+    {
+        $definition = $this->silent(fn () => $this->getCollection($collection));
+
+        $attributes = $definition->attributes();
+        $found = false;
+        foreach ($attributes as $position => $stored) {
+            if ($stored->key === $key) {
+                $attributes[$position] = $attribute;
+                $found = true;
+                break;
+            }
+        }
+
+        if (! $found) {
+            throw new NotFoundException('Attribute not found');
+        }
+
+        $definition->setAttribute('attributes', \array_map(static fn (Attribute $stored): Document => $stored->toDocument(), $attributes));
+        $this->updateMetadata(
+            collection: $definition,
+            rollbackOperation: null,
+            shouldRollback: false,
+            operationDescription: "attribute metadata update '{$key}'"
+        );
+        $this->withRetries(fn () => $this->purgeCachedCollection($collection));
+
+        return $attribute;
+    }
+
+    /**
+     * Rename the attribute stored under $key on $collection, a junction collection, to $newKey.
+     *
+     * @throws NotFoundException
+     */
+    private function renameStoredAttribute(string $collection, string $key, string $newKey): Attribute
+    {
+        $definition = $this->silent(fn () => $this->getCollection($collection));
+        foreach ($definition->attributes() as $stored) {
+            if ($stored->key === $key) {
+                return $this->replaceAttribute($collection, $key, $stored->apply(new AttributeUpdate(key: $newKey)));
+            }
+        }
+
+        throw new NotFoundException('Attribute not found');
+    }
+
+    /**
+     * Remove the attribute stored under $key from the collection's metadata, without writing it.
+     */
+    private function forgetAttribute(Collection $collection, string $key): void
+    {
+        $collection->setAttribute('attributes', self::attributeDocuments($collection->attributes(), $key));
+    }
+
+    /**
+     * The stored form of $attributes, the first one under $without left out.
+     *
+     * @param  list<Attribute>  $attributes
+     * @return list<Document>
+     */
+    private static function attributeDocuments(array $attributes, string $without): array
+    {
+        $documents = [];
+        $removed = false;
+        foreach ($attributes as $attribute) {
+            if (! $removed && $attribute->key === $without) {
+                $removed = true;
+
+                continue;
+            }
+            $documents[] = $attribute->toDocument();
+        }
+
+        return $documents;
+    }
+
+    /**
+     * @param  list<Attribute>  $attributes
+     */
+    private static function relationshipAttribute(array $attributes, string $key): ?Attribute
+    {
+        foreach ($attributes as $attribute) {
+            if ($attribute->key === $key) {
+                return $attribute->relationship === null ? null : $attribute;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  list<Attribute>  $attributes
+     * @return list<string>
+     */
+    private static function attributeKeys(array $attributes): array
+    {
+        return \array_map(static fn (Attribute $attribute): string => $attribute->key, $attributes);
+    }
+
+    /**
+     * Whether the engine's schema of $collection already holds a column named $key, as a rename that completed
+     * before a prior partial failure leaves it.
+     */
+    private function hasSchemaColumn(string $collection, string $key): bool
+    {
+        $filtered = \strtolower($this->adapter->filter($key));
+        foreach ($this->getSchemaAttributes($collection) as $column) {
+            if (\strtolower($column->getId()) === $filtered) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Run each step of a rollback, carrying on past a step that fails.
+     *
+     * @param  list<callable(): mixed>  $steps
+     */
+    private static function bestEffort(array $steps): void
+    {
+        foreach ($steps as $step) {
+            try {
+                $step();
+            } catch (Throwable) {
+                // A rollback step that fails leaves the rest to run.
+            }
+        }
     }
 }

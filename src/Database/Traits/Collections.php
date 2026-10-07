@@ -170,7 +170,9 @@ trait Collections
 
         $stored = $this->toCollection($stored);
 
-        $this->triggerHooks(Event::CollectionCreate, $stored);
+        if ($this->listens(Event::CollectionCreate)) {
+            $this->dispatch(new Event\Collection\Created($stored->getId(), $stored));
+        }
 
         return $stored;
     }
@@ -207,7 +209,9 @@ trait Collections
             $this->silent(fn () => $this->updateDocument(self::METADATA, $definition->getId(), $definition)),
         );
 
-        $this->triggerHooks(Event::CollectionUpdate, $updated);
+        if ($this->listens(Event::CollectionUpdate)) {
+            $this->dispatch(new Event\Collection\Updated($updated->getId(), $updated));
+        }
 
         return $updated;
     }
@@ -231,7 +235,9 @@ trait Collections
     {
         if ($collection === self::METADATA) {
             $definition = self::collectionDefinition();
-            $this->trigger(Event::CollectionRead, $definition);
+            if ($this->listens(Event::CollectionRead)) {
+                $this->dispatch(new Event\Collection\Read($definition->getId(), $definition));
+            }
 
             return $definition;
         }
@@ -252,7 +258,9 @@ trait Collections
 
         $definition = $this->toCollection($stored);
 
-        $this->trigger(Event::CollectionRead, $definition);
+        if ($this->listens(Event::CollectionRead)) {
+            $this->dispatch(new Event\Collection\Read($definition->getId(), $definition));
+        }
 
         return $definition;
     }
@@ -271,7 +279,9 @@ trait Collections
 
         $collections = \array_map($this->toCollection(...), \array_values($result));
 
-        $this->trigger(Event::CollectionList, $collections);
+        if ($this->listens(Event::CollectionList)) {
+            $this->dispatch(new Event\Collection\Listed($collections));
+        }
 
         return $collections;
     }
@@ -357,8 +367,8 @@ trait Collections
             $this->purgeCachedCollection($collection);
         }
 
-        if ($deleted) {
-            $this->triggerHooks(Event::CollectionDelete, $definition);
+        if ($deleted && $this->listens(Event::CollectionDelete)) {
+            $this->dispatch(new Event\Collection\Deleted($definition->getId(), $definition));
         }
     }
 

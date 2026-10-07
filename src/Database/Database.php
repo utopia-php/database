@@ -14,6 +14,7 @@ use Utopia\Database\Adapter\Profile;
 use Utopia\Database\Cache\Invalidator;
 use Utopia\Database\Cache\QueryCache;
 use Utopia\Database\Cache\Scope;
+use Utopia\Database\Event\Domain;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Character as CharacterException;
@@ -132,9 +133,9 @@ class Database
         UnconfirmedException::class,
     ];
 
-    public const INSERT_BATCH_SIZE = 1_000;
+    public const int BATCH_SIZE = 1_000;
 
-    public const DELETE_BATCH_SIZE = 1_000;
+    public const int CURSOR_BATCH_SIZE = 100;
 
     /**
      * @var list<string>
@@ -797,7 +798,7 @@ class Database
         }
 
         $builder = $this->adapter->builder($collection);
-        $builder->setExecutor(fn (\Utopia\Query\Builder\Statement $statement) => $this->execute($statement));
+        $builder->setExecutor($this->runStatement(...));
 
         return $builder;
     }
@@ -812,19 +813,19 @@ class Database
         }
 
         $schema = $this->adapter->schema();
-        $schema->setExecutor(fn (\Utopia\Query\Builder\Statement $statement) => $this->execute($statement));
+        $schema->setExecutor($this->runStatement(...));
 
         return $schema;
     }
 
     /**
-     * Run a statement as written, with everything from() says it bypasses; a builder runs its SELECT.
+     * Run a read as written, with everything from() says it bypasses; a builder runs its SELECT.
      *
-     * @return array<Document>|int The rows a read returns, or how many rows a write changed
+     * @return list<Document> The rows the read returns
      * @throws AuthorizationException While authorization is enabled
      * @throws DatabaseException When the adapter cannot run raw statements
      */
-    public function execute(\Utopia\Query\Builder|\Utopia\Query\Builder\Statement $query): array|int
+    public function query(\Utopia\Query\Builder|\Utopia\Query\Builder\Statement $query): array
     {
         $this->requireSkippedAuthorization();
 
@@ -832,13 +833,44 @@ class Database
             throw new DatabaseException('Raw queries are not supported by this adapter');
         }
 
-        $result = $query instanceof \Utopia\Query\Builder\Statement ? $query : $query->build();
+        $statement = self::statement($query);
 
-        if ($result->readOnly) {
-            return $this->adapter->rawQuery($result->query, $result->bindings);
+        return \array_values($this->adapter->rawQuery($statement->query, $statement->bindings));
+    }
+
+    /**
+     * Run a write as written, with everything from() says it bypasses.
+     *
+     * @return int How many rows the write changed
+     * @throws AuthorizationException While authorization is enabled
+     * @throws DatabaseException When the adapter cannot run raw statements
+     */
+    public function mutate(\Utopia\Query\Builder|\Utopia\Query\Builder\Statement $query): int
+    {
+        $this->requireSkippedAuthorization();
+
+        if (! $this->adapterHasFeature(Feature\RawQuery::class)) {
+            throw new DatabaseException('Raw queries are not supported by this adapter');
         }
 
-        return $this->adapter->rawMutation($result->query, $result->bindings);
+        $statement = self::statement($query);
+
+        return $this->adapter->rawMutation($statement->query, $statement->bindings);
+    }
+
+    /**
+     * The executor of from() and schema(): a statement the builder marks read-only is a read.
+     *
+     * @return list<Document>|int
+     */
+    private function runStatement(\Utopia\Query\Builder\Statement $statement): array|int
+    {
+        return $statement->readOnly ? $this->query($statement) : $this->mutate($statement);
+    }
+
+    private static function statement(\Utopia\Query\Builder|\Utopia\Query\Builder\Statement $query): \Utopia\Query\Builder\Statement
+    {
+        return $query instanceof \Utopia\Query\Builder\Statement ? $query : $query->build();
     }
 
     /**
@@ -873,10 +905,6 @@ class Database
      */
     public function setQueryCache(?QueryCache $queryCache): static
     {
-        $this->lifecycleHooks = \array_values(\array_filter(
-            $this->lifecycleHooks,
-            static fn (Lifecycle $hook): bool => ! $hook instanceof Invalidator,
-        ));
         $this->invalidator = null;
         $this->queryCache = $queryCache;
 
@@ -1391,6 +1419,7 @@ class Database
      * - {@see Hook\Relationships} — relationship resolution and mutation
      * - {@see Hook\Write} — row-level write interception (permissions, tenant)
      * - {@see Hook\Transform} — raw SQL transformation before execution
+     * - {@see Invalidator} — the query cache invalidation, replacing the one setQueryCache() made
      *
      * An {@see Hook\Attachable} hook is attached to this database first.
      *
@@ -1400,6 +1429,7 @@ class Database
     {
         if (
             ! $hook instanceof Lifecycle
+            && ! $hook instanceof Invalidator
             && ! $hook instanceof Hook\Decorator
             && ! $hook instanceof Relationships
             && ! $hook instanceof Hook\Write
@@ -1412,16 +1442,12 @@ class Database
             $hook->attach($this);
         }
 
+        if ($hook instanceof Invalidator) {
+            $this->invalidator = $hook;
+        }
+
         if ($hook instanceof Lifecycle) {
-            if ($hook instanceof Invalidator) {
-                $this->lifecycleHooks = \array_values(\array_filter(
-                    $this->lifecycleHooks,
-                    static fn (Lifecycle $registered): bool => ! $registered instanceof Invalidator,
-                ));
-                $this->invalidator = $hook;
-            } else {
-                $this->registerLifecycleHook($hook);
-            }
+            $this->registerLifecycleHook($hook);
         }
 
         if ($hook instanceof Hook\Decorator) {
@@ -2923,16 +2949,6 @@ class Database
     }
 
     /**
-     * Fire an event to mandatory cache invalidation and registered lifecycle hooks.
-     * Mandatory invalidation is never silenced and failures are propagated.
-     */
-    protected function trigger(Event $event, mixed $data = null): void
-    {
-        $this->invalidate($event, $data);
-        $this->triggerHooks($event, $data);
-    }
-
-    /**
      * Run mandatory cache invalidation for a lifecycle event.
      */
     protected function invalidate(Event $event, mixed $data = null): void
@@ -2977,18 +2993,26 @@ class Database
     }
 
     /**
-     * Fire suppressible user lifecycle hooks after mandatory invalidation succeeds.
+     * Whether a registered lifecycle hook handles the event, so a trigger site builds the typed event only then.
+     */
+    protected function listens(Event $event): bool
+    {
+        return $this->getActiveLifecycleHooks($event) !== [];
+    }
+
+    /**
+     * Hand a typed event to the lifecycle hooks that handle it, after mandatory invalidation succeeded.
      *
      * Whether a hook's exception reaches the caller depends on the event
      * ({@see propagatesHookFailures()}); an \Error always does.
      */
-    protected function triggerHooks(Event $event, mixed $data = null): void
+    protected function dispatch(Domain $event): void
     {
-        $propagates = $this->propagatesHookFailures($event);
+        $propagates = $this->propagatesHookFailures($event->event);
 
-        foreach ($this->getActiveLifecycleHooks($event) as $hook) {
+        foreach ($this->getActiveLifecycleHooks($event->event) as $hook) {
             try {
-                $hook->handle($event, $data);
+                $hook->handle($event);
             } catch (Exception $exception) {
                 if ($propagates) {
                     throw $exception;
@@ -2998,15 +3022,14 @@ class Database
     }
 
     /**
-     * Fire suppressible user lifecycle hooks and let the first hook exception reach the
-     * caller whatever the event's default. Document writes and purgeCachedDocument() fire
-     * Event::DocumentPurge through it; the schema changes that purge a collection fire it
-     * through triggerHooks(), isolated.
+     * Hand a typed event to the lifecycle hooks that handle it and let the first hook exception reach the caller
+     * whatever the event's default. Document writes and purgeCachedDocument() dispatch Event::DocumentPurge through
+     * it; the schema changes that purge a collection dispatch it through dispatch(), isolated.
      */
-    protected function triggerPropagatingHooks(Event $event, mixed $data = null): void
+    protected function dispatchPropagating(Domain $event): void
     {
-        foreach ($this->getActiveLifecycleHooks($event) as $hook) {
-            $hook->handle($event, $data);
+        foreach ($this->getActiveLifecycleHooks($event->event) as $hook) {
+            $hook->handle($event);
         }
     }
 
@@ -3018,22 +3041,26 @@ class Database
     {
         return match ($event) {
             Event::IndexCreate,
+            Event::IndexesCreate,
             Event::DocumentRead,
             Event::DocumentCreate,
             Event::DocumentsCreate,
             Event::DocumentUpdate,
             Event::DocumentsUpdate,
+            Event::DocumentUpsert,
             Event::DocumentsUpsert,
             Event::DocumentIncrease,
             Event::DocumentDecrease,
             Event::DocumentDelete,
             Event::DocumentsDelete,
             Event::DocumentFind,
+            Event::DocumentAggregate,
             Event::DocumentCount,
             Event::DocumentSum => true,
             Event::All,
             Event::DatabaseList,
             Event::DatabaseCreate,
+            Event::DatabaseUpdate,
             Event::DatabaseDelete,
             Event::CollectionList,
             Event::CollectionCreate,
@@ -3047,6 +3074,7 @@ class Database
             Event::AttributeCreate,
             Event::AttributesCreate,
             Event::AttributeUpdate,
+            Event::AttributeRename,
             Event::AttributeDelete,
             Event::IndexRename,
             Event::IndexDelete => false,

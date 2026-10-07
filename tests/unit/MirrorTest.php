@@ -246,13 +246,16 @@ class MirrorTest extends TestCase
         $this->assertSame('updated', $this->title($mirror));
     }
 
-    public function testTriggerInvalidatesTheMirrorQueryCacheAndDispatchesOnce(): void
+    public function testAnEventThroughTheMirrorInvalidatesTheMirrorQueryCacheAndIsDispatchedOnce(): void
     {
         $source = new Database(new Memory(), new Cache(new None()));
         $mirror = new class ($source) extends Mirror {
-            public function fire(Event $event, mixed $data): void
+            public function fire(Document $document): void
             {
-                $this->trigger($event, $data);
+                $this->invalidate(Event::DocumentUpdate, $document);
+                if ($this->listens(Event::DocumentUpdate)) {
+                    $this->dispatch(new Event\Document\Updated($document->getCollection(), $document));
+                }
             }
         };
         $this->seed($mirror);
@@ -266,7 +269,7 @@ class MirrorTest extends TestCase
         $updated = $source->getDocument(self::COLLECTION, 'first');
         $recorder = new RecordingLifecycle();
         $mirror->addHook($recorder);
-        $mirror->fire(Event::DocumentUpdate, $updated);
+        $mirror->fire($updated);
 
         $this->assertSame([Event::DocumentUpdate], $recorder->getEvents());
         $this->assertSame('updated', $this->title($mirror));
@@ -661,10 +664,26 @@ class MirrorTest extends TestCase
     }
 
     /**
+     * @return iterable<string, array{Closure(Mirror, Document): mixed, Event}>
+     */
+    public static function upsertEvents(): iterable
+    {
+        $events = [
+            'upsertDocument' => Event::DocumentUpsert,
+            'upsertDocuments' => Event::DocumentsUpsert,
+            'upsertDocuments with an increase' => Event::DocumentsUpsert,
+        ];
+
+        foreach (self::upserts() as $label => [$upsert]) {
+            yield $label => [$upsert, $events[$label]];
+        }
+    }
+
+    /**
      * @param  Closure(Mirror, Document): mixed  $upsert
      */
-    #[DataProvider('upserts')]
-    public function testUpsertThroughMirrorFiresEachEventOnce(Closure $upsert): void
+    #[DataProvider('upsertEvents')]
+    public function testUpsertThroughMirrorFiresEachEventOnce(Closure $upsert, Event $event): void
     {
         $mirror = $this->seed(new Mirror(self::sqlite(), self::sqlite()));
         $recorder = new RecordingLifecycle();
@@ -672,7 +691,7 @@ class MirrorTest extends TestCase
 
         self::inCoroutine(static fn (): mixed => $upsert($mirror, new Document([Document::ID => 'upserted', 'title' => 'upserted', 'views' => 2])));
 
-        $this->assertSame([Event::DocumentPurge, Event::DocumentsUpsert], $recorder->getEvents());
+        $this->assertSame([Event::DocumentPurge, $event], $recorder->getEvents());
     }
 
     /**
@@ -708,7 +727,7 @@ class MirrorTest extends TestCase
     {
         yield 'upsertDocument' => [
             static fn (Mirror $mirror, Document $document): mixed => $mirror->upsertDocument(self::COLLECTION, $document),
-            'upsertDocuments',
+            'upsertDocument',
         ];
         yield 'upsertDocuments' => [
             static fn (Mirror $mirror, Document $document): mixed => $mirror->upsertDocuments(self::COLLECTION, [$document]),

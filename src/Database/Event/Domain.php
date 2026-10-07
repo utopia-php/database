@@ -4,15 +4,14 @@ namespace Utopia\Database\Event;
 
 use Utopia\Database\Event;
 
-class Domain
+/**
+ * A lifecycle event. Each {@see Event} case has one final subclass carrying the typed payload of that event; it is
+ * built only when a registered lifecycle hook handles the event.
+ */
+abstract readonly class Domain
 {
-    public readonly \DateTimeImmutable $occurredAt;
-
     public function __construct(
-        public readonly string $collection,
-        public readonly Event $event,
-        ?\DateTimeImmutable $occurredAt = null,
+        public Event $event,
     ) {
-        $this->occurredAt = $occurredAt ?? new \DateTimeImmutable();
     }
 }

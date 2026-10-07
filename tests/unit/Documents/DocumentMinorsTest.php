@@ -5,8 +5,6 @@ namespace Tests\Unit\Documents;
 use PDO;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
-use Tests\Unit\Cache\CountingCache;
-use Tests\Unit\Cache\LeasableHashCache;
 use Throwable;
 use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Cache\Adapter\None;
@@ -124,16 +122,6 @@ final class DocumentMinorsTest extends TestCase
         $this->assertThrows(DatabaseException::class, null, fn (): int => $database->deleteDocuments(self::COLLECTION));
 
         $this->assertSame(1, $database->count(self::COLLECTION));
-    }
-
-    public function testPurgingANullIdTouchesNothing(): void
-    {
-        $cache = new CountingCache(new LeasableHashCache());
-        $database = $this->database(new Memory(), new Cache($cache));
-        $before = $cache->getOperations();
-
-        $this->assertTrue($database->purgeCachedDocument(self::COLLECTION, null));
-        $this->assertSame($before, $cache->getOperations());
     }
 
     public function testAWriteWhoseCacheOwnerCannotBeRegisteredIsRolledBack(): void

@@ -18,6 +18,7 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
+use Utopia\Database\Event\Domain;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Lifecycle;
@@ -347,9 +348,9 @@ final class ParallelPopulationTest extends TestCase
             {
             }
 
-            public function handle(Event $event, mixed $data): void
+            public function handle(Domain $event): void
             {
-                ($this->record)($event);
+                ($this->record)($event->event);
             }
         });
 

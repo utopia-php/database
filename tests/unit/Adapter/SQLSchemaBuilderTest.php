@@ -30,10 +30,10 @@ final class SQLSchemaBuilderTest extends TestCase
             $table->string('label', 16);
             $table->create()->execute();
 
-            $database->execute($database->from('raw_items')->set(['value' => 7, 'label' => 'seven'])->insert());
-            $database->execute($database->from('raw_items')->set(['value' => 8, 'label' => 'eight'])->insert());
+            $database->mutate($database->from('raw_items')->set(['value' => 7, 'label' => 'seven'])->insert());
+            $database->mutate($database->from('raw_items')->set(['value' => 8, 'label' => 'eight'])->insert());
 
-            return $database->execute($database->from('raw_items')->select(['value', 'label'])->filter([BaseQuery::equal('value', [7])]));
+            return $database->query($database->from('raw_items')->select(['value', 'label'])->filter([BaseQuery::equal('value', [7])]));
         });
 
         $this->assertIsArray($rows);

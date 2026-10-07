@@ -68,7 +68,13 @@ trait Indexes
             return [];
         }
 
-        return $this->storeIndexes($collection, $indexes);
+        $stored = $this->storeIndexes($collection, $indexes);
+
+        if ($this->listens(Event::IndexesCreate)) {
+            $this->dispatch(new Event\Index\BatchCreated($collection, $stored));
+        }
+
+        return $stored;
     }
 
     /**
@@ -116,10 +122,9 @@ trait Indexes
 
         $this->withRetries(fn () => $this->purgeCachedCollection($definition->getId()));
 
-        $this->triggerHooks(
-            Event::IndexRename,
-            $renamed->toDocument()->setAttribute(Document::COLLECTION, $definition->getId()),
-        );
+        if ($this->listens(Event::IndexRename)) {
+            $this->dispatch(new Event\Index\Renamed($definition->getId(), $old, $renamed));
+        }
     }
 
     /**
@@ -166,10 +171,9 @@ trait Indexes
 
         $this->withRetries(fn () => $this->purgeCachedCollection($definition->getId()));
 
-        $this->triggerHooks(
-            Event::IndexDelete,
-            $deleted->toDocument()->setAttribute(Document::COLLECTION, $definition->getId()),
-        );
+        if ($this->listens(Event::IndexDelete)) {
+            $this->dispatch(new Event\Index\Deleted($definition->getId(), $deleted));
+        }
     }
 
     /**
@@ -220,11 +224,10 @@ trait Indexes
 
         $this->withRetries(fn () => $this->purgeCachedCollection($definition->getId()));
 
-        foreach ($prepared as $index) {
-            $this->triggerHooks(
-                Event::IndexCreate,
-                $index->toDocument()->setAttribute(Document::COLLECTION, $definition->getId()),
-            );
+        if ($this->listens(Event::IndexCreate)) {
+            foreach ($prepared as $index) {
+                $this->dispatch(new Event\Index\Created($definition->getId(), $index));
+            }
         }
 
         return $prepared;

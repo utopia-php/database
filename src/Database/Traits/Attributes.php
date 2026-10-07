@@ -90,10 +90,9 @@ trait Attributes
 
         $this->purgeCollectionCaches($definition->getId());
 
-        $this->triggerHooks(
-            Event::AttributeCreate,
-            $attribute->toDocument()->setAttribute(Document::COLLECTION, $definition->getId()),
-        );
+        if ($this->listens(Event::AttributeCreate)) {
+            $this->dispatch(new Event\Attribute\Created($definition->getId(), $attribute));
+        }
 
         return $attribute;
     }
@@ -183,17 +182,15 @@ trait Attributes
 
         $this->purgeCollectionCaches($definition->getId());
 
-        $documents = \array_map(
-            static fn (Attribute $attribute): Document => $attribute->toDocument()
-                ->setAttribute(Document::COLLECTION, $definition->getId()),
-            $stored,
-        );
-
-        foreach ($documents as $document) {
-            $this->triggerHooks(Event::AttributeCreate, $document);
+        if ($this->listens(Event::AttributeCreate)) {
+            foreach ($stored as $attribute) {
+                $this->dispatch(new Event\Attribute\Created($definition->getId(), $attribute));
+            }
         }
 
-        $this->triggerHooks(Event::AttributesCreate, $documents);
+        if ($this->listens(Event::AttributesCreate)) {
+            $this->dispatch(new Event\Attribute\BatchCreated($definition->getId(), $stored));
+        }
 
         return $stored;
     }
@@ -332,15 +329,13 @@ trait Attributes
         }
         $this->withRetries(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $definition->getId()));
 
-        $this->triggerHooks(Event::DocumentPurge, new Document([
-            Document::ID => $definition->getId(),
-            Document::COLLECTION => self::METADATA,
-        ]));
+        if ($this->listens(Event::DocumentPurge)) {
+            $this->dispatch(new Event\Document\Purged(self::METADATA, $definition->getId()));
+        }
 
-        $this->triggerHooks(
-            Event::AttributeUpdate,
-            $updated->toDocument()->setAttribute(Document::COLLECTION, $definition->getId()),
-        );
+        if ($this->listens(Event::AttributeUpdate)) {
+            $this->dispatch(new Event\Attribute\Updated($definition->getId(), $updated));
+        }
 
         return $updated;
     }
@@ -433,10 +428,9 @@ trait Attributes
 
         $this->purgeCollectionCaches($definition->getId());
 
-        $this->triggerHooks(
-            Event::AttributeDelete,
-            $attribute->toDocument()->setAttribute(Document::COLLECTION, $definition->getId()),
-        );
+        if ($this->listens(Event::AttributeDelete)) {
+            $this->dispatch(new Event\Attribute\Deleted($definition->getId(), $attribute));
+        }
     }
 
     /**
@@ -500,10 +494,9 @@ trait Attributes
 
         $this->withRetries(fn () => $this->purgeCachedCollection($definition->getId()));
 
-        $this->triggerHooks(
-            Event::AttributeUpdate,
-            $renamed->toDocument()->setAttribute(Document::COLLECTION, $definition->getId()),
-        );
+        if ($this->listens(Event::AttributeRename)) {
+            $this->dispatch(new Event\Attribute\Renamed($definition->getId(), $old, $renamed));
+        }
     }
 
     /**
@@ -910,10 +903,9 @@ trait Attributes
         $this->withRetries(fn () => $this->purgeCachedCollection($collection));
         $this->withRetries(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $collection));
 
-        $this->triggerHooks(Event::DocumentPurge, new Document([
-            Document::ID => $collection,
-            Document::COLLECTION => self::METADATA,
-        ]));
+        if ($this->listens(Event::DocumentPurge)) {
+            $this->dispatch(new Event\Document\Purged(self::METADATA, $collection));
+        }
     }
 
     /**

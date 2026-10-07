@@ -5,6 +5,7 @@ namespace Tests\E2E\Adapter\Support;
 use UnexpectedValueException;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
+use Utopia\Database\Event\Domain;
 use Utopia\Database\Hook\Lifecycle;
 use Utopia\Database\Hook\Named;
 
@@ -15,11 +16,8 @@ use Utopia\Database\Hook\Named;
  */
 final class EventRecorder implements Lifecycle, Named
 {
-    /** @var list<Event> */
+    /** @var list<Domain> */
     private array $events = [];
-
-    /** @var list<mixed> */
-    private array $payloads = [];
 
     private bool $recording = true;
 
@@ -33,11 +31,10 @@ final class EventRecorder implements Lifecycle, Named
         return $this->name;
     }
 
-    public function handle(Event $event, mixed $data): void
+    public function handle(Domain $event): void
     {
         if ($this->recording) {
             $this->events[] = $event;
-            $this->payloads[] = $data;
         }
     }
 
@@ -50,41 +47,38 @@ final class EventRecorder implements Lifecycle, Named
     {
         $this->recording = false;
 
-        return $this->events;
+        return \array_map(static fn (Domain $event): Event => $event->event, $this->events);
     }
 
     /**
-     * The payloads recorded for $event so far, in the order they fired.
+     * The typed events recorded for $event so far, in the order they fired.
      *
-     * @return list<mixed>
+     * @return list<Domain>
      */
-    public function getPayloads(Event $event): array
+    public function received(Event $event): array
     {
-        $payloads = [];
-        foreach ($this->events as $index => $recorded) {
-            if ($recorded === $event) {
-                $payloads[] = $this->payloads[$index];
-            }
-        }
-
-        return $payloads;
+        return \array_values(\array_filter(
+            $this->events,
+            static fn (Domain $recorded): bool => $recorded->event === $event,
+        ));
     }
 
     /**
-     * The documents recorded for $event so far, in the order they fired.
+     * The documents the events recorded for $event so far carry, in the order they fired.
      *
      * @return list<Document>
      *
-     * @throws UnexpectedValueException When a payload recorded for $event is not a document
+     * @throws UnexpectedValueException When an event recorded for $event carries no document
      */
     public function getDocuments(Event $event): array
     {
         $documents = [];
-        foreach ($this->getPayloads($event) as $payload) {
-            if (! $payload instanceof Document) {
-                throw new UnexpectedValueException($event->value . ' recorded a ' . \get_debug_type($payload) . ', not a document');
+        foreach ($this->received($event) as $recorded) {
+            $document = \property_exists($recorded, 'document') ? $recorded->document : null;
+            if (! $document instanceof Document) {
+                throw new UnexpectedValueException($event->value.' recorded a '.$recorded::class.', which carries no document');
             }
-            $documents[] = $payload;
+            $documents[] = $document;
         }
 
         return $documents;

@@ -58,20 +58,20 @@ final class AggregateResultNamesTest extends TestCase
         $database = $this->database($native);
         $joined = $this->join($join);
 
-        $this->assertSame([['total' => $total]], $this->rows($database->find('main', [$joined, Query::sum('score', 'total')])));
-        $this->assertSame([['score' => $total]], $this->rows($database->find('main', [$joined, Query::sum('score', 'score')])));
-        $this->assertSame([['total' => $total, 'score' => $rows]], $this->rows($database->find('main', [$joined, Query::sum('score', 'total'), Query::count('*', 'score')])), 'another aggregate named like the attribute');
-        $this->assertSame([['score' => $joinedTotal]], $this->rows($database->find('main', [$joined, Query::sum('a.score', 'score')])), 'a joined attribute keeps its alias');
+        $this->assertSame([['total' => $total]], $database->aggregate('main', [$joined, Query::sum('score', 'total')]));
+        $this->assertSame([['score' => $total]], $database->aggregate('main', [$joined, Query::sum('score', 'score')]));
+        $this->assertSame([['total' => $total, 'score' => $rows]], $database->aggregate('main', [$joined, Query::sum('score', 'total'), Query::count('*', 'score')]), 'another aggregate named like the attribute');
+        $this->assertSame([['score' => $joinedTotal]], $database->aggregate('main', [$joined, Query::sum('a.score', 'score')]), 'a joined attribute keeps its alias');
     }
 
     #[DataProvider('joins')]
-    public function testUnaliasedAggregatesKeepTheNamesTheEngineGivesThem(Method $join, bool $native, int $total, int $joinedTotal, int $rows): void
+    public function testUnaliasedAggregatesComeBackUnderTheirDefaultAlias(Method $join, bool $native, int $total, int $joinedTotal, int $rows): void
     {
         $database = $this->database($native);
 
         $this->assertSame(
-            [['COUNT(*)' => $rows, 'SUM(`table_main`.`score`)' => $total, 'SUM(`a`.`score`)' => $joinedTotal]],
-            $this->rows($database->find('main', [$this->join($join), Query::count(), Query::sum('score'), Query::sum('a.score')])),
+            [['count' => $rows, 'sum_score' => $total, 'sum_a_score' => $joinedTotal]],
+            $database->aggregate('main', [$this->join($join), Query::count(), Query::sum('score'), Query::sum('a.score')]),
         );
     }
 
@@ -98,8 +98,8 @@ final class AggregateResultNamesTest extends TestCase
     {
         foreach ([false, true] as $native) {
             try {
-                $rows = $this->database($native)->find('main', $queries());
-                $this->fail(($native ? 'native' : 'emulated').': the shape was accepted and returned '.\json_encode($this->rows($rows)));
+                $rows = $this->database($native)->aggregate('main', $queries());
+                $this->fail(($native ? 'native' : 'emulated').': the shape was accepted and returned '.\json_encode($rows));
             } catch (QueryException $error) {
                 $this->assertSame($message, $error->getMessage());
             }
@@ -112,11 +112,11 @@ final class AggregateResultNamesTest extends TestCase
 
         $this->assertSame(
             [['links' => 1, 'total' => 10, 'link' => '1'], ['links' => 1, 'total' => 20, 'link' => '2']],
-            $this->rows($database->find('main', [Query::count('*', 'links'), Query::sum('score', 'total'), Query::groupBy(['link']), Query::orderAsc('link')])),
+            $database->aggregate('main', [Query::count('*', 'links'), Query::sum('score', 'total'), Query::groupBy(['link']), Query::orderAsc('link')]),
         );
         $this->assertSame(
             [['score' => 10, 'label' => 'first']],
-            $this->rows($database->find('main', [Query::join('a', 'a', [Query::on('link', 'link')]), Query::sum('score', 'score'), Query::groupBy(['a.label'])])),
+            $database->aggregate('main', [Query::join('a', 'a', [Query::on('link', 'link')]), Query::sum('score', 'score'), Query::groupBy(['a.label'])]),
         );
     }
 

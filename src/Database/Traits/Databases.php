@@ -24,7 +24,9 @@ trait Databases
 
         $this->silent(fn () => $this->createCollection(self::collectionDefinition()));
 
-        $this->trigger(Event::DatabaseCreate, $database);
+        if ($this->listens(Event::DatabaseCreate)) {
+            $this->dispatch(new Event\Database\Created($database));
+        }
 
         return true;
     }
@@ -52,7 +54,9 @@ trait Databases
     {
         $databases = $this->adapter->list();
 
-        $this->trigger(Event::DatabaseList, $databases);
+        if ($this->listens(Event::DatabaseList)) {
+            $this->dispatch(new Event\Database\Listed(\array_values($databases)));
+        }
 
         return $databases;
     }
@@ -86,6 +90,10 @@ trait Databases
             $this->setDatabase($new);
         }
 
+        if ($this->listens(Event::DatabaseUpdate)) {
+            $this->dispatch(new Event\Database\Updated($database, $new));
+        }
+
         return $updated;
     }
 
@@ -102,10 +110,9 @@ trait Databases
 
         $this->cache->flush();
 
-        $this->trigger(Event::DatabaseDelete, [
-            'name' => $database,
-            'deleted' => $deleted,
-        ]);
+        if ($this->listens(Event::DatabaseDelete)) {
+            $this->dispatch(new Event\Database\Deleted($database, $deleted));
+        }
 
         return $deleted;
     }
@@ -139,7 +146,7 @@ trait Databases
     {
         return $this->silent(fn (): array => $this->authorization->skip(function (): array {
             $ids = [];
-            foreach ($this->iterate(self::METADATA) as $definition) {
+            foreach ($this->cursor(self::METADATA, batchSize: 25) as $definition) {
                 $ids[] = $definition->getId();
             }
 

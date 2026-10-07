@@ -19,7 +19,7 @@ final class FindOneMissTest extends TestCase
         $found = $database->findOne(HookFixture::COLLECTION, [Query::equal(Document::ID, ['missing'])]);
 
         $this->assertTrue($found->isEmpty());
-        $this->assertSame([], $recorder->getPayloads(Event::DocumentFind));
+        $this->assertSame([], $recorder->received(Event::DocumentFind));
     }
 
     public function testAMissOnAnEmptyCollectionFiresNoFindEvent(): void
@@ -29,7 +29,7 @@ final class FindOneMissTest extends TestCase
         $database->addHook($recorder);
 
         $this->assertTrue($database->findOne(HookFixture::COLLECTION)->isEmpty());
-        $this->assertSame([], $recorder->getPayloads(Event::DocumentFind));
+        $this->assertSame([], $recorder->received(Event::DocumentFind));
     }
 
     public function testAHitFiresOneFindEventWithTheDocument(): void
@@ -41,10 +41,11 @@ final class FindOneMissTest extends TestCase
 
         $found = $database->findOne(HookFixture::COLLECTION, [Query::equal(Document::ID, ['second'])]);
 
-        $payloads = $recorder->getPayloads(Event::DocumentFind);
+        $events = $recorder->received(Event::DocumentFind);
         $this->assertSame('second', $found->getId());
-        $this->assertCount(1, $payloads);
-        $this->assertInstanceOf(Document::class, $payloads[0]);
-        $this->assertSame('second', $payloads[0]->getId());
+        $this->assertCount(1, $events);
+        $this->assertInstanceOf(Event\Document\Found::class, $events[0]);
+        $this->assertSame(HookFixture::COLLECTION, $events[0]->collection);
+        $this->assertSame([$found], $events[0]->documents);
     }
 }

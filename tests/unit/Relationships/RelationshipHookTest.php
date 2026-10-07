@@ -17,6 +17,7 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
+use Utopia\Database\Event\Domain;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Relationship as RelationshipException;
@@ -516,10 +517,10 @@ final class RelationshipHookTest extends TestCase
             /** @var array<string, mixed> */
             public array $options = [];
 
-            public function handle(Event $event, mixed $data): void
+            public function handle(Domain $event): void
             {
-                if ($event === Event::AttributeUpdate && $data instanceof Document) {
-                    $this->options[$data->getCollection().'.'.$data->getId()] = $data->getAttribute('options');
+                if ($event instanceof Event\Attribute\Updated) {
+                    $this->options[$event->collection.'.'.$event->attribute->key] = $event->attribute->toDocument()->getAttribute('options');
                 }
             }
         };

@@ -2,14 +2,16 @@
 
 namespace Utopia\Database\Event\Collection;
 
+use Utopia\Database\Collection;
 use Utopia\Database\Event;
 use Utopia\Database\Event\Domain;
 
-class Deleted extends Domain
+final readonly class Deleted extends Domain
 {
     public function __construct(
-        string $collection,
+        public string $collection,
+        public Collection $definition,
     ) {
-        parent::__construct($collection, Event::CollectionDelete);
+        parent::__construct(Event::CollectionDelete);
     }
 }

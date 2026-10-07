@@ -113,7 +113,7 @@ final class DottedAttributeKeyTest extends TestCase
         ]);
 
         $this->assertSame([[2, 5], [1, 5]], \array_map(
-            static fn (Document $group): array => [$group->getAttribute('people'), $group->getAttribute('score')],
+            static fn (array $group): array => [$group['people'], $group['score']],
             $groups,
         ));
 
@@ -124,7 +124,7 @@ final class DottedAttributeKeyTest extends TestCase
         ]);
 
         $this->assertCount(1, $having);
-        $this->assertSame(2, $having[0]->getAttribute('people'));
+        $this->assertSame(2, $having[0]['people']);
     }
 
     public function testSearchReadsADottedKey(): void

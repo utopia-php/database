@@ -70,8 +70,8 @@ final class AggregateMinorsTest extends TestCase
         $this->assertSame(40, $database->sum('orders', 'price', [$item]), 'a name only the join declares');
         $this->assertSame(
             [['total' => 40]],
-            $this->rows($database->find('orders', [$item, Query::sum('price', 'total')])),
-            'find() reads the same attribute',
+            $database->aggregate('orders', [$item, Query::sum('price', 'total')]),
+            'aggregate() reads the same attribute',
         );
         $this->assertSame(40, $database->sum('orders', 'it.price', [$item]), 'the qualified name');
         $this->assertSame(20, $database->sum('orders', 'price', [$item, Query::equal('it.code', ['a'])]));
@@ -129,27 +129,27 @@ final class AggregateMinorsTest extends TestCase
 
             $this->assertSame(
                 [['orders' => 2, 'name' => 'x', 'it.name' => 'apple'], ['orders' => 1, 'name' => 'y', 'it.name' => 'banana']],
-                $this->rows($database->find('orders', [$item, Query::count('*', 'orders'), Query::groupBy(['name', 'it.name']), Query::orderAsc('name')])),
+                $database->aggregate('orders', [$item, Query::count('*', 'orders'), Query::groupBy(['name', 'it.name']), Query::orderAsc('name')]),
                 $case.': the main group keeps the bare name',
             );
             $this->assertSame(
                 [['orders' => 2, 'name' => 'x', 'it.name' => 'apple'], ['orders' => 1, 'name' => 'y', 'it.name' => 'banana']],
-                $this->rows($database->find('orders', [$item, Query::count('*', 'orders'), Query::groupBy(['it.name', 'name']), Query::orderAsc('it.name')])),
+                $database->aggregate('orders', [$item, Query::count('*', 'orders'), Query::groupBy(['it.name', 'name']), Query::orderAsc('it.name')]),
                 $case.': in either order',
             );
             $this->assertSame(
                 [['orders' => 1, 'name' => 'y', 'it.name' => 'banana']],
-                $this->rows($database->find('orders', [$item, Query::count('*', 'orders'), Query::groupBy(['name', 'it.name']), Query::having([Query::equal('it.name', ['banana'])])])),
+                $database->aggregate('orders', [$item, Query::count('*', 'orders'), Query::groupBy(['name', 'it.name']), Query::having([Query::equal('it.name', ['banana'])])]),
                 $case.': a having on the qualified group',
             );
             $this->assertSame(
                 [['orders' => 2, 'name' => 'apple'], ['orders' => 1, 'name' => 'banana']],
-                $this->rows($database->find('orders', [$item, Query::count('*', 'orders'), Query::groupBy(['it.name']), Query::orderAsc('it.name')])),
+                $database->aggregate('orders', [$item, Query::count('*', 'orders'), Query::groupBy(['it.name']), Query::orderAsc('it.name')]),
                 $case.': a joined group alone keeps its bare name',
             );
             $this->assertSame(
                 [['orders' => 2, 'code' => 'a'], ['orders' => 1, 'code' => 'b']],
-                $this->rows($database->find('orders', [$item, Query::count('*', 'orders'), Query::groupBy(['code']), Query::orderAsc('it.code')])),
+                $database->aggregate('orders', [$item, Query::count('*', 'orders'), Query::groupBy(['code']), Query::orderAsc('it.code')]),
                 $case.': a bare name only the join declares',
             );
         }
@@ -157,12 +157,12 @@ final class AggregateMinorsTest extends TestCase
         $database = $this->database();
         $this->assertSame(
             [['orders' => 2, 'it.code' => 'a', 'ex.code' => 'a']],
-            $this->rows($database->find('orders', [
+            $database->aggregate('orders', [
                 Query::join('items', 'it', [Query::on('item', 'code')]),
                 Query::join('extras', 'ex', [Query::on('item', 'code')]),
                 Query::count('*', 'orders'),
                 Query::groupBy(['it.code', 'ex.code']),
-            ])),
+            ]),
             'two joined groups of one name are both qualified',
         );
     }
@@ -220,15 +220,6 @@ final class AggregateMinorsTest extends TestCase
         ));
 
         return [$rows, $sql];
-    }
-
-    /**
-     * @param  array<Document>  $documents
-     * @return list<array<string, mixed>>
-     */
-    private function rows(array $documents): array
-    {
-        return \array_values(\array_map(static fn (Document $document): array => $document->getArrayCopy(), $documents));
     }
 
     /**

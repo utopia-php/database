@@ -12,6 +12,7 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
+use Utopia\Database\Event\Domain;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -116,10 +117,10 @@ final class QueriesValidatorTest extends TestCase
     {
         $database = $this->database();
         $database->addHook(new class () implements Lifecycle {
-            public function handle(Event $event, mixed $data): void
+            public function handle(Domain $event): void
             {
-                if ($event === Event::CollectionRead && $data instanceof Document) {
-                    $data->setAttribute('attributes', [Attribute::integer(key: 'title')->toDocument()]);
+                if ($event instanceof Event\Collection\Read) {
+                    $event->definition->setAttribute('attributes', [Attribute::integer(key: 'title')->toDocument()]);
                 }
             }
         });

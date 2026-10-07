@@ -107,10 +107,10 @@ final class QueryBuilderAuthorizationTest extends TestCase
         foreach ([
             'the builder' => fn () => $builder->execute(),
             'a read statement' => fn () => $read->execute(),
-            'a read statement through Database::execute()' => fn () => $this->database->execute($read),
-            'the builder through Database::execute()' => fn () => $this->database->execute($builder),
+            'a read statement through Database::query()' => fn () => $this->database->query($read),
+            'the builder through Database::query()' => fn () => $this->database->query($builder),
             'a write statement' => fn () => $write->execute(),
-            'a write statement through Database::execute()' => fn () => $this->database->execute($write),
+            'a write statement through Database::mutate()' => fn () => $this->database->mutate($write),
         ] as $label => $run) {
             try {
                 $run();

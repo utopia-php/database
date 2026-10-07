@@ -71,7 +71,7 @@ final class QueryCachePurgeTest extends TestCase
         $this->assertSame(['first'], $this->ids($reader->find('posts', [Query::orderAsc('$id')])));
         $bypass->createDocument('posts', new Document(['$id' => 'second']));
 
-        $this->assertTrue($reader->purgeCachedCollection('posts'));
+        $reader->purgeCachedCollection('posts');
 
         $this->assertSame(
             ['first', 'second'],

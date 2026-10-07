@@ -15,13 +15,10 @@ final class DispatcherHookRecording
     }
 
     /**
-     * @return list<array{class-string<Domain>, string}>
+     * @return list<class-string<Domain>>
      */
-    public function summary(): array
+    public function classes(): array
     {
-        return \array_map(
-            static fn (Domain $event): array => [$event::class, $event->collection],
-            $this->events,
-        );
+        return \array_map(static fn (Domain $event): string => $event::class, $this->events);
     }
 }

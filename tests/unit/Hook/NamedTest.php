@@ -14,6 +14,7 @@ use Tests\Unit\Event\NamedRecordingLifecycle;
 use Tests\Unit\Event\RecordingLifecycle;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
+use Utopia\Database\Event\Domain;
 use Utopia\Database\Hook\Decorator;
 use Utopia\Database\Hook\Lifecycle;
 use Utopia\Database\Hook\Named;
@@ -270,7 +271,7 @@ final class NamedTest extends TestCase
             ) {
             }
 
-            public function handle(Event $event, mixed $data): void
+            public function handle(Domain $event): void
             {
                 ($this->record)($this->label);
             }
@@ -292,9 +293,9 @@ final class NamedTest extends TestCase
                 return $this->name;
             }
 
-            public function handle(Event $event, mixed $data): void
+            public function handle(Domain $event): void
             {
-                $this->hook->handle($event, $data);
+                $this->hook->handle($event);
             }
         };
     }
@@ -313,9 +314,9 @@ final class NamedTest extends TestCase
                 return $this->name;
             }
 
-            public function handle(Event $event, mixed $data): void
+            public function handle(Domain $event): void
             {
-                $this->failing->handle($event, $data);
+                $this->failing->handle($event);
             }
         };
     }

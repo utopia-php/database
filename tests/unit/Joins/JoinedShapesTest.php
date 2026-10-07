@@ -74,7 +74,7 @@ final class JoinedShapesTest extends TestCase
 
         $this->assertRefused(
             'Invalid query: Cannot select "it.*": an aggregation query can only select the attributes it groups by',
-            fn (): mixed => $database->find('orders', [$item, Query::count('*', 'orders'), Query::groupBy(['it.name']), Query::select(['it.*'])]),
+            fn (): mixed => $database->aggregate('orders', [$item, Query::count('*', 'orders'), Query::groupBy(['it.name']), Query::select(['it.*'])]),
         );
         $this->assertRefused(
             'Invalid query: Attribute not found in schema: zz',
@@ -101,12 +101,12 @@ final class JoinedShapesTest extends TestCase
             $this->assertSame(['o2', 'o1', 'o3'], $this->ids($database->find('orders', [$item, Query::orderDesc('price'), Query::orderAsc('$id')])), $case);
             $this->assertSame(
                 [['orders' => 1, 'code' => 'b'], ['orders' => 2, 'code' => 'a']],
-                $this->arrays($database->find('orders', [$item, Query::count('*', 'orders'), Query::groupBy(['code']), Query::orderDesc('code')])),
+                $database->aggregate('orders', [$item, Query::count('*', 'orders'), Query::groupBy(['code']), Query::orderDesc('code')]),
                 $case.': a group only the join declares, named bare',
             );
             $this->assertSame(
                 [['orders' => 1, 'code' => 'b'], ['orders' => 2, 'code' => 'a']],
-                $this->arrays($database->find('orders', [$item, Query::count('*', 'orders'), Query::groupBy(['it.code']), Query::orderDesc('code')])),
+                $database->aggregate('orders', [$item, Query::count('*', 'orders'), Query::groupBy(['it.code']), Query::orderDesc('code')]),
                 $case.': a group named by its alias',
             );
         }

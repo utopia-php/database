@@ -21,6 +21,7 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
+use Utopia\Database\Event\Domain;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Unconfirmed as UnconfirmedException;
 use Utopia\Database\Helpers\Permission;
@@ -222,7 +223,7 @@ final class DocumentPurgeTest extends TestCase
     {
         [$database, $recorder] = $this->seeded($database(), ['first']);
 
-        $this->assertTrue($database->purgeCachedDocument(HookFixture::COLLECTION, 'first'));
+        $database->purgeCachedDocument(HookFixture::COLLECTION, 'first');
 
         $this->assertSame([Event::DocumentPurge], $recorder->getEvents());
         $this->assertSame(['posts/first'], $this->purged($recorder));
@@ -316,9 +317,9 @@ final class DocumentPurgeTest extends TestCase
     private function purged(RecordingLifecycle $recorder): array
     {
         $purged = [];
-        foreach ($recorder->getPayloads(Event::DocumentPurge) as $payload) {
-            $this->assertInstanceOf(Document::class, $payload);
-            $purged[] = $payload->getCollection().'/'.$payload->getId();
+        foreach ($recorder->received(Event::DocumentPurge) as $event) {
+            $this->assertInstanceOf(Event\Document\Purged::class, $event);
+            $purged[] = $event->collection.'/'.$event->id;
         }
 
         return $purged;
@@ -634,7 +635,7 @@ final class DocumentPurgeTest extends TestCase
         });
 
         $this->assertSame(['posts/second'], $this->purged($recorder));
-        $this->assertSame([], $named->getPayloads(Event::DocumentPurge));
+        $this->assertSame([], $named->received(Event::DocumentPurge));
     }
 
     public function testEveryQueuedPurgeEventIsDeliveredWhenAListenerFails(): void
@@ -956,9 +957,9 @@ final class DocumentPurgeTest extends TestCase
             ) {
             }
 
-            public function handle(Event $event, mixed $data): void
+            public function handle(Domain $event): void
             {
-                if ($event === Event::DocumentPurge) {
+                if ($event->event === Event::DocumentPurge) {
                     $this->observed->append(($this->observe)());
                 }
             }

@@ -60,7 +60,7 @@ final class DocumentCacheEpochTest extends TestCase
         UncachedTwin::of($database)->updateDocument('webhooks', 'hook', new Document(['name' => 'changed']));
         $this->assertSame('original', $database->getDocument('webhooks', 'hook')->getAttribute('name'), 'A document written without this cache leaves the cached copy in place');
 
-        $this->assertTrue($database->purgeCachedCollection('webhooks'));
+        $database->purgeCachedCollection('webhooks');
 
         $this->assertSame('changed', $database->getDocument('webhooks', 'hook')->getAttribute('name'), 'purgeCachedCollection() must retire every cached document of the collection');
     }
@@ -199,7 +199,7 @@ final class DocumentCacheEpochTest extends TestCase
         $cache = new FlushDuringActivationMemory();
         $database = $this->createDatabaseWithCache($cache);
         $this->assertTrue($cache->flush());
-        $this->assertTrue($database->purgeCachedCollection('webhooks'));
+        $database->purgeCachedCollection('webhooks');
         $cache->flushAfterReading('collection:webhooks#finished');
 
         $database->deleteCollection('webhooks');
@@ -533,7 +533,7 @@ final class DocumentCacheEpochTest extends TestCase
             try {
                 $writer->withTransaction(function () use ($writer, $reader, $cache): void {
                     $this->renameDocument($writer, 'users', 'user', 'updated');
-                    $this->assertTrue($reader->purgeCachedCollection('users'));
+                    $reader->purgeCachedCollection('users');
                     $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
                     $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
                     $cache->abandonNextWrite();
@@ -559,7 +559,7 @@ final class DocumentCacheEpochTest extends TestCase
 
             $writer->withTransaction(function () use ($writer, $reader): void {
                 $this->renameDocument($writer, 'users', 'user', 'updated');
-                $this->assertTrue($reader->purgeCachedCollection('users'));
+                $reader->purgeCachedCollection('users');
                 $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
                 $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
             });

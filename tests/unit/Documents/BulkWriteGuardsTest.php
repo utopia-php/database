@@ -142,12 +142,11 @@ final class BulkWriteGuardsTest extends TestCase
         $this->assertSame(0, $database->count(self::COLLECTION));
     }
 
-    public function testAnUpsertCallbackFailureGoesToTheErrorHandlerAndTheUpsertContinues(): void
+    public function testAnUpsertCallbackFailureAbortsTheCallAfterItsBatchIsWritten(): void
     {
         $database = $this->database(new SQLite(new PDO('sqlite::memory:')));
-        $errors = [];
 
-        $count = $database->upsertDocuments(
+        $this->assertRefused(RuntimeException::class, 'the consumer refused a', fn (): int => $database->upsertDocuments(
             self::COLLECTION,
             [$this->task('a', 1), $this->task('b', 2)],
             onNext: static function (Document $document): void {
@@ -155,13 +154,8 @@ final class BulkWriteGuardsTest extends TestCase
                     throw new RuntimeException('the consumer refused a');
                 }
             },
-            onError: static function (Throwable $error) use (&$errors): void {
-                $errors[] = $error->getMessage();
-            },
-        );
+        ));
 
-        $this->assertSame(2, $count);
-        $this->assertSame(['the consumer refused a'], $errors);
         $this->assertSame(2, $database->count(self::COLLECTION));
     }
 
@@ -174,7 +168,7 @@ final class BulkWriteGuardsTest extends TestCase
         $this->assertRefused(DatabaseException::class, null, fn (): Document => $database->upsertDocument(self::COLLECTION, $this->task('a', 5)));
     }
 
-    public function testIteratingWithoutALimitPagesTwentyFiveDocumentsAtATime(): void
+    public function testTheCursorReadsPagesOfItsBatchSize(): void
     {
         /** @var list<int|null> $limits */
         $limits = [];
@@ -209,7 +203,7 @@ final class BulkWriteGuardsTest extends TestCase
         $limits = [];
 
         $seen = [];
-        foreach ($database->iterate(self::COLLECTION, [Query::orderAsc('rank')]) as $task) {
+        foreach ($database->cursor(self::COLLECTION, [Query::orderAsc('rank')], batchSize: 25) as $task) {
             $seen[] = $task->getAttribute('rank');
         }
 

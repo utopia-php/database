@@ -119,7 +119,7 @@ final class QueryValidationTest extends TestCase
 
         $this->assertInvalidQuery(
             $message,
-            fn (): mixed => $this->database->find('posts', [Query::join('users', 'author', [Query::on('owner', '$id')]), Query::count('*', 'rows'), Query::select(['author.*'])]),
+            fn (): mixed => $this->database->aggregate('posts', [Query::join('users', 'author', [Query::on('owner', '$id')]), Query::count('*', 'rows'), Query::select(['author.*'])]),
             'an aggregate next to the relationship wildcard',
         );
 
@@ -300,7 +300,7 @@ final class QueryValidationTest extends TestCase
     {
         $join = Query::join('items', 'it', [Query::on('$id', 'ownerRef')]);
 
-        $rows = $this->database->find('owners', [
+        $rows = $this->database->aggregate('owners', [
             $join,
             Query::min('name', 'first'),
             Query::max('score', 'best'),
@@ -309,13 +309,13 @@ final class QueryValidationTest extends TestCase
             Query::min('it.title', 'title'),
         ]);
         $this->assertCount(1, $rows);
-        $this->assertSame('Ann', $rows[0]->getAttribute('first'));
-        $this->assertSame(4, $rows[0]->getAttribute('best'));
-        $this->assertSame(7, $rows[0]->getAttribute('dearest'));
-        $this->assertSame('cup', $rows[0]->getAttribute('title'));
+        $this->assertSame('Ann', $rows[0]['first']);
+        $this->assertSame(4, $rows[0]['best']);
+        $this->assertSame(7, $rows[0]['dearest']);
+        $this->assertSame('cup', $rows[0]['title']);
 
-        $owners = $this->database->find('items', [Query::groupBy(['owner']), Query::count('*', 'rows'), Query::max('owner', 'last'), Query::orderAsc('owner')]);
-        $this->assertSame(['ann', 'bob'], \array_map(static fn (Document $group): mixed => $group->getAttribute('owner'), $owners), 'the side of a relationship that holds a column');
+        $owners = $this->database->aggregate('items', [Query::groupBy(['owner']), Query::count('*', 'rows'), Query::max('owner', 'last'), Query::orderAsc('owner')]);
+        $this->assertSame(['ann', 'bob'], \array_map(static fn (array $group): mixed => $group['owner'], $owners), 'the side of a relationship that holds a column');
     }
 
     public function testTheAggregateValidatorRefusesExtremaOfUnorderedTypes(): void
@@ -432,7 +432,7 @@ final class QueryValidationTest extends TestCase
         $rows = $this->database->getAuthorization()->skip(fn (): array => $this->database->rawQuery('SELECT ? AS answer', [42]));
 
         $this->assertCount(1, $rows);
-        $this->assertSame(42, $rows[0]->getAttribute('answer'));
+        $this->assertSame(42, $rows[0]['answer']);
     }
 
     /**

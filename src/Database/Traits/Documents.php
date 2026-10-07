@@ -583,7 +583,9 @@ trait Documents
 
             $document = $this->decorateDocument(Event::DocumentRead, $collection, $document);
 
-            $this->trigger(Event::DocumentRead, $document);
+            if ($this->listens(Event::DocumentRead)) {
+                $this->dispatch(new Event\Document\Read($collection->getId(), $document));
+            }
 
             if ($this->isTtlExpired($collection, $document)) {
                 return $this->newDocument($collection->getId(), []);
@@ -611,7 +613,9 @@ trait Documents
         if ($readInTransaction !== null) {
             $collectionState = $this->loadDocumentCacheState($this->getCacheBaseKeys($id)[0]);
             $document = $this->decorateDocument(Event::DocumentRead, $collection, clone $readInTransaction);
-            $this->trigger(Event::DocumentRead, $document);
+            if ($this->listens(Event::DocumentRead)) {
+                $this->dispatch(new Event\Document\Read($collection->getId(), $document));
+            }
             $this->attachCollectionCacheEpoch($document, $collectionState->value);
 
             return $document;
@@ -725,7 +729,9 @@ trait Documents
 
         $document = $this->decorateDocument(Event::DocumentRead, $collection, $document);
 
-        $this->trigger(Event::DocumentRead, $document);
+        if ($this->listens(Event::DocumentRead)) {
+            $this->dispatch(new Event\Document\Read($collection->getId(), $document));
+        }
 
         $this->attachCollectionCacheEpoch($document, $collectionState->value);
 
@@ -1053,7 +1059,9 @@ trait Documents
 
         $document = $this->decorateDocument(Event::DocumentCreate, $collection, $document);
 
-        $this->triggerHooks(Event::DocumentCreate, $document);
+        if ($this->listens(Event::DocumentCreate)) {
+            $this->dispatch(new Event\Document\Created($collection->getId(), $document));
+        }
 
         return $document;
     }
@@ -1201,13 +1209,14 @@ trait Documents
      *
      * @param  string  $collection  The collection identifier
      * @param  array<Document>  $documents  The documents to create
-     * @param  int  $batchSize  Number of documents per batch insert
-     * @param  (callable(Document): void)|null  $onNext  Callback given each created document once its batch is written
-     * @param  (callable(Throwable): void)|null  $onError  Given an error $onNext throws; the write continues. Without it the
-     *                                                    error is rethrown. Write errors are always thrown.
+     * @param  int  $batchSize  Number of documents per batch insert, at most BATCH_SIZE
+     * @param  (callable(Document $document, ?Document $previous): void)|null  $onNext  Given each created document once its
+     *                                                                                  batch is written, and null; an exception
+     *                                                                                  it throws aborts the call
      * @return int The number of documents created
      *
      * @throws AuthorizationException
+     * @throws LimitException When $batchSize is above BATCH_SIZE
      * @throws StructureException
      * @throws Throwable
      * @throws Exception
@@ -1215,10 +1224,11 @@ trait Documents
     public function createDocuments(
         string $collection,
         array $documents,
-        int $batchSize = self::INSERT_BATCH_SIZE,
+        int $batchSize = self::BATCH_SIZE,
         ?callable $onNext = null,
-        ?callable $onError = null,
     ): int {
+        $batchSize = self::batchSize($batchSize);
+
         if (
             $this->adapter->hasSharedTables()
             && ! $this->adapter->isTenantPerDocument()
@@ -1235,7 +1245,6 @@ trait Documents
             return 0;
         }
 
-        $batchSize = \min(Database::INSERT_BATCH_SIZE, \max(1, $batchSize));
         $collection = $this->silent(fn () => $this->getCollection($collection));
         if ($collection->getId() !== self::METADATA) {
             if (! $this->authorization->isValid(new Input(PermissionType::Create, $collection->getPermissionsByType(PermissionType::Create)))) {
@@ -1336,20 +1345,17 @@ trait Documents
             $batch = $this->decorateDocuments(Event::DocumentsCreate, $collection, $batch);
 
             foreach ($batch as $document) {
-                try {
-                    $onNext && $onNext($document);
-                } catch (Throwable $e) {
-                    $onError ? $onError($e) : throw $e;
+                if ($onNext !== null) {
+                    $onNext($document, null);
                 }
 
                 $modified++;
             }
         }
 
-        $this->triggerHooks(Event::DocumentsCreate, new Document([
-            Document::COLLECTION => $collection->getId(),
-            'modified' => $modified,
-        ]));
+        if ($this->listens(Event::DocumentsCreate)) {
+            $this->dispatch(new Event\Document\BatchCreated($collection->getId(), $modified));
+        }
 
         return $modified;
     }
@@ -1652,7 +1658,9 @@ trait Documents
 
         $document = $this->decorateDocument(Event::DocumentUpdate, $collection, $document);
 
-        $this->triggerHooks(Event::DocumentUpdate, $document);
+        if ($this->listens(Event::DocumentUpdate)) {
+            $this->dispatch(new Event\Document\Updated($collection->getId(), $document));
+        }
 
         return $document;
     }
@@ -1665,15 +1673,17 @@ trait Documents
      * @param  string  $collection  The collection identifier
      * @param  Document  $updates  The document containing fields to update
      * @param  array<Query>  $queries  Queries to filter documents for update
-     * @param  int  $batchSize  Number of documents per batch update
-     * @param  (callable(Document $updated, Document $old): void)|null  $onNext  Callback given each updated document once its batch is written, with a copy of the document as it was read before the update
-     * @param  (callable(Throwable): void)|null  $onError  Given an error $onNext throws; the write continues. Without it the
-     *                                                    error is rethrown. Write errors are always thrown.
+     * @param  int  $batchSize  Number of documents per batch update, at most BATCH_SIZE
+     * @param  (callable(Document $document, ?Document $previous): void)|null  $onNext  Given each updated document once its
+     *                                                                                  batch is written, and a copy of the
+     *                                                                                  stored document it updated; an exception
+     *                                                                                  it throws aborts the call
      * @return int The number of documents updated
      *
      * @throws AuthorizationException
      * @throws ConflictException
      * @throws DuplicateException
+     * @throws LimitException When $batchSize is above BATCH_SIZE
      * @throws QueryException
      * @throws StructureException
      * @throws TimeoutException
@@ -1684,17 +1694,17 @@ trait Documents
         string $collection,
         Document $updates,
         array $queries = [],
-        int $batchSize = self::INSERT_BATCH_SIZE,
+        int $batchSize = self::BATCH_SIZE,
         ?callable $onNext = null,
-        ?callable $onError = null,
     ): int {
+        $batchSize = self::batchSize($batchSize);
+
         $this->rejectJoins($queries, 'Join queries are not supported for bulk updates');
 
         if ($updates->isEmpty()) {
             return 0;
         }
 
-        $batchSize = \min(Database::INSERT_BATCH_SIZE, \max(1, $batchSize));
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
@@ -1887,10 +1897,8 @@ trait Documents
 
             foreach ($batch as $index => $doc) {
                 $doc->removeAttribute(PermissionsHook::UNCHANGED);
-                try {
-                    $onNext && $onNext($doc, $old[$index]);
-                } catch (Throwable $th) {
-                    $onError ? $onError($th) : throw $th;
+                if ($onNext !== null) {
+                    $onNext($doc, $old[$index]);
                 }
                 $modified++;
             }
@@ -1905,10 +1913,9 @@ trait Documents
             $last = \end($batch);
         }
 
-        $this->triggerHooks(Event::DocumentsUpdate, new Document([
-            Document::COLLECTION => $collection->getId(),
-            'modified' => $modified,
-        ]));
+        if ($this->listens(Event::DocumentsUpdate)) {
+            $this->dispatch(new Event\Document\BatchUpdated($collection->getId(), $modified));
+        }
 
         return $modified;
     }
@@ -1918,7 +1925,7 @@ trait Documents
      *
      * @param  string  $collection  The collection identifier
      * @param  Document  $document  The document to create or update
-     * @return Document The created or updated document
+     * @return Document The created or updated document, or the stored one when nothing changed, which fires no event
      *
      * @throws StructureException
      * @throws Throwable
@@ -1928,18 +1935,25 @@ trait Documents
         Document $document,
     ): Document {
         $result = null;
+        $created = false;
 
-        $this->upsertDocuments(
+        $this->upsert(
             $collection,
             [$document],
-            onNext: function (Document $upserted) use (&$result): void {
+            1,
+            function (Document $upserted, ?Document $previous) use (&$result, &$created): void {
                 $result = $upserted;
+                $created = $previous === null;
             },
+            null,
         );
 
         if ($result === null) {
-            // No-op (unchanged): return the current persisted doc
-            $result = $this->getDocument($collection, $document->getId());
+            return $this->getDocument($collection, $document->getId());
+        }
+
+        if ($this->listens(Event::DocumentUpsert)) {
+            $this->dispatch(new Event\Document\Upserted($collection, $result, $created));
         }
 
         return $result;
@@ -1951,13 +1965,15 @@ trait Documents
      *
      * @param  string  $collection  The collection identifier
      * @param  array<Document>  $documents  The documents to create or update
-     * @param  int  $batchSize  Number of documents per batch
-     * @param  (callable(Document $upserted, ?Document $old): void)|null  $onNext  Callback given each upserted document once its batch is written, with the stored document it updated, or null when it was created
-     * @param  (callable(Throwable): void)|null  $onError  Given an error $onNext throws; the write continues. Without it the
-     *                                                    error is rethrown. Write errors are always thrown.
+     * @param  int  $batchSize  Number of documents per batch, at most BATCH_SIZE
+     * @param  (callable(Document $document, ?Document $previous): void)|null  $onNext  Given each upserted document once its
+     *                                                                                  batch is written, and the stored document
+     *                                                                                  it updated, or null when it was created;
+     *                                                                                  an exception it throws aborts the call
      * @param  string|null  $increase  The attribute an update increases by the document's value
      * @return int The number of documents created or updated
      *
+     * @throws LimitException When $batchSize is above BATCH_SIZE
      * @throws StructureException
      * @throws Throwable
      * @throws Exception
@@ -1965,11 +1981,36 @@ trait Documents
     public function upsertDocuments(
         string $collection,
         array $documents,
-        int $batchSize = self::INSERT_BATCH_SIZE,
+        int $batchSize = self::BATCH_SIZE,
         ?callable $onNext = null,
-        ?callable $onError = null,
         ?string $increase = null,
     ): int {
+        [$created, $updated] = $this->upsert($collection, $documents, self::batchSize($batchSize), $onNext, $increase);
+
+        if ($documents !== [] && $this->listens(Event::DocumentsUpsert)) {
+            $this->dispatch(new Event\Document\BatchUpserted($collection, $created, $updated));
+        }
+
+        return $created + $updated;
+    }
+
+    /**
+     * @param  array<Document>  $documents
+     * @param  int<1, max>  $batchSize
+     * @param  (callable(Document $document, ?Document $previous): void)|null  $onNext
+     * @return array{int, int} How many documents were created and how many updated
+     *
+     * @throws StructureException
+     * @throws Throwable
+     * @throws Exception
+     */
+    private function upsert(
+        string $collection,
+        array $documents,
+        int $batchSize,
+        ?callable $onNext,
+        ?string $increase,
+    ): array {
         if (! $this->adapterHasFeature(Feature\Upserts::class)) {
             throw new DatabaseException('Adapter does not support upserts');
         }
@@ -1987,10 +2028,9 @@ trait Documents
         }
 
         if (empty($documents)) {
-            return 0;
+            return [0, 0];
         }
 
-        $batchSize = \min(Database::INSERT_BATCH_SIZE, \max(1, $batchSize));
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
         $collectionAttributes = $collection->attributes();
@@ -2269,21 +2309,13 @@ trait Documents
                     $old = $this->castAfterDocument($collection, $old);
                 }
 
-                try {
-                    $onNext && $onNext($doc, $old->isEmpty() ? null : $old);
-                } catch (Throwable $th) {
-                    $onError ? $onError($th) : throw $th;
+                if ($onNext !== null) {
+                    $onNext($doc, $old->isEmpty() ? null : $old);
                 }
             }
         }
 
-        $this->triggerHooks(Event::DocumentsUpsert, new Document([
-            Document::COLLECTION => $collection->getId(),
-            'created' => $created,
-            'updated' => $updated,
-        ]));
-
-        return $created + $updated;
+        return [$created, $updated];
     }
 
     /**
@@ -2455,7 +2487,9 @@ trait Documents
             return $document->setAttribute($attribute, $result);
         });
 
-        $this->triggerHooks(Event::DocumentIncrease, $document);
+        if ($this->listens(Event::DocumentIncrease)) {
+            $this->dispatch(new Event\Document\Increased($collection->getId(), $document, $attribute));
+        }
 
         return $document;
     }
@@ -2576,7 +2610,9 @@ trait Documents
             return $document->setAttribute($attribute, $result);
         });
 
-        $this->triggerHooks(Event::DocumentDecrease, $document);
+        if ($this->listens(Event::DocumentDecrease)) {
+            $this->dispatch(new Event\Document\Decreased($collection->getId(), $document, $attribute));
+        }
 
         return $document;
     }
@@ -2605,7 +2641,7 @@ trait Documents
         $cacheTarget = $collection->getId() === self::METADATA
             ? new Document([Document::ID => $id, Document::COLLECTION => self::METADATA])
             : $collection->getId();
-        $report = $this->getActiveLifecycleHooks(Event::DocumentUpdate) !== [];
+        $report = $this->listens(Event::DocumentUpdate);
         $changed = [];
         $deleted = $this->withMutation(Event::DocumentDelete, $cacheTarget, function () use ($collection, $id, $report, &$changed): ?Document {
             $changed = [];
@@ -2658,7 +2694,7 @@ trait Documents
             return false;
         }
 
-        $this->triggerDeleteHooks($deleted, $changed);
+        $this->dispatchDeleted($collection->getId(), $deleted, $changed);
 
         return true;
     }
@@ -2669,19 +2705,21 @@ trait Documents
      *
      * @param  list<Document>  $changed
      */
-    private function triggerDeleteHooks(Document $document, array $changed): void
+    private function dispatchDeleted(string $collection, Document $document, array $changed): void
     {
         $failure = null;
 
         try {
-            $this->triggerHooks(Event::DocumentDelete, $document);
+            if ($this->listens(Event::DocumentDelete)) {
+                $this->dispatch(new Event\Document\Deleted($collection, $document));
+            }
         } catch (Throwable $error) {
             $failure = $error;
         }
 
         foreach ($changed as $related) {
             try {
-                $this->triggerHooks(Event::DocumentUpdate, $related);
+                $this->dispatch(new Event\Document\Updated($related->getCollection(), $related));
             } catch (Throwable $error) {
                 $failure ??= $error;
             }
@@ -2699,14 +2737,16 @@ trait Documents
      *
      * @param  string  $collection  The collection identifier
      * @param  array<Query>  $queries  Queries to filter documents for deletion
-     * @param  int  $batchSize  Number of documents per batch deletion
-     * @param  (callable(Document $deleted, Document $copy): void)|null  $onNext  Callback given each deleted document once its batch is deleted, and a copy of that same document taken before the delete, not a separately stored version
-     * @param  (callable(Throwable): void)|null  $onError  Given an error $onNext throws; the write continues. Without it the
-     *                                                    error is rethrown. Write errors are always thrown.
+     * @param  int  $batchSize  Number of documents per batch deletion, at most BATCH_SIZE
+     * @param  (callable(Document $document, ?Document $previous): void)|null  $onNext  Given each deleted document once its
+     *                                                                                  batch is deleted, as both arguments: the
+     *                                                                                  stored document; an exception it throws
+     *                                                                                  aborts the call
      * @return int The number of documents deleted
      *
      * @throws AuthorizationException
      * @throws DatabaseException
+     * @throws LimitException When $batchSize is above BATCH_SIZE
      * @throws QueryException
      * @throws RestrictedException
      * @throws Throwable
@@ -2714,17 +2754,17 @@ trait Documents
     public function deleteDocuments(
         string $collection,
         array $queries = [],
-        int $batchSize = self::DELETE_BATCH_SIZE,
+        int $batchSize = self::BATCH_SIZE,
         ?callable $onNext = null,
-        ?callable $onError = null,
     ): int {
+        $batchSize = self::batchSize($batchSize);
+
         $this->rejectJoins($queries, 'Join queries are not supported for bulk deletes');
 
         if ($this->adapter->hasSharedTables() && empty($this->adapter->getTenant())) {
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
-        $batchSize = \min(Database::DELETE_BATCH_SIZE, \max(1, $batchSize));
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
@@ -2784,7 +2824,6 @@ trait Documents
                 break;
             }
 
-            $old = array_map(fn ($doc) => clone $doc, $batch);
             $sequences = [];
             $permissionIds = [];
 
@@ -2835,11 +2874,9 @@ trait Documents
                 $this->queueDocumentPurges($collection->getId(), $batch);
             });
 
-            foreach ($batch as $index => $document) {
-                try {
-                    $onNext && $onNext($document, $old[$index]);
-                } catch (Throwable $th) {
-                    $onError ? $onError($th) : throw $th;
+            foreach ($batch as $document) {
+                if ($onNext !== null) {
+                    $onNext($document, $document);
                 }
                 $modified++;
             }
@@ -2853,35 +2890,29 @@ trait Documents
             $last = \end($batch);
         }
 
-        $this->triggerHooks(Event::DocumentsDelete, new Document([
-            Document::COLLECTION => $collection->getId(),
-            'modified' => $modified,
-        ]));
+        if ($this->listens(Event::DocumentsDelete)) {
+            $this->dispatch(new Event\Document\BatchDeleted($collection->getId(), $modified));
+        }
 
         return $modified;
     }
 
     /**
      * Cleans all of the collection's documents from the cache and all related cached documents.
-     *
-     * @param  string  $collectionId  The collection identifier
-     * @return bool True if the cache was purged successfully
      */
-    public function purgeCachedCollection(string $collectionId): bool
+    public function purgeCachedCollection(string $collection): void
     {
-        if ($collectionId === self::METADATA) {
+        if ($collection === self::METADATA) {
             $this->purgeCachedDefinitions();
-            $this->queryCache?->invalidateCollection($this->getQueryCacheScope(), $collectionId);
+            $this->queryCache?->invalidateCollection($this->getQueryCacheScope(), $collection);
 
-            return true;
+            return;
         }
 
-        [$collectionKey] = $this->getCacheKeys($collectionId);
+        [$collectionKey] = $this->getCacheKeys($collection);
 
-        $purged = $this->advanceDocumentCacheEpoch($collectionKey, $this->getDefinitionCacheKey($collectionId));
-        $this->queryCache?->invalidateCollection($this->getQueryCacheScope(), $collectionId);
-
-        return $purged;
+        $this->advanceDocumentCacheEpoch($collectionKey, $this->getDefinitionCacheKey($collection));
+        $this->queryCache?->invalidateCollection($this->getQueryCacheScope(), $collection);
     }
 
     /**
@@ -2942,12 +2973,11 @@ trait Documents
      */
     private function purgeCachedDefinitions(): void
     {
-        $this->silent(fn () => $this->authorization->skip(fn () => $this->foreach(
-            self::METADATA,
-            function (Document $definition): void {
+        $this->silent(fn () => $this->authorization->skip(function (): void {
+            foreach ($this->cursor(self::METADATA, batchSize: 25) as $definition) {
                 $this->cache->purge($this->getDefinitionCacheKey($definition->getId()));
-            },
-        )));
+            }
+        }));
     }
 
     /**
@@ -3300,26 +3330,20 @@ trait Documents
      *
      * Note: Do not retry this method as it triggers events. Use purgeCachedDocumentInternal() with retry instead.
      *
-     * @param  string  $collectionId  The collection identifier
-     * @param  string|null  $id  The document identifier, or null to skip
-     * @return bool True if the cache was purged successfully
-     *
      * @throws Exception
      */
-    public function purgeCachedDocument(string $collectionId, ?string $id): bool
+    public function purgeCachedDocument(string $collection, string $id): void
     {
-        $result = $this->purgeCachedDocumentInternal($collectionId, $id);
+        $this->purgeCachedDocumentInternal($collection, $id);
 
-        if ($id !== null) {
-            $purged = new Document([
-                Document::ID => $id,
-                Document::COLLECTION => $collectionId,
-            ]);
-            $this->invalidate(Event::DocumentPurge, $purged);
-            $this->triggerPropagatingHooks(Event::DocumentPurge, $purged);
+        $this->invalidate(Event::DocumentPurge, new Document([
+            Document::ID => $id,
+            Document::COLLECTION => $collection,
+        ]));
+
+        if ($this->listens(Event::DocumentPurge)) {
+            $this->dispatchPropagating(new Event\Document\Purged($collection, $id));
         }
-
-        return $result;
     }
 
     /**
@@ -3330,25 +3354,22 @@ trait Documents
      */
     private function queueDocumentPurge(string $collectionId, string $id): void
     {
-        $document = new Document([
-            Document::ID => $id,
-            Document::COLLECTION => $collectionId,
-        ]);
-
-        if (! $this->adapter->inTransaction()) {
-            $this->triggerPropagatingHooks(Event::DocumentPurge, $document);
-
+        if (! $this->listens(Event::DocumentPurge)) {
             return;
         }
 
-        if ($this->areEventsSilenced()) {
+        $purged = new Event\Document\Purged($collectionId, $id);
+
+        if (! $this->adapter->inTransaction()) {
+            $this->dispatchPropagating($purged);
+
             return;
         }
 
         $context = $this->getEventContext();
         $tenant = $this->getTenant();
         $silenced = \array_keys($this->silencedListeners()->get());
-        $announce = fn () => $this->triggerPropagatingHooks(Event::DocumentPurge, $document);
+        $announce = fn () => $this->dispatchPropagating($purged);
 
         $this->documentPurgeEvents[$context][] = function () use ($tenant, $silenced, $announce): void {
             $this->withTenant(
@@ -3632,11 +3653,9 @@ trait Documents
      * Find Documents
      *
      * @param  string  $collection  The collection identifier
-     * @param  array<Query>  $queries  Queries for filtering, sorting, pagination, and selection
+     * @param  array<Query>  $queries  Queries for filtering, sorting, pagination, and selection; aggregates and groupBy
+     *                                 are refused (see aggregate())
      * @param  PermissionType  $forPermission  The permission type to check for authorization
-     * @return array<Document>
-     *
-     * @param  array<Query>  $queries
      * @return array<Document>
      *
      * @throws DatabaseException
@@ -3645,6 +3664,21 @@ trait Documents
      * @throws Exception
      */
     public function find(string $collection, array $queries = [], PermissionType $forPermission = PermissionType::Read): array
+    {
+        return $this->fetch($collection, $queries, $forPermission, false);
+    }
+
+    /**
+     * @param  array<Query>  $queries
+     * @param  bool  $aggregate  Whether the queries must aggregate (aggregate()) or must not (find())
+     * @return array<Document>
+     *
+     * @throws DatabaseException
+     * @throws QueryException
+     * @throws TimeoutException
+     * @throws Exception
+     */
+    private function fetch(string $collection, array $queries, PermissionType $forPermission, bool $aggregate): array
     {
         $queryCacheQueries = $queries;
 
@@ -3687,6 +3721,12 @@ trait Documents
         $cursorDirection = $grouped['cursorDirection'] ?? CursorDirection::After;
 
         $isAggregation = ! empty($aggregations) || ! empty($groupByAttrs);
+
+        if ($isAggregation !== $aggregate) {
+            throw new QueryException($aggregate
+                ? 'aggregate() needs an aggregate or groupBy query'
+                : 'find() does not run aggregate or groupBy queries: use aggregate()');
+        }
 
         if ($isAggregation && ! $this->adapter->supports(Capability::Aggregations)) {
             throw new QueryException('Aggregation queries are not supported by this adapter');
@@ -3888,8 +3928,6 @@ trait Documents
         }
 
         if ($isAggregation) {
-            $this->trigger(Event::DocumentFind, $results);
-
             return $results;
         }
 
@@ -3932,14 +3970,16 @@ trait Documents
             }
         }
 
-        $this->trigger(Event::DocumentFind, $results);
+        if ($this->listens(Event::DocumentFind)) {
+            $this->dispatch(new Event\Document\Found($collection->getId(), \array_values($results)));
+        }
 
         return $results;
     }
 
     /**
      * Execute a raw query bypassing the query builder. The statement runs as written, with no
-     * permission or tenant scope, so like from() and execute() it runs only while authorization is
+     * permission or tenant scope, so like from(), query() and mutate() it runs only while authorization is
      * disabled: inside getAuthorization()->skip().
      *
      * @param string $query The raw query string
@@ -3958,85 +3998,6 @@ trait Documents
         }
 
         return $this->adapter->rawQuery($query, $bindings);
-    }
-
-    /**
-     * Iterate documents in collection using a callback pattern.
-     *
-     * @param  string  $collection  The collection identifier
-     * @param  callable(Document): void  $callback  Callback invoked for each matching document
-     * @param  array<Query>  $queries  Queries for filtering, sorting, and pagination
-     * @param  PermissionType  $forPermission  The permission type to check for authorization
-     *
-     * @throws DatabaseException
-     */
-    public function foreach(string $collection, callable $callback, array $queries = [], PermissionType $forPermission = PermissionType::Read): void
-    {
-        foreach ($this->iterate($collection, $queries, $forPermission) as $document) {
-            $callback($document);
-        }
-    }
-
-    /**
-     * Return a generator yielding each document of the given collection that matches the given queries.
-     *
-     * @param  string  $collection  The collection identifier
-     * @param  array<Query>  $queries  Queries for filtering, sorting, and pagination
-     * @param  PermissionType  $forPermission  The permission type to check for authorization
-     * @return Generator<Document>
-     *
-     * @throws DatabaseException
-     */
-    public function iterate(string $collection, array $queries = [], PermissionType $forPermission = PermissionType::Read): Generator
-    {
-        $grouped = Query::groupForDatabase($queries);
-        $limitExists = $grouped['limit'] !== null;
-        $limit = $grouped['limit'] ?? 25;
-        $offset = $grouped['offset'];
-
-        $cursor = $grouped['cursor'];
-        $cursorDirection = $grouped['cursorDirection'];
-
-        // Cursor before is not supported
-        if ($cursor !== null && $cursorDirection === CursorDirection::Before) {
-            throw new DatabaseException('Cursor '.CursorDirection::Before->value.' not supported in this method.');
-        }
-
-        $sum = $limit;
-        $latestDocument = null;
-        $check = null;
-
-        while ($sum === $limit) {
-            $newQueries = $queries;
-            if ($latestDocument !== null) {
-                // reset offset and cursor as groupByType ignores same type query after first one is encountered
-                if ($offset !== null) {
-                    array_unshift($newQueries, Query::offset(0));
-                }
-
-                array_unshift($newQueries, Query::cursorAfter($latestDocument));
-            }
-            if (! $limitExists) {
-                $newQueries[] = Query::limit($limit);
-            }
-            $results = $this->find($collection, $newQueries, $forPermission);
-
-            if (empty($results)) {
-                return;
-            }
-
-            $sum = count($results);
-            $latestDocument = $results[array_key_last($results)];
-
-            if ($sum === $limit) {
-                $check ??= $this->nextPageCheck($collection, $queries);
-                $check($latestDocument);
-            }
-
-            foreach ($results as $document) {
-                yield $document;
-            }
-        }
     }
 
     /**
@@ -4060,7 +4021,9 @@ trait Documents
             return new Document();
         }
 
-        $this->trigger(Event::DocumentFind, $found);
+        if ($this->listens(Event::DocumentFind)) {
+            $this->dispatch(new Event\Document\Found($found->getCollection(), [$found]));
+        }
 
         return $found;
     }
@@ -4112,7 +4075,9 @@ trait Documents
         $getCount = fn () => $this->adapter->count($collection, $queries, $max);
         $count = $skipAuth ? $this->authorization->skip($getCount) : $getCount();
 
-        $this->trigger(Event::DocumentCount, $count);
+        if ($this->listens(Event::DocumentCount)) {
+            $this->dispatch(new Event\Document\Counted($collection->getId(), $count));
+        }
 
         return $count;
     }
@@ -4173,9 +4138,27 @@ trait Documents
         $getSum = fn () => $this->adapter->sum($collection, $attribute, $queries, $max);
         $sum = $skipAuth ? $this->authorization->skip($getSum) : $getSum();
 
-        $this->trigger(Event::DocumentSum, $sum);
+        if ($this->listens(Event::DocumentSum)) {
+            $this->dispatch(new Event\Document\Summed($collection->getId(), $attribute, $sum));
+        }
 
         return $sum;
+    }
+
+    /**
+     * A batch size above BATCH_SIZE is refused; one below 1 reads and writes one document at a time.
+     *
+     * @return int<1, max>
+     *
+     * @throws LimitException
+     */
+    private static function batchSize(int $batchSize): int
+    {
+        if ($batchSize > self::BATCH_SIZE) {
+            throw new LimitException('Batch size must be at most '.self::BATCH_SIZE.', got '.$batchSize);
+        }
+
+        return \max(1, $batchSize);
     }
 
     /**
@@ -4337,23 +4320,45 @@ trait Documents
      * @param  array<Query>  $queries
      * @return Generator<int, Document>
      *
-     * @throws DatabaseException
+     * @throws DatabaseException When the queries hold a cursorBefore
+     * @throws LimitException When $batchSize is above BATCH_SIZE
      */
-    public function cursor(string $collection, array $queries = [], int $batchSize = 100): Generator
-    {
+    public function cursor(
+        string $collection,
+        array $queries = [],
+        int $batchSize = self::CURSOR_BATCH_SIZE,
+        PermissionType $forPermission = PermissionType::Read,
+    ): Generator {
+        $batchSize = self::batchSize($batchSize);
         $grouped = Query::groupForDatabase($queries);
-        $remaining = $grouped['limit'];
-        $offset = $grouped['offset'];
-        $cursor = $grouped['cursor'];
 
-        if ($cursor !== null && $grouped['cursorDirection'] === CursorDirection::Before) {
+        if ($grouped['cursor'] !== null && $grouped['cursorDirection'] === CursorDirection::Before) {
             throw new DatabaseException('Cursor '.CursorDirection::Before->value.' not supported in this method.');
         }
 
-        $queries = \array_values(\array_filter(
+        $filters = \array_values(\array_filter(
             $queries,
             static fn (Query $query): bool => ! \in_array($query->getMethod(), [Method::Limit, Method::Offset, Method::CursorAfter, Method::CursorBefore], true),
         ));
+
+        return $this->pages($collection, $filters, $batchSize, $forPermission, $grouped['limit'], $grouped['offset'], $grouped['cursor']);
+    }
+
+    /**
+     * @param  array<Query>  $queries  The queries without their limit, offset and cursor
+     * @return Generator<int, Document>
+     *
+     * @throws DatabaseException
+     */
+    private function pages(
+        string $collection,
+        array $queries,
+        int $batchSize,
+        PermissionType $forPermission,
+        ?int $remaining,
+        ?int $offset,
+        ?Document $cursor,
+    ): Generator {
         $check = null;
 
         while ($remaining === null || $remaining > 0) {
@@ -4366,7 +4371,7 @@ trait Documents
                 $page[] = Query::cursorAfter($cursor);
             }
 
-            $documents = $this->find($collection, [...$page, ...$queries]);
+            $documents = $this->find($collection, [...$page, ...$queries], $forPermission);
             $last = \end($documents);
             $pages = $last !== false && \count($documents) === $size && ($remaining === null || $remaining > $size);
 
@@ -4392,14 +4397,56 @@ trait Documents
     }
 
     /**
-     * Execute aggregation queries (count, sum, avg, min, max, groupBy) and return results.
+     * Run aggregation queries (count, sum, avg, min, max, groupBy) and return one row per group. An aggregate without
+     * an alias comes back under `<method>_<attribute>`, or `<method>` for count('*').
      *
-     * @param  array<Query>  $queries  Must include at least one aggregation query (Query::count(), Query::sum(), etc.)
-     * @return array<Document>
+     * @param  array<Query>  $queries  At least one aggregate or groupBy query
+     * @return list<array<string, mixed>>
+     *
+     * @throws DatabaseException
+     * @throws QueryException When the queries hold no aggregate or groupBy
      */
     public function aggregate(string $collection, array $queries): array
     {
-        return $this->find($collection, $queries);
+        $rows = [];
+        foreach ($this->fetch($collection, self::aliasAggregates($queries), PermissionType::Read, true) as $row) {
+            $rows[] = $row->getArrayCopy();
+        }
+
+        if ($this->listens(Event::DocumentAggregate)) {
+            $this->dispatch(new Event\Document\Aggregated($collection, $rows));
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @param  array<Query>  $queries
+     * @return array<Query>
+     */
+    private static function aliasAggregates(array $queries): array
+    {
+        foreach ($queries as $index => $query) {
+            $method = $query->getMethod();
+            if (! $method->isAggregate() || self::aggregateAlias($query) !== '') {
+                continue;
+            }
+
+            $attribute = $query->getAttribute();
+            $alias = $attribute === '*' || $attribute === '' ? $method->value : $method->value.'_'.$attribute;
+            $alias = \substr((string) \preg_replace('/[^A-Za-z0-9_]/', '_', $alias), 0, Aggregate::MAX_ALIAS_LENGTH);
+
+            $queries[$index] = new Query($method, $attribute, [$alias]);
+        }
+
+        return $queries;
+    }
+
+    private static function aggregateAlias(Query $query): string
+    {
+        $alias = $query->getValue('');
+
+        return \is_string($alias) ? $alias : '';
     }
 
     /**

@@ -4,8 +4,8 @@ namespace Tests\Unit\Event;
 
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Attribute;
-use Utopia\Database\Document;
 use Utopia\Database\Event;
+use Utopia\Database\Event\Domain;
 
 final class AttributeCreateTest extends TestCase
 {
@@ -27,13 +27,14 @@ final class AttributeCreateTest extends TestCase
             Event::AttributesCreate,
         ], $recorder->getEvents());
 
-        $created = $recorder->getPayloads(Event::AttributeCreate);
+        $created = $recorder->received(Event::AttributeCreate);
         $this->assertSame(['posts/summary', 'posts/likes'], \array_map($this->describe(...), $created));
 
-        $batches = $recorder->getPayloads(Event::AttributesCreate);
+        $batches = $recorder->received(Event::AttributesCreate);
         $this->assertCount(1, $batches);
-        $this->assertIsArray($batches[0]);
-        $this->assertSame(['posts/summary', 'posts/likes'], \array_map($this->describe(...), $batches[0]));
+        $this->assertInstanceOf(Event\Attribute\BatchCreated::class, $batches[0]);
+        $this->assertSame('posts', $batches[0]->collection);
+        $this->assertSame(['summary', 'likes'], \array_map(static fn (Attribute $attribute): string => $attribute->key, $batches[0]->attributes));
     }
 
     public function testCreateAttributeFiresAttributeCreateOnce(): void
@@ -45,13 +46,13 @@ final class AttributeCreateTest extends TestCase
         $database->createAttribute(HookFixture::COLLECTION, Attribute::string(key: 'summary', size: 64));
 
         $this->assertSame([Event::DocumentPurge, Event::AttributeCreate], $recorder->getEvents());
-        $this->assertSame(['posts/summary'], \array_map($this->describe(...), $recorder->getPayloads(Event::AttributeCreate)));
+        $this->assertSame(['posts/summary'], \array_map($this->describe(...), $recorder->received(Event::AttributeCreate)));
     }
 
-    private function describe(mixed $attribute): string
+    private function describe(Domain $event): string
     {
-        $this->assertInstanceOf(Document::class, $attribute);
+        $this->assertInstanceOf(Event\Attribute\Created::class, $event);
 
-        return $attribute->getCollection().'/'.$attribute->getId();
+        return $event->collection.'/'.$event->attribute->key;
     }
 }

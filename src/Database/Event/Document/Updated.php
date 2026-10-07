@@ -6,12 +6,12 @@ use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Event\Domain;
 
-class Updated extends Domain
+final readonly class Updated extends Domain
 {
     public function __construct(
-        string $collection,
-        public readonly Document $document,
+        public string $collection,
+        public Document $document,
     ) {
-        parent::__construct($collection, Event::DocumentUpdate);
+        parent::__construct(Event::DocumentUpdate);
     }
 }

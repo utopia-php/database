@@ -270,7 +270,7 @@ final class JoinCursorTest extends TestCase
     public function testIterateOverADistinctReadReachesTheEnd(): void
     {
         $labels = [];
-        foreach ($this->database->iterate('notes', [Query::distinct(), Query::select(['label']), Query::orderAsc('label'), Query::limit(1)]) as $row) {
+        foreach ($this->database->cursor('notes', [Query::distinct(), Query::select(['label']), Query::orderAsc('label')], batchSize: 1) as $row) {
             $labels[] = $row->getAttribute('label');
             if (\count($labels) > 3) {
                 break;
@@ -338,15 +338,13 @@ final class JoinCursorTest extends TestCase
     }
 
     /**
-     * @return iterable<string, array{Method, string, list<Query>, string}>
+     * @return iterable<string, array{Method, list<Query>, string}>
      */
     public static function unpageableJoinedReads(): iterable
     {
         foreach (['inner join' => Method::Join, 'left join' => Method::LeftJoin] as $joinName => $join) {
-            foreach (['cursor', 'iterate'] as $helper) {
-                yield "{$joinName}, {$helper}, joined id not selected" => [$join, $helper, [Query::select(['name', 'n.rank'])], 'n.$id'];
-                yield "{$joinName}, {$helper}, joined order not selected" => [$join, $helper, [Query::select(['name', 'n.$id']), Query::orderAsc('n.rank')], 'n.rank'];
-            }
+            yield "{$joinName}, joined id not selected" => [$join, [Query::select(['name', 'n.rank'])], 'n.$id'];
+            yield "{$joinName}, joined order not selected" => [$join, [Query::select(['name', 'n.$id']), Query::orderAsc('n.rank')], 'n.rank'];
         }
     }
 
@@ -354,12 +352,10 @@ final class JoinCursorTest extends TestCase
      * @param  list<Query>  $queries
      */
     #[DataProvider('unpageableJoinedReads')]
-    public function testPagingAJoinedReadItCannotPageFailsBeforeYieldingARow(Method $join, string $helper, array $queries, string $missing): void
+    public function testPagingAJoinedReadItCannotPageFailsBeforeYieldingARow(Method $join, array $queries, string $missing): void
     {
         $queries = [new Query($join, 'notes', [Query::on('$id', 'author')], 'n'), ...$queries];
-        $rows = $helper === 'cursor'
-            ? $this->database->cursor('authors', $queries, 2)
-            : $this->database->iterate('authors', [...$queries, Query::limit(2)]);
+        $rows = $this->database->cursor('authors', $queries, 2);
         /** @var int $yielded */
         $yielded = 0;
 

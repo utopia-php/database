@@ -3,20 +3,17 @@
 namespace Tests\Unit\Event;
 
 use Utopia\Database\Event;
+use Utopia\Database\Event\Domain;
 use Utopia\Database\Hook\Lifecycle;
 
 class RecordingLifecycle implements Lifecycle
 {
-    /** @var list<Event> */
+    /** @var list<Domain> */
     private array $events = [];
 
-    /** @var list<mixed> */
-    private array $payloads = [];
-
-    public function handle(Event $event, mixed $data): void
+    public function handle(Domain $event): void
     {
         $this->events[] = $event;
-        $this->payloads[] = $data;
     }
 
     /**
@@ -24,21 +21,19 @@ class RecordingLifecycle implements Lifecycle
      */
     public function getEvents(): array
     {
-        return $this->events;
+        return \array_map(static fn (Domain $event): Event => $event->event, $this->events);
     }
 
     /**
-     * @return list<mixed>
+     * The typed events recorded for $event, in the order they fired.
+     *
+     * @return list<Domain>
      */
-    public function getPayloads(Event $event): array
+    public function received(Event $event): array
     {
-        $payloads = [];
-        foreach ($this->events as $index => $recorded) {
-            if ($recorded === $event) {
-                $payloads[] = $this->payloads[$index];
-            }
-        }
-
-        return $payloads;
+        return \array_values(\array_filter(
+            $this->events,
+            static fn (Domain $recorded): bool => $recorded->event === $event,
+        ));
     }
 }

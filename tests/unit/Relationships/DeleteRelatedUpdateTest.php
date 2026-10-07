@@ -100,7 +100,7 @@ final class DeleteRelatedUpdateTest extends TestCase
         $this->assertTrue($database->deleteDocument('parent', 'parent1'));
 
         $this->assertSame(['child1', 'child2'], $this->reported($recorder));
-        foreach ($recorder->getPayloads(Event::DocumentUpdate) as $related) {
+        foreach ($this->updated($recorder) as $related) {
             $this->assertInstanceOf(Document::class, $related);
             $this->assertSame('child', $related->getCollection());
             $this->assertTrue(\array_key_exists('parent', $related->getArrayCopy()));
@@ -123,7 +123,7 @@ final class DeleteRelatedUpdateTest extends TestCase
         $database->deleteDocument('child', 'child1');
 
         $this->assertSame(['parent1'], $this->reported($recorder));
-        $related = $recorder->getPayloads(Event::DocumentUpdate)[0];
+        $related = $this->updated($recorder)[0];
         $this->assertInstanceOf(Document::class, $related);
         $this->assertSame('parent', $related->getCollection());
     }
@@ -165,7 +165,7 @@ final class DeleteRelatedUpdateTest extends TestCase
             if ($listened !== null) {
                 $dispatcher = new DispatcherHook();
                 $dispatcher->on($listened, function (DocumentDeleted|DocumentUpdated $event) use (&$heard): void {
-                    $heard[] = $event instanceof DocumentUpdated ? $event->document->getId() : $event->documentId;
+                    $heard[] = $event->document->getId();
                 });
                 $database->addHook($dispatcher);
             }
@@ -428,7 +428,7 @@ final class DeleteRelatedUpdateTest extends TestCase
         $dispatcher = new DispatcherHook();
         $deleted = [];
         $dispatcher->on(DocumentDeleted::class, static function (DocumentDeleted $event) use (&$deleted): void {
-            $deleted[] = $event->documentId;
+            $deleted[] = $event->document->getId();
         });
         $database->addHook($dispatcher);
         $database->setMaxQueryValues(1);
@@ -486,7 +486,7 @@ final class DeleteRelatedUpdateTest extends TestCase
 
         $this->assertSame(3, $peers->written, 'Every child must be cleared');
         $this->assertSame(['child1', 'child2', 'child3'], $this->reported($recorder));
-        foreach ($recorder->getPayloads(Event::DocumentUpdate) as $related) {
+        foreach ($this->updated($recorder) as $related) {
             $this->assertInstanceOf(Document::class, $related);
             $this->assertNull($related->getAttribute('parent'));
         }
@@ -596,13 +596,29 @@ final class DeleteRelatedUpdateTest extends TestCase
     private function reported(RecordingLifecycle $recorder): array
     {
         $ids = [];
-        foreach ($recorder->getPayloads(Event::DocumentUpdate) as $related) {
+        foreach ($this->updated($recorder) as $related) {
             $this->assertInstanceOf(Document::class, $related);
             $ids[] = $related->getId();
         }
         \sort($ids);
 
         return $ids;
+    }
+
+    /**
+     * The documents the update events recorded carry, in the order they fired.
+     *
+     * @return list<Document>
+     */
+    private function updated(RecordingLifecycle $recorder): array
+    {
+        $documents = [];
+        foreach ($recorder->received(Event::DocumentUpdate) as $event) {
+            $this->assertInstanceOf(Event\Document\Updated::class, $event);
+            $documents[] = $event->document;
+        }
+
+        return $documents;
     }
 
     /**

@@ -61,7 +61,7 @@ final class AggregateOrderTest extends TestCase
     #[DataProvider('ungroupedOrders')]
     public function testOrderByAnUngroupedAttributeInAnAggregationQueryIsAnInvalidQuery(array $queries, string $attribute): void
     {
-        $this->assertInvalidQuery(self::ungrouped($attribute), fn (): mixed => $this->database->find('customers', $queries));
+        $this->assertInvalidQuery(self::ungrouped($attribute), fn (): mixed => $this->database->aggregate('customers', $queries));
     }
 
     public function testUngroupedOrderIsRejectedWhereverAQuerySetIsValidated(): void
@@ -101,14 +101,14 @@ final class AggregateOrderTest extends TestCase
     #[DataProvider('groupedOrders')]
     public function testOrderByAGroupOrAnAggregateReturnsTheGroupsInThatOrder(array $queries, string $attribute, array $expected): void
     {
-        $groups = $this->database->find('customers', $queries);
+        $groups = $this->database->aggregate('customers', $queries);
 
-        $this->assertSame($expected, \array_map(static fn (Document $group): mixed => $group->getAttribute($attribute), $groups));
+        $this->assertSame($expected, \array_map(static fn (array $group): mixed => $group[$attribute], $groups));
     }
 
     public function testRandomOrderNextToAnAggregateIsAccepted(): void
     {
-        $groups = $this->database->find('customers', [Query::count('*', 'rows'), Query::groupBy(['status']), Query::orderRandom()]);
+        $groups = $this->database->aggregate('customers', [Query::count('*', 'rows'), Query::groupBy(['status']), Query::orderRandom()]);
 
         $this->assertCount(2, $groups);
     }

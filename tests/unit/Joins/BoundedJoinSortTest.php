@@ -248,21 +248,16 @@ final class BoundedJoinSortTest extends TestCase
         }
 
         $keys = \array_map($this->key(...), $all);
-        foreach ([[Query::limit(2)], [Query::limit(3), Query::offset(1)]] as $page) {
-            $skipped = $page[1] ?? null;
-            $expected = $skipped === null ? $keys : \array_slice($keys, 1);
+        foreach ([[2, []], [3, [Query::offset(1)]]] as [$pageSize, $offset]) {
+            $expected = $offset === [] ? $keys : \array_slice($keys, 1);
             foreach ([$sorted, $bounding] as $database) {
-                $iterated = [];
-                foreach ($database->iterate('authors', [...$queries, ...$page]) as $document) {
-                    $iterated[] = $this->key($document);
+                foreach ([$pageSize, 2] as $batchSize) {
+                    $batched = [];
+                    foreach ($database->cursor('authors', [...$queries, ...$offset], $batchSize) as $document) {
+                        $batched[] = $this->key($document);
+                    }
+                    $this->assertSame($expected, $batched, "batches of {$batchSize}");
                 }
-                $this->assertSame($expected, $iterated);
-
-                $batched = [];
-                foreach ($database->cursor('authors', [...$queries, ...\array_slice($page, 1)], 2) as $document) {
-                    $batched[] = $this->key($document);
-                }
-                $this->assertSame($expected, $batched);
             }
         }
     }

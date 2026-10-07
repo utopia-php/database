@@ -51,15 +51,19 @@ final class DatabaseGuardsTest extends TestCase
         $database->schema();
     }
 
-    public function testExecuteIsRefusedWithoutRawQueries(): void
+    public function testQueryAndMutateAreRefusedWithoutRawQueries(): void
     {
         $database = $this->database(new Memory());
         $statement = new Statement('SELECT 1', [], readOnly: true);
 
-        $this->expectException(DatabaseException::class);
-        $this->expectExceptionMessage('Raw queries are not supported by this adapter');
-
-        $database->getAuthorization()->skip(fn () => $database->execute($statement));
+        foreach ([$database->query(...), $database->mutate(...)] as $run) {
+            try {
+                $database->getAuthorization()->skip(fn () => $run($statement));
+                $this->fail('A raw statement ran without raw query support');
+            } catch (DatabaseException $error) {
+                $this->assertSame('Raw queries are not supported by this adapter', $error->getMessage());
+            }
+        }
     }
 
     /**

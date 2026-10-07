@@ -1949,7 +1949,7 @@ trait CollectionTests
         ]));
 
         try {
-            $database->skipValidation(fn () => $database->find($collection, [Query::max('active', 'most')]));
+            $database->skipValidation(fn () => $database->aggregate($collection, [Query::max('active', 'most')]));
             $this->fail('Expected QueryException for max() over a boolean attribute');
         } catch (QueryException $e) {
             $this->assertSame('Query applies a function or operator the attribute type does not support', $e->getMessage());

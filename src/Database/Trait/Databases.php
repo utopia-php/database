@@ -1,6 +1,6 @@
 <?php
 
-namespace Utopia\Database\Traits;
+namespace Utopia\Database\Trait;
 
 use Utopia\Database\Document;
 use Utopia\Database\Event;

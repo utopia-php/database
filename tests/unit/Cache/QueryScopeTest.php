@@ -7,15 +7,15 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
-use Utopia\Database\Cache\QueryCache;
+use Utopia\Database\Cache\Query as ResultCache;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Permission;
 use Utopia\Database\Query;
+use Utopia\Database\Role;
 
-final class QueryCacheScopeTest extends TestCase
+final class QueryScopeTest extends TestCase
 {
     /**
      * @return array<string, array{Closure(Database): Database, Closure(Database): Database}>
@@ -161,7 +161,7 @@ final class QueryCacheScopeTest extends TestCase
         $scope($database);
         $database->create();
         $database->getAuthorization()->addRole(Role::any()->toString());
-        $database->setQueryCache(new QueryCache(new Cache($cache)));
+        $database->setQueryCache(new ResultCache(new Cache($cache)));
         $database->createCollection(Collection::create(id: 'posts', permissions: $this->permissions(), documentSecurity: false));
         $database->createDocument('posts', new Document(['$id' => $seed]));
 
@@ -182,7 +182,7 @@ final class QueryCacheScopeTest extends TestCase
             ->setTenant(1);
         $database->create();
         $database->getAuthorization()->addRole(Role::any()->toString());
-        $database->setQueryCache(new QueryCache(new Cache(new LeasableHashCache())));
+        $database->setQueryCache(new ResultCache(new Cache(new LeasableHashCache())));
 
         foreach ([1, 2] as $tenant) {
             $database->withTenant($tenant, function () use ($database, $tenant): void {

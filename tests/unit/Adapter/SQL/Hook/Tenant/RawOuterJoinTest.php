@@ -1,23 +1,23 @@
 <?php
 
-namespace Tests\Unit\Hook;
+namespace Tests\Unit\Adapter\SQL\Hook\Tenant;
 
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Hook\RawOuterJoinTenantFilter;
-use Utopia\Database\Hook\RawTenantFilter;
+use Utopia\Database\Adapter\SQL\Hook\Tenant\Raw;
+use Utopia\Database\Adapter\SQL\Hook\Tenant\RawOuterJoin;
 use Utopia\Query\Builder\JoinType;
 use Utopia\Query\Hook\Join\Placement;
 
-final class RawOuterJoinTenantFilterTest extends TestCase
+final class RawOuterJoinTest extends TestCase
 {
     public function testOnlyRightAndFullOuterJoinsNeedConditionsInTheirOwnOn(): void
     {
-        $tenants = new RawTenantFilter(7, 'ns_authors', false, '`');
-        $hook = new RawOuterJoinTenantFilter($tenants);
+        $tenants = new Raw(7, 'ns_authors', false, '`');
+        $hook = new RawOuterJoin($tenants);
 
         foreach ([JoinType::Inner, JoinType::Left, JoinType::Cross, JoinType::Natural] as $type) {
             $tenants->filterJoin('Book', $type);
-            $this->assertNull($hook->filterJoin('Book', $type), "A {$type->value} meets its condition where RawTenantFilter places it");
+            $this->assertNull($hook->filterJoin('Book', $type), "A {$type->value} meets its condition where Raw places it");
             $tenants->reset();
         }
 

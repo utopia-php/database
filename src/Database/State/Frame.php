@@ -10,7 +10,7 @@ namespace Utopia\Database\State;
  *
  * @template T
  */
-final class Scope
+final class Frame
 {
     /**
      * @var array<int, T> The values written by coroutines that inherited this override, by coroutine id
@@ -20,12 +20,12 @@ final class Scope
     /**
      * @param  int  $coroutine  The coroutine that opened the override or kept the write, or -1 outside coroutines
      * @param  T  $value
-     * @param  Scope<T>|null  $outer  The override it is nested in, opened by the same coroutine
+     * @param  Frame<T>|null  $outer  The override it is nested in, opened by the same coroutine
      */
     public function __construct(
         public readonly int $coroutine,
         public mixed $value,
-        public readonly ?Scope $outer,
+        public readonly ?Frame $outer,
     ) {
     }
 }

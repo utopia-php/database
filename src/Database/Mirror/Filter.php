@@ -1,6 +1,6 @@
 <?php
 
-namespace Utopia\Database\Mirroring;
+namespace Utopia\Database\Mirror;
 
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -18,7 +18,7 @@ abstract class Filter
      * @param Database|null $destination The destination database instance, or null if unavailable
      * @return void
      */
-    public function init(
+    public function initialize(
         Database $source,
         ?Database $destination,
     ): void {

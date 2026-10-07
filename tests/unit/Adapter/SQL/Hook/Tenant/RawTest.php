@@ -1,15 +1,15 @@
 <?php
 
-namespace Tests\Unit\Hook;
+namespace Tests\Unit\Adapter\SQL\Hook\Tenant;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Utopia\Database\Adapter\SQL\Hook\Tenant\Raw;
 use Utopia\Database\Exception\Query as QueryException;
-use Utopia\Database\Hook\RawTenantFilter;
 use Utopia\Query\Builder\JoinType;
 use Utopia\Query\Hook\Join\Placement;
 
-final class RawTenantFilterTest extends TestCase
+final class RawTest extends TestCase
 {
     private const string TABLE = 'appwrite.ns_authors';
 
@@ -79,7 +79,7 @@ final class RawTenantFilterTest extends TestCase
 
     public function testMetadataKeepsTheDefinitionsAPoolSharesWithoutATenant(): void
     {
-        $filter = new RawTenantFilter(self::TENANT, self::TABLE, true, '`');
+        $filter = new Raw(self::TENANT, self::TABLE, true, '`');
 
         $this->assertSame(
             '(`appwrite`.`ns_authors`._tenant IN (?) OR `appwrite`.`ns_authors`._tenant IS NULL)',
@@ -152,7 +152,7 @@ final class RawTenantFilterTest extends TestCase
 
     public function testPostgresQuotesEveryTableItNames(): void
     {
-        $filter = new RawTenantFilter(self::TENANT, 'appwrite.ns_authors', false, '"');
+        $filter = new Raw(self::TENANT, 'appwrite.ns_authors', false, '"');
         $filter->filterJoin('Book', JoinType::FullOuter);
 
         $this->assertSame('("Review"._tenant IN (?) OR "Review"."_uid" IS NULL)', $filter->filterJoin('Review', JoinType::Right)->condition->expression);
@@ -164,14 +164,14 @@ final class RawTenantFilterTest extends TestCase
 
     public function testADigitLeadingOuterJoinAliasAndDatabaseAreQuoted(): void
     {
-        $filter = new RawTenantFilter(self::TENANT, '1db.ns_authors', false, '`');
+        $filter = new Raw(self::TENANT, '1db.ns_authors', false, '`');
 
         $this->assertSame('(`9x`._tenant IN (?) OR `9x`.`_uid` IS NULL)', $filter->filterJoin('9x', JoinType::Right)->condition->expression);
         $this->assertSame('(`1db`.`ns_authors`._tenant IN (?) OR `1db`.`ns_authors`.`_uid` IS NULL)', $filter->filter('1db.ns_authors')->expression);
     }
 
-    private function filter(): RawTenantFilter
+    private function filter(): Raw
     {
-        return new RawTenantFilter(self::TENANT, self::TABLE, false, '`');
+        return new Raw(self::TENANT, self::TABLE, false, '`');
     }
 }

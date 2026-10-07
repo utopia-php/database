@@ -15,15 +15,15 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
-use Utopia\Database\Helpers\ID;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Tenancy;
+use Utopia\Database\Id;
+use Utopia\Database\Permission;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationshipDeleteAction;
 use Utopia\Database\RelationshipType;
+use Utopia\Database\Role;
 use Utopia\Database\Storage;
 
 trait PermissionTests
@@ -511,7 +511,7 @@ trait PermissionTests
         $this->getDatabase()->getAuthorization()->addRole(Role::users()->toString());
 
         $document = $database->createDocument($collection->getId(), new Document([
-            '$id' => \Utopia\Database\Helpers\ID::unique(),
+            '$id' => \Utopia\Database\Id::unique(),
             '$permissions' => [
                 Permission::read(Role::user('random')),
                 Permission::update(Role::user('random')),
@@ -593,7 +593,7 @@ trait PermissionTests
         $this->getDatabase()->getAuthorization()->addRole(Role::users()->toString());
 
         $document = $database->createDocument($collection->getId(), new Document([
-            '$id' => \Utopia\Database\Helpers\ID::unique(),
+            '$id' => \Utopia\Database\Id::unique(),
             '$permissions' => [
                 Permission::read(Role::user('random')),
                 Permission::update(Role::user('random')),
@@ -601,7 +601,7 @@ trait PermissionTests
             ],
             'test' => 'lorem',
             RelationshipType::OneToOne->value => [
-                '$id' => \Utopia\Database\Helpers\ID::unique(),
+                '$id' => \Utopia\Database\Id::unique(),
                 '$permissions' => [
                     Permission::read(Role::user('random')),
                     Permission::update(Role::user('random')),
@@ -611,7 +611,7 @@ trait PermissionTests
             ],
             RelationshipType::OneToMany->value => [
                 [
-                    '$id' => \Utopia\Database\Helpers\ID::unique(),
+                    '$id' => \Utopia\Database\Id::unique(),
                     '$permissions' => [
                         Permission::read(Role::user('random')),
                         Permission::update(Role::user('random')),
@@ -619,7 +619,7 @@ trait PermissionTests
                     ],
                     'test' => 'lorem ipsum',
                 ], [
-                    '$id' => \Utopia\Database\Helpers\ID::unique(),
+                    '$id' => \Utopia\Database\Id::unique(),
                     '$permissions' => [
                         Permission::read(Role::user('torsten')),
                         Permission::update(Role::user('random')),
@@ -952,7 +952,7 @@ trait PermissionTests
         $database = $this->getDatabase();
 
         $document = $database->createDocument($this->getDocumentsCollection(), new Document([
-            '$id' => ID::unique(),
+            '$id' => Id::unique(),
             '$permissions' => [
                 Permission::read(Role::any())
             ],
@@ -978,7 +978,7 @@ trait PermissionTests
         $this->assertEquals($updatedDocument->getUpdatedAt(), $document->getUpdatedAt());
 
         $document = $database->createDocument($this->getDocumentsCollection(), new Document([
-            '$id' => ID::unique(),
+            '$id' => Id::unique(),
             '$permissions' => [],
             'string' => 'text📝',
             'integer_signed' => -Database::MAX_INT,
@@ -1187,7 +1187,7 @@ trait PermissionTests
         $database = $this->getDatabase();
 
         $database->createDocument($collectionId, new Document([
-            '$id' => ID::unique(),
+            '$id' => Id::unique(),
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
@@ -1208,7 +1208,7 @@ trait PermissionTests
         $database = $this->getDatabase();
 
         $document = $database->createDocument($collectionId, new Document([
-            '$id' => ID::unique(),
+            '$id' => Id::unique(),
             '$permissions' => [
                 Permission::read(Role::user('random')),
                 Permission::update(Role::user('random')),
@@ -1407,7 +1407,7 @@ trait PermissionTests
         $database = $this->getDatabase();
 
         $database->createDocument($collectionId, new Document([
-            '$id' => ID::unique(),
+            '$id' => Id::unique(),
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::update(Role::any())
@@ -1458,7 +1458,7 @@ trait PermissionTests
         $database = $this->getDatabase();
 
         $document = $database->createDocument($collectionId, new Document([
-            '$id' => ID::unique(),
+            '$id' => Id::unique(),
             '$permissions' => [
                 Permission::read(Role::user('random')),
                 Permission::update(Role::user('random')),
@@ -1466,7 +1466,7 @@ trait PermissionTests
             ],
             'test' => 'lorem',
             RelationshipType::OneToOne->value => [
-                '$id' => ID::unique(),
+                '$id' => Id::unique(),
                 '$permissions' => [
                     Permission::read(Role::user('random')),
                     Permission::update(Role::user('random')),
@@ -1476,7 +1476,7 @@ trait PermissionTests
             ],
             RelationshipType::OneToMany->value => [
                 [
-                    '$id' => ID::unique(),
+                    '$id' => Id::unique(),
                     '$permissions' => [
                         Permission::read(Role::user('random')),
                         Permission::update(Role::user('random')),
@@ -1484,7 +1484,7 @@ trait PermissionTests
                     ],
                     'test' => 'lorem ipsum'
                 ], [
-                    '$id' => ID::unique(),
+                    '$id' => Id::unique(),
                     '$permissions' => [
                         Permission::read(Role::user('torsten')),
                         Permission::update(Role::user('random')),

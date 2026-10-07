@@ -19,10 +19,10 @@ use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Filter;
 use Utopia\Database\Filter\Callback;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
+use Utopia\Database\Permission;
 use Utopia\Database\Query;
+use Utopia\Database\Role;
 
 final class DocumentWriteMinorsTest extends TestCase
 {

@@ -6,6 +6,7 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
+use Utopia\Database\Validator\Query\Joined\Attributes;
 use Utopia\Query\Method;
 use Utopia\Query\Query as BaseQuery;
 
@@ -15,7 +16,7 @@ use Utopia\Query\Query as BaseQuery;
  */
 class Select extends Base
 {
-    use JoinedAttributes;
+    use Attributes;
 
     /**
      * @var array<int|string, true>

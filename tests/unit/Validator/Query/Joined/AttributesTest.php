@@ -1,6 +1,6 @@
 <?php
 
-namespace Tests\Unit\Validator;
+namespace Tests\Unit\Validator\Query\Joined;
 
 use PHPUnit\Framework\TestCase;
 use Tests\Unit\Support\Profiles;
@@ -15,7 +15,7 @@ use Utopia\Query\Method;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 
-class JoinedAttributesTest extends TestCase
+class AttributesTest extends TestCase
 {
     private const string AMBIGUOUS_AMOUNT = 'Invalid query: Attribute "amount" is ambiguous across joins; qualify it with a join alias';
 

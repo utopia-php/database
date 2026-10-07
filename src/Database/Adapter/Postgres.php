@@ -8,9 +8,10 @@ use PDOException;
 use PDOStatement;
 use Swoole\Database\PDOStatementProxy;
 use Throwable;
+use Utopia\Database\Adapter\SQL\Hook\Permission;
 use Utopia\Database\Adapter\SQL\Wkt;
 use Utopia\Database\Attribute;
-use Utopia\Database\Builder\PostgreSQL as PostgreSQLBuilder;
+use Utopia\Database\Builder\Postgres as PostgresBuilder;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -27,7 +28,6 @@ use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Exception\Unique as UniqueException;
-use Utopia\Database\Hook\PermissionFilter;
 use Utopia\Database\Index;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
@@ -46,7 +46,7 @@ use Utopia\Query\OrderDirection;
 use Utopia\Query\Query as BaseQuery;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
-use Utopia\Query\Schema\PostgreSQL as PostgreSQLSchema;
+use Utopia\Query\Schema\PostgreSQL as PostgresSchema;
 
 /**
  * Differences between MariaDB and Postgres
@@ -1776,13 +1776,13 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
      */
     protected function createBuilder(): SQLBuilder
     {
-        return new PostgreSQLBuilder();
+        return new PostgresBuilder();
     }
 
     #[\Override]
-    public function schema(): PostgreSQLSchema
+    public function schema(): PostgresSchema
     {
-        return new PostgreSQLSchema();
+        return new PostgresSchema();
     }
 
     protected function getSqlType(ColumnType $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
@@ -1879,9 +1879,9 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
      * @param  array<string>  $roles
      */
     #[\Override]
-    protected function newPermissionHook(string $collection, array $roles, string $type = PermissionType::Read->value, string $documentColumn = Storage::UID): PermissionFilter
+    protected function newPermissionHook(string $collection, array $roles, string $type = PermissionType::Read->value, string $documentColumn = Storage::UID): Permission\Filter
     {
-        return new class (\array_values($roles), $type, $documentColumn) extends PermissionFilter {
+        return new class (\array_values($roles), $type, $documentColumn) extends Permission\Filter {
             /**
              * @param  list<string>  $roles
              */

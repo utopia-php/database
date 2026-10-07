@@ -3,7 +3,7 @@
 namespace Tests\Unit\Validator;
 
 use Utopia\Database\Document;
-use Utopia\Database\Validator\IndexedQueries;
+use Utopia\Database\Validator\Queries\Indexed;
 use Utopia\Database\Validator\Query\Aggregate;
 use Utopia\Database\Validator\Query\Filter;
 use Utopia\Database\Validator\Query\GroupBy;
@@ -53,11 +53,11 @@ trait QueryShapeAttributes
     /**
      * @param  array<Document>  $indexes
      */
-    private function validator(array $indexes = []): IndexedQueries
+    private function validator(array $indexes = []): Indexed
     {
         $attributes = $this->attributes();
 
-        return new IndexedQueries($attributes, $indexes, [
+        return new Indexed($attributes, $indexes, [
             new Limit(),
             new Filter($attributes, ColumnType::Integer->value, self::MAX_VALUES),
             new Order($attributes),

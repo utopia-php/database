@@ -1,13 +1,14 @@
 <?php
 
-namespace Utopia\Database\Hook;
+namespace Utopia\Database\Adapter\SQL\Hook\Permission;
 
 use Closure;
 use InvalidArgumentException;
+use Utopia\Database\Adapter\SQL\Hook\Column\AllowNull;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Query\Builder\Condition;
 use Utopia\Query\Builder\JoinType;
-use Utopia\Query\Hook\Filter;
+use Utopia\Query\Hook\Filter as FilterHook;
 use Utopia\Query\Hook\Join\Condition as JoinCondition;
 use Utopia\Query\Hook\Join\Filter as JoinFilter;
 
@@ -17,7 +18,7 @@ use Utopia\Query\Hook\Join\Filter as JoinFilter;
  * Produces an EXISTS/IN subquery against a permissions side table, filtering documents
  * by the current user's roles, permission type, and optionally specific columns.
  */
-class PermissionFilter implements Filter, JoinFilter
+class Filter implements FilterHook, JoinFilter
 {
     private const string IDENTIFIER_PATTERN = '/^[a-zA-Z_][a-zA-Z0-9_.\-]*$/';
 
@@ -33,7 +34,7 @@ class PermissionFilter implements Filter, JoinFilter
      * @param  list<string>  $roles
      * @param  Closure(string): string  $permissionsTable  Receives the base table name, returns the permissions table name
      * @param  list<string>|null  $columns  Column names to check permissions for. NULL rows (wildcard) are always included.
-     * @param  Filter|null  $subqueryFilter  Optional filter applied inside the permissions subquery (e.g. tenant filtering)
+     * @param  FilterHook|null  $subqueryFilter  Optional filter applied inside the permissions subquery (e.g. tenant filtering)
      * @param  bool  $semiJoin  Whether the engine may merge the subquery into the outer query as a semi-join; when not, it carries MySQL's NO_SEMIJOIN hint, a comment to engines without optimizer hints
      */
     public function __construct(
@@ -46,7 +47,7 @@ class PermissionFilter implements Filter, JoinFilter
         protected string $permissionRoleColumn = 'role',
         protected string $permissionTypeColumn = 'type',
         protected string $scopeColumn = 'column',
-        protected ?Filter $subqueryFilter = null,
+        protected ?FilterHook $subqueryFilter = null,
         protected string $quoteCharacter = '`',
         protected bool $semiJoin = true,
     ) {
@@ -77,8 +78,8 @@ class PermissionFilter implements Filter, JoinFilter
             throw new DatabaseException('Invalid permissions table name: '.$permTable);
         }
 
-        $quotedPermTable = AllowNullColumn::quote($permTable, $this->quoteCharacter);
-        $quotedDocumentColumn = AllowNullColumn::quote($this->documentColumn, $this->quoteCharacter);
+        $quotedPermTable = AllowNull::quote($permTable, $this->quoteCharacter);
+        $quotedDocumentColumn = AllowNull::quote($this->documentColumn, $this->quoteCharacter);
 
         $rolePlaceholders = \implode(', ', \array_fill(0, \count($this->roles), '?'));
 
@@ -137,7 +138,7 @@ class PermissionFilter implements Filter, JoinFilter
     }
 
     /**
-     * Per-join-table permission checks are applied via separate PermissionFilter hooks
+     * Per-join-table permission checks are applied via separate Permission\Join hooks
      * registered by the SQL adapter for each joined table. This hook only handles the
      * primary table's WHERE clause, so filterJoin returns null.
      */

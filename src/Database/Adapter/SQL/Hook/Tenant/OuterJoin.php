@@ -1,6 +1,6 @@
 <?php
 
-namespace Utopia\Database\Hook;
+namespace Utopia\Database\Adapter\SQL\Hook\Tenant;
 
 use Utopia\Query\Builder\Condition;
 use Utopia\Query\Builder\JoinType;
@@ -10,21 +10,21 @@ use Utopia\Query\Hook\Join\Placement;
 
 /**
  * The tenant conditions a right or full outer join needs inside ON: the main table's and the joined
- * table's own. OuterJoinChainFilter adds those of the tables joined before it.
+ * table's own. Join\OuterChain adds those of the tables joined before it.
  *
  * These joins pair rows before the WHERE tenant filters run, so a row whose only match lies outside
  * the tenant would be paired with it and then dropped by WHERE: it vanishes instead of surviving
- * unmatched, and another tenant's rows decide what this tenant reads. TenantFilter still places each
+ * unmatched, and another tenant's rows decide what this tenant reads. Filter still places each
  * joined table's own condition; this is a separate hook because a join filter contributes a single
  * condition, in a single placement, per join.
  */
-final readonly class OuterJoinTenantFilter implements JoinFilter
+final readonly class OuterJoin implements JoinFilter
 {
     /**
-     * @param string $source The main table's alias, the reference the builder hands TenantFilter::filter()
+     * @param string $source The main table's alias, the reference the builder hands Filter::filter()
      */
     public function __construct(
-        private TenantFilter $filter,
+        private Filter $filter,
         private string $source,
     ) {
     }

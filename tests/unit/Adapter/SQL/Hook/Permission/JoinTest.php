@@ -1,20 +1,20 @@
 <?php
 
-namespace Tests\Unit\Hook;
+namespace Tests\Unit\Adapter\SQL\Hook\Permission;
 
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Hook\PermissionFilter;
-use Utopia\Database\Hook\PermissionJoinFilter;
+use Utopia\Database\Adapter\SQL\Hook\Permission\Filter;
+use Utopia\Database\Adapter\SQL\Hook\Permission\Join;
 use Utopia\Database\Storage;
 use Utopia\Query\Builder\JoinType;
 use Utopia\Query\Hook\Join\Placement;
 
-final class PermissionJoinFilterTest extends TestCase
+final class JoinTest extends TestCase
 {
     public function testLeftJoinPlacesPermissionInOnClause(): void
     {
         $filter = $this->permissionFilter();
-        $hook = new PermissionJoinFilter($filter, 'j0');
+        $hook = new Join($filter, 'j0');
 
         $result = $hook->filterJoin('j0', JoinType::Left);
 
@@ -26,7 +26,7 @@ final class PermissionJoinFilterTest extends TestCase
 
     public function testInnerJoinPlacesPermissionInOnClause(): void
     {
-        $hook = new PermissionJoinFilter($this->permissionFilter(), 'j0');
+        $hook = new Join($this->permissionFilter(), 'j0');
         $result = $hook->filterJoin('j0', JoinType::Inner);
 
         $this->assertNotNull($result);
@@ -35,7 +35,7 @@ final class PermissionJoinFilterTest extends TestCase
 
     public function testRightJoinPlacesPermissionInWhereClause(): void
     {
-        $hook = new PermissionJoinFilter($this->permissionFilter(), 'j0');
+        $hook = new Join($this->permissionFilter(), 'j0');
         $result = $hook->filterJoin('j0', JoinType::Right);
 
         $this->assertNotNull($result);
@@ -46,7 +46,7 @@ final class PermissionJoinFilterTest extends TestCase
 
     public function testFullOuterJoinPlacesPermissionInWhereClauseAndAllowsNullUid(): void
     {
-        $hook = new PermissionJoinFilter($this->permissionFilter(), 'j0');
+        $hook = new Join($this->permissionFilter(), 'j0');
         $result = $hook->filterJoin('j0', JoinType::FullOuter);
 
         $this->assertNotNull($result);
@@ -58,7 +58,7 @@ final class PermissionJoinFilterTest extends TestCase
 
     public function testCrossJoinPlacesPermissionInWhereClause(): void
     {
-        $hook = new PermissionJoinFilter($this->permissionFilter(), 'j0');
+        $hook = new Join($this->permissionFilter(), 'j0');
         $result = $hook->filterJoin('j0', JoinType::Cross);
 
         $this->assertNotNull($result);
@@ -66,9 +66,9 @@ final class PermissionJoinFilterTest extends TestCase
         $this->assertStringNotContainsString('IS NULL', $result->condition->expression);
     }
 
-    private function permissionFilter(): PermissionFilter
+    private function permissionFilter(): Filter
     {
-        return new PermissionFilter(
+        return new Filter(
             roles: ['any'],
             permissionsTable: static fn (string $table): string => 'perms_'.$table,
             documentColumn: 'j0.'.Storage::UID,

@@ -12,15 +12,15 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Structure;
-use Utopia\Database\Helpers\ID;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Id;
 use Utopia\Database\Operator;
+use Utopia\Database\Permission;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationshipDeleteAction;
 use Utopia\Database\RelationshipType;
 use Utopia\Database\RelationshipUpdate;
+use Utopia\Database\Role;
 use Utopia\Query\Schema\ColumnType;
 
 trait ManyToManyTests
@@ -1256,14 +1256,14 @@ trait ManyToManyTests
         $database->createRelationship('$symbols_coll.ection7', Relationship::manyToMany(relatedCollection: '$symbols_coll.ection8', twoWay: true));
 
         $doc1 = $database->createDocument('$symbols_coll.ection8', new Document([
-            '$id' => ID::unique(),
+            '$id' => Id::unique(),
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
             ],
         ]));
         $doc2 = $database->createDocument('$symbols_coll.ection7', new Document([
-            '$id' => ID::unique(),
+            '$id' => Id::unique(),
             'symbols_collection8' => [$doc1->getId()],
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -2340,9 +2340,9 @@ trait ManyToManyTests
             return;
         }
 
-        $grandparents = ID::unique();
-        $parents = ID::unique();
-        $tags = ID::unique();
+        $grandparents = Id::unique();
+        $parents = Id::unique();
+        $tags = Id::unique();
         $permissions = [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
@@ -2426,8 +2426,8 @@ trait ManyToManyTests
             return;
         }
 
-        $parents = ID::unique();
-        $tags = ID::unique();
+        $parents = Id::unique();
+        $tags = Id::unique();
         $database->createCollection(Collection::create(id: $parents, attributes: [Attribute::string(key: 'name', size: 64)], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
@@ -2480,8 +2480,8 @@ trait ManyToManyTests
             return;
         }
 
-        $books = ID::unique();
-        $authors = ID::unique();
+        $books = Id::unique();
+        $authors = Id::unique();
         $this->createManyToManyRenameCollections($database, $books, $authors);
         $database->createRelationship($books, Relationship::manyToMany(relatedCollection: $authors, key: 'authors', twoWayKey: 'books'));
 
@@ -2517,8 +2517,8 @@ trait ManyToManyTests
             return;
         }
 
-        $books = ID::unique();
-        $authors = ID::unique();
+        $books = Id::unique();
+        $authors = Id::unique();
         $this->createManyToManyRenameCollections($database, $books, $authors);
         $database->createRelationship($books, Relationship::manyToMany(relatedCollection: $authors, twoWay: true, key: 'authors', twoWayKey: 'books'));
 

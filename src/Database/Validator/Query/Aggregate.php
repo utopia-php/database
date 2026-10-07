@@ -6,6 +6,8 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\Storage;
+use Utopia\Database\Validator\Query\Joined\Attributes;
+use Utopia\Database\Validator\Query\Joined\Collection;
 use Utopia\Query\Method;
 use Utopia\Query\Query as BaseQuery;
 use Utopia\Query\Schema\ColumnType;
@@ -15,7 +17,7 @@ use Utopia\Query\Schema\ColumnType;
  */
 class Aggregate extends Base
 {
-    use JoinedAttributes;
+    use Attributes;
 
     public const int MAX_ALIAS_LENGTH = 63;
 
@@ -121,7 +123,7 @@ class Aggregate extends Base
         }
 
         $this->schema += self::internalColumns($sharedTables);
-        $this->columns = JoinedCollection::columns($attributes);
+        $this->columns = Collection::columns($attributes);
     }
 
     /**

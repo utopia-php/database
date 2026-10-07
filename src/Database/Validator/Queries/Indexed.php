@@ -1,6 +1,6 @@
 <?php
 
-namespace Utopia\Database\Validator;
+namespace Utopia\Database\Validator\Queries;
 
 use Exception;
 use Throwable;
@@ -9,7 +9,7 @@ use Utopia\Database\Collection;
 use Utopia\Database\Document;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Query\Base;
+use Utopia\Database\Validator\Query\Base as QueryBase;
 use Utopia\Query\Method;
 use Utopia\Query\Query as BaseQuery;
 use Utopia\Query\Schema\IndexType;
@@ -17,7 +17,7 @@ use Utopia\Query\Schema\IndexType;
 /**
  * Validates queries against available indexes, ensuring search queries have matching fulltext indexes.
  */
-class IndexedQueries extends Queries
+class Indexed extends Base
 {
     private const string UID_INDEX = '_uid_';
 
@@ -43,7 +43,7 @@ class IndexedQueries extends Queries
     /**
      * @param  array<Attribute|Document>  $attributes
      * @param  array<Index|Document>  $indexes
-     * @param  array<Base>  $validators
+     * @param  array<QueryBase>  $validators
      *
      * @throws Exception
      */

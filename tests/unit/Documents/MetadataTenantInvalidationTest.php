@@ -11,8 +11,8 @@ use Utopia\Database\Adapter\Memory as DatabaseMemory;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Permission;
+use Utopia\Database\Role;
 
 /**
  * A collection definition is the one row tenant-per-document lets through with

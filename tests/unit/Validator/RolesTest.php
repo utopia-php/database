@@ -4,8 +4,8 @@ namespace Tests\Unit\Validator;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Helpers\ID;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Id;
+use Utopia\Database\Role;
 use Utopia\Database\Validator\Roles;
 
 class RolesTest extends TestCase
@@ -27,9 +27,9 @@ class RolesTest extends TestCase
         $this->assertTrue($object->isValid([Role::users()->toString()]));
         $this->assertTrue($object->isValid([Role::users(Roles::DIMENSION_VERIFIED)->toString()]));
         $this->assertTrue($object->isValid([Role::users(Roles::DIMENSION_UNVERIFIED)->toString()]));
-        $this->assertTrue($object->isValid([Role::team(ID::custom('696f34ea003d48edab8e'))->toString()]));
-        $this->assertTrue($object->isValid([Role::team(ID::custom('696f34ea003d48edab8e'), 'project-696f34ea003d48edab8e-owner')->toString()]));
-        $this->assertTrue($object->isValid([Role::team(ID::custom('696f34ea003d48edab8e'), 'project-696f34ea003d48edab8e')->toString()]));
+        $this->assertTrue($object->isValid([Role::team(Id::custom('696f34ea003d48edab8e'))->toString()]));
+        $this->assertTrue($object->isValid([Role::team(Id::custom('696f34ea003d48edab8e'), 'project-696f34ea003d48edab8e-owner')->toString()]));
+        $this->assertTrue($object->isValid([Role::team(Id::custom('696f34ea003d48edab8e'), 'project-696f34ea003d48edab8e')->toString()]));
         $this->assertTrue($object->isValid([Role::label('vip')->toString()]));
     }
 

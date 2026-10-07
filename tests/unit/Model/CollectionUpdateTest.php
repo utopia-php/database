@@ -4,8 +4,8 @@ namespace Tests\Unit\Model;
 
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\CollectionUpdate;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Permission;
+use Utopia\Database\Role;
 
 final class CollectionUpdateTest extends TestCase
 {

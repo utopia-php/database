@@ -7,7 +7,7 @@ use Utopia\Validator;
 /**
  * Validates that a value is a valid object (associative array or valid JSON string).
  */
-class ObjectValidator extends Validator
+class ObjectValue extends Validator
 {
     /**
      * Get Description

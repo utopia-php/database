@@ -23,12 +23,12 @@ use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Unique as UniqueException;
-use Utopia\Database\Helpers\ID;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Id;
 use Utopia\Database\Index;
 use Utopia\Database\IntegerWidth;
+use Utopia\Database\Permission;
 use Utopia\Database\Query;
+use Utopia\Database\Role;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\IndexDefinition;
 use Utopia\Query\OrderDirection;
@@ -649,7 +649,7 @@ trait IndexTests
         $this->assertSame('Negative index length provided for title1', $validator->getDescription());
 
         try {
-            $database->createCollection(Collection::create(id: ID::unique(), attributes: $attributes, indexes: $indexes));
+            $database->createCollection(Collection::create(id: Id::unique(), attributes: $attributes, indexes: $indexes));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertSame('Negative index length provided for title1', $e->getMessage());
@@ -663,7 +663,7 @@ trait IndexTests
         $this->assertSame('Invalid index lengths. Count of lengths must be equal or less than the number of attributes.', $validator->getDescription());
 
         try {
-            $database->createCollection(Collection::create(id: ID::unique(), attributes: $attributes, indexes: $indexes));
+            $database->createCollection(Collection::create(id: Id::unique(), attributes: $attributes, indexes: $indexes));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertSame('Invalid index lengths. Count of lengths must be equal or less than the number of attributes.', $e->getMessage());

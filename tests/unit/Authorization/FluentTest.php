@@ -3,8 +3,8 @@
 namespace Tests\Unit\Authorization;
 
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Helpers\Role;
 use Utopia\Database\PermissionType;
+use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Authorization\Input;
 

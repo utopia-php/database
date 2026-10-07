@@ -12,7 +12,7 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Structure as StructureException;
-use Utopia\Database\Helpers\ID;
+use Utopia\Database\Id;
 use Utopia\Database\RelationshipSide;
 use Utopia\Database\RelationshipType;
 use Utopia\Database\Schema\Column;
@@ -102,7 +102,7 @@ class AttributeTest extends TestCase
         $validator = new AttributeDefinition(
             attributes: [
                 new Document([
-                    '$id' => ID::custom('title'),
+                    '$id' => Id::custom('title'),
                     'key' => 'title',
                     'type' => ColumnType::String->value,
                     'size' => 255,
@@ -117,7 +117,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('title'),
+            '$id' => Id::custom('title'),
             'key' => 'title',
             'type' => ColumnType::String->value,
             'size' => 255,
@@ -141,7 +141,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('title'),
+            '$id' => Id::custom('title'),
             'key' => 'title',
             'type' => ColumnType::String->value,
             'size' => 255,
@@ -163,7 +163,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('title'),
+            '$id' => Id::custom('title'),
             'key' => 'title',
             'type' => ColumnType::String->value,
             'size' => 2000,
@@ -187,7 +187,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('title'),
+            '$id' => Id::custom('title'),
             'key' => 'title',
             'type' => ColumnType::Varchar->value,
             'size' => 2000,
@@ -211,7 +211,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('content'),
+            '$id' => Id::custom('content'),
             'key' => 'content',
             'type' => ColumnType::Text->value,
             'size' => 70000,
@@ -235,7 +235,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('content'),
+            '$id' => Id::custom('content'),
             'key' => 'content',
             'type' => ColumnType::MediumText->value,
             'size' => 20000000,
@@ -259,7 +259,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('count'),
+            '$id' => Id::custom('count'),
             'key' => 'count',
             'type' => ColumnType::Integer->value,
             'size' => 200,
@@ -283,7 +283,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('test'),
+            '$id' => Id::custom('test'),
             'key' => 'test',
             'type' => 'unknown_type',
             'size' => 0,
@@ -307,7 +307,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('created'),
+            '$id' => Id::custom('created'),
             'key' => 'created',
             'type' => ColumnType::Datetime->value,
             'size' => 0,
@@ -331,7 +331,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('created'),
+            '$id' => Id::custom('created'),
             'key' => 'created',
             'type' => ColumnType::Datetime->value,
             'size' => 0,
@@ -353,7 +353,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('title'),
+            '$id' => Id::custom('title'),
             'key' => 'title',
             'type' => ColumnType::String->value,
             'size' => 255,
@@ -377,7 +377,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('count'),
+            '$id' => Id::custom('count'),
             'key' => 'count',
             'type' => ColumnType::Integer->value,
             'size' => 4,
@@ -401,7 +401,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('embedding'),
+            '$id' => Id::custom('embedding'),
             'key' => 'embedding',
             'type' => ColumnType::Vector->value,
             'size' => 128,
@@ -425,7 +425,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('embeddings'),
+            '$id' => Id::custom('embeddings'),
             'key' => 'embeddings',
             'type' => ColumnType::Vector->value,
             'size' => 128,
@@ -449,7 +449,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('embedding'),
+            '$id' => Id::custom('embedding'),
             'key' => 'embedding',
             'type' => ColumnType::Vector->value,
             'size' => 0,
@@ -473,7 +473,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('embedding'),
+            '$id' => Id::custom('embedding'),
             'key' => 'embedding',
             'type' => ColumnType::Vector->value,
             'size' => 20000,
@@ -497,7 +497,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('location'),
+            '$id' => Id::custom('location'),
             'key' => 'location',
             'type' => ColumnType::Point->value,
             'size' => 0,
@@ -521,7 +521,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('locations'),
+            '$id' => Id::custom('locations'),
             'key' => 'locations',
             'type' => ColumnType::Point->value,
             'size' => 0,
@@ -545,7 +545,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('location'),
+            '$id' => Id::custom('location'),
             'key' => 'location',
             'type' => ColumnType::Point->value,
             'size' => 100,
@@ -569,7 +569,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('metadata'),
+            '$id' => Id::custom('metadata'),
             'key' => 'metadata',
             'type' => ColumnType::Object->value,
             'size' => 0,
@@ -593,7 +593,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('metadata'),
+            '$id' => Id::custom('metadata'),
             'key' => 'metadata',
             'type' => ColumnType::Object->value,
             'size' => 0,
@@ -617,7 +617,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('metadata'),
+            '$id' => Id::custom('metadata'),
             'key' => 'metadata',
             'type' => ColumnType::Object->value,
             'size' => 100,
@@ -643,7 +643,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('title'),
+            '$id' => Id::custom('title'),
             'key' => 'title',
             'type' => ColumnType::String->value,
             'size' => 255,
@@ -669,7 +669,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('title'),
+            '$id' => Id::custom('title'),
             'key' => 'title',
             'type' => ColumnType::String->value,
             'size' => 255,
@@ -693,7 +693,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('embedding'),
+            '$id' => Id::custom('embedding'),
             'key' => 'embedding',
             'type' => ColumnType::Vector->value,
             'size' => 3,
@@ -717,7 +717,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('embedding'),
+            '$id' => Id::custom('embedding'),
             'key' => 'embedding',
             'type' => ColumnType::Vector->value,
             'size' => 3,
@@ -741,7 +741,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('embedding'),
+            '$id' => Id::custom('embedding'),
             'key' => 'embedding',
             'type' => ColumnType::Vector->value,
             'size' => 3,
@@ -765,7 +765,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('content'),
+            '$id' => Id::custom('content'),
             'key' => 'content',
             'type' => ColumnType::LongText->value,
             'size' => 5000000000,
@@ -789,7 +789,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('name'),
+            '$id' => Id::custom('name'),
             'key' => 'name',
             'type' => ColumnType::Varchar->value,
             'size' => 255,
@@ -811,7 +811,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('content'),
+            '$id' => Id::custom('content'),
             'key' => 'content',
             'type' => ColumnType::Text->value,
             'size' => 65535,
@@ -833,7 +833,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('content'),
+            '$id' => Id::custom('content'),
             'key' => 'content',
             'type' => ColumnType::MediumText->value,
             'size' => 16777215,
@@ -855,7 +855,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('content'),
+            '$id' => Id::custom('content'),
             'key' => 'content',
             'type' => ColumnType::LongText->value,
             'size' => 4294967295,
@@ -877,7 +877,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('price'),
+            '$id' => Id::custom('price'),
             'key' => 'price',
             'type' => ColumnType::Double->value,
             'size' => 0,
@@ -899,7 +899,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('active'),
+            '$id' => Id::custom('active'),
             'key' => 'active',
             'type' => ColumnType::Boolean->value,
             'size' => 0,
@@ -921,7 +921,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('price'),
+            '$id' => Id::custom('price'),
             'key' => 'price',
             'type' => ColumnType::Double->value,
             'size' => 0,
@@ -945,7 +945,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('active'),
+            '$id' => Id::custom('active'),
             'key' => 'active',
             'type' => ColumnType::Boolean->value,
             'size' => 0,
@@ -969,7 +969,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('title'),
+            '$id' => Id::custom('title'),
             'key' => 'title',
             'type' => ColumnType::String->value,
             'size' => 255,
@@ -993,7 +993,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('title'),
+            '$id' => Id::custom('title'),
             'key' => 'title',
             'type' => ColumnType::String->value,
             'size' => 255,
@@ -1015,7 +1015,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('count'),
+            '$id' => Id::custom('count'),
             'key' => 'count',
             'type' => ColumnType::Integer->value,
             'size' => 4,
@@ -1037,7 +1037,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('price'),
+            '$id' => Id::custom('price'),
             'key' => 'price',
             'type' => ColumnType::Double->value,
             'size' => 0,
@@ -1059,7 +1059,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('active'),
+            '$id' => Id::custom('active'),
             'key' => 'active',
             'type' => ColumnType::Boolean->value,
             'size' => 0,
@@ -1082,7 +1082,7 @@ class AttributeTest extends TestCase
 
         // Unsigned allows double the size
         $attribute = new Document([
-            '$id' => ID::custom('count'),
+            '$id' => Id::custom('count'),
             'key' => 'count',
             'type' => ColumnType::Integer->value,
             'size' => 80,
@@ -1104,7 +1104,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('count'),
+            '$id' => Id::custom('count'),
             'key' => 'count',
             'type' => ColumnType::Integer->value,
             'size' => 150,
@@ -1125,7 +1125,7 @@ class AttributeTest extends TestCase
         $validator = new AttributeDefinition(
             attributes: [
                 new Document([
-                    '$id' => ID::custom('Title'),
+                    '$id' => Id::custom('Title'),
                     'key' => 'Title',
                     'type' => ColumnType::String->value,
                     'size' => 255,
@@ -1140,7 +1140,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('title'),
+            '$id' => Id::custom('title'),
             'key' => 'title',
             'type' => ColumnType::String->value,
             'size' => 255,
@@ -1167,7 +1167,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('existing_column'),
+            '$id' => Id::custom('existing_column'),
             'key' => 'existing_column',
             'type' => ColumnType::String->value,
             'size' => 255,
@@ -1194,7 +1194,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('existing_column'),
+            '$id' => Id::custom('existing_column'),
             'key' => 'existing_column',
             'type' => ColumnType::String->value,
             'size' => 255,
@@ -1216,7 +1216,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('route'),
+            '$id' => Id::custom('route'),
             'key' => 'route',
             'type' => ColumnType::Linestring->value,
             'size' => 0,
@@ -1238,7 +1238,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('area'),
+            '$id' => Id::custom('area'),
             'key' => 'area',
             'type' => ColumnType::Polygon->value,
             'size' => 0,
@@ -1260,7 +1260,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('location'),
+            '$id' => Id::custom('location'),
             'key' => 'location',
             'type' => ColumnType::Point->value,
             'size' => 0,
@@ -1282,7 +1282,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('embedding'),
+            '$id' => Id::custom('embedding'),
             'key' => 'embedding',
             'type' => ColumnType::Vector->value,
             'size' => 128,
@@ -1304,7 +1304,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('embedding'),
+            '$id' => Id::custom('embedding'),
             'key' => 'embedding',
             'type' => ColumnType::Vector->value,
             'size' => 3,
@@ -1326,7 +1326,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('metadata'),
+            '$id' => Id::custom('metadata'),
             'key' => 'metadata',
             'type' => ColumnType::Object->value,
             'size' => 0,
@@ -1348,7 +1348,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('tags'),
+            '$id' => Id::custom('tags'),
             'key' => 'tags',
             'type' => ColumnType::String->value,
             'size' => 255,
@@ -1370,7 +1370,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('tags'),
+            '$id' => Id::custom('tags'),
             'key' => 'tags',
             'type' => ColumnType::String->value,
             'size' => 255,
@@ -1392,7 +1392,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('tags'),
+            '$id' => Id::custom('tags'),
             'key' => 'tags',
             'type' => ColumnType::String->value,
             'size' => 255,
@@ -1416,7 +1416,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('created'),
+            '$id' => Id::custom('created'),
             'key' => 'created',
             'type' => ColumnType::Datetime->value,
             'size' => 0,
@@ -1440,7 +1440,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('created'),
+            '$id' => Id::custom('created'),
             'key' => 'created',
             'type' => ColumnType::Datetime->value,
             'size' => 0,
@@ -1462,7 +1462,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('name'),
+            '$id' => Id::custom('name'),
             'key' => 'name',
             'type' => ColumnType::Varchar->value,
             'size' => 255,
@@ -1486,7 +1486,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('content'),
+            '$id' => Id::custom('content'),
             'key' => 'content',
             'type' => ColumnType::Text->value,
             'size' => 65535,
@@ -1510,7 +1510,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('content'),
+            '$id' => Id::custom('content'),
             'key' => 'content',
             'type' => ColumnType::MediumText->value,
             'size' => 16777215,
@@ -1534,7 +1534,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('content'),
+            '$id' => Id::custom('content'),
             'key' => 'content',
             'type' => ColumnType::LongText->value,
             'size' => 4294967295,
@@ -1558,7 +1558,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('name'),
+            '$id' => Id::custom('name'),
             'key' => 'name',
             'type' => ColumnType::Varchar->value,
             'size' => 255,
@@ -1580,7 +1580,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('content'),
+            '$id' => Id::custom('content'),
             'key' => 'content',
             'type' => ColumnType::Text->value,
             'size' => 65535,
@@ -1602,7 +1602,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('count'),
+            '$id' => Id::custom('count'),
             'key' => 'count',
             'type' => ColumnType::Integer->value,
             'size' => 4,
@@ -1624,7 +1624,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('title'),
+            '$id' => Id::custom('title'),
             'key' => 'title',
             'type' => ColumnType::String->value,
             'size' => 255,
@@ -1646,7 +1646,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('title'),
+            '$id' => Id::custom('title'),
             'key' => 'title',
             'type' => ColumnType::String->value,
             'size' => 255,
@@ -1670,7 +1670,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('services'),
+            '$id' => Id::custom('services'),
             'key' => 'services',
             'type' => ColumnType::String->value,
             'size' => 16384,
@@ -1692,7 +1692,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('data'),
+            '$id' => Id::custom('data'),
             'key' => 'data',
             'type' => ColumnType::String->value,
             'size' => 65535,
@@ -1766,7 +1766,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('new_column'),
+            '$id' => Id::custom('new_column'),
             'key' => 'new_column',
             'type' => ColumnType::String->value,
             'size' => 255,
@@ -1792,7 +1792,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('formatted'),
+            '$id' => Id::custom('formatted'),
             'key' => 'formatted',
             'type' => ColumnType::String->value,
             'size' => 255,
@@ -1933,7 +1933,7 @@ class AttributeTest extends TestCase
         );
 
         $attribute = new Document([
-            '$id' => ID::custom('column'),
+            '$id' => Id::custom('column'),
             'key' => 'column',
             'type' => ColumnType::String->value,
             'size' => 255,

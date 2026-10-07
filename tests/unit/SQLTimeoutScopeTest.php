@@ -14,11 +14,11 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Change;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Hook\Transform;
 use Utopia\Database\PDO as DatabasePDO;
+use Utopia\Database\Permission;
+use Utopia\Database\Role;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\Authorization;
 

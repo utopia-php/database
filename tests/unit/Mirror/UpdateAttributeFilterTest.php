@@ -14,7 +14,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Mirror;
 use Utopia\Database\Mirror\Failure;
-use Utopia\Database\Mirroring\Filter;
+use Utopia\Database\Mirror\Filter;
 
 final class UpdateAttributeFilterTest extends TestCase
 {

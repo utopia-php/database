@@ -2,37 +2,25 @@
 
 namespace Utopia\Database\Hook\Mongo;
 
-use Utopia\Database\Hook\Read;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\Authorization;
 
 /**
- * MongoDB read hook that injects permission-based filters into queries.
- *
- * Unlike SQL adapters which use separate PermissionFilter (read) and Permission (write)
- * hooks, MongoDB stores permissions as an embedded `_permissions` array directly on the
- * document. This means no side-table management is needed on write, so there is no
- * corresponding MongoPermission hook. Read filtering is sufficient because the
- * permissions are part of the document itself.
+ * Narrows a MongoDB read to the documents the current roles may access through an exact-match `$in` of
+ * `type("role")` strings against the embedded `_permissions` array. Permissions live on the document, so no
+ * write-side hook exists.
  */
-class PermissionFilter implements Read
+final readonly class Permission implements Read
 {
-    /**
-     * @param Authorization $authorization The authorization instance providing current user roles
-     */
     public function __construct(
         private Authorization $authorization,
     ) {
     }
 
     /**
-     * Inject an exact-match `$in` filter of `type("role")` strings against `_permissions`.
-     *
-     * @param array<string, mixed> $filters The current MongoDB filter array
-     * @param string $collection The collection being queried
-     * @param PermissionType $forPermission The permission type to filter for
-     * @return array<string, mixed> The modified filter array with permission constraints
+     * @param  array<string, mixed>  $filters
+     * @return array<string, mixed>
      */
     public function applyFilters(array $filters, string $collection, PermissionType $forPermission): array
     {

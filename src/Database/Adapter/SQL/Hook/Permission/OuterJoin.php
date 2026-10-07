@@ -1,7 +1,8 @@
 <?php
 
-namespace Utopia\Database\Hook;
+namespace Utopia\Database\Adapter\SQL\Hook\Permission;
 
+use Utopia\Database\Adapter\SQL\Hook\Column\AllowNull;
 use Utopia\Database\Storage;
 use Utopia\Query\Builder\Condition;
 use Utopia\Query\Builder\JoinType;
@@ -15,11 +16,11 @@ use Utopia\Query\Hook\Join\Placement;
  *
  * These joins pair rows before the WHERE permission checks run, so a row whose only match is
  * unreadable would be paired with it and then dropped: it vanishes instead of coming back
- * unmatched, and the reader learns that an unreadable document exists. PermissionJoinFilter still
+ * unmatched, and the reader learns that an unreadable document exists. Permission\Join still
  * places each joined table's own condition in WHERE; this is a separate hook because a join filter
- * contributes a single condition, in a single placement, per join. It mirrors OuterJoinTenantFilter.
+ * contributes a single condition, in a single placement, per join. It mirrors Tenant\OuterJoin.
  */
-final readonly class OuterJoinPermissionFilter implements JoinFilter
+final readonly class OuterJoin implements JoinFilter
 {
     /**
      * @param string $source The main table's alias
@@ -41,7 +42,7 @@ final readonly class OuterJoinPermissionFilter implements JoinFilter
 
         $conditions = [];
         if (isset($this->conditions[$this->source])) {
-            $conditions[] = AllowNullColumn::wrap(
+            $conditions[] = AllowNull::wrap(
                 $this->conditions[$this->source],
                 $this->source.'.'.Storage::UID,
                 $this->quoteCharacter,

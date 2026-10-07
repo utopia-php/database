@@ -22,14 +22,14 @@ use Utopia\Database\Event\DispatcherHook;
 use Utopia\Database\Event\Document\Deleted as DocumentDeleted;
 use Utopia\Database\Event\Document\Updated as DocumentUpdated;
 use Utopia\Database\Exception\Transaction as TransactionException;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Hook\Relationships;
-use Utopia\Database\Profiler\QueryLog;
+use Utopia\Database\Permission;
+use Utopia\Database\Profiler\Log;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationshipDeleteAction;
+use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
 
 /**
@@ -172,7 +172,7 @@ final class DeleteRelatedUpdateTest extends TestCase
             $this->assertTrue($database->deleteDocument('parent', 'parent1'), $case);
             $reads[$case] = \count(\array_filter(
                 $database->getProfiler()?->getLogs() ?? [],
-                static fn (QueryLog $log): bool => \str_starts_with(\ltrim($log->query), 'SELECT'),
+                static fn (Log $log): bool => \str_starts_with(\ltrim($log->query), 'SELECT'),
             ));
 
             $this->assertSame(match ($listened) {

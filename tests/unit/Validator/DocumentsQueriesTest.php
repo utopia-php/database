@@ -7,7 +7,7 @@ use PHPUnit\Framework\TestCase;
 use Tests\Unit\Support\Profiles;
 use Utopia\Database\Capability;
 use Utopia\Database\Document;
-use Utopia\Database\Helpers\ID;
+use Utopia\Database\Id;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Queries\Documents;
 use Utopia\Query\Schema\ColumnType;
@@ -94,7 +94,7 @@ class DocumentsQueriesTest extends TestCase
 
         $this->indexes = [
             new Document([
-                '$id' => ID::custom('testindex2'),
+                '$id' => Id::custom('testindex2'),
                 'type' => 'key',
                 'attributes' => [
                     'title',
@@ -107,7 +107,7 @@ class DocumentsQueriesTest extends TestCase
                 ],
             ]),
             new Document([
-                '$id' => ID::custom('testindex3'),
+                '$id' => Id::custom('testindex3'),
                 'type' => 'fulltext',
                 'attributes' => [
                     'title',

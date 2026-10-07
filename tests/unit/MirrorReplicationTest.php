@@ -24,15 +24,15 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Index;
 use Utopia\Database\Mirror;
 use Utopia\Database\Mirror\Failure;
+use Utopia\Database\Permission;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationshipUpdate;
+use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
 
 use function Swoole\Coroutine\run;

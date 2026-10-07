@@ -1,14 +1,15 @@
 <?php
 
-namespace Utopia\Database\Profiler;
+namespace Utopia\Database;
 
 use InvalidArgumentException;
+use Utopia\Database\Profiler\Log;
 
-class QueryProfiler
+class Profiler
 {
     public const int DEFAULT_CAPACITY = 1000;
 
-    /** @var array<int, QueryLog> */
+    /** @var array<int, Log> */
     private array $logs = [];
 
     private int $oldest = 0;
@@ -109,7 +110,7 @@ class QueryProfiler
             );
         }
 
-        $entry = new QueryLog(
+        $entry = new Log(
             query: $query,
             bindings: $bindings,
             durationMs: $durationMs,
@@ -128,7 +129,7 @@ class QueryProfiler
     /**
      * The newest entries up to the capacity, oldest first.
      *
-     * @return list<QueryLog>
+     * @return list<Log>
      */
     public function getLogs(): array
     {
@@ -139,11 +140,11 @@ class QueryProfiler
     }
 
     /**
-     * @return array<QueryLog>
+     * @return array<Log>
      */
     public function getSlowQueries(): array
     {
-        return \array_filter($this->getLogs(), fn (QueryLog $log) => $log->durationMs >= $this->slowThreshold);
+        return \array_filter($this->getLogs(), fn (Log $log) => $log->durationMs >= $this->slowThreshold);
     }
 
     /**
@@ -194,7 +195,7 @@ class QueryProfiler
         $this->totalTime = 0.0;
     }
 
-    private function record(QueryLog $entry): void
+    private function record(Log $entry): void
     {
         $this->queryCount++;
         $this->totalTime += $entry->durationMs;

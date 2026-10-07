@@ -1,7 +1,10 @@
 <?php
 
-namespace Utopia\Database\Hook;
+namespace Utopia\Database\Adapter\SQL\Hook\Tenant;
 
+use Utopia\Database\Adapter\SQL\Hook\Column\AllowNull;
+use Utopia\Database\Adapter\SQL\Hook\Join\Chain;
+use Utopia\Database\Adapter\SQL\Hook\Join\OuterChain;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Storage;
 use Utopia\Query\Builder\Condition;
@@ -17,15 +20,15 @@ use Utopia\Query\Hook\Join\Placement;
  * statement: the builder hands every join to the join filters in order, then the main table to the
  * filters.
  *
- * Each joined table meets its own condition where TenantFilter places it: inner and left joins in
+ * Each joined table meets its own condition where Filter places it: inner and left joins in
  * ON, the others in WHERE, where a row an outer join left without the table passes, recognised by
  * the NOT NULL `_uid`. The main table's condition runs in WHERE after every join, relaxed the same
- * way only when the statement has a right or full outer join. RawOuterJoinTenantFilter adds what
+ * way only when the statement has a right or full outer join. RawOuterJoin adds what
  * such a join needs in its own ON (outerJoin()).
  *
  * Tables are named quoted with the adapter's identifier quote, as the builder declares them.
  */
-final class RawTenantFilter implements Filter, JoinFilter
+final class Raw implements Filter, JoinFilter
 {
     /**
      * @var array<string, JoinType> The statement's joins so far, by the name the builder hands join filters
@@ -66,7 +69,7 @@ final class RawTenantFilter implements Filter, JoinFilter
      */
     public function filter(string $table): Condition
     {
-        $preserving = (new JoinChain($this->joins))->hasPreservingOuterJoin();
+        $preserving = (new Chain($this->joins))->hasPreservingOuterJoin();
         $this->reset();
 
         if ($table === '') {
@@ -92,14 +95,14 @@ final class RawTenantFilter implements Filter, JoinFilter
      */
     public function outerJoin(string $table, JoinType $joinType): Condition
     {
-        $chain = new JoinChain($this->joins);
+        $chain = new Chain($this->joins);
         $earlier = [];
         foreach ($chain->preceding($table) as $alias) {
             $earlier[$alias] = $this->joined($alias);
         }
 
         $conditions = [$this->allowMissing($this->main($this->table), $this->table), $this->joined($table)];
-        $preceding = (new OuterJoinChainFilter($chain, $earlier, $this->quoteCharacter))->filterJoin($table, $joinType);
+        $preceding = (new OuterChain($chain, $earlier, $this->quoteCharacter))->filterJoin($table, $joinType);
         if ($preceding !== null) {
             $conditions[] = $preceding->condition;
         }
@@ -132,11 +135,11 @@ final class RawTenantFilter implements Filter, JoinFilter
 
     private function allowMissing(Condition $condition, string $table): Condition
     {
-        return AllowNullColumn::wrap($condition, $table.'.'.Storage::UID, $this->quoteCharacter);
+        return AllowNull::wrap($condition, $table.'.'.Storage::UID, $this->quoteCharacter);
     }
 
     private function column(string $table): string
     {
-        return AllowNullColumn::quote($table, $this->quoteCharacter).'.'.Storage::TENANT;
+        return AllowNull::quote($table, $this->quoteCharacter).'.'.Storage::TENANT;
     }
 }

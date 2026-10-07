@@ -15,9 +15,9 @@ use Utopia\Database\Collection;
 use Utopia\Database\CollectionUpdate;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Permission;
 use Utopia\Database\Query;
+use Utopia\Database\Role;
 
 /**
  * Cache round trips and adapter reads of the core operations on a warm cache, bounded by database 7.3.12's

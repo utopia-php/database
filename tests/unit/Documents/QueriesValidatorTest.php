@@ -14,11 +14,11 @@ use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Event\Domain;
 use Utopia\Database\Exception\Query as QueryException;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Lifecycle;
 use Utopia\Database\Index;
+use Utopia\Database\Permission;
 use Utopia\Database\Query;
+use Utopia\Database\Role;
 use Utopia\Query\Schema\ColumnType;
 
 final class QueriesValidatorTest extends TestCase

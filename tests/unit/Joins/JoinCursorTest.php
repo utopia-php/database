@@ -16,12 +16,12 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Order as OrderException;
 use Utopia\Database\Exception\Query as QueryException;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Index;
-use Utopia\Database\Profiler\QueryLog;
+use Utopia\Database\Permission;
+use Utopia\Database\Profiler\Log;
 use Utopia\Database\Query;
+use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\Method;
 use Utopia\Query\OrderDirection;
@@ -488,7 +488,7 @@ final class JoinCursorTest extends TestCase
 
         $selects = \array_values(\array_filter(
             $this->database->getProfiler()?->getLogs() ?? [],
-            static fn (QueryLog $log): bool => \str_starts_with($log->query, 'SELECT') && \str_contains($log->query, 'ORDER BY'),
+            static fn (Log $log): bool => \str_starts_with($log->query, 'SELECT') && \str_contains($log->query, 'ORDER BY'),
         ));
         $this->assertNotSame([], $selects);
         $query = $selects[\count($selects) - 1]->query;
@@ -575,7 +575,7 @@ final class JoinCursorTest extends TestCase
     {
         $selects = \array_values(\array_filter(
             $this->database->getProfiler()?->getLogs() ?? [],
-            static fn (QueryLog $log): bool => \str_starts_with($log->query, 'SELECT') && \str_contains($log->query, 'ORDER BY'),
+            static fn (Log $log): bool => \str_starts_with($log->query, 'SELECT') && \str_contains($log->query, 'ORDER BY'),
         ));
         $this->assertNotSame([], $selects);
         $query = $selects[\count($selects) - 1]->query;

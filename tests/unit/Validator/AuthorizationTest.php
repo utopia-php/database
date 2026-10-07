@@ -4,10 +4,10 @@ namespace Tests\Unit\Validator;
 
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Document;
-use Utopia\Database\Helpers\ID;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Id;
+use Utopia\Database\Permission;
 use Utopia\Database\PermissionType;
+use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Authorization\Input;
 
@@ -29,11 +29,11 @@ class AuthorizationTest extends TestCase
         $this->authorization->addRole(Role::any()->toString());
 
         $document = new Document([
-            '$id' => ID::unique(),
-            '$collection' => ID::unique(),
+            '$id' => Id::unique(),
+            '$collection' => Id::unique(),
             '$permissions' => [
-                Permission::read(Role::user(ID::custom('123'))),
-                Permission::read(Role::team(ID::custom('123'))),
+                Permission::read(Role::user(Id::custom('123'))),
+                Permission::read(Role::team(Id::custom('123'))),
                 Permission::create(Role::any()),
                 Permission::update(Role::any()),
                 Permission::delete(Role::any()),

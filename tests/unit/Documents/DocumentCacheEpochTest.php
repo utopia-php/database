@@ -15,13 +15,13 @@ use Utopia\Cache\Feature\Leasable;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
-use Utopia\Database\Cache\QueryCache;
+use Utopia\Database\Cache\Query as ResultCache;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Permission;
 use Utopia\Database\Query;
+use Utopia\Database\Role;
 
 final class DocumentCacheEpochTest extends TestCase
 {
@@ -231,7 +231,7 @@ final class DocumentCacheEpochTest extends TestCase
     {
         $cache = new RedisLeasableCache();
         $database = $this->createDatabaseWithCache($cache);
-        $database->setQueryCache(new QueryCache(new Cache($cache)));
+        $database->setQueryCache(new ResultCache(new Cache($cache)));
         for ($index = 0; $index <= 20; $index++) {
             $database->createDocument('webhooks', new Document([
                 '$id' => 'hook'.$index,

@@ -4,11 +4,11 @@ namespace Tests\Unit\Adapter;
 
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\Memory;
-use Utopia\Database\Profiler\QueryProfiler;
+use Utopia\Database\Profiler;
 
 final class ProfilerProbeAdapter extends Memory implements Feature\Connection
 {
-    public ?QueryProfiler $profiled = null;
+    public ?Profiler $profiled = null;
 
     #[\Override]
     public function ping(): bool

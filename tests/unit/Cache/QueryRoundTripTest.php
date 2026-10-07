@@ -5,15 +5,15 @@ namespace Tests\Unit\Cache;
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
-use Utopia\Database\Cache\QueryCache;
+use Utopia\Database\Cache\Query as ResultCache;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Permission;
 use Utopia\Database\Query;
+use Utopia\Database\Role;
 
-final class QueryCacheRoundTripTest extends TestCase
+final class QueryRoundTripTest extends TestCase
 {
     private const int HIT_BUDGET = 3;
 
@@ -57,7 +57,7 @@ final class QueryCacheRoundTripTest extends TestCase
             ->setNamespace('round_trips_'.\uniqid());
         $database->create();
         $database->getAuthorization()->addRole(Role::any()->toString());
-        $database->setQueryCache(new QueryCache(new Cache($cache)));
+        $database->setQueryCache(new ResultCache(new Cache($cache)));
         $database->createCollection(Collection::create(id: 'posts', permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),

@@ -21,7 +21,7 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Hook\RowMetadata;
 use Utopia\Database\Hook\Tenancy;
-use Utopia\Database\Profiler\QueryProfiler;
+use Utopia\Database\Profiler;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Pools\Pool as UtopiaPool;
 
@@ -266,7 +266,7 @@ final class PoolTest extends TestCase
     {
         $adapter = new ProfilerProbeAdapter();
         $pool = $this->createPool($adapter);
-        $profiler = new QueryProfiler();
+        $profiler = new Profiler();
         $pool->setProfiler($profiler);
 
         $this->assertTrue($pool->ping());
@@ -279,7 +279,7 @@ final class PoolTest extends TestCase
     {
         $adapter = new ProfilerProbeAdapter();
         $pool = $this->createPool($adapter);
-        $profiler = new QueryProfiler();
+        $profiler = new Profiler();
         $pool->setProfiler($profiler);
 
         $this->assertTrue($pool->withTransaction(static fn (): bool => $pool->ping()));
@@ -301,7 +301,7 @@ final class PoolTest extends TestCase
         $database->createCollection(Collection::create(id: 'posts'));
 
         $profiler = $database->getProfiler();
-        $this->assertInstanceOf(QueryProfiler::class, $profiler);
+        $this->assertInstanceOf(Profiler::class, $profiler);
         $captured = $profiler->getQueryCount();
         $this->assertGreaterThan(0, $captured, 'The pooled SQLite connection must profile its statements');
 

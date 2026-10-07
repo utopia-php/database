@@ -3,16 +3,16 @@
 namespace Tests\Unit\Profiler;
 
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Profiler\QueryLog;
-use Utopia\Database\Profiler\QueryProfiler;
+use Utopia\Database\Profiler;
+use Utopia\Database\Profiler\Log;
 
-class QueryProfilerAdvancedTest extends TestCase
+class ProfilerAdvancedTest extends TestCase
 {
-    private QueryProfiler $profiler;
+    private Profiler $profiler;
 
     protected function setUp(): void
     {
-        $this->profiler = new QueryProfiler();
+        $this->profiler = new Profiler();
     }
 
     public function testBacktraceCaptureWhenEnabled(): void
@@ -65,7 +65,7 @@ class QueryProfilerAdvancedTest extends TestCase
         $this->assertEmpty($this->profiler->getSlowQueries());
 
         $this->profiler->log('slow', [], 20.0);
-        $this->assertInstanceOf(QueryLog::class, $received->entry);
+        $this->assertInstanceOf(Log::class, $received->entry);
         $this->assertEquals('slow', $received->entry->query);
     }
 
@@ -149,7 +149,7 @@ class QueryProfilerAdvancedTest extends TestCase
         $this->assertEmpty($this->profiler->getSlowQueries());
     }
 
-    public function testSlowQueryCallbackReceivesQueryLogEntry(): void
+    public function testSlowQueryCallbackReceivesTheLogEntry(): void
     {
         $this->profiler->enable();
         $this->profiler->setSlowThreshold(10.0);
@@ -163,7 +163,7 @@ class QueryProfilerAdvancedTest extends TestCase
 
         $this->profiler->log('SELECT slow', ['param'], 50.0, 'users', 'find');
 
-        $this->assertInstanceOf(QueryLog::class, $received->entry);
+        $this->assertInstanceOf(Log::class, $received->entry);
         $this->assertEquals('SELECT slow', $received->entry->query);
         $this->assertEquals(50.0, $received->entry->durationMs);
         $this->assertEquals('users', $received->entry->collection);

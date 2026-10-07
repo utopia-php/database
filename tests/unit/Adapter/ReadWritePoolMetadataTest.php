@@ -14,14 +14,14 @@ use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\ReadWritePool;
 use Utopia\Database\Attribute;
-use Utopia\Database\Cache\QueryCache;
+use Utopia\Database\Cache\Query as ResultCache;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Permission;
 use Utopia\Database\Query;
+use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Pools\Pool as UtopiaPool;
 use Utopia\Query\Schema\ColumnType;
@@ -195,7 +195,7 @@ final class ReadWritePoolMetadataTest extends TestCase
     public function testReadsReachTheReplicaAfterTheStickyWindowWhileCacheKeysNameTheHost(): void
     {
         $database = $this->createReplicatedDatabase(new HostnameSQLite('primary'), new HostnameSQLite('replica'));
-        $database->setQueryCache(new QueryCache(new Cache(new MemoryCache())));
+        $database->setQueryCache(new ResultCache(new Cache(new MemoryCache())));
 
         $this->assertSame(
             'primary',

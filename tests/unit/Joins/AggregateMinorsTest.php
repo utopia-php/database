@@ -15,11 +15,11 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Query as QueryException;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
-use Utopia\Database\Profiler\QueryLog;
+use Utopia\Database\Permission;
+use Utopia\Database\Profiler\Log;
 use Utopia\Database\Query;
+use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
 
 /**
@@ -92,7 +92,7 @@ final class AggregateMinorsTest extends TestCase
 
             $reads = \array_filter(
                 $database->getProfiler()?->getLogs() ?? [],
-                static fn (QueryLog $log): bool => \str_contains($log->query, '_metadata') && \in_array('items', $log->bindings, true),
+                static fn (Log $log): bool => \str_contains($log->query, '_metadata') && \in_array('items', $log->bindings, true),
             );
             $this->assertCount(1, $reads, $case.': the definition resolved for the join serves the bare name too');
         }

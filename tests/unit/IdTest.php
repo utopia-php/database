@@ -3,19 +3,19 @@
 namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Helpers\ID;
+use Utopia\Database\Id;
 
-class IDTest extends TestCase
+class IdTest extends TestCase
 {
     public function test_custom_id(): void
     {
-        $id = ID::custom('test');
+        $id = Id::custom('test');
         $this->assertEquals('test', $id);
     }
 
     public function test_unique_id(): void
     {
-        $id = ID::unique();
+        $id = Id::unique();
         $this->assertNotEmpty($id);
         $this->assertIsString($id); // @phpstan-ignore method.alreadyNarrowedType
     }

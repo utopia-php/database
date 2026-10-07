@@ -23,7 +23,7 @@ use Utopia\Database\Adapter\Timeout;
 use Utopia\Database\Attribute;
 use Utopia\Database\AttributeUpdate;
 use Utopia\Database\Cache\Invalidator;
-use Utopia\Database\Cache\QueryCache;
+use Utopia\Database\Cache\Query as ResultCache;
 use Utopia\Database\Capability;
 use Utopia\Database\Change;
 use Utopia\Database\Collection;
@@ -33,15 +33,15 @@ use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Filter\Registry;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Decorator;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Index;
 use Utopia\Database\Mirror;
 use Utopia\Database\Mirror\Failure;
-use Utopia\Database\Mirroring\Filter;
+use Utopia\Database\Mirror\Filter;
+use Utopia\Database\Permission;
 use Utopia\Database\Query;
+use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
 
 use function Swoole\Coroutine\run;
@@ -235,7 +235,7 @@ class MirrorTest extends TestCase
             new Database($adapter, new Cache(new None())),
             new Database(new Memory(), new Cache(new None())),
         ));
-        $mirror->setQueryCache(new QueryCache(new Cache(new MemoryCache())));
+        $mirror->setQueryCache(new ResultCache(new Cache(new MemoryCache())));
 
         $this->assertSame('first', $this->title($mirror));
         $finds = $adapter->finds;
@@ -261,7 +261,7 @@ class MirrorTest extends TestCase
             }
         };
         $this->seed($mirror);
-        $mirror->setQueryCache(new QueryCache(new Cache(new MemoryCache())));
+        $mirror->setQueryCache(new ResultCache(new Cache(new MemoryCache())));
         $source->setQueryCache(null);
 
         $this->assertSame('first', $this->title($mirror));
@@ -294,7 +294,7 @@ class MirrorTest extends TestCase
     public function testInvalidatorAddedThroughMirrorInvalidatesOnPurge(Closure $register): void
     {
         $mirror = $this->seed(new Mirror(new Database(new Memory(), new Cache(new None()))));
-        $queryCache = new QueryCache(new Cache(new MemoryCache()));
+        $queryCache = new ResultCache(new Cache(new MemoryCache()));
         $register($mirror, new Invalidator($queryCache));
 
         $this->assertStaleUntilPurgedThroughMirror($mirror, $this->sibling($mirror)->setQueryCache($queryCache));
@@ -304,7 +304,7 @@ class MirrorTest extends TestCase
     {
         $source = new Database(new Memory(), new Cache(new None()));
         $mirror = $this->seed(new Mirror($source));
-        $source->setQueryCache(new QueryCache(new Cache(new MemoryCache())));
+        $source->setQueryCache(new ResultCache(new Cache(new MemoryCache())));
 
         $this->assertStaleUntilPurgedThroughMirror($mirror, $source);
     }
@@ -329,7 +329,7 @@ class MirrorTest extends TestCase
      */
     public static function forwardedSetters(): iterable
     {
-        $queryCache = new QueryCache(new Cache(new None()));
+        $queryCache = new ResultCache(new Cache(new None()));
         $filters = new Registry();
         $meta = self::meta(...);
 

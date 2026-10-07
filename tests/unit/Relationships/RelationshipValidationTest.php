@@ -17,14 +17,14 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Structure as StructureException;
-use Utopia\Database\Helpers\ID;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Relationships;
+use Utopia\Database\Id;
 use Utopia\Database\Operator;
+use Utopia\Database\Permission;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationshipType;
 use Utopia\Database\RelationshipUpdate;
+use Utopia\Database\Role;
 use Utopia\Query\Schema\ColumnType;
 
 /** @internal */
@@ -285,7 +285,7 @@ class RelationshipValidationTest extends TestCase
         ]);
 
         $doc = $db->createDocument('species', new Document([
-            '$id' => ID::custom('1'),
+            '$id' => Id::custom('1'),
             '$permissions' => [Permission::read(Role::any())],
             'name' => 'Canine',
             'creature' => null,
@@ -427,7 +427,7 @@ class RelationshipValidationTest extends TestCase
         $this->expectExceptionMessage('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
 
         $db->createDocument('invalid1', new Document([
-            '$id' => ID::unique(),
+            '$id' => Id::unique(),
             'invalid2' => 10,
         ]));
     }
@@ -456,7 +456,7 @@ class RelationshipValidationTest extends TestCase
         $this->expectExceptionMessage('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
 
         $db->createDocument('invalid1', new Document([
-            '$id' => ID::unique(),
+            '$id' => Id::unique(),
             'invalid2' => new \stdClass(),
         ]));
     }
@@ -485,7 +485,7 @@ class RelationshipValidationTest extends TestCase
         $this->expectExceptionMessage('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
 
         $db->createDocument('invalid1', new Document([
-            '$id' => ID::unique(),
+            '$id' => Id::unique(),
             'invalid3' => [10],
         ]));
     }
@@ -514,7 +514,7 @@ class RelationshipValidationTest extends TestCase
         $this->expectExceptionMessage('Invalid relationship value. Cannot set a value from the child side of a oneToOne relationship when twoWay is false.');
 
         $db->createDocument('reverse2', new Document([
-            '$id' => ID::unique(),
+            '$id' => Id::unique(),
             'reverse1' => ['name' => 'reverse'],
         ]));
     }
@@ -540,7 +540,7 @@ class RelationshipValidationTest extends TestCase
         ], [], true);
 
         $doc = $db->createDocument('null1', new Document([
-            '$id' => ID::unique(),
+            '$id' => Id::unique(),
             'null2' => null,
         ]));
 

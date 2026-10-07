@@ -9,7 +9,6 @@ use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Query;
 use Utopia\Database\RelationshipSide;
 use Utopia\Database\RelationshipType;
-use Utopia\Database\Validator\IndexedQueries;
 use Utopia\Database\Validator\Queries;
 use Utopia\Database\Validator\Query\Aggregate;
 use Utopia\Database\Validator\Query\Base;
@@ -151,13 +150,13 @@ final class QueryValidatorCoverageTest extends TestCase
         $search = '{"method":"search","attribute":"name","values":["phrase"]}';
         $attributes = [new Document([Document::ID => 'name', 'key' => 'name', 'type' => ColumnType::String->value, 'array' => false])];
 
-        $withoutFulltext = new IndexedQueries($attributes, [], [new Filter($attributes, ColumnType::Integer->value)]);
+        $withoutFulltext = new Queries\Indexed($attributes, [], [new Filter($attributes, ColumnType::Integer->value)]);
         $this->assertFalse($withoutFulltext->isValid([$search]));
         $this->assertSame('Searching by attribute "name" requires a fulltext index.', $withoutFulltext->getDescription());
         $this->assertFalse($withoutFulltext->isValid([Query::parse($search)]));
         $this->assertSame('Searching by attribute "name" requires a fulltext index.', $withoutFulltext->getDescription());
 
-        $withFulltext = new IndexedQueries(
+        $withFulltext = new Queries\Indexed(
             $attributes,
             [new Document(['type' => IndexType::Fulltext->value, 'attributes' => ['name']])],
             [new Filter($attributes, ColumnType::Integer->value)],
@@ -169,7 +168,7 @@ final class QueryValidatorCoverageTest extends TestCase
 
     public function testStringChildrenOfALogicalQueryAreParsedAndAnUnparseableOneIsRejected(): void
     {
-        $validator = new Queries([$this->filter()]);
+        $validator = new Queries\Base([$this->filter()]);
         $child = '{"method":"equal","attribute":"embedding","values":[[1,2,3]]}';
 
         $this->assertFalse($validator->isValid([new Query(Method::Or, '', [$child, '{"method":"equal"'])]));

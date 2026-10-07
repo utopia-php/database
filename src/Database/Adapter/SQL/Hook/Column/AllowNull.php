@@ -1,13 +1,13 @@
 <?php
 
-namespace Utopia\Database\Hook;
+namespace Utopia\Database\Adapter\SQL\Hook\Column;
 
 use InvalidArgumentException;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Query\Builder\Condition;
 use Utopia\Query\Hook\Filter;
 
-final readonly class AllowNullColumn implements Filter
+final readonly class AllowNull implements Filter
 {
     private const IDENTIFIER_PATTERN = '/^[a-zA-Z0-9_\-][a-zA-Z0-9_.\-]*$/';
 

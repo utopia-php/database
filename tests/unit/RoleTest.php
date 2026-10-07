@@ -5,8 +5,8 @@ namespace Tests\Unit;
 use Exception;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Helpers\ID;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Id;
+use Utopia\Database\Role;
 
 class RoleTest extends TestCase
 {
@@ -109,19 +109,19 @@ class RoleTest extends TestCase
         $role = Role::users();
         $this->assertEquals('users', $role->toString());
 
-        $role = Role::user(ID::custom('123'));
+        $role = Role::user(Id::custom('123'));
         $this->assertEquals('user:123', $role->toString());
 
-        $role = Role::team(ID::custom('123'));
+        $role = Role::team(Id::custom('123'));
         $this->assertEquals('team:123', $role->toString());
 
-        $role = Role::team(ID::custom('123'), '456');
+        $role = Role::team(Id::custom('123'), '456');
         $this->assertEquals('team:123/456', $role->toString());
 
-        $role = Role::team(ID::custom('123'), 'project-456-owner');
+        $role = Role::team(Id::custom('123'), 'project-456-owner');
         $this->assertEquals('team:123/project-456-owner', $role->toString());
 
-        $role = Role::team(ID::custom('123'), 'project-456');
+        $role = Role::team(Id::custom('123'), 'project-456');
         $this->assertEquals('team:123/project-456', $role->toString());
 
         $role = Role::label('vip');
@@ -130,13 +130,13 @@ class RoleTest extends TestCase
 
     public function test_input_from_id(): void
     {
-        $role = Role::user(ID::custom('123'));
+        $role = Role::user(Id::custom('123'));
         $this->assertEquals('user:123', $role->toString());
 
-        $role = Role::team(ID::custom('123'));
+        $role = Role::team(Id::custom('123'));
         $this->assertEquals('team:123', $role->toString());
 
-        $role = Role::team(ID::custom('123'), '456');
+        $role = Role::team(Id::custom('123'), '456');
         $this->assertEquals('team:123/456', $role->toString());
     }
 

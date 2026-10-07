@@ -30,7 +30,7 @@ final class Value
     private static ?bool $coroutines = null;
 
     /**
-     * @var array<int, Scope<T>> The innermost open override of each coroutine that has one, by coroutine id
+     * @var array<int, Frame<T>> The innermost open override of each coroutine that has one, by coroutine id
      */
     private array $scopes = [];
 
@@ -139,7 +139,7 @@ final class Value
     public function with(mixed $value, callable $callback): mixed
     {
         $coroutine = self::coroutine();
-        $scope = new Scope($coroutine, $value, $this->scopes[$coroutine] ?? null);
+        $scope = new Frame($coroutine, $value, $this->scopes[$coroutine] ?? null);
         $this->scopes[$coroutine] = $scope;
         $this->open++;
         $this->group->open++;
@@ -164,10 +164,10 @@ final class Value
      * The value the reader sees through an override it inherited: the nearest write by the reader or an ancestor
      * below the override's owner, else the override's value.
      *
-     * @param  Scope<T>  $scope
+     * @param  Frame<T>  $scope
      * @return T
      */
-    private static function inherited(Scope $scope, int $reader): mixed
+    private static function inherited(Frame $scope, int $reader): mixed
     {
         for ($coroutine = $reader; $coroutine !== $scope->coroutine; $coroutine = self::parent($coroutine)) {
             if (\array_key_exists($coroutine, $scope->writes)) {
@@ -185,7 +185,7 @@ final class Value
      */
     private function detach(int $writer, mixed $value): void
     {
-        $scope = new Scope($writer, $value, null);
+        $scope = new Frame($writer, $value, null);
 
         Coroutine::defer(function () use ($writer, $scope): void {
             if (($this->scopes[$writer] ?? null) === $scope) {

@@ -22,12 +22,12 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Permission;
+use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Pools\Pool as UtopiaPool;
 use Utopia\Query\Schema\MySQL as MySQLSchema;
-use Utopia\Query\Schema\PostgreSQL as PostgreSQLSchema;
+use Utopia\Query\Schema\PostgreSQL as PostgresSchema;
 
 final class BuilderTest extends TestCase
 {
@@ -39,7 +39,7 @@ final class BuilderTest extends TestCase
     public static function dialects(): iterable
     {
         yield 'MariaDB' => [new MariaDB(new stdClass()), MySQLSchema::class];
-        yield 'Postgres' => [new Postgres(new stdClass()), PostgreSQLSchema::class];
+        yield 'Postgres' => [new Postgres(new stdClass()), PostgresSchema::class];
         yield 'SQLite' => [new SQLite(new PDO('sqlite::memory:')), MySQLSchema::class];
     }
 

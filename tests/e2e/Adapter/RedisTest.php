@@ -10,9 +10,9 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Helpers\ID;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Id;
+use Utopia\Database\Permission;
+use Utopia\Database\Role;
 
 /**
  * Paratest's `--functional` mode invokes `setUpBeforeClass`/`tearDownAfterClass`
@@ -126,7 +126,7 @@ class RedisTest extends Base
     {
         $database = $this->getDatabase();
         $collection = 'lenientReads';
-        $id = ID::unique();
+        $id = Id::unique();
         $permissions = [Permission::read(Role::any())];
 
         $database->createCollection(Collection::create(

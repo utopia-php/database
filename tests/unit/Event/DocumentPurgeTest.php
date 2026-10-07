@@ -24,11 +24,11 @@ use Utopia\Database\Event;
 use Utopia\Database\Event\Domain;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Unconfirmed as UnconfirmedException;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Lifecycle;
 use Utopia\Database\Mirror;
+use Utopia\Database\Permission;
 use Utopia\Database\Query;
+use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
 
 final class DocumentPurgeTest extends TestCase

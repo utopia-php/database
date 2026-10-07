@@ -5,13 +5,15 @@ namespace Utopia\Database\Validator\Query;
 use Utopia\Database\Attribute;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
+use Utopia\Database\Validator\Query\Joined\Attributes;
+use Utopia\Database\Validator\Query\Joined\Collection;
 
 /**
  * Validates groupBy query methods ensuring the grouped attributes exist in the schema.
  */
 class GroupBy extends Base
 {
-    use JoinedAttributes;
+    use Attributes;
 
     /**
      * @var array<string, true>
@@ -41,7 +43,7 @@ class GroupBy extends Base
         }
 
         $this->schema += self::internalColumns($sharedTables);
-        $this->columns = JoinedCollection::columns($attributes);
+        $this->columns = Collection::columns($attributes);
     }
 
     public function getMethodType(): string

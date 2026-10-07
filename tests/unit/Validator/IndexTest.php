@@ -11,7 +11,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Index;
 use Utopia\Database\Validator\IndexDefinition;
-use Utopia\Database\Validator\IndexedQueries;
+use Utopia\Database\Validator\Queries\Indexed;
 use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\IndexType;
 
@@ -470,7 +470,7 @@ class IndexTest extends TestCase
 
         $this->assertSame(IndexType::Key, $index->type);
         $this->assertSame(['title'], $index->attributes);
-        $this->assertTrue((new IndexedQueries([Attribute::string(key: 'title', size: 64)], [$stored]))->isValid([]));
+        $this->assertTrue((new Indexed([Attribute::string(key: 'title', size: 64)], [$stored]))->isValid([]));
     }
 
     public function testTextAttributeWithoutASizeIsJudgedAgainstTheTextMaximum(): void

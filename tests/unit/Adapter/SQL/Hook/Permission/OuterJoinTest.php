@@ -1,19 +1,19 @@
 <?php
 
-namespace Tests\Unit\Hook;
+namespace Tests\Unit\Adapter\SQL\Hook\Permission;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Hook\OuterJoinPermissionFilter;
-use Utopia\Database\Hook\PermissionFilter;
-use Utopia\Database\Hook\PermissionJoinFilter;
-use Utopia\Database\Hook\TenantFilter;
+use Utopia\Database\Adapter\SQL\Hook\Permission\Filter;
+use Utopia\Database\Adapter\SQL\Hook\Permission\Join;
+use Utopia\Database\Adapter\SQL\Hook\Permission\OuterJoin;
+use Utopia\Database\Adapter\SQL\Hook\Tenant\Filter as TenantFilter;
 use Utopia\Database\Storage;
 use Utopia\Query\Builder\Condition;
 use Utopia\Query\Builder\JoinType;
 use Utopia\Query\Hook\Join\Placement;
 
-final class OuterJoinPermissionFilterTest extends TestCase
+final class OuterJoinTest extends TestCase
 {
     private const string SOURCE = 'main';
 
@@ -53,7 +53,7 @@ final class OuterJoinPermissionFilterTest extends TestCase
     #[DataProvider('preservingJoins')]
     public function testBothSidesAreCheckedInsideOn(JoinType $joinType): void
     {
-        $result = (new OuterJoinPermissionFilter(self::SOURCE, [
+        $result = (new OuterJoin(self::SOURCE, [
             self::SOURCE => $this->permission(self::SOURCE)->filter(self::SOURCE),
             self::ALIAS => $this->permission(self::ALIAS)->filter(self::ALIAS),
         ]))->filterJoin(self::ALIAS, $joinType);
@@ -74,7 +74,7 @@ final class OuterJoinPermissionFilterTest extends TestCase
     #[DataProvider('otherJoins')]
     public function testJoinsThatDropUnreadableRowsInTheirOwnPlacementNeedNothing(JoinType $joinType): void
     {
-        $hook = new OuterJoinPermissionFilter(self::SOURCE, [
+        $hook = new OuterJoin(self::SOURCE, [
             self::SOURCE => new Condition('main.ok'),
             self::ALIAS => new Condition('j0.ok'),
         ]);
@@ -84,9 +84,9 @@ final class OuterJoinPermissionFilterTest extends TestCase
 
     public function testATableReadThroughItsCollectionGrantIsNotChecked(): void
     {
-        $sourceOnly = (new OuterJoinPermissionFilter(self::SOURCE, [self::SOURCE => new Condition('main.ok = ?', [1])], '"'))
+        $sourceOnly = (new OuterJoin(self::SOURCE, [self::SOURCE => new Condition('main.ok = ?', [1])], '"'))
             ->filterJoin(self::ALIAS, JoinType::Right);
-        $joinedOnly = (new OuterJoinPermissionFilter(self::SOURCE, [self::ALIAS => new Condition('j0.ok = ?', [2])]))
+        $joinedOnly = (new OuterJoin(self::SOURCE, [self::ALIAS => new Condition('j0.ok = ?', [2])]))
             ->filterJoin(self::ALIAS, JoinType::Right);
 
         $this->assertNotNull($sourceOnly);
@@ -95,7 +95,7 @@ final class OuterJoinPermissionFilterTest extends TestCase
         $this->assertNotNull($joinedOnly);
         $this->assertSame('j0.ok = ?', $joinedOnly->condition->expression);
         $this->assertSame([2], $joinedOnly->condition->bindings);
-        $this->assertNull((new OuterJoinPermissionFilter(self::SOURCE, []))->filterJoin(self::ALIAS, JoinType::FullOuter));
+        $this->assertNull((new OuterJoin(self::SOURCE, []))->filterJoin(self::ALIAS, JoinType::FullOuter));
     }
 
     /**
@@ -105,7 +105,7 @@ final class OuterJoinPermissionFilterTest extends TestCase
     #[DataProvider('placements')]
     public function testPermissionJoinFilterPlacesItsConditionWhereTenantFilterDoes(JoinType $joinType, bool $preservingOuterJoin): void
     {
-        $permission = (new PermissionJoinFilter($this->permission(self::ALIAS), self::ALIAS, preservingOuterJoin: $preservingOuterJoin))
+        $permission = (new Join($this->permission(self::ALIAS), self::ALIAS, preservingOuterJoin: $preservingOuterJoin))
             ->filterJoin(self::ALIAS, $joinType);
         $tenant = (new TenantFilter(7, allowNullColumn: $preservingOuterJoin ? self::SOURCE.'.'.Storage::UID : ''))
             ->filterJoin(self::ALIAS, $joinType);
@@ -119,9 +119,9 @@ final class OuterJoinPermissionFilterTest extends TestCase
         );
     }
 
-    private function permission(string $alias): PermissionFilter
+    private function permission(string $alias): Filter
     {
-        return new PermissionFilter(
+        return new Filter(
             roles: ['any'],
             permissionsTable: static fn (string $table): string => 'perms_'.$table,
             documentColumn: $alias.'.'.Storage::UID,

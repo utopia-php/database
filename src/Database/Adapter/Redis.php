@@ -21,7 +21,7 @@ use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Unique as UniqueException;
-use Utopia\Database\Helpers\ID;
+use Utopia\Database\Id;
 use Utopia\Database\Index;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
@@ -897,7 +897,7 @@ class Redis extends Adapter implements
         $col = $this->filter($collection->getId());
         $id = $document->getId();
         if ($id === '') {
-            $id = ID::unique();
+            $id = Id::unique();
             $document->setAttribute(Document::ID, $id);
         }
         $tenant = $document->getTenant();

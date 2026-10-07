@@ -16,7 +16,7 @@ use Utopia\Query\Hook;
 class Invalidator implements Hook
 {
     public function __construct(
-        private QueryCache $queryCache,
+        private Query $queryCache,
         private Scope $scope = new Scope(),
     ) {
     }

@@ -1,25 +1,21 @@
 <?php
 
-namespace Utopia\Database\Hook;
+namespace Utopia\Database\Hook\Mongo;
 
 use Utopia\Database\PermissionType;
 use Utopia\Query\Hook;
 
 /**
- * Read hook interface for MongoDB adapters that narrow a query's filter array by permission.
+ * Narrows a MongoDB filter array before the Mongo adapter runs it.
  *
- * Only reads apply these hooks. Database authorizes every write before it reaches the adapter,
- * so write paths are scoped by tenant alone and never inherit a read filter.
+ * Database authorizes every write before it reaches the adapter, so write paths apply the tenant hook alone and
+ * never inherit a permission filter.
  */
 interface Read extends Hook
 {
     /**
-     * Apply read-side filters to a MongoDB filter array.
-     *
-     * @param  array<string, mixed>  $filters  The current MongoDB filter array
-     * @param  string  $collection  The collection being queried
-     * @param  PermissionType  $forPermission  The permission the caller must hold on every matched document
-     * @return array<string, mixed> The modified filter array
+     * @param  array<string, mixed>  $filters
+     * @return array<string, mixed>
      */
     public function applyFilters(array $filters, string $collection, PermissionType $forPermission): array;
 }

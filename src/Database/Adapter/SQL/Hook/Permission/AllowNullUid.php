@@ -1,20 +1,21 @@
 <?php
 
-namespace Utopia\Database\Hook;
+namespace Utopia\Database\Adapter\SQL\Hook\Permission;
 
+use Utopia\Database\Adapter\SQL\Hook\Column\AllowNull;
 use Utopia\Query\Builder\Condition;
 use Utopia\Query\Hook\Filter;
 
-final readonly class PermissionAllowNullUid implements Filter
+final readonly class AllowNullUid implements Filter
 {
-    private AllowNullColumn $inner;
+    private AllowNull $inner;
 
     public function __construct(
         Filter $filter,
         string $documentColumn,
         string $quoteCharacter = '`',
     ) {
-        $this->inner = new AllowNullColumn($filter, $documentColumn, $quoteCharacter);
+        $this->inner = new AllowNull($filter, $documentColumn, $quoteCharacter);
     }
 
     public function filter(string $table): Condition

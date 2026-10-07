@@ -12,11 +12,11 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
-use Utopia\Database\Profiler\QueryLog;
+use Utopia\Database\Permission;
+use Utopia\Database\Profiler\Log;
 use Utopia\Database\Query;
+use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
 
 /**
@@ -82,7 +82,7 @@ final class ProfiledStatementTest extends TestCase
 
     public function testAnUnfilteredReadLogsItsCollection(): void
     {
-        $count = $this->database->getAuthorization()->skip(fn (): QueryLog => $this->logOn(fn (): int => $this->database->count('items')));
+        $count = $this->database->getAuthorization()->skip(fn (): Log => $this->logOn(fn (): int => $this->database->count('items')));
         $this->assertSame([], $count->bindings);
         $this->assertSame('items', $count->collection);
         $this->assertSame(Event::DocumentCount->value, $count->operation);
@@ -108,7 +108,7 @@ final class ProfiledStatementTest extends TestCase
      *
      * @param  callable(): mixed  $read
      */
-    private function logOn(callable $read): QueryLog
+    private function logOn(callable $read): Log
     {
         $profiler = $this->database->setProfiling(true)->getProfiler();
         $this->assertNotNull($profiler);
@@ -122,7 +122,7 @@ final class ProfiledStatementTest extends TestCase
 
         $logs = \array_values(\array_filter(
             $profiler->getLogs(),
-            static fn (QueryLog $log): bool => \str_contains($log->query, self::NAMESPACE.'_items`'),
+            static fn (Log $log): bool => \str_contains($log->query, self::NAMESPACE.'_items`'),
         ));
         $this->assertCount(1, $logs);
 

@@ -12,7 +12,7 @@ use Utopia\Database\Document;
  * of the database it runs for from the {@see Scope} it is handed (or, for the key-based calls, its writer timeout
  * argument), so one query cache can be shared by databases named and configured differently.
  */
-class QueryCache
+class Query
 {
     private const string ACTIVE_PREFIX = 'active:';
 

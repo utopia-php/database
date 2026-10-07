@@ -15,7 +15,7 @@ use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
-use Utopia\Database\Cache\QueryCache;
+use Utopia\Database\Cache\Query as ResultCache;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
@@ -30,14 +30,14 @@ use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
-use Utopia\Database\Helpers\ID;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Id;
 use Utopia\Database\Index;
 use Utopia\Database\Mirror;
 use Utopia\Database\PDO;
-use Utopia\Database\Profiler\QueryProfiler;
+use Utopia\Database\Permission;
+use Utopia\Database\Profiler;
 use Utopia\Database\Query;
+use Utopia\Database\Role;
 
 trait GeneralTests
 {
@@ -189,7 +189,7 @@ trait GeneralTests
             $database->createAttribute(__FUNCTION__, Attribute::string(key: 'name', size: 100));
             $database->createIndex(__FUNCTION__, Index::key(key: 'nameIndex', attributes: ['name']));
 
-            $doc1Id = ID::unique();
+            $doc1Id = Id::unique();
 
             // Create doc for tenant 1
             $database
@@ -210,7 +210,7 @@ trait GeneralTests
             $this->assertEquals('Spiderman', $doc['name']);
             $doc1CreatedAt = $doc->getCreatedAt();
 
-            $doc2Id = ID::unique();
+            $doc2Id = Id::unique();
 
             // Create doc for tenant 2
             $database
@@ -272,7 +272,7 @@ trait GeneralTests
                 $this->assertSame($doc1CreatedAt, $documents[0]->getCreatedAt());
 
                 // Test upsert with tenant per doc
-                $doc3Id = ID::unique();
+                $doc3Id = Id::unique();
                 $database
                     ->setTenant(null)
                     ->setTenantPerDocument(true)
@@ -312,8 +312,8 @@ trait GeneralTests
                 // placeholder per distinct tenant, so a cross-tenant batch has to keep each
                 // tenant's value at the position its placeholder was named for -- collected here
                 // because $onNext is the only way these documents reach the caller.
-                $doc4Id = ID::unique();
-                $doc5Id = ID::unique();
+                $doc4Id = Id::unique();
+                $doc5Id = Id::unique();
                 $sequences = [];
                 $database
                     ->setTenant(null)
@@ -445,7 +445,7 @@ trait GeneralTests
             ));
             $database
                 ->setTenantPerDocument(true)
-                ->setQueryCache(new QueryCache($database->getCache()));
+                ->setQueryCache(new ResultCache($database->getCache()));
 
             foreach ([5, 6] as $documentTenant) {
                 $database->createDocument('notes', $this->queryCacheTenantNote($documentTenant, ['alice', 'bob'], 'draft'));
@@ -852,7 +852,7 @@ trait GeneralTests
             $this->markTestSkipped('Adapter does not use the document cache.');
         }
 
-        $collection = 'ownerKeys'.ID::unique();
+        $collection = 'ownerKeys'.Id::unique();
         $database->createCollection(Collection::create(id: $collection, attributes: [
             Attribute::string(key: 'name', size: 64, required: true),
         ], permissions: [
@@ -868,7 +868,7 @@ trait GeneralTests
         $queryCache = $database->getQueryCache();
         $destination = $database instanceof Mirror ? $database->getDestination() : null;
         $destinationCache = $destination?->getCache();
-        $database->setCache($cache)->setQueryCache(new QueryCache($cache));
+        $database->setCache($cache)->setQueryCache(new ResultCache($cache));
 
         $documents = 10;
         try {
@@ -1344,12 +1344,12 @@ trait GeneralTests
 
     public function testGetId(): void
     {
-        $this->assertSame(20, strlen(ID::unique()));
-        $this->assertSame(13, strlen(ID::unique(0)));
-        $this->assertSame(13, strlen(ID::unique(-1)));
-        $this->assertSame(23, strlen(ID::unique(10)));
+        $this->assertSame(20, strlen(Id::unique()));
+        $this->assertSame(13, strlen(Id::unique(0)));
+        $this->assertSame(13, strlen(Id::unique(-1)));
+        $this->assertSame(23, strlen(Id::unique(10)));
 
-        $this->assertNotSame(ID::unique(10), ID::unique(10));
+        $this->assertNotSame(Id::unique(10), Id::unique(10));
     }
 
     public function testNestedQueryValidation(): void
@@ -1367,11 +1367,11 @@ trait GeneralTests
 
         $database->createDocuments(__FUNCTION__, [
             new Document([
-                '$id' => ID::unique(),
+                '$id' => Id::unique(),
                 'name' => 'test1',
             ]),
             new Document([
-                '$id' => ID::unique(),
+                '$id' => Id::unique(),
                 'name' => 'doc2',
             ]),
         ]);
@@ -1697,7 +1697,7 @@ trait GeneralTests
         }
     }
 
-    private function countStatementsAgainst(QueryProfiler $profiler, string $table): int
+    private function countStatementsAgainst(Profiler $profiler, string $table): int
     {
         $statements = 0;
         foreach ($profiler->getLogs() as $log) {
@@ -1729,7 +1729,7 @@ trait GeneralTests
         $profiler = $database->setProfiling(true)->getProfiler();
         $this->assertNotNull($profiler);
 
-        $collection = 'roundTrips'.ID::unique();
+        $collection = 'roundTrips'.Id::unique();
         $measure = function (string $operation, int $roundTrips, int $statements, callable $callback) use ($counting, $profiler, $counted): mixed {
             $counting->resetOperations();
             $profiler->reset();

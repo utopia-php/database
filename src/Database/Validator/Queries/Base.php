@@ -1,17 +1,17 @@
 <?php
 
-namespace Utopia\Database\Validator;
+namespace Utopia\Database\Validator\Queries;
 
 use Throwable;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Query\Aggregate;
-use Utopia\Database\Validator\Query\Base;
+use Utopia\Database\Validator\Query\Base as QueryBase;
 use Utopia\Database\Validator\Query\Filter;
 use Utopia\Database\Validator\Query\GroupBy;
 use Utopia\Database\Validator\Query\Having;
 use Utopia\Database\Validator\Query\Join;
-use Utopia\Database\Validator\Query\JoinedCollection;
+use Utopia\Database\Validator\Query\Joined\Collection;
 use Utopia\Database\Validator\Query\Order;
 use Utopia\Database\Validator\Query\Select;
 use Utopia\Query\Method;
@@ -20,12 +20,12 @@ use Utopia\Validator;
 /**
  * Validates an array of query objects by dispatching each to the appropriate method-type validator.
  */
-class Queries extends Validator
+class Base extends Validator
 {
     protected string $message = 'Invalid queries';
 
     /**
-     * @var array<Base>
+     * @var array<QueryBase>
      */
     protected array $validators;
 
@@ -39,7 +39,7 @@ class Queries extends Validator
     /**
      * Queries constructor
      *
-     * @param  array<Base>  $validators
+     * @param  array<QueryBase>  $validators
      */
     public function __construct(array $validators = [], int $length = 0)
     {
@@ -116,7 +116,7 @@ class Queries extends Validator
             ) {
                 $validator->resetJoinAliases();
             }
-            if ($validator->getMethodType() === Base::METHOD_TYPE_FILTER) {
+            if ($validator->getMethodType() === QueryBase::METHOD_TYPE_FILTER) {
                 $hasFilterValidator = true;
             }
         }
@@ -244,17 +244,17 @@ class Queries extends Validator
             // of the aggregate methods, silently rejecting stddevPop, varPop,
             // bitAnd, etc. with "Invalid query method".
             if ($method->isAggregate()) {
-                $methodType = Base::METHOD_TYPE_AGGREGATE;
+                $methodType = QueryBase::METHOD_TYPE_AGGREGATE;
             } else {
                 $methodType = match ($method) {
-                    Method::Select => Base::METHOD_TYPE_SELECT,
-                    Method::Limit => Base::METHOD_TYPE_LIMIT,
-                    Method::Offset => Base::METHOD_TYPE_OFFSET,
+                    Method::Select => QueryBase::METHOD_TYPE_SELECT,
+                    Method::Limit => QueryBase::METHOD_TYPE_LIMIT,
+                    Method::Offset => QueryBase::METHOD_TYPE_OFFSET,
                     Method::CursorAfter,
-                    Method::CursorBefore => Base::METHOD_TYPE_CURSOR,
+                    Method::CursorBefore => QueryBase::METHOD_TYPE_CURSOR,
                     Method::OrderAsc,
                     Method::OrderDesc,
-                    Method::OrderRandom => Base::METHOD_TYPE_ORDER,
+                    Method::OrderRandom => QueryBase::METHOD_TYPE_ORDER,
                     Method::Equal,
                     Method::NotEqual,
                     Method::LessThan,
@@ -299,16 +299,16 @@ class Queries extends Validator
                     Method::VectorEuclidean,
                     Method::Regex,
                     Method::Exists,
-                    Method::NotExists => Base::METHOD_TYPE_FILTER,
-                    Method::Distinct => Base::METHOD_TYPE_DISTINCT,
-                    Method::GroupBy => Base::METHOD_TYPE_GROUP_BY,
-                    Method::Having => Base::METHOD_TYPE_HAVING,
+                    Method::NotExists => QueryBase::METHOD_TYPE_FILTER,
+                    Method::Distinct => QueryBase::METHOD_TYPE_DISTINCT,
+                    Method::GroupBy => QueryBase::METHOD_TYPE_GROUP_BY,
+                    Method::Having => QueryBase::METHOD_TYPE_HAVING,
                     Method::Join,
                     Method::LeftJoin,
                     Method::RightJoin,
                     Method::CrossJoin,
                     Method::FullOuterJoin,
-                    Method::NaturalJoin => Base::METHOD_TYPE_JOIN,
+                    Method::NaturalJoin => QueryBase::METHOD_TYPE_JOIN,
                     default => '',
                 };
             }
@@ -341,7 +341,7 @@ class Queries extends Validator
      * The collection each join of the query set reads, for the joins whose collection is given.
      *
      * @param  list<Query>  $queries
-     * @return list<JoinedCollection>
+     * @return list<Collection>
      */
     private function joins(array $queries): array
     {
@@ -354,7 +354,7 @@ class Queries extends Validator
 
             $collection = $this->getJoinedCollection($query->getAttribute());
             if ($collection !== null) {
-                $joins[] = JoinedCollection::of($query->getAlias(), $collection);
+                $joins[] = Collection::of($query->getAlias(), $collection);
             }
         }
 

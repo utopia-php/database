@@ -8,10 +8,10 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Helpers\ID;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Id;
+use Utopia\Database\Permission;
 use Utopia\Database\Query;
+use Utopia\Database\Role;
 
 trait CustomDocumentTypeTests
 {
@@ -127,7 +127,7 @@ trait CustomDocumentTypeTests
         $database->setDocumentType('customUsers', User::class);
 
         $created = $database->createDocument('customUsers', new Document([
-            '$id' => ID::unique(),
+            '$id' => Id::unique(),
             'email' => 'test@example.com',
             'name' => 'Test User',
             'status' => 'active',
@@ -163,14 +163,14 @@ trait CustomDocumentTypeTests
         $database->setDocumentType('customPosts', Post::class);
 
         $database->createDocument('customPosts', new Document([
-            '$id' => ID::unique(),
+            '$id' => Id::unique(),
             'title' => 'First Post',
             'content' => 'This is the first post',
             '$permissions' => [Permission::read(Role::any())],
         ]));
 
         $database->createDocument('customPosts', new Document([
-            '$id' => ID::unique(),
+            '$id' => Id::unique(),
             'title' => 'Second Post',
             'content' => 'This is the second post',
             '$permissions' => [Permission::read(Role::any())],
@@ -205,7 +205,7 @@ trait CustomDocumentTypeTests
         $database->setDocumentType('customUsersUpdate', User::class);
 
         $created = $database->createDocument('customUsersUpdate', new Document([
-            '$id' => ID::unique(),
+            '$id' => Id::unique(),
             'email' => 'original@example.com',
             'name' => 'Original Name',
             'status' => 'active',
@@ -240,7 +240,7 @@ trait CustomDocumentTypeTests
         ]));
 
         $created = $database->createDocument('unmappedCollection', new Document([
-            '$id' => ID::unique(),
+            '$id' => Id::unique(),
             'data' => 'test data',
             '$permissions' => [Permission::read(Role::any())],
         ]));

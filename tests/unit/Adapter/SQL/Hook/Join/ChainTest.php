@@ -1,17 +1,17 @@
 <?php
 
-namespace Tests\Unit\Hook;
+namespace Tests\Unit\Adapter\SQL\Hook\Join;
 
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Hook\JoinChain;
+use Utopia\Database\Adapter\SQL\Hook\Join\Chain;
 use Utopia\Database\Query;
 use Utopia\Query\Builder\JoinType;
 
-final class JoinChainTest extends TestCase
+final class ChainTest extends TestCase
 {
     public function testJoinsAreKeyedTheWayTheBuilderHandsThemToJoinFilters(): void
     {
-        $chain = JoinChain::fromQueries([
+        $chain = Chain::fromQueries([
             Query::equal('name', ['a']),
             Query::join('books', 'book', [Query::on('$id', 'authorId')]),
             Query::crossJoin('extras', 'extra'),
@@ -26,7 +26,7 @@ final class JoinChainTest extends TestCase
 
     public function testOnlyTablesWhoseConditionsSitInWherePrecedeALaterJoin(): void
     {
-        $chain = new JoinChain([
+        $chain = new Chain([
             'inner' => JoinType::Inner,
             'left' => JoinType::Left,
             'right' => JoinType::Right,
@@ -43,16 +43,16 @@ final class JoinChainTest extends TestCase
 
     public function testAnAliasOutsideTheChainHasNoPrecedingTables(): void
     {
-        $chain = new JoinChain(['right' => JoinType::Right, 'last' => JoinType::Right]);
+        $chain = new Chain(['right' => JoinType::Right, 'last' => JoinType::Right]);
 
         $this->assertSame([], $chain->preceding('unknown'), 'Repeating conditions of tables the join may not follow would reference aliases it cannot see');
     }
 
     public function testOnlyRightAndFullOuterJoinsCanLeaveATableMissing(): void
     {
-        $this->assertFalse((new JoinChain())->hasPreservingOuterJoin());
-        $this->assertFalse((new JoinChain(['a' => JoinType::Inner, 'b' => JoinType::Left, 'c' => JoinType::Cross]))->hasPreservingOuterJoin());
-        $this->assertTrue((new JoinChain(['a' => JoinType::Inner, 'b' => JoinType::Right]))->hasPreservingOuterJoin());
-        $this->assertTrue((new JoinChain(['a' => JoinType::FullOuter]))->hasPreservingOuterJoin());
+        $this->assertFalse((new Chain())->hasPreservingOuterJoin());
+        $this->assertFalse((new Chain(['a' => JoinType::Inner, 'b' => JoinType::Left, 'c' => JoinType::Cross]))->hasPreservingOuterJoin());
+        $this->assertTrue((new Chain(['a' => JoinType::Inner, 'b' => JoinType::Right]))->hasPreservingOuterJoin());
+        $this->assertTrue((new Chain(['a' => JoinType::FullOuter]))->hasPreservingOuterJoin());
     }
 }

@@ -16,16 +16,16 @@ use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\ReadWritePool;
 use Utopia\Database\Attribute;
-use Utopia\Database\Cache\QueryCache;
+use Utopia\Database\Cache\Query;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Hook\Write;
 use Utopia\Database\Index;
-use Utopia\Database\Profiler\QueryProfiler;
+use Utopia\Database\Permission;
+use Utopia\Database\Profiler;
+use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Pools\Pool as UtopiaPool;
 
@@ -536,7 +536,7 @@ class ReadWritePoolTest extends TestCase
         $replica = new ProfilerProbeAdapter();
         $pool = new ReadWritePool($this->createConnections(new Memory()), $this->createConnections($replica));
         $pool->setAuthorization(new Authorization());
-        $profiler = new QueryProfiler();
+        $profiler = new Profiler();
         $pool->setProfiler($profiler);
 
         $this->assertTrue($pool->ping());
@@ -656,7 +656,7 @@ class ReadWritePoolTest extends TestCase
             ->setDatabase('replication')
             ->setNamespace('replication')
             ->setAuthorization(new Authorization());
-        $database->setQueryCache(new QueryCache(new Cache(new MemoryCache())));
+        $database->setQueryCache(new Query(new Cache(new MemoryCache())));
         $titles = static fn (): array => \array_map(
             static fn (Document $article): mixed => $article->getAttribute('title'),
             $database->find('articles'),

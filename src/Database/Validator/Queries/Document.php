@@ -8,7 +8,6 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Document as BaseDocument;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Queries;
 use Utopia\Database\Validator\Query\Filter;
 use Utopia\Database\Validator\Query\Join;
 use Utopia\Database\Validator\Query\Select;
@@ -17,14 +16,14 @@ use Utopia\Database\Validator\Query\Select;
  * Validates queries for single document retrieval: selections of the document's attributes, and,
  * unless turned off, joins whose conditions meet the filter rules a listing applies to them.
  */
-class Document extends Queries
+class Document extends Base
 {
     /**
      * @var array<Attribute>
      */
     private readonly array $attributes;
 
-    private ?Queries $conditions = null;
+    private ?Base $conditions = null;
 
     /**
      * @param  array<Attribute|BaseDocument>  $attributes
@@ -86,7 +85,7 @@ class Document extends Queries
 
         $supportForAttributes = $this->profile->supports(Capability::DefinedAttributes);
         $limits = $this->profile->limits;
-        $conditions = $this->conditions ??= new Queries([
+        $conditions = $this->conditions ??= new Base([
             new Filter(
                 $this->attributes,
                 $limits->idType->value,

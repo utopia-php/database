@@ -10,6 +10,7 @@ use PDOStatement;
 use Swoole\Database\PDOProxy;
 use Swoole\Database\PDOStatementProxy;
 use Throwable;
+use Utopia\Database\Adapter\SQL\Hook\Permission;
 use Utopia\Database\Attribute;
 use Utopia\Database\Builder\SQLite as SQLiteBuilder;
 use Utopia\Database\Capability;
@@ -28,7 +29,6 @@ use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Exception\Unique as UniqueException;
-use Utopia\Database\Hook\PermissionFilter;
 use Utopia\Database\Index;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
@@ -1487,7 +1487,7 @@ class SQLite extends SQL
      * @param  array<string>  $roles
      */
     #[Override]
-    protected function newPermissionHook(string $collection, array $roles, string $type = PermissionType::Read->value, string $documentColumn = Storage::UID): PermissionFilter
+    protected function newPermissionHook(string $collection, array $roles, string $type = PermissionType::Read->value, string $documentColumn = Storage::UID): Permission\Filter
     {
         return parent::newPermissionHook($collection, $roles, $type, $documentColumn)->collate(SQLiteBuilder::COLLATION);
     }

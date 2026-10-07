@@ -16,11 +16,11 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Structure as StructureException;
-use Utopia\Database\Helpers\ID;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Id;
 use Utopia\Database\Index;
+use Utopia\Database\Permission;
 use Utopia\Database\Query;
+use Utopia\Database\Role;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 
@@ -183,7 +183,7 @@ class SpatialValidationTest extends TestCase
         $this->setupCollections([$col]);
 
         $doc = $this->database->createDocument('spatial_defaults', new Document([
-            '$id' => ID::custom('d1'),
+            '$id' => Id::custom('d1'),
             '$permissions' => [Permission::read(Role::any())],
         ]));
 

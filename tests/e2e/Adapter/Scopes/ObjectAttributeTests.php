@@ -13,11 +13,11 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Structure as StructureException;
-use Utopia\Database\Helpers\ID;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Id;
 use Utopia\Database\Index;
+use Utopia\Database\Permission;
 use Utopia\Database\Query;
+use Utopia\Database\Role;
 use Utopia\Query\Method;
 use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
@@ -66,7 +66,7 @@ trait ObjectAttributeTests
             $this->markTestSkipped('Adapter does not support object attributes');
         }
 
-        $collectionId = ID::unique();
+        $collectionId = Id::unique();
         $database->createCollection(Collection::create(id: $collectionId));
 
         // Create object attribute
@@ -620,7 +620,7 @@ trait ObjectAttributeTests
             $this->markTestSkipped('Adapter does not support object indexes');
         }
 
-        $collectionId = ID::unique();
+        $collectionId = Id::unique();
         $database->createCollection(Collection::create(id: $collectionId));
 
         // Create object attribute
@@ -727,7 +727,7 @@ trait ObjectAttributeTests
             $this->markTestSkipped('Adapter does not support object attributes');
         }
 
-        $collectionId = ID::unique();
+        $collectionId = Id::unique();
         $database->createCollection(Collection::create(id: $collectionId));
 
         $this->createAttribute($database, $collectionId, 'meta', ColumnType::Object, 0, false);
@@ -895,7 +895,7 @@ trait ObjectAttributeTests
             $this->markTestSkipped('Adapter does not support object attributes');
         }
 
-        $collectionId = ID::unique();
+        $collectionId = Id::unique();
         $database->createCollection(Collection::create(id: $collectionId));
 
         $this->createAttribute($database, $collectionId, 'metaDefaultEmpty', ColumnType::Object, 0, false, []);
@@ -948,7 +948,7 @@ trait ObjectAttributeTests
             $this->markTestSkipped('Adapter does not support object attributes');
         }
 
-        $collectionId = ID::unique();
+        $collectionId = Id::unique();
         $database->createCollection(Collection::create(id: $collectionId));
         $this->createAttribute($database, $collectionId, 'meta', ColumnType::Object, 0, false);
 
@@ -996,7 +996,7 @@ trait ObjectAttributeTests
             $this->markTestSkipped('Adapter does not support object attributes');
         }
 
-        $collectionId = ID::unique();
+        $collectionId = Id::unique();
         $database->createCollection(Collection::create(id: $collectionId));
         $this->createAttribute($database, $collectionId, 'meta', ColumnType::Object, 0, false);
 
@@ -1042,7 +1042,7 @@ trait ObjectAttributeTests
             $this->markTestSkipped('Adapter does not support object attributes');
         }
 
-        $collectionId = ID::unique();
+        $collectionId = Id::unique();
         $database->createCollection(Collection::create(id: $collectionId));
         $this->createAttribute($database, $collectionId, 'meta', ColumnType::Object, 0, false);
 
@@ -1108,7 +1108,7 @@ trait ObjectAttributeTests
             return;
         }
 
-        $collectionId = ID::unique();
+        $collectionId = Id::unique();
         $database->createCollection(Collection::create(id: $collectionId));
 
         // Attributes: 3D vector and nested metadata object
@@ -1266,7 +1266,7 @@ trait ObjectAttributeTests
             $this->markTestSkipped('Adapter does not support object attributes');
         }
 
-        $collectionId = ID::unique();
+        $collectionId = Id::unique();
         $database->createCollection(Collection::create(id: $collectionId));
 
         // Base attributes
@@ -1340,7 +1340,7 @@ trait ObjectAttributeTests
             $this->markTestSkipped('Adapter does not support object attributes');
         }
 
-        $collectionId = ID::unique();
+        $collectionId = Id::unique();
         $database->createCollection(Collection::create(id: $collectionId));
 
         // Base attributes
@@ -1465,7 +1465,7 @@ trait ObjectAttributeTests
             $this->markTestSkipped('Adapter does not support object attributes');
         }
 
-        $collectionId = ID::unique();
+        $collectionId = Id::unique();
         $database->createCollection(Collection::create(id: $collectionId));
         $this->createAttribute($database, $collectionId, 'meta', ColumnType::Object, 0, false);
         $this->createAttribute($database, $collectionId, 'secret', ColumnType::String, 64, false);
@@ -1534,7 +1534,7 @@ trait ObjectAttributeTests
             $this->markTestSkipped('Adapter does not support object attributes');
         }
 
-        $collectionId = ID::unique();
+        $collectionId = Id::unique();
         $database->createCollection(Collection::create(id: $collectionId));
 
         // Base attributes

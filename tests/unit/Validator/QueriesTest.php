@@ -6,7 +6,7 @@ use Exception;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Queries;
+use Utopia\Database\Validator\Queries\Base;
 use Utopia\Database\Validator\Query\Aggregate;
 use Utopia\Database\Validator\Query\Cursor;
 use Utopia\Database\Validator\Query\Distinct;
@@ -33,23 +33,23 @@ class QueriesTest extends TestCase
 
     public function test_empty_queries(): void
     {
-        $validator = new Queries();
+        $validator = new Base();
 
         $this->assertEquals(true, $validator->isValid([]));
     }
 
     public function test_invalid_method(): void
     {
-        $validator = new Queries();
+        $validator = new Base();
         $this->assertEquals(false, $validator->isValid([Query::equal('attr', ['value'])]));
 
-        $validator = new Queries([new Limit()]);
+        $validator = new Base([new Limit()]);
         $this->assertEquals(false, $validator->isValid([Query::equal('attr', ['value'])]));
     }
 
     public function test_invalid_value(): void
     {
-        $validator = new Queries([new Limit()]);
+        $validator = new Base([new Limit()]);
         $this->assertEquals(false, $validator->isValid([Query::limit(-1)]));
     }
 
@@ -73,7 +73,7 @@ class QueriesTest extends TestCase
             ]),
         ];
 
-        $validator = new Queries(
+        $validator = new Base(
             [
                 new Cursor(),
                 new Filter($attributes, ColumnType::Integer->value),
@@ -126,7 +126,7 @@ class QueriesTest extends TestCase
 
     public function test_non_array_value_returns_false(): void
     {
-        $validator = new Queries();
+        $validator = new Base();
 
         $this->assertFalse($validator->isValid('not_an_array'));
         $this->assertEquals('Queries must be an array', $validator->getDescription());
@@ -137,7 +137,7 @@ class QueriesTest extends TestCase
 
     public function test_query_count_exceeds_length(): void
     {
-        $validator = new Queries([new Limit()], length: 2);
+        $validator = new Base([new Limit()], length: 2);
 
         $this->assertFalse($validator->isValid([
             Query::limit(10),
@@ -157,7 +157,7 @@ class QueriesTest extends TestCase
             ]),
         ];
 
-        $validator = new Queries([
+        $validator = new Base([
             new Aggregate($attributes),
             new Order($attributes),
         ]);
@@ -170,7 +170,7 @@ class QueriesTest extends TestCase
 
     public function test_variance_and_stddev_method_type_mapping(): void
     {
-        $validator = new Queries([new Aggregate(supportForAttributes: false)]);
+        $validator = new Base([new Aggregate(supportForAttributes: false)]);
 
         $this->assertTrue($validator->isValid([Query::variance('col', 'var_col')]));
         $this->assertTrue($validator->isValid([Query::stddev('col', 'std_col')]));
@@ -178,28 +178,28 @@ class QueriesTest extends TestCase
 
     public function test_distinct_method_type_mapping(): void
     {
-        $validator = new Queries([new Distinct()]);
+        $validator = new Base([new Distinct()]);
 
         $this->assertTrue($validator->isValid([Query::distinct()]));
     }
 
     public function test_group_by_method_type_mapping(): void
     {
-        $validator = new Queries([new GroupBy(supportForAttributes: false)]);
+        $validator = new Base([new GroupBy(supportForAttributes: false)]);
 
         $this->assertTrue($validator->isValid([Query::groupBy(['category'])]));
     }
 
     public function test_having_method_type_mapping(): void
     {
-        $validator = new Queries([new Having()]);
+        $validator = new Base([new Having()]);
 
         $this->assertTrue($validator->isValid([Query::having([Query::greaterThan('count', 5)])]));
     }
 
     public function test_join_method_type_mapping(): void
     {
-        $validator = new Queries([new Join()]);
+        $validator = new Base([new Join()]);
 
         $this->assertTrue($validator->isValid([Query::join('orders', 'j0', [Query::on('user_id', 'id')])]));
     }
@@ -217,7 +217,7 @@ class QueriesTest extends TestCase
             ]),
         ];
 
-        $validator = new Queries([
+        $validator = new Base([
             new Aggregate($attributes),
             new GroupBy($attributes),
             new Join(),
@@ -252,7 +252,7 @@ class QueriesTest extends TestCase
             ]),
         ];
 
-        $validator = new Queries([
+        $validator = new Base([
             new Aggregate($attributes),
             new GroupBy($attributes),
             new Join(),
@@ -273,7 +273,7 @@ class QueriesTest extends TestCase
             ]),
         ];
 
-        $validator = new Queries([
+        $validator = new Base([
             new Aggregate($attributes),
             new GroupBy($attributes),
             new Join(),
@@ -306,7 +306,7 @@ class QueriesTest extends TestCase
             ]),
         ];
 
-        $validator = new Queries([
+        $validator = new Base([
             new Aggregate($attributes),
             new GroupBy($attributes),
             new Join(),
@@ -336,7 +336,7 @@ class QueriesTest extends TestCase
             ]),
         ];
 
-        $validator = new Queries([
+        $validator = new Base([
             new Aggregate($attributes),
             new GroupBy($attributes),
             new Join(),
@@ -372,7 +372,7 @@ class QueriesTest extends TestCase
             ]),
         ];
 
-        $validator = new Queries([
+        $validator = new Base([
             new Select($attributes),
             new Join(),
         ]);
@@ -394,7 +394,7 @@ class QueriesTest extends TestCase
             ]),
         ];
 
-        $validator = new Queries([
+        $validator = new Base([
             new Filter($attributes, ColumnType::Integer->value),
             new Join(),
         ]);
@@ -416,7 +416,7 @@ class QueriesTest extends TestCase
             ]),
         ];
 
-        $validator = new Queries([
+        $validator = new Base([
             new Select($attributes),
             new Filter($attributes, ColumnType::Integer->value),
             new Join(),
@@ -442,7 +442,7 @@ class QueriesTest extends TestCase
             ]),
         ];
 
-        $validator = new Queries([
+        $validator = new Base([
             new Filter($attributes, ColumnType::Integer->value),
             new Join(),
         ]);
@@ -467,7 +467,7 @@ class QueriesTest extends TestCase
             ]),
         ];
 
-        $validator = new Queries([
+        $validator = new Base([
             new Order($attributes),
             new Join(),
         ]);
@@ -489,7 +489,7 @@ class QueriesTest extends TestCase
             ]),
         ];
 
-        $validator = new Queries([
+        $validator = new Base([
             new Filter($attributes, ColumnType::Integer->value),
             new Join(),
         ]);
@@ -518,7 +518,7 @@ class QueriesTest extends TestCase
             ]),
         ];
 
-        $validator = new Queries([
+        $validator = new Base([
             new Filter($attributes, ColumnType::Integer->value),
             new Join(),
         ]);
@@ -552,7 +552,7 @@ class QueriesTest extends TestCase
             ]),
         ];
 
-        $validator = new Queries([
+        $validator = new Base([
             new Filter($attributes, ColumnType::Integer->value),
             new Join(),
         ]);
@@ -587,7 +587,7 @@ class QueriesTest extends TestCase
             ]),
         ];
 
-        $validator = new Queries([
+        $validator = new Base([
             new Filter($attributes, ColumnType::Integer->value),
             new Join(),
         ]);
@@ -622,7 +622,7 @@ class QueriesTest extends TestCase
             ]),
         ];
 
-        $validator = new Queries([
+        $validator = new Base([
             new Filter($attributes, ColumnType::Integer->value),
             new Join(),
         ]);
@@ -651,7 +651,7 @@ class QueriesTest extends TestCase
             ]),
         ];
 
-        $validator = new Queries([
+        $validator = new Base([
             new Filter($attributes, ColumnType::Integer->value),
         ]);
 
@@ -663,14 +663,14 @@ class QueriesTest extends TestCase
 
     public function test_is_array(): void
     {
-        $validator = new Queries();
+        $validator = new Base();
 
         $this->assertTrue($validator->isArray());
     }
 
     public function test_get_type(): void
     {
-        $validator = new Queries();
+        $validator = new Base();
 
         $this->assertEquals('object', $validator->getType());
     }

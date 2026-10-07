@@ -4,6 +4,7 @@ namespace Utopia\Database\Adapter;
 
 use Exception;
 use PDOException;
+use Utopia\Database\Adapter\SQL\Hook\Permission;
 use Utopia\Database\Builder\MySQL as MySQLBuilder;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
@@ -13,7 +14,6 @@ use Utopia\Database\Exception\Character as CharacterException;
 use Utopia\Database\Exception\Dependency as DependencyException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
-use Utopia\Database\Hook\PermissionFilter;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
 use Utopia\Database\Storage;
@@ -144,7 +144,7 @@ class MySQL extends MariaDB
      * rows once per outer row, so an outer-joined table's check always stays a subquery.
      */
     #[\Override]
-    protected function newJoinPermissionHook(string $collection, array $roles, string $type, string $documentColumn, int $joins, JoinType $joinType): PermissionFilter
+    protected function newJoinPermissionHook(string $collection, array $roles, string $type, string $documentColumn, int $joins, JoinType $joinType): Permission\Filter
     {
         $hook = parent::newJoinPermissionHook($collection, $roles, $type, $documentColumn, $joins, $joinType);
 

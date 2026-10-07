@@ -6,8 +6,7 @@ use Utopia\Database\Adapter\Profile;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Queries;
-use Utopia\Database\Validator\Query\Base;
+use Utopia\Database\Validator\Query\Base as QueryBase;
 use Utopia\Database\Validator\Query\Cursor;
 use Utopia\Database\Validator\Query\Filter;
 use Utopia\Database\Validator\Query\Limit;
@@ -25,47 +24,47 @@ use Utopia\Query\Method;
  *
  * Nothing is kept between lists: every list is checked against the collection as it is passed.
  */
-final class Narrow extends Queries
+final class Narrow extends Base
 {
     /**
      * The method type of each method a narrow list may hold.
      */
     private const array METHOD_TYPES = [
-        Method::Equal->value => Base::METHOD_TYPE_FILTER,
-        Method::NotEqual->value => Base::METHOD_TYPE_FILTER,
-        Method::LessThan->value => Base::METHOD_TYPE_FILTER,
-        Method::LessThanEqual->value => Base::METHOD_TYPE_FILTER,
-        Method::GreaterThan->value => Base::METHOD_TYPE_FILTER,
-        Method::GreaterThanEqual->value => Base::METHOD_TYPE_FILTER,
-        Method::Between->value => Base::METHOD_TYPE_FILTER,
-        Method::NotBetween->value => Base::METHOD_TYPE_FILTER,
-        Method::StartsWith->value => Base::METHOD_TYPE_FILTER,
-        Method::NotStartsWith->value => Base::METHOD_TYPE_FILTER,
-        Method::EndsWith->value => Base::METHOD_TYPE_FILTER,
-        Method::NotEndsWith->value => Base::METHOD_TYPE_FILTER,
-        Method::Contains->value => Base::METHOD_TYPE_FILTER,
-        Method::ContainsAny->value => Base::METHOD_TYPE_FILTER,
-        Method::ContainsAll->value => Base::METHOD_TYPE_FILTER,
-        Method::NotContains->value => Base::METHOD_TYPE_FILTER,
-        Method::IsNull->value => Base::METHOD_TYPE_FILTER,
-        Method::IsNotNull->value => Base::METHOD_TYPE_FILTER,
-        Method::Regex->value => Base::METHOD_TYPE_FILTER,
-        Method::Limit->value => Base::METHOD_TYPE_LIMIT,
-        Method::Offset->value => Base::METHOD_TYPE_OFFSET,
-        Method::CursorAfter->value => Base::METHOD_TYPE_CURSOR,
-        Method::CursorBefore->value => Base::METHOD_TYPE_CURSOR,
-        Method::OrderAsc->value => Base::METHOD_TYPE_ORDER,
-        Method::OrderDesc->value => Base::METHOD_TYPE_ORDER,
-        Method::OrderRandom->value => Base::METHOD_TYPE_ORDER,
+        Method::Equal->value => QueryBase::METHOD_TYPE_FILTER,
+        Method::NotEqual->value => QueryBase::METHOD_TYPE_FILTER,
+        Method::LessThan->value => QueryBase::METHOD_TYPE_FILTER,
+        Method::LessThanEqual->value => QueryBase::METHOD_TYPE_FILTER,
+        Method::GreaterThan->value => QueryBase::METHOD_TYPE_FILTER,
+        Method::GreaterThanEqual->value => QueryBase::METHOD_TYPE_FILTER,
+        Method::Between->value => QueryBase::METHOD_TYPE_FILTER,
+        Method::NotBetween->value => QueryBase::METHOD_TYPE_FILTER,
+        Method::StartsWith->value => QueryBase::METHOD_TYPE_FILTER,
+        Method::NotStartsWith->value => QueryBase::METHOD_TYPE_FILTER,
+        Method::EndsWith->value => QueryBase::METHOD_TYPE_FILTER,
+        Method::NotEndsWith->value => QueryBase::METHOD_TYPE_FILTER,
+        Method::Contains->value => QueryBase::METHOD_TYPE_FILTER,
+        Method::ContainsAny->value => QueryBase::METHOD_TYPE_FILTER,
+        Method::ContainsAll->value => QueryBase::METHOD_TYPE_FILTER,
+        Method::NotContains->value => QueryBase::METHOD_TYPE_FILTER,
+        Method::IsNull->value => QueryBase::METHOD_TYPE_FILTER,
+        Method::IsNotNull->value => QueryBase::METHOD_TYPE_FILTER,
+        Method::Regex->value => QueryBase::METHOD_TYPE_FILTER,
+        Method::Limit->value => QueryBase::METHOD_TYPE_LIMIT,
+        Method::Offset->value => QueryBase::METHOD_TYPE_OFFSET,
+        Method::CursorAfter->value => QueryBase::METHOD_TYPE_CURSOR,
+        Method::CursorBefore->value => QueryBase::METHOD_TYPE_CURSOR,
+        Method::OrderAsc->value => QueryBase::METHOD_TYPE_ORDER,
+        Method::OrderDesc->value => QueryBase::METHOD_TYPE_ORDER,
+        Method::OrderRandom->value => QueryBase::METHOD_TYPE_ORDER,
     ];
 
     /**
-     * @var array<string, Base>
+     * @var array<string, QueryBase>
      */
     private array $byType = [];
 
     /**
-     * @param  array<Base>  $validators
+     * @param  array<QueryBase>  $validators
      */
     private function __construct(array $validators)
     {
@@ -91,7 +90,7 @@ final class Narrow extends Queries
             return parent::isValid($value);
         }
 
-        $order = $this->byType[Base::METHOD_TYPE_ORDER] ?? null;
+        $order = $this->byType[QueryBase::METHOD_TYPE_ORDER] ?? null;
         if ($order instanceof Order) {
             $order->resetAggregationAliases();
             $order->resetJoinAliases();
@@ -157,9 +156,9 @@ final class Narrow extends Queries
             }
             $types[$type] = true;
 
-            if ($type === Base::METHOD_TYPE_FILTER) {
+            if ($type === QueryBase::METHOD_TYPE_FILTER) {
                 $filtered[$query->getAttribute()] = true;
-            } elseif ($type === Base::METHOD_TYPE_ORDER && $query->getMethod() !== Method::OrderRandom) {
+            } elseif ($type === QueryBase::METHOD_TYPE_ORDER && $query->getMethod() !== Method::OrderRandom) {
                 $ordered[$query->getAttribute()] = true;
             }
         }
@@ -180,16 +179,16 @@ final class Narrow extends Queries
         $supportForAttributes = $profile->supports(Capability::DefinedAttributes);
         $limits = $profile->limits;
         $validators = [];
-        if (isset($types[Base::METHOD_TYPE_LIMIT])) {
+        if (isset($types[QueryBase::METHOD_TYPE_LIMIT])) {
             $validators[] = new Limit();
         }
-        if (isset($types[Base::METHOD_TYPE_OFFSET])) {
+        if (isset($types[QueryBase::METHOD_TYPE_OFFSET])) {
             $validators[] = new Offset();
         }
-        if (isset($types[Base::METHOD_TYPE_CURSOR])) {
+        if (isset($types[QueryBase::METHOD_TYPE_CURSOR])) {
             $validators[] = new Cursor($limits->uidLength);
         }
-        if (isset($types[Base::METHOD_TYPE_FILTER])) {
+        if (isset($types[QueryBase::METHOD_TYPE_FILTER])) {
             $validators[] = new Filter(
                 $filterAttributes,
                 $limits->idType->value,
@@ -200,7 +199,7 @@ final class Narrow extends Queries
                 $profile->supports(Capability::UnsignedBigInt),
             );
         }
-        if (isset($types[Base::METHOD_TYPE_ORDER])) {
+        if (isset($types[QueryBase::METHOD_TYPE_ORDER])) {
             $validators[] = new Order($orderAttributes, $supportForAttributes, $profile->supports(Capability::OrderRandom));
         }
 
@@ -219,7 +218,7 @@ final class Narrow extends Queries
             return null;
         }
 
-        if (($type === Base::METHOD_TYPE_FILTER || $method === Method::OrderAsc || $method === Method::OrderDesc) && \str_contains($query->getAttribute(), '.')) {
+        if (($type === QueryBase::METHOD_TYPE_FILTER || $method === Method::OrderAsc || $method === Method::OrderDesc) && \str_contains($query->getAttribute(), '.')) {
             return null;
         }
 

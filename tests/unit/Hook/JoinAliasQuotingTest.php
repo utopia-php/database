@@ -4,15 +4,10 @@ namespace Tests\Unit\Hook;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Utopia\Database\Adapter\SQL\Hook\Join;
+use Utopia\Database\Adapter\SQL\Hook\Permission;
+use Utopia\Database\Adapter\SQL\Hook\Tenant;
 use Utopia\Database\Database;
-use Utopia\Database\Hook\JoinChain;
-use Utopia\Database\Hook\OuterJoinChainFilter;
-use Utopia\Database\Hook\OuterJoinPermissionFilter;
-use Utopia\Database\Hook\OuterJoinTenantFilter;
-use Utopia\Database\Hook\PermissionAllowNullUid;
-use Utopia\Database\Hook\PermissionFilter;
-use Utopia\Database\Hook\PermissionJoinFilter;
-use Utopia\Database\Hook\TenantFilter;
 use Utopia\Database\Storage;
 use Utopia\Query\Builder\JoinType;
 
@@ -54,7 +49,7 @@ final class JoinAliasQuotingTest extends TestCase
     #[DataProvider('quoteCharacters')]
     public function testTenantFilterQuotesTheTableItQualifies(string $quote): void
     {
-        $filter = new TenantFilter(7, Database::METADATA, 'authors', quoteCharacter: $quote);
+        $filter = new Tenant\Filter(7, Database::METADATA, 'authors', quoteCharacter: $quote);
 
         $this->assertSame($this->quoted('"Main"._tenant IN (?)', $quote), $filter->filter(self::SOURCE)->expression);
         $this->assertSame($this->quoted('"Book"._tenant IN (?)', $quote), $filter->joined(self::ALIAS)->expression);
@@ -64,7 +59,7 @@ final class JoinAliasQuotingTest extends TestCase
     #[DataProvider('quoteCharacters')]
     public function testTenantFilterQuotesTheTableOfATenantlessMetadataRow(string $quote): void
     {
-        $filter = new TenantFilter(7, Database::METADATA, Database::METADATA, quoteCharacter: $quote);
+        $filter = new Tenant\Filter(7, Database::METADATA, Database::METADATA, quoteCharacter: $quote);
 
         $this->assertSame(
             $this->quoted('("Main"._tenant IN (?) OR "Main"._tenant IS NULL)', $quote),
@@ -78,7 +73,7 @@ final class JoinAliasQuotingTest extends TestCase
     #[DataProvider('quoteCharacters')]
     public function testTenantFilterDoesNotQualifyWithARawTableName(string $quote): void
     {
-        $filter = new TenantFilter(7, Database::METADATA, 'authors', quoteCharacter: $quote);
+        $filter = new Tenant\Filter(7, Database::METADATA, 'authors', quoteCharacter: $quote);
 
         $this->assertSame('_tenant IN (?)', $filter->filter('database.namespace_authors')->expression);
         $this->assertSame('_tenant IN (?)', $filter->filter($quote.'namespace_authors'.$quote)->expression);
@@ -87,7 +82,7 @@ final class JoinAliasQuotingTest extends TestCase
     #[DataProvider('joins')]
     public function testTenantFilterQuotesTheAliasOfEveryJoin(JoinType $joinType, string $quote): void
     {
-        $filter = new TenantFilter(7, allowNullColumn: self::SOURCE.'.'.Storage::UID, quoteCharacter: $quote);
+        $filter = new Tenant\Filter(7, allowNullColumn: self::SOURCE.'.'.Storage::UID, quoteCharacter: $quote);
 
         $result = $filter->filterJoin(self::ALIAS, $joinType);
 
@@ -104,9 +99,9 @@ final class JoinAliasQuotingTest extends TestCase
     #[DataProvider('quoteCharacters')]
     public function testOuterJoinTenantFilterQuotesBothTables(string $quote): void
     {
-        $filter = new TenantFilter(7, Database::METADATA, 'authors', self::SOURCE.'.'.Storage::UID, $quote);
+        $filter = new Tenant\Filter(7, Database::METADATA, 'authors', self::SOURCE.'.'.Storage::UID, $quote);
 
-        $result = (new OuterJoinTenantFilter($filter, self::SOURCE))->filterJoin(self::ALIAS, JoinType::Right);
+        $result = (new Tenant\OuterJoin($filter, self::SOURCE))->filterJoin(self::ALIAS, JoinType::Right);
 
         $this->assertNotNull($result);
         $this->assertSame(
@@ -118,13 +113,13 @@ final class JoinAliasQuotingTest extends TestCase
     #[DataProvider('quoteCharacters')]
     public function testOuterJoinChainFilterQuotesEveryEarlierTable(string $quote): void
     {
-        $chain = new JoinChain([self::EARLIER => JoinType::Cross, self::ALIAS => JoinType::Right]);
-        $tenants = new TenantFilter(7, quoteCharacter: $quote);
+        $chain = new Join\Chain([self::EARLIER => JoinType::Cross, self::ALIAS => JoinType::Right]);
+        $tenants = new Tenant\Filter(7, quoteCharacter: $quote);
         $permission = $this->permission(self::EARLIER, $quote);
 
-        $tenant = (new OuterJoinChainFilter($chain, [self::EARLIER => $tenants->joined(self::EARLIER)], $quote))
+        $tenant = (new Join\OuterChain($chain, [self::EARLIER => $tenants->joined(self::EARLIER)], $quote))
             ->filterJoin(self::ALIAS, JoinType::Right);
-        $permitted = (new OuterJoinChainFilter($chain, [self::EARLIER => $permission->filter(self::EARLIER)], $quote))
+        $permitted = (new Join\OuterChain($chain, [self::EARLIER => $permission->filter(self::EARLIER)], $quote))
             ->filterJoin(self::ALIAS, JoinType::Right);
 
         $this->assertNotNull($tenant);
@@ -145,7 +140,7 @@ final class JoinAliasQuotingTest extends TestCase
     #[DataProvider('joins')]
     public function testPermissionJoinFilterQuotesTheAliasOfEveryJoin(JoinType $joinType, string $quote): void
     {
-        $hook = new PermissionJoinFilter($this->permission(self::ALIAS, $quote), self::ALIAS, $quote, preservingOuterJoin: true);
+        $hook = new Permission\Join($this->permission(self::ALIAS, $quote), self::ALIAS, $quote, preservingOuterJoin: true);
 
         $result = $hook->filterJoin(self::ALIAS, $joinType);
 
@@ -156,7 +151,7 @@ final class JoinAliasQuotingTest extends TestCase
     #[DataProvider('quoteCharacters')]
     public function testPermissionAllowNullUidQuotesTheMainTableOnBothSides(string $quote): void
     {
-        $hook = new PermissionAllowNullUid($this->permission(self::SOURCE, $quote), self::SOURCE.'.'.Storage::UID, $quote);
+        $hook = new Permission\AllowNullUid($this->permission(self::SOURCE, $quote), self::SOURCE.'.'.Storage::UID, $quote);
 
         $this->assertSame(
             $this->quoted('("Main"."_uid" IN (SELECT _document FROM "database"."namespace_books_perms" WHERE _permission IN (?) AND _type = ?) OR "Main"."_uid" IS NULL)', $quote),
@@ -167,7 +162,7 @@ final class JoinAliasQuotingTest extends TestCase
     #[DataProvider('quoteCharacters')]
     public function testOuterJoinPermissionFilterQuotesBothTables(string $quote): void
     {
-        $hook = new OuterJoinPermissionFilter(self::SOURCE, [
+        $hook = new Permission\OuterJoin(self::SOURCE, [
             self::SOURCE => $this->permission(self::SOURCE, $quote)->filter(self::SOURCE),
             self::ALIAS => $this->permission(self::ALIAS, $quote)->filter(self::ALIAS),
         ], $quote);
@@ -179,9 +174,9 @@ final class JoinAliasQuotingTest extends TestCase
         $this->assertOnlyQuoted(self::ALIAS, $result->condition->expression, $quote);
     }
 
-    private function permission(string $alias, string $quote): PermissionFilter
+    private function permission(string $alias, string $quote): Permission\Filter
     {
-        return new PermissionFilter(
+        return new Permission\Filter(
             roles: ['any'],
             permissionsTable: static fn (string $table): string => 'database.namespace_books_perms',
             documentColumn: $alias.'.'.Storage::UID,

@@ -3,13 +3,13 @@
 namespace Tests\Unit\Validator;
 
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Validator\ObjectValidator;
+use Utopia\Database\Validator\ObjectValue;
 
 class ObjectTest extends TestCase
 {
     public function test_valid_associative_objects(): void
     {
-        $validator = new ObjectValidator();
+        $validator = new ObjectValue();
 
         $this->assertTrue($validator->isValid(['key' => 'value']));
         $this->assertTrue($validator->isValid([
@@ -48,7 +48,7 @@ class ObjectTest extends TestCase
 
     public function test_invalid_structures(): void
     {
-        $validator = new ObjectValidator();
+        $validator = new ObjectValue();
 
         $this->assertFalse($validator->isValid(['a', 'b', 'c']));
 
@@ -61,7 +61,7 @@ class ObjectTest extends TestCase
 
     public function test_scalar_json_strings_are_not_objects(): void
     {
-        $validator = new ObjectValidator();
+        $validator = new ObjectValue();
 
         $this->assertFalse($validator->isValid('123'), 'a JSON number is not an object');
         $this->assertFalse($validator->isValid('0'), 'a falsy JSON number is not an object');
@@ -74,7 +74,7 @@ class ObjectTest extends TestCase
 
     public function test_json_object_strings_are_objects(): void
     {
-        $validator = new ObjectValidator();
+        $validator = new ObjectValue();
 
         $this->assertTrue($validator->isValid('{"a": 1}'));
         $this->assertTrue($validator->isValid('{}'));
@@ -83,7 +83,7 @@ class ObjectTest extends TestCase
 
     public function test_empty_cases(): void
     {
-        $validator = new ObjectValidator();
+        $validator = new ObjectValue();
 
         $this->assertTrue($validator->isValid([]));
         $this->assertTrue($validator->isValid(new \stdClass()));

@@ -12,10 +12,10 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
-use Utopia\Database\Profiler\QueryLog;
+use Utopia\Database\Permission;
+use Utopia\Database\Profiler\Log;
+use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
 
 final class SQLiteInsertStatementTest extends TestCase
@@ -46,7 +46,7 @@ final class SQLiteInsertStatementTest extends TestCase
         $created = $database->createDocument(self::COLLECTION, $this->document('measured', $documentPermissions));
 
         $statements = \array_map(
-            static fn (QueryLog $log): string => \strtoupper(\ltrim((string) \preg_replace('#/\*.*?\*/#s', '', $log->query))),
+            static fn (Log $log): string => \strtoupper(\ltrim((string) \preg_replace('#/\*.*?\*/#s', '', $log->query))),
             $profiler->getLogs(),
         );
         $inserts = \array_values(\array_filter($statements, static fn (string $statement): bool => \str_starts_with($statement, 'INSERT')));

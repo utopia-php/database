@@ -16,9 +16,9 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
+use Utopia\Database\Permission;
+use Utopia\Database\Role;
 
 final class CaseOnlyRenameTest extends TestCase
 {

@@ -3,7 +3,7 @@
 namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Hook\Mongo\PermissionFilter;
+use Utopia\Database\Hook\Mongo\Permission;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\Authorization;
@@ -70,7 +70,7 @@ class MongoPermissionStringsTest extends TestCase
             $authorization->addRole($role);
         }
 
-        $filters = (new PermissionFilter($authorization))->applyFilters([], 'documents', $type);
+        $filters = (new Permission($authorization))->applyFilters([], 'documents', $type);
         $permissionFilter = $filters[Storage::PERMISSIONS] ?? null;
         if (! \is_array($permissionFilter)) {
             return [];

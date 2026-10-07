@@ -8,14 +8,14 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Helpers\ID;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Id;
+use Utopia\Database\Permission;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationshipDeleteAction;
 use Utopia\Database\RelationshipSide;
 use Utopia\Database\RelationshipType;
 use Utopia\Database\RelationshipUpdate;
+use Utopia\Database\Role;
 
 trait ChildSideTests
 {
@@ -184,8 +184,8 @@ trait ChildSideTests
      */
     private function createOneWayOneToOne(Database $database): array
     {
-        $parents = 'parents_'.ID::unique();
-        $children = 'children_'.ID::unique();
+        $parents = 'parents_'.Id::unique();
+        $children = 'children_'.Id::unique();
         $permissions = [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
@@ -211,8 +211,8 @@ trait ChildSideTests
      */
     private function createChildSideRelationship(Database $database, RelationshipType $type): array
     {
-        $parents = 'parents_'.ID::unique();
-        $children = 'children_'.ID::unique();
+        $parents = 'parents_'.Id::unique();
+        $children = 'children_'.Id::unique();
         $permissions = [
             Permission::create(Role::any()),
             Permission::read(Role::any()),

@@ -6,8 +6,8 @@ use PHPUnit\Framework\TestCase;
 use Redis;
 use Utopia\Database\Adapter\Redis as RedisAdapter;
 use Utopia\Database\Document;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Permission;
+use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
 
 final class RedisLenientReadTest extends TestCase

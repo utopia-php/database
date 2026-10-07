@@ -30,9 +30,9 @@ use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Exception\Unconfirmed as UnconfirmedException;
 use Utopia\Database\Exception\Unique as UniqueException;
-use Utopia\Database\Hook\Mongo\PermissionFilter as MongoPermissionFilter;
-use Utopia\Database\Hook\Mongo\TenantFilter as MongoTenantFilter;
-use Utopia\Database\Hook\Read;
+use Utopia\Database\Hook\Mongo\Permission as PermissionHook;
+use Utopia\Database\Hook\Mongo\Read;
+use Utopia\Database\Hook\Mongo\Tenant as TenantHook;
 use Utopia\Database\Index;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
@@ -232,7 +232,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
 
     protected function syncReadHooks(): void
     {
-        $this->readHooks = [new MongoPermissionFilter($this->authorization)];
+        $this->readHooks = [new PermissionHook($this->authorization)];
     }
 
     /**
@@ -241,7 +241,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      */
     protected function applyTenantFilter(array $filters, string $collection): array
     {
-        $tenantFilter = new MongoTenantFilter(
+        $tenantFilter = new TenantHook(
             $this->sharedTables,
             $this->getTenantFilters(...),
         );

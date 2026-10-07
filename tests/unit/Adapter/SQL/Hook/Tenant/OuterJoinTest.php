@@ -1,17 +1,17 @@
 <?php
 
-namespace Tests\Unit\Hook;
+namespace Tests\Unit\Adapter\SQL\Hook\Tenant;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Utopia\Database\Adapter\SQL\Hook\Tenant\Filter;
+use Utopia\Database\Adapter\SQL\Hook\Tenant\OuterJoin;
 use Utopia\Database\Database;
-use Utopia\Database\Hook\OuterJoinTenantFilter;
-use Utopia\Database\Hook\TenantFilter;
 use Utopia\Database\Storage;
 use Utopia\Query\Builder\JoinType;
 use Utopia\Query\Hook\Join\Placement;
 
-final class OuterJoinTenantFilterTest extends TestCase
+final class OuterJoinTest extends TestCase
 {
     private const string SOURCE = 'table_main';
 
@@ -40,9 +40,9 @@ final class OuterJoinTenantFilterTest extends TestCase
     #[DataProvider('preservingJoins')]
     public function testBothSidesAreScopedToTheTenantInsideOn(JoinType $joinType): void
     {
-        $filter = new TenantFilter(7, Database::METADATA, 'orders', self::SOURCE.'.'.Storage::UID);
+        $filter = new Filter(7, Database::METADATA, 'orders', self::SOURCE.'.'.Storage::UID);
 
-        $result = (new OuterJoinTenantFilter($filter, self::SOURCE))->filterJoin(self::ALIAS, $joinType);
+        $result = (new OuterJoin($filter, self::SOURCE))->filterJoin(self::ALIAS, $joinType);
 
         $this->assertNotNull($result);
         $this->assertSame(Placement::On, $result->placement, 'Only ON decides which rows the join pairs');
@@ -56,16 +56,16 @@ final class OuterJoinTenantFilterTest extends TestCase
     #[DataProvider('otherJoins')]
     public function testJoinsTenantFilterAlreadyScopesAreLeftToIt(JoinType $joinType): void
     {
-        $filter = new TenantFilter(7, Database::METADATA, 'orders');
+        $filter = new Filter(7, Database::METADATA, 'orders');
 
-        $this->assertNull((new OuterJoinTenantFilter($filter, self::SOURCE))->filterJoin(self::ALIAS, $joinType));
+        $this->assertNull((new OuterJoin($filter, self::SOURCE))->filterJoin(self::ALIAS, $joinType));
     }
 
     public function testATenantlessMetadataRowStaysMatchable(): void
     {
-        $filter = new TenantFilter(7, Database::METADATA, Database::METADATA);
+        $filter = new Filter(7, Database::METADATA, Database::METADATA);
 
-        $result = (new OuterJoinTenantFilter($filter, self::SOURCE))->filterJoin(self::ALIAS, JoinType::Right);
+        $result = (new OuterJoin($filter, self::SOURCE))->filterJoin(self::ALIAS, JoinType::Right);
 
         $this->assertNotNull($result);
         $this->assertSame(
@@ -77,9 +77,9 @@ final class OuterJoinTenantFilterTest extends TestCase
 
     public function testEveryTenantOfACrossTenantReadIsBoundOnBothSides(): void
     {
-        $filter = new TenantFilter([1, 2], Database::METADATA, 'orders');
+        $filter = new Filter([1, 2], Database::METADATA, 'orders');
 
-        $result = (new OuterJoinTenantFilter($filter, self::SOURCE))->filterJoin(self::ALIAS, JoinType::FullOuter);
+        $result = (new OuterJoin($filter, self::SOURCE))->filterJoin(self::ALIAS, JoinType::FullOuter);
 
         $this->assertNotNull($result);
         $this->assertSame('`table_main`._tenant IN (?, ?) AND `j0`._tenant IN (?, ?)', $result->condition->expression);
@@ -88,7 +88,7 @@ final class OuterJoinTenantFilterTest extends TestCase
 
     public function testAFullOuterJoinTreatsOnlyAMissingJoinedRowAsUnmatched(): void
     {
-        $result = (new TenantFilter(7))->filterJoin(self::ALIAS, JoinType::FullOuter);
+        $result = (new Filter(7))->filterJoin(self::ALIAS, JoinType::FullOuter);
 
         $this->assertNotNull($result);
         $this->assertSame(Placement::Where, $result->placement);

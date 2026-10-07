@@ -3,7 +3,7 @@
 namespace Utopia\Database\Validator;
 
 use Exception;
-use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Permission;
 use Utopia\Database\PermissionType;
 
 /**

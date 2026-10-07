@@ -15,13 +15,13 @@ use Utopia\Database\Exception;
 use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Structure as StructureException;
-use Utopia\Database\Helpers\ID;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Id;
 use Utopia\Database\Index;
+use Utopia\Database\Permission;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
+use Utopia\Database\Role;
 use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
@@ -60,7 +60,7 @@ trait SpatialTests
         $this->assertCount(2, $col->indexes());
 
         $database->createAttribute($collectionName, Attribute::point(key: 'attribute3', required: true));
-        $database->createIndex($collectionName, Index::spatial(key: ID::custom('index3'), attribute: 'attribute3'));
+        $database->createIndex($collectionName, Index::spatial(key: Id::custom('index3'), attribute: 'attribute3'));
 
         $col = $database->getCollection($collectionName);
         $this->assertCount(3, $col->attributes());
@@ -341,7 +341,7 @@ trait SpatialTests
             // whatever null constraint it was created with until the adapter
             // alters it, and only a write proves that happened.
             $document = $database->createDocument($collectionName, new Document([
-                '$id' => ID::unique(),
+                '$id' => Id::unique(),
                 '$permissions' => [Permission::read(Role::any())],
                 'name' => 'Test Location',
                 'location' => null,
@@ -389,7 +389,7 @@ trait SpatialTests
 
             // Create a simple document to ensure structure is valid
             $doc = $database->createDocument($collectionName, new Document([
-                '$id' => ID::custom('sdoc'),
+                '$id' => Id::custom('sdoc'),
                 'pointAttr' => [1.0, 1.0],
                 'lineAttr' => [[0.0, 0.0], [1.0, 1.0]],
                 'polyAttr' => [[[0.0, 0.0], [0.0, 2.0], [2.0, 2.0], [0.0, 0.0]]],
@@ -1992,7 +1992,7 @@ trait SpatialTests
             ];
 
             $document = $database->createDocument($collectionName, new Document([
-                '$id' => ID::custom('d1'),
+                '$id' => Id::custom('d1'),
                 '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             ]));
             $this->assertSpatialDefaults($defaults, $document, 'created');
@@ -2015,7 +2015,7 @@ trait SpatialTests
                 'active' => false,
             ];
             $overridden = $database->createDocument($collectionName, new Document([
-                '$id' => ID::custom('d2'),
+                '$id' => Id::custom('d2'),
                 '$permissions' => [Permission::read(Role::any())],
                 ...$overrides,
             ]));
@@ -2038,7 +2038,7 @@ trait SpatialTests
                 'active' => false,
             ];
             $document = $database->createDocument($collectionName, new Document([
-                '$id' => ID::custom('d3'),
+                '$id' => Id::custom('d3'),
                 '$permissions' => [Permission::read(Role::any())],
             ]));
             $this->assertSpatialDefaults($newDefaults, $document, 'created after the defaults changed');
@@ -2311,25 +2311,25 @@ trait SpatialTests
     public function testSpatialEncodeDecode(): void
     {
         $collection = new Document([
-            '$collection' => ID::custom(Database::METADATA),
-            '$id' => ID::custom('users'),
+            '$collection' => Id::custom(Database::METADATA),
+            '$id' => Id::custom('users'),
             'name' => 'Users',
             'attributes' => [
                 [
-                    '$id' => ID::custom('point'),
+                    '$id' => Id::custom('point'),
                     'type' => ColumnType::Point->value,
                     'required' => false,
                     'filters' => [ColumnType::Point->value],
                 ],
                 [
-                    '$id' => ID::custom('line'),
+                    '$id' => Id::custom('line'),
                     'type' => ColumnType::Linestring->value,
                     'format' => '',
                     'required' => false,
                     'filters' => [ColumnType::Linestring->value],
                 ],
                 [
-                    '$id' => ID::custom('poly'),
+                    '$id' => Id::custom('poly'),
                     'type' => ColumnType::Polygon->value,
                     'format' => '',
                     'required' => false,

@@ -11,8 +11,8 @@ use Utopia\Database\AttributeUpdate;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
-use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
+use Utopia\Database\Role;
 
 final class IndexRevalidationTest extends TestCase
 {

@@ -7,7 +7,7 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Database\Builder\Filtering;
 use Utopia\Database\Builder\MariaDB;
 use Utopia\Database\Builder\MySQL;
-use Utopia\Database\Builder\PostgreSQL;
+use Utopia\Database\Builder\Postgres;
 use Utopia\Database\Query;
 
 final class SearchTermTest extends TestCase
@@ -73,8 +73,8 @@ final class SearchTermTest extends TestCase
     #[DataProvider('postgreSQLTerms')]
     public function testPostgreSQLSearchesEachWordOfATerm(string $term, string $bound): void
     {
-        $this->assertSame([$bound], $this->bindings(new PostgreSQL(), Query::search('title', $term)));
-        $this->assertSame([$bound], $this->bindings(new PostgreSQL(), Query::notSearch('title', $term)));
+        $this->assertSame([$bound], $this->bindings(new Postgres(), Query::search('title', $term)));
+        $this->assertSame([$bound], $this->bindings(new Postgres(), Query::notSearch('title', $term)));
     }
 
     #[DataProvider('mySQLTerms')]
@@ -94,7 +94,7 @@ final class SearchTermTest extends TestCase
     #[DataProvider('termsWithoutWords')]
     public function testATermWithoutWordsBindsNothing(string $term): void
     {
-        foreach ([new PostgreSQL(), new MySQL(), new MariaDB()] as $builder) {
+        foreach ([new Postgres(), new MySQL(), new MariaDB()] as $builder) {
             $this->assertSame([], $this->bindings($builder, Query::search('title', $term)), $builder::class);
             $this->assertSame([], $this->bindings($builder, Query::notSearch('title', $term)), $builder::class);
         }
@@ -104,7 +104,7 @@ final class SearchTermTest extends TestCase
     {
         $term = "foo'); DROP TABLE docs; --";
 
-        foreach ([new PostgreSQL(), new MySQL(), new MariaDB()] as $builder) {
+        foreach ([new Postgres(), new MySQL(), new MariaDB()] as $builder) {
             $condition = $builder->compileFilters([Query::search('title', $term)]);
 
             $this->assertStringNotContainsString('DROP', $condition->expression, $builder::class);

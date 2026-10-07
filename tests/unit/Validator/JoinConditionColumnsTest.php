@@ -10,7 +10,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\RelationshipSide;
 use Utopia\Database\RelationshipType;
-use Utopia\Database\Validator\Queries;
+use Utopia\Database\Validator\Queries\Base;
 use Utopia\Database\Validator\Queries\Document as DocumentQueries;
 use Utopia\Database\Validator\Queries\Documents as DocumentsQueries;
 use Utopia\Database\Validator\Query\Aggregate;
@@ -100,7 +100,7 @@ final class JoinConditionColumnsTest extends TestCase
 
     public function testColumnsOfACollectionTheValidatorDoesNotKnowAreNotChecked(): void
     {
-        $validator = new Queries([new Join()]);
+        $validator = new Base([new Join()]);
 
         $this->assertTrue($validator->isValid([Query::join('orders', 'j0', [Query::on('user_id', 'id')])]), $validator->getDescription());
         $this->assertTrue($validator->isValid([Query::join('orders', 'ord', [Query::on('user_id', 'id')]), Query::join('items', 'item', [Query::on('ord.anything', 'orderId')])]), $validator->getDescription());
@@ -111,7 +111,7 @@ final class JoinConditionColumnsTest extends TestCase
 
     public function testSchemalessJoinsCheckOnlyWhichTablesAColumnBelongsTo(): void
     {
-        $validator = new Queries([new Join($this->customers(), supportForAttributes: false)]);
+        $validator = new Base([new Join($this->customers(), supportForAttributes: false)]);
         $validator->setJoinedCollections($this->collections());
 
         $this->assertTrue($validator->isValid([Query::join('notes', 'note', [Query::on('anything', 'whatever')])]), $validator->getDescription());
@@ -244,7 +244,7 @@ final class JoinConditionColumnsTest extends TestCase
     }
 
     /**
-     * @return array<string, Queries>
+     * @return array<string, Base>
      */
     private function validators(): array
     {
@@ -253,7 +253,7 @@ final class JoinConditionColumnsTest extends TestCase
         $document = new DocumentQueries($this->customers(), Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::Joins]));
         $document->setJoinedCollections($this->collections());
 
-        $joins = new Queries([new Join($this->customers())]);
+        $joins = new Base([new Join($this->customers())]);
         $joins->setJoinedCollections($this->collections());
 
         return ['documents' => $documents, 'document' => $document, 'join' => $joins];

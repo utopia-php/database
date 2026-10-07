@@ -13,9 +13,9 @@ use Utopia\Database\Database;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
+use Utopia\Database\Permission;
+use Utopia\Database\Role;
 
 final class IndexSchemaReconciliationTest extends TestCase
 {

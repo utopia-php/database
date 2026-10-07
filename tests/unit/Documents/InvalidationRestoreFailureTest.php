@@ -11,12 +11,12 @@ use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Attribute;
 use Utopia\Database\Cache\Invalidator;
-use Utopia\Database\Cache\QueryCache;
+use Utopia\Database\Cache\Query;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Permission;
+use Utopia\Database\Role;
 
 final class InvalidationRestoreFailureTest extends TestCase
 {
@@ -27,7 +27,7 @@ final class InvalidationRestoreFailureTest extends TestCase
     public function testAFailedWriteKeepsItsErrorWhenRestoringTheCacheEpochsFails(): void
     {
         $cache = $this->failingEpochCache();
-        $queryCache = new QueryCache(new Cache(new MemoryCache()));
+        $queryCache = new Query(new Cache(new MemoryCache()));
         $database = new Database(new Memory(), new Cache($cache));
         $database->setDatabase('restore')->setNamespace('restore_'.\uniqid());
         $database->setQueryCache($queryCache);
@@ -86,12 +86,12 @@ final class InvalidationRestoreFailureTest extends TestCase
         };
     }
 
-    private function failingInvalidator(QueryCache $queryCache): Invalidator
+    private function failingInvalidator(Query $queryCache): Invalidator
     {
         $failing = fn (): bool => $this->failing;
 
         return new class ($queryCache, $failing) extends Invalidator {
-            public function __construct(QueryCache $queryCache, private readonly \Closure $failing)
+            public function __construct(Query $queryCache, private readonly \Closure $failing)
             {
                 parent::__construct($queryCache);
             }

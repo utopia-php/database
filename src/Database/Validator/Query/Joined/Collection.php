@@ -1,9 +1,9 @@
 <?php
 
-namespace Utopia\Database\Validator\Query;
+namespace Utopia\Database\Validator\Query\Joined;
 
 use Utopia\Database\Attribute;
-use Utopia\Database\Collection;
+use Utopia\Database\Collection as DatabaseCollection;
 use Utopia\Database\Document;
 use Utopia\Database\RelationshipSide;
 use Utopia\Database\RelationshipType;
@@ -13,7 +13,7 @@ use Utopia\Query\Schema\ColumnType;
  * A collection one join of a query set reads, as the query validators check it: the alias its
  * columns are referenced by and what the collection declares.
  */
-final readonly class JoinedCollection
+final readonly class Collection
 {
     private const string ENCRYPT = 'encrypt';
 
@@ -42,7 +42,7 @@ final readonly class JoinedCollection
      */
     public static function of(string $alias, Document $collection): self
     {
-        $definitions = Collection::fromDocument($collection)->attributes();
+        $definitions = DatabaseCollection::fromDocument($collection)->attributes();
 
         $attributes = [];
         $numeric = [];

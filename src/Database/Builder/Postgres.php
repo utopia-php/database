@@ -12,7 +12,7 @@ use Utopia\Query\Schema\ColumnType;
  * The PostgreSQL builder, which also compiles filters on their own, prepares search terms as 7.x did, and writes a
  * filter on a path into an object attribute only when every key of the path is a plain key.
  */
-class PostgreSQL extends Base implements Filtering
+class Postgres extends Base implements Filtering
 {
     use CompilesFilters;
     use PreparesSearchTerms;

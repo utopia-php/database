@@ -15,7 +15,6 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Hook\Transform;
 use Utopia\Database\Hook\Write;
-use Utopia\Database\Profiler\QueryProfiler;
 use Utopia\Database\State\Value;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\CursorDirection;
@@ -69,7 +68,7 @@ abstract class Adapter
      */
     protected array $writeHooks = [];
 
-    protected ?QueryProfiler $profiler = null;
+    protected ?Profiler $profiler = null;
 
     protected Authorization $authorization;
 
@@ -136,14 +135,14 @@ abstract class Adapter
         return $this->authorization;
     }
 
-    public function setProfiler(?QueryProfiler $profiler): static
+    public function setProfiler(?Profiler $profiler): static
     {
         $this->profiler = $profiler;
 
         return $this;
     }
 
-    public function getProfiler(): ?QueryProfiler
+    public function getProfiler(): ?Profiler
     {
         return $this->profiler;
     }

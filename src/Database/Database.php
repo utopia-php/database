@@ -12,7 +12,7 @@ use Utopia\Console;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\Profile;
 use Utopia\Database\Cache\Invalidator;
-use Utopia\Database\Cache\QueryCache;
+use Utopia\Database\Cache\Query as ResultCache;
 use Utopia\Database\Cache\Scope;
 use Utopia\Database\Event\Domain;
 use Utopia\Database\Exception as DatabaseException;
@@ -36,13 +36,11 @@ use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Exception\Unconfirmed as UnconfirmedException;
 use Utopia\Database\Filter\Codec;
 use Utopia\Database\Filter\Registry;
-use Utopia\Database\Helpers\ID;
 use Utopia\Database\Hook\Lifecycle;
 use Utopia\Database\Hook\Named;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Hook\Selective;
 use Utopia\Database\Hook\Transform;
-use Utopia\Database\Profiler\QueryProfiler;
 use Utopia\Database\State\Snapshot;
 use Utopia\Database\State\Value;
 use Utopia\Database\Validator\Authorization;
@@ -55,13 +53,13 @@ use Utopia\Query\Schema\ColumnType;
  */
 class Database
 {
-    use Traits\Attributes;
-    use Traits\Collections;
-    use Traits\Databases;
-    use Traits\Documents;
-    use Traits\Indexes;
-    use Traits\Relationships;
-    use Traits\Transactions;
+    use Trait\Attributes;
+    use Trait\Collections;
+    use Trait\Databases;
+    use Trait\Documents;
+    use Trait\Indexes;
+    use Trait\Relationships;
+    use Trait\Transactions;
 
     // Max limits
     public const MAX_INT = 2147483647;
@@ -297,11 +295,11 @@ class Database
      */
     protected array $documentTypes = [];
 
-    protected ?QueryCache $queryCache = null;
+    protected ?ResultCache $queryCache = null;
 
     protected ?Invalidator $invalidator = null;
 
-    protected ?QueryProfiler $profiler = null;
+    protected ?Profiler $profiler = null;
 
     private Authorization $authorization;
 
@@ -903,7 +901,7 @@ class Database
      * Cache find() results in the query cache, keyed by this database's cache name and timed by its writer timeout
      * on each call, so the query cache may be shared with other databases; null stops caching them.
      */
-    public function setQueryCache(?QueryCache $queryCache): static
+    public function setQueryCache(?ResultCache $queryCache): static
     {
         $this->invalidator = null;
         $this->queryCache = $queryCache;
@@ -915,7 +913,7 @@ class Database
         return $this;
     }
 
-    public function getQueryCache(): ?QueryCache
+    public function getQueryCache(): ?ResultCache
     {
         return $this->queryCache;
     }
@@ -932,7 +930,7 @@ class Database
             return $this;
         }
 
-        $this->profiler ??= new QueryProfiler();
+        $this->profiler ??= new Profiler();
         $this->profiler->enable();
         $this->adapter->setProfiler($this->profiler);
 
@@ -944,7 +942,7 @@ class Database
         return $this->profiler?->isEnabled() ?? false;
     }
 
-    public function getProfiler(): ?QueryProfiler
+    public function getProfiler(): ?Profiler
     {
         return $this->profiler;
     }

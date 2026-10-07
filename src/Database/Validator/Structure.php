@@ -383,7 +383,7 @@ class Structure extends Validator
                     break;
 
                 case ColumnType::Object:
-                    $validators[] = new ObjectValidator();
+                    $validators[] = new ObjectValue();
                     break;
 
                 case ColumnType::Point:

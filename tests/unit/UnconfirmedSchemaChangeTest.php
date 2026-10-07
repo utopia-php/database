@@ -14,9 +14,9 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Unconfirmed as UnconfirmedException;
-use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\Relationship;
+use Utopia\Database\Role;
 
 /**
  * Covers schema calls whose definition write ends in Exception\Unconfirmed, as a MongoDB commit whose result could

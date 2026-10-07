@@ -15,11 +15,11 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Type as TypeException;
-use Utopia\Database\Helpers\ID;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Id;
 use Utopia\Database\Index;
+use Utopia\Database\Permission;
 use Utopia\Database\Query;
+use Utopia\Database\Role;
 use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\IndexType;
 
@@ -1501,7 +1501,7 @@ trait SchemalessTests
 
             return;
         }
-        $collectionId = ID::unique();
+        $collectionId = Id::unique();
         $database->createCollection(Collection::create(id: $collectionId));
 
         // Create documents with array of objects
@@ -1655,7 +1655,7 @@ trait SchemalessTests
 
             return;
         }
-        $collectionId = ID::unique();
+        $collectionId = Id::unique();
         $database->createCollection(Collection::create(id: $collectionId));
 
         // Create documents with complex nested structures
@@ -1929,7 +1929,7 @@ trait SchemalessTests
             $this->markTestSkipped('Adapter supports attributes (schemaful mode). Field removal in upsert is tested in schemaful tests.');
         }
 
-        $collectionName = ID::unique();
+        $collectionName = Id::unique();
         $database->createCollection(Collection::create(id: $collectionName, permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
@@ -3193,7 +3193,7 @@ trait SchemalessTests
         ]));
 
         $database->createDocument('schemaless_time', new Document([
-            '$id' => ID::unique(),
+            '$id' => Id::unique(),
             '$permissions' => [Permission::read(Role::any())],
             'name' => 'Schemaless Movie',
         ]));

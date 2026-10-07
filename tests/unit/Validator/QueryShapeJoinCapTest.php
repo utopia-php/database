@@ -6,7 +6,7 @@ use PHPUnit\Framework\TestCase;
 use Tests\Unit\Support\Profiles;
 use Utopia\Database\Capability;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Queries;
+use Utopia\Database\Validator\Queries\Base;
 use Utopia\Database\Validator\Queries\Document as DocumentQueries;
 use Utopia\Database\Validator\Query\Join;
 use Utopia\Database\Validator\Query\Limit;
@@ -25,7 +25,7 @@ class QueryShapeJoinCapTest extends TestCase
 
     public function testAtMostEightJoinsPerQuery(): void
     {
-        $validator = new Queries([new Join(), new Limit()]);
+        $validator = new Base([new Join(), new Limit()]);
 
         $this->assertTrue($validator->isValid($this->crossJoins(8)), $validator->getDescription());
 

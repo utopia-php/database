@@ -1,6 +1,6 @@
 <?php
 
-namespace Utopia\Database\Validator\Query;
+namespace Utopia\Database\Validator\Query\Joined;
 
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -9,19 +9,19 @@ use Utopia\Database\Document;
  * Resolution of attributes this collection does not declare, for validators that may legitimately
  * name an attribute of a joined collection.
  */
-trait JoinedAttributes
+trait Attributes
 {
     /**
      * The joins of the query set whose collection is known, in query order.
      *
-     * @var list<JoinedCollection>
+     * @var list<Collection>
      */
     protected array $joins = [];
 
     /**
      * The known join of each alias.
      *
-     * @var array<string, JoinedCollection>
+     * @var array<string, Collection>
      */
     protected array $joinsByAlias = [];
 
@@ -34,7 +34,7 @@ trait JoinedAttributes
      * Declare the joins of the query set whose collection is known: an `alias.column` under one of
      * their aliases has to name a column of that collection, and a bare name may resolve to one.
      *
-     * @param  list<JoinedCollection>  $joins
+     * @param  list<Collection>  $joins
      */
     public function allowJoins(array $joins): void
     {
@@ -143,7 +143,7 @@ trait JoinedAttributes
      * The known join an attribute this collection does not declare resolves to: the join of its
      * alias, or the join that declares a bare name.
      */
-    protected function joinOf(string $attribute): ?JoinedCollection
+    protected function joinOf(string $attribute): ?Collection
     {
         $dot = \strpos($attribute, '.');
 
@@ -203,7 +203,7 @@ trait JoinedAttributes
 
         $declaring = \array_values(\array_filter(
             $this->joins,
-            static fn (JoinedCollection $join): bool => isset($join->attributes[$attribute]),
+            static fn (Collection $join): bool => isset($join->attributes[$attribute]),
         ));
 
         return \count($declaring) === 1 ? $declaring[0]->alias.'.'.$attribute : $attribute;

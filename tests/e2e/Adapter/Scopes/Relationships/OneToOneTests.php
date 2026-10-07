@@ -13,14 +13,14 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Structure as StructureException;
-use Utopia\Database\Helpers\ID;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Id;
+use Utopia\Database\Permission;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationshipDeleteAction;
 use Utopia\Database\RelationshipType;
 use Utopia\Database\RelationshipUpdate;
+use Utopia\Database\Role;
 use Utopia\Query\Schema\ColumnType;
 
 trait OneToOneTests
@@ -1628,14 +1628,14 @@ trait OneToOneTests
         $database->createRelationship('$symbols_coll.ection1', Relationship::oneToOne(relatedCollection: '$symbols_coll.ection2', twoWay: true));
 
         $doc1 = $database->createDocument('$symbols_coll.ection2', new Document([
-            '$id' => ID::unique(),
+            '$id' => Id::unique(),
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
             ],
         ]));
         $doc2 = $database->createDocument('$symbols_coll.ection1', new Document([
-            '$id' => ID::unique(),
+            '$id' => Id::unique(),
             'symbols_collection2' => $doc1->getId(),
             '$permissions' => [
                 Permission::read(Role::any()),

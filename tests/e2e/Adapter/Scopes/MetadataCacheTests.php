@@ -13,11 +13,11 @@ use Utopia\Database\CollectionUpdate;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\NotFound as NotFoundException;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
+use Utopia\Database\Permission;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Relationship;
+use Utopia\Database\Role;
 
 /**
  * Collection definitions are served from the document cache. Every schema

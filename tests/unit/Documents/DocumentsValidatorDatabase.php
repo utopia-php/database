@@ -5,7 +5,7 @@ namespace Tests\Unit\Documents;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Queries;
+use Utopia\Database\Validator\Queries\Base;
 use Utopia\Database\Validator\Queries\Documents as DocumentsValidator;
 
 final class DocumentsValidatorDatabase extends Database
@@ -23,7 +23,7 @@ final class DocumentsValidatorDatabase extends Database
     /**
      * @param  array<Query>  $queries
      */
-    public function queriesValidator(Document $collection, array $queries): Queries
+    public function queriesValidator(Document $collection, array $queries): Base
     {
         return $this->getQueriesValidator($collection, $queries);
     }

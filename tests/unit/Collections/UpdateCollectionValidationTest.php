@@ -17,10 +17,10 @@ use Utopia\Database\CollectionUpdate;
 use Utopia\Database\Database;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Structure as StructureException;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
+use Utopia\Database\Permission;
 use Utopia\Database\Relationship;
+use Utopia\Database\Role;
 
 final class UpdateCollectionValidationTest extends TestCase
 {

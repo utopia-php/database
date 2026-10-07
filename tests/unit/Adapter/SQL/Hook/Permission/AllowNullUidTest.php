@@ -1,16 +1,16 @@
 <?php
 
-namespace Tests\Unit\Hook;
+namespace Tests\Unit\Adapter\SQL\Hook\Permission;
 
 use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Hook\PermissionAllowNullUid;
-use Utopia\Database\Hook\PermissionFilter;
+use Utopia\Database\Adapter\SQL\Hook\Permission\AllowNullUid;
+use Utopia\Database\Adapter\SQL\Hook\Permission\Filter as PermissionFilter;
 use Utopia\Database\Storage;
 use Utopia\Query\Builder\Condition;
 use Utopia\Query\Hook\Filter;
 
-final class PermissionAllowNullUidTest extends TestCase
+final class AllowNullUidTest extends TestCase
 {
     public function testWrapsPermissionConditionWithNullUid(): void
     {
@@ -19,7 +19,7 @@ final class PermissionAllowNullUidTest extends TestCase
             permissionsTable: static fn (string $table): string => 'perms_'.$table,
             documentColumn: 'table_main.'.Storage::UID,
         );
-        $hook = new PermissionAllowNullUid($inner, 'table_main.'.Storage::UID);
+        $hook = new AllowNullUid($inner, 'table_main.'.Storage::UID);
 
         $condition = $hook->filter('movies');
 
@@ -38,7 +38,7 @@ final class PermissionAllowNullUidTest extends TestCase
                 return new Condition('inner_expr', ['role']);
             }
         };
-        $hook = new PermissionAllowNullUid($inner, 'table_main.'.Storage::UID, '"');
+        $hook = new AllowNullUid($inner, 'table_main.'.Storage::UID, '"');
 
         $condition = $hook->filter('movies');
 
@@ -50,7 +50,7 @@ final class PermissionAllowNullUidTest extends TestCase
     {
         $this->expectException(InvalidArgumentException::class);
 
-        new PermissionAllowNullUid(
+        new AllowNullUid(
             new PermissionFilter(
                 roles: ['any'],
                 permissionsTable: static fn (string $table): string => 'perms_'.$table,

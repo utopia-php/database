@@ -1,11 +1,12 @@
 <?php
 
-namespace Utopia\Database\Hook;
+namespace Utopia\Database\Adapter\SQL\Hook\Tenant;
 
+use Utopia\Database\Adapter\SQL\Hook\Column\AllowNull;
 use Utopia\Database\Storage;
 use Utopia\Query\Builder\Condition;
 use Utopia\Query\Builder\JoinType;
-use Utopia\Query\Hook\Filter;
+use Utopia\Query\Hook\Filter as FilterHook;
 use Utopia\Query\Hook\Join\Condition as JoinCondition;
 use Utopia\Query\Hook\Join\Filter as JoinFilter;
 use Utopia\Query\Hook\Join\Placement;
@@ -13,7 +14,7 @@ use Utopia\Query\Hook\Join\Placement;
 /**
  * SQL read hook that generates tenant isolation conditions for shared-table configurations.
  */
-class TenantFilter implements Filter, JoinFilter
+class Filter implements FilterHook, JoinFilter
 {
     /**
      * @var list<int|string|null>
@@ -56,7 +57,7 @@ class TenantFilter implements Filter, JoinFilter
     public function filter(string $table): Condition
     {
         $prefix = (! \str_contains($table, '.') && ! \str_contains($table, $this->quoteCharacter))
-            ? AllowNullColumn::quote($table, $this->quoteCharacter).'.'
+            ? AllowNull::quote($table, $this->quoteCharacter).'.'
             : '';
 
         $name = $this->collection !== '' ? $this->collection : $table;
@@ -84,7 +85,7 @@ class TenantFilter implements Filter, JoinFilter
             return $condition;
         }
 
-        return AllowNullColumn::wrap($condition, $this->allowNullColumn, $this->quoteCharacter);
+        return AllowNull::wrap($condition, $this->allowNullColumn, $this->quoteCharacter);
     }
 
     /**
@@ -103,7 +104,7 @@ class TenantFilter implements Filter, JoinFilter
         $condition = $this->joined($table);
 
         if ($placement === Placement::Where && ($joinType === JoinType::FullOuter || $this->allowNullColumn !== '')) {
-            $condition = AllowNullColumn::wrap(
+            $condition = AllowNull::wrap(
                 $condition,
                 $table.'.'.Storage::UID,
                 $this->quoteCharacter,
@@ -118,7 +119,7 @@ class TenantFilter implements Filter, JoinFilter
      */
     public function joined(string $table): Condition
     {
-        $column = AllowNullColumn::quote($table, $this->quoteCharacter).'.'.Storage::TENANT;
+        $column = AllowNull::quote($table, $this->quoteCharacter).'.'.Storage::TENANT;
 
         return new Condition("{$column} IN ({$this->placeholders()})", $this->tenants);
     }

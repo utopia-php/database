@@ -13,12 +13,12 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Attachable;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Mirror;
+use Utopia\Database\Permission;
 use Utopia\Database\Relationship;
+use Utopia\Database\Role;
 use Utopia\Query\Hook;
 
 final class AttachTest extends TestCase

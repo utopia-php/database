@@ -13,7 +13,7 @@ use Utopia\Database\Adapter\Memory as DatabaseMemory;
 use Utopia\Database\Adapter\Pool;
 use Utopia\Database\Attribute;
 use Utopia\Database\AttributeUpdate;
-use Utopia\Database\Cache\QueryCache;
+use Utopia\Database\Cache\Query as ResultCache;
 use Utopia\Database\Cache\Scope;
 use Utopia\Database\Collection;
 use Utopia\Database\CollectionUpdate;
@@ -22,14 +22,14 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict;
 use Utopia\Database\Exception\Query as QueryException;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
+use Utopia\Database\Permission;
 use Utopia\Database\Query;
+use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Pools\Pool as UtopiaPool;
 
-final class DatabaseQueryCacheTest extends TestCase
+final class DatabaseTest extends TestCase
 {
     public function testQueryCacheSeparatesCompleteExecutionShapes(): void
     {
@@ -127,7 +127,7 @@ final class DatabaseQueryCacheTest extends TestCase
         $adapter = new ObservedMemory();
         [$database] = $this->createDatabase($adapter, queryCache: false);
         $this->createUsers($database);
-        $database->setQueryCache(new QueryCache($cache));
+        $database->setQueryCache(new ResultCache($cache));
         $cache->failing = $method;
         $adapter->observeFinds('users');
 
@@ -153,7 +153,7 @@ final class DatabaseQueryCacheTest extends TestCase
         [$database, $queryAdapter] = $this->createDatabase(queryCache: false);
         $database->createCollection(Collection::create(id: 'users', permissions: self::permissions(), documentSecurity: false));
 
-        $queryCache = new QueryCache(new Cache($queryAdapter));
+        $queryCache = new ResultCache(new Cache($queryAdapter));
         $database->setQueryCache($queryCache);
         $database->setQueryCache($queryCache);
 
@@ -177,7 +177,7 @@ final class DatabaseQueryCacheTest extends TestCase
 
     public function testOneQueryCacheSharedByDatabasesOfDifferentNamesKeepsTheirResultsApart(): void
     {
-        $queryCache = new QueryCache(new Cache(new LeasableHashCache()));
+        $queryCache = new ResultCache(new Cache(new LeasableHashCache()));
         $namespace = 'cache_'.\uniqid();
         $first = $this->createNamedDatabase('first', $namespace, $queryCache, 'a');
         $second = $this->createNamedDatabase('second', $namespace, $queryCache, 'b');
@@ -198,7 +198,7 @@ final class DatabaseQueryCacheTest extends TestCase
 
     public function testReadsAndWritesUseTheCacheNameSetAfterTheQueryCache(): void
     {
-        $queryCache = new QueryCache(new Cache(new LeasableHashCache()));
+        $queryCache = new ResultCache(new Cache(new LeasableHashCache()));
         $namespace = 'cache_'.\uniqid();
         $named = $this->createNamedDatabase('x', $namespace, $queryCache, 'a');
 
@@ -369,7 +369,7 @@ final class DatabaseQueryCacheTest extends TestCase
     public function testMemoryCacheSeparatesRolesAndExecutionShapes(): void
     {
         [$database] = $this->createDatabase(queryCache: false);
-        $database->setQueryCache(new QueryCache(new Cache(new MemoryCache())));
+        $database->setQueryCache(new ResultCache(new Cache(new MemoryCache())));
         $database->getAuthorization()->skip(function () use ($database): void {
             $database->createCollection(Collection::create(id: 'private', permissions: [
                 Permission::create(Role::any()),
@@ -468,7 +468,7 @@ final class DatabaseQueryCacheTest extends TestCase
     public function testSilentPermissionRevocationStillInvalidatesQueryCache(): void
     {
         [$database] = $this->createDatabase(queryCache: false);
-        $database->setQueryCache(new QueryCache(new Cache(new MemoryCache())));
+        $database->setQueryCache(new ResultCache(new Cache(new MemoryCache())));
         $database->getAuthorization()->skip(function () use ($database): void {
             $database->createCollection(Collection::create(id: 'private', permissions: [
                 Permission::create(Role::any()),
@@ -513,7 +513,7 @@ final class DatabaseQueryCacheTest extends TestCase
     {
         $cache = new FailingMemory();
         [$database] = $this->createDatabase(queryCache: false);
-        $database->setQueryCache(new QueryCache(new Cache($cache)));
+        $database->setQueryCache(new ResultCache(new Cache($cache)));
         $database->createCollection(Collection::create(id: 'users', permissions: self::permissions(), documentSecurity: false));
         $database->find('users');
         $cache->failBlocks();
@@ -649,7 +649,7 @@ final class DatabaseQueryCacheTest extends TestCase
         $database
             ->setDatabase('cache-tests')
             ->setNamespace('pooled_'.\uniqid())
-            ->setQueryCache(new QueryCache(new Cache(new MemoryCache())));
+            ->setQueryCache(new ResultCache(new Cache(new MemoryCache())));
         $database->create();
         $database->getAuthorization()->addRole(Role::any()->toString());
         $database->createCollection(Collection::create(id: 'users', attributes: [
@@ -699,13 +699,13 @@ final class DatabaseQueryCacheTest extends TestCase
         $database->getAuthorization()->addRole(Role::any()->toString());
 
         if ($queryCache) {
-            $database->setQueryCache(new QueryCache(new Cache($queryAdapter)));
+            $database->setQueryCache(new ResultCache(new Cache($queryAdapter)));
         }
 
         return [$database, $queryAdapter];
     }
 
-    private function createNamedDatabase(string $name, string $namespace, QueryCache $queryCache, string $document): Database
+    private function createNamedDatabase(string $name, string $namespace, ResultCache $queryCache, string $document): Database
     {
         $database = new Database(new DatabaseMemory(), new Cache(new LeasableHashCache()));
         $database
@@ -752,7 +752,7 @@ final class DatabaseQueryCacheTest extends TestCase
         ]));
 
         $cache = new FailingMemory();
-        $database->setQueryCache(new QueryCache(new Cache($cache)));
+        $database->setQueryCache(new ResultCache(new Cache($cache)));
         $this->assertSame(
             ['existing' => 'original'],
             $this->names($database->find('users', [Query::orderAsc('$id')])),
@@ -827,8 +827,8 @@ final class DatabaseQueryCacheTest extends TestCase
         ]));
 
         $cache = new LeasableHashCache();
-        $writer->setQueryCache(new QueryCache(new Cache($cache)));
-        $reader->setQueryCache(new QueryCache(new Cache($cache)));
+        $writer->setQueryCache(new ResultCache(new Cache($cache)));
+        $reader->setQueryCache(new ResultCache(new Cache($cache)));
 
         return [$writer, $reader, $writerAdapter, $readerAdapter, $cache, $path];
     }

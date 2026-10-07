@@ -7,16 +7,16 @@ use RuntimeException;
 use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
-use Utopia\Database\Cache\QueryCache;
+use Utopia\Database\Cache\Query as ResultCache;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Permission;
 use Utopia\Database\Query;
+use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
 
-final class QueryCachePurgeTest extends TestCase
+final class QueryPurgeTest extends TestCase
 {
     public function testPurgeCachedQueriesDropsTheResultsFindCached(): void
     {
@@ -38,7 +38,7 @@ final class QueryCachePurgeTest extends TestCase
     public function testPurgeCachedQueriesReachesTheNamespaceItNames(): void
     {
         $namespace = 'posts_'.\uniqid();
-        $queryCache = new QueryCache(new Cache(new LeasableHashCache()));
+        $queryCache = new ResultCache(new Cache(new LeasableHashCache()));
         [$reader, $bypass] = $this->createDatabases($namespace, $queryCache);
         $caller = new Database(new DatabaseMemory(), new Cache(new LeasableHashCache()));
         $caller
@@ -58,7 +58,7 @@ final class QueryCachePurgeTest extends TestCase
     public function testPurgeCachedQueriesReportsAQueryCacheItCouldNotPurge(): void
     {
         $queryCache = new FailingMemory();
-        [$reader] = $this->createDatabases('posts_'.\uniqid(), new QueryCache(new Cache($queryCache)));
+        [$reader] = $this->createDatabases('posts_'.\uniqid(), new ResultCache(new Cache($queryCache)));
         $queryCache->failBlocks();
 
         $this->assertFalse($reader->purgeCachedQueries('posts'));
@@ -140,7 +140,7 @@ final class QueryCachePurgeTest extends TestCase
      *
      * @return array{Database, Database}
      */
-    private function createDatabases(string $namespace, ?QueryCache $queryCache = null): array
+    private function createDatabases(string $namespace, ?ResultCache $queryCache = null): array
     {
         $adapter = new DatabaseMemory();
         $cache = new Cache(new LeasableHashCache());
@@ -159,7 +159,7 @@ final class QueryCachePurgeTest extends TestCase
         [$reader, $bypass] = $databases;
 
         $reader->create();
-        $reader->setQueryCache($queryCache ?? new QueryCache(new Cache(new LeasableHashCache())));
+        $reader->setQueryCache($queryCache ?? new ResultCache(new Cache(new LeasableHashCache())));
         $reader->createCollection(Collection::create(id: 'posts', permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),

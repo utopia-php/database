@@ -1,12 +1,12 @@
 <?php
 
-namespace Tests\Unit\Validator;
+namespace Tests\Unit\Validator\Queries;
 
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Document;
 use Utopia\Database\Exception;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\IndexedQueries;
+use Utopia\Database\Validator\Queries\Indexed;
 use Utopia\Database\Validator\Query\Cursor;
 use Utopia\Database\Validator\Query\Filter;
 use Utopia\Database\Validator\Query\Join;
@@ -17,7 +17,7 @@ use Utopia\Query\Method;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 
-class IndexedQueriesTest extends TestCase
+class IndexedTest extends TestCase
 {
     protected function setUp(): void
     {
@@ -29,30 +29,30 @@ class IndexedQueriesTest extends TestCase
 
     public function test_empty_queries(): void
     {
-        $validator = new IndexedQueries();
+        $validator = new Indexed();
 
         $this->assertEquals(true, $validator->isValid([]));
     }
 
     public function test_invalid_query(): void
     {
-        $validator = new IndexedQueries();
+        $validator = new Indexed();
 
         $this->assertEquals(false, $validator->isValid(['this.is.invalid']));
     }
 
     public function test_invalid_method(): void
     {
-        $validator = new IndexedQueries();
+        $validator = new Indexed();
         $this->assertEquals(false, $validator->isValid(['equal("attr", "value")']));
 
-        $validator = new IndexedQueries([], [], [new Limit()]);
+        $validator = new Indexed([], [], [new Limit()]);
         $this->assertEquals(false, $validator->isValid(['equal("attr", "value")']));
     }
 
     public function test_invalid_value(): void
     {
-        $validator = new IndexedQueries([], [], [new Limit()]);
+        $validator = new Indexed([], [], [new Limit()]);
         $this->assertEquals(false, $validator->isValid(['limit(-1)']));
     }
 
@@ -78,7 +78,7 @@ class IndexedQueriesTest extends TestCase
             ]),
         ];
 
-        $validator = new IndexedQueries(
+        $validator = new Indexed(
             $attributes,
             $indexes,
             [
@@ -141,7 +141,7 @@ class IndexedQueriesTest extends TestCase
             ]),
         ];
 
-        $validator = new IndexedQueries(
+        $validator = new Indexed(
             $attributes,
             $indexes,
             [
@@ -181,7 +181,7 @@ class IndexedQueriesTest extends TestCase
             ]),
         ];
 
-        $validator = new IndexedQueries(
+        $validator = new Indexed(
             $attributes,
             [],
             [
@@ -239,7 +239,7 @@ class IndexedQueriesTest extends TestCase
             ]),
         ];
 
-        $validator = new IndexedQueries(
+        $validator = new Indexed(
             $attributes,
             [],
             [
@@ -307,7 +307,7 @@ class IndexedQueriesTest extends TestCase
             ]),
         ];
 
-        $validator = new IndexedQueries(
+        $validator = new Indexed(
             $attributes,
             [],
             [
@@ -341,7 +341,7 @@ class IndexedQueriesTest extends TestCase
             ]),
         ];
 
-        $validator = new IndexedQueries(
+        $validator = new Indexed(
             $attributes,
             [],
             [
@@ -386,7 +386,7 @@ class IndexedQueriesTest extends TestCase
             ]),
         ];
 
-        $validator = new IndexedQueries(
+        $validator = new Indexed(
             $attributes,
             $indexes,
             [
@@ -423,7 +423,7 @@ class IndexedQueriesTest extends TestCase
             ]),
         ];
 
-        $validator = new IndexedQueries(
+        $validator = new Indexed(
             $attributes,
             [],
             [new Filter($attributes, ColumnType::Integer->value)]
@@ -451,7 +451,7 @@ class IndexedQueriesTest extends TestCase
             ]),
         ];
 
-        $validator = new IndexedQueries(
+        $validator = new Indexed(
             $attributes,
             [],
             [new Filter($attributes, ColumnType::Integer->value)]
@@ -467,7 +467,7 @@ class IndexedQueriesTest extends TestCase
 
     public function test_unparseable_string_query_returns_error(): void
     {
-        $validator = new IndexedQueries([], [], [new Limit()]);
+        $validator = new Indexed([], [], [new Limit()]);
 
         $this->assertFalse($validator->isValid(['totally broken }{']));
         $this->assertStringContainsString('Invalid query', $validator->getDescription());
@@ -475,7 +475,7 @@ class IndexedQueriesTest extends TestCase
 
     public function test_nested_non_having_with_invalid_sub_queries(): void
     {
-        $validator = new IndexedQueries([], [], [new Filter([], ColumnType::Integer->value)]);
+        $validator = new Indexed([], [], [new Filter([], ColumnType::Integer->value)]);
 
         $nestedOr = Query::or([Query::equal('nonexistent', ['value'])]);
         $this->assertFalse($validator->isValid([$nestedOr]));
@@ -505,7 +505,7 @@ class IndexedQueriesTest extends TestCase
             ]),
         ];
 
-        $validator = new IndexedQueries(
+        $validator = new Indexed(
             $attributes,
             $indexes,
             [new Filter($attributes, ColumnType::Integer->value)]
@@ -539,7 +539,7 @@ class IndexedQueriesTest extends TestCase
             ]),
         ];
 
-        $validator = new IndexedQueries(
+        $validator = new Indexed(
             $attributes,
             [],
             [new Filter($attributes, ColumnType::Integer->value)]

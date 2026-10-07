@@ -11,7 +11,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\RelationshipSide;
 use Utopia\Database\RelationshipType;
-use Utopia\Database\Validator\Queries;
+use Utopia\Database\Validator\Queries\Base;
 use Utopia\Database\Validator\Queries\Document as DocumentQueries;
 use Utopia\Database\Validator\Query\Aggregate;
 use Utopia\Database\Validator\Query\Filter;
@@ -263,7 +263,7 @@ final class JoinedColumnTest extends TestCase
     /**
      * @param  array<Document>  $joinedCollections
      */
-    private function validator(array $joinedCollections = [], bool $supportForAttributes = true): Queries
+    private function validator(array $joinedCollections = [], bool $supportForAttributes = true): Base
     {
         $attributes = [
             ...$this->attributes(),
@@ -273,7 +273,7 @@ final class JoinedColumnTest extends TestCase
             $this->attribute('$updatedAt', ColumnType::Datetime),
         ];
 
-        $validator = new Queries([
+        $validator = new Base([
             new Filter($attributes, ColumnType::Integer->value, supportForAttributes: $supportForAttributes),
             new Select($attributes, $supportForAttributes),
             new Order($attributes, $supportForAttributes),

@@ -13,10 +13,10 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Unique as UniqueException;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
+use Utopia\Database\Permission;
 use Utopia\Database\Relationship;
+use Utopia\Database\Role;
 
 /**
  * Database::update() renames a database. Adapters without separate databases (Capability::Schemas) and SQLite, which

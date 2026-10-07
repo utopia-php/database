@@ -17,9 +17,9 @@ use Utopia\Database\Collection;
 use Utopia\Database\Connection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Permission;
 use Utopia\Database\Query;
+use Utopia\Database\Role;
 
 echo 'swoole=' . (extension_loaded('swoole') ? '1' : '0') . PHP_EOL;
 

@@ -1,17 +1,17 @@
 <?php
 
-namespace Tests\Unit\Hook;
+namespace Tests\Unit\Adapter\SQL\Hook\Join;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Hook\JoinChain;
-use Utopia\Database\Hook\OuterJoinChainFilter;
-use Utopia\Database\Hook\TenantFilter;
+use Utopia\Database\Adapter\SQL\Hook\Join\Chain;
+use Utopia\Database\Adapter\SQL\Hook\Join\OuterChain;
+use Utopia\Database\Adapter\SQL\Hook\Tenant\Filter;
 use Utopia\Query\Builder\Condition;
 use Utopia\Query\Builder\JoinType;
 use Utopia\Query\Hook\Join\Placement;
 
-final class OuterJoinChainFilterTest extends TestCase
+final class OuterChainTest extends TestCase
 {
     /**
      * @return iterable<string, array{JoinType}>
@@ -35,20 +35,20 @@ final class OuterJoinChainFilterTest extends TestCase
     #[DataProvider('preservingJoins')]
     public function testEveryEarlierTableFilteredInWhereIsRepeatedInOnRelaxedForMissingRows(JoinType $joinType): void
     {
-        $chain = new JoinChain([
+        $chain = new Chain([
             'b' => JoinType::Inner,
             'c' => JoinType::Right,
             'x' => JoinType::Cross,
             'd' => $joinType,
             'e' => JoinType::Right,
         ]);
-        $tenants = new TenantFilter(7);
+        $tenants = new Filter(7);
         $conditions = [];
         foreach (['b', 'c', 'x', 'd', 'e'] as $alias) {
             $conditions[$alias] = $tenants->joined($alias);
         }
 
-        $result = (new OuterJoinChainFilter($chain, $conditions))->filterJoin('d', $joinType);
+        $result = (new OuterChain($chain, $conditions))->filterJoin('d', $joinType);
 
         $this->assertNotNull($result);
         $this->assertSame(Placement::On, $result->placement, 'Only ON decides which rows the join pairs');
@@ -63,24 +63,24 @@ final class OuterJoinChainFilterTest extends TestCase
     #[DataProvider('otherJoins')]
     public function testJoinsThatKeepNoUnmatchedRowsOfEarlierTablesNeedNothing(JoinType $joinType): void
     {
-        $chain = new JoinChain(['c' => JoinType::Right, 'd' => $joinType]);
+        $chain = new Chain(['c' => JoinType::Right, 'd' => $joinType]);
 
-        $this->assertNull((new OuterJoinChainFilter($chain, ['c' => new Condition('c.ok')]))->filterJoin('d', $joinType));
+        $this->assertNull((new OuterChain($chain, ['c' => new Condition('c.ok')]))->filterJoin('d', $joinType));
     }
 
     public function testTheFirstOuterJoinAndTablesWithoutConditionsAddNothing(): void
     {
-        $chain = new JoinChain(['c' => JoinType::Right, 'd' => JoinType::Right]);
+        $chain = new Chain(['c' => JoinType::Right, 'd' => JoinType::Right]);
 
-        $this->assertNull((new OuterJoinChainFilter($chain, ['c' => new Condition('c.ok')]))->filterJoin('c', JoinType::Right));
-        $this->assertNull((new OuterJoinChainFilter($chain, ['d' => new Condition('d.ok')]))->filterJoin('d', JoinType::Right));
+        $this->assertNull((new OuterChain($chain, ['c' => new Condition('c.ok')]))->filterJoin('c', JoinType::Right));
+        $this->assertNull((new OuterChain($chain, ['d' => new Condition('d.ok')]))->filterJoin('d', JoinType::Right));
     }
 
     public function testBindingsFollowTheConditionsInOrder(): void
     {
-        $chain = new JoinChain(['c' => JoinType::FullOuter, 'x' => JoinType::Cross, 'd' => JoinType::Right]);
+        $chain = new Chain(['c' => JoinType::FullOuter, 'x' => JoinType::Cross, 'd' => JoinType::Right]);
 
-        $result = (new OuterJoinChainFilter($chain, [
+        $result = (new OuterChain($chain, [
             'x' => new Condition('x.role IN (?, ?)', ['x1', 'x2']),
             'c' => new Condition('c.role = ?', ['c1']),
         ], '"'))->filterJoin('d', JoinType::Right);

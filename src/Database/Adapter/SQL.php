@@ -12,6 +12,9 @@ use Throwable;
 use Utopia\Console;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\SQL\BoundedPage;
+use Utopia\Database\Adapter\SQL\Hook\Join;
+use Utopia\Database\Adapter\SQL\Hook\Permission;
+use Utopia\Database\Adapter\SQL\Hook\Tenant;
 use Utopia\Database\Adapter\SQL\Hook\WriteContext;
 use Utopia\Database\Attribute;
 use Utopia\Database\Builder\Filtering;
@@ -28,17 +31,7 @@ use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
-use Utopia\Database\Hook\JoinChain;
-use Utopia\Database\Hook\OuterJoinChainFilter;
-use Utopia\Database\Hook\OuterJoinPermissionFilter;
-use Utopia\Database\Hook\OuterJoinTenantFilter;
-use Utopia\Database\Hook\PermissionAllowNullUid;
-use Utopia\Database\Hook\PermissionFilter;
-use Utopia\Database\Hook\PermissionJoinFilter;
-use Utopia\Database\Hook\RawOuterJoinTenantFilter;
-use Utopia\Database\Hook\RawTenantFilter;
 use Utopia\Database\Hook\Tenancy;
-use Utopia\Database\Hook\TenantFilter;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
 use Utopia\Database\PDO as DatabasePDO;
@@ -71,9 +64,9 @@ use Utopia\Query\Schema;
 use Utopia\Query\Schema\Column;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\MySQL as MySQLSchema;
-use Utopia\Query\Schema\PostgreSQL as PostgreSQLSchema;
+use Utopia\Query\Schema\PostgreSQL as PostgresSchema;
 use Utopia\Query\Schema\Table;
-use Utopia\Query\Schema\Table\PostgreSQL as PostgreSQLTable;
+use Utopia\Query\Schema\Table\PostgreSQL as PostgresTable;
 
 /**
  * Abstract base adapter for SQL-based database engines (MariaDB, MySQL, PostgreSQL, SQLite).
@@ -593,7 +586,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         // no joins. This is by far the most common shape (metadata fetch,
         // primary cache miss, the locked read of every update); skip the
         // builder pipeline and go directly to a parameterised SELECT, filtered
-        // by tenant and locked the way the builder's TenantFilter and lock
+        // by tenant and locked the way the builder's Tenant\Filter and lock
         // clause do it.
         if (
             empty($selections)
@@ -2150,7 +2143,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         }
 
         if ($this->sharedTables) {
-            $tenant = (new TenantFilter($this->currentTenant(), Database::METADATA, $name, quoteCharacter: $this->getIdentifierQuote()))->filter($alias);
+            $tenant = (new Tenant\Filter($this->currentTenant(), Database::METADATA, $name, quoteCharacter: $this->getIdentifierQuote()))->filter($alias);
             $conditions[] = $tenant->expression;
             \array_push($bindings, ...$tenant->bindings);
         }
@@ -3311,7 +3304,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     /**
      * A schema builder in this adapter's SQL dialect.
      */
-    public function schema(): MySQLSchema|PostgreSQLSchema
+    public function schema(): MySQLSchema|PostgresSchema
     {
         return new MySQLSchema();
     }
@@ -3341,7 +3334,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             if ($allowNullTenant) {
                 $allowNullColumn = $source.'.'.Storage::UID;
             }
-            $tenantFilter = new TenantFilter(
+            $tenantFilter = new Tenant\Filter(
                 $tenants === [] ? $this->currentTenant() : $tenants,
                 Database::METADATA,
                 $table,
@@ -3349,7 +3342,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 $this->getIdentifierQuote(),
             );
             $builder->addHook($tenantFilter);
-            $builder->addHook(new OuterJoinTenantFilter($tenantFilter, $source));
+            $builder->addHook(new Tenant\OuterJoin($tenantFilter, $source));
         }
 
         return $builder;
@@ -3378,7 +3371,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * columns and applies no permissions.
      *
      * Under shared tables it keeps every statement to the selected tenant: the main table and every
-     * table joined through the builder's join methods (RawTenantFilter). It does not use
+     * table joined through the builder's join methods (Tenant\Raw). It does not use
      * newBuilder()'s tenant hooks, which need a read's joins up front; the caller adds these later.
      * Not kept to the tenant: SQL the caller writes, builders that did not come from Database::from()
      * (subqueries, unions, lateral joins) and a dialect's multi-table updates and deletes.
@@ -3391,7 +3384,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         }
 
         $table = $this->getTableRaw($name);
-        $tenants = new RawTenantFilter(
+        $tenants = new Tenant\Raw(
             $this->currentTenant(),
             $table,
             $name === Database::METADATA || $name === Storage::permissionsTable(Database::METADATA),
@@ -3403,7 +3396,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             ->from($table)
             ->addHook($this->attributeMap)
             ->addHook($tenants)
-            ->addHook(new RawOuterJoinTenantFilter($tenants))
+            ->addHook(new Tenant\RawOuterJoin($tenants))
             ->beforeBuild($tenants->reset(...));
     }
 
@@ -3424,9 +3417,9 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     /**
      * @param  array<string>  $roles
      */
-    protected function newPermissionHook(string $collection, array $roles, string $type = PermissionType::Read->value, string $documentColumn = Storage::UID): PermissionFilter
+    protected function newPermissionHook(string $collection, array $roles, string $type = PermissionType::Read->value, string $documentColumn = Storage::UID): Permission\Filter
     {
-        return new PermissionFilter(
+        return new Permission\Filter(
             roles: \array_values($roles),
             permissionsTable: fn (string $table) => $this->getTableRaw(Storage::permissionsTable($collection)),
             type: $type,
@@ -3435,7 +3428,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             permissionRoleColumn: Storage::PERM_PERMISSION,
             permissionTypeColumn: Storage::PERM_TYPE,
             subqueryFilter: $this->sharedTables
-                ? new TenantFilter(
+                ? new Tenant\Filter(
                     $this->currentTenant(),
                     Database::METADATA,
                     Storage::permissionsTable($collection),
@@ -3449,7 +3442,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     /**
      * @param  array<string>  $roles
      */
-    protected function newJoinPermissionHook(string $collection, array $roles, string $type, string $documentColumn, int $joins, JoinType $joinType): PermissionFilter
+    protected function newJoinPermissionHook(string $collection, array $roles, string $type, string $documentColumn, int $joins, JoinType $joinType): Permission\Filter
     {
         return $this->newPermissionHook($collection, $roles, $type, $documentColumn);
     }
@@ -4249,7 +4242,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
     private function addVectorColumn(Table $table, string $name, int $size): Column
     {
-        if (! $table instanceof PostgreSQLTable) {
+        if (! $table instanceof PostgresTable) {
             throw new DatabaseException('Vector columns are only supported on PostgreSQL');
         }
 
@@ -4798,16 +4791,16 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             }
         }
 
-        $chain = JoinChain::fromQueries($queries);
+        $chain = Join\Chain::fromQueries($queries);
         $preserving = $chain->hasPreservingOuterJoin();
 
         if ($this->sharedTables && $preserving) {
-            $tenantFilter = new TenantFilter($this->currentTenant(), quoteCharacter: $this->getIdentifierQuote());
+            $tenantFilter = new Tenant\Filter($this->currentTenant(), quoteCharacter: $this->getIdentifierQuote());
             $tenantConditions = [];
             foreach ($joinTablePrefixes as $join) {
                 $tenantConditions[$join['alias']] = $tenantFilter->joined($join['alias']);
             }
-            $builder->addHook(new OuterJoinChainFilter($chain, $tenantConditions, $this->getIdentifierQuote()));
+            $builder->addHook(new Join\OuterChain($chain, $tenantConditions, $this->getIdentifierQuote()));
         }
 
         if ($this->authorization->getStatus()) {
@@ -4819,7 +4812,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 $permissionHook = $this->newPermissionHook($name, $roles, $forPermission->value, $docCol);
                 if ($preserving) {
                     $permissionConditions[$alias] = $permissionHook->filter($alias);
-                    $permissionHook = new PermissionAllowNullUid(
+                    $permissionHook = new Permission\AllowNullUid(
                         $permissionHook,
                         $docCol,
                         $this->getIdentifierQuote(),
@@ -4848,7 +4841,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 if ($preserving) {
                     $permissionConditions[$join['alias']] = $permissionHook->filter($join['alias']);
                 }
-                $builder->addHook(new PermissionJoinFilter(
+                $builder->addHook(new Permission\Join(
                     $permissionHook,
                     $join['alias'],
                     $this->getIdentifierQuote(),
@@ -4857,8 +4850,8 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             }
 
             if ($permissionConditions !== []) {
-                $builder->addHook(new OuterJoinPermissionFilter($alias, $permissionConditions, $this->getIdentifierQuote()));
-                $builder->addHook(new OuterJoinChainFilter($chain, $permissionConditions, $this->getIdentifierQuote()));
+                $builder->addHook(new Permission\OuterJoin($alias, $permissionConditions, $this->getIdentifierQuote()));
+                $builder->addHook(new Join\OuterChain($chain, $permissionConditions, $this->getIdentifierQuote()));
             }
         }
     }

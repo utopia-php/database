@@ -8,16 +8,16 @@ use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Attribute;
 use Utopia\Database\Cache\Invalidator;
-use Utopia\Database\Cache\QueryCache;
+use Utopia\Database\Cache\Query as ResultCache;
 use Utopia\Database\Cache\Scope;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
+use Utopia\Database\Permission;
 use Utopia\Database\Query;
+use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
 
 /**
@@ -25,7 +25,7 @@ use Utopia\Database\Validator\Authorization;
  * writer has selected, while find() caches its results per tenant. A write has to refresh the
  * cached results of each written document's tenant and leave every other tenant's in place.
  */
-final class QueryCacheTenantPerDocumentTest extends TestCase
+final class QueryTenantPerDocumentTest extends TestCase
 {
     private const string COLLECTION = 'notes';
 
@@ -69,7 +69,7 @@ final class QueryCacheTenantPerDocumentTest extends TestCase
             ->addHook(new Permissions());
         $this->database->create();
         $this->database->createCollection($this->notes());
-        $this->database->setQueryCache(new QueryCache(new Cache(new LeasableHashCache())));
+        $this->database->setQueryCache(new ResultCache(new Cache(new LeasableHashCache())));
 
         foreach ([self::TENANT, self::OTHER_TENANT, self::UNTOUCHED_TENANT] as $tenant) {
             $this->database->createDocument(self::COLLECTION, $this->note($tenant, [self::ALICE, self::BOB]));
@@ -168,7 +168,7 @@ final class QueryCacheTenantPerDocumentTest extends TestCase
             ->addHook(new Permissions());
         $database->create();
         $database->createCollection($this->notes());
-        $database->setQueryCache(new QueryCache(new Cache(new LeasableHashCache())));
+        $database->setQueryCache(new ResultCache(new Cache(new LeasableHashCache())));
         $database->createDocument(self::COLLECTION, $this->note(self::TENANT, [self::ALICE, self::BOB]));
         $read = fn (): array => \array_map(
             static fn (Document $document): string => $document->getId(),
@@ -185,7 +185,7 @@ final class QueryCacheTenantPerDocumentTest extends TestCase
 
     public function testTokensKeyEachDocumentUnderTheTenantItIsStoredUnder(): void
     {
-        $queryCache = new QueryCache(new InvalidationCache());
+        $queryCache = new ResultCache(new InvalidationCache());
         $scope = new Scope('host', 'database', 'namespace', self::UNTOUCHED_TENANT);
         $documents = [
             new Document(['$collection' => self::COLLECTION, '$tenant' => self::TENANT]),
@@ -212,7 +212,7 @@ final class QueryCacheTenantPerDocumentTest extends TestCase
 
     public function testAWrittenDocumentsOwnOptionsNameNoCollectionToInvalidate(): void
     {
-        $queryCache = new QueryCache(new InvalidationCache());
+        $queryCache = new ResultCache(new InvalidationCache());
         $scope = new Scope(namespace: 'namespace', tenant: self::TENANT);
         $document = new Document([
             '$collection' => self::COLLECTION,

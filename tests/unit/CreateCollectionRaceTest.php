@@ -11,9 +11,9 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
-use Utopia\Database\Helpers\ID;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Id;
+use Utopia\Database\Permission;
+use Utopia\Database\Role;
 
 class CreateCollectionRaceTest extends TestCase
 {
@@ -48,7 +48,7 @@ class CreateCollectionRaceTest extends TestCase
         ]);
 
         $adapter->createDocument($schema, new Document([
-            '$id' => ID::custom('written'),
+            '$id' => Id::custom('written'),
             '$permissions' => [Permission::read(Role::any())],
             'name' => 'peer',
         ]));

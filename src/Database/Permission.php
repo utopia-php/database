@@ -1,10 +1,9 @@
 <?php
 
-namespace Utopia\Database\Helpers;
+namespace Utopia\Database;
 
 use Exception;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\PermissionType;
 
 /**
  * Represents a database permission binding a permission type to a role.

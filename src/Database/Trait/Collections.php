@@ -1,6 +1,6 @@
 <?php
 
-namespace Utopia\Database\Traits;
+namespace Utopia\Database\Trait;
 
 use Exception;
 use Throwable;
@@ -18,10 +18,10 @@ use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Structure as StructureException;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
+use Utopia\Database\Permission;
 use Utopia\Database\Query;
+use Utopia\Database\Role;
 use Utopia\Database\Validator\IndexDefinition;
 use Utopia\Database\Validator\Permissions;
 use Utopia\Query\Schema\ColumnType;

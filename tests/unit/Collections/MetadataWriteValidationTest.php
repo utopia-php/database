@@ -16,9 +16,9 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Structure as StructureException;
-use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\Relationship;
+use Utopia\Database\Role;
 
 final class MetadataWriteValidationTest extends TestCase
 {

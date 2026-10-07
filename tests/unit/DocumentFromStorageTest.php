@@ -9,16 +9,16 @@ use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Attribute;
-use Utopia\Database\Cache\QueryCache;
+use Utopia\Database\Cache\Query;
 use Utopia\Database\Cache\Scope;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Filter;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Permission;
 use Utopia\Database\PermissionType;
+use Utopia\Database\Role;
 
 final class DocumentFromStorageTest extends TestCase
 {
@@ -155,7 +155,7 @@ final class DocumentFromStorageTest extends TestCase
 
     public function testQueryCacheRebuildsCachedDocumentsWithANonStringPermission(): void
     {
-        $queryCache = new QueryCache(new Cache(new MemoryCache()));
+        $queryCache = new Query(new Cache(new MemoryCache()));
         $entry = $queryCache->getEntry(new Scope(), 'users', []);
         $this->assertNotNull($entry);
         $stored = new Document();

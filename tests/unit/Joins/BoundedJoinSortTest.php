@@ -13,12 +13,12 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Index;
-use Utopia\Database\Profiler\QueryLog;
+use Utopia\Database\Permission;
+use Utopia\Database\Profiler\Log;
 use Utopia\Database\Query;
+use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\Method;
 
@@ -373,7 +373,7 @@ final class BoundedJoinSortTest extends TestCase
     {
         $reads = \array_values(\array_filter(
             $database->getProfiler()?->getLogs() ?? [],
-            static fn (QueryLog $log): bool => \str_starts_with($log->query, 'SELECT') && \str_contains($log->query, 'JOIN'),
+            static fn (Log $log): bool => \str_starts_with($log->query, 'SELECT') && \str_contains($log->query, 'JOIN'),
         ));
         $this->assertNotSame([], $reads);
         $read = $reads[\count($reads) - 1];

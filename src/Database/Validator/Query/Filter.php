@@ -9,6 +9,8 @@ use Utopia\Database\Query;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
 use Utopia\Database\Validator\ObjectPath;
+use Utopia\Database\Validator\Query\Joined\Attributes;
+use Utopia\Database\Validator\Query\Joined\Collection;
 use Utopia\Database\Validator\Sequence;
 use Utopia\Query\Method;
 use Utopia\Query\Query as BaseQuery;
@@ -23,7 +25,7 @@ use Utopia\Validator\Text;
  */
 class Filter extends Base
 {
-    use JoinedAttributes;
+    use Attributes;
 
     /**
      * @var array<int|string, mixed>
@@ -349,7 +351,7 @@ class Filter extends Base
             }
         }
 
-        if ($attributeType === ColumnType::Relationship && \in_array(false, JoinedCollection::columns([new Document($attributeSchema)]), true)) {
+        if ($attributeType === ColumnType::Relationship && \in_array(false, Collection::columns([new Document($attributeSchema)]), true)) {
             $this->message = 'Cannot query on virtual relationship attribute';
 
             return false;
@@ -742,7 +744,7 @@ class Filter extends Base
 
         /** @var array<string, mixed>|null $definition */
         $definition = $this->schema[$attribute] ?? null;
-        if ($definition !== null && (JoinedCollection::columns([new Document($definition)])[$attribute] ?? true) === false) {
+        if ($definition !== null && (Collection::columns([new Document($definition)])[$attribute] ?? true) === false) {
             $this->message = 'Cannot query on virtual relationship attribute';
 
             return false;

@@ -6,16 +6,16 @@ use Closure;
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Utopia\Database\Adapter\SQL\Hook\Column\AllowNull;
+use Utopia\Database\Adapter\SQL\Hook\Permission\Filter;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Hook\AllowNullColumn;
-use Utopia\Database\Hook\PermissionFilter;
 use Utopia\Query\Builder\Condition;
 
 final class ColumnNameTest extends TestCase
 {
     public function testWrapAllowsNullInTheQuotedColumn(): void
     {
-        $condition = AllowNullColumn::wrap(new Condition('x = ?', [1]), 'alias._uid');
+        $condition = AllowNull::wrap(new Condition('x = ?', [1]), 'alias._uid');
 
         $this->assertSame('(x = ? OR `alias`.`_uid` IS NULL)', $condition->expression);
         $this->assertSame([1], $condition->bindings);
@@ -27,7 +27,7 @@ final class ColumnNameTest extends TestCase
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('Invalid column name: '.$column);
 
-        AllowNullColumn::wrap(new Condition('x = 1'), $column);
+        AllowNull::wrap(new Condition('x = 1'), $column);
     }
 
     /**
@@ -42,7 +42,7 @@ final class ColumnNameTest extends TestCase
     }
 
     /**
-     * @param  Closure(string): PermissionFilter  $construct
+     * @param  Closure(string): Filter  $construct
      */
     #[DataProvider('permissionFilterColumns')]
     public function testPermissionFilterRejectsAColumnOutsideTheIdentifierPattern(Closure $construct, string $column): void
@@ -54,17 +54,17 @@ final class ColumnNameTest extends TestCase
     }
 
     /**
-     * @return iterable<string, array{Closure(string): PermissionFilter, string}>
+     * @return iterable<string, array{Closure(string): Filter, string}>
      */
     public static function permissionFilterColumns(): iterable
     {
         $permissionsTable = static fn (string $table): string => $table.'_perms';
         $constructors = [
-            'documentColumn' => static fn (string $column): PermissionFilter => new PermissionFilter(['any'], $permissionsTable, documentColumn: $column),
-            'permissionDocumentColumn' => static fn (string $column): PermissionFilter => new PermissionFilter(['any'], $permissionsTable, permissionDocumentColumn: $column),
-            'permissionRoleColumn' => static fn (string $column): PermissionFilter => new PermissionFilter(['any'], $permissionsTable, permissionRoleColumn: $column),
-            'permissionTypeColumn' => static fn (string $column): PermissionFilter => new PermissionFilter(['any'], $permissionsTable, permissionTypeColumn: $column),
-            'scopeColumn' => static fn (string $column): PermissionFilter => new PermissionFilter(['any'], $permissionsTable, scopeColumn: $column),
+            'documentColumn' => static fn (string $column): Filter => new Filter(['any'], $permissionsTable, documentColumn: $column),
+            'permissionDocumentColumn' => static fn (string $column): Filter => new Filter(['any'], $permissionsTable, permissionDocumentColumn: $column),
+            'permissionRoleColumn' => static fn (string $column): Filter => new Filter(['any'], $permissionsTable, permissionRoleColumn: $column),
+            'permissionTypeColumn' => static fn (string $column): Filter => new Filter(['any'], $permissionsTable, permissionTypeColumn: $column),
+            'scopeColumn' => static fn (string $column): Filter => new Filter(['any'], $permissionsTable, scopeColumn: $column),
         ];
         foreach ($constructors as $parameter => $construct) {
             foreach (self::invalidColumns() as $label => [$column]) {
@@ -75,7 +75,7 @@ final class ColumnNameTest extends TestCase
 
     public function testPermissionFilterWithoutRolesMatchesNothing(): void
     {
-        $filter = new PermissionFilter([], static fn (string $table): string => $table.'_perms');
+        $filter = new Filter([], static fn (string $table): string => $table.'_perms');
 
         $condition = $filter->filter('posts');
 
@@ -85,7 +85,7 @@ final class ColumnNameTest extends TestCase
 
     public function testPermissionFilterRejectsAPermissionsTableOutsideTheIdentifierPattern(): void
     {
-        $filter = new PermissionFilter(['any'], static fn (string $table): string => $table.' perms');
+        $filter = new Filter(['any'], static fn (string $table): string => $table.' perms');
 
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('Invalid permissions table name: posts perms');
@@ -95,7 +95,7 @@ final class ColumnNameTest extends TestCase
 
     public function testPermissionFilterWithNoColumnsMatchesOnlyCollectionWidePermissions(): void
     {
-        $filter = new PermissionFilter(['any'], static fn (string $table): string => $table.'_perms', columns: []);
+        $filter = new Filter(['any'], static fn (string $table): string => $table.'_perms', columns: []);
 
         $condition = $filter->filter('posts');
 
@@ -105,7 +105,7 @@ final class ColumnNameTest extends TestCase
 
     public function testPermissionFilterWithColumnsMatchesThemOrCollectionWidePermissions(): void
     {
-        $filter = new PermissionFilter(['any', 'users'], static fn (string $table): string => $table.'_perms', columns: ['title', 'body']);
+        $filter = new Filter(['any', 'users'], static fn (string $table): string => $table.'_perms', columns: ['title', 'body']);
 
         $condition = $filter->filter('posts');
 
@@ -115,13 +115,13 @@ final class ColumnNameTest extends TestCase
 
     public function testWrapAcceptsADigitOrHyphenLeadingColumnAndQuotesIt(): void
     {
-        $this->assertSame('(x = 1 OR `1db`.`_uid` IS NULL)', AllowNullColumn::wrap(new Condition('x = 1'), '1db._uid')->expression);
-        $this->assertSame('(x = 1 OR `-ns`.`_uid` IS NULL)', AllowNullColumn::wrap(new Condition('x = 1'), '-ns._uid')->expression);
+        $this->assertSame('(x = 1 OR `1db`.`_uid` IS NULL)', AllowNull::wrap(new Condition('x = 1'), '1db._uid')->expression);
+        $this->assertSame('(x = 1 OR `-ns`.`_uid` IS NULL)', AllowNull::wrap(new Condition('x = 1'), '-ns._uid')->expression);
     }
 
     public function testPermissionFilterAcceptsADigitLeadingPermissionsTableAndQuotesIt(): void
     {
-        $filter = new PermissionFilter(['any'], static fn (string $table): string => '1db.ns_'.$table.'_perms');
+        $filter = new Filter(['any'], static fn (string $table): string => '1db.ns_'.$table.'_perms');
 
         $condition = $filter->filter('posts');
 
@@ -134,6 +134,6 @@ final class ColumnNameTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage('Invalid column name: 1role');
 
-        new PermissionFilter(['any'], static fn (string $table): string => $table.'_perms', permissionRoleColumn: '1role');
+        new Filter(['any'], static fn (string $table): string => $table.'_perms', permissionRoleColumn: '1role');
     }
 }

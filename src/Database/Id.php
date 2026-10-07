@@ -1,6 +1,6 @@
 <?php
 
-namespace Utopia\Database\Helpers;
+namespace Utopia\Database;
 
 use Exception;
 use Utopia\Database\Exception as DatabaseException;
@@ -8,7 +8,7 @@ use Utopia\Database\Exception as DatabaseException;
 /**
  * Helper class for generating and creating document identifiers.
  */
-class ID
+class Id
 {
     /**
      * Create a new unique ID using uniqid with optional random padding.

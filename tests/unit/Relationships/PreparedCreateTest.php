@@ -21,15 +21,15 @@ use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Exception\Contention;
 use Utopia\Database\Filter\Callback;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Index;
+use Utopia\Database\Permission;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationshipDeleteAction;
 use Utopia\Database\RelationshipType;
+use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
 
 /**

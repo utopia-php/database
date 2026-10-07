@@ -1,6 +1,6 @@
 <?php
 
-namespace Utopia\Database\Helpers;
+namespace Utopia\Database;
 
 use Exception;
 
@@ -132,7 +132,7 @@ class Role
      * @param string $status The user status dimension (e.g. 'verified')
      * @return Role
      */
-    public static function user(string $identifier, string $status = ''): Role
+    public static function user(string $identifier, string $status = ''): \Utopia\Database\Role
     {
         return new self('user', $identifier, $status);
     }
@@ -176,9 +176,9 @@ class Role
      *
      * @return Role
      */
-    public static function any(): Role
+    public static function any(): \Utopia\Database\Role
     {
-        return new Role('any');
+        return new \Utopia\Database\Role('any');
     }
 
     /**

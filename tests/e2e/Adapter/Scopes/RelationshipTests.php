@@ -25,14 +25,14 @@ use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Relationship as RelationshipException;
-use Utopia\Database\Helpers\ID;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Id;
+use Utopia\Database\Permission;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationshipDeleteAction;
 use Utopia\Database\RelationshipType;
 use Utopia\Database\RelationshipUpdate;
+use Utopia\Database\Role;
 use Utopia\Query\Method;
 
 use function Swoole\Coroutine\run;
@@ -74,8 +74,8 @@ trait RelationshipTests
             return;
         }
 
-        $parents = ID::unique();
-        $children = ID::unique();
+        $parents = Id::unique();
+        $children = Id::unique();
         $permissions = [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -1291,19 +1291,19 @@ trait RelationshipTests
         ));
 
         $species = $database->createDocument('species', new Document([
-            '$id' => ID::custom('1'),
+            '$id' => Id::custom('1'),
             '$permissions' => [
                 Permission::read(Role::any()),
             ],
             'name' => 'Canine',
             'creature' => [
-                '$id' => ID::custom('1'),
+                '$id' => Id::custom('1'),
                 '$permissions' => [
                     Permission::read(Role::any()),
                 ],
                 'name' => 'Dog',
                 'characteristic' => [
-                    '$id' => ID::custom('1'),
+                    '$id' => Id::custom('1'),
                     '$permissions' => [
                         Permission::read(Role::any()),
                         Permission::update(Role::any()),
@@ -1314,13 +1314,13 @@ trait RelationshipTests
         ]));
 
         $database->updateDocument('species', $species->getId(), new Document([
-            '$id' => ID::custom('1'),
+            '$id' => Id::custom('1'),
             '$collection' => 'species',
             'creature' => [
-                '$id' => ID::custom('1'),
+                '$id' => Id::custom('1'),
                 '$collection' => 'creatures',
                 'characteristic' => [
-                    '$id' => ID::custom('1'),
+                    '$id' => Id::custom('1'),
                     'name' => 'active',
                     '$collection' => 'characteristics',
                 ],
@@ -1879,7 +1879,7 @@ trait RelationshipTests
 
         foreach ($cases as $case => [$collection, $key, $expected]) {
             $created = $database->createDocument($collection, new Document([
-                '$id' => ID::unique(),
+                '$id' => Id::unique(),
                 $key => null,
             ]));
             $this->assertSame($expected, $created->getAttribute($key), "{$case}: created value");
@@ -4322,8 +4322,8 @@ trait RelationshipTests
             return;
         }
 
-        $parents = ID::unique();
-        $children = ID::unique();
+        $parents = Id::unique();
+        $children = Id::unique();
         $permissions = [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
@@ -4389,8 +4389,8 @@ trait RelationshipTests
             return;
         }
 
-        $parents = ID::unique();
-        $children = ID::unique();
+        $parents = Id::unique();
+        $children = Id::unique();
         $database->createCollection(Collection::create(id: $parents, permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
@@ -4464,8 +4464,8 @@ trait RelationshipTests
             return;
         }
 
-        $parents = ID::unique();
-        $children = ID::unique();
+        $parents = Id::unique();
+        $children = Id::unique();
         $database->createCollection(Collection::create(id: $parents, permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
@@ -4539,10 +4539,10 @@ trait RelationshipTests
             return;
         }
 
-        $parents = ID::unique();
-        $children = ID::unique();
-        $toys = ID::unique();
-        $parts = ID::unique();
+        $parents = Id::unique();
+        $children = Id::unique();
+        $toys = Id::unique();
+        $parts = Id::unique();
         $permissions = [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
@@ -4630,9 +4630,9 @@ trait RelationshipTests
             return;
         }
 
-        $grandparents = ID::unique();
-        $parents = ID::unique();
-        $children = ID::unique();
+        $grandparents = Id::unique();
+        $parents = Id::unique();
+        $children = Id::unique();
         $permissions = [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
@@ -4704,8 +4704,8 @@ trait RelationshipTests
             return;
         }
 
-        $parents = ID::unique();
-        $children = ID::unique();
+        $parents = Id::unique();
+        $children = Id::unique();
         $database->createCollection(Collection::create(id: $parents, attributes: [Attribute::string(key: 'name', size: 64)], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
@@ -4747,8 +4747,8 @@ trait RelationshipTests
             return;
         }
 
-        $parents = ID::unique();
-        $children = ID::unique();
+        $parents = Id::unique();
+        $children = Id::unique();
         $permissions = [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
@@ -5076,8 +5076,8 @@ trait RelationshipTests
             return;
         }
 
-        $parents = ID::unique();
-        $children = ID::unique();
+        $parents = Id::unique();
+        $children = Id::unique();
         $permissions = [
             Permission::create(Role::any()),
             Permission::read(Role::any()),

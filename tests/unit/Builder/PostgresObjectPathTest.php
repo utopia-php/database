@@ -4,12 +4,12 @@ namespace Tests\Unit\Builder;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Builder\PostgreSQL;
+use Utopia\Database\Builder\Postgres;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Query;
 use Utopia\Query\Schema\ColumnType;
 
-final class PostgreSQLObjectPathTest extends TestCase
+final class PostgresObjectPathTest extends TestCase
 {
     /**
      * @return array<string, array{string}>
@@ -30,7 +30,7 @@ final class PostgreSQLObjectPathTest extends TestCase
     {
         $this->expectException(QueryException::class);
 
-        (new PostgreSQL())->compileFilters([$this->objectFilter(Query::equal($path, ['x']))]);
+        (new Postgres())->compileFilters([$this->objectFilter(Query::equal($path, ['x']))]);
     }
 
     #[DataProvider('unsafePaths')]
@@ -38,7 +38,7 @@ final class PostgreSQLObjectPathTest extends TestCase
     {
         $this->expectException(QueryException::class);
 
-        (new PostgreSQL())
+        (new Postgres())
             ->from('docs')
             ->filter([Query::or([
                 $this->objectFilter(Query::equal('meta.a', ['x'])),
@@ -49,7 +49,7 @@ final class PostgreSQLObjectPathTest extends TestCase
 
     public function testAFilterOnAPlainObjectPathBindsItsValue(): void
     {
-        $condition = (new PostgreSQL())->compileFilters([$this->objectFilter(Query::equal('meta.user-info.home_city2', ['x']))]);
+        $condition = (new Postgres())->compileFilters([$this->objectFilter(Query::equal('meta.user-info.home_city2', ['x']))]);
 
         $this->assertSame(['x'], $condition->bindings);
     }

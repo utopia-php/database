@@ -19,8 +19,8 @@ use Utopia\Database\Filter;
 use Utopia\Database\Filter\Callback;
 use Utopia\Database\Filter\Codec;
 use Utopia\Database\Filter\Registry;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Permission;
+use Utopia\Database\Role;
 use Utopia\Query\Schema\ColumnType;
 
 class FilterRegistryTest extends TestCase

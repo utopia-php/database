@@ -30,15 +30,15 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Filter;
-use Utopia\Database\Helpers\ID;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Id;
 use Utopia\Database\Index;
 use Utopia\Database\IntegerWidth;
 use Utopia\Database\PDO as DatabasePDO;
+use Utopia\Database\Permission;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
+use Utopia\Database\Role;
 use Utopia\Database\SetType;
 use Utopia\Query\CursorDirection;
 use Utopia\Query\Method;
@@ -119,17 +119,17 @@ trait DocumentTests
         $document = $database->createDocument($collection, new Document([
             '$permissions' => [
                 Permission::read(Role::any()),
-                Permission::read(Role::user(ID::custom('1'))),
-                Permission::read(Role::user(ID::custom('2'))),
+                Permission::read(Role::user(Id::custom('1'))),
+                Permission::read(Role::user(Id::custom('2'))),
                 Permission::create(Role::any()),
-                Permission::create(Role::user(ID::custom('1x'))),
-                Permission::create(Role::user(ID::custom('2x'))),
+                Permission::create(Role::user(Id::custom('1x'))),
+                Permission::create(Role::user(Id::custom('2x'))),
                 Permission::update(Role::any()),
-                Permission::update(Role::user(ID::custom('1x'))),
-                Permission::update(Role::user(ID::custom('2x'))),
+                Permission::update(Role::user(Id::custom('1x'))),
+                Permission::update(Role::user(Id::custom('2x'))),
                 Permission::delete(Role::any()),
-                Permission::delete(Role::user(ID::custom('1x'))),
-                Permission::delete(Role::user(ID::custom('2x'))),
+                Permission::delete(Role::user(Id::custom('1x'))),
+                Permission::delete(Role::user(Id::custom('2x'))),
             ],
             'string' => 'text📝',
             'integer_signed' => -Database::MAX_INT,
@@ -203,7 +203,7 @@ trait DocumentTests
         ];
 
         $document = $database->createDocument($collection, new Document([
-            '$id' => ID::custom('frozen'),
+            '$id' => Id::custom('frozen'),
             '$permissions' => $permissions,
             'name' => 'Frozen',
             'director' => 'Chris Buck & Jennifer Lee',
@@ -420,17 +420,17 @@ trait DocumentTests
             '$sequence' => $sequence,
             '$permissions' => [
                 Permission::read(Role::any()),
-                Permission::read(Role::user(ID::custom('1'))),
-                Permission::read(Role::user(ID::custom('2'))),
+                Permission::read(Role::user(Id::custom('1'))),
+                Permission::read(Role::user(Id::custom('2'))),
                 Permission::create(Role::any()),
-                Permission::create(Role::user(ID::custom('1x'))),
-                Permission::create(Role::user(ID::custom('2x'))),
+                Permission::create(Role::user(Id::custom('1x'))),
+                Permission::create(Role::user(Id::custom('2x'))),
                 Permission::update(Role::any()),
-                Permission::update(Role::user(ID::custom('1x'))),
-                Permission::update(Role::user(ID::custom('2x'))),
+                Permission::update(Role::user(Id::custom('1x'))),
+                Permission::update(Role::user(Id::custom('2x'))),
                 Permission::delete(Role::any()),
-                Permission::delete(Role::user(ID::custom('1x'))),
-                Permission::delete(Role::user(ID::custom('2x'))),
+                Permission::delete(Role::user(Id::custom('1x'))),
+                Permission::delete(Role::user(Id::custom('2x'))),
             ],
             'string' => 'text📝',
             'integer_signed' => -Database::MAX_INT,
@@ -3010,7 +3010,7 @@ trait DocumentTests
         $this->getDatabase()->getAuthorization()->cleanRoles();
 
         $document = $database->updateDocument($this->getDocumentsCollection(), $document->getId(), new Document([
-            '$id' => ID::custom($document->getId()),
+            '$id' => Id::custom($document->getId()),
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
@@ -3703,7 +3703,7 @@ trait DocumentTests
         }
 
         // Create collection with JSON filter attribute
-        $collection = ID::unique();
+        $collection = Id::unique();
         $database->createCollection(Collection::create(id: $collection, permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -5698,7 +5698,7 @@ trait DocumentTests
         $this->assertSame('collection', $database->createAttribute(__FUNCTION__, Attribute::string(key: 'collection', size: 128))->key);
 
         $database->createDocument(__FUNCTION__, new Document([
-            '$id' => ID::custom('clash'),
+            '$id' => Id::custom('clash'),
             '$permissions' => [
                 Permission::read(Role::any()),
             ],
@@ -5706,7 +5706,7 @@ trait DocumentTests
         ]));
 
         $database->createDocument(__FUNCTION__, new Document([
-            '$id' => ID::custom('clashNull'),
+            '$id' => Id::custom('clashNull'),
             '$permissions' => [
                 Permission::read(Role::any()),
             ],
@@ -5736,7 +5736,7 @@ trait DocumentTests
         $this->assertSame('tenant', $database->createAttribute(__FUNCTION__, Attribute::string(key: 'tenant', size: 128))->key);
 
         $database->createDocument(__FUNCTION__, new Document([
-            '$id' => ID::custom('clash'),
+            '$id' => Id::custom('clash'),
             '$permissions' => [
                 Permission::read(Role::any()),
             ],
@@ -6956,7 +6956,7 @@ trait DocumentTests
 
         foreach ($values as $value) {
             $database->createDocument($collection, new Document([
-                '$id' => ID::unique(),
+                '$id' => Id::unique(),
                 '$permissions' => [
                     Permission::read(Role::any()),
                     Permission::update(Role::any()),
@@ -7008,7 +7008,7 @@ trait DocumentTests
         $this->assertSame('name', $database->createAttribute('movies_nested_id', Attribute::string(key: 'name', size: 128, required: true))->key);
 
         $database->createDocument('movies_nested_id', new Document([
-            '$id' => ID::custom('1'),
+            '$id' => Id::custom('1'),
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
@@ -7019,7 +7019,7 @@ trait DocumentTests
         ]));
 
         $database->createDocument('movies_nested_id', new Document([
-            '$id' => ID::custom('2'),
+            '$id' => Id::custom('2'),
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
@@ -7030,7 +7030,7 @@ trait DocumentTests
         ]));
 
         $database->createDocument('movies_nested_id', new Document([
-            '$id' => ID::custom('3'),
+            '$id' => Id::custom('3'),
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
@@ -7387,12 +7387,12 @@ trait DocumentTests
     public function testEncodeDecode(): void
     {
         $collection = new Document([
-            '$collection' => ID::custom(Database::METADATA),
-            '$id' => ID::custom('users'),
+            '$collection' => Id::custom(Database::METADATA),
+            '$id' => Id::custom('users'),
             'name' => 'Users',
             'attributes' => [
                 [
-                    '$id' => ID::custom('name'),
+                    '$id' => Id::custom('name'),
                     'type' => ColumnType::String,
                     'format' => '',
                     'size' => 256,
@@ -7402,7 +7402,7 @@ trait DocumentTests
                     'filters' => [],
                 ],
                 [
-                    '$id' => ID::custom('email'),
+                    '$id' => Id::custom('email'),
                     'type' => ColumnType::String,
                     'format' => '',
                     'size' => 1024,
@@ -7412,7 +7412,7 @@ trait DocumentTests
                     'filters' => [],
                 ],
                 [
-                    '$id' => ID::custom('status'),
+                    '$id' => Id::custom('status'),
                     'type' => ColumnType::Integer,
                     'format' => '',
                     'size' => 0,
@@ -7422,7 +7422,7 @@ trait DocumentTests
                     'filters' => [],
                 ],
                 [
-                    '$id' => ID::custom('password'),
+                    '$id' => Id::custom('password'),
                     'type' => ColumnType::String,
                     'format' => '',
                     'size' => 16384,
@@ -7432,7 +7432,7 @@ trait DocumentTests
                     'filters' => [],
                 ],
                 [
-                    '$id' => ID::custom('passwordUpdate'),
+                    '$id' => Id::custom('passwordUpdate'),
                     'type' => ColumnType::Datetime,
                     'format' => '',
                     'size' => 0,
@@ -7442,7 +7442,7 @@ trait DocumentTests
                     'filters' => ['datetime'],
                 ],
                 [
-                    '$id' => ID::custom('registration'),
+                    '$id' => Id::custom('registration'),
                     'type' => ColumnType::Datetime,
                     'format' => '',
                     'size' => 0,
@@ -7452,7 +7452,7 @@ trait DocumentTests
                     'filters' => ['datetime'],
                 ],
                 [
-                    '$id' => ID::custom('emailVerification'),
+                    '$id' => Id::custom('emailVerification'),
                     'type' => ColumnType::Boolean,
                     'format' => '',
                     'size' => 0,
@@ -7462,7 +7462,7 @@ trait DocumentTests
                     'filters' => [],
                 ],
                 [
-                    '$id' => ID::custom('reset'),
+                    '$id' => Id::custom('reset'),
                     'type' => ColumnType::Boolean,
                     'format' => '',
                     'size' => 0,
@@ -7472,7 +7472,7 @@ trait DocumentTests
                     'filters' => [],
                 ],
                 [
-                    '$id' => ID::custom('prefs'),
+                    '$id' => Id::custom('prefs'),
                     'type' => ColumnType::String,
                     'format' => '',
                     'size' => 16384,
@@ -7482,7 +7482,7 @@ trait DocumentTests
                     'filters' => ['json']
                 ],
                 [
-                    '$id' => ID::custom('sessions'),
+                    '$id' => Id::custom('sessions'),
                     'type' => ColumnType::String,
                     'format' => '',
                     'size' => 16384,
@@ -7492,7 +7492,7 @@ trait DocumentTests
                     'filters' => ['json'],
                 ],
                 [
-                    '$id' => ID::custom('tokens'),
+                    '$id' => Id::custom('tokens'),
                     'type' => ColumnType::String,
                     'format' => '',
                     'size' => 16384,
@@ -7502,7 +7502,7 @@ trait DocumentTests
                     'filters' => ['json'],
                 ],
                 [
-                    '$id' => ID::custom('memberships'),
+                    '$id' => Id::custom('memberships'),
                     'type' => ColumnType::String,
                     'format' => '',
                     'size' => 16384,
@@ -7512,7 +7512,7 @@ trait DocumentTests
                     'filters' => ['json'],
                 ],
                 [
-                    '$id' => ID::custom('roles'),
+                    '$id' => Id::custom('roles'),
                     'type' => ColumnType::String,
                     'format' => '',
                     'size' => 128,
@@ -7522,7 +7522,7 @@ trait DocumentTests
                     'filters' => [],
                 ],
                 [
-                    '$id' => ID::custom('tags'),
+                    '$id' => Id::custom('tags'),
                     'type' => ColumnType::String,
                     'format' => '',
                     'size' => 128,
@@ -7534,7 +7534,7 @@ trait DocumentTests
             ],
             'indexes' => [
                 [
-                    '$id' => ID::custom('_key_email'),
+                    '$id' => Id::custom('_key_email'),
                     'type' => IndexType::Unique,
                     'attributes' => ['email'],
                     'lengths' => [1024],
@@ -7544,7 +7544,7 @@ trait DocumentTests
         ]);
 
         $document = new Document([
-            '$id' => ID::custom('608fdbe51361a'),
+            '$id' => Id::custom('608fdbe51361a'),
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::user('608fdbe51361a')),
@@ -7584,7 +7584,7 @@ trait DocumentTests
         $this->assertContains('read("any")', $result->getPermissions());
         $this->assertContains('read("any")', $result->getPermissions());
         $this->assertContains('any', $result->getPermissionsByType(PermissionType::Read));
-        $this->assertContains(Permission::create(Role::user(ID::custom('608fdbe51361a'))), $result->getPermissions());
+        $this->assertContains(Permission::create(Role::user(Id::custom('608fdbe51361a'))), $result->getPermissions());
         $this->assertContains('user:608fdbe51361a', $result->getPermissionsByType(PermissionType::Create));
         $this->assertContains('user:608fdbe51361a', $this->writeRoles($result));
         $this->assertEquals('test@example.com', $result->getAttribute('email'));
@@ -9467,7 +9467,7 @@ trait DocumentTests
             return;
         }
 
-        $collectionId = 'dotkey_'.ID::unique();
+        $collectionId = 'dotkey_'.Id::unique();
         $attributeId = 'pb.e_DSS.FIRMWARE_VERSION';
         $filteredStorageKey = $database->getAdapter()->filter($attributeId);
 

@@ -29,13 +29,13 @@ use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Filter;
 use Utopia\Database\Format;
-use Utopia\Database\Helpers\ID;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Id;
 use Utopia\Database\Index;
 use Utopia\Database\IntegerWidth;
+use Utopia\Database\Permission;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
+use Utopia\Database\Role;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
 use Utopia\Database\Validator\Structure;
 use Utopia\Query\Method;
@@ -353,7 +353,7 @@ trait AttributeTests
         $database->createRelationship('dots.parent', Relationship::oneToOne(relatedCollection: 'dots'));
 
         $database->createDocument('dots.parent', new Document([
-            '$id' => ID::custom('father'),
+            '$id' => Id::custom('father'),
             'dots.name' => 'Bill clinton',
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -362,7 +362,7 @@ trait AttributeTests
                 Permission::delete(Role::any()),
             ],
             'dots' => [
-                '$id' => ID::custom('child'),
+                '$id' => Id::custom('child'),
                 '$permissions' => [
                     Permission::read(Role::any()),
                     Permission::create(Role::any()),
@@ -880,7 +880,7 @@ trait AttributeTests
                 Permission::update(Role::any()),
                 Permission::delete(Role::any()),
             ],
-            '$id' => ID::custom('LiliPriced'),
+            '$id' => Id::custom('LiliPriced'),
             'name' => 'Lily Priced',
             'inStock' => 50,
             'cartModel' => '{}',
@@ -949,7 +949,7 @@ trait AttributeTests
                     Permission::update(Role::any()),
                     Permission::delete(Role::any()),
                 ],
-                '$id' => ID::custom('LiliPriced'),
+                '$id' => Id::custom('LiliPriced'),
                 'name' => 'Lily Priced',
                 'inStock' => 50,
                 'cartModel' => '{}',
@@ -1376,7 +1376,7 @@ trait AttributeTests
 
         $database->createAttribute('resize_test', Attribute::string(key: 'resize_me', size: 128, required: true));
         $document = $database->createDocument('resize_test', new Document([
-            '$id' => ID::unique(),
+            '$id' => Id::unique(),
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
@@ -2006,7 +2006,7 @@ trait AttributeTests
         }
 
         $doc = $database->createDocument('datetime', new Document([
-            '$id' => ID::custom('id1234'),
+            '$id' => Id::custom('id1234'),
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
@@ -2418,7 +2418,7 @@ trait AttributeTests
 
         // Test VARCHAR with valid data
         $doc1 = $database->createDocument('stringTypes', new Document([
-            '$id' => ID::custom('doc1'),
+            '$id' => Id::custom('doc1'),
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
@@ -2438,7 +2438,7 @@ trait AttributeTests
 
         // Test VARCHAR with default value
         $doc2 = $database->createDocument('stringTypes', new Document([
-            '$id' => ID::custom('doc2'),
+            '$id' => Id::custom('doc2'),
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
@@ -2452,7 +2452,7 @@ trait AttributeTests
 
         // Test array types
         $doc3 = $database->createDocument('stringTypes', new Document([
-            '$id' => ID::custom('doc3'),
+            '$id' => Id::custom('doc3'),
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
@@ -2470,7 +2470,7 @@ trait AttributeTests
         if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             try {
                 $database->createDocument('stringTypes', new Document([
-                    '$id' => ID::custom('doc4'),
+                    '$id' => Id::custom('doc4'),
                     '$permissions' => [
                         Permission::read(Role::any()),
                         Permission::create(Role::any()),
@@ -2487,7 +2487,7 @@ trait AttributeTests
             // Test TEXT size constraint (should fail)
             try {
                 $database->createDocument('stringTypes', new Document([
-                    '$id' => ID::custom('doc5'),
+                    '$id' => Id::custom('doc5'),
                     '$permissions' => [
                         Permission::read(Role::any()),
                         Permission::create(Role::any()),

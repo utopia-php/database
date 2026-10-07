@@ -1,15 +1,15 @@
 <?php
 
-namespace Tests\Unit\Hook;
+namespace Tests\Unit\Adapter\SQL\Hook\Tenant;
 
 use PHPUnit\Framework\TestCase;
+use Utopia\Database\Adapter\SQL\Hook\Tenant\Filter;
 use Utopia\Database\Database;
-use Utopia\Database\Hook\TenantFilter;
 use Utopia\Database\Storage;
 use Utopia\Query\Builder\JoinType;
 use Utopia\Query\Hook\Join\Placement;
 
-final class TenantFilterTest extends TestCase
+final class FilterTest extends TestCase
 {
     public function testMetadataPermissionRowsMayBeTenantless(): void
     {
@@ -18,7 +18,7 @@ final class TenantFilterTest extends TestCase
         // the side table strictly to the writer's tenant matches neither the
         // read nor the delete, and revoking a permission on a shared definition
         // silently does nothing.
-        $hook = new TenantFilter(989, Database::METADATA, Storage::permissionsTable(Database::METADATA));
+        $hook = new Filter(989, Database::METADATA, Storage::permissionsTable(Database::METADATA));
 
         $condition = $hook->filter('perms');
 
@@ -28,7 +28,7 @@ final class TenantFilterTest extends TestCase
 
     public function testANonMetadataPermissionsTableStaysStrictlyTenanted(): void
     {
-        $hook = new TenantFilter(989, Database::METADATA, Storage::permissionsTable('orders'));
+        $hook = new Filter(989, Database::METADATA, Storage::permissionsTable('orders'));
 
         $condition = $hook->filter('perms');
 
@@ -38,7 +38,7 @@ final class TenantFilterTest extends TestCase
 
     public function testFilterDoesNotAllowNullTenantByDefault(): void
     {
-        $hook = new TenantFilter(7, '', 'orders');
+        $hook = new Filter(7, '', 'orders');
 
         $condition = $hook->filter('table_main');
 
@@ -48,7 +48,7 @@ final class TenantFilterTest extends TestCase
 
     public function testFilterAllowsNullTenantWhenColumnProvided(): void
     {
-        $hook = new TenantFilter(7, '', 'orders', 'table_main.'.Storage::TENANT);
+        $hook = new Filter(7, '', 'orders', 'table_main.'.Storage::TENANT);
 
         $condition = $hook->filter('table_main');
 
@@ -59,7 +59,7 @@ final class TenantFilterTest extends TestCase
 
     public function testFilterJoinLeftPlacesTenantInOnClause(): void
     {
-        $hook = new TenantFilter(7);
+        $hook = new Filter(7);
         $result = $hook->filterJoin('j0', JoinType::Left);
 
         $this->assertNotNull($result);
@@ -70,7 +70,7 @@ final class TenantFilterTest extends TestCase
 
     public function testFilterJoinRightPlacesTenantInWhereClause(): void
     {
-        $hook = new TenantFilter(7);
+        $hook = new Filter(7);
         $result = $hook->filterJoin('j0', JoinType::Right);
 
         $this->assertNotNull($result);
@@ -81,7 +81,7 @@ final class TenantFilterTest extends TestCase
 
     public function testFilterJoinFullOuterPlacesTenantInWhereClauseAndAllowsNull(): void
     {
-        $hook = new TenantFilter(7);
+        $hook = new Filter(7);
         $result = $hook->filterJoin('j0', JoinType::FullOuter);
 
         $this->assertNotNull($result);
@@ -93,7 +93,7 @@ final class TenantFilterTest extends TestCase
 
     public function testFilterJoinInnerPlacesTenantInOnClause(): void
     {
-        $hook = new TenantFilter(7);
+        $hook = new Filter(7);
         $result = $hook->filterJoin('j0', JoinType::Inner);
 
         $this->assertNotNull($result);
@@ -103,7 +103,7 @@ final class TenantFilterTest extends TestCase
 
     public function testFilterJoinCrossPlacesTenantInWhereClause(): void
     {
-        $hook = new TenantFilter(7);
+        $hook = new Filter(7);
         $result = $hook->filterJoin('j0', JoinType::Cross);
 
         $this->assertNotNull($result);

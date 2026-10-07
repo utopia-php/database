@@ -1,6 +1,6 @@
 <?php
 
-namespace Utopia\Database\Hook;
+namespace Utopia\Database\Adapter\SQL\Hook\Join;
 
 use Utopia\Query\Builder\JoinType;
 use Utopia\Query\Method;
@@ -13,7 +13,7 @@ use Utopia\Query\Query;
  * joins leave them in WHERE, which runs only after every join has paired its rows, and right and
  * full outer joins can leave the tables before them missing from a row.
  */
-final readonly class JoinChain
+final readonly class Chain
 {
     /**
      * @param array<string, JoinType> $joins Each joined table's alias and how it is joined, in order

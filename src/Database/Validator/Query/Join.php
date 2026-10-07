@@ -5,6 +5,7 @@ namespace Utopia\Database\Validator\Query;
 use Utopia\Database\Attribute;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
+use Utopia\Database\Validator\Query\Joined\Collection;
 use Utopia\Query\Method;
 use Utopia\Query\Query as BaseQuery;
 
@@ -69,7 +70,7 @@ class Join extends Base
     /**
      * The joins of the query set whose collection is known.
      *
-     * @var list<JoinedCollection>
+     * @var list<Collection>
      */
     private array $joins = [];
 
@@ -77,7 +78,7 @@ class Join extends Base
      * The aliases the joins validated so far in this query set declared, each with the collection it
      * joins when that is known.
      *
-     * @var array<string, JoinedCollection|null>
+     * @var array<string, Collection|null>
      */
     private array $declared = [];
 
@@ -86,7 +87,7 @@ class Join extends Base
      */
     public function __construct(?array $attributes = null, private readonly bool $supportForAttributes = true)
     {
-        $this->columns = $attributes === null ? null : JoinedCollection::columns($attributes);
+        $this->columns = $attributes === null ? null : Collection::columns($attributes);
 
         $relationships = [];
         foreach ($attributes ?? [] as $attribute) {
@@ -102,7 +103,7 @@ class Join extends Base
      * Declare the joins of the query set whose collection is known, so the columns of their
      * conditions can be checked against it.
      *
-     * @param  list<JoinedCollection>  $joins
+     * @param  list<Collection>  $joins
      */
     public function allowJoins(array $joins): void
     {
@@ -208,7 +209,7 @@ class Join extends Base
         return true;
     }
 
-    private function isValidConditions(Query $query, string $alias, ?JoinedCollection $join): bool
+    private function isValidConditions(Query $query, string $alias, ?Collection $join): bool
     {
         $onQueries = $query->getJoinOnQueries();
         if ($onQueries === []) {
@@ -257,7 +258,7 @@ class Join extends Base
         return true;
     }
 
-    private function isValidCondition(mixed $left, mixed $operator, mixed $right, string $alias, ?JoinedCollection $join): bool
+    private function isValidCondition(mixed $left, mixed $operator, mixed $right, string $alias, ?Collection $join): bool
     {
         if (! \is_string($left) || $left === '' || ! \is_string($right) || $right === '') {
             $this->message = 'Join ON requires left and right columns';
@@ -298,7 +299,7 @@ class Join extends Base
     /**
      * The right column belongs to the collection the join reads, bare or under the join's alias.
      */
-    private function isValidRightColumn(string $column, string $alias, ?JoinedCollection $join): bool
+    private function isValidRightColumn(string $column, string $alias, ?Collection $join): bool
     {
         $name = $column;
         $dot = \strpos($column, '.');
@@ -344,7 +345,7 @@ class Join extends Base
     /**
      * @return array<string, bool>|null
      */
-    private function columnsOf(?JoinedCollection $join): ?array
+    private function columnsOf(?Collection $join): ?array
     {
         if ($join === null) {
             return null;
@@ -353,7 +354,7 @@ class Join extends Base
         return \array_fill_keys(\array_keys($join->attributes), true) + $join->columns;
     }
 
-    private function joinOf(Query $query): ?JoinedCollection
+    private function joinOf(Query $query): ?Collection
     {
         foreach ($this->joins as $join) {
             if ($join->collection === $query->getAttribute() && $join->alias === $query->getAlias()) {

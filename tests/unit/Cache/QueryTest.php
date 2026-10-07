@@ -10,7 +10,7 @@ use Utopia\Cache\Cache;
 use Utopia\Database\Attribute;
 use Utopia\Database\Cache\Entry;
 use Utopia\Database\Cache\Invalidator;
-use Utopia\Database\Cache\QueryCache;
+use Utopia\Database\Cache\Query as ResultCache;
 use Utopia\Database\Cache\Region;
 use Utopia\Database\Cache\Scope;
 use Utopia\Database\Database;
@@ -20,21 +20,21 @@ use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationshipSide;
 
-class QueryCacheTest extends TestCase
+class QueryTest extends TestCase
 {
-    private QueryCache $queryCache;
+    private ResultCache $queryCache;
 
     private Cache&Stub $cache;
 
     protected function setUp(): void
     {
         $this->cache = self::createCache();
-        $this->queryCache = new QueryCache($this->cache);
+        $this->queryCache = new ResultCache($this->cache);
     }
 
     public function testConstructorWithDefaults(): void
     {
-        $queryCache = new QueryCache(self::createCache());
+        $queryCache = new ResultCache(self::createCache());
 
         $this->assertNotNull($queryCache->getEntry(new Scope(), 'any_collection', []));
     }
@@ -42,8 +42,8 @@ class QueryCacheTest extends TestCase
     public function testCacheNamesKeepTheirResultsApartOnTheSameCache(): void
     {
         $adapter = new RedisLeasableCache();
-        $default = new QueryCache(new Cache($adapter));
-        $custom = new QueryCache(new Cache($adapter));
+        $default = new ResultCache(new Cache($adapter));
+        $custom = new ResultCache(new Cache($adapter));
         $entry = $custom->getEntry(new Scope(name: 'custom'), 'users', []);
         $this->assertNotNull($entry);
         $this->assertTrue($custom->set($entry, [new Document(['$id' => 'custom'])], $custom->getGeneration($entry)));
@@ -61,7 +61,7 @@ class QueryCacheTest extends TestCase
 
     public function testOneQueryCacheKeysEachCallByTheNameInItsScope(): void
     {
-        $queryCache = new QueryCache(new Cache(new RedisLeasableCache()));
+        $queryCache = new ResultCache(new Cache(new RedisLeasableCache()));
         $first = $queryCache->getEntry(new Scope(name: 'first'), 'users', []);
         $this->assertNotNull($first);
         $this->assertTrue($queryCache->set($first, [new Document(['$id' => 'first'])], $queryCache->getGeneration($first)));
@@ -79,7 +79,7 @@ class QueryCacheTest extends TestCase
 
     public function testTheWriterTimeoutComesFromTheScopeOfEachCall(): void
     {
-        $queryCache = new QueryCache(new Cache(new RedisLeasableCache()));
+        $queryCache = new ResultCache(new Cache(new RedisLeasableCache()));
         $queryCache->blockCollection($queryCache->getCollectionKey(new Scope(), 'users'), $queryCache->createToken());
 
         $this->assertNull($queryCache->getEntry(new Scope(), 'users', []), 'A write younger than the writer timeout is still in flight');
@@ -185,8 +185,8 @@ class QueryCacheTest extends TestCase
     public function testFilledResultsAreServedByAnotherQueryCacheOnTheSameCache(): void
     {
         $adapter = new RedisLeasableCache();
-        $writer = new QueryCache(new Cache($adapter));
-        $reader = new QueryCache(new Cache($adapter));
+        $writer = new ResultCache(new Cache($adapter));
+        $reader = new ResultCache(new Cache($adapter));
         $scope = new Scope(namespace: 'ns');
         $entry = $writer->getEntry($scope, 'users', [Query::limit(2)]);
         $this->assertNotNull($entry);
@@ -209,7 +209,7 @@ class QueryCacheTest extends TestCase
 
     public function testAFillThatStartedBeforeAnInvalidationIsRejected(): void
     {
-        $queryCache = new QueryCache(new Cache(new RedisLeasableCache()));
+        $queryCache = new ResultCache(new Cache(new RedisLeasableCache()));
         $scope = new Scope(namespace: 'ns');
         $entry = $queryCache->getEntry($scope, 'users', []);
         $this->assertNotNull($entry);
@@ -250,7 +250,7 @@ class QueryCacheTest extends TestCase
 
     public function testEntriesExpireWithTheRegionButEpochsNeverDo(): void
     {
-        $queryCache = new QueryCache(new Cache(new RedisLeasableCache()));
+        $queryCache = new ResultCache(new Cache(new RedisLeasableCache()));
         $scope = new Scope(namespace: 'ns');
         $queryCache->setRegion('users', new Region(ttl: 0));
         $queryCache->invalidateCollection($scope, 'users');
@@ -287,7 +287,7 @@ class QueryCacheTest extends TestCase
     public function testAMalformedResultMissesAndIsReplacedByTheNextFill(\Closure $payload): void
     {
         $cache = new Cache(new RedisLeasableCache());
-        $queryCache = new QueryCache($cache);
+        $queryCache = new ResultCache($cache);
         $entry = $queryCache->getEntry(new Scope(namespace: 'ns'), 'users', []);
         $this->assertNotNull($entry);
         $cache->save($entry->key, $payload($entry), $entry->slot);
@@ -299,7 +299,7 @@ class QueryCacheTest extends TestCase
 
     public function testInvalidateCollectionBlocksThenPublishesAFreshEpoch(): void
     {
-        $queryCache = new QueryCache(new Cache(new RedisLeasableCache()));
+        $queryCache = new ResultCache(new Cache(new RedisLeasableCache()));
 
         $this->assertRetired($queryCache, new Scope(), 'users', function () use ($queryCache): void {
             $queryCache->invalidateCollection(new Scope(), 'users');
@@ -309,7 +309,7 @@ class QueryCacheTest extends TestCase
     public function testAnInvalidEpochIsAMiss(): void
     {
         $cache = new Cache(new Memory());
-        $queryCache = new QueryCache($cache);
+        $queryCache = new ResultCache($cache);
         $scope = new Scope(namespace: 'ns');
         $cache->save($queryCache->getCollectionKey($scope, 'users').'#epoch', ['not' => 'an epoch']);
 
@@ -330,7 +330,7 @@ class QueryCacheTest extends TestCase
 
     public function testFlushDropsEveryCachedResult(): void
     {
-        $queryCache = new QueryCache(new Cache(new RedisLeasableCache()));
+        $queryCache = new ResultCache(new Cache(new RedisLeasableCache()));
         $scope = new Scope(namespace: 'ns');
         $users = $queryCache->getEntry($scope, 'users', []);
         $posts = $queryCache->getEntry($scope, 'posts', []);
@@ -381,7 +381,7 @@ class QueryCacheTest extends TestCase
 
     public function testInvalidatorIgnoresNonWriteEvents(): void
     {
-        $queryCache = new QueryCache(new Cache(new RedisLeasableCache()));
+        $queryCache = new ResultCache(new Cache(new RedisLeasableCache()));
 
         $this->assertKept($queryCache, ['users'], function () use ($queryCache): void {
             (new Invalidator($queryCache))->handle(Event::DocumentFind, new Document(['$id' => 'doc1', '$collection' => 'users']));
@@ -400,7 +400,7 @@ class QueryCacheTest extends TestCase
 
     public function testInvalidatorIgnoresEmptyCollection(): void
     {
-        $queryCache = new QueryCache(new Cache(new RedisLeasableCache()));
+        $queryCache = new ResultCache(new Cache(new RedisLeasableCache()));
 
         $this->assertKept($queryCache, ['users', ''], function () use ($queryCache): void {
             (new Invalidator($queryCache))->handle(Event::DocumentCreate, new Document(['$id' => 'doc1']));
@@ -428,7 +428,7 @@ class QueryCacheTest extends TestCase
 
     public function testInvalidatorInvalidatesTheScopeItIsGiven(): void
     {
-        $queryCache = new QueryCache(new Cache(new RedisLeasableCache()));
+        $queryCache = new ResultCache(new Cache(new RedisLeasableCache()));
         $scope = new Scope('host', 'database', 'namespace', 7);
         $untouched = $queryCache->getEntry(new Scope(), 'users', []);
         $this->assertNotNull($untouched);
@@ -445,7 +445,7 @@ class QueryCacheTest extends TestCase
 
     public function testInvalidatorHandlesEventsInTheScopeItWasGiven(): void
     {
-        $queryCache = new QueryCache(new Cache(new RedisLeasableCache()));
+        $queryCache = new ResultCache(new Cache(new RedisLeasableCache()));
         $scope = new Scope(namespace: 'namespace', tenant: 'tenant');
 
         $this->assertRetired($queryCache, $scope, 'users', function () use ($queryCache, $scope): void {
@@ -455,7 +455,7 @@ class QueryCacheTest extends TestCase
 
     public function testInvalidatorKeysTokensByTheScopedCollection(): void
     {
-        $queryCache = new QueryCache(new InvalidationCache());
+        $queryCache = new ResultCache(new InvalidationCache());
         $scope = new Scope(namespace: 'namespace', tenant: 7);
 
         $tokens = (new Invalidator($queryCache))->tokens(Event::DocumentCreate, 'users', $scope);
@@ -465,7 +465,7 @@ class QueryCacheTest extends TestCase
 
     public function testMemoryAdapterKeepsPhysicalVariantsIsolated(): void
     {
-        $queryCache = new QueryCache(new Cache(new Memory()));
+        $queryCache = new ResultCache(new Cache(new Memory()));
         $first = $queryCache->getEntry(new Scope(namespace: 'ns'), 'users', [['limit' => 1]], 'role:user-a');
         $second = $queryCache->getEntry(new Scope(namespace: 'ns'), 'users', [['limit' => 2]], 'role:user-b');
         $this->assertNotNull($first);
@@ -485,7 +485,7 @@ class QueryCacheTest extends TestCase
 
     public function testMemoryAdapterStaysBlockedAfterInvalidation(): void
     {
-        $queryCache = new QueryCache(new Cache(new Memory()));
+        $queryCache = new ResultCache(new Cache(new Memory()));
         $scope = new Scope(namespace: 'ns');
         $entry = $queryCache->getEntry($scope, 'users', []);
         $this->assertNotNull($entry);
@@ -506,9 +506,9 @@ class QueryCacheTest extends TestCase
 
         for ($iteration = 0; $iteration < 10; $iteration++) {
             $adapter = new OwnershipCache();
-            $first = new QueryCache(new Cache($adapter));
-            $second = new QueryCache(new Cache($adapter));
-            $reader = new QueryCache(new Cache($adapter));
+            $first = new ResultCache(new Cache($adapter));
+            $second = new ResultCache(new Cache($adapter));
+            $reader = new ResultCache(new Cache($adapter));
             $key = $reader->getCollectionKey($scope, 'users');
             $firstToken = 'first-'.$iteration;
             $secondToken = 'second-'.$iteration;
@@ -516,7 +516,7 @@ class QueryCacheTest extends TestCase
             $entry = $reader->getEntry($scope, 'users', []);
             $this->assertNotNull($entry);
             $this->assertTrue($reader->set($entry, [new Document(['$id' => 'old'])], $reader->getGeneration($entry)));
-            $this->assertSame(['old'], $this->ids((new QueryCache(new Cache($adapter)))->get($entry) ?? []));
+            $this->assertSame(['old'], $this->ids((new ResultCache(new Cache($adapter)))->get($entry) ?? []));
 
             $first->blockCollection($key, $firstToken);
             $adapter->pauseNextActivation(function () use ($reader, $second, $scope, $key, $secondToken): void {
@@ -535,14 +535,14 @@ class QueryCacheTest extends TestCase
             $this->assertNotNull($fresh);
             $this->assertNull($reader->get($fresh));
             $this->assertTrue($reader->set($fresh, [new Document(['$id' => 'fresh'])], $reader->getGeneration($fresh)));
-            $this->assertSame(['fresh'], $this->ids((new QueryCache(new Cache($adapter)))->get($fresh) ?? []));
+            $this->assertSame(['fresh'], $this->ids((new ResultCache(new Cache($adapter)))->get($fresh) ?? []));
         }
     }
 
     public function testAnEpochPublishedAfterALaterFinishStaysUsable(): void
     {
         $adapter = new OwnershipCache();
-        $queryCache = new QueryCache(new Cache($adapter));
+        $queryCache = new ResultCache(new Cache($adapter));
         $scope = new Scope(namespace: 'ns');
         $key = $queryCache->getCollectionKey($scope, 'users');
 
@@ -561,7 +561,7 @@ class QueryCacheTest extends TestCase
 
     public function testATombstoneOlderThanItsRegionStillBlocksWhileItsWriterIsInFlight(): void
     {
-        $queryCache = new QueryCache(new Cache(new OwnershipCache()));
+        $queryCache = new ResultCache(new Cache(new OwnershipCache()));
         $queryCache->setRegion('users', new Region(ttl: 0));
         $key = $queryCache->getCollectionKey(new Scope(), 'users');
         $stale = $queryCache->getEntry(new Scope(), 'users', []);
@@ -588,7 +588,7 @@ class QueryCacheTest extends TestCase
     public function testAKilledWriterDoesNotDisableTheQueryCacheForever(): void
     {
         $adapter = new RedisLeasableCache();
-        $queryCache = new QueryCache(new Cache($adapter));
+        $queryCache = new ResultCache(new Cache($adapter));
         $scope = new Scope(namespace: 'ns', writerTimeout: 0);
         $key = $queryCache->getCollectionKey($scope, 'users');
         $before = $queryCache->getEntry($scope, 'users', []);
@@ -607,9 +607,9 @@ class QueryCacheTest extends TestCase
     public function testAWriteAfterAKilledWriterReenablesTheQueryCache(): void
     {
         $adapter = new RedisLeasableCache();
-        $killed = new QueryCache(new Cache($adapter));
-        $writer = new QueryCache(new Cache($adapter));
-        $reader = new QueryCache(new Cache($adapter));
+        $killed = new ResultCache(new Cache($adapter));
+        $writer = new ResultCache(new Cache($adapter));
+        $reader = new ResultCache(new Cache($adapter));
         $scope = new Scope(namespace: 'ns');
         $writerScope = new Scope(namespace: 'ns', writerTimeout: 0);
         $killed->blockCollection($killed->getCollectionKey($scope, 'users'), $killed->createToken());
@@ -630,8 +630,8 @@ class QueryCacheTest extends TestCase
     public function testAWriteDoesNotReenableTheQueryCacheWhileAnotherWriterIsLive(): void
     {
         $adapter = new RedisLeasableCache();
-        $live = new QueryCache(new Cache($adapter));
-        $writer = new QueryCache(new Cache($adapter));
+        $live = new ResultCache(new Cache($adapter));
+        $writer = new ResultCache(new Cache($adapter));
         $scope = new Scope(namespace: 'ns');
         $key = $live->getCollectionKey($scope, 'users');
         $token = $live->createToken();
@@ -649,9 +649,9 @@ class QueryCacheTest extends TestCase
     public function testAWriterWhoseTokenHasNoCreationTimeCountsAsLive(): void
     {
         $adapter = new RedisLeasableCache();
-        $live = new QueryCache(new Cache($adapter));
-        $writer = new QueryCache(new Cache($adapter));
-        $reader = new QueryCache(new Cache($adapter));
+        $live = new ResultCache(new Cache($adapter));
+        $writer = new ResultCache(new Cache($adapter));
+        $reader = new ResultCache(new Cache($adapter));
         $scope = new Scope(namespace: 'ns');
         $live->blockCollection($live->getCollectionKey($scope, 'users'), 'token-without-a-time');
 
@@ -663,7 +663,7 @@ class QueryCacheTest extends TestCase
     public function testAWriterPastTheTimeoutRetiresWhatReadersFilledWhileItRan(): void
     {
         $adapter = new RedisLeasableCache();
-        $queryCache = new QueryCache(new Cache($adapter));
+        $queryCache = new ResultCache(new Cache($adapter));
         $scope = new Scope(namespace: 'ns', writerTimeout: 0);
         $key = $queryCache->getCollectionKey($scope, 'users');
         $token = $queryCache->createToken();
@@ -682,8 +682,8 @@ class QueryCacheTest extends TestCase
     public function testAWriterJudgedAbandonedStillRetiresWhatReadersFilledWhileItRan(): void
     {
         $adapter = new RedisLeasableCache();
-        $slow = new QueryCache(new Cache($adapter));
-        $writer = new QueryCache(new Cache($adapter));
+        $slow = new ResultCache(new Cache($adapter));
+        $writer = new ResultCache(new Cache($adapter));
         $scope = new Scope(namespace: 'ns');
         $key = $slow->getCollectionKey($scope, 'users');
         $token = $slow->createToken();
@@ -702,7 +702,7 @@ class QueryCacheTest extends TestCase
 
     public function testATombstoneOnACacheWithoutGenerationsLapsesWithItsRegion(): void
     {
-        $queryCache = new QueryCache(new Cache(new Memory()));
+        $queryCache = new ResultCache(new Cache(new Memory()));
         $queryCache->setRegion('users', new Region(ttl: 0));
 
         $queryCache->invalidateCollection(new Scope(), 'users');
@@ -716,7 +716,7 @@ class QueryCacheTest extends TestCase
     public function testCacheFlushDuringActivationDoesNotFailInvalidation(): void
     {
         $adapter = new OwnershipCache();
-        $queryCache = new QueryCache(new Cache($adapter));
+        $queryCache = new ResultCache(new Cache($adapter));
         $key = $queryCache->getCollectionKey(new Scope(), 'users');
         $queryCache->blockCollection($key, 'owner');
         $adapter->flushDuringActivation();
@@ -729,7 +729,7 @@ class QueryCacheTest extends TestCase
     public function testCacheFlushBeforeActivationDoesNotFailInvalidation(): void
     {
         $adapter = new OwnershipCache();
-        $queryCache = new QueryCache(new Cache($adapter));
+        $queryCache = new ResultCache(new Cache($adapter));
         $key = $queryCache->getCollectionKey(new Scope(), 'users');
         $queryCache->blockCollection($key, 'owner');
         $this->assertTrue($adapter->flush());
@@ -742,7 +742,7 @@ class QueryCacheTest extends TestCase
     public function testActivationPurgeFailureStillPropagates(): void
     {
         $adapter = new OwnershipCache();
-        $queryCache = new QueryCache(new Cache($adapter));
+        $queryCache = new ResultCache(new Cache($adapter));
         $key = $queryCache->getCollectionKey(new Scope(), 'users');
         $queryCache->blockCollection($key, 'owner');
         $adapter->failDuringActivation();
@@ -761,7 +761,7 @@ class QueryCacheTest extends TestCase
     {
         $slots = 4;
         $adapter = new RedisLeasableCache();
-        $queryCache = new QueryCache(new Cache($adapter), slots: $slots);
+        $queryCache = new ResultCache(new Cache($adapter), slots: $slots);
         $scope = new Scope(namespace: 'ns');
         $cycle = function (int $query) use ($queryCache, $scope): void {
             $entry = $queryCache->getEntry($scope, 'users', [Query::limit($query)]);
@@ -788,7 +788,7 @@ class QueryCacheTest extends TestCase
 
     public function testAnInvalidationRetiresEveryCachedResultOfTheScope(): void
     {
-        $queryCache = new QueryCache(new Cache(new RedisLeasableCache()));
+        $queryCache = new ResultCache(new Cache(new RedisLeasableCache()));
         $scope = new Scope(namespace: 'ns');
         for ($query = 1; $query <= 50; $query++) {
             $entry = $queryCache->getEntry($scope, 'users', [Query::limit($query)]);
@@ -811,7 +811,7 @@ class QueryCacheTest extends TestCase
     public function testQueriesSharingASlotNeverServeEachOther(): void
     {
         $adapter = new RedisLeasableCache();
-        $queryCache = new QueryCache(new Cache($adapter), slots: 1);
+        $queryCache = new ResultCache(new Cache($adapter), slots: 1);
         $scope = new Scope(namespace: 'ns');
         $first = $queryCache->getEntry($scope, 'users', [Query::limit(1)], 'role:user-a');
         $second = $queryCache->getEntry($scope, 'users', [Query::limit(2)], 'role:user-b');
@@ -828,7 +828,7 @@ class QueryCacheTest extends TestCase
     public function testAResultFilledBeforeTheFirstWriteIsNeverServedAfterTheEpochIsLost(): void
     {
         $adapter = new RedisLeasableCache();
-        $queryCache = new QueryCache(new Cache($adapter));
+        $queryCache = new ResultCache(new Cache($adapter));
         $scope = new Scope(namespace: 'ns');
         $key = $queryCache->getCollectionKey($scope, 'users');
         $before = $queryCache->getEntry($scope, 'users', []);
@@ -846,7 +846,7 @@ class QueryCacheTest extends TestCase
     public function testAFillUnderARetiredEpochIsNeverServed(): void
     {
         $adapter = new RedisLeasableCache();
-        $queryCache = new QueryCache(new Cache($adapter));
+        $queryCache = new ResultCache(new Cache($adapter));
         $scope = new Scope(namespace: 'ns');
         $stale = $queryCache->getEntry($scope, 'users', []);
         $this->assertNotNull($stale);
@@ -862,7 +862,7 @@ class QueryCacheTest extends TestCase
 
     public function testQueriesOfOneCollectionKeepTheirOwnResultsOnACacheWithFields(): void
     {
-        $queryCache = new QueryCache(new Cache(new RedisLeasableCache()));
+        $queryCache = new ResultCache(new Cache(new RedisLeasableCache()));
         $scope = new Scope(namespace: 'ns');
         $first = $queryCache->getEntry($scope, 'users', [Query::limit(1)], 'role:user-a');
         $second = $queryCache->getEntry($scope, 'users', [Query::limit(2)], 'role:user-b');
@@ -878,7 +878,7 @@ class QueryCacheTest extends TestCase
 
     public function testOverlappingInvalidationsSucceedOnACacheWithoutFields(): void
     {
-        $queryCache = new QueryCache(new Cache(new Memory()));
+        $queryCache = new ResultCache(new Cache(new Memory()));
         $key = $queryCache->getCollectionKey(new Scope(), 'users');
 
         $queryCache->blockCollection($key, 'first');
@@ -896,7 +896,7 @@ class QueryCacheTest extends TestCase
     public function testActivationRejectsACorruptedOwnerRegistration(): void
     {
         $adapter = new RedisLeasableCache();
-        $queryCache = new QueryCache(new Cache($adapter));
+        $queryCache = new ResultCache(new Cache($adapter));
         $key = $queryCache->getCollectionKey(new Scope(), 'users');
         $adapter->corruptFieldWrites();
         $queryCache->blockCollection($key, 'owner');
@@ -914,7 +914,7 @@ class QueryCacheTest extends TestCase
     public function testActivationPropagatesAnOwnerReleaseFailure(): void
     {
         $adapter = new RedisLeasableCache();
-        $queryCache = new QueryCache(new Cache($adapter));
+        $queryCache = new ResultCache(new Cache($adapter));
         $key = $queryCache->getCollectionKey(new Scope(), 'users');
         $queryCache->blockCollection($key, 'owner');
         $adapter->failFieldPurges();
@@ -931,7 +931,7 @@ class QueryCacheTest extends TestCase
 
     public function testInvalidationPropagatesACacheWriteFailure(): void
     {
-        $queryCache = new QueryCache(new class (new RedisLeasableCache()) extends Cache {
+        $queryCache = new ResultCache(new class (new RedisLeasableCache()) extends Cache {
             #[\Override]
             public function save(string $key, mixed $data, string $hash = '', int $ttl = 0): bool|string|array
             {
@@ -947,7 +947,7 @@ class QueryCacheTest extends TestCase
     public function testAFlushedWriterLeavesAnotherWritersTombstoneInPlace(): void
     {
         $adapter = new OwnershipCache();
-        $queryCache = new QueryCache(new Cache($adapter));
+        $queryCache = new ResultCache(new Cache($adapter));
         $scope = new Scope(namespace: 'ns');
         $key = $queryCache->getCollectionKey($scope, 'users');
 
@@ -985,7 +985,7 @@ class QueryCacheTest extends TestCase
                 return parent::purge($key, $hash);
             }
         };
-        $queryCache = new QueryCache($cache);
+        $queryCache = new ResultCache($cache);
         $scope = new Scope(namespace: 'ns');
         $key = $queryCache->getCollectionKey($scope, 'users');
         $queryCache->blockCollection($key, 'owner');
@@ -1001,7 +1001,7 @@ class QueryCacheTest extends TestCase
 
     public function testInvalidationPropagatesAnOwnerRegistrationFailure(): void
     {
-        $queryCache = new QueryCache(new class (new RedisLeasableCache()) extends Cache {
+        $queryCache = new ResultCache(new class (new RedisLeasableCache()) extends Cache {
             #[\Override]
             public function save(string $key, mixed $data, string $hash = '', int $ttl = 0): bool|string|array
             {
@@ -1028,7 +1028,7 @@ class QueryCacheTest extends TestCase
     {
         $cache = self::createStub(Cache::class);
         $cache->method('flush')->willReturn(false);
-        $queryCache = new QueryCache($cache);
+        $queryCache = new ResultCache($cache);
 
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('Failed to flush query cache');
@@ -1040,7 +1040,7 @@ class QueryCacheTest extends TestCase
      */
     private function assertInvalidatorInvalidates(Event $event, mixed $data, array $collections): void
     {
-        $queryCache = new QueryCache(new Cache(new RedisLeasableCache()));
+        $queryCache = new ResultCache(new Cache(new RedisLeasableCache()));
         $action = function () use ($queryCache, $event, $data): void {
             (new Invalidator($queryCache))->handle($event, $data);
         };
@@ -1054,7 +1054,7 @@ class QueryCacheTest extends TestCase
         $action();
     }
 
-    private function assertRetired(QueryCache $queryCache, Scope $scope, string $collection, callable $action): void
+    private function assertRetired(ResultCache $queryCache, Scope $scope, string $collection, callable $action): void
     {
         $before = $queryCache->getEntry($scope, $collection, []);
         $this->assertNotNull($before);
@@ -1073,7 +1073,7 @@ class QueryCacheTest extends TestCase
     /**
      * @param  array<string>  $collections
      */
-    private function assertKept(QueryCache $queryCache, array $collections, callable $action): void
+    private function assertKept(ResultCache $queryCache, array $collections, callable $action): void
     {
         foreach ($collections as $collection) {
             $before = $queryCache->getEntry(new Scope(), $collection, []);

@@ -1,6 +1,6 @@
 <?php
 
-namespace Utopia\Database\Traits;
+namespace Utopia\Database\Trait;
 
 use Closure;
 use DateTime as PhpDateTime;
@@ -36,8 +36,8 @@ use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Type as TypeException;
-use Utopia\Database\Helpers\ID;
 use Utopia\Database\Hook\Lifecycle;
+use Utopia\Database\Id;
 use Utopia\Database\Operator;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
@@ -47,13 +47,13 @@ use Utopia\Database\Validator\Authorization\Input;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Database\Validator\PartialStructure;
 use Utopia\Database\Validator\Permissions;
-use Utopia\Database\Validator\Queries;
+use Utopia\Database\Validator\Queries\Base;
 use Utopia\Database\Validator\Queries\Document as DocumentValidator;
 use Utopia\Database\Validator\Queries\Documents as DocumentsValidator;
 use Utopia\Database\Validator\Queries\Narrow;
 use Utopia\Database\Validator\Query\Aggregate;
 use Utopia\Database\Validator\Query\Join as JoinValidator;
-use Utopia\Database\Validator\Query\JoinedCollection;
+use Utopia\Database\Validator\Query\Joined\Collection as JoinedCollection;
 use Utopia\Database\Validator\Structure;
 use Utopia\Database\Validator\UID;
 use Utopia\Query\CursorDirection;
@@ -343,7 +343,7 @@ trait Documents
      * @param  array<mixed>  $queries
      * @param  array<Document>  $joinedCollections
      */
-    protected function getQueriesValidator(Document $collection, array $queries, array $joinedCollections = []): Queries
+    protected function getQueriesValidator(Document $collection, array $queries, array $joinedCollections = []): Base
     {
         if ($joinedCollections === [] && Narrow::accepts($queries)) {
             $narrow = Narrow::of(
@@ -1165,7 +1165,7 @@ trait Documents
 
         $id = $document->getId();
         $document
-            ->setAttribute(Document::ID, empty($id) ? ID::unique() : $id)
+            ->setAttribute(Document::ID, empty($id) ? Id::unique() : $id)
             ->setAttribute(Document::COLLECTION, $collection->getId())
             ->setAttribute(Document::CREATED_AT, ($createdAt === null || ! $this->datePreservation()->get()) ? $time : $createdAt)
             ->setAttribute(Document::UPDATED_AT, ($updatedAt === null || ! $this->datePreservation()->get()) ? $time : $updatedAt);
@@ -1277,7 +1277,7 @@ trait Documents
             $updatedAt = $document->getUpdatedAt();
 
             $document
-                ->setAttribute(Document::ID, empty($document->getId()) ? ID::unique() : $document->getId())
+                ->setAttribute(Document::ID, empty($document->getId()) ? Id::unique() : $document->getId())
                 ->setAttribute(Document::COLLECTION, $collection->getId())
                 ->setAttribute(Document::CREATED_AT, ($createdAt === null || ! $this->datePreservation()->get()) ? $time : $createdAt)
                 ->setAttribute(Document::UPDATED_AT, ($updatedAt === null || ! $this->datePreservation()->get()) ? $time : $updatedAt);
@@ -2142,7 +2142,7 @@ trait Documents
             $updatedAt = $document->getUpdatedAt();
 
             $document
-                ->setAttribute(Document::ID, empty($document->getId()) ? ID::unique() : $document->getId())
+                ->setAttribute(Document::ID, empty($document->getId()) ? Id::unique() : $document->getId())
                 ->setAttribute(Document::COLLECTION, $collection->getId())
                 ->setAttribute(Document::UPDATED_AT, ($updatedAt === null || ! $this->datePreservation()->get()) ? $time : $updatedAt);
 

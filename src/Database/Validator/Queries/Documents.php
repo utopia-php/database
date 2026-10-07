@@ -7,7 +7,6 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Document;
 use Utopia\Database\Index;
-use Utopia\Database\Validator\IndexedQueries;
 use Utopia\Database\Validator\Query\Aggregate;
 use Utopia\Database\Validator\Query\Cursor;
 use Utopia\Database\Validator\Query\Distinct;
@@ -24,7 +23,7 @@ use Utopia\Database\Validator\Query\Select;
  * Validates queries for document listing: filters, ordering, selection and pagination, plus joins
  * and aggregations (aggregate functions, group by, having and distinct) when enabled.
  */
-class Documents extends IndexedQueries
+class Documents extends Indexed
 {
     /**
      * @var list<Attribute>|null

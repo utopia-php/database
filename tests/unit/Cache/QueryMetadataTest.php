@@ -8,15 +8,15 @@ use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
 use Utopia\Database\Adapter\SQLite;
-use Utopia\Database\Cache\QueryCache;
+use Utopia\Database\Cache\Query;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
+use Utopia\Database\Permission;
+use Utopia\Database\Role;
 
-final class QueryCacheMetadataTest extends TestCase
+final class QueryMetadataTest extends TestCase
 {
     public function testCollectionListingsFollowCreatedAndDeletedCollections(): void
     {
@@ -26,7 +26,7 @@ final class QueryCacheMetadataTest extends TestCase
             ->setNamespace('metadata_'.\uniqid());
         $database->create();
         $database->getAuthorization()->addRole(Role::any()->toString());
-        $database->setQueryCache(new QueryCache(new Cache(new LeasableHashCache())));
+        $database->setQueryCache(new Query(new Cache(new LeasableHashCache())));
         $database->createCollection(Collection::create(id: 'first', permissions: $this->permissions()));
 
         $this->assertSame(['first'], $this->listCollectionIds($database));
@@ -49,7 +49,7 @@ final class QueryCacheMetadataTest extends TestCase
         $database->addHook(new Permissions());
         $database->create();
         $database->getAuthorization()->addRole(Role::any()->toString());
-        $database->setQueryCache(new QueryCache(new Cache(new LeasableHashCache())));
+        $database->setQueryCache(new Query(new Cache(new LeasableHashCache())));
         $database->createCollection(Collection::create(id: 'owned', permissions: $this->permissions()));
 
         $this->assertSame(['owned'], $this->listCollectionIds($database));

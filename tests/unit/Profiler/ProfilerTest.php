@@ -4,16 +4,16 @@ namespace Tests\Unit\Profiler;
 
 use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Profiler\QueryLog;
-use Utopia\Database\Profiler\QueryProfiler;
+use Utopia\Database\Profiler;
+use Utopia\Database\Profiler\Log;
 
-class QueryProfilerTest extends TestCase
+class ProfilerTest extends TestCase
 {
-    private QueryProfiler $profiler;
+    private Profiler $profiler;
 
     protected function setUp(): void
     {
-        $this->profiler = new QueryProfiler();
+        $this->profiler = new Profiler();
     }
 
     public function testDisabledByDefault(): void
@@ -140,14 +140,14 @@ class QueryProfilerTest extends TestCase
     {
         $this->profiler->enable();
 
-        for ($index = 0; $index <= QueryProfiler::DEFAULT_CAPACITY; $index++) {
+        for ($index = 0; $index <= Profiler::DEFAULT_CAPACITY; $index++) {
             $this->profiler->log("Q{$index}", [], 1.0);
         }
 
         $logs = $this->profiler->getLogs();
-        $this->assertCount(QueryProfiler::DEFAULT_CAPACITY, $logs);
+        $this->assertCount(Profiler::DEFAULT_CAPACITY, $logs);
         $this->assertSame('Q1', $logs[0]->query);
-        $this->assertSame('Q'.QueryProfiler::DEFAULT_CAPACITY, $logs[QueryProfiler::DEFAULT_CAPACITY - 1]->query);
+        $this->assertSame('Q'.Profiler::DEFAULT_CAPACITY, $logs[Profiler::DEFAULT_CAPACITY - 1]->query);
     }
 
     public function testCountAndTotalTimeCoverEntriesPastTheCapacity(): void
@@ -221,6 +221,6 @@ class QueryProfilerTest extends TestCase
      */
     private function loggedQueries(): array
     {
-        return \array_map(static fn (QueryLog $log): string => $log->query, $this->profiler->getLogs());
+        return \array_map(static fn (Log $log): string => $log->query, $this->profiler->getLogs());
     }
 }

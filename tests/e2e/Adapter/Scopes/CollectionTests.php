@@ -31,14 +31,14 @@ use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Type as TypeException;
-use Utopia\Database\Helpers\ID;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Transform;
+use Utopia\Database\Id;
 use Utopia\Database\Index;
+use Utopia\Database\Permission;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationshipDeleteAction;
+use Utopia\Database\Role;
 use Utopia\Database\Storage;
 use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
@@ -480,7 +480,7 @@ trait CollectionTests
                     Permission::update(Role::any()),
                     Permission::delete(Role::any()),
                 ],
-                '$id' => ID::custom('helloWorld'),
+                '$id' => Id::custom('helloWorld'),
                 'attribute1' => 'Hello World',
             ]));
             $this->assertEquals('helloWorld', $document->getId());
@@ -773,7 +773,7 @@ trait CollectionTests
             $database->createIndex('people', Index::fulltext(key: 'idx_lifeStory', attributes: ['lifeStory']));
         }
 
-        $docId = ID::unique();
+        $docId = Id::unique();
 
         $database->createDocument('people', new Document([
             '$id' => $docId,
@@ -1151,7 +1151,7 @@ trait CollectionTests
 
             $database->setDatabase($this->testDatabase);
 
-            $collectionId = ID::unique();
+            $collectionId = Id::unique();
             $database->createCollection(Collection::create(id: $collectionId));
             $database->listCollections();
             $database->getCollection($collectionId);
@@ -1215,7 +1215,7 @@ trait CollectionTests
     {
         $this->getDatabase()->getAuthorization()->skip(function () {
             $database = $this->getDatabase();
-            $collectionId = ID::unique();
+            $collectionId = Id::unique();
 
             $replaced = new EventRecorder('audits');
             $replacement = new EventRecorder('audits');
@@ -1242,7 +1242,7 @@ trait CollectionTests
         $this->assertSame($this->getCreatedAtCollection(), $created->getId());
         $database->createAttribute($this->getCreatedAtCollection(), Attribute::string(key: 'title', size: 100));
         $document = $database->createDocument($this->getCreatedAtCollection(), new Document([
-            '$id' => ID::custom('uid123'),
+            '$id' => Id::custom('uid123'),
 
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -1279,12 +1279,12 @@ trait CollectionTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        $collection = ID::unique();
+        $collection = Id::unique();
 
         $database->createCollection(Collection::create(id: $collection));
         $database->createAttribute($collection, Attribute::string(key: 'title', size: 100));
         $database->createDocument($collection, new Document([
-            '$id' => ID::custom('uid123'),
+            '$id' => Id::custom('uid123'),
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
@@ -1412,7 +1412,7 @@ trait CollectionTests
         // Non metadata collection should contain tenant in the cache key
         [$collectionKey, $documentKey, $hashKey] = $db->getCacheKeys(
             $collectionId,
-            ID::unique(),
+            Id::unique(),
             []
         );
 
@@ -1520,7 +1520,7 @@ trait CollectionTests
         ]));
 
         $peer->createDocument($collection, new Document([
-            '$id' => ID::custom('written'),
+            '$id' => Id::custom('written'),
             '$permissions' => [Permission::read(Role::any())],
             'name' => 'peer',
         ]));
@@ -1586,7 +1586,7 @@ trait CollectionTests
         ]);
 
         $database->getAdapter()->createDocument($schema, new Document([
-            '$id' => ID::custom('written'),
+            '$id' => Id::custom('written'),
             '$permissions' => [Permission::read(Role::any())],
             'name' => 'peer',
         ]));

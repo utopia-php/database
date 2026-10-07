@@ -5,11 +5,11 @@ namespace Tests\Unit\Hook;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Document;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\PDO;
+use Utopia\Database\Permission;
 use Utopia\Database\PermissionType;
+use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
 
 final class PermissionsTest extends TestCase

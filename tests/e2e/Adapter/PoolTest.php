@@ -15,9 +15,9 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Exception\Limit;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
 use Utopia\Database\PDO;
+use Utopia\Database\Permission;
+use Utopia\Database\Role;
 use Utopia\Pools\Adapter\Stack;
 use Utopia\Pools\Pool as UtopiaPool;
 

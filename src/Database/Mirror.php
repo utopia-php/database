@@ -10,18 +10,18 @@ use Throwable;
 use Utopia\Async\Promise;
 use Utopia\Cache\Cache;
 use Utopia\Database\Cache\Invalidator;
-use Utopia\Database\Cache\QueryCache;
+use Utopia\Database\Cache\Query as ResultCache;
 use Utopia\Database\Event\Domain;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit;
 use Utopia\Database\Filter\Registry;
-use Utopia\Database\Helpers\ID;
 use Utopia\Database\Hook\Lifecycle;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Hook\Write;
 use Utopia\Database\Mirror\Failure;
-use Utopia\Database\Mirroring\Filter;
+use Utopia\Database\Mirror\Filter;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Database\Validator\Queries\Base;
 use Utopia\Query\OrderDirection;
 
 /**
@@ -121,7 +121,7 @@ class Mirror extends Database
      * @param  array<mixed>  $queries
      * @param  array<Document>  $joinedCollections
      */
-    protected function getQueriesValidator(Document $collection, array $queries, array $joinedCollections = []): Validator\Queries
+    protected function getQueriesValidator(Document $collection, array $queries, array $joinedCollections = []): Base
     {
         return $this->source->getQueriesValidator($collection, $queries, $joinedCollections);
     }
@@ -308,7 +308,7 @@ class Mirror extends Database
      *
      * {@inheritdoc}
      */
-    public function setQueryCache(?QueryCache $queryCache): static
+    public function setQueryCache(?ResultCache $queryCache): static
     {
         $this->source->setQueryCache($queryCache);
         $this->destination?->setQueryCache($queryCache);

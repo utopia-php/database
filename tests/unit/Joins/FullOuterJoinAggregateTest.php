@@ -426,7 +426,7 @@ final class FullOuterJoinAggregateTest extends TestCase
         $collectionPermissions = [Permission::create(Role::any()), Permission::read(Role::any())];
         foreach (\array_keys(self::ROWS) as $collection) {
             $main = $collection === 'main';
-            $database->createCollection(new Collection(
+            $database->createCollection(Collection::create(
                 id: $collection,
                 attributes: [
                     Attribute::string(key: self::LINK, size: 16, required: true),

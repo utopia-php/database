@@ -37,7 +37,7 @@ class SelectFilterSkipTest extends TestCase
             }
         );
 
-        $database->createCollection(new Collection(id: 'filterSelect'));
+        $database->createCollection(Collection::create(id: 'filterSelect'));
         $database->createAttribute('filterSelect', Attribute::string(key: 'plain', size: 128));
         $database->createAttribute('filterSelect', Attribute::string(key: 'kids', size: 128, filters: ['subQueryProbeUnit']));
 

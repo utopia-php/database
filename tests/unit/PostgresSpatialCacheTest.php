@@ -69,7 +69,7 @@ final class PostgresSpatialCacheTest extends TestCase
             '$id' => 'shapes',
             'attributes' => [
                 Attribute::point(key: 'origin'),
-                Attribute::linestring(key: 'path'),
+                Attribute::lineString(key: 'path'),
                 Attribute::point(key: 'wellKnown'),
             ],
         ]);

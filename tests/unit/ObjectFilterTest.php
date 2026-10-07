@@ -18,6 +18,7 @@ final class ObjectFilterTest extends TestCase
         $collection = new Document([
             'attributes' => [new Document([
                 '$id' => 'meta',
+                'type' => ColumnType::Object->value,
                 'array' => false,
                 'filters' => [ColumnType::Object->value],
             ])],
@@ -49,6 +50,7 @@ final class ObjectFilterTest extends TestCase
         $collection = new Document([
             'attributes' => [new Document([
                 '$id' => 'meta',
+                'type' => ColumnType::Object->value,
                 'array' => false,
                 'filters' => [ColumnType::Object->value],
             ])],

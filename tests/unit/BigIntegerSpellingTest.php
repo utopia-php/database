@@ -14,6 +14,7 @@ use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\Redis as RedisAdapter;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
+use Utopia\Database\AttributeUpdate;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -24,7 +25,6 @@ use Utopia\Database\Index;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\Schema\ColumnType;
-use ValueError;
 
 /**
  * Every bigint attribute written before 8.0 is stored with the type `bigint`,
@@ -35,27 +35,24 @@ final class BigIntegerSpellingTest extends TestCase
 {
     private const string PERSISTED = 'bigint';
 
-    public function testPersistedTypeKeepsTheBigintSpellingForBigIntegerOnly(): void
+    public function testStoredTypeKeepsTheBigintSpellingForBigIntegerOnly(): void
     {
-        foreach (ColumnType::cases() as $type) {
+        foreach (Attribute::TYPES as $type) {
             $expected = $type === ColumnType::BigInteger ? self::PERSISTED : $type->value;
 
-            $this->assertSame($expected, Attribute::persistedType($type), $type->name);
-            $this->assertSame($type, Attribute::normalizeType(Attribute::persistedType($type)), $type->name);
+            $this->assertSame($expected, Attribute::storedType($type), $type->name);
+            $this->assertSame($type, Attribute::typeFromStored(Attribute::storedType($type)), $type->name);
         }
     }
 
     public function testBothSpellingsNormalizeToBigInteger(): void
     {
         foreach ([self::PERSISTED, ColumnType::BigInteger->value] as $spelling) {
-            $this->assertSame(ColumnType::BigInteger, Attribute::normalizeType($spelling), $spelling);
-            $this->assertSame(ColumnType::BigInteger, Attribute::tryNormalizeType($spelling), $spelling);
+            $this->assertSame(ColumnType::BigInteger, Attribute::typeFromStored($spelling), $spelling);
         }
 
-        $this->assertNull(Attribute::tryNormalizeType('huge'));
-
-        $this->expectException(ValueError::class);
-        Attribute::normalizeType('huge');
+        $this->expectException(StructureException::class);
+        Attribute::typeFromStored('huge');
     }
 
     public function testAttributeModelsHoldThePersistedSpelling(): void
@@ -63,35 +60,26 @@ final class BigIntegerSpellingTest extends TestCase
         $attribute = Attribute::bigInteger(key: 'total');
 
         $this->assertSame(ColumnType::BigInteger, $attribute->type);
-        $this->assertSame(self::PERSISTED, $attribute->getAttribute('type'));
         $this->assertSame(self::PERSISTED, $attribute->toDocument()->getAttribute('type'));
-        $this->assertSame(self::PERSISTED, (new Attribute(key: 'total', type: ColumnType::BigInteger))->getAttribute('type'));
         $this->assertSame(self::PERSISTED, Attribute::fromArray([
             '$id' => 'total',
             'type' => ColumnType::BigInteger->value,
-        ])->getAttribute('type'));
-        $this->assertSame(self::PERSISTED, Attribute::fromDocument(new Document([
+        ])->toDocument()->getAttribute('type'));
+        $this->assertSame(ColumnType::BigInteger, Attribute::fromDocument(new Document([
             '$id' => 'total',
             'type' => self::PERSISTED,
-        ]))->getAttribute('type'));
+        ]))->type);
 
-        $changed = Attribute::integer(key: 'count');
-
-        $changed->type = ColumnType::BigInteger;
-        $this->assertSame(self::PERSISTED, $changed->getAttribute('type'));
-
-        $changed->setAttribute('type', ColumnType::Integer);
-        $this->assertSame(ColumnType::Integer->value, $changed->getAttribute('type'));
-
-        $changed->setAttribute('type', ColumnType::BigInteger->value);
-        $this->assertSame(self::PERSISTED, $changed->getAttribute('type'));
+        $changed = Attribute::integer(key: 'count')->apply(new AttributeUpdate(type: ColumnType::BigInteger));
         $this->assertSame(ColumnType::BigInteger, $changed->type);
+        $this->assertSame(self::PERSISTED, $changed->toDocument()->getAttribute('type'));
 
-        $changed['type'] = ColumnType::BigInteger;
-        $this->assertSame(self::PERSISTED, $changed->getAttribute('type'));
+        $changed = $changed->apply(new AttributeUpdate(type: ColumnType::Integer));
+        $this->assertSame(ColumnType::Integer, $changed->type);
+        $this->assertSame(ColumnType::Integer->value, $changed->toDocument()->getAttribute('type'));
 
-        $changed->setAttribute('type', 'huge');
-        $this->assertSame('huge', $changed->getAttribute('type'), 'An unknown type is stored as given so validation can report it');
+        $this->expectException(StructureException::class);
+        Attribute::fromArray(['$id' => 'count', 'type' => 'huge']);
     }
 
     /**
@@ -110,7 +98,7 @@ final class BigIntegerSpellingTest extends TestCase
     public function testNewBigIntegerAttributesPersistTheBigintSpelling(Closure $adapter): void
     {
         $database = $this->database($adapter);
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: 'ledger',
             attributes: [Attribute::bigInteger(key: 'inline')],
             permissions: $this->permissions(),
@@ -118,8 +106,8 @@ final class BigIntegerSpellingTest extends TestCase
         $database->createAttribute('ledger', Attribute::bigInteger(key: 'single'));
         $database->createAttributes('ledger', [Attribute::bigInteger(key: 'batch')]);
         $database->createAttribute('ledger', Attribute::integer(key: 'widened'));
-        $database->updateAttribute('ledger', 'widened', type: ColumnType::BigInteger);
-        $database->updateAttribute('ledger', 'single', required: true);
+        $database->updateAttribute('ledger', 'widened', new AttributeUpdate(type: ColumnType::BigInteger));
+        $database->updateAttribute('ledger', 'single', new AttributeUpdate(required: true));
 
         $this->assertSame([
             'inline' => self::PERSISTED,
@@ -128,7 +116,7 @@ final class BigIntegerSpellingTest extends TestCase
             'widened' => self::PERSISTED,
         ], $this->storedTypes($database, 'ledger'));
 
-        foreach ($database->getCollection('ledger')->attributes as $attribute) {
+        foreach ($database->getCollection('ledger')->attributes() as $attribute) {
             $this->assertSame(ColumnType::BigInteger, $attribute->type, $attribute->key);
         }
     }
@@ -140,7 +128,7 @@ final class BigIntegerSpellingTest extends TestCase
     public function testStoredBigIntegerSpellingIsWrittenBackAsBigint(Closure $adapter): void
     {
         $database = $this->database($adapter);
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: 'ledger',
             attributes: [
                 Attribute::bigInteger(key: 'total'),
@@ -151,11 +139,11 @@ final class BigIntegerSpellingTest extends TestCase
         $this->storeType($database, 'ledger', 'total', ColumnType::BigInteger->value);
         $this->storeType($database, 'ledger', 'untouched', ColumnType::BigInteger->value);
 
-        foreach ($database->getCollection('ledger')->attributes as $attribute) {
+        foreach ($database->getCollection('ledger')->attributes() as $attribute) {
             $this->assertSame(ColumnType::BigInteger, $attribute->type, $attribute->key);
         }
 
-        $database->updateAttributeRequired('ledger', 'total', true);
+        $database->updateAttribute('ledger', 'total', new AttributeUpdate(required: true));
 
         $this->assertSame([
             'total' => self::PERSISTED,
@@ -181,14 +169,14 @@ final class BigIntegerSpellingTest extends TestCase
     public function testBothStoredSpellingsBehaveIdentically(Closure $adapter, string $spelling): void
     {
         $database = $this->database($adapter);
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: 'ledger',
             attributes: [Attribute::bigInteger(key: 'total')],
             permissions: $this->permissions(),
         ));
         $this->storeType($database, 'ledger', 'total', $spelling);
 
-        $this->assertTrue($database->createIndex('ledger', Index::key(key: 'totals', attributes: ['total'])));
+        $database->createIndex('ledger', Index::key(key: 'totals', attributes: ['total']));
 
         $created = $database->createDocument('ledger', new Document([
             '$id' => 'balance',
@@ -263,7 +251,7 @@ final class BigIntegerSpellingTest extends TestCase
         $adapter = new RedisAdapter($client);
         $adapter->createCollection('ledger', [Attribute::bigInteger(key: 'inline')]);
         $adapter->createAttribute('ledger', Attribute::bigInteger(key: 'single'));
-        $adapter->updateAttribute('ledger', Attribute::bigInteger(key: 'inline', required: true));
+        $adapter->updateAttribute('ledger', 'inline', Attribute::bigInteger(key: 'inline', required: true));
 
         $records = [];
         foreach ($hashes as $fields) {

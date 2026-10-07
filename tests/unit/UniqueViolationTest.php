@@ -294,7 +294,7 @@ final class UniqueViolationTest extends TestCase
             ->setAuthorization(new Authorization());
         $database->create();
 
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [Attribute::string(key: 'slug', size: 128)],
             indexes: [Index::unique(key: self::INDEX, attributes: ['slug'], lengths: [128])],

@@ -32,10 +32,10 @@ final class BigIntegerTest extends TestCase
 {
     public function testUnsignedBoundsAndArithmeticStayExact(): void
     {
-        $bounds = Attribute::getNumericBounds(ColumnType::BigInteger, false);
+        $bounds = Attribute::bigInteger(key: 'total', signed: false)->bounds();
 
         $this->assertNotNull($bounds);
-        $this->assertSame('18446744073709551615', $bounds['max']);
+        $this->assertSame('18446744073709551615', $bounds->max);
         $this->assertSame('9223372036854775808', BigInt::add(PHP_INT_MAX, 1));
         $this->assertSame(PHP_INT_MAX, BigInt::subtract('9223372036854775808', 1));
         $this->assertSame('18446744073709551615', BigInt::add('18446744073709551614', 1));

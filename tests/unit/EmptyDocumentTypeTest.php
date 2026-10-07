@@ -29,7 +29,7 @@ class EmptyDocumentTypeTest extends TestCase
             ->setDatabase('utopiaTests')
             ->setNamespace('empty_type_' . \uniqid());
         $database->create();
-        $database->createCollection(new Collection(id: 'users'));
+        $database->createCollection(Collection::create(id: 'users'));
         $database->setDocumentType('users', TypedUser::class);
 
         $empty = $database->getDocument('users', '');

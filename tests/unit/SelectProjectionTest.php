@@ -38,7 +38,7 @@ class SelectProjectionTest extends TestCase
             ->setNamespace('select_' . \uniqid());
 
         $this->database->create();
-        $this->database->createCollection(new Collection(id: 'widgets'));
+        $this->database->createCollection(Collection::create(id: 'widgets'));
         $this->database->createAttribute('widgets', Attribute::string(key: 'sku'));
         $this->database->createDocument('widgets', new Document([
             '$id' => 'widget',

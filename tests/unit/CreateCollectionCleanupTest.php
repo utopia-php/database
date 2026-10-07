@@ -86,7 +86,7 @@ final class CreateCollectionCleanupTest extends TestCase
 
         $error = null;
         try {
-            $database->createCollection(new Collection(
+            $database->createCollection(Collection::create(
                 id: 'logs',
                 attributes: [Attribute::string(key: 'message', size: 64)],
                 permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
@@ -135,7 +135,7 @@ final class CreateCollectionCleanupTest extends TestCase
 
         $error = null;
         try {
-            $database->createCollection(new Collection(
+            $database->createCollection(Collection::create(
                 id: 'logs',
                 attributes: [Attribute::string(key: 'message', size: 64)],
             ));
@@ -145,7 +145,7 @@ final class CreateCollectionCleanupTest extends TestCase
 
         $this->assertInstanceOf(DatabaseException::class, $error);
         $this->assertFalse($adapter->exists('cleanup', 'logs'), 'A table without a stored definition must be dropped');
-        $this->assertTrue($database->getCollection('logs')->isEmpty());
+        $this->assertNull($database->findCollection('logs'));
     }
 
     public function testACleanupThatFailsKeepsTheOriginalErrorAndLogsTheCleanupFailure(): void

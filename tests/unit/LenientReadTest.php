@@ -143,7 +143,7 @@ final class LenientReadTest extends TestCase
     private static function seed(Database $database): Database
     {
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [Attribute::string(key: 'title', size: 64)],
             permissions: [

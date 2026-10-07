@@ -343,7 +343,7 @@ final class JoinResolutionTest extends TestCase
         $database->create();
 
         $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: 'themes',
             attributes: [
                 Attribute::string(key: 'name', size: 64),
@@ -354,7 +354,7 @@ final class JoinResolutionTest extends TestCase
             permissions: $permissions,
             documentSecurity: false,
         ));
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: 'tickets',
             attributes: [
                 Attribute::string(key: 'name', size: 64),

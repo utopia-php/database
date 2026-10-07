@@ -162,7 +162,7 @@ final class QueryCacheScopeTest extends TestCase
         $database->create();
         $database->getAuthorization()->addRole(Role::any()->toString());
         $database->setQueryCache(new QueryCache(new Cache($cache)));
-        $database->createCollection(new Collection(id: 'posts', permissions: $this->permissions(), documentSecurity: false));
+        $database->createCollection(Collection::create(id: 'posts', permissions: $this->permissions(), documentSecurity: false));
         $database->createDocument('posts', new Document(['$id' => $seed]));
 
         return [$database, $adapter];
@@ -186,7 +186,7 @@ final class QueryCacheScopeTest extends TestCase
 
         foreach ([1, 2] as $tenant) {
             $database->withTenant($tenant, function () use ($database, $tenant): void {
-                $database->createCollection(new Collection(id: 'posts', permissions: $this->permissions(), documentSecurity: false));
+                $database->createCollection(Collection::create(id: 'posts', permissions: $this->permissions(), documentSecurity: false));
                 $database->createDocument('posts', new Document(['$id' => 'seed-'.$tenant]));
             });
         }

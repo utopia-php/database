@@ -26,7 +26,7 @@ final class SQLiteForUpdateDocumentTest extends TestCase
             ->setAuthorization(new Authorization());
         $database->create();
 
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: 'migrations',
             attributes: [
                 Attribute::string('status'),

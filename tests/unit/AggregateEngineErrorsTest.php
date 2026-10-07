@@ -47,7 +47,7 @@ final class AggregateEngineErrorsTest extends TestCase
         $database->addHook(new Permissions());
         $database->create();
 
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [
                 Attribute::string(key: 'sensor', size: 20, required: true),

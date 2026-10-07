@@ -25,7 +25,6 @@ use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\Method;
 use Utopia\Query\OrderDirection;
-use Utopia\Query\Schema\IndexType;
 
 /**
  * A cursor over a joined read names the row the read returned: its order values, the main `$sequence` and each
@@ -395,7 +394,7 @@ final class JoinCursorTest extends TestCase
 
     private function createItems(): void
     {
-        $this->database->createCollection(new Collection(
+        $this->database->createCollection(Collection::create(
             id: 'items',
             attributes: [Attribute::string(key: 'name', size: 16)],
             permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
@@ -421,10 +420,10 @@ final class JoinCursorTest extends TestCase
     #[DataProvider('getDocumentJoins')]
     public function testJoinedGetDocumentPairsTheLowestSequenceJoinedRow(Method $join): void
     {
-        $this->database->createCollection(new Collection(
+        $this->database->createCollection(Collection::create(
             id: 'drafts',
             attributes: [Attribute::string(key: 'author', size: 16), Attribute::string(key: 'label', size: 16)],
-            indexes: [new Index('author_label', IndexType::Key, ['author', 'label'])],
+            indexes: [Index::key('author_label', ['author', 'label'])],
             permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
         ));
         foreach (['d-first' => 'z', 'd-second' => 'm', 'd-third' => 'a'] as $id => $label) {
@@ -603,12 +602,12 @@ final class JoinCursorTest extends TestCase
         $this->database->addHook(new Permissions());
         $this->database->create();
 
-        $this->database->createCollection(new Collection(
+        $this->database->createCollection(Collection::create(
             id: 'authors',
             attributes: [Attribute::string(key: 'name', size: 16), Attribute::integer(key: 'rank', required: false)],
             permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
         ));
-        $this->database->createCollection(new Collection(
+        $this->database->createCollection(Collection::create(
             id: 'notes',
             attributes: [
                 Attribute::string(key: 'author', size: 16),

@@ -16,6 +16,7 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Query as QueryException;
+use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
@@ -59,7 +60,7 @@ final class QueryConversionTest extends TestCase
      * @param  \Closure(): Adapter  $adapter
      */
     #[DataProvider('adapters')]
-    public function testAttributeWithoutAStringTypeConvertsWithAnEmptyType(\Closure $adapter): void
+    public function testAttributeWithoutAStringTypeIsRefused(\Closure $adapter): void
     {
         $database = $this->database($adapter());
         $collection = new Document([
@@ -67,11 +68,9 @@ final class QueryConversionTest extends TestCase
             'attributes' => [new Document([Document::ID => 'untyped', 'type' => 5, 'array' => true])],
         ]);
 
-        $query = $database->convertQuery($collection, Query::equal('untyped', ['x']));
-
-        $this->assertSame('', $query->getAttributeType());
-        $this->assertTrue($query->onArray());
-        $this->assertSame(['x'], $query->getValues());
+        $this->expectException(StructureException::class);
+        $this->expectExceptionMessage('Attribute type must be a string, int given');
+        $database->convertQuery($collection, Query::equal('untyped', ['x']));
     }
 
     /**
@@ -151,7 +150,7 @@ final class QueryConversionTest extends TestCase
     private function eventsDatabase(Adapter $adapter): Database
     {
         $database = $this->database($adapter);
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [
                 Attribute::datetime(key: 'occurredAt'),

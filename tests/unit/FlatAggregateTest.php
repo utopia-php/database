@@ -45,7 +45,7 @@ final class FlatAggregateTest extends TestCase
         $this->database->create();
 
         foreach (['items', 'labels'] as $collection) {
-            $this->database->createCollection(new Collection(
+            $this->database->createCollection(Collection::create(
                 id: $collection,
                 attributes: [
                     Attribute::string(key: 'category', size: 16),

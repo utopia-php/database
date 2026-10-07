@@ -206,7 +206,7 @@ final class FullOuterJoinOrderColumnTest extends TestCase
         $database->create();
 
         $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::MAIN,
             attributes: [
                 Attribute::string(key: self::LINK, size: 16, required: true),
@@ -215,7 +215,7 @@ final class FullOuterJoinOrderColumnTest extends TestCase
             permissions: $permissions,
             documentSecurity: false,
         ));
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::JOINED,
             attributes: [
                 Attribute::string(key: self::LINK, size: 16, required: true),

@@ -32,7 +32,6 @@ use Utopia\Database\Query;
 use Utopia\Database\State\Snapshot;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Pools\Pool as UtopiaPool;
-use Utopia\Query\Schema\IndexType;
 
 use function Swoole\Coroutine\run;
 
@@ -651,13 +650,13 @@ final class ScopedToggleCoroutineTest extends TestCase
 
     private function collection(bool $fulltext = false): Collection
     {
-        return new Collection(
+        return Collection::create(
             id: self::COLLECTION,
             attributes: [
                 Attribute::string(key: 'title', size: 64, filters: [self::FILTER]),
                 Attribute::integer(key: 'views'),
             ],
-            indexes: $fulltext ? [new Index(key: 'title_search', type: IndexType::Fulltext, attributes: ['title'])] : [],
+            indexes: $fulltext ? [Index::fulltext(key: 'title_search', attributes: ['title'])] : [],
             permissions: [
                 Permission::create(Role::any()),
                 Permission::read(Role::any()),

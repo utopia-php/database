@@ -13,6 +13,7 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Filter;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
@@ -269,13 +270,13 @@ final class JoinedDecodeTest extends TestCase
         $database->create();
 
         $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: 'customers',
             attributes: [Attribute::string(key: 'name', size: 64, required: true)],
             permissions: $permissions,
             documentSecurity: false,
         ));
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: 'orders',
             attributes: [
                 Attribute::string(key: 'customerId', size: 64, required: true),
@@ -284,15 +285,15 @@ final class JoinedDecodeTest extends TestCase
                 Attribute::boolean(key: 'paid', required: true),
                 Attribute::datetime(key: 'placedAt', required: true),
                 Attribute::string(key: 'tags', size: 32, array: true),
-                Attribute::string(key: 'meta', size: 1024, filters: ['json']),
+                Attribute::string(key: 'meta', size: 1024, filters: [Filter::Json]),
                 Attribute::string(key: 'secret', size: 1024, filters: ['sealed']),
-                Attribute::string(key: 'profile', size: 1024, filters: ['json', 'sealed']),
+                Attribute::string(key: 'profile', size: 1024, filters: [Filter::Json, 'sealed']),
                 Attribute::string(key: 'note', size: 256, filters: ['witness']),
             ],
             permissions: $permissions,
             documentSecurity: false,
         ));
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: 'refunds',
             attributes: [
                 Attribute::string(key: 'customerId', size: 64, required: true),

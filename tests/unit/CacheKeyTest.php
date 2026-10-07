@@ -7,6 +7,7 @@ use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
 use Utopia\Database\Capability;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Query as QueryException;
@@ -239,12 +240,7 @@ class CacheKeyTest extends TestCase
             Query::orderAsc('priority'),
         ];
 
-        $schemaHash = \md5(
-            (\json_encode($collection->getArray('attributes')) ?: '')
-            . (\json_encode($collection->getArray('indexes')) ?: '')
-            . (\json_encode($collection->getAttribute('$permissions', [])) ?: '')
-            . (\json_encode($collection->getAttribute('documentSecurity', false)) ?: '')
-        );
+        $schemaHash = Collection::fromDocument($collection)->fingerprint();
         $field = $db->getQueryCacheField($collection, $queries);
         $this->assertNotNull($field);
 

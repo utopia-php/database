@@ -27,11 +27,11 @@ final class QueryCacheMetadataTest extends TestCase
         $database->create();
         $database->getAuthorization()->addRole(Role::any()->toString());
         $database->setQueryCache(new QueryCache(new Cache(new LeasableHashCache())));
-        $database->createCollection(new Collection(id: 'first', permissions: $this->permissions()));
+        $database->createCollection(Collection::create(id: 'first', permissions: $this->permissions()));
 
         $this->assertSame(['first'], $this->listCollectionIds($database));
 
-        $database->createCollection(new Collection(id: 'second', permissions: $this->permissions()));
+        $database->createCollection(Collection::create(id: 'second', permissions: $this->permissions()));
         $this->assertSame(['first', 'second'], $this->listCollectionIds($database));
 
         $database->deleteCollection('first');
@@ -50,11 +50,11 @@ final class QueryCacheMetadataTest extends TestCase
         $database->create();
         $database->getAuthorization()->addRole(Role::any()->toString());
         $database->setQueryCache(new QueryCache(new Cache(new LeasableHashCache())));
-        $database->createCollection(new Collection(id: 'owned', permissions: $this->permissions()));
+        $database->createCollection(Collection::create(id: 'owned', permissions: $this->permissions()));
 
         $this->assertSame(['owned'], $this->listCollectionIds($database));
 
-        $database->withTenant(null, fn (): Document => $database->createCollection(new Collection(id: 'shared', permissions: $this->permissions())));
+        $database->withTenant(null, fn (): Document => $database->createCollection(Collection::create(id: 'shared', permissions: $this->permissions())));
 
         $this->assertSame(
             ['owned', 'shared'],

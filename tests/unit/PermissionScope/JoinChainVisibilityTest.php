@@ -257,14 +257,14 @@ final class JoinChainVisibilityTest extends TestCase
         $database->addHook(new Permissions());
         $database->create();
 
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::AUTHORS,
             attributes: [Attribute::string(key: 'name', size: 64, required: true)],
             permissions: $this->collectionPermissions($grantAuthors),
             documentSecurity: true,
         ));
         foreach (self::NUMBERS as $collection => $number) {
-            $database->createCollection(new Collection(
+            $database->createCollection(Collection::create(
                 id: $collection,
                 attributes: [
                     Attribute::string(key: 'authorId', size: 64, required: true),

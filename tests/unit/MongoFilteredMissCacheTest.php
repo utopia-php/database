@@ -85,7 +85,7 @@ final class MongoFilteredMissCacheTest extends TestCase
         $database->create();
 
         $database->getAuthorization()->skip(function () use ($database): void {
-            $database->createCollection(new Collection(
+            $database->createCollection(Collection::create(
                 id: self::COLLECTION,
                 attributes: [Attribute::string(key: 'name', size: 64)],
                 permissions: [Permission::read(Role::user('alice'))],

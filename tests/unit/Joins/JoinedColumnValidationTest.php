@@ -399,7 +399,7 @@ final class JoinedColumnValidationTest extends TestCase
      */
     private function createCollection(string $id, array $attributes): void
     {
-        $this->database->createCollection(new Collection(
+        $this->database->createCollection(Collection::create(
             id: $id,
             attributes: $attributes,
             permissions: [Permission::create(Role::any()), Permission::read(Role::any())],

@@ -28,7 +28,7 @@ class ForUpdateCacheTest extends TestCase
             ->setNamespace('for_update_' . \uniqid());
 
         $this->database->create();
-        $this->database->createCollection(new Collection(id: 'projects'));
+        $this->database->createCollection(Collection::create(id: 'projects'));
         $this->database->createAttribute('projects', Attribute::string(key: 'name'));
         $this->database->createAttribute('projects', Attribute::string(key: 'description'));
         $this->database->createDocument('projects', new Document([

@@ -56,7 +56,7 @@ final class PermissionsBatchSkipTest extends TestCase
             ->setNamespace('batch_skip_'.\uniqid());
         $this->database->addHook(new Permissions());
         $this->database->create();
-        $this->database->createCollection(new Collection(
+        $this->database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [Attribute::string(key: 'title', size: 64)],
             permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())],

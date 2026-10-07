@@ -433,12 +433,12 @@ final class BoundedJoinSortTest extends TestCase
             'notes' => [Attribute::string(key: 'author', size: 16), Attribute::integer(key: 'rank', required: false)],
             'tags' => [Attribute::string(key: 'author', size: 16), Attribute::string(key: 'note', size: 16)],
         ] as $id => $attributes) {
-            $database->createCollection(new Collection(
+            $database->createCollection(Collection::create(
                 id: $id,
                 attributes: $attributes,
                 indexes: match ($id) {
-                    'authors' => [Index::fullText(key: 'name_search', attributes: ['name'])],
-                    'notes' => [Index::fullText(key: 'author_search', attributes: ['author'])],
+                    'authors' => [Index::fulltext(key: 'name_search', attributes: ['name'])],
+                    'notes' => [Index::fulltext(key: 'author_search', attributes: ['author'])],
                     default => [],
                 },
                 permissions: $permissions,

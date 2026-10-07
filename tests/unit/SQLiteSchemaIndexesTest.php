@@ -36,8 +36,8 @@ final class SQLiteSchemaIndexesTest extends TestCase
     public function testFulltextIndexesAreListedUnderTheirIds(bool $shared): void
     {
         $database = $this->database($shared);
-        $database->createIndex(self::COLLECTION, Index::fullText(key: 'title_search', attributes: ['title']));
-        $database->createIndex(self::COLLECTION, Index::fullText(key: 'body_search', attributes: ['body']));
+        $database->createIndex(self::COLLECTION, Index::fulltext(key: 'title_search', attributes: ['title']));
+        $database->createIndex(self::COLLECTION, Index::fulltext(key: 'body_search', attributes: ['body']));
 
         $this->assertSame([
             'body_search' => ['FULLTEXT', ['body']],
@@ -56,10 +56,10 @@ final class SQLiteSchemaIndexesTest extends TestCase
     public function testDeletingOneOfTwoFulltextIndexesKeepsTheOther(bool $shared): void
     {
         $database = $this->database($shared);
-        $database->createIndex(self::COLLECTION, Index::fullText(key: 'title_search', attributes: ['title']));
-        $database->createIndex(self::COLLECTION, Index::fullText(key: 'body_search', attributes: ['body']));
+        $database->createIndex(self::COLLECTION, Index::fulltext(key: 'title_search', attributes: ['title']));
+        $database->createIndex(self::COLLECTION, Index::fulltext(key: 'body_search', attributes: ['body']));
 
-        $this->assertTrue($database->deleteIndex(self::COLLECTION, 'title_search'));
+        $database->deleteIndex(self::COLLECTION, 'title_search');
 
         $this->assertSame(['body_search' => ['FULLTEXT', ['body']]], $this->fulltextIndexes($database));
         $this->assertSame(['fox'], $this->search($database, 'body', 'lazy'));
@@ -71,7 +71,7 @@ final class SQLiteSchemaIndexesTest extends TestCase
             $this->assertSame('Searching by attribute "title" requires a fulltext index.', $error->getMessage());
         }
 
-        $this->assertTrue($database->createIndex(self::COLLECTION, Index::fullText(key: 'title_search', attributes: ['title'])));
+        $database->createIndex(self::COLLECTION, Index::fulltext(key: 'title_search', attributes: ['title']));
         $this->assertSame(['fox'], $this->search($database, 'title', 'quick'));
     }
 
@@ -99,7 +99,7 @@ final class SQLiteSchemaIndexesTest extends TestCase
     {
         $database = $this->database(true);
         $database->withTenant(2, function () use ($database): void {
-            $database->createCollection(new Collection(
+            $database->createCollection(Collection::create(
                 id: self::COLLECTION,
                 attributes: [
                     Attribute::string(key: 'title', size: 64),
@@ -144,14 +144,14 @@ final class SQLiteSchemaIndexesTest extends TestCase
         $database->getAdapter()->deleteIndex(self::COLLECTION, 'by_title');
         $this->assertArrayNotHasKey('by_title', $this->indexes($database));
 
-        $this->assertTrue($database->renameIndex(self::COLLECTION, 'by_title', 'by_heading'));
+        $database->renameIndex(self::COLLECTION, 'by_title', 'by_heading');
 
         $indexes = $this->indexes($database);
         $this->assertArrayNotHasKey('by_title', $indexes);
         $this->assertSame([1, [...($shared ? ['_tenant'] : []), 'title']], $indexes['by_heading'] ?? null, 'the metadata names an index the schema has');
         $this->assertSame(['by_heading'], \array_values(\array_map(
             static fn (Index $index): string => $index->key,
-            $database->getCollection(self::COLLECTION)->indexes,
+            $database->getCollection(self::COLLECTION)->indexes(),
         )));
     }
 
@@ -221,7 +221,7 @@ final class SQLiteSchemaIndexesTest extends TestCase
         }
 
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [
                 Attribute::string(key: 'title', size: 64),

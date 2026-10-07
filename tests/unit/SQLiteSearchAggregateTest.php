@@ -16,7 +16,6 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
-use Utopia\Query\Schema\IndexType;
 
 final class SQLiteSearchAggregateTest extends TestCase
 {
@@ -32,13 +31,13 @@ final class SQLiteSearchAggregateTest extends TestCase
             ->setDatabase('search')
             ->setNamespace('search_'.\uniqid());
         $this->database->create();
-        $this->database->createCollection(new Collection(
+        $this->database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [
                 Attribute::string(key: 'body', size: 128),
                 Attribute::integer(key: 'views'),
             ],
-            indexes: [new Index(key: 'body_search', type: IndexType::Fulltext, attributes: ['body'])],
+            indexes: [Index::fulltext(key: 'body_search', attributes: ['body'])],
             permissions: [
                 Permission::create(Role::any()),
                 Permission::read(Role::any()),

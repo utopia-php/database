@@ -404,8 +404,8 @@ final class JoinInternalColumnsTest extends TestCase
         $this->createCollection('libraries', [Attribute::string(key: 'name', size: 64)]);
         $this->createCollection('persons', [Attribute::string(key: 'name', size: 64)]);
         $this->createCollection('books', [Attribute::string(key: 'title', size: 64)]);
-        $this->database->createRelationship(Relationship::oneToOne(collection: 'persons', relatedCollection: 'libraries', key: 'library', twoWayKey: 'person'));
-        $this->database->createRelationship(Relationship::oneToMany(collection: 'persons', relatedCollection: 'books', key: 'books', twoWayKey: 'owner'));
+        $this->database->createRelationship('persons', Relationship::oneToOne(relatedCollection: 'libraries', key: 'library', twoWayKey: 'person'));
+        $this->database->createRelationship('persons', Relationship::oneToMany(relatedCollection: 'books', key: 'books', twoWayKey: 'owner'));
 
         $this->createDocument('libraries', 'central', ['name' => 'Central']);
         $this->createDocument('persons', 'ada', ['name' => 'Ada', 'library' => 'central']);
@@ -419,7 +419,7 @@ final class JoinInternalColumnsTest extends TestCase
      */
     private function createCollection(string $id, array $attributes): void
     {
-        $this->database->createCollection(new Collection(
+        $this->database->createCollection(Collection::create(
             id: $id,
             attributes: $attributes,
             permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())],

@@ -19,9 +19,9 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Relationship;
-use Utopia\Database\RelationType;
+use Utopia\Database\RelationshipDeleteAction;
+use Utopia\Database\RelationshipType;
 use Utopia\Database\Validator\Authorization;
-use Utopia\Query\Schema\ForeignKeyAction;
 
 use function Swoole\Coroutine\run;
 
@@ -53,9 +53,9 @@ final class RelationshipCoroutineTest extends TestCase
             foreach (['levelOne', 'levelTwo', 'levelThree', 'shelves', 'books'] as $collection) {
                 $database->createCollection($this->collection($collection));
             }
-            $this->relate($database, 'levelOne', 'levelTwo', RelationType::OneToMany, 'children', 'parent');
-            $this->relate($database, 'levelTwo', 'levelThree', RelationType::OneToMany, 'children', 'parent');
-            $this->relate($database, 'shelves', 'books', RelationType::OneToMany, 'books', 'shelf');
+            $this->relate($database, 'levelOne', 'levelTwo', RelationshipType::OneToMany, 'children', 'parent');
+            $this->relate($database, 'levelTwo', 'levelThree', RelationshipType::OneToMany, 'children', 'parent');
+            $this->relate($database, 'shelves', 'books', RelationshipType::OneToMany, 'books', 'shelf');
             $this->armed = true;
 
             $done = new Channel(1);
@@ -104,8 +104,8 @@ final class RelationshipCoroutineTest extends TestCase
             foreach (['people', 'pets', 'passports'] as $collection) {
                 $database->createCollection($this->collection($collection));
             }
-            $this->relate($database, 'people', 'pets', RelationType::OneToMany, 'pets', 'owner');
-            $this->relate($database, 'people', 'passports', RelationType::OneToOne, 'passport', 'person', ForeignKeyAction::Cascade);
+            $this->relate($database, 'people', 'pets', RelationshipType::OneToMany, 'pets', 'owner');
+            $this->relate($database, 'people', 'passports', RelationshipType::OneToOne, 'passport', 'person', RelationshipDeleteAction::Cascade);
 
             $database->createDocument('people', new Document([
                 '$id' => 'paused',
@@ -171,7 +171,7 @@ final class RelationshipCoroutineTest extends TestCase
 
     private function collection(string $id): Collection
     {
-        return new Collection(
+        return Collection::create(
             id: $id,
             attributes: [Attribute::string(key: 'name', size: 64, filters: [self::FILTER])],
             permissions: [
@@ -188,20 +188,19 @@ final class RelationshipCoroutineTest extends TestCase
         Database $database,
         string $collection,
         string $relatedCollection,
-        RelationType $type,
+        RelationshipType $type,
         string $key,
         string $twoWayKey,
-        ForeignKeyAction $onDelete = ForeignKeyAction::SetNull,
+        RelationshipDeleteAction $onDelete = RelationshipDeleteAction::SetNull,
     ): void {
-        $database->createRelationship(new Relationship(
-            collection: $collection,
-            relatedCollection: $relatedCollection,
-            type: $type,
-            twoWay: true,
-            key: $key,
-            twoWayKey: $twoWayKey,
-            onDelete: $onDelete,
-        ));
+        $database->createRelationship($collection, Relationship::fromArray([
+            'relatedCollection' => $relatedCollection,
+            'relationType' => $type,
+            'twoWay' => true,
+            'key' => $key,
+            'twoWayKey' => $twoWayKey,
+            'onDelete' => $onDelete,
+        ]));
     }
 
     private function pausedChannel(): Channel

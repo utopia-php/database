@@ -36,7 +36,7 @@ final class QueryShapeDatabaseTest extends TestCase
         $database->addHook(new Permissions());
         $database->create();
 
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [
                 Attribute::integer(key: 'amount', required: true),
@@ -226,7 +226,7 @@ final class QueryShapeDatabaseTest extends TestCase
     public function testEmptySetAggregatesOverAFullOuterJoinFollowTheContract(bool $nativeFullOuterJoin): void
     {
         $database = $this->database($nativeFullOuterJoin);
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: 'refunds',
             attributes: [
                 Attribute::integer(key: 'amount', required: true),

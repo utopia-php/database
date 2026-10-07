@@ -23,7 +23,7 @@ final class SQLOperatorBindingTest extends TestCase
         $database->setDatabase('operators')->setNamespace('operators');
         $database->getAuthorization()->addRole(Role::any()->toString());
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: 'scores',
             attributes: [Attribute::integer(key: 'value')],
             permissions: [

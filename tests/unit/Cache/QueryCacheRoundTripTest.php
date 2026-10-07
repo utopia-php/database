@@ -58,7 +58,7 @@ final class QueryCacheRoundTripTest extends TestCase
         $database->create();
         $database->getAuthorization()->addRole(Role::any()->toString());
         $database->setQueryCache(new QueryCache(new Cache($cache)));
-        $database->createCollection(new Collection(id: 'posts', permissions: [
+        $database->createCollection(Collection::create(id: 'posts', permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
         ], documentSecurity: false));

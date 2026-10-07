@@ -160,12 +160,12 @@ final class JoinedInternalAttributesTest extends TestCase
         $database->create();
 
         $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::AUTHORS,
             attributes: [Attribute::string(key: 'name', size: 64, required: true)],
             permissions: $permissions,
         ));
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::BOOKS,
             attributes: [Attribute::string(key: 'authorId', size: 64, required: true)],
             permissions: $permissions,

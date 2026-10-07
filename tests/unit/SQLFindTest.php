@@ -16,6 +16,7 @@ use Utopia\Database\Query;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\OrderDirection;
+use Utopia\Query\Schema\ColumnType;
 
 final class SQLFindTest extends TestCase
 {
@@ -439,7 +440,7 @@ final class SQLFindTest extends TestCase
                 Query::equal('orders.$id', ['order-1']),
                 Query::equal('profile.user.email', ['c@d.co']),
             ],
-            attributes: [new Document(['$id' => 'meta.score', 'key' => 'meta.score'])],
+            attributes: [new Document(['$id' => 'meta.score', 'key' => 'meta.score', 'type' => ColumnType::Integer->value])],
         );
 
         $this->assertStringContainsString('`table_main`.`metascore` IN (?)', $sql);

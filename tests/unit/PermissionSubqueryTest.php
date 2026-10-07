@@ -353,7 +353,7 @@ final class PermissionSubqueryTest extends TestCase
         }
 
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [
                 Attribute::string('name', size: 64),

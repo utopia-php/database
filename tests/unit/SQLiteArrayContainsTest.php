@@ -168,7 +168,7 @@ final class SQLiteArrayContainsTest extends TestCase
             ->setAuthorization(new Authorization());
         $database->create();
 
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [
                 Attribute::string('labels', size: 32, array: true),

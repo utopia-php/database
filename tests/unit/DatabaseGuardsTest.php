@@ -17,7 +17,6 @@ use Utopia\Database\Database;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Index;
 use Utopia\Query\Builder\Statement;
-use Utopia\Query\Schema\IndexType;
 
 final class DatabaseGuardsTest extends TestCase
 {
@@ -109,10 +108,10 @@ final class DatabaseGuardsTest extends TestCase
     {
         $database = $this->database(new Memory());
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: 'introspected',
             attributes: [Attribute::string(key: 'name', size: 32)],
-            indexes: [new Index(key: 'byName', type: IndexType::Key, attributes: ['name'])],
+            indexes: [Index::key(key: 'byName', attributes: ['name'])],
         ));
 
         $this->assertSame([], $database->getSchemaAttributes('introspected'));

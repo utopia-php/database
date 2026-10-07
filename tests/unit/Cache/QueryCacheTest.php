@@ -7,6 +7,7 @@ use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\Memory;
 use Utopia\Cache\Cache;
+use Utopia\Database\Attribute;
 use Utopia\Database\Cache\Entry;
 use Utopia\Database\Cache\Invalidator;
 use Utopia\Database\Cache\QueryCache;
@@ -16,6 +17,8 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Query;
+use Utopia\Database\Relationship;
+use Utopia\Database\RelationshipSide;
 
 class QueryCacheTest extends TestCase
 {
@@ -378,12 +381,13 @@ class QueryCacheTest extends TestCase
 
     public function testInvalidatorInvalidatesBothRelationshipCollections(): void
     {
-        $this->assertInvalidatorInvalidates(Event::AttributeCreate, new Document([
-            '$collection' => 'posts',
-            'options' => [
-                'relatedCollection' => 'authors',
-            ],
-        ]), ['posts', 'authors']);
+        $this->assertInvalidatorInvalidates(
+            Event::AttributeCreate,
+            Attribute::relationship('author', Relationship::manyToOne('authors'), RelationshipSide::Parent)
+                ->toDocument()
+                ->setAttribute('$collection', 'posts'),
+            ['posts', 'authors'],
+        );
     }
 
     public function testInvalidatorUsesCollectionIdentityForCollectionMutations(): void

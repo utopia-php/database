@@ -16,7 +16,6 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
-use Utopia\Query\Schema\IndexType;
 
 final class DottedAttributeKeyTest extends TestCase
 {
@@ -131,7 +130,7 @@ final class DottedAttributeKeyTest extends TestCase
     public function testSearchReadsADottedKey(): void
     {
         $database = $this->database();
-        $database->createIndex(self::PEOPLE, new Index(key: 'names', type: IndexType::Fulltext, attributes: ['dots.name']));
+        $database->createIndex(self::PEOPLE, Index::fulltext(key: 'names', attributes: ['dots.name']));
 
         $this->assertSame(['a', 'b'], $this->ids($database->find(self::PEOPLE, [Query::search('dots.name', 'v')])));
         $this->assertSame(2, $database->count(self::PEOPLE, [Query::search('dots.name', 'v')]));
@@ -165,7 +164,7 @@ final class DottedAttributeKeyTest extends TestCase
         $database->create();
 
         $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::PEOPLE,
             attributes: [
                 Attribute::string(key: 'dots.name', size: 64),
@@ -174,7 +173,7 @@ final class DottedAttributeKeyTest extends TestCase
             permissions: $permissions,
             documentSecurity: false,
         ));
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::ORDERS,
             attributes: [
                 Attribute::string(key: 'personId', size: 64, required: true),

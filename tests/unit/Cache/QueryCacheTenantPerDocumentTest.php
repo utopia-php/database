@@ -226,7 +226,7 @@ final class QueryCacheTenantPerDocumentTest extends TestCase
 
     private function notes(): Collection
     {
-        return new Collection(
+        return Collection::create(
             id: self::COLLECTION,
             attributes: [Attribute::string(key: 'title', size: 64)],
             permissions: [

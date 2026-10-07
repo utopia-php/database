@@ -130,11 +130,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     private const array PREFIX_SWAPPED_KEYS = ['permissions', 'createdAt', 'updatedAt', 'collection'];
 
     /**
-     * @var list<array{'$id': string, type: ColumnType, array: bool}>|null
-     */
-    private static ?array $internalAttributeArrays = null;
-
-    /**
      * Constructor.
      *
      * Set connection and settings
@@ -3059,24 +3054,10 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             return $document;
         }
 
-        $rawCbAttributes = $collection->getAttribute('attributes', []);
-        /** @var array<int, array<string, mixed>> $cbAttributes */
-        $cbAttributes = \is_array($rawCbAttributes) ? $rawCbAttributes : [];
-
-        $internalCbAttributeArrays = self::getInternalAttributeArrays();
-
-        /** @var array<int, array<string, mixed>> $attributes */
-        $attributes = \array_merge($cbAttributes, $internalCbAttributeArrays);
-
-        foreach ($attributes as $attribute) {
-            /** @var array<string, mixed> $attribute */
-            $rawCbId = $attribute[Document::ID] ?? null;
-            $key = \is_string($rawCbId) ? $rawCbId : '';
-            $rawCbType = $attribute['type'] ?? null;
-            $type = $rawCbType instanceof ColumnType
-                ? $rawCbType
-                : (\is_string($rawCbType) ? Attribute::tryNormalizeType($rawCbType) : null);
-            $array = (bool) ($attribute['array'] ?? false);
+        foreach ([...Collection::fromDocument($collection)->attributes(), ...Database::internalAttributesFor(true)] as $attribute) {
+            $key = $attribute->key;
+            $type = $attribute->type;
+            $array = $attribute->array;
 
             $value = $document->getAttribute($key);
             if (is_null($value)) {
@@ -3084,7 +3065,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             }
 
             if (Operator::isOperator($value)) {
-                if (Attribute::isIntegerType($type ?? ColumnType::String)) {
+                if ($attribute->isInteger()) {
                     /** @var Operator $value */
                     $values = $value->getValues();
                     foreach ($values as $index => $operand) {
@@ -3142,16 +3123,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             }
             $document->setAttribute($key, ($array) ? $value : $value[0]);
         }
-        $rawIndexesAttr = $collection->getAttribute('indexes');
-        /** @var array<mixed> $indexes */
-        $indexes = \is_array($rawIndexesAttr) ? $rawIndexesAttr : [];
-        /** @var array<string> $ttlIndexes */
-        $ttlIndexes = array_filter($indexes, function ($index) {
-            if ($index instanceof Document) {
-                return $index->getAttribute('type') === IndexType::Ttl->value;
-            }
-            return false;
-        });
 
         if (! $this->supports(Capability::DefinedAttributes)) {
             foreach ($document->getArrayCopy() as $key => $value) {
@@ -3159,7 +3130,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 if (in_array($this->getInternalKeyForAttribute($key), Database::INTERNAL_ATTRIBUTE_KEYS)) {
                     continue;
                 }
-                if (is_string($value) && (in_array($key, $ttlIndexes) || $this->isExtendedISODatetime($value))) {
+                if (is_string($value) && $this->isExtendedISODatetime($value)) {
                     try {
                         $newValue = new UTCDateTime(new NativeDateTime($value));
                         $document->setAttribute($key, $newValue);
@@ -3203,35 +3174,20 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     /**
      * The key, type and array flag of every collection attribute, then of every internal attribute.
      *
-     * @return list<array{0: string, 1: ColumnType|null, 2: bool}>
+     * @return list<array{0: string, 1: ColumnType, 2: bool}>
      */
     private function getReadCasts(Document $collection): array
     {
-        $rawCollectionAttributes = $collection->getAttribute('attributes', []);
-        /** @var array<int, array<string, mixed>> $collectionAttributes */
-        $collectionAttributes = \is_array($rawCollectionAttributes) ? $rawCollectionAttributes : [];
-
         $casts = [];
-        foreach ([$collectionAttributes, self::getInternalAttributeArrays()] as $attributes) {
-            foreach ($attributes as $attribute) {
-                /** @var array<string, mixed> $attribute */
-                $rawId = $attribute[Document::ID] ?? null;
-                $rawType = $attribute['type'] ?? null;
-                $casts[] = [
-                    \is_string($rawId) ? $rawId : '',
-                    $rawType instanceof ColumnType
-                        ? $rawType
-                        : (\is_string($rawType) ? Attribute::tryNormalizeType($rawType) : null),
-                    (bool) ($attribute['array'] ?? false),
-                ];
-            }
+        foreach ([...Collection::fromDocument($collection)->attributes(), ...Database::internalAttributesFor(true)] as $attribute) {
+            $casts[] = [$attribute->key, $attribute->type, $attribute->array];
         }
 
         return $casts;
     }
 
     /**
-     * @param  list<array{0: string, 1: ColumnType|null, 2: bool}>  $casts
+     * @param  list<array{0: string, 1: ColumnType, 2: bool}>  $casts
      */
     private function castRead(array $casts, bool $defined, Document $document): Document
     {
@@ -3305,17 +3261,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         }
 
         return $document;
-    }
-
-    /**
-     * @return list<array{'$id': string, type: ColumnType, array: bool}>
-     */
-    private static function getInternalAttributeArrays(): array
-    {
-        return self::$internalAttributeArrays ??= \array_values(\array_map(
-            fn (Attribute $attribute): array => [Document::ID => $attribute->getKey(), 'type' => $attribute->getType(), 'array' => $attribute->isArray()],
-            Database::internalAttributesFor(true)
-        ));
     }
 
     /**
@@ -3404,14 +3349,9 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      */
     private function getEscapedAttributes(Document $collection): array
     {
-        $rawAttrs = $collection->getAttribute('attributes', []);
-        /** @var array<array<string, mixed>> $attributes */
-        $attributes = \is_array($rawAttrs) ? $rawAttrs : [];
         $dotAttributes = [];
-        foreach ($attributes as $attribute) {
-            /** @var array<string, mixed> $attribute */
-            $rawKey = $attribute[Document::ID] ?? null;
-            $key = \is_string($rawKey) ? $rawKey : (\is_scalar($rawKey) ? (string) $rawKey : '');
+        foreach (Collection::fromDocument($collection)->attributes() as $attribute) {
+            $key = $attribute->key;
             if (\str_contains($key, '.') || \str_starts_with($key, '$')) {
                 $dotAttributes[$key] = $this->escapeMongoFieldName($key);
             }
@@ -3866,7 +3806,10 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     {
         $projection = [];
 
-        $internalKeys = \array_column(self::getInternalAttributeArrays(), Document::ID);
+        $internalKeys = \array_map(
+            static fn (Attribute $attribute): string => $attribute->key,
+            Database::internalAttributesFor(true),
+        );
 
         foreach ($selections as $selection) {
             // Skip internal attributes since all are selected by default

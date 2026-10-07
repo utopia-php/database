@@ -1826,40 +1826,18 @@ class Database
      */
     public function encode(Document $collection, Document $document, bool $applyDefaults = true): Document
     {
-        $rawAttributes = $collection->getAttribute('attributes', []);
-        $attributes = \is_array($rawAttributes) ? $rawAttributes : [];
-        $internalDateAttributes = [Document::CREATED_AT, Document::UPDATED_AT];
-        foreach ($this->internalAttributes() as $attribute) {
-            $attributes[] = $attribute;
-        }
-
         $known = [];
 
-        foreach ($attributes as $attribute) {
-            if ($attribute instanceof Attribute) {
-                $key = $attribute->getKey();
-                $array = $attribute->isArray();
-                $default = $attribute->getDefault();
-                $filters = $attribute->getFilters();
-            } elseif ($attribute instanceof Document) {
-                $key = $attribute->getId();
-                $array = (bool) $attribute->getAttribute('array', false);
-                $default = $attribute->offsetExists('default') ? $attribute['default'] : null;
-                $filters = $attribute->getArray('filters');
-            } elseif (\is_array($attribute)) {
-                $key = \is_string($attribute[Document::ID] ?? null) ? $attribute[Document::ID] : '';
-                $array = $attribute['array'] ?? false;
-                $default = $attribute['default'] ?? null;
-                $filters = \is_array($attribute['filters'] ?? null) ? $attribute['filters'] : [];
-            } else {
-                continue;
-            }
+        foreach ([...Collection::fromDocument($collection)->attributes(), ...$this->internalAttributes()] as $attribute) {
+            $key = $attribute->key;
+            $array = $attribute->array;
+            $default = $attribute->default;
+            $filters = $attribute->filters;
             $known[$key] = true;
-            /** @var array<string> $filters */
             $exists = $document->offsetExists($key);
             $value = $exists ? $document[$key] : null;
 
-            if (in_array($key, $internalDateAttributes) && is_string($value) && empty($value)) {
+            if (($key === Document::CREATED_AT || $key === Document::UPDATED_AT) && \is_string($value) && empty($value)) {
                 $document->setAttribute($key, null);
 
                 continue;
@@ -1932,15 +1910,8 @@ class Database
 
         if ($known === null) {
             $known = [];
-            $declared = $collection->getAttribute('attributes', []);
-            foreach (\is_array($declared) ? $declared : [] as $attribute) {
-                $key = match (true) {
-                    $attribute instanceof Attribute => $attribute->getKey(),
-                    $attribute instanceof Document => $attribute->getId(),
-                    \is_array($attribute) => \is_string($attribute[Document::ID] ?? null) ? $attribute[Document::ID] : '',
-                    default => '',
-                };
-                $known[$key] = true;
+            foreach (Collection::fromDocument($collection)->attributes() as $attribute) {
+                $known[$attribute->key] = true;
             }
         }
 
@@ -1978,16 +1949,12 @@ class Database
      */
     public function decode(Document $collection, Document $document, array $selections = []): Document
     {
-        /** @var array<array<string, mixed>|Document> $allAttributes */
-        $allAttributes = $collection->getAttribute('attributes', []);
+        $allAttributes = Collection::fromDocument($collection)->attributes();
 
-        // Single-pass partition into relationships vs regular attributes.
-        // Replaces two array_filter passes that each walked the full list.
         $attributes = [];
         $relationships = [];
-        $relationshipType = ColumnType::Relationship->value;
         foreach ($allAttributes as $attribute) {
-            if (($attribute['type'] ?? '') === $relationshipType) {
+            if ($attribute->relationship !== null) {
                 $relationships[] = $attribute;
             } else {
                 $attributes[] = $attribute;
@@ -2000,8 +1967,7 @@ class Database
         if (! empty($relationships)) {
             $documentArray = (array) $document;
             foreach ($relationships as $relationship) {
-                /** @var string $key */
-                $key = $relationship[Document::ID] ?? '';
+                $key = $relationship->key;
                 $relationshipKeys[$key] = true;
                 $filteredKey = $this->adapter->filter($key);
 
@@ -2045,15 +2011,13 @@ class Database
         }
 
         foreach ($attributes as $attribute) {
-            /** @var string $key */
-            $key = $attribute[Document::ID] ?? '';
+            $key = $attribute->key;
             if ($key === Document::PERMISSIONS) {
                 continue;
             }
 
-            $array = $attribute['array'] ?? false;
-            /** @var array<string> $filters */
-            $filters = $attribute['filters'] ?? [];
+            $array = $attribute->array;
+            $filters = $attribute->filters;
             $value = $document->getAttribute($key);
 
             // filter() strips the leading "$" off an internal key, leaving a name a user
@@ -2110,10 +2074,9 @@ class Database
 
         if ($hasRelationshipSelections && $selectionsMap !== null) {
             foreach ($allAttributes as $attribute) {
-                /** @var string $key */
-                $key = $attribute[Document::ID] ?? '';
+                $key = $attribute->key;
 
-                if (($attribute['type'] ?? '') === $relationshipType || $key === Document::PERMISSIONS) {
+                if ($attribute->relationship !== null || $key === Document::PERMISSIONS) {
                     continue;
                 }
 
@@ -2237,54 +2200,25 @@ class Database
             return $document;
         }
 
-        /** @var array<array<string, mixed>> $attributes */
-        $attributes = $collection->getAttribute('attributes', []);
+        foreach ([...Collection::fromDocument($collection)->attributes(), ...$this->internalAttributes()] as $attribute) {
+            $key = $attribute->key;
+            $type = $attribute->type;
+            $array = $attribute->array;
 
-        foreach ($this->internalAttributes() as $attribute) {
-            $attributes[] = $attribute;
-        }
-
-        // Cache the set of types that actually require a cast. Strings,
-        // datetimes, JSON, etc. all fall through to default in the match
-        // below, so skipping them entirely avoids the per-attribute
-        // foreach + setAttribute pair on every document.
-        $idType = ColumnType::Id->value;
-        $boolType = ColumnType::Boolean->value;
-        $intType = ColumnType::Integer->value;
-        $bigIntType = ColumnType::BigInteger->value;
-        $floatType = ColumnType::Float->value;
-        $doubleType = ColumnType::Double->value;
-
-        foreach ($attributes as $attribute) {
-            /** @var string $key */
-            $key = $attribute[Document::ID] ?? '';
-            if ($key === Document::PERMISSIONS) {
+            $needsCast = $array || match ($type) {
+                ColumnType::Id,
+                ColumnType::Boolean,
+                ColumnType::Integer,
+                ColumnType::BigInteger,
+                ColumnType::Float,
+                ColumnType::Double => true,
+                default => false,
+            };
+            if (! $needsCast || $key === Document::PERMISSIONS) {
                 continue;
             }
 
-            $type = $attribute['type'] ?? '';
-            $signed = (bool) ($attribute['signed'] ?? true);
-            $array = $attribute['array'] ?? false;
-            $normalizedType = $type instanceof ColumnType || \is_string($type)
-                ? Attribute::tryNormalizeType($type)
-                : null;
-            $typeKey = $normalizedType instanceof ColumnType ? $normalizedType->value : '';
-
-            $needsCast = $array
-                || $typeKey === $idType
-                || $typeKey === $boolType
-                || $typeKey === $intType
-                || $typeKey === $bigIntType
-                || $typeKey === $floatType
-                || $typeKey === $doubleType;
-            if (! $needsCast) {
-                // String/datetime/JSON/etc — already in their canonical
-                // PHP type after PDO fetch. Skip the load/setAttribute
-                // round trip entirely.
-                continue;
-            }
-
-            $value = $document->getAttribute($key, null);
+            $value = $document->getAttribute($key);
             if (\is_null($value)) {
                 continue;
             }
@@ -2299,17 +2233,15 @@ class Database
 
             /** @var array<int|string, scalar|null> $value */
             foreach ($value as $index => $node) {
-                $node = match ($typeKey) {
-                    ColumnType::Id->value => (string) $node,
-                    ColumnType::Boolean->value => (bool) $node,
-                    ColumnType::Integer->value => (int) $node,
-                    ColumnType::BigInteger->value => $this->castBigInteger($node, $signed),
-                    ColumnType::Float->value,
-                    ColumnType::Double->value => (float) $node,
+                $value[$index] = match ($type) {
+                    ColumnType::Id => (string) $node,
+                    ColumnType::Boolean => (bool) $node,
+                    ColumnType::Integer => (int) $node,
+                    ColumnType::BigInteger => $this->castBigInteger($node, $attribute->signed),
+                    ColumnType::Float,
+                    ColumnType::Double => (float) $node,
                     default => $node,
                 };
-
-                $value[$index] = $node;
             }
 
             $document->setAttribute($key, ($array) ? $value : $value[0]);
@@ -2472,32 +2404,24 @@ class Database
     }
 
     /**
-     * Build an `id => Document` map of the collection's attributes plus
-     * shared internal attribute Documents, and of each joined collection's under
-     * `alias.id`. Hoisted out so it's computed once per `convertQueries` call
-     * rather than per query / per attribute.
+     * The collection's attributes and the internal ones by key, and each joined collection's under
+     * `alias.key`, built once per conversion rather than per query.
      *
      * @param  array<string, Document>  $joinedCollections
-     * @return array<string, Document>
+     * @return array<string, Attribute>
      */
     private function buildAttributeMap(Document $collection, array $joinedCollections = []): array
     {
-        /** @var array<Document> $attributes */
-        $attributes = $collection->getAttribute('attributes', []);
+        $internal = $this->internalAttributes();
 
         $attributesById = [];
-        foreach ($attributes as $attr) {
-            $attributesById[$attr->getId()] = $attr;
-        }
-        foreach ($this->internalAttributes() as $internal) {
-            $attributesById[$internal->key] = $internal;
+        foreach ([...Collection::fromDocument($collection)->attributes(), ...$internal] as $attribute) {
+            $attributesById[$attribute->key] = $attribute;
         }
 
         foreach ($joinedCollections as $alias => $joined) {
-            /** @var array<Document> $joinedAttributes */
-            $joinedAttributes = $joined->getAttribute('attributes', []);
-            foreach ([...$joinedAttributes, ...$this->internalAttributes()] as $attribute) {
-                $attributesById[$alias.'.'.$attribute->getId()] ??= $attribute;
+            foreach ([...Collection::fromDocument($joined)->attributes(), ...$internal] as $attribute) {
+                $attributesById[$alias.'.'.$attribute->key] ??= $attribute;
             }
         }
 
@@ -2508,9 +2432,9 @@ class Database
      * The attribute map a having condition is converted by: an aggregate alias names the result of
      * its aggregate, which for min and max has the type of the aggregated attribute.
      *
-     * @param  array<string, Document>  $attributesById
+     * @param  array<string, Attribute>  $attributesById
      * @param  array<Query>  $queries
-     * @return array<string, Document>
+     * @return array<string, Attribute>
      */
     private function withAggregateAliases(array $attributesById, array $queries): array
     {
@@ -2537,7 +2461,7 @@ class Database
 
     /**
      * @param array<Query> $queries
-     * @param array<string, Document> $attributesById
+     * @param array<string, Attribute> $attributesById
      * @return array<Query>
      * @throws QueryException
      * @throws \Utopia\Database\Exception
@@ -2578,7 +2502,7 @@ class Database
     }
 
     /**
-     * @param array<string, Document> $attributesById
+     * @param array<string, Attribute> $attributesById
      * @return Query
      * @throws QueryException
      * @throws \Utopia\Database\Exception
@@ -2593,22 +2517,16 @@ class Database
         if ($attribute === null && $isNestedQueryAttribute) {
             $baseAttribute = \explode('.', $queryAttribute, 2)[0];
             $base = $attributesById[$baseAttribute] ?? null;
-            if ($base !== null && $base->getAttribute('type') === ColumnType::Object->value) {
+            if ($base !== null && $base->type === ColumnType::Object) {
                 $query->setAttributeType(ColumnType::Object->value);
             }
         }
 
         if ($attribute !== null) {
-            /** @var bool $isArray */
-            $isArray = $attribute->getAttribute('array', false);
-            $rawAttrType = $attribute->getAttribute('type');
-            $attrType = $rawAttrType instanceof ColumnType || \is_string($rawAttrType)
-                ? Attribute::normalizeType($rawAttrType)->value
-                : '';
-            $query->setOnArray($isArray);
-            $query->setAttributeType($attrType);
+            $query->setOnArray($attribute->array);
+            $query->setAttributeType($attribute->type->value);
 
-            if ($attrType == ColumnType::Datetime->value) {
+            if ($attribute->type === ColumnType::Datetime) {
                 $values = $query->getValues();
                 foreach ($values as $valueIndex => $value) {
                     try {
@@ -2844,13 +2762,14 @@ class Database
         ];
 
         $schemaHash = '';
-        if ($collection !== null && ! $collection->isEmpty()) {
-            $schemaHash = \md5(
-                (\json_encode($collection->getAttribute('attributes', [])) ?: '')
-                .(\json_encode($collection->getAttribute('indexes', [])) ?: '')
-                .(\json_encode($collection->getAttribute(Document::PERMISSIONS, [])) ?: '')
-                .(\json_encode($collection->getAttribute('documentSecurity', false)) ?: '')
-            );
+        if ($collection !== null) {
+            $definition = Collection::fromDocument($collection);
+            $schemaHash = \md5(\json_encode([
+                $definition->attributes(),
+                $definition->indexes(),
+                $definition->getPermissions(),
+                $definition->documentSecurity(),
+            ]) ?: '');
         }
 
         return \sprintf(

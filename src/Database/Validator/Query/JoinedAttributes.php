@@ -180,9 +180,9 @@ trait JoinedAttributes
     protected static function internalColumns(bool $sharedTables): array
     {
         $columns = [];
-        foreach (Database::internalAttributesFor(true) as $attribute) {
-            if ($attribute->getKey() !== Document::COLLECTION && ($sharedTables || $attribute->getKey() !== Document::TENANT)) {
-                $columns[$attribute->getKey()] = true;
+        foreach (Database::internalAttributesFor($sharedTables) as $attribute) {
+            if ($attribute->key !== Document::COLLECTION) {
+                $columns[$attribute->key] = true;
             }
         }
 

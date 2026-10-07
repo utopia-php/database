@@ -3,7 +3,9 @@
 namespace Utopia\Database\Validator\Queries;
 
 use DateTime;
+use Utopia\Database\Attribute;
 use Utopia\Database\Document;
+use Utopia\Database\Index;
 use Utopia\Database\Validator\IndexedQueries;
 use Utopia\Database\Validator\Query\Aggregate;
 use Utopia\Database\Validator\Query\Cursor;
@@ -16,7 +18,6 @@ use Utopia\Database\Validator\Query\Limit;
 use Utopia\Database\Validator\Query\Offset;
 use Utopia\Database\Validator\Query\Order;
 use Utopia\Database\Validator\Query\Select;
-use Utopia\Query\Schema\ColumnType;
 
 /**
  * Validates queries for document listing: filters, ordering, selection and pagination, plus joins
@@ -25,39 +26,13 @@ use Utopia\Query\Schema\ColumnType;
 class Documents extends IndexedQueries
 {
     /**
-     * The attributes every collection holds besides its own, by key: the document id, sequence and
-     * timestamps. Queries may name them like the collection's attributes.
+     * @var list<Attribute>|null
      */
-    public const array INTERNAL_ATTRIBUTES = [
-        Document::ID => [
-            Document::ID => Document::ID,
-            'key' => Document::ID,
-            'type' => ColumnType::String->value,
-            'array' => false,
-        ],
-        Document::SEQUENCE => [
-            Document::ID => Document::SEQUENCE,
-            'key' => Document::SEQUENCE,
-            'type' => ColumnType::Id->value,
-            'array' => false,
-        ],
-        Document::CREATED_AT => [
-            Document::ID => Document::CREATED_AT,
-            'key' => Document::CREATED_AT,
-            'type' => ColumnType::Datetime->value,
-            'array' => false,
-        ],
-        Document::UPDATED_AT => [
-            Document::ID => Document::UPDATED_AT,
-            'key' => Document::UPDATED_AT,
-            'type' => ColumnType::Datetime->value,
-            'array' => false,
-        ],
-    ];
+    private static ?array $internalAttributes = null;
 
     /**
-     * @param  array<Document>  $attributes
-     * @param  array<Document>  $indexes
+     * @param  array<Attribute|Document>  $attributes
+     * @param  array<Index|Document>  $indexes
      * @param  bool  $sharedTables  Whether the tables hold `$tenant`, as they do under shared tables
      * @param  bool  $supportForOrderRandom  Whether the adapter can order by random (Capability::OrderRandom)
      *
@@ -78,9 +53,13 @@ class Documents extends IndexedQueries
         bool $sharedTables = false,
         bool $supportForOrderRandom = true,
     ) {
-        foreach (self::INTERNAL_ATTRIBUTES as $definition) {
-            $attributes[] = new Document($definition);
-        }
+        $attributes = [
+            ...\array_map(
+                static fn (Attribute|Document $attribute): Attribute => $attribute instanceof Attribute ? $attribute : Attribute::fromDocument($attribute),
+                $attributes,
+            ),
+            ...self::internalAttributes(),
+        ];
 
         $validators = [
             new Limit(),
@@ -114,5 +93,23 @@ class Documents extends IndexedQueries
         }
 
         parent::__construct($attributes, $indexes, $validators);
+    }
+
+    /**
+     * The attributes every collection holds besides its own that queries may name like the collection's
+     * attributes: the document id, sequence and timestamps.
+     *
+     * @internal
+     *
+     * @return list<Attribute>
+     */
+    public static function internalAttributes(): array
+    {
+        return self::$internalAttributes ??= [
+            Attribute::string(Document::ID),
+            Attribute::id(Document::SEQUENCE),
+            Attribute::datetime(Document::CREATED_AT),
+            Attribute::datetime(Document::UPDATED_AT),
+        ];
     }
 }

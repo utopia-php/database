@@ -42,18 +42,17 @@ class Select extends Base
     private array $groupBy = [];
 
     /**
-     * @param  array<Document>  $attributes
+     * @param  array<Attribute|Document>  $attributes
      * @param  bool  $sharedTables  Whether the tables hold `$tenant`, as they do under shared tables
      */
     public function __construct(array $attributes = [], protected bool $supportForAttributes = true, protected bool $sharedTables = false)
     {
         foreach ($attributes as $attribute) {
-            /** @var string $attrKey */
-            $attrKey = $attribute->getAttribute('key', $attribute->getAttribute(Document::ID));
-            $this->schema[$attrKey] = true;
+            $attribute = $attribute instanceof Attribute ? $attribute : Attribute::fromDocument($attribute);
+            $this->schema[$attribute->key] = true;
 
-            if (Attribute::isRelationship($attribute)) {
-                $this->relationships[$attrKey] = true;
+            if ($attribute->relationship !== null) {
+                $this->relationships[$attribute->key] = true;
             }
         }
     }
@@ -247,14 +246,10 @@ class Select extends Base
      */
     private function internalKeys(): array
     {
-        $keys = [];
-        foreach (Database::internalAttributesFor(true) as $attribute) {
-            if ($this->sharedTables || $attribute->getKey() !== Document::TENANT) {
-                $keys[] = $attribute->getKey();
-            }
-        }
-
-        return $keys;
+        return \array_map(
+            static fn (Attribute $attribute): string => $attribute->key,
+            Database::internalAttributesFor($this->sharedTables),
+        );
     }
 
     /**

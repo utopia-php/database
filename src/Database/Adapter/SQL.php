@@ -16,6 +16,7 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Builder\Filtering;
 use Utopia\Database\Capability;
 use Utopia\Database\Change;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
@@ -1269,13 +1270,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
             /** @var array<string, mixed> $attributeDefaults */
             $attributeDefaults = [];
-            /** @var array<mixed> $collAttrs */
-            $collAttrs = $collection->getAttribute('attributes', []);
-            foreach ($collAttrs as $attr) {
-                /** @var array<string, mixed> $attr */
-                $attrIdRaw = $attr[Document::ID] ?? '';
-                $attrId = \is_scalar($attrIdRaw) ? (string) $attrIdRaw : '';
-                $attributeDefaults[$attrId] = $attr['default'] ?? null;
+            foreach (Collection::fromDocument($collection)->attributes() as $declared) {
+                $attributeDefaults[$declared->key] = $declared->default;
             }
 
             $collection = $collection->getId();
@@ -2193,10 +2189,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $aliasSet = \array_fill_keys(\array_column($joinTablePrefixes, 'alias'), true);
         $aliasSet[Query::DEFAULT_ALIAS] = true;
         $mainAttributes = [];
-        /** @var array<Document> $collectionAttrs */
-        $collectionAttrs = $collection->getAttribute('attributes', []);
-        foreach ($collectionAttrs as $attr) {
-            $mainAttributes[$attr->getId()] = true;
+        foreach (Collection::fromDocument($collection)->attributes() as $declared) {
+            $mainAttributes[$declared->key] = true;
         }
 
         $qualified = $this->qualifyDottedAttribute($attribute, $aliasSet, $mainAttributes);
@@ -4065,10 +4059,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $aliasSet = \array_fill_keys(\array_column($joinTablePrefixes, 'alias'), true);
         $aliasSet[Query::DEFAULT_ALIAS] = true;
         $mainAttributes = [];
-        /** @var array<Document> $collectionAttrs */
-        $collectionAttrs = $collection->getAttribute('attributes', []);
-        foreach ($collectionAttrs as $attribute) {
-            $mainAttributes[$attribute->getId()] = true;
+        foreach (Collection::fromDocument($collection)->attributes() as $attribute) {
+            $mainAttributes[$attribute->key] = true;
         }
 
         foreach ($queries as $query) {
@@ -4873,13 +4865,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         if ($hasAggregation && ! empty($joinTablePrefixes)) {
             $mainAttributes = [];
-            foreach (Database::internalAttributesFor(true) as $attribute) {
-                $mainAttributes[$attribute->getKey()] = true;
-            }
-            /** @var array<Document> $collectionAttributes */
-            $collectionAttributes = $collection->getAttribute('attributes', []);
-            foreach ($collectionAttributes as $attribute) {
-                $mainAttributes[$attribute->getId()] = true;
+            foreach ([...Database::internalAttributesFor(true), ...Collection::fromDocument($collection)->attributes()] as $attribute) {
+                $mainAttributes[$attribute->key] = true;
             }
 
             $joinAttributes = $collection->getAttribute(Database::JOIN_ATTRIBUTES, []);
@@ -6179,13 +6166,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     private function qualifyJoinedOrders(array $orderAttributes, array $cursor, Document $collection, array $joinTablePrefixes): array
     {
         $main = [];
-        foreach (Database::internalAttributesFor(true) as $attribute) {
-            $main[$attribute->getKey()] = true;
-        }
-        /** @var array<Document> $attributes */
-        $attributes = $collection->getAttribute('attributes', []);
-        foreach ($attributes as $attribute) {
-            $main[$attribute->getId()] = true;
+        foreach ([...Database::internalAttributesFor(true), ...Collection::fromDocument($collection)->attributes()] as $attribute) {
+            $main[$attribute->key] = true;
         }
 
         $joinAttributes = $collection->getAttribute(Database::JOIN_ATTRIBUTES, []);
@@ -6353,48 +6335,14 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      */
     protected function getSpatialAttributes(Document $collection): array
     {
-        /** @var array<mixed> $collectionAttributes */
-        $collectionAttributes = $collection->getAttribute('attributes', []);
-        $spatialTypes = [ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value];
-
         $spatialAttributes = [];
-        foreach ($collectionAttributes as $attribute) {
-            [$attributeKey, $attributeType] = $this->attributeKeyAndType($attribute);
-            if (\is_string($attributeKey) && \in_array($attributeType, $spatialTypes, true)) {
-                $spatialAttributes[] = $attributeKey;
+        foreach (Collection::fromDocument($collection)->attributes() as $attribute) {
+            if ($attribute->isSpatial()) {
+                $spatialAttributes[] = $attribute->key;
             }
         }
 
         return $spatialAttributes;
-    }
-
-    /**
-     * @return array{0: ?string, 1: ?string}
-     */
-    private function attributeKeyAndType(mixed $attr): array
-    {
-        if ($attr instanceof Attribute) {
-            return [$attr->getKey(), $attr->getType()->value];
-        }
-
-        if ($attr instanceof Document) {
-            $type = $attr->getAttribute('type');
-            $key = $attr->getAttribute('key', $attr->getId());
-        } elseif (\is_array($attr)) {
-            $type = $attr['type'] ?? null;
-            $key = $attr['key'] ?? $attr[Document::ID] ?? null;
-        } else {
-            return [null, null];
-        }
-
-        if ($type instanceof ColumnType) {
-            $type = $type->value;
-        }
-
-        return [
-            \is_string($key) ? $key : null,
-            \is_string($type) ? $type : null,
-        ];
     }
 
     protected function encodeSpatialWriteValue(mixed $value): mixed

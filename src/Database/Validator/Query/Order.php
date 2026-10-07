@@ -2,6 +2,7 @@
 
 namespace Utopia\Database\Validator\Query;
 
+use Utopia\Database\Attribute;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Query\Method;
@@ -38,7 +39,7 @@ class Order extends Base
     private array $groupBy = [];
 
     /**
-     * @param  array<Document>  $attributes
+     * @param  array<Attribute|Document>  $attributes
      */
     public function __construct(
         array $attributes = [],
@@ -46,9 +47,8 @@ class Order extends Base
         protected bool $supportForOrderRandom = true,
     ) {
         foreach ($attributes as $attribute) {
-            /** @var string $attrKey */
-            $attrKey = $attribute->getAttribute('key', $attribute->getAttribute(Document::ID));
-            $this->schema[$attrKey] = true;
+            $attribute = $attribute instanceof Attribute ? $attribute : Attribute::fromDocument($attribute);
+            $this->schema[$attribute->key] = true;
         }
     }
 

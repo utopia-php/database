@@ -2,7 +2,9 @@
 
 namespace Tests\Unit;
 
+use Closure;
 use PDO;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
@@ -20,6 +22,7 @@ use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Query\CursorDirection;
 
 /**
  * Under tenant-per-document one shared table holds the documents of every tenant, and two
@@ -52,10 +55,42 @@ final class PermissionsTenantPerDocumentTest extends TestCase
 
     private Database $database;
 
+    /**
+     * @var list<int>
+     */
+    private array $spannedTenants = [];
+
     protected function setUp(): void
     {
         $this->pdo = new PDO('sqlite::memory:');
-        $this->adapter = new SQLite($this->pdo);
+        $this->adapter = new class ($this->pdo, fn (): array => $this->spannedTenants) extends SQLite {
+            /**
+             * @param  Closure(): list<int>  $spannedTenants
+             */
+            public function __construct(PDO $pdo, private readonly Closure $spannedTenants)
+            {
+                parent::__construct($pdo);
+            }
+
+            #[\Override]
+            public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read): array
+            {
+                $tenants = ($this->spannedTenants)();
+                if ($tenants === [] || $collection->getId() === Database::METADATA) {
+                    return parent::find($collection, $queries, $limit, $offset, $orderAttributes, $orderTypes, $cursor, $cursorDirection, $forPermission);
+                }
+
+                $documents = [];
+                foreach ($tenants as $tenant) {
+                    \array_push($documents, ...$this->withTenant(
+                        $tenant,
+                        fn (): array => parent::find($collection, $queries, $limit, $offset, $orderAttributes, $orderTypes, $cursor, $cursorDirection, $forPermission),
+                    ));
+                }
+
+                return $documents;
+            }
+        };
         $this->authorization = new Authorization();
         $this->authorization->addRole(Role::any()->toString());
 
@@ -215,6 +250,54 @@ final class PermissionsTenantPerDocumentTest extends TestCase
         );
 
         $this->assertBobRevokedOnlyUnderTheTenant();
+    }
+
+    /**
+     * @return array<string, array{list<int>}>
+     */
+    public static function crossTenantBatchOrders(): array
+    {
+        return [
+            'changing document first' => [[self::TENANT, self::OTHER_TENANT]],
+            'keeping document first' => [[self::OTHER_TENANT, self::TENANT]],
+        ];
+    }
+
+    /**
+     * A batch that spans tenants holds the same id once per tenant. When one of those documents changes its
+     * permissions and the other keeps them, the id must not be skipped, whichever order the batch holds them in.
+     *
+     * @param  list<int>  $order
+     */
+    #[DataProvider('crossTenantBatchOrders')]
+    public function testABatchUpdateSpanningTenantsRewritesAnIdOnlyOneTenantChanges(array $order): void
+    {
+        $this->database->withTenant(
+            self::OTHER_TENANT,
+            fn (): Document => $this->database->updateDocument(self::COLLECTION, self::DOCUMENT, $this->readers([self::ALICE])),
+        );
+        $this->spannedTenants = $order;
+
+        try {
+            $updated = $this->database->withTenant(
+                self::TENANT,
+                fn (): int => $this->database->updateDocuments(self::COLLECTION, $this->readers([self::ALICE]), [Query::equal('$id', [self::DOCUMENT])]),
+            );
+        } finally {
+            $this->spannedTenants = [];
+        }
+
+        $this->assertSame(2, $updated);
+        $this->assertSame(
+            [
+                $this->grant(self::TENANT, self::ALICE),
+                $this->grant(self::OTHER_TENANT, self::ALICE),
+            ],
+            $this->grants(),
+            'Tenant 5 revoked bob and tenant 6 already had, so neither tenant may keep a grant for bob',
+        );
+        $this->assertSame([self::TENANT => [], self::OTHER_TENANT => []], $this->readableBy(self::BOB));
+        $this->assertSame([self::TENANT => [self::DOCUMENT], self::OTHER_TENANT => [self::DOCUMENT]], $this->readableBy(self::ALICE));
     }
 
     public function testARenameUnderTheDocumentsTenantMovesOnlyThatTenantsGrants(): void

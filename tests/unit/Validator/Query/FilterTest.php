@@ -299,4 +299,46 @@ class FilterTest extends TestCase
         $this->assertFalse($this->validator->isValid(Query::notExists([])));
         $this->assertSame('NotExists queries require at least one value.', $this->validator->getDescription());
     }
+
+    public function test_or_with_non_document_cursor_is_rejected_as_non_filter(): void
+    {
+        $this->assertFalse($this->validator->isValid(Query::or([
+            Query::equal('string', ['Main']),
+            Query::cursorAfter(['$id' => 'row']),
+        ])));
+        $this->assertSame('Or queries can only contain filter queries', $this->validator->getDescription());
+    }
+
+    public function test_and_with_non_document_cursor_is_rejected_as_non_filter(): void
+    {
+        $this->assertFalse($this->validator->isValid(Query::and([
+            Query::equal('string', ['Main']),
+            Query::cursorBefore(new \stdClass()),
+        ])));
+        $this->assertSame('And queries can only contain filter queries', $this->validator->getDescription());
+    }
+
+    public function test_elem_match_with_non_document_cursor_is_rejected_as_non_filter(): void
+    {
+        $validator = new Filter(
+            attributes: [],
+            idAttributeType: ColumnType::Integer->value,
+            supportForAttributes: false,
+        );
+
+        $this->assertFalse($validator->isValid(Query::elemMatch('items', [
+            Query::equal('name', ['Main']),
+            Query::cursorAfter(['$id' => 'row']),
+        ])));
+        $this->assertSame('elemMatch queries can only contain filter queries', $validator->getDescription());
+    }
+
+    public function test_or_with_document_cursor_is_rejected_as_non_filter(): void
+    {
+        $this->assertFalse($this->validator->isValid(Query::or([
+            Query::equal('string', ['Main']),
+            Query::cursorAfter(new Document(['$id' => 'row'])),
+        ])));
+        $this->assertSame('Or queries can only contain filter queries', $this->validator->getDescription());
+    }
 }

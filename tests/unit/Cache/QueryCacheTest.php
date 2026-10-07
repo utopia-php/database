@@ -525,11 +525,11 @@ class QueryCacheTest extends TestCase
                 $this->assertNull($reader->getEntry($scope, 'users', []));
             });
 
-            $first->activateCollection($key, $firstToken);
+            $first->activateCollection($key, $firstToken, Scope::WRITER_TIMEOUT);
 
             $this->assertNull($reader->getEntry($scope, 'users', []));
 
-            $second->activateCollection($key, $secondToken);
+            $second->activateCollection($key, $secondToken, Scope::WRITER_TIMEOUT);
 
             $fresh = $reader->getEntry($scope, 'users', []);
             $this->assertNotNull($fresh);
@@ -549,9 +549,9 @@ class QueryCacheTest extends TestCase
         $queryCache->blockCollection($key, 'first');
         $adapter->pauseNextActivation(function () use ($queryCache, $key): void {
             $queryCache->blockCollection($key, 'second');
-            $queryCache->activateCollection($key, 'second');
+            $queryCache->activateCollection($key, 'second', Scope::WRITER_TIMEOUT);
         });
-        $queryCache->activateCollection($key, 'first');
+        $queryCache->activateCollection($key, 'first', Scope::WRITER_TIMEOUT);
 
         $entry = $queryCache->getEntry($scope, 'users', []);
         $this->assertNotNull($entry, 'Once every writer has finished, an epoch published late must still be usable');
@@ -575,7 +575,7 @@ class QueryCacheTest extends TestCase
             'A transaction that outlives the region TTL must keep readers off the cache until it activates',
         );
 
-        $queryCache->activateCollection($key, 'writer');
+        $queryCache->activateCollection($key, 'writer', Scope::WRITER_TIMEOUT);
         $queryCache->setRegion('users', new Region());
 
         $fresh = $queryCache->getEntry(new Scope(), 'users', []);
@@ -641,7 +641,7 @@ class QueryCacheTest extends TestCase
 
         $this->assertNull($writer->getEntry($scope, 'users', []), 'A writer registered within the writer timeout is still in flight');
 
-        $live->activateCollection($key, $token);
+        $live->activateCollection($key, $token, Scope::WRITER_TIMEOUT);
 
         $this->assertNotNull($writer->getEntry($scope, 'users', []));
     }
@@ -693,7 +693,7 @@ class QueryCacheTest extends TestCase
         $this->assertNotNull($during);
         $this->assertTrue($slow->set($during, [new Document(['$id' => 'before-commit'])], $slow->getGeneration($during)));
 
-        $slow->activateCollection($key, $token);
+        $slow->activateCollection($key, $token, Scope::WRITER_TIMEOUT);
 
         $after = $slow->getEntry($scope, 'users', []);
         $this->assertNotNull($after);
@@ -721,7 +721,7 @@ class QueryCacheTest extends TestCase
         $queryCache->blockCollection($key, 'owner');
         $adapter->flushDuringActivation();
 
-        $queryCache->activateCollection($key, 'owner');
+        $queryCache->activateCollection($key, 'owner', Scope::WRITER_TIMEOUT);
 
         $this->assertNotNull($queryCache->getEntry(new Scope(), 'users', []));
     }
@@ -734,7 +734,7 @@ class QueryCacheTest extends TestCase
         $queryCache->blockCollection($key, 'owner');
         $this->assertTrue($adapter->flush());
 
-        $queryCache->activateCollection($key, 'owner');
+        $queryCache->activateCollection($key, 'owner', Scope::WRITER_TIMEOUT);
 
         $this->assertNotNull($queryCache->getEntry(new Scope(), 'users', []));
     }
@@ -748,7 +748,7 @@ class QueryCacheTest extends TestCase
         $adapter->failDuringActivation();
 
         try {
-            $queryCache->activateCollection($key, 'owner');
+            $queryCache->activateCollection($key, 'owner', Scope::WRITER_TIMEOUT);
             $this->fail('Query cache activation purge failure was not propagated');
         } catch (\RuntimeException $error) {
             $this->assertStringContainsString('finish query cache invalidation', $error->getMessage());
@@ -883,9 +883,9 @@ class QueryCacheTest extends TestCase
 
         $queryCache->blockCollection($key, 'first');
         $queryCache->blockCollection($key, 'second');
-        $queryCache->activateCollection($key, 'first');
+        $queryCache->activateCollection($key, 'first', Scope::WRITER_TIMEOUT);
         $this->assertNull($queryCache->getEntry(new Scope(), 'users', []), 'The second writer is still in flight');
-        $queryCache->activateCollection($key, 'second');
+        $queryCache->activateCollection($key, 'second', Scope::WRITER_TIMEOUT);
 
         $this->assertNull(
             $queryCache->getEntry(new Scope(), 'users', []),
@@ -902,7 +902,7 @@ class QueryCacheTest extends TestCase
         $queryCache->blockCollection($key, 'owner');
 
         try {
-            $queryCache->activateCollection($key, 'owner');
+            $queryCache->activateCollection($key, 'owner', Scope::WRITER_TIMEOUT);
             $this->fail('A corrupted owner registration was accepted');
         } catch (\RuntimeException $error) {
             $this->assertStringContainsString('Invalid query cache owner', $error->getMessage());
@@ -920,7 +920,7 @@ class QueryCacheTest extends TestCase
         $adapter->failFieldPurges();
 
         try {
-            $queryCache->activateCollection($key, 'owner');
+            $queryCache->activateCollection($key, 'owner', Scope::WRITER_TIMEOUT);
             $this->fail('An owner release failure was not propagated');
         } catch (\RuntimeException $error) {
             $this->assertStringContainsString('Failed to release query cache owner', $error->getMessage());
@@ -955,11 +955,11 @@ class QueryCacheTest extends TestCase
         $this->assertTrue($adapter->flush());
         $queryCache->blockCollection($key, 'second');
 
-        $queryCache->activateCollection($key, 'first');
+        $queryCache->activateCollection($key, 'first', Scope::WRITER_TIMEOUT);
 
         $this->assertNull($queryCache->getEntry($scope, 'users', []), 'A writer whose registration was flushed away must not enable the cache while another writer is in flight');
 
-        $queryCache->activateCollection($key, 'second');
+        $queryCache->activateCollection($key, 'second', Scope::WRITER_TIMEOUT);
 
         $this->assertNotNull($queryCache->getEntry($scope, 'users', []));
     }
@@ -991,7 +991,7 @@ class QueryCacheTest extends TestCase
         $queryCache->blockCollection($key, 'owner');
         $cache->flushOnNextFieldPurge();
 
-        $queryCache->activateCollection($key, 'owner');
+        $queryCache->activateCollection($key, 'owner', Scope::WRITER_TIMEOUT);
 
         $entry = $queryCache->getEntry($scope, 'users', []);
         $this->assertNotNull($entry, 'An owner that a flush removed before its release must still publish a fresh epoch');

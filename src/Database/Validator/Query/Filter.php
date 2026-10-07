@@ -11,6 +11,7 @@ use Utopia\Database\Validator\Datetime as DatetimeValidator;
 use Utopia\Database\Validator\ObjectPath;
 use Utopia\Database\Validator\Sequence;
 use Utopia\Query\Method;
+use Utopia\Query\Query as BaseQuery;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Validator\Boolean;
 use Utopia\Validator\FloatValidator;
@@ -615,7 +616,7 @@ class Filter extends Base
                     $nestedQueries[] = $nested;
                 }
 
-                $filters = Query::groupByType($nestedQueries)->filters;
+                $filters = BaseQuery::groupByType($nestedQueries)->filters;
 
                 if (count($nestedQueries) !== count($filters)) {
                     $this->message = \ucfirst($method->value).' queries can only contain filter queries';
@@ -638,20 +639,16 @@ class Filter extends Base
                 return true;
 
             case Method::ElemMatch:
-                // elemMatch is not supported when adapter supports attributes (schema mode)
                 if ($this->supportForAttributes) {
                     $this->message = 'elemMatch is not supported by the database';
 
                     return false;
                 }
 
-                // Validate that the attribute (array field) exists
                 if (! $this->isValidAttribute($attribute)) {
                     return false;
                 }
 
-                // For schemaless mode, allow elemMatch on any attribute
-                // Validate nested queries are filter queries
                 /** @var list<Query|string> $elemMatchValues */
                 $elemMatchValues = $value->getValues();
                 $nestedQueries = [];
@@ -664,7 +661,7 @@ class Filter extends Base
                     $nestedQueries[] = $nested;
                 }
 
-                $filters = Query::groupByType($nestedQueries)->filters;
+                $filters = BaseQuery::groupByType($nestedQueries)->filters;
                 if (count($nestedQueries) !== count($filters)) {
                     $this->message = 'elemMatch queries can only contain filter queries';
 
@@ -686,7 +683,6 @@ class Filter extends Base
                 return true;
 
             default:
-                // Handle spatial query types and any other query types
                 if ($value->isSpatialQuery()) {
                     if ($this->isEmpty($value->getValues())) {
                         $this->message = \ucfirst($method->value).' queries require at least one value.';

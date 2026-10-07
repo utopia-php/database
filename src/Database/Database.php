@@ -3000,6 +3000,10 @@ class Database
      * The registered lifecycle hooks that handle the event now; a trigger site builds the typed event only when there
      * is one, and hands them to {@see self::dispatch()}.
      *
+     * An operation computes the list once and reuses it for every event of its dispatch loop, so the list is a
+     * snapshot: a hook silenced while the loop runs still receives the rest of that operation's events, one
+     * unsilenced stays out of them, and the change applies from the next operation.
+     *
      * @return list<Lifecycle>
      */
     protected function listens(Event $event): array

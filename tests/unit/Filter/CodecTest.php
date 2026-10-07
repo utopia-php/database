@@ -116,9 +116,9 @@ final class CodecTest extends TestCase
 
     public function testCacheKeysFollowTheSignatureOfASignedCodec(): void
     {
-        $first = $this->database()->setFilters($this->registry(new Prefixed('a:')));
-        $second = $this->database()->setFilters($this->registry(new Prefixed('b:')));
-        $sameSignature = $this->database()->setFilters($this->registry(new Prefixed('a:')));
+        $first = $this->database()->setFilters($this->registry(new CodecTestPrefixed('a:')));
+        $second = $this->database()->setFilters($this->registry(new CodecTestPrefixed('b:')));
+        $sameSignature = $this->database()->setFilters($this->registry(new CodecTestPrefixed('a:')));
 
         $this->assertNotSame($this->documentHash($first), $this->documentHash($second));
         $this->assertSame($this->documentHash($first), $this->documentHash($sameSignature));

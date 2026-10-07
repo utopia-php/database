@@ -226,7 +226,7 @@ class QueryCache
      *
      * @param  int  $writerTimeout  Seconds after which another writer's registration is treated as abandoned
      */
-    public function activateCollection(string $key, string $token, int $writerTimeout = Scope::WRITER_TIMEOUT): void
+    public function activateCollection(string $key, string $token, int $writerTimeout): void
     {
         $registration = (new Owners($this->cache))->find($key, $token);
         $owner = $this->cache->load($registration->key, self::PERMANENT, $registration->field);

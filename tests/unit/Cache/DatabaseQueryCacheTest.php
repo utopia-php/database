@@ -196,6 +196,32 @@ final class DatabaseQueryCacheTest extends TestCase
         $this->assertSame(['a', 'c'], $this->ids($first->find('users', [Query::orderAsc('$id')])));
     }
 
+    public function testReadsAndWritesUseTheCacheNameSetAfterTheQueryCache(): void
+    {
+        $queryCache = new QueryCache(new Cache(new LeasableHashCache()));
+        $namespace = 'cache_'.\uniqid();
+        $named = $this->createNamedDatabase('x', $namespace, $queryCache, 'a');
+
+        $renamed = new Database(new DatabaseMemory(), new Cache(new LeasableHashCache()));
+        $renamed
+            ->setDatabase('cache-tests')
+            ->setNamespace($namespace)
+            ->setQueryCache($queryCache)
+            ->setCacheName('x');
+        $renamed->create();
+        $renamed->getAuthorization()->addRole(Role::any()->toString());
+        $renamed->createCollection(Collection::create(id: 'users', permissions: self::permissions(), documentSecurity: false));
+        $renamed->createDocument('users', new Document(['$id' => 'b']));
+
+        $queries = [Query::orderAsc('$id')];
+        $this->assertSame(['a'], $this->ids($named->find('users', $queries)));
+        $this->assertSame(['a'], $this->ids($renamed->find('users', $queries)), 'A read must use the cache name set after the query cache');
+
+        $renamed->createDocument('users', new Document(['$id' => 'c']));
+
+        $this->assertSame(['b', 'c'], $this->ids($renamed->find('users', $queries)), 'A write must retire what was cached under the cache name set after the query cache');
+    }
+
     /**
      * @return array<string, array{callable(Database): mixed}>
      */

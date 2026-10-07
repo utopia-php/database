@@ -2760,9 +2760,9 @@ trait Documents
      * @param  array<Query>  $queries  Queries to filter documents for deletion
      * @param  int  $batchSize  Number of documents per batch deletion, at most BATCH_SIZE
      * @param  (callable(Document $document, ?Document $previous): void)|null  $onNext  Given each deleted document once its
-     *                                                                                  batch is deleted, as both arguments: the
-     *                                                                                  stored document; an exception it throws
-     *                                                                                  aborts the call
+     *                                                                                  batch is deleted: the stored document,
+     *                                                                                  and as $previous a copy of it; an
+     *                                                                                  exception it throws aborts the call
      * @return int The number of documents deleted
      *
      * @throws AuthorizationException
@@ -2897,7 +2897,7 @@ trait Documents
 
             foreach ($batch as $document) {
                 if ($onNext !== null) {
-                    $onNext($document, $document);
+                    $onNext($document, clone $document);
                 }
                 $modified++;
             }

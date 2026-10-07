@@ -18,9 +18,9 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
-use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\Permission;
@@ -31,6 +31,7 @@ use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\Method;
+use Utopia\Query\Schema\IndexType;
 
 final class DocumentMinorsTest extends TestCase
 {
@@ -62,18 +63,13 @@ final class DocumentMinorsTest extends TestCase
         $this->assertSame(10.0, $database->getDocument(self::COLLECTION, 'entry')->getAttribute('ratio'));
     }
 
-    public function testATimeToLiveIndexWithoutAPeriodNeverExpires(): void
+    public function testATimeToLiveIndexWithoutAPeriodIsRefused(): void
     {
-        $database = $this->database(new class () extends Memory {
-            public function capabilities(): array
-            {
-                return [...parent::capabilities(), Capability::TTLIndexes];
-            }
-        });
-        $database->skipValidation(fn (): bool => $database->createIndex(self::COLLECTION, Index::ttl(key: 'expiry', attributes: ['recordedAt'], ttl: 0)));
-        $database->createDocument(self::COLLECTION, new Document([Document::ID => 'entry', 'recordedAt' => DateTime::format(new \DateTime('2000-01-01'))]));
-
-        $this->assertFalse($database->getDocument(self::COLLECTION, 'entry')->isEmpty());
+        $this->assertThrows(
+            IndexException::class,
+            'TTL must be at least 1 second',
+            fn (): Index => Index::fromArray(['key' => 'expiry', 'type' => IndexType::Ttl, 'attributes' => ['recordedAt'], 'ttl' => 0]),
+        );
     }
 
     public function testAnUnchangedListOfRelatedIdsIsNotAChange(): void
@@ -100,9 +96,9 @@ final class DocumentMinorsTest extends TestCase
         $database->create();
         $database->addHook(new Relationships($database));
         $readOnly = [Permission::create(Role::any()), Permission::read(Role::any())];
-        $database->createCollection(new Collection(id: 'parents', permissions: $readOnly));
-        $database->createCollection(new Collection(id: 'children', permissions: [...$readOnly, Permission::update(Role::any())]));
-        $database->createRelationship(Relationship::oneToMany(collection: 'parents', relatedCollection: 'children', twoWay: true, key: 'children', twoWayKey: 'parent'));
+        $database->createCollection(Collection::create(id: 'parents', permissions: $readOnly));
+        $database->createCollection(Collection::create(id: 'children', permissions: [...$readOnly, Permission::update(Role::any())]));
+        $database->createRelationship('parents', Relationship::oneToMany(relatedCollection: 'children', twoWay: true, key: 'children', twoWayKey: 'parent'));
         $database->createDocument('children', new Document([Document::ID => 'c1']));
         $database->createDocument('children', new Document([Document::ID => 'c2']));
         $database->createDocument('parents', new Document([Document::ID => 'p1', 'children' => ['c1', 'c2']]));
@@ -206,9 +202,9 @@ final class DocumentMinorsTest extends TestCase
         $database->create();
         $database->addHook(new Relationships($database));
         $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
-        $database->createCollection(new Collection(id: 'books', attributes: [Attribute::integer(key: 'pages')], permissions: $permissions));
-        $database->createCollection(new Collection(id: 'authors', attributes: [Attribute::string(key: 'name', size: 32)], permissions: $permissions));
-        $database->createRelationship(Relationship::manyToOne(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books'));
+        $database->createCollection(Collection::create(id: 'books', attributes: [Attribute::integer(key: 'pages')], permissions: $permissions));
+        $database->createCollection(Collection::create(id: 'authors', attributes: [Attribute::string(key: 'name', size: 32)], permissions: $permissions));
+        $database->createRelationship('books', Relationship::manyToOne(relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books'));
         $database->createDocument('authors', new Document([Document::ID => 'ada', 'name' => 'Ada']));
         $database->createDocument('books', new Document([Document::ID => 'notes', 'pages' => 120, 'author' => 'ada']));
 
@@ -300,7 +296,7 @@ final class DocumentMinorsTest extends TestCase
         $database = new Database($adapter, $cache ?? new Cache(new None()));
         $database->setAuthorization($authorization)->setDatabase('minors')->setNamespace('minors_'.\uniqid());
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [Attribute::integer(key: 'count'), Attribute::float(key: 'ratio'), Attribute::datetime(key: 'recordedAt')],
             permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any()), Permission::delete(Role::any())],

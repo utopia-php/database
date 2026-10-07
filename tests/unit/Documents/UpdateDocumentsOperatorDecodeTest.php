@@ -47,7 +47,7 @@ final class UpdateDocumentsOperatorDecodeTest extends TestCase
             ->setNamespace('operator_decode_'.\uniqid());
         $this->database->getAuthorization()->addRole(Role::any()->toString());
         $this->database->create();
-        $this->database->createCollection(new Collection(
+        $this->database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [
                 Attribute::integer('counter', required: false),

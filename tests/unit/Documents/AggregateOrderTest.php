@@ -203,7 +203,7 @@ final class AggregateOrderTest extends TestCase
      */
     private function createCollection(Database $database, string $id, array $attributes): void
     {
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: $id,
             attributes: $attributes,
             permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())],

@@ -68,7 +68,7 @@ final class ConvertQueriesCapabilityTest extends TestCase
         $database = new Database($adapter, new Cache(new MemoryCache()));
         $database->setDatabase('convert')->setNamespace('convert_'.\uniqid());
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [Attribute::string(key: 'title', size: 64)],
             permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())],

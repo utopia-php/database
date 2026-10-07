@@ -29,12 +29,12 @@ final class MetadataTenantInvalidationTest extends TestCase
     {
         [$writer, $reader] = $this->databases();
 
-        $this->assertTrue(
-            $reader->getCollection('targets')->isEmpty(),
+        $this->assertNull(
+            $reader->findCollection('targets'),
             'The collection does not exist yet, so the read must miss',
         );
 
-        $writer->createCollection(new Collection(id: 'targets', attributes: [
+        $writer->createCollection(Collection::create(id: 'targets', attributes: [
             Attribute::string(key: 'name', size: 64),
         ], permissions: [
             Permission::read(Role::any()),
@@ -42,8 +42,8 @@ final class MetadataTenantInvalidationTest extends TestCase
             Permission::update(Role::any()),
         ]));
 
-        $this->assertFalse(
-            $reader->getCollection('targets')->isEmpty(),
+        $this->assertNotNull(
+            $reader->findCollection('targets'),
             'A miss cached before provisioning must not outlive the collection being created',
         );
     }
@@ -52,7 +52,7 @@ final class MetadataTenantInvalidationTest extends TestCase
     {
         [$writer] = $this->databases();
 
-        $writer->createCollection(new Collection(id: 'targets', attributes: [
+        $writer->createCollection(Collection::create(id: 'targets', attributes: [
             Attribute::string(key: 'name', size: 64),
         ], permissions: [
             Permission::read(Role::any()),
@@ -103,12 +103,12 @@ final class MetadataTenantInvalidationTest extends TestCase
         [$writer, $reader] = $databases;
         $writer->create();
 
-        $this->assertTrue(
-            $reader->getCollection('targets')->isEmpty(),
+        $this->assertNull(
+            $reader->findCollection('targets'),
             'The collection does not exist yet, so the read must miss',
         );
 
-        $writer->createCollection(new Collection(id: 'targets', attributes: [
+        $writer->createCollection(Collection::create(id: 'targets', attributes: [
             Attribute::string(key: 'name', size: 64),
         ], permissions: [
             Permission::read(Role::any()),
@@ -116,8 +116,8 @@ final class MetadataTenantInvalidationTest extends TestCase
             Permission::update(Role::any()),
         ]));
 
-        $this->assertFalse(
-            $reader->getCollection('targets')->isEmpty(),
+        $this->assertNotNull(
+            $reader->findCollection('targets'),
             'A miss cached before provisioning must not outlive the collection being created',
         );
 

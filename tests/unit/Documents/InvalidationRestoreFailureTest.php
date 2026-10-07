@@ -33,7 +33,7 @@ final class InvalidationRestoreFailureTest extends TestCase
         $database->setQueryCache($queryCache);
         $database->addHook($this->failingInvalidator($queryCache));
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [Attribute::string(key: 'entry', size: 32)],
             permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())],

@@ -21,6 +21,8 @@ use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
+use Utopia\Database\RelationshipSide;
+use Utopia\Database\RelationshipType;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Queries\Document as DocumentValidator;
@@ -313,7 +315,12 @@ final class AggregateSelectTest extends TestCase
         $validator = new Select([
             new Document(['$id' => 'name', 'key' => 'name', 'type' => ColumnType::String->value]),
             new Document(['$id' => 'status', 'key' => 'status', 'type' => ColumnType::String->value]),
-            new Document(['$id' => 'account', 'key' => 'account', 'type' => ColumnType::Relationship->value]),
+            new Document([
+                '$id' => 'account',
+                'key' => 'account',
+                'type' => ColumnType::Relationship->value,
+                'options' => ['relatedCollection' => 'accounts', 'relationType' => RelationshipType::ManyToOne->value, 'side' => RelationshipSide::Parent->value],
+            ]),
         ]);
 
         $validator->setAggregations([Query::count('*', 'rows')]);
@@ -395,8 +402,8 @@ final class AggregateSelectTest extends TestCase
             Attribute::string(key: 'name', size: 64),
             Attribute::integer(key: 'score'),
         ]);
-        $database->createRelationship(Relationship::oneToOne(collection: 'customers', relatedCollection: 'accounts', key: 'account', twoWayKey: 'customer'));
-        $database->createRelationship(Relationship::manyToOne(collection: 'accounts', relatedCollection: 'regions', key: 'region', twoWayKey: 'accounts'));
+        $database->createRelationship('customers', Relationship::oneToOne(relatedCollection: 'accounts', key: 'account', twoWayKey: 'customer'));
+        $database->createRelationship('accounts', Relationship::manyToOne(relatedCollection: 'regions', key: 'region', twoWayKey: 'accounts'));
 
         if ($sharedTables) {
             $database->setTenant(self::TENANT);
@@ -420,7 +427,7 @@ final class AggregateSelectTest extends TestCase
      */
     private function createCollection(Database $database, string $id, array $attributes): void
     {
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: $id,
             attributes: $attributes,
             permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())],

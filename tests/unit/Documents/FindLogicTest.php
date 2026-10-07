@@ -122,7 +122,7 @@ class FindLogicTest extends TestCase
         $this->adapter->method('getDocument')->willReturnCallback(
             function (Document $col, string $docId) use ($map) {
                 if ($col->getId() === Database::METADATA && $docId === Database::METADATA) {
-                    return new Document(Database::collectionDefinition());
+                    return Database::collectionDefinition();
                 }
                 if ($col->getId() === Database::METADATA && isset($map[$docId])) {
                     return $map[$docId];

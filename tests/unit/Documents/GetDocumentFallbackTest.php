@@ -74,7 +74,7 @@ final class GetDocumentFallbackTest extends TestCase
     public function testACachedDocumentPastItsTimeToLiveReadsAsEmpty(): void
     {
         $database = $this->database($this->ttlMemory(), new Cache(new MemoryCache()));
-        $database->createIndex(self::COLLECTION, Index::ttl(key: 'expiry', attributes: ['startedAt'], ttl: 1));
+        $database->createIndex(self::COLLECTION, Index::ttl(key: 'expiry', attribute: 'startedAt', ttl: 1));
         $database->createDocument(self::COLLECTION, new Document([Document::ID => 'session', 'owner' => 'ada', 'startedAt' => DateTime::now()]));
 
         $this->assertSame('ada', $database->getDocument(self::COLLECTION, 'session')->getAttribute('owner'));
@@ -157,7 +157,7 @@ final class GetDocumentFallbackTest extends TestCase
         $database = new Database($adapter, $cache);
         $database->setDatabase('fallback')->setNamespace('fallback_'.\uniqid());
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [Attribute::string(key: 'owner', size: 32), Attribute::datetime(key: 'startedAt')],
             permissions: [Permission::create(Role::any()), Permission::read(Role::any())],

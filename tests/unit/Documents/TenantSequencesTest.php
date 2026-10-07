@@ -101,7 +101,7 @@ final class TenantSequencesTest extends TestCase
             ->setTenant(null)
             ->setTenantPerDocument(true);
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [Attribute::string(key: 'title', size: 64, required: false)],
             permissions: [

@@ -19,6 +19,7 @@ use Utopia\Database\Adapter\Memory as DatabaseMemory;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
+use Utopia\Database\CollectionUpdate;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
@@ -152,14 +153,14 @@ final class DocumentCacheInvalidationTest extends TestCase
     {
         $adapter = new CountingMemory();
         $database = $this->createDatabase($adapter, new RedisLeasableCache());
-        $database->createCollection(new Collection(id: 'logs', permissions: [Permission::read(Role::any())]));
+        $database->createCollection(Collection::create(id: 'logs', permissions: [Permission::read(Role::any())]));
         $database->getCollection('webhooks');
         $database->getCollection('logs');
 
-        $database->updateCollection('logs', [Permission::read(Role::any()), Permission::create(Role::any())], true);
+        $database->updateCollection('logs', new CollectionUpdate(permissions: [Permission::read(Role::any()), Permission::create(Role::any())], documentSecurity: true));
         $adapter->reset();
 
-        $this->assertFalse($database->getCollection('webhooks')->isEmpty());
+        $this->assertNotNull($database->findCollection('webhooks'));
         $this->assertSame(0, $adapter->metadataReads, 'A write to one collection definition must leave the other definitions cached');
         $this->assertTrue($database->getCollection('logs')->getAttribute('documentSecurity'), 'The written definition must be read again');
     }
@@ -397,7 +398,7 @@ final class DocumentCacheInvalidationTest extends TestCase
     {
         $database = $this->configure(new Database($adapter, new Cache($cache)), $namespace ?? 'document_cache_'.\uniqid());
         $database->create();
-        $database->createCollection(new Collection(id: 'webhooks', attributes: [
+        $database->createCollection(Collection::create(id: 'webhooks', attributes: [
             Attribute::string(key: 'name'),
             Attribute::string(key: 'description'),
             Attribute::integer(key: 'count', default: 10),

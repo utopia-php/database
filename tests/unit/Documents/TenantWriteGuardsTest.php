@@ -116,7 +116,7 @@ final class TenantWriteGuardsTest extends TestCase
             ->setSharedTables($shared)
             ->setTenant(null);
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [Attribute::string(key: 'body', size: 32)],
             permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())],

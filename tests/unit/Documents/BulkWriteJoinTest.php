@@ -166,13 +166,13 @@ class BulkWriteJoinTest extends TestCase
             Permission::delete(Role::any()),
         ];
 
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: 'customers',
             attributes: [Attribute::string(key: 'name')],
             permissions: $permissions,
             documentSecurity: false,
         ));
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: 'orders',
             attributes: [
                 Attribute::string(key: 'customerId'),

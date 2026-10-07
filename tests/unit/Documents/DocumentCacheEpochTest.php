@@ -114,7 +114,7 @@ final class DocumentCacheEpochTest extends TestCase
         $cache = new FailDocumentEpochMemory();
         $adapter = new CountingMemory();
         $database = $this->createDatabaseWithCache($cache, adapter: $adapter);
-        $database->createCollection(new Collection(id: 'logs', attributes: [
+        $database->createCollection(Collection::create(id: 'logs', attributes: [
             Attribute::string(key: 'name'),
         ], permissions: [
             Permission::read(Role::any()),
@@ -202,8 +202,8 @@ final class DocumentCacheEpochTest extends TestCase
         $this->assertTrue($database->purgeCachedCollection('webhooks'));
         $cache->flushAfterReading('collection:webhooks#finished');
 
-        $this->assertTrue($database->deleteCollection('webhooks'));
-        $this->assertTrue($database->getCollection('webhooks')->isEmpty());
+        $database->deleteCollection('webhooks');
+        $this->assertNull($database->findCollection('webhooks'));
     }
 
     public function testActivationPurgeFailureStillPropagates(): void
@@ -348,7 +348,7 @@ final class DocumentCacheEpochTest extends TestCase
             ->setDatabase('utopiaTests')
             ->setNamespace($namespace ?? 'epoch_'.\uniqid());
         $database->create();
-        $database->createCollection(new Collection(id: 'webhooks', attributes: [
+        $database->createCollection(Collection::create(id: 'webhooks', attributes: [
             Attribute::string(key: 'name'),
         ], permissions: [
             Permission::read(Role::any()),
@@ -390,7 +390,7 @@ final class DocumentCacheEpochTest extends TestCase
         }
 
         $writer->create();
-        $writer->createCollection(new Collection(id: 'users', attributes: [
+        $writer->createCollection(Collection::create(id: 'users', attributes: [
             Attribute::string(key: 'name', required: true),
         ], permissions: [
             Permission::read(Role::any()),
@@ -632,7 +632,7 @@ final class DocumentCacheEpochTest extends TestCase
             ->setDatabase('utopiaTests')
             ->setNamespace('epoch_'.\uniqid());
         $database->create();
-        $database->createCollection(new Collection(id: 'webhooks', attributes: [
+        $database->createCollection(Collection::create(id: 'webhooks', attributes: [
             Attribute::string(key: 'name'),
         ], permissions: [
             Permission::read(Role::any()),
@@ -677,7 +677,7 @@ final class DocumentCacheEpochTest extends TestCase
         }
 
         $writer->create();
-        $writer->createCollection(new Collection(id: 'users', attributes: [
+        $writer->createCollection(Collection::create(id: 'users', attributes: [
             Attribute::string(key: 'name', required: true),
         ], permissions: [
             Permission::read(Role::any()),

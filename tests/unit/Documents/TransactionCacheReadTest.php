@@ -14,6 +14,7 @@ use Utopia\Database\Adapter as DatabaseAdapter;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
+use Utopia\Database\CollectionUpdate;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
@@ -153,7 +154,7 @@ final class TransactionCacheReadTest extends TestCase
         [$writer, $reader] = $this->createSharedMemoryDatabases();
 
         $read = $writer->withTransaction(function () use ($writer, $reader): Document {
-            $writer->updateCollection('webhooks', [Permission::read(Role::any()), Permission::update(Role::any())], false);
+            $writer->updateCollection('webhooks', new CollectionUpdate(permissions: [Permission::read(Role::any()), Permission::update(Role::any())], documentSecurity: false));
             $this->assertTrue($reader->getCollection('webhooks')->getAttribute('documentSecurity'));
 
             return $writer->getCollection('webhooks');
@@ -177,7 +178,7 @@ final class TransactionCacheReadTest extends TestCase
             $this->assertSame('hook', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
             $this->assertSame('hook', $database->getDocument('webhooks', 'cold')->getAttribute('name'));
             $this->assertTrue($database->getDocument('webhooks', 'absent')->isEmpty());
-            $this->assertTrue($database->getCollection('absent')->isEmpty());
+            $this->assertNull($database->findCollection('absent'));
         });
 
         $this->assertSame($before, $fills, 'A read inside a transaction must not save to the cache');
@@ -188,22 +189,21 @@ final class TransactionCacheReadTest extends TestCase
         $adapter = new CountingMemory();
         $database = $this->createDatabase($adapter, new RedisLeasableCache());
         $database->addHook(new Relationships($database));
-        $database->createCollection(new Collection(id: 'libraries', attributes: [
+        $database->createCollection(Collection::create(id: 'libraries', attributes: [
             Attribute::string(key: 'name'),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
         ]));
-        $database->createCollection(new Collection(id: 'books', attributes: [
+        $database->createCollection(Collection::create(id: 'books', attributes: [
             Attribute::string(key: 'title'),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
         ]));
-        $database->createRelationship(Relationship::oneToMany(
-            collection: 'libraries',
+        $database->createRelationship('libraries', Relationship::oneToMany(
             relatedCollection: 'books',
             twoWay: true,
             key: 'books',
@@ -226,10 +226,10 @@ final class TransactionCacheReadTest extends TestCase
         $database = $this->createDatabase($adapter, new RedisLeasableCache());
 
         $adapter->reset();
-        $this->assertTrue($database->getCollection('missing')->isEmpty());
+        $this->assertNull($database->findCollection('missing'));
         $this->assertSame(1, $adapter->metadataReads, 'A missing collection must cost one read of its definition (7.3.12: 1 read)');
 
-        $this->assertTrue($database->getCollection('missing')->isEmpty());
+        $this->assertNull($database->findCollection('missing'));
         $this->assertSame(1, $adapter->metadataReads, 'A missing collection must be served from the cache once read');
     }
 
@@ -239,7 +239,7 @@ final class TransactionCacheReadTest extends TestCase
         $database = $this->createDatabase($adapter, new RedisLeasableCache());
 
         $adapter->reset();
-        $database->createCollection(new Collection(id: 'logs', attributes: [
+        $database->createCollection(Collection::create(id: 'logs', attributes: [
             Attribute::string(key: 'message'),
         ], permissions: [Permission::read(Role::any())]));
 
@@ -250,11 +250,11 @@ final class TransactionCacheReadTest extends TestCase
     {
         $adapter = new CountingMemory();
         $database = $this->createDatabase($adapter, new RedisLeasableCache());
-        $this->assertTrue($database->getCollection('logs')->isEmpty());
-        $database->createCollection(new Collection(id: 'audits', permissions: [Permission::read(Role::any())]));
+        $this->assertNull($database->findCollection('logs'));
+        $database->createCollection(Collection::create(id: 'audits', permissions: [Permission::read(Role::any())]));
 
         $adapter->reset();
-        $database->createCollection(new Collection(id: 'logs', permissions: [Permission::read(Role::any())]));
+        $database->createCollection(Collection::create(id: 'logs', permissions: [Permission::read(Role::any())]));
 
         $this->assertSame(0, $adapter->metadataReads, 'A cached miss for the new id must survive other definitions being written (7.3.12: 0 reads)');
     }
@@ -412,7 +412,7 @@ final class TransactionCacheReadTest extends TestCase
         }
 
         $writer->create();
-        $writer->createCollection(new Collection(id: 'users', attributes: [
+        $writer->createCollection(Collection::create(id: 'users', attributes: [
             Attribute::string(key: 'name', required: true),
         ], permissions: [
             Permission::read(Role::any()),
@@ -440,7 +440,7 @@ final class TransactionCacheReadTest extends TestCase
     {
         $database = $this->configure(new Database($adapter, new Cache($cache)), $namespace ?? 'transaction_cache_'.\uniqid());
         $database->create();
-        $database->createCollection(new Collection(id: 'webhooks', attributes: [
+        $database->createCollection(Collection::create(id: 'webhooks', attributes: [
             Attribute::string(key: 'name'),
             Attribute::integer(key: 'count', default: 10),
         ], permissions: [

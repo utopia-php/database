@@ -73,7 +73,7 @@ final class UpdateDocumentsCastingTest extends TestCase
         $database->getAuthorization()->disable();
         $database->setNamespace('casting');
         $this->assertTrue($database->create());
-        $database->createCollection(new Collection(id: 'counters', attributes: [
+        $database->createCollection(Collection::create(id: 'counters', attributes: [
             Attribute::integer(key: 'value'),
         ]));
         $database->createDocuments('counters', [

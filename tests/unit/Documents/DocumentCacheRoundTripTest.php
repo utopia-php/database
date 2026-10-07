@@ -12,6 +12,7 @@ use Tests\Unit\Support\UncachedTwin;
 use Utopia\Cache\Cache;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
+use Utopia\Database\CollectionUpdate;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
@@ -32,7 +33,7 @@ final class DocumentCacheRoundTripTest extends TestCase
 
         $adapter->reset();
         $cache->resetOperations();
-        $this->assertFalse($database->getCollection('webhooks')->isEmpty());
+        $this->assertNotNull($database->findCollection('webhooks'));
 
         $this->assertLessThanOrEqual(1, $cache->getOperations(), '7.3.12: 1');
         $this->assertSame(0, $adapter->metadataReads);
@@ -226,7 +227,7 @@ final class DocumentCacheRoundTripTest extends TestCase
             ->setGlobalCollections(['webhooks']);
         $database->getAuthorization()->addRole(Role::any()->toString());
         $database->create();
-        $database->createCollection(new Collection(id: 'webhooks', attributes: [
+        $database->createCollection(Collection::create(id: 'webhooks', attributes: [
             Attribute::string(key: 'name'),
             Attribute::integer(key: 'count', default: 10),
         ], permissions: [
@@ -256,13 +257,13 @@ final class DocumentCacheRoundTripTest extends TestCase
     public function testPurgingTheMetadataCollectionRetiresEveryCachedDefinition(): void
     {
         [$database] = $this->createDatabase();
-        $database->createCollection(new Collection(id: 'logs', permissions: [Permission::read(Role::any())]));
+        $database->createCollection(Collection::create(id: 'logs', permissions: [Permission::read(Role::any())]));
         $this->assertTrue($database->getCollection('webhooks')->getAttribute('documentSecurity'));
         $this->assertTrue($database->getCollection('logs')->getAttribute('documentSecurity'));
 
         $uncached = UncachedTwin::of($database);
-        $uncached->updateCollection('webhooks', [Permission::read(Role::any())], false);
-        $uncached->updateCollection('logs', [Permission::read(Role::any())], false);
+        $uncached->updateCollection('webhooks', new CollectionUpdate(permissions: [Permission::read(Role::any())], documentSecurity: false));
+        $uncached->updateCollection('logs', new CollectionUpdate(permissions: [Permission::read(Role::any())], documentSecurity: false));
         $this->assertTrue($database->getCollection('webhooks')->getAttribute('documentSecurity'), 'A definition written without this cache leaves the cached definition in place');
 
         $database->purgeCachedCollection(Database::METADATA);
@@ -274,15 +275,15 @@ final class DocumentCacheRoundTripTest extends TestCase
     public function testPurgingTheMetadataCollectionRetiresACachedMissingCollection(): void
     {
         [$database] = $this->createDatabase();
-        $this->assertTrue($database->getCollection('logs')->isEmpty());
+        $this->assertNull($database->findCollection('logs'));
 
         $uncached = UncachedTwin::of($database);
-        $uncached->createCollection(new Collection(id: 'logs', permissions: [Permission::read(Role::any())]));
-        $this->assertTrue($database->getCollection('logs')->isEmpty(), 'A definition written without this cache leaves the cached miss in place');
+        $uncached->createCollection(Collection::create(id: 'logs', permissions: [Permission::read(Role::any())]));
+        $this->assertNull($database->findCollection('logs'), 'A definition written without this cache leaves the cached miss in place');
 
         $database->purgeCachedCollection(Database::METADATA);
 
-        $this->assertFalse($database->getCollection('logs')->isEmpty(), 'purgeCachedCollection(\'_metadata\') must retire a cached missing collection');
+        $this->assertNotNull($database->findCollection('logs'), 'purgeCachedCollection(\'_metadata\') must retire a cached missing collection');
     }
 
     /**
@@ -294,7 +295,7 @@ final class DocumentCacheRoundTripTest extends TestCase
         $cache = new CountingCache(new RedisLeasableCache());
         $database = $this->configure(new Database($adapter, new Cache($cache)), 'round_trips_'.\uniqid());
         $database->create();
-        $database->createCollection(new Collection(id: 'webhooks', attributes: [
+        $database->createCollection(Collection::create(id: 'webhooks', attributes: [
             Attribute::string(key: 'name'),
             Attribute::integer(key: 'count', default: 10),
         ], permissions: [

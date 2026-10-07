@@ -275,7 +275,7 @@ final class BulkWriteGuardsTest extends TestCase
             ->setDatabase('bulk')
             ->setNamespace('bulk_'.\uniqid());
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [Attribute::integer(key: 'rank'), Attribute::string(key: 'label', size: 16)],
             permissions: $permissions ?? [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())],

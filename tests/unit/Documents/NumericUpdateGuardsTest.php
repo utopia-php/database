@@ -225,7 +225,7 @@ final class NumericUpdateGuardsTest extends TestCase
         }
         $database->setDatabase('numeric')->setNamespace('numeric_'.\uniqid());
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: $attributes ?? [
                 Attribute::integer(key: 'count'),

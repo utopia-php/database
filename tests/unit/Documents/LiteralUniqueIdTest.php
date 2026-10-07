@@ -20,7 +20,6 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Relationship;
-use Utopia\Database\RelationType;
 
 final class LiteralUniqueIdTest extends TestCase
 {
@@ -112,10 +111,8 @@ final class LiteralUniqueIdTest extends TestCase
     public function testANestedRelatedDocumentStoresTheLiteralId(Adapter $adapter): void
     {
         $database = $this->database($adapter, self::ALBUMS, self::ARTISTS);
-        $database->createRelationship(new Relationship(
-            collection: self::ALBUMS,
+        $database->createRelationship(self::ALBUMS, Relationship::manyToOne(
             relatedCollection: self::ARTISTS,
-            type: RelationType::ManyToOne,
             key: self::ARTIST,
         ));
 
@@ -186,7 +183,7 @@ final class LiteralUniqueIdTest extends TestCase
         $database->create();
 
         foreach ($collections as $collection) {
-            $database->createCollection(new Collection(
+            $database->createCollection(Collection::create(
                 id: $collection,
                 attributes: [Attribute::string('name', size: 64)],
                 permissions: [

@@ -142,7 +142,8 @@ class SQLite extends SQL
     }
 
     /**
-     * SQLite has no server-side connection id; the handle's object id names the connection within the process.
+     * SQLite has no server-side connection id, so the handle's object id names the connection: unique only within
+     * the process and only while the handle lives.
      */
     public function id(): string
     {

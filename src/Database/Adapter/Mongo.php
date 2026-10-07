@@ -150,7 +150,8 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
-     * The wire protocol has no connection id, so the client's object id names the connection within the process.
+     * The wire protocol has no connection id, so the client's object id names the connection: unique only within
+     * the process and only while the client lives.
      */
     public function id(): string
     {

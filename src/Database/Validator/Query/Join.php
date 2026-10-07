@@ -82,7 +82,7 @@ class Join extends Base
     private array $declared = [];
 
     /**
-     * @param  array<Document>|null  $attributes  The main collection's attributes, or null when they are not known
+     * @param  array<Attribute|Document>|null  $attributes  The main collection's attributes, or null when they are not known
      */
     public function __construct(?array $attributes = null, private readonly bool $supportForAttributes = true)
     {
@@ -90,9 +90,9 @@ class Join extends Base
 
         $relationships = [];
         foreach ($attributes ?? [] as $attribute) {
-            $key = $attribute->getAttribute('key', $attribute->getId());
-            if (\is_string($key) && $key !== '' && Attribute::isRelationship($attribute)) {
-                $relationships[$key] = true;
+            $attribute = $attribute instanceof Attribute ? $attribute : Attribute::fromDocument($attribute);
+            if ($attribute->key !== '' && $attribute->relationship !== null) {
+                $relationships[$attribute->key] = true;
             }
         }
         $this->relationships = $relationships;

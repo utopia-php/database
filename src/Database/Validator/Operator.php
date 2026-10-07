@@ -3,12 +3,13 @@
 namespace Utopia\Database\Validator;
 
 use Throwable;
-use Utopia\Database\Attribute as AttributeVO;
+use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
 use Utopia\Database\Document;
 use Utopia\Database\Operator as DatabaseOperator;
 use Utopia\Database\OperatorType;
-use Utopia\Database\RelationSide;
-use Utopia\Database\RelationType;
+use Utopia\Database\RelationshipSide;
+use Utopia\Database\RelationshipType;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Validator;
 
@@ -20,7 +21,7 @@ class Operator extends Validator
     protected Document $collection;
 
     /**
-     * @var array<string, AttributeVO>
+     * @var array<string, Attribute>
      */
     protected array $attributes = [];
 
@@ -41,11 +42,8 @@ class Operator extends Validator
         $this->collection = $collection;
         $this->currentDocument = $currentDocument;
 
-        /** @var array<AttributeVO|Document> $collectionAttributes */
-        $collectionAttributes = $collection->getAttribute('attributes', []);
-        foreach ($collectionAttributes as $attribute) {
-            $typed = $attribute instanceof AttributeVO ? $attribute : AttributeVO::fromDocument($attribute);
-            $this->attributes[$typed->getKey()] = $typed;
+        foreach (Collection::fromDocument($collection)->attributes() as $attribute) {
+            $this->attributes[$attribute->key] = $attribute;
         }
     }
 
@@ -60,61 +58,29 @@ class Operator extends Validator
     /**
      * Check if a relationship attribute represents a "many" side (returns array of documents)
      */
-    private function isRelationshipArray(AttributeVO $attribute): bool
+    private function isRelationshipArray(Attribute $attribute): bool
     {
-        $options = $attribute->getOptions() ?? [];
-
-        /** @var array<string, mixed> $options */
-
-        $relationTypeRaw = $options['relationType'] ?? '';
-        $sideRaw = $options['side'] ?? '';
-
-        $relationType = $relationTypeRaw instanceof RelationType
-            ? $relationTypeRaw
-            : (\is_string($relationTypeRaw) && $relationTypeRaw !== '' ? RelationType::from($relationTypeRaw) : null);
-        $side = $sideRaw instanceof RelationSide
-            ? $sideRaw
-            : (\is_string($sideRaw) && $sideRaw !== '' ? RelationSide::from($sideRaw) : null);
-
-        // Many-to-many is always an array on both sides
-        if ($relationType === RelationType::ManyToMany) {
-            return true;
-        }
-
-        // One-to-many: array on parent side, single on child side
-        if ($relationType === RelationType::OneToMany && $side === RelationSide::Parent) {
-            return true;
-        }
-
-        // Many-to-one: array on child side, single on parent side
-        if ($relationType === RelationType::ManyToOne && $side === RelationSide::Child) {
-            return true;
-        }
-
-        return false;
+        return match ($attribute->relationship?->type) {
+            RelationshipType::ManyToMany => true,
+            RelationshipType::OneToMany => $attribute->side === RelationshipSide::Parent,
+            RelationshipType::ManyToOne => $attribute->side === RelationshipSide::Child,
+            default => false,
+        };
     }
 
-    /**
-     * @return array{min: int|float|string, max: int|float|string}|null
-     */
-    private function getNumericBounds(AttributeVO $attribute): ?array
+    private function isNumericValueInBounds(mixed $value, Attribute $attribute): bool
     {
-        return AttributeVO::getNumericBounds($attribute->getType(), $attribute->isSigned());
-    }
-
-    private function isNumericValueInBounds(mixed $value, AttributeVO $attribute): bool
-    {
-        $bounds = $this->getNumericBounds($attribute);
+        $bounds = $attribute->bounds();
         if ($bounds === null) {
             return false;
         }
 
-        if (AttributeVO::isIntegerType($attribute->getType())) {
+        if ($attribute->isInteger()) {
             $integer = $this->getIntegerValue($value);
 
             return $integer !== null
-                && BigInt::compare($integer, $bounds['min']) >= 0
-                && BigInt::compare($integer, $bounds['max']) <= 0;
+                && BigInt::compare($integer, $bounds->min) >= 0
+                && BigInt::compare($integer, $bounds->max) <= 0;
         }
 
         $numeric = $this->getNumericValue($value);
@@ -126,15 +92,15 @@ class Operator extends Validator
             return false;
         }
 
-        return $numeric >= $bounds['min'] && $numeric <= $bounds['max'];
+        return $numeric >= $bounds->min && $numeric <= $bounds->max;
     }
 
-    private function isValidLimit(mixed $limit, AttributeVO $attribute, DatabaseOperator $operator): bool
+    private function isValidLimit(mixed $limit, Attribute $attribute, DatabaseOperator $operator): bool
     {
         $methodName = $operator->getMethod()->value;
         $finite = \is_int($limit) || (\is_float($limit) && \is_finite($limit)) || (\is_string($limit) && \is_numeric($limit));
 
-        if (! AttributeVO::isIntegerType($attribute->getType()) || ! $finite) {
+        if (! $attribute->isInteger() || ! $finite) {
             if ($this->isNumericValueInBounds($limit, $attribute)) {
                 return true;
             }
@@ -152,15 +118,15 @@ class Operator extends Validator
             return false;
         }
 
-        $bounds = $this->getNumericBounds($attribute);
+        $bounds = $attribute->bounds();
         if ($bounds === null) {
             $this->message = "Cannot apply {$methodName} operator: max/min limit must be numeric, got ".\gettype($limit);
 
             return false;
         }
 
-        if (BigInt::compare($integral, $bounds['min']) < 0 || BigInt::compare($integral, $bounds['max']) > 0) {
-            $this->message = "Cannot apply {$methodName} operator: max/min limit must be between {$bounds['min']} and {$bounds['max']}";
+        if (BigInt::compare($integral, $bounds->min) < 0 || BigInt::compare($integral, $bounds->max) > 0) {
+            $this->message = "Cannot apply {$methodName} operator: max/min limit must be between {$bounds->min} and {$bounds->max}";
 
             return false;
         }
@@ -196,27 +162,27 @@ class Operator extends Validator
         return BigInt::fitsPhpInt($value) ? (int) $value : (float) $value;
     }
 
-    private function setNumericRangeMessage(OperatorType $method, AttributeVO $attribute, int|float|string $result): bool
+    private function setNumericRangeMessage(OperatorType $method, Attribute $attribute, int|float|string $result): bool
     {
-        $bounds = $this->getNumericBounds($attribute);
+        $bounds = $attribute->bounds();
         if ($bounds === null) {
             return false;
         }
 
-        $aboveMaximum = AttributeVO::isIntegerType($attribute->getType())
-            ? BigInt::compare($result, $bounds['max']) > 0
-            : $result > $bounds['max'];
+        $aboveMaximum = $attribute->isInteger()
+            ? BigInt::compare($result, $bounds->max) > 0
+            : $result > $bounds->max;
         if ($aboveMaximum) {
-            $this->message = "Cannot apply {$method->value} operator: would overflow maximum value of {$bounds['max']}";
+            $this->message = "Cannot apply {$method->value} operator: would overflow maximum value of {$bounds->max}";
 
             return false;
         }
 
-        $belowMinimum = AttributeVO::isIntegerType($attribute->getType())
-            ? BigInt::compare($result, $bounds['min']) < 0
-            : $result < $bounds['min'];
+        $belowMinimum = $attribute->isInteger()
+            ? BigInt::compare($result, $bounds->min) < 0
+            : $result < $bounds->min;
         if ($belowMinimum) {
-            $this->message = "Cannot apply {$method->value} operator: would underflow minimum value of {$bounds['min']}";
+            $this->message = "Cannot apply {$method->value} operator: would underflow minimum value of {$bounds->min}";
 
             return false;
         }
@@ -273,14 +239,14 @@ class Operator extends Validator
      */
     private function validateOperatorForAttribute(
         DatabaseOperator $operator,
-        AttributeVO $attribute
+        Attribute $attribute
     ): bool {
         $method = $operator->getMethod();
         $methodName = $method->value;
         $values = $operator->getValues();
 
-        $type = $attribute->getType();
-        $isArray = $attribute->isArray();
+        $type = $attribute->type;
+        $isArray = $attribute->array;
 
         // Array operators that carry a caller-supplied value list are capped to guard against
         // memory exhaustion. Enforced here so every adapter rejects an oversized list the same way.
@@ -310,13 +276,13 @@ class Operator extends Validator
             case OperatorType::Modulo:
             case OperatorType::Power:
                 // Numeric operations only work on numeric types
-                if (! AttributeVO::isNumericType($type)) {
+                if (! $attribute->isNumeric()) {
                     $this->message = "Cannot apply {$methodName} operator to non-numeric field '{$operator->getAttribute()}'";
 
                     return false;
                 }
 
-                if (! $attribute->isSigned()
+                if (! $attribute->signed
                     && $type === ColumnType::BigInteger
                     && ! $this->supportUnsignedBigInt) {
                     $this->message = "Cannot apply {$methodName} operator: unsigned 64-bit arithmetic is not supported by this adapter";
@@ -332,7 +298,7 @@ class Operator extends Validator
                 }
 
                 // Special validation for divide/modulo by zero
-                $integerType = AttributeVO::isIntegerType($type);
+                $integerType = $attribute->isInteger();
                 $operatorValue = $integerType
                     ? $this->getIntegerValue($values[0])
                     : $this->getNumericValue($values[0]);
@@ -395,15 +361,15 @@ class Operator extends Validator
                     return false;
                 }
 
-                if (! empty($values) && AttributeVO::isIntegerType($type)) {
+                if (! empty($values) && $attribute->isInteger()) {
                     $newItems = \is_array($values[0]) ? $values[0] : $values;
                     foreach ($newItems as $item) {
                         if (\is_numeric($item) && ! $this->isNumericValueInBounds($item, $attribute)) {
-                            $bounds = $this->getNumericBounds($attribute);
+                            $bounds = $attribute->bounds();
                             if ($bounds === null) {
                                 return false;
                             }
-                            $this->message = "Cannot apply {$methodName} operator: array items must be between {$bounds['min']} and {$bounds['max']}";
+                            $this->message = "Cannot apply {$methodName} operator: array items must be between {$bounds->min} and {$bounds->max}";
 
                             return false;
                         }
@@ -461,13 +427,13 @@ class Operator extends Validator
                     }
                 }
 
-                if (AttributeVO::isIntegerType($type) && \is_numeric($insertValue)) {
+                if ($attribute->isInteger() && \is_numeric($insertValue)) {
                     if (! $this->isNumericValueInBounds($insertValue, $attribute)) {
-                        $bounds = $this->getNumericBounds($attribute);
+                        $bounds = $attribute->bounds();
                         if ($bounds === null) {
                             return false;
                         }
-                        $this->message = "Cannot apply {$methodName} operator: array items must be between {$bounds['min']} and {$bounds['max']}";
+                        $this->message = "Cannot apply {$methodName} operator: array items must be between {$bounds->min} and {$bounds->max}";
 
                         return false;
                     }
@@ -618,7 +584,7 @@ class Operator extends Validator
                     $concatValue = $values[0];
                     $predictedLength = strlen($currentString) + strlen((string) $concatValue);
 
-                    $maxSize = $attribute->getSize();
+                    $maxSize = $attribute->size ?? 0;
 
                     if ($maxSize > 0 && $predictedLength > $maxSize) {
                         $this->message = "Cannot apply {$methodName} operator: result would exceed maximum length of {$maxSize} characters";

@@ -4,6 +4,7 @@ namespace Utopia\Database\Validator\Queries;
 
 use DateTime;
 use Exception;
+use Utopia\Database\Attribute;
 use Utopia\Database\Document as BaseDocument;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Queries;
@@ -19,14 +20,14 @@ use Utopia\Query\Schema\ColumnType;
 class Document extends Queries
 {
     /**
-     * @var array<BaseDocument>
+     * @var array<Attribute>
      */
     private readonly array $attributes;
 
     private ?Queries $conditions = null;
 
     /**
-     * @param  array<BaseDocument>  $attributes
+     * @param  array<Attribute|BaseDocument>  $attributes
      * @param  bool  $sharedTables  Whether the tables hold `$tenant`, as they do under shared tables
      * @param  bool  $supportForJoins  Whether join queries are accepted
      *
@@ -43,30 +44,13 @@ class Document extends Queries
         bool $sharedTables = false,
         bool $supportForJoins = true,
     ) {
-        $attributes[] = new BaseDocument([
-            BaseDocument::ID => BaseDocument::ID,
-            'key' => BaseDocument::ID,
-            'type' => ColumnType::String->value,
-            'array' => false,
-        ]);
-        $attributes[] = new BaseDocument([
-            BaseDocument::ID => BaseDocument::SEQUENCE,
-            'key' => BaseDocument::SEQUENCE,
-            'type' => ColumnType::Id->value,
-            'array' => false,
-        ]);
-        $attributes[] = new BaseDocument([
-            BaseDocument::ID => BaseDocument::CREATED_AT,
-            'key' => BaseDocument::CREATED_AT,
-            'type' => ColumnType::Datetime->value,
-            'array' => false,
-        ]);
-        $attributes[] = new BaseDocument([
-            BaseDocument::ID => BaseDocument::UPDATED_AT,
-            'key' => BaseDocument::UPDATED_AT,
-            'type' => ColumnType::Datetime->value,
-            'array' => false,
-        ]);
+        $attributes = [
+            ...\array_map(
+                static fn (Attribute|BaseDocument $attribute): Attribute => $attribute instanceof Attribute ? $attribute : Attribute::fromDocument($attribute),
+                $attributes,
+            ),
+            ...Documents::internalAttributes(),
+        ];
 
         $this->attributes = $attributes;
 

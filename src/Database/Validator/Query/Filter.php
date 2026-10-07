@@ -32,7 +32,7 @@ class Filter extends Base
     protected array $schema = [];
 
     /**
-     * @param  array<Document>  $attributes
+     * @param  array<Attribute|Document>  $attributes
      */
     public function __construct(
         array $attributes,
@@ -44,16 +44,8 @@ class Filter extends Base
         private readonly bool $supportUnsignedBigInt = true
     ) {
         foreach ($attributes as $attribute) {
-            /** @var string $attrKey */
-            $attrKey = $attribute->getAttribute('key', $attribute->getId());
-            $copy = $attribute->getArrayCopy();
-            // Convert known type strings to ColumnType enum for typed comparisons.
-            // Unknown strings are preserved as-is so the downstream switch can
-            // emit a recoverable "Unknown Data type" error instead of throwing.
-            if (isset($copy['type']) && \is_string($copy['type'])) {
-                $copy['type'] = Attribute::tryNormalizeType($copy['type']) ?? $copy['type'];
-            }
-            $this->schema[$attrKey] = $copy;
+            $attribute = $attribute instanceof Attribute ? $attribute : Attribute::fromDocument($attribute);
+            $this->schema[$attribute->key] = ['type' => $attribute->type] + $attribute->toDocument()->getArrayCopy();
         }
     }
 

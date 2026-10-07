@@ -98,30 +98,30 @@ class Aggregate extends Base
     protected array $groups = [];
 
     /**
-     * @param  array<Document>  $attributes
+     * @param  array<Attribute|Document>  $attributes
      * @param  bool  $sharedTables  Whether the tables hold `$tenant`, as they do under shared tables
      */
     public function __construct(array $attributes = [], protected bool $supportForAttributes = true, bool $sharedTables = false)
     {
-        foreach ($attributes as $attribute) {
-            $key = $attribute->getAttribute('key', $attribute->getAttribute(Document::ID));
+        $attributes = \array_map(
+            static fn (Attribute|Document $attribute): Attribute => $attribute instanceof Attribute ? $attribute : Attribute::fromDocument($attribute),
+            $attributes,
+        );
 
-            if (\is_string($key)) {
-                $this->schema[$key] = true;
+        foreach ($attributes as $attribute) {
+            $this->schema[$attribute->key] = true;
+
+            if (! $attribute->array && $attribute->isNumeric()) {
+                $this->numeric[$attribute->key] = $attribute->type;
+            }
+
+            if (! self::isOrdered($attribute->type, $attribute->array)) {
+                $this->unordered[$attribute->key] = true;
             }
         }
 
         $this->schema += self::internalColumns($sharedTables);
-
-        $this->numeric = self::numericTypes($attributes);
         $this->columns = JoinedCollection::columns($attributes);
-
-        foreach ($attributes as $attribute) {
-            $key = $attribute->getAttribute('key', $attribute->getAttribute(Document::ID));
-            if (\is_string($key) && ! self::isOrdered($attribute->getAttribute('type'), (bool) $attribute->getAttribute('array', false))) {
-                $this->unordered[$key] = true;
-            }
-        }
     }
 
     /**
@@ -265,7 +265,7 @@ class Aggregate extends Base
             return false;
         }
 
-        if ($bitwise && ! Attribute::isIntegerType($type)) {
+        if ($bitwise && $type !== ColumnType::Integer && $type !== ColumnType::BigInteger) {
             $this->message = 'Aggregate '.$method->value.' requires an integer attribute that is not an array: '.$attribute;
 
             return false;
@@ -299,7 +299,8 @@ class Aggregate extends Base
                 return true;
             }
 
-            $ordered = self::isOrdered($definition['type'] ?? null, (bool) ($definition['array'] ?? false));
+            $type = $definition['type'] ?? null;
+            $ordered = self::isOrdered($type instanceof ColumnType ? $type : null, (bool) ($definition['array'] ?? false));
         }
 
         if (! $ordered) {
@@ -311,43 +312,9 @@ class Aggregate extends Base
         return true;
     }
 
-    private static function isOrdered(mixed $type, bool $array): bool
+    private static function isOrdered(?ColumnType $type, bool $array): bool
     {
-        if ($array) {
-            return false;
-        }
-
-        $type = $type instanceof ColumnType || \is_string($type) ? Attribute::tryNormalizeType($type) : null;
-
-        return ! \in_array($type, self::UNORDERED_TYPES, true);
-    }
-
-    /**
-     * The type of each attribute that holds a single number.
-     *
-     * @param  array<Document>  $attributes
-     * @return array<string, ColumnType>
-     */
-    public static function numericTypes(array $attributes): array
-    {
-        $types = [];
-
-        foreach ($attributes as $attribute) {
-            $key = $attribute->getAttribute('key', $attribute->getAttribute(Document::ID));
-            $type = $attribute->getAttribute('type');
-
-            if (! \is_string($key) || ! ($type instanceof ColumnType || \is_string($type)) || (bool) $attribute->getAttribute('array', false)) {
-                continue;
-            }
-
-            $type = Attribute::tryNormalizeType($type);
-
-            if ($type !== null && Attribute::isNumericType($type)) {
-                $types[$key] = $type;
-            }
-        }
-
-        return $types;
+        return ! $array && ! \in_array($type, self::UNORDERED_TYPES, true);
     }
 
     protected function acceptsMainAttribute(string $attribute): bool

@@ -2,7 +2,7 @@
 
 namespace Utopia\Database\Validator\Queries;
 
-use Utopia\Database\Document;
+use Utopia\Database\Attribute;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Queries;
 use Utopia\Database\Validator\Query\Base;
@@ -134,11 +134,10 @@ final class Narrow extends Queries
     }
 
     /**
-     * The validator of a narrow query list, or null when the list is not narrow or a collection
-     * attribute is not a Document.
+     * The validator of a narrow query list, or null when the list is not narrow.
      *
      * @param  array<mixed>  $queries
-     * @param  array<mixed>  $attributes  The collection's attributes
+     * @param  list<Attribute>  $attributes  The collection's attributes
      */
     public static function of(
         array $queries,
@@ -169,40 +168,12 @@ final class Narrow extends Queries
         $filterAttributes = [];
         $orderAttributes = [];
         if ($filtered !== [] || $ordered !== []) {
-            foreach ($attributes as $attribute) {
-                if (! $attribute instanceof Document) {
-                    return null;
+            foreach ([...$attributes, ...Documents::internalAttributes()] as $attribute) {
+                if (isset($filtered[$attribute->key])) {
+                    $filterAttributes[] = $attribute;
                 }
-
-                $key = $attribute->getAttribute('key');
-
-                if ($filtered !== []) {
-                    $filterKey = $key ?? $attribute->getId();
-                    if (! \is_string($filterKey) && ! \is_int($filterKey)) {
-                        return null;
-                    }
-                    if (isset($filtered[$filterKey])) {
-                        $filterAttributes[] = $attribute;
-                    }
-                }
-
-                if ($ordered !== []) {
-                    $orderKey = $key ?? $attribute->getAttribute(Document::ID) ?? '';
-                    if (! \is_string($orderKey) && ! \is_int($orderKey)) {
-                        return null;
-                    }
-                    if (isset($ordered[$orderKey])) {
-                        $orderAttributes[] = $attribute;
-                    }
-                }
-            }
-
-            foreach (Documents::INTERNAL_ATTRIBUTES as $key => $definition) {
-                if (isset($filtered[$key])) {
-                    $filterAttributes[] = new Document($definition);
-                }
-                if (isset($ordered[$key])) {
-                    $orderAttributes[] = new Document($definition);
+                if (isset($ordered[$attribute->key])) {
+                    $orderAttributes[] = $attribute;
                 }
             }
         }

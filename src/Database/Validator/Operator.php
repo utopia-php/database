@@ -7,8 +7,8 @@ use Utopia\Database\Attribute as AttributeVO;
 use Utopia\Database\Document;
 use Utopia\Database\Operator as DatabaseOperator;
 use Utopia\Database\OperatorType;
-use Utopia\Database\RelationSide;
-use Utopia\Database\RelationType;
+use Utopia\Database\RelationshipSide;
+use Utopia\Database\RelationshipType;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Validator;
 
@@ -62,36 +62,12 @@ class Operator extends Validator
      */
     private function isRelationshipArray(AttributeVO $attribute): bool
     {
-        $options = $attribute->getOptions() ?? [];
-
-        /** @var array<string, mixed> $options */
-
-        $relationTypeRaw = $options['relationType'] ?? '';
-        $sideRaw = $options['side'] ?? '';
-
-        $relationType = $relationTypeRaw instanceof RelationType
-            ? $relationTypeRaw
-            : (\is_string($relationTypeRaw) && $relationTypeRaw !== '' ? RelationType::from($relationTypeRaw) : null);
-        $side = $sideRaw instanceof RelationSide
-            ? $sideRaw
-            : (\is_string($sideRaw) && $sideRaw !== '' ? RelationSide::from($sideRaw) : null);
-
-        // Many-to-many is always an array on both sides
-        if ($relationType === RelationType::ManyToMany) {
-            return true;
-        }
-
-        // One-to-many: array on parent side, single on child side
-        if ($relationType === RelationType::OneToMany && $side === RelationSide::Parent) {
-            return true;
-        }
-
-        // Many-to-one: array on child side, single on parent side
-        if ($relationType === RelationType::ManyToOne && $side === RelationSide::Child) {
-            return true;
-        }
-
-        return false;
+        return match ($attribute->relationship?->type) {
+            RelationshipType::ManyToMany => true,
+            RelationshipType::OneToMany => $attribute->side === RelationshipSide::Parent,
+            RelationshipType::ManyToOne => $attribute->side === RelationshipSide::Child,
+            default => false,
+        };
     }
 
     /**

@@ -15,6 +15,7 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Change;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
@@ -37,8 +38,9 @@ use Utopia\Database\OperatorType;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
-use Utopia\Database\RelationSide;
-use Utopia\Database\RelationType;
+use Utopia\Database\RelationshipSide;
+use Utopia\Database\RelationshipType;
+use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Mongo\Client;
@@ -1003,11 +1005,8 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
     /**
      * Create a relationship between collections. No-op for MongoDB since relationships are virtual.
-     *
-     * @param Relationship $relationship The relationship definition
-     * @return bool
      */
-    public function createRelationship(Relationship $relationship): bool
+    public function createRelationship(string $collection, Relationship $relationship): bool
     {
         return true;
     }
@@ -1016,67 +1015,62 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      * @throws DatabaseException
      * @throws MongoException
      */
-    public function updateRelationship(
-        Relationship $relationship,
-        ?string $newKey = null,
-        ?string $newTwoWayKey = null
-    ): bool {
-        $collectionName = $this->getNamespace().'_'.$this->filter($relationship->getSourceCollection());
-        $relatedCollectionName = $this->getNamespace().'_'.$this->filter($relationship->getRelatedCollection());
-
-        $escapedKey = $this->escapeMongoFieldName($relationship->getKey());
-        $escapedNewKey = ! \is_null($newKey) ? $this->escapeMongoFieldName($newKey) : null;
-        $escapedTwoWayKey = $this->escapeMongoFieldName($relationship->getTwoWayKey());
-        $escapedNewTwoWayKey = ! \is_null($newTwoWayKey) ? $this->escapeMongoFieldName($newTwoWayKey) : null;
+    public function updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, RelationshipUpdate $update): bool
+    {
+        $collectionName = $this->getNamespace().'_'.$this->filter($collection);
+        $relatedCollectionName = $this->getNamespace().'_'.$this->filter($relationship->relatedCollection);
+        $key = $relationship->key ?? '';
+        $twoWayKey = $relationship->twoWayKey ?? '';
+        $newKey = $update->key;
+        $newTwoWayKey = $update->twoWayKey;
+        $twoWay = $update->twoWay ?? $relationship->twoWay;
 
         $renameKey = [
             '$rename' => [
-                $escapedKey => $escapedNewKey,
+                $this->escapeMongoFieldName($key) => $newKey === null ? null : $this->escapeMongoFieldName($newKey),
             ],
         ];
 
         $renameTwoWayKey = [
             '$rename' => [
-                $escapedTwoWayKey => $escapedNewTwoWayKey,
+                $this->escapeMongoFieldName($twoWayKey) => $newTwoWayKey === null ? null : $this->escapeMongoFieldName($newTwoWayKey),
             ],
         ];
 
-        switch ($relationship->getType()) {
-            case RelationType::OneToOne:
-                if (! \is_null($newKey) && $relationship->getKey() !== $newKey) {
+        switch ($relationship->type) {
+            case RelationshipType::OneToOne:
+                if ($newKey !== null && $key !== $newKey) {
                     $this->getClient()->update($collectionName, updates: $renameKey, multi: true);
                 }
-                if ($relationship->isTwoWay() && ! \is_null($newTwoWayKey) && $relationship->getTwoWayKey() !== $newTwoWayKey) {
+                if ($twoWay && $newTwoWayKey !== null && $twoWayKey !== $newTwoWayKey) {
                     $this->getClient()->update($relatedCollectionName, updates: $renameTwoWayKey, multi: true);
                 }
                 break;
-            case RelationType::OneToMany:
-                if ($relationship->isTwoWay() && ! \is_null($newTwoWayKey) && $relationship->getTwoWayKey() !== $newTwoWayKey) {
-                    $this->getClient()->update($relatedCollectionName, updates: $renameTwoWayKey, multi: true);
-                }
-                break;
-            case RelationType::ManyToOne:
-                if (! \is_null($newKey) && $relationship->getKey() !== $newKey) {
+            case RelationshipType::OneToMany:
+                if ($side === RelationshipSide::Parent) {
+                    if ($newTwoWayKey !== null && $twoWayKey !== $newTwoWayKey) {
+                        $this->getClient()->update($relatedCollectionName, updates: $renameTwoWayKey, multi: true);
+                    }
+                } elseif ($newKey !== null && $key !== $newKey) {
                     $this->getClient()->update($collectionName, updates: $renameKey, multi: true);
                 }
                 break;
-            case RelationType::ManyToMany:
-                $metadataCollection = new Document([Document::ID => Database::METADATA]);
-                $collectionDocument = $this->getDocument($metadataCollection, $relationship->getSourceCollection());
-                $relatedCollectionDocument = $this->getDocument($metadataCollection, $relationship->getRelatedCollection());
-
-                if ($collectionDocument->isEmpty() || $relatedCollectionDocument->isEmpty()) {
-                    throw new DatabaseException('Collection or related collection not found');
+            case RelationshipType::ManyToOne:
+                if ($side === RelationshipSide::Child) {
+                    if ($newTwoWayKey !== null && $twoWayKey !== $newTwoWayKey) {
+                        $this->getClient()->update($relatedCollectionName, updates: $renameTwoWayKey, multi: true);
+                    }
+                } elseif ($newKey !== null && $key !== $newKey) {
+                    $this->getClient()->update($collectionName, updates: $renameKey, multi: true);
                 }
+                break;
+            case RelationshipType::ManyToMany:
+                $junction = $this->getJunctionName($collection, $relationship->relatedCollection, $side);
 
-                $junction = $relationship->getSide() === RelationSide::Parent
-                    ? $this->getNamespace().'_'.$this->filter('_'.$collectionDocument->getSequence().'_'.$relatedCollectionDocument->getSequence())
-                    : $this->getNamespace().'_'.$this->filter('_'.$relatedCollectionDocument->getSequence().'_'.$collectionDocument->getSequence());
-
-                if (! \is_null($newKey) && $relationship->getKey() !== $newKey) {
+                if ($newKey !== null && $key !== $newKey) {
                     $this->getClient()->update($junction, updates: $renameKey, multi: true);
                 }
-                if (! \is_null($newTwoWayKey) && $relationship->getTwoWayKey() !== $newTwoWayKey) {
+                if ($newTwoWayKey !== null && $twoWayKey !== $newTwoWayKey) {
                     $this->getClient()->update($junction, updates: $renameTwoWayKey, multi: true);
                 }
                 break;
@@ -1089,60 +1083,67 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      * @throws MongoException
      * @throws Exception
      */
-    public function deleteRelationship(
-        Relationship $relationship
-    ): bool {
-        $collectionName = $this->getNamespace().'_'.$this->filter($relationship->getSourceCollection());
-        $relatedCollectionName = $this->getNamespace().'_'.$this->filter($relationship->getRelatedCollection());
-        $escapedKey = $this->escapeMongoFieldName($relationship->getKey());
-        $escapedTwoWayKey = $this->escapeMongoFieldName($relationship->getTwoWayKey());
+    public function deleteRelationship(string $collection, Relationship $relationship, RelationshipSide $side): bool
+    {
+        $collectionName = $this->getNamespace().'_'.$this->filter($collection);
+        $relatedCollectionName = $this->getNamespace().'_'.$this->filter($relationship->relatedCollection);
+        $escapedKey = $this->escapeMongoFieldName($relationship->key ?? '');
+        $escapedTwoWayKey = $this->escapeMongoFieldName($relationship->twoWayKey ?? '');
 
-        switch ($relationship->getType()) {
-            case RelationType::OneToOne:
-                if ($relationship->getSide() === RelationSide::Parent) {
+        switch ($relationship->type) {
+            case RelationshipType::OneToOne:
+                if ($side === RelationshipSide::Parent) {
                     $this->getClient()->update($collectionName, [], ['$unset' => [$escapedKey => '']], multi: true);
-                    if ($relationship->isTwoWay()) {
+                    if ($relationship->twoWay) {
                         $this->getClient()->update($relatedCollectionName, [], ['$unset' => [$escapedTwoWayKey => '']], multi: true);
                     }
-                } elseif ($relationship->getSide() === RelationSide::Child) {
+                } else {
                     $this->getClient()->update($relatedCollectionName, [], ['$unset' => [$escapedTwoWayKey => '']], multi: true);
-                    if ($relationship->isTwoWay()) {
+                    if ($relationship->twoWay) {
                         $this->getClient()->update($collectionName, [], ['$unset' => [$escapedKey => '']], multi: true);
                     }
                 }
                 break;
-            case RelationType::OneToMany:
-                if ($relationship->getSide() === RelationSide::Parent) {
+            case RelationshipType::OneToMany:
+                if ($side === RelationshipSide::Parent) {
                     $this->getClient()->update($relatedCollectionName, [], ['$unset' => [$escapedTwoWayKey => '']], multi: true);
                 } else {
                     $this->getClient()->update($collectionName, [], ['$unset' => [$escapedKey => '']], multi: true);
                 }
                 break;
-            case RelationType::ManyToOne:
-                if ($relationship->getSide() === RelationSide::Parent) {
+            case RelationshipType::ManyToOne:
+                if ($side === RelationshipSide::Parent) {
                     $this->getClient()->update($collectionName, [], ['$unset' => [$escapedKey => '']], multi: true);
                 } else {
                     $this->getClient()->update($relatedCollectionName, [], ['$unset' => [$escapedTwoWayKey => '']], multi: true);
                 }
                 break;
-            case RelationType::ManyToMany:
-                $metadataCollection = new Document([Document::ID => Database::METADATA]);
-                $collectionDocument = $this->getDocument($metadataCollection, $relationship->getSourceCollection());
-                $relatedCollectionDocument = $this->getDocument($metadataCollection, $relationship->getRelatedCollection());
-
-                if ($collectionDocument->isEmpty() || $relatedCollectionDocument->isEmpty()) {
-                    throw new DatabaseException('Collection or related collection not found');
-                }
-
-                $junction = $relationship->getSide() === RelationSide::Parent
-                    ? $this->getNamespace().'_'.$this->filter('_'.$collectionDocument->getSequence().'_'.$relatedCollectionDocument->getSequence())
-                    : $this->getNamespace().'_'.$this->filter('_'.$relatedCollectionDocument->getSequence().'_'.$collectionDocument->getSequence());
-
-                $this->getClient()->dropCollection($junction);
+            case RelationshipType::ManyToMany:
+                $this->getClient()->dropCollection($this->getJunctionName($collection, $relationship->relatedCollection, $side));
                 break;
         }
 
         return true;
+    }
+
+    /**
+     * The namespaced junction collection of a many-to-many relationship, named after the parent's sequence first.
+     *
+     * @throws DatabaseException
+     */
+    private function getJunctionName(string $collection, string $relatedCollection, RelationshipSide $side): string
+    {
+        $metadataCollection = new Document([Document::ID => Database::METADATA]);
+        $collectionDocument = $this->getDocument($metadataCollection, $collection);
+        $relatedCollectionDocument = $this->getDocument($metadataCollection, $relatedCollection);
+
+        if ($collectionDocument->isEmpty() || $relatedCollectionDocument->isEmpty()) {
+            throw new DatabaseException('Collection or related collection not found');
+        }
+
+        return $side === RelationshipSide::Parent
+            ? $this->getNamespace().'_'.$this->filter('_'.$collectionDocument->getSequence().'_'.$relatedCollectionDocument->getSequence())
+            : $this->getNamespace().'_'.$this->filter('_'.$relatedCollectionDocument->getSequence().'_'.$collectionDocument->getSequence());
     }
 
     /**
@@ -3445,38 +3446,26 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      */
     protected function ensureRelationshipDefaults(Document $collection, Document $document): void
     {
-        $rawEnsureAttrs = $collection->getAttribute('attributes', []);
-        /** @var array<array<string, mixed>> $attributes */
-        $attributes = \is_array($rawEnsureAttrs) ? $rawEnsureAttrs : [];
+        $attributes = $collection instanceof Collection
+            ? $collection->attributes()
+            : Collection::fromArray($collection->getArrayCopy())->attributes();
+
         foreach ($attributes as $attribute) {
-            /** @var array<string, mixed> $attribute */
-            $rawEnsureKey = $attribute[Document::ID] ?? null;
-            $key = \is_string($rawEnsureKey) ? $rawEnsureKey : (\is_scalar($rawEnsureKey) ? (string) $rawEnsureKey : '');
-            $rawEnsureType = $attribute['type'] ?? null;
-            $type = \is_string($rawEnsureType) ? $rawEnsureType : (\is_scalar($rawEnsureType) ? (string) $rawEnsureType : '');
-            if ($type === ColumnType::Relationship->value && ! $document->offsetExists($key)) {
-                $rawOptions = $attribute['options'] ?? [];
-                /** @var array<string, mixed> $options */
-                $options = \is_array($rawOptions) ? $rawOptions : [];
-                $twoWay = (bool) ($options['twoWay'] ?? false);
-                $rawSide = $options['side'] ?? null;
-                $side = \is_string($rawSide) ? $rawSide : (\is_scalar($rawSide) ? (string) $rawSide : '');
-                $rawRelationType = $options['relationType'] ?? null;
-                $relationType = \is_string($rawRelationType) ? $rawRelationType : (\is_scalar($rawRelationType) ? (string) $rawRelationType : '');
+            $relationship = $attribute->relationship;
+            if ($relationship === null || $document->offsetExists($attribute->key)) {
+                continue;
+            }
 
-                // Determine if this relationship stores data on this collection's documents
-                // Only set null defaults for relationships that would have a column in SQL
-                $storesData = match ($relationType) {
-                    RelationType::OneToOne->value => $side === RelationSide::Parent->value || $twoWay,
-                    RelationType::OneToMany->value => $side === RelationSide::Child->value,
-                    RelationType::ManyToOne->value => $side === RelationSide::Parent->value,
-                    RelationType::ManyToMany->value => false,
-                    default => false,
-                };
+            $parent = $attribute->side === RelationshipSide::Parent;
+            $storesData = match ($relationship->type) {
+                RelationshipType::OneToOne => $parent || $relationship->twoWay,
+                RelationshipType::OneToMany => ! $parent,
+                RelationshipType::ManyToOne => $parent,
+                RelationshipType::ManyToMany => false,
+            };
 
-                if ($storesData) {
-                    $document->setAttribute($key, null);
-                }
+            if ($storesData) {
+                $document->setAttribute($attribute->key, null);
             }
         }
     }

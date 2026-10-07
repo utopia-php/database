@@ -36,8 +36,9 @@ use Utopia\Database\PDOStatement as DatabasePDOStatement;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
-use Utopia\Database\RelationSide;
-use Utopia\Database\RelationType;
+use Utopia\Database\RelationshipSide;
+use Utopia\Database\RelationshipType;
+use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Query\Builder\SQL as SQLBuilder;
@@ -2570,27 +2571,24 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
      * driver runs the first statement and silently drops the rest, so
      * re-implement the dispatch with one statement per call.
      */
-    public function createRelationship(Relationship $relationship): bool
+    public function createRelationship(string $collection, Relationship $relationship): bool
     {
-        $name = $this->filter($relationship->getSourceCollection());
-        $relatedName = $this->filter($relationship->getRelatedCollection());
-        $table = $this->getSQLTable($name);
-        $relatedTable = $this->getSQLTable($relatedName);
-        $id = $this->filter($relationship->getKey());
-        $twoWayKey = $this->filter($relationship->getTwoWayKey());
+        $table = $this->getSQLTable($this->filter($collection));
+        $relatedTable = $this->getSQLTable($this->filter($relationship->relatedCollection));
+        $key = $this->filter($relationship->key ?? '');
+        $twoWayKey = $this->filter($relationship->twoWayKey ?? '');
         $sqlType = $this->getSQLType(ColumnType::Relationship, 0, false, false, false);
-        $twoWay = $relationship->isTwoWay();
 
-        $statements = match ($relationship->getType()) {
-            RelationType::OneToOne => $twoWay
+        $statements = match ($relationship->type) {
+            RelationshipType::OneToOne => $relationship->twoWay
                 ? [
-                    "ALTER TABLE {$table} ADD COLUMN `{$id}` {$sqlType} DEFAULT NULL",
+                    "ALTER TABLE {$table} ADD COLUMN `{$key}` {$sqlType} DEFAULT NULL",
                     "ALTER TABLE {$relatedTable} ADD COLUMN `{$twoWayKey}` {$sqlType} DEFAULT NULL",
                 ]
-                : ["ALTER TABLE {$table} ADD COLUMN `{$id}` {$sqlType} DEFAULT NULL"],
-            RelationType::OneToMany => ["ALTER TABLE {$relatedTable} ADD COLUMN `{$twoWayKey}` {$sqlType} DEFAULT NULL"],
-            RelationType::ManyToOne => ["ALTER TABLE {$table} ADD COLUMN `{$id}` {$sqlType} DEFAULT NULL"],
-            RelationType::ManyToMany => [],
+                : ["ALTER TABLE {$table} ADD COLUMN `{$key}` {$sqlType} DEFAULT NULL"],
+            RelationshipType::OneToMany => ["ALTER TABLE {$relatedTable} ADD COLUMN `{$twoWayKey}` {$sqlType} DEFAULT NULL"],
+            RelationshipType::ManyToOne => ["ALTER TABLE {$table} ADD COLUMN `{$key}` {$sqlType} DEFAULT NULL"],
+            RelationshipType::ManyToMany => [],
         };
 
         foreach ($statements as $statement) {
@@ -2600,33 +2598,20 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         return true;
     }
 
-    public function updateRelationship(
-        Relationship $relationship,
-        ?string $newKey = null,
-        ?string $newTwoWayKey = null,
-    ): bool {
-        $collection = $relationship->getSourceCollection();
-        $relatedCollection = $relationship->getRelatedCollection();
-        $name = $this->filter($collection);
-        $relatedName = $this->filter($relatedCollection);
-        $table = $this->getSQLTable($name);
-        $relatedTable = $this->getSQLTable($relatedName);
-        $key = $this->filter($relationship->getKey());
-        $twoWayKey = $this->filter($relationship->getTwoWayKey());
-        $twoWay = $relationship->isTwoWay();
-        $side = $relationship->getSide();
-
-        if ($newKey !== null) {
-            $newKey = $this->filter($newKey);
-        }
-        if ($newTwoWayKey !== null) {
-            $newTwoWayKey = $this->filter($newTwoWayKey);
-        }
+    public function updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, RelationshipUpdate $update): bool
+    {
+        $table = $this->getSQLTable($this->filter($collection));
+        $relatedTable = $this->getSQLTable($this->filter($relationship->relatedCollection));
+        $key = $this->filter($relationship->key ?? '');
+        $twoWayKey = $this->filter($relationship->twoWayKey ?? '');
+        $twoWay = $update->twoWay ?? $relationship->twoWay;
+        $newKey = $update->key === null ? null : $this->filter($update->key);
+        $newTwoWayKey = $update->twoWayKey === null ? null : $this->filter($update->twoWayKey);
 
         $statements = [];
 
-        switch ($relationship->getType()) {
-            case RelationType::OneToOne:
+        switch ($relationship->type) {
+            case RelationshipType::OneToOne:
                 if ($newKey !== null && $key !== $newKey) {
                     $statements[] = "ALTER TABLE {$table} RENAME COLUMN `{$key}` TO `{$newKey}`";
                 }
@@ -2634,37 +2619,26 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
                     $statements[] = "ALTER TABLE {$relatedTable} RENAME COLUMN `{$twoWayKey}` TO `{$newTwoWayKey}`";
                 }
                 break;
-            case RelationType::OneToMany:
-                if ($side === RelationSide::Parent) {
+            case RelationshipType::OneToMany:
+                if ($side === RelationshipSide::Parent) {
                     if ($newTwoWayKey !== null && $twoWayKey !== $newTwoWayKey) {
                         $statements[] = "ALTER TABLE {$relatedTable} RENAME COLUMN `{$twoWayKey}` TO `{$newTwoWayKey}`";
                     }
-                } else {
-                    if ($newKey !== null && $key !== $newKey) {
-                        $statements[] = "ALTER TABLE {$table} RENAME COLUMN `{$key}` TO `{$newKey}`";
-                    }
+                } elseif ($newKey !== null && $key !== $newKey) {
+                    $statements[] = "ALTER TABLE {$table} RENAME COLUMN `{$key}` TO `{$newKey}`";
                 }
                 break;
-            case RelationType::ManyToOne:
-                if ($side === RelationSide::Child) {
+            case RelationshipType::ManyToOne:
+                if ($side === RelationshipSide::Child) {
                     if ($newTwoWayKey !== null && $twoWayKey !== $newTwoWayKey) {
                         $statements[] = "ALTER TABLE {$relatedTable} RENAME COLUMN `{$twoWayKey}` TO `{$newTwoWayKey}`";
                     }
-                } else {
-                    if ($newKey !== null && $key !== $newKey) {
-                        $statements[] = "ALTER TABLE {$table} RENAME COLUMN `{$key}` TO `{$newKey}`";
-                    }
+                } elseif ($newKey !== null && $key !== $newKey) {
+                    $statements[] = "ALTER TABLE {$table} RENAME COLUMN `{$key}` TO `{$newKey}`";
                 }
                 break;
-            case RelationType::ManyToMany:
-                $metadataCollection = new Document([Document::ID => Database::METADATA]);
-                $collectionDocument = $this->getDocument($metadataCollection, $collection);
-                $relatedCollectionDocument = $this->getDocument($metadataCollection, $relatedCollection);
-
-                $junctionName = $side === RelationSide::Parent
-                    ? '_' . $collectionDocument->getSequence() . '_' . $relatedCollectionDocument->getSequence()
-                    : '_' . $relatedCollectionDocument->getSequence() . '_' . $collectionDocument->getSequence();
-                $junction = $this->getSQLTable($junctionName);
+            case RelationshipType::ManyToMany:
+                $junction = $this->getSQLTable($this->getJunctionName($collection, $relationship->relatedCollection, $side));
 
                 if ($newKey !== null && $key !== $newKey) {
                     $statements[] = "ALTER TABLE {$junction} RENAME COLUMN `{$key}` TO `{$newKey}`";
@@ -2682,53 +2656,42 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         return true;
     }
 
-    public function deleteRelationship(Relationship $relationship): bool
+    public function deleteRelationship(string $collection, Relationship $relationship, RelationshipSide $side): bool
     {
-        $collection = $relationship->getSourceCollection();
-        $relatedCollection = $relationship->getRelatedCollection();
-        $name = $this->filter($collection);
-        $relatedName = $this->filter($relatedCollection);
-        $table = $this->getSQLTable($name);
-        $relatedTable = $this->getSQLTable($relatedName);
-        $key = $this->filter($relationship->getKey());
-        $twoWayKey = $this->filter($relationship->getTwoWayKey());
-        $twoWay = $relationship->isTwoWay();
-        $side = $relationship->getSide();
+        $table = $this->getSQLTable($this->filter($collection));
+        $relatedTable = $this->getSQLTable($this->filter($relationship->relatedCollection));
+        $key = $this->filter($relationship->key ?? '');
+        $twoWayKey = $this->filter($relationship->twoWayKey ?? '');
+        $twoWay = $relationship->twoWay;
 
         $statements = [];
 
-        switch ($relationship->getType()) {
-            case RelationType::OneToOne:
-                if ($side === RelationSide::Parent) {
+        switch ($relationship->type) {
+            case RelationshipType::OneToOne:
+                if ($side === RelationshipSide::Parent) {
                     $statements[] = "ALTER TABLE {$table} DROP COLUMN `{$key}`";
                     if ($twoWay) {
                         $statements[] = "ALTER TABLE {$relatedTable} DROP COLUMN `{$twoWayKey}`";
                     }
-                } elseif ($side === RelationSide::Child) {
+                } else {
                     $statements[] = "ALTER TABLE {$relatedTable} DROP COLUMN `{$twoWayKey}`";
                     if ($twoWay) {
                         $statements[] = "ALTER TABLE {$table} DROP COLUMN `{$key}`";
                     }
                 }
                 break;
-            case RelationType::OneToMany:
-                $statements[] = $side === RelationSide::Parent
+            case RelationshipType::OneToMany:
+                $statements[] = $side === RelationshipSide::Parent
                     ? "ALTER TABLE {$relatedTable} DROP COLUMN `{$twoWayKey}`"
                     : "ALTER TABLE {$table} DROP COLUMN `{$key}`";
                 break;
-            case RelationType::ManyToOne:
-                $statements[] = $side === RelationSide::Parent
+            case RelationshipType::ManyToOne:
+                $statements[] = $side === RelationshipSide::Parent
                     ? "ALTER TABLE {$table} DROP COLUMN `{$key}`"
                     : "ALTER TABLE {$relatedTable} DROP COLUMN `{$twoWayKey}`";
                 break;
-            case RelationType::ManyToMany:
-                $metadataCollection = new Document([Document::ID => Database::METADATA]);
-                $collectionDocument = $this->getDocument($metadataCollection, $collection);
-                $relatedCollectionDocument = $this->getDocument($metadataCollection, $relatedCollection);
-
-                $junctionBase = $side === RelationSide::Parent
-                    ? '_' . $collectionDocument->getSequence() . '_' . $relatedCollectionDocument->getSequence()
-                    : '_' . $relatedCollectionDocument->getSequence() . '_' . $collectionDocument->getSequence();
+            case RelationshipType::ManyToMany:
+                $junctionBase = $this->getJunctionName($collection, $relationship->relatedCollection, $side);
 
                 $statements[] = "DROP TABLE {$this->getSQLTable($junctionBase)}";
                 $statements[] = "DROP TABLE {$this->getSQLTable(Storage::permissionsTable($junctionBase))}";

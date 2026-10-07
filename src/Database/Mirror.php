@@ -21,7 +21,6 @@ use Utopia\Database\Mirroring\Filter;
 use Utopia\Database\Type\TypeRegistry;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\OrderDirection;
-use Utopia\Query\Schema\ForeignKeyAction;
 
 /**
  * Wraps a source Database and replicates write operations to an optional destination Database.
@@ -1546,25 +1545,9 @@ class Mirror extends Database
     /**
      * {@inheritdoc}
      */
-    public function createRelationship(Relationship $relationship): bool
+    public function createRelationship(string $collection, Relationship $relationship): Relationship
     {
-        /** @var bool $result */
-        $result = $this->delegateInOrder(__FUNCTION__, [$relationship]);
-        return $result;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function updateRelationship(
-        string $collection,
-        string $id,
-        ?string $newKey = null,
-        ?string $newTwoWayKey = null,
-        ?bool $twoWay = null,
-        ?ForeignKeyAction $onDelete = null
-    ): bool {
-        /** @var bool $result */
+        /** @var Relationship $result */
         $result = $this->delegateInOrder(__FUNCTION__, \func_get_args());
         return $result;
     }
@@ -1572,13 +1555,24 @@ class Mirror extends Database
     /**
      * {@inheritdoc}
      */
-    public function deleteRelationship(string $collection, string $id): bool
+    public function updateRelationship(string $collection, string $key, RelationshipUpdate $update): Relationship
     {
-        /** @var bool $result */
+        /** @var Relationship $result */
         $result = $this->delegateInOrder(__FUNCTION__, \func_get_args());
         return $result;
     }
 
+    /**
+     * {@inheritdoc}
+     */
+    public function deleteRelationship(string $collection, string $key): void
+    {
+        $this->delegateInOrder(__FUNCTION__, \func_get_args());
+    }
+
+    /**
+     * {@inheritdoc}
+     */
     public function renameIndex(string $collection, string $old, string $new): void
     {
         $this->delegateInOrder(__FUNCTION__, \func_get_args());

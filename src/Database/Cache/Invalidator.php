@@ -3,6 +3,7 @@
 namespace Utopia\Database\Cache;
 
 use Throwable;
+use Utopia\Database\Attribute;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
@@ -186,16 +187,12 @@ class Invalidator implements Lifecycle
                 $collections[$collection] = true;
             }
 
-            if (! $this->isAttributeMutation($event)) {
+            if (! $this->isAttributeMutation($event) || ! Attribute::isRelationship($data)) {
                 return $collections;
             }
 
-            $options = $data->getAttribute('options', []);
-            if ($options instanceof Document) {
-                $options = $options->getArrayCopy();
-            }
-            $related = \is_array($options) ? ($options['relatedCollection'] ?? null) : null;
-            if (\is_string($related) && $related !== '') {
+            $related = Attribute::fromDocument($data)->relationship?->relatedCollection;
+            if ($related !== null) {
                 $collections[$related] = true;
             }
 

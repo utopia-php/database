@@ -110,14 +110,14 @@ final class ProfiledStatementTest extends TestCase
      */
     private function logOn(callable $read): QueryLog
     {
-        $profiler = $this->database->enableProfiling()->getProfiler();
+        $profiler = $this->database->setProfiling(true)->getProfiler();
         $this->assertNotNull($profiler);
 
         try {
             $profiler->reset();
             $read();
         } finally {
-            $this->database->disableProfiling();
+            $this->database->setProfiling(false);
         }
 
         $logs = \array_values(\array_filter(

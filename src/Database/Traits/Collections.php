@@ -122,7 +122,7 @@ trait Collections
             $created = true;
         } catch (DuplicateException $error) {
             if ($id === self::METADATA
-                || ($this->adapter->getSharedTables()
+                || ($this->adapter->hasSharedTables()
                     && $this->adapter->collectionExists($this->adapter->getDatabase(), $id))) {
                 // The metadata table must never be dropped during reconciliation.
                 // In shared-tables mode the physical table is reused across
@@ -243,7 +243,7 @@ trait Collections
         }
 
         if (
-            $this->adapter->getSharedTables()
+            $this->adapter->hasSharedTables()
             && $stored->getTenant() !== null
             && $stored->getTenant() !== $this->adapter->getTenant()
         ) {
@@ -292,7 +292,7 @@ trait Collections
      */
     public function getSizeOfCollectionOnDisk(string $collection): int
     {
-        if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
+        if ($this->adapter->hasSharedTables() && empty($this->adapter->getTenant())) {
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
@@ -371,7 +371,7 @@ trait Collections
     {
         $definition = $this->getCollection($collection);
 
-        if ($this->adapter->getSharedTables() && $definition->getTenant() !== $this->adapter->getTenant()) {
+        if ($this->adapter->hasSharedTables() && $definition->getTenant() !== $this->adapter->getTenant()) {
             throw new NotFoundException('Collection not found');
         }
 

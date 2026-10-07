@@ -6,6 +6,7 @@ use ArrayObject;
 use PDO;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
+use Tests\Unit\FilterRegistry;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\SQLite;
@@ -14,6 +15,7 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Filter;
+use Utopia\Database\Filter\Callback;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
@@ -43,9 +45,35 @@ final class JoinedDecodeTest extends TestCase
      */
     private ArrayObject $witnessed;
 
+    /**
+     * @var array<string, array{encode: callable, decode: callable, signature: string}>
+     */
+    private array $registered = [];
+
+    private bool $defaultsRegistered = false;
+
     protected function setUp(): void
     {
         $this->witnessed = new ArrayObject();
+        $this->registered = FilterRegistry::filters();
+        $this->defaultsRegistered = FilterRegistry::defaultsRegistered();
+
+        Database::addFilter(
+            'witness',
+            static fn (mixed $value): mixed => \is_string($value) ? self::WITNESS_PREFIX.$value : $value,
+            function (mixed $value, Document $document, Database $database): mixed {
+                $this->witnessed->append(['document' => clone $document, 'database' => $database]);
+
+                return \is_string($value) && \str_starts_with($value, self::WITNESS_PREFIX)
+                    ? \substr($value, \strlen(self::WITNESS_PREFIX))
+                    : $value;
+            },
+        );
+    }
+
+    protected function tearDown(): void
+    {
+        FilterRegistry::restore($this->registered, $this->defaultsRegistered);
     }
 
     public function testImplicitProjectionDecodesLikeADirectRead(): void
@@ -335,13 +363,14 @@ final class JoinedDecodeTest extends TestCase
     }
 
     /**
-     * @return array<string, array{encode: callable, decode: callable}>
+     * @return list<Callback>
      */
     private function filters(): array
     {
         return [
-            'sealed' => [
-                'encode' => static function (mixed $value): mixed {
+            new Callback(
+                'sealed',
+                static function (mixed $value): mixed {
                     if (! \is_string($value)) {
                         return $value;
                     }
@@ -358,7 +387,7 @@ final class JoinedDecodeTest extends TestCase
                         'version' => '1',
                     ]);
                 },
-                'decode' => static function (mixed $value): mixed {
+                static function (mixed $value): mixed {
                     if ($value === null) {
                         return null;
                     }
@@ -375,17 +404,7 @@ final class JoinedDecodeTest extends TestCase
 
                     return \openssl_decrypt($payload['data'], self::CIPHER, self::KEY, 0, (string) \hex2bin($payload['iv']), (string) \hex2bin($payload['tag']));
                 },
-            ],
-            'witness' => [
-                'encode' => static fn (mixed $value): mixed => \is_string($value) ? self::WITNESS_PREFIX.$value : $value,
-                'decode' => function (mixed $value, Document $document, Database $database): mixed {
-                    $this->witnessed->append(['document' => clone $document, 'database' => $database]);
-
-                    return \is_string($value) && \str_starts_with($value, self::WITNESS_PREFIX)
-                        ? \substr($value, \strlen(self::WITNESS_PREFIX))
-                        : $value;
-                },
-            ],
+            ),
         ];
     }
 }

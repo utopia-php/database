@@ -73,7 +73,9 @@ class AuthorizationTest extends TestCase
 
         $this->assertEquals($object->isValid(new Input(PermissionType::Read, $document->getRead())), false);
 
-        $this->authorization->setDefaultStatus(false);
+        $this->authorization = (new Authorization(defaultStatus: false))->cleanRoles();
+        $object = $this->authorization;
+        $this->assertFalse($object->getStatus());
         $this->authorization->disable();
 
         $this->assertEquals($object->isValid(new Input(PermissionType::Read, $document->getRead())), true);

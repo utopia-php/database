@@ -122,7 +122,7 @@ final class SQLArrayWritesTest extends TestCase
 
     public function testANestedOperandMatchesNoElementOfANewDocument(): void
     {
-        $this->database->disableValidation();
+        $this->database->setValidation(false);
 
         $this->database->upsertDocument('items', new Document(['$id' => 'created', 'numbers' => Operator::arrayIntersect([[2]])]));
 

@@ -102,7 +102,7 @@ class MongoDBTest extends Base
     {
         $database = $this->getDatabase();
         $tenant = $database->getTenant();
-        $tenantPerDocument = $database->getTenantPerDocument();
+        $tenantPerDocument = $database->isTenantPerDocument();
         $collection = 'tenantSequences';
 
         $documents = fn (string $id): array => [
@@ -129,7 +129,7 @@ class MongoDBTest extends Base
                 $database
                     ->setTenant(null)
                     ->setTenantPerDocument(true)
-                    ->skipDuplicates(fn () => $database->createDocuments(
+                    ->ignoreDuplicates(fn () => $database->createDocuments(
                         $collection,
                         $documents($id),
                         onNext: function (Document $document): void {

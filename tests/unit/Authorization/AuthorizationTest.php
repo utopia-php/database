@@ -241,18 +241,18 @@ class AuthorizationTest extends TestCase
         $this->assertTrue($this->auth->isValid($input));
     }
 
-    public function testSetDefaultStatus(): void
+    public function testConstructorSetsTheDefaultStatus(): void
     {
-        $this->auth->setDefaultStatus(false);
-        $this->assertFalse($this->auth->getStatus());
+        $authorization = new Authorization(defaultStatus: false);
+        $this->assertFalse($authorization->getStatus());
 
-        $this->auth->reset();
-        $this->assertFalse($this->auth->getStatus());
+        $authorization->enable();
+        $authorization->reset();
+        $this->assertFalse($authorization->getStatus());
     }
 
     public function testResetRestoresDefaultStatus(): void
     {
-        $this->auth->setDefaultStatus(true);
         $this->auth->disable();
         $this->assertFalse($this->auth->getStatus());
 

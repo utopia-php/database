@@ -544,7 +544,7 @@ trait Attributes
                 return true;
             }
 
-            if ($this->getSharedTables()) {
+            if ($this->hasSharedTables()) {
                 throw new DuplicateException('Attribute exists in the shared table with another type', previous: $duplicate);
             }
 

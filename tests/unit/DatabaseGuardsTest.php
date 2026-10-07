@@ -113,9 +113,9 @@ final class DatabaseGuardsTest extends TestCase
     {
         $database = $this->database(new Memory());
 
-        $this->assertFalse($database->getDropUnknownAttributes());
-        $this->assertTrue($database->setDropUnknownAttributes(true)->getDropUnknownAttributes());
-        $this->assertFalse($database->setDropUnknownAttributes(false)->getDropUnknownAttributes());
+        $this->assertFalse($database->isDroppingUnknownAttributes());
+        $this->assertTrue($database->setDropUnknownAttributes(true)->isDroppingUnknownAttributes());
+        $this->assertFalse($database->setDropUnknownAttributes(false)->isDroppingUnknownAttributes());
     }
 
     public function testSkipRelationshipsWithoutTheHookRunsTheCallback(): void

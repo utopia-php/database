@@ -46,9 +46,9 @@ class FindLogicTest extends TestCase
     private function useAdapter(Adapter&Stub $adapter): void
     {
         $this->adapter = $adapter;
-        $this->adapter->method('getSharedTables')->willReturn(false);
+        $this->adapter->method('hasSharedTables')->willReturn(false);
         $this->adapter->method('getTenant')->willReturn(null);
-        $this->adapter->method('getTenantPerDocument')->willReturn(false);
+        $this->adapter->method('isTenantPerDocument')->willReturn(false);
         $this->adapter->method('getNamespace')->willReturn('');
         $this->adapter->method('limits')->willReturn(new Limits(
             string: 16777215,
@@ -162,7 +162,7 @@ class FindLogicTest extends TestCase
     public function testFindValidatesQueriesViaDocumentsValidator(): void
     {
         $this->setupCollectionLookup('testCol');
-        $this->database->enableValidation();
+        $this->database->setValidation(true);
         $this->expectException(QueryException::class);
         $this->database->find('testCol', [Query::equal('nonexistent_attr', ['val'])]);
     }
@@ -1133,7 +1133,7 @@ class FindLogicTest extends TestCase
     public function testSumValidatesQueries(): void
     {
         $this->setupCollectionLookup('testCol');
-        $this->database->enableValidation();
+        $this->database->setValidation(true);
 
         $this->expectException(QueryException::class);
         $this->database->sum('testCol', 'amount', [Query::equal('unknown_field', ['val'])]);
@@ -1155,9 +1155,9 @@ class FindLogicTest extends TestCase
         array $extraCollections = [],
         ?callable $getDocumentOverride = null,
     ): Database {
-        $adapter->method('getSharedTables')->willReturn(false);
+        $adapter->method('hasSharedTables')->willReturn(false);
         $adapter->method('getTenant')->willReturn(null);
-        $adapter->method('getTenantPerDocument')->willReturn(false);
+        $adapter->method('isTenantPerDocument')->willReturn(false);
         $adapter->method('getNamespace')->willReturn('');
         $adapter->method('limits')->willReturn(new Limits(
             string: 16777215,

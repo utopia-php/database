@@ -10,6 +10,7 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Filter\Callback;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
@@ -18,7 +19,7 @@ use Utopia\Query\Method;
 class QueryCacheTest extends TestCase
 {
     /**
-     * @param array<string, array{encode: callable, decode: callable}> $filters
+     * @param  list<Callback>  $filters
      */
     private function createDatabase(Adapter $cache, array $filters = [], ?DatabaseMemory $adapter = null): Database
     {
@@ -525,15 +526,16 @@ class QueryCacheTest extends TestCase
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache, [
-            'wrapped' => [
-                'encode' => static function (mixed $value): string {
+            new Callback(
+                'wrapped',
+                static function (mixed $value): string {
                     if (! \is_scalar($value) && $value !== null) {
                         throw new \InvalidArgumentException('Filter input must be scalar or null');
                     }
 
                     return 'encoded:'.(string) $value;
                 },
-                'decode' => static function (mixed $value): string {
+                static function (mixed $value): string {
                     if (! \is_string($value)) {
                         throw new \InvalidArgumentException('Encoded filter input must be a string');
                     }
@@ -542,7 +544,7 @@ class QueryCacheTest extends TestCase
                         ? \substr($value, 8)
                         : 'double:'.$value;
                 },
-            ],
+            ),
         ]);
         $database->createCollection(Collection::create(id: 'secrets', attributes: [
             Attribute::string(key: 'secret', filters: ['wrapped']),

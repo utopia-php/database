@@ -3486,7 +3486,7 @@ trait JoinTests
             return;
         }
 
-        $sharedTables = $database->getSharedTables();
+        $sharedTables = $database->hasSharedTables();
         $namespace = $database->getNamespace();
         $schema = $database->getDatabase();
         $tenant = $database->getTenant();
@@ -4921,7 +4921,7 @@ trait JoinTests
             return;
         }
 
-        $sharedTables = $database->getSharedTables();
+        $sharedTables = $database->hasSharedTables();
         $supportsSchemas = $database->getAdapter()->supports(Capability::Schemas);
         if (! $sharedTables && ! $supportsSchemas) {
             $this->expectNotToPerformAssertions();
@@ -6813,7 +6813,7 @@ trait JoinTests
     public function testSharedTablesJoinsReadOnlyTheSelectedTenantsRows(): void
     {
         $database = static::getDatabase();
-        if (! $database->getSharedTables() || ! $database->getAdapter()->supports(Capability::Joins)) {
+        if (! $database->hasSharedTables() || ! $database->getAdapter()->supports(Capability::Joins)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -6893,7 +6893,7 @@ trait JoinTests
     public function testSharedTablesChainedJoinsKeepTheSelectedTenantsUnmatchedRows(): void
     {
         $database = static::getDatabase();
-        if (! $database->getSharedTables() || ! $database->getAdapter()->supports(Capability::Joins)) {
+        if (! $database->hasSharedTables() || ! $database->getAdapter()->supports(Capability::Joins)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -7133,7 +7133,7 @@ trait JoinTests
     public function testSharedTablesJoinChainsKeepRowsOnlyAnotherTenantMatches(): void
     {
         $database = static::getDatabase();
-        if (! $database->getSharedTables() || ! $database->getAdapter()->supports(Capability::Joins)) {
+        if (! $database->hasSharedTables() || ! $database->getAdapter()->supports(Capability::Joins)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -7913,7 +7913,7 @@ trait JoinTests
             ],
         ];
 
-        if (! $database->getSharedTables()) {
+        if (! $database->hasSharedTables()) {
             foreach ($reads as $attribute => $shapes) {
                 foreach ($shapes as $shape => $read) {
                     try {
@@ -7982,7 +7982,7 @@ trait JoinTests
         $database->createDocuments($collection, $documents);
 
         $table = '`'.$database->getNamespace().'_'.$collection.'`';
-        $profiler = $database->enableProfiling()->getProfiler();
+        $profiler = $database->setProfiling(true)->getProfiler();
         $this->assertNotNull($profiler);
 
         try {
@@ -8026,7 +8026,7 @@ trait JoinTests
                 $this->assertSame(1, $plans, $joins.' self-joins must read the collection in one statement');
             }
         } finally {
-            $database->disableProfiling();
+            $database->setProfiling(false);
             $this->cleanupAggCollections($database, [$collection]);
         }
     }

@@ -212,7 +212,7 @@ final class FlatAggregateTest extends TestCase
     public function testABuilderRefusalIsAQueryException(): void
     {
         $join = Query::join('labels', 'label', [Query::on('category', 'category'), Query::limit(1)]);
-        $this->database->disableValidation();
+        $this->database->setValidation(false);
 
         foreach ([
             'count()' => fn (): int => $this->database->count('items', [$join]),
@@ -258,14 +258,14 @@ final class FlatAggregateTest extends TestCase
      */
     private function profile(callable $read): array
     {
-        $profiler = $this->database->enableProfiling()->getProfiler();
+        $profiler = $this->database->setProfiling(true)->getProfiler();
         $this->assertNotNull($profiler);
 
         try {
             $profiler->reset();
             $result = $read();
         } finally {
-            $this->database->disableProfiling();
+            $this->database->setProfiling(false);
         }
 
         $statements = [];

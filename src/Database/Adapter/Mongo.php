@@ -785,7 +785,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         // In shared-tables mode or for metadata, the physical collection may
         // already exist for another tenant. Return early to avoid a
         // "Collection Exists" exception from the client.
-        if (! $this->inTransaction && ($this->getSharedTables() || $collection === Database::METADATA) && $this->collectionExists($this->getNamespace(), $collection)) {
+        if (! $this->inTransaction && ($this->hasSharedTables() || $collection === Database::METADATA) && $this->collectionExists($this->getNamespace(), $collection)) {
             return true;
         }
 
@@ -797,7 +797,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
                 return true;
             }
             $error = $this->processException($error);
-            if ($error instanceof DuplicateException && ($this->getSharedTables() || $collection === Database::METADATA)) {
+            if ($error instanceof DuplicateException && ($this->hasSharedTables() || $collection === Database::METADATA)) {
                 return true;
             }
             throw $error;

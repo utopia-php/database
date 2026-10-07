@@ -294,7 +294,7 @@ final class PoolTest extends TestCase
             ->setDatabase('profiling')
             ->setNamespace('profiling')
             ->setAuthorization(new Authorization());
-        $database->enableProfiling();
+        $database->setProfiling(true);
         $database->create();
         $database->createCollection(Collection::create(id: 'posts'));
 
@@ -303,7 +303,7 @@ final class PoolTest extends TestCase
         $captured = $profiler->getQueryCount();
         $this->assertGreaterThan(0, $captured, 'The pooled SQLite connection must profile its statements');
 
-        $database->disableProfiling();
+        $database->setProfiling(false);
 
         $this->assertNull($database->getAdapter()->getProfiler(), 'The pool must not keep the profiler once profiling is off');
         $this->assertNull($connection->getProfiler(), 'The pooled connection must not keep the profiler once profiling is off');

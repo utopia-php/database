@@ -113,7 +113,7 @@ trait SchemaReconciliationTests
             $requested = Attribute::string(key: 'nick', size: 64);
             $adapter->createAttribute($collection, $orphan);
 
-            if ($database->getSharedTables()) {
+            if ($database->hasSharedTables()) {
                 try {
                     $database->createAttribute($collection, $requested);
                     $this->fail('A column another tenant may use must not be replaced under shared tables');

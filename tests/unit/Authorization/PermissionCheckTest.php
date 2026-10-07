@@ -30,9 +30,9 @@ class PermissionCheckTest extends TestCase
     {
         $this->adapter = self::createStub(Adapter::class);
 
-        $this->adapter->method('getSharedTables')->willReturn(false);
+        $this->adapter->method('hasSharedTables')->willReturn(false);
         $this->adapter->method('getTenant')->willReturn(null);
-        $this->adapter->method('getTenantPerDocument')->willReturn(false);
+        $this->adapter->method('isTenantPerDocument')->willReturn(false);
         $this->adapter->method('limits')->willReturn(new Limits(
             string: 0,
             varchar: 0,
@@ -66,8 +66,8 @@ class PermissionCheckTest extends TestCase
 
         $cache = new Cache(new NoneAdapter());
         $this->database = new Database($this->adapter, $cache);
-        $this->database->disableValidation();
-        $this->database->disableFilters();
+        $this->database->setValidation(false);
+        $this->database->setFiltering(false);
 
         $this->authorization = $this->database->getAuthorization();
     }

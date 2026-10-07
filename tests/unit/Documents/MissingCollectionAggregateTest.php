@@ -72,9 +72,9 @@ final class MissingCollectionAggregateTest extends TestCase
     public function testMissingCollectionNeverReachesTheAdapterWhenAuthorizationIsSkipped(Closure $aggregate, string $method): void
     {
         $adapter = $this->createMock(Adapter::class);
-        $adapter->method('getSharedTables')->willReturn(false);
+        $adapter->method('hasSharedTables')->willReturn(false);
         $adapter->method('getTenant')->willReturn(null);
-        $adapter->method('getTenantPerDocument')->willReturn(false);
+        $adapter->method('isTenantPerDocument')->willReturn(false);
         $adapter->method('getNamespace')->willReturn('');
         $adapter->method('limits')->willReturn(new Limits(
             string: 0,

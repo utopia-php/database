@@ -1167,7 +1167,7 @@ trait JoinComboTests
             return;
         }
 
-        $sharedTables = $database->getSharedTables();
+        $sharedTables = $database->hasSharedTables();
         $namespace = $database->getNamespace();
         $schema = $database->getDatabase();
         $tenant = $database->getTenant();

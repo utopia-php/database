@@ -25,6 +25,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Filter\Callback;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
@@ -78,21 +79,33 @@ final class ScopedToggleCoroutineTest extends TestCase
                 'quiet',
                 'QUIET',
             ],
+            'withFiltering(false)' => [
+                static fn (Database $database, Closure $callback): mixed => $database->withFiltering(false, $callback),
+                self::decodedTitle(...),
+                'quiet',
+                'QUIET',
+            ],
+            'withValidation(false)' => [
+                static fn (Database $database, Closure $callback): mixed => $database->withValidation(false, $callback),
+                static fn (Database $database): bool => $database->isValidating(),
+                false,
+                true,
+            ],
             'skipValidation' => [
                 static fn (Database $database, Closure $callback): mixed => $database->skipValidation($callback),
-                static fn (Database $database): bool => $database->isValidationEnabled(),
+                static fn (Database $database): bool => $database->isValidating(),
                 false,
                 true,
             ],
             'withPreserveDates' => [
-                static fn (Database $database, Closure $callback): mixed => $database->withPreserveDates($callback),
-                static fn (Database $database): bool => $database->getPreserveDates(),
+                static fn (Database $database, Closure $callback): mixed => $database->withPreserveDates(true, $callback),
+                static fn (Database $database): bool => $database->isPreservingDates(),
                 true,
                 false,
             ],
             'withPreserveSequence' => [
-                static fn (Database $database, Closure $callback): mixed => $database->withPreserveSequence($callback),
-                static fn (Database $database): bool => $database->getPreserveSequence(),
+                static fn (Database $database, Closure $callback): mixed => $database->withPreserveSequence(true, $callback),
+                static fn (Database $database): bool => $database->isPreservingSequence(),
                 true,
                 false,
             ],
@@ -108,14 +121,14 @@ final class ScopedToggleCoroutineTest extends TestCase
                 'conflict',
                 'updated',
             ],
-            'skipDuplicates' => [
-                static fn (Database $database, Closure $callback): mixed => $database->skipDuplicates($callback),
+            'ignoreDuplicates' => [
+                static fn (Database $database, Closure $callback): mixed => $database->ignoreDuplicates($callback),
                 self::duplicateOutcome(...),
                 'skipped',
                 'rejected',
             ],
-            'adapter skipDuplicates' => [
-                static fn (Database $database, Closure $callback): mixed => $database->getAdapter()->skipDuplicates($callback),
+            'adapter ignoreDuplicates' => [
+                static fn (Database $database, Closure $callback): mixed => $database->getAdapter()->ignoreDuplicates($callback),
                 self::duplicateOutcome(...),
                 'skipped',
                 'rejected',
@@ -236,15 +249,15 @@ final class ScopedToggleCoroutineTest extends TestCase
         $database = $this->database(new Memory());
 
         $seen = $database->skipValidation(function () use ($database): array {
-            $database->enableValidation();
+            $database->setValidation(true);
             $database->setPreserveDates(true);
 
-            return [$database->isValidationEnabled(), $database->withPreserveDates(fn (): bool => $database->getPreserveDates())];
+            return [$database->isValidating(), $database->withPreserveDates(true, fn (): bool => $database->isPreservingDates())];
         });
 
         $this->assertSame([true, true], $seen);
-        $this->assertTrue($database->isValidationEnabled());
-        $this->assertTrue($database->getPreserveDates(), 'setPreserveDates() outside a withPreserveDates() scope changes the handle-wide value');
+        $this->assertTrue($database->isValidating());
+        $this->assertTrue($database->isPreservingDates(), 'setPreserveDates() outside a withPreserveDates() scope changes the handle-wide value');
 
         $database->withTenant(self::SCOPED_TENANT, fn (): Database => $database->setTenant(self::OTHER_TENANT));
 
@@ -318,7 +331,7 @@ final class ScopedToggleCoroutineTest extends TestCase
             $closed = new Channel(1);
 
             Coroutine::create(function () use ($database, $entered, $written, $closed): void {
-                $database->withPreserveDates(function () use ($database, $entered, $written): void {
+                $database->withPreserveDates(true, function () use ($database, $entered, $written): void {
                     $entered->push(true);
                     $written->pop();
                     $this->failureOf(fn (): Document => $database->createDocument(self::COLLECTION, $this->dated('preserved')));
@@ -354,7 +367,7 @@ final class ScopedToggleCoroutineTest extends TestCase
                     $released->pop();
                     $seen['carried'] = $database->withSnapshot($snapshot, function () use ($database): array {
                         $state = $this->state($database);
-                        $database->enableValidation();
+                        $database->setValidation(true);
                         $database->setTenant(9);
 
                         return $state;
@@ -390,7 +403,7 @@ final class ScopedToggleCoroutineTest extends TestCase
     public function testASnapshotTakenOutsideAnyScopeCarriesTheHandleWideValues(): void
     {
         $source = $this->database(new Memory());
-        $source->disableValidation()->setPreserveDates(true);
+        $source->setValidation(false)->setPreserveDates(true);
         $destination = $this->database(new Memory());
 
         $carried = $destination->withSnapshot($source->snapshot(), fn (): array => $this->state($destination));
@@ -410,7 +423,7 @@ final class ScopedToggleCoroutineTest extends TestCase
             ['inside' => 'skipped', 'child' => 'skipped', 'parent' => 'rejected', 'sibling' => 'rejected', 'insideAfterSibling' => 'skipped', 'after' => 'rejected'],
             $this->whileASiblingIsInside(
                 $database,
-                static fn (Database $database, Closure $callback): mixed => $database->getAdapter()->skipDuplicates($callback),
+                static fn (Database $database, Closure $callback): mixed => $database->getAdapter()->ignoreDuplicates($callback),
                 self::duplicateOutcome(...),
                 siblingFirst: false,
             ),
@@ -493,12 +506,12 @@ final class ScopedToggleCoroutineTest extends TestCase
     {
         return $database->skipValidation(
             fn (): mixed => $database->withPreserveDates(
-                fn (): mixed => $database->withPreserveSequence(
-                    fn (): mixed => $database->withTenant(
+                true, fn (): mixed => $database->withPreserveSequence(
+                    true, fn (): mixed => $database->withTenant(
                         self::SCOPED_TENANT,
                         fn (): mixed => $database->withRequestTimestamp(
                             new DateTime(self::PAST),
-                            fn (): mixed => $database->skipDuplicates(
+                            fn (): mixed => $database->ignoreDuplicates(
                                 fn (): mixed => $database->skipFilters($callback, [self::FILTER]),
                             ),
                         ),
@@ -514,9 +527,9 @@ final class ScopedToggleCoroutineTest extends TestCase
     private function state(Database $database): array
     {
         return [
-            'validation' => $database->isValidationEnabled(),
-            'preserveDates' => $database->getPreserveDates(),
-            'preserveSequence' => $database->getPreserveSequence(),
+            'validation' => $database->isValidating(),
+            'preserveDates' => $database->isPreservingDates(),
+            'preserveSequence' => $database->isPreservingSequence(),
             'tenant' => $database->getTenant(),
             'title' => self::guarded(self::decodedTitle(...), $database),
             'update' => self::guarded(self::updateOutcome(...), $database),
@@ -636,15 +649,16 @@ final class ScopedToggleCoroutineTest extends TestCase
     }
 
     /**
-     * @return array<string, array{encode: callable, decode: callable}>
+     * @return list<Callback>
      */
     private static function filters(): array
     {
         return [
-            self::FILTER => [
-                'encode' => static fn (mixed $value): mixed => \is_string($value) ? \strtolower($value) : $value,
-                'decode' => static fn (mixed $value): mixed => \is_string($value) ? \strtoupper($value) : $value,
-            ],
+            new Callback(
+                self::FILTER,
+                static fn (mixed $value): mixed => \is_string($value) ? \strtolower($value) : $value,
+                static fn (mixed $value): mixed => \is_string($value) ? \strtoupper($value) : $value,
+            ),
         ];
     }
 

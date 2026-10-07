@@ -485,7 +485,7 @@ final class JoinCursorTest extends TestCase
     #[DataProvider('joinTieKeys')]
     public function testJoinedIdBreaksTiesOnlyWhenAJoinCanPairSeveralRows(Query $join, bool $ordersByJoinedId): void
     {
-        $this->database->enableProfiling();
+        $this->database->setProfiling(true);
         $this->database->getProfiler()?->reset();
 
         $rows = $this->database->find('notes', [$join, Query::orderAsc('label')]);
@@ -537,7 +537,7 @@ final class JoinCursorTest extends TestCase
     {
         $queries = [new Query($join, 'notes', ['$id', '=', 'author', 'n']), ...$queries];
 
-        $this->database->enableProfiling();
+        $this->database->setProfiling(true);
         $this->database->getProfiler()?->reset();
         $rows = $this->database->find('authors', $queries);
 
@@ -559,7 +559,7 @@ final class JoinCursorTest extends TestCase
         $queries = [Query::leftJoin('notes', '$id', 'author', '=', 'n'), Query::select(['name'])];
         $cursor = $this->database->find('authors', [...$queries, Query::limit(1)])[0];
 
-        $this->database->enableProfiling();
+        $this->database->setProfiling(true);
         $this->database->getProfiler()?->reset();
 
         try {

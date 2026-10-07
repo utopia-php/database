@@ -32,15 +32,16 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Exception\Conflict as ConflictException;
+use Utopia\Database\Filter\Registry;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Decorator;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Index;
 use Utopia\Database\Mirror;
+use Utopia\Database\Mirror\Failure;
 use Utopia\Database\Mirroring\Filter;
 use Utopia\Database\Query;
-use Utopia\Database\Type\TypeRegistry;
 use Utopia\Database\Validator\Authorization;
 
 use function Swoole\Coroutine\run;
@@ -88,9 +89,9 @@ class MirrorTest extends TestCase
 
         $mirror->setSharedTables(true);
 
-        $this->assertTrue($mirror->getSharedTables());
-        $this->assertTrue($source->getSharedTables());
-        $this->assertTrue($destination->getSharedTables());
+        $this->assertTrue($mirror->hasSharedTables());
+        $this->assertTrue($source->hasSharedTables());
+        $this->assertTrue($destination->hasSharedTables());
     }
 
     public function testCreateCreatesMetadataOnDestination(): void
@@ -133,36 +134,36 @@ class MirrorTest extends TestCase
     {
         [$mirror, $source, $destination] = $this->pair();
 
-        $this->assertTrue($mirror->isValidationEnabled());
-        $this->assertTrue($source->isValidationEnabled());
-        $this->assertTrue($destination->isValidationEnabled());
+        $this->assertTrue($mirror->isValidating());
+        $this->assertTrue($source->isValidating());
+        $this->assertTrue($destination->isValidating());
 
         $mirror->skipValidation(function () use ($mirror, $source, $destination) {
-            $this->assertFalse($mirror->isValidationEnabled());
-            $this->assertFalse($source->isValidationEnabled());
-            $this->assertFalse($destination->isValidationEnabled());
+            $this->assertFalse($mirror->isValidating());
+            $this->assertFalse($source->isValidating());
+            $this->assertFalse($destination->isValidating());
         });
 
-        $this->assertTrue($mirror->isValidationEnabled());
-        $this->assertTrue($source->isValidationEnabled());
-        $this->assertTrue($destination->isValidationEnabled());
+        $this->assertTrue($mirror->isValidating());
+        $this->assertTrue($source->isValidating());
+        $this->assertTrue($destination->isValidating());
     }
 
     public function testDisableValidationDelegatesToSourceAndDestination(): void
     {
         [$mirror, $source, $destination] = $this->pair();
 
-        $mirror->disableValidation();
+        $mirror->setValidation(false);
 
-        $this->assertFalse($mirror->isValidationEnabled());
-        $this->assertFalse($source->isValidationEnabled());
-        $this->assertFalse($destination->isValidationEnabled());
+        $this->assertFalse($mirror->isValidating());
+        $this->assertFalse($source->isValidating());
+        $this->assertFalse($destination->isValidating());
 
-        $mirror->enableValidation();
+        $mirror->setValidation(true);
 
-        $this->assertTrue($mirror->isValidationEnabled());
-        $this->assertTrue($source->isValidationEnabled());
-        $this->assertTrue($destination->isValidationEnabled());
+        $this->assertTrue($mirror->isValidating());
+        $this->assertTrue($source->isValidating());
+        $this->assertTrue($destination->isValidating());
     }
 
     public function testWrappingKeepsTheAuthorizationOfTheSourceAndDestination(): void
@@ -327,7 +328,7 @@ class MirrorTest extends TestCase
     public static function forwardedSetters(): iterable
     {
         $queryCache = new QueryCache(new Cache(new None()));
-        $typeRegistry = new TypeRegistry();
+        $filters = new Registry();
         $meta = self::meta(...);
 
         yield 'setQueryCache' => [
@@ -354,7 +355,7 @@ class MirrorTest extends TestCase
         ];
         yield 'setTenantPerDocument' => [
             static fn (Mirror $mirror): mixed => $mirror->setTenantPerDocument(true),
-            static fn (Database $database): mixed => $database->getTenantPerDocument(),
+            static fn (Database $database): mixed => $database->isTenantPerDocument(),
             true,
         ];
         yield 'setTimeout' => [
@@ -381,13 +382,13 @@ class MirrorTest extends TestCase
             static fn (Database $database): mixed => $database->getMetadata(),
             [],
         ];
-        yield 'disableFilters' => [
-            static fn (Mirror $mirror): mixed => $mirror->disableFilters(),
+        yield 'setFiltering(false)' => [
+            static fn (Mirror $mirror): mixed => $mirror->setFiltering(false),
             $meta,
             '{"filtered":true}',
         ];
-        yield 'enableFilters' => [
-            static fn (Mirror $mirror): mixed => self::onEach($mirror, static fn (Database $database): mixed => $database->disableFilters())->enableFilters(),
+        yield 'setFiltering(true)' => [
+            static fn (Mirror $mirror): mixed => self::onEach($mirror, static fn (Database $database): mixed => $database->setFiltering(false))->setFiltering(true),
             $meta,
             ['filtered' => true],
         ];
@@ -396,13 +397,13 @@ class MirrorTest extends TestCase
             static fn (Database $database): mixed => self::locking($database),
             true,
         ];
-        yield 'enableProfiling' => [
-            static fn (Mirror $mirror): mixed => $mirror->enableProfiling(),
+        yield 'setProfiling(true)' => [
+            static fn (Mirror $mirror): mixed => $mirror->setProfiling(true),
             static fn (Database $database): mixed => $database->getProfiler()?->isEnabled(),
             true,
         ];
-        yield 'disableProfiling' => [
-            static fn (Mirror $mirror): mixed => self::onEach($mirror, static fn (Database $database): mixed => $database->enableProfiling())->disableProfiling(),
+        yield 'setProfiling(false)' => [
+            static fn (Mirror $mirror): mixed => self::onEach($mirror, static fn (Database $database): mixed => $database->setProfiling(true))->setProfiling(false),
             static fn (Database $database): mixed => $database->getProfiler()?->isEnabled(),
             false,
         ];
@@ -411,10 +412,10 @@ class MirrorTest extends TestCase
             static fn (Database $database): mixed => $database->isMigrating(),
             true,
         ];
-        yield 'setTypeRegistry' => [
-            static fn (Mirror $mirror): mixed => $mirror->setTypeRegistry($typeRegistry),
-            static fn (Database $database): mixed => $database->getTypeRegistry(),
-            $typeRegistry,
+        yield 'setFilters' => [
+            static fn (Mirror $mirror): mixed => $mirror->setFilters($filters),
+            static fn (Database $database): mixed => $database->getFilters(),
+            $filters,
         ];
     }
 
@@ -469,15 +470,15 @@ class MirrorTest extends TestCase
     public static function scopedSetters(): iterable
     {
         yield 'withPreserveDates' => [
-            static fn (Mirror $mirror, Closure $callback): mixed => $mirror->withPreserveDates($callback),
-            static fn (Database $database): mixed => $database->getPreserveDates(),
+            static fn (Mirror $mirror, Closure $callback): mixed => $mirror->withPreserveDates(true, $callback),
+            static fn (Database $database): mixed => $database->isPreservingDates(),
             true,
             false,
             true,
         ];
         yield 'withPreserveSequence' => [
-            static fn (Mirror $mirror, Closure $callback): mixed => $mirror->withPreserveSequence($callback),
-            static fn (Database $database): mixed => $database->getPreserveSequence(),
+            static fn (Mirror $mirror, Closure $callback): mixed => $mirror->withPreserveSequence(true, $callback),
+            static fn (Database $database): mixed => $database->isPreservingSequence(),
             true,
             false,
             true,
@@ -557,7 +558,7 @@ class MirrorTest extends TestCase
         $createdAt = '2001-02-03T04:05:06.000+00:00';
 
         self::inCoroutine(static fn (): mixed => $mirror->withPreserveDates(
-            static fn (): mixed => $mirror->upsertDocument(self::COLLECTION, new Document([
+            true, static fn (): mixed => $mirror->upsertDocument(self::COLLECTION, new Document([
                 Document::ID => 'dated',
                 '$createdAt' => $createdAt,
                 '$updatedAt' => $createdAt,
@@ -578,7 +579,7 @@ class MirrorTest extends TestCase
     {
         [$mirror, $source, $destination] = $this->pair();
 
-        $mirror->enableProfiling();
+        $mirror->setProfiling(true);
 
         $this->assertNotNull($mirror->getProfiler());
         $this->assertSame($source->getProfiler(), $mirror->getProfiler());
@@ -586,7 +587,7 @@ class MirrorTest extends TestCase
         $this->assertNotNull($destination->getProfiler());
         $this->assertSame($destination->getProfiler(), $destination->getAdapter()->getProfiler());
 
-        $mirror->disableProfiling();
+        $mirror->setProfiling(false);
 
         $this->assertNull($mirror->getAdapter()->getProfiler());
         $this->assertNull($destination->getAdapter()->getProfiler());
@@ -636,8 +637,8 @@ class MirrorTest extends TestCase
         }, new Cache(new None()));
         $mirror = new Mirror($source, $destination);
         $errors = [];
-        $mirror->onError(static function (string $failed, Throwable $error) use (&$errors): void {
-            $errors[] = [$failed, $error->getMessage()];
+        $mirror->onError(static function (Failure $failure) use (&$errors): void {
+            $errors[] = [$failure->method, $failure->error->getMessage()];
         });
 
         $call($mirror);
@@ -687,8 +688,8 @@ class MirrorTest extends TestCase
         $destination = self::sqlite();
         $mirror = $this->seed(new Mirror($source, $destination));
         $errors = [];
-        $mirror->onError(static function (string $action, Throwable $error) use (&$errors): void {
-            $errors[] = [$action, $error->getMessage()];
+        $mirror->onError(static function (Failure $failure) use (&$errors): void {
+            $errors[] = [$failure->method, $failure->error->getMessage()];
         });
 
         self::inCoroutine(static fn (): mixed => $upsert($mirror, new Document([Document::ID => 'first', 'title' => 'upserted', 'views' => 2])));
@@ -740,8 +741,8 @@ class MirrorTest extends TestCase
         }, new Cache(new None()));
         $mirror = $this->seed(new Mirror(self::sqlite(), $destination));
         $errors = [];
-        $mirror->onError(static function (string $failed, Throwable $error) use (&$errors): void {
-            $errors[] = [$failed, $error->getMessage()];
+        $mirror->onError(static function (Failure $failure) use (&$errors): void {
+            $errors[] = [$failure->method, $failure->error->getMessage()];
         });
 
         self::inCoroutine(static fn (): mixed => $upsert($mirror, new Document([Document::ID => 'first', 'title' => 'upserted', 'views' => 2])));
@@ -942,8 +943,8 @@ class MirrorTest extends TestCase
         }, new Cache(new None()));
         $mirror = new Mirror($source, $destination);
         $errors = [];
-        $mirror->onError(static function (string $action, Throwable $error) use (&$errors): void {
-            $errors[] = [$action, $error->getMessage()];
+        $mirror->onError(static function (Failure $failure) use (&$errors): void {
+            $errors[] = [$failure->method, $failure->error->getMessage()];
         });
 
         $mirror->setLocks(true);
@@ -1038,8 +1039,8 @@ class MirrorTest extends TestCase
             }
         });
         $errors = [];
-        $mirror->onError(static function (string $action, Throwable $error) use (&$errors): void {
-            $errors[] = [$action, $error->getMessage()];
+        $mirror->onError(static function (Failure $failure) use (&$errors): void {
+            $errors[] = [$failure->method, $failure->error->getMessage()];
         });
         /** @var ArrayObject<int, Document> $returned */
         $returned = new ArrayObject();
@@ -1071,11 +1072,11 @@ class MirrorTest extends TestCase
             },
             500,
         ];
-        yield 'disableValidation' => [
+        yield 'setValidation(false)' => [
             static function (Mirror $mirror): mixed {
-                $mirror->disableValidation();
+                $mirror->setValidation(false);
 
-                return [$mirror->isValidationEnabled(), $mirror->getSource()->isValidationEnabled()];
+                return [$mirror->isValidating(), $mirror->getSource()->isValidating()];
             },
             [false, false],
         ];
@@ -1100,8 +1101,8 @@ class MirrorTest extends TestCase
     {
         $mirror = $this->seed(new Mirror(new Database(self::configurableAdapter(), new Cache(new None()))));
         $errors = [];
-        $mirror->onError(static function (string $action, Throwable $error) use (&$errors): void {
-            $errors[] = [$action, $error->getMessage()];
+        $mirror->onError(static function (Failure $failure) use (&$errors): void {
+            $errors[] = [$failure->method, $failure->error->getMessage()];
         });
 
         $this->assertSame($expected, $call($mirror));
@@ -1113,10 +1114,10 @@ class MirrorTest extends TestCase
         $source = new Database(new Memory(), new Cache(new None()));
         $mirror = new Mirror($source);
 
-        $inside = $mirror->skipValidation(static fn (): array => [$mirror->isValidationEnabled(), $source->isValidationEnabled()]);
+        $inside = $mirror->skipValidation(static fn (): array => [$mirror->isValidating(), $source->isValidating()]);
 
         $this->assertSame([false, false], $inside);
-        $this->assertSame([true, true], [$mirror->isValidationEnabled(), $source->isValidationEnabled()]);
+        $this->assertSame([true, true], [$mirror->isValidating(), $source->isValidating()]);
     }
 
     public function testCreateCollectionRunsWriteFilters(): void
@@ -1238,8 +1239,8 @@ class MirrorTest extends TestCase
     {
         /** @var ArrayObject<int, array{string, string}> $errors */
         $errors = new ArrayObject();
-        $mirror->onError(static function (string $action, Throwable $error) use ($errors): void {
-            $errors[] = [$action, $error->getMessage()];
+        $mirror->onError(static function (Failure $failure) use ($errors): void {
+            $errors[] = [$failure->method, $failure->error->getMessage()];
         });
 
         return $errors;
@@ -1758,7 +1759,7 @@ class MirrorTest extends TestCase
         $this->assertSame([[$action, 'destination unreachable']], $errors->getArrayCopy());
         $this->assertSame($sourceTitle, self::storedTitle($source, $id));
         $this->assertSame($unchangedTitle, self::storedTitle($destination, $id));
-        $this->assertFalse($destination->getPreserveDates(), 'A failed replication must not leave the destination preserving dates');
+        $this->assertFalse($destination->isPreservingDates(), 'A failed replication must not leave the destination preserving dates');
     }
 
     public function testReplicationKeepsTheDestinationsPreserveDatesSetting(): void
@@ -1770,7 +1771,7 @@ class MirrorTest extends TestCase
         $mirror->createDocument(self::COLLECTION, new Document([Document::ID => 'second', 'title' => 'second']));
         $mirror->updateDocument(self::COLLECTION, 'second', new Document(['title' => 'updated']));
 
-        $this->assertTrue($destination->getPreserveDates());
+        $this->assertTrue($destination->isPreservingDates());
     }
 
     public function testWritesThroughAMirrorWhoseSourceHasNoUpgradesCollectionAreNotReplicated(): void

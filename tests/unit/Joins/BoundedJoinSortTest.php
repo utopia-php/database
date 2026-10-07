@@ -475,7 +475,7 @@ final class BoundedJoinSortTest extends TestCase
         if ($shared) {
             $database->setTenant(1);
         }
-        $database->enableProfiling();
+        $database->setProfiling(true);
 
         return $database;
     }

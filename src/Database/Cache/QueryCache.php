@@ -5,8 +5,13 @@ namespace Utopia\Database\Cache;
 use InvalidArgumentException;
 use RuntimeException;
 use Utopia\Cache\Cache;
+use Utopia\Database\Database;
 use Utopia\Database\Document;
 
+/**
+ * Caches find() results per collection. It takes its cache name and its writer timeout, the seconds after which a
+ * write that has not activated is treated as abandoned, from the Database it is attached to.
+ */
 class QueryCache
 {
     private const string ACTIVE_PREFIX = 'active:';
@@ -29,6 +34,8 @@ class QueryCache
 
     private const int WRITER_TIMEOUT = 3600;
 
+    private const string NAME = 'default';
+
     private const int SLOTS = 1024;
 
     private const string BLOCK_FIELD = 'block';
@@ -36,14 +43,13 @@ class QueryCache
     /** @var array<string, Region> */
     private array $regions = [];
 
+    private ?Database $database = null;
+
     /**
-     * @param  int  $writerTimeout  Seconds after which a write that has not activated is treated as abandoned
      * @param  int  $slots  Results a collection scope keeps at most; queries sharing a slot evict each other
      */
     public function __construct(
         private readonly Cache $cache,
-        private readonly string $cacheName = 'default',
-        private readonly int $writerTimeout = self::WRITER_TIMEOUT,
         private readonly int $slots = self::SLOTS,
     ) {
         if ($slots < 1) {
@@ -51,9 +57,19 @@ class QueryCache
         }
     }
 
-    public function setRegion(string $collection, Region $region): void
+    /**
+     * @internal Database::setQueryCache() attaches the cache to the database it is set on.
+     */
+    public function attach(Database $database): void
+    {
+        $this->database = $database;
+    }
+
+    public function setRegion(string $collection, Region $region): static
     {
         $this->regions[$collection] = $region;
+
+        return $this;
     }
 
     public function getRegion(string $collection): Region
@@ -71,7 +87,9 @@ class QueryCache
             'collection' => $collection,
         ]));
 
-        return "{$this->cacheName}:qcache:{$collection}:{$scopeHash}";
+        $name = $this->database?->getCacheName() ?? self::NAME;
+
+        return "{$name}:qcache:{$collection}:{$scopeHash}";
     }
 
     /**
@@ -342,13 +360,14 @@ class QueryCache
     {
         $now = \time();
         $ttl = $this->getRegion($collection)->ttl;
-        if ($stamp + \min($ttl, $this->writerTimeout) > $now) {
+        $writerTimeout = $this->getWriterTimeout();
+        if ($stamp + \min($ttl, $writerTimeout) > $now) {
             return null;
         }
 
         $started = $this->cache->getGeneration($this->getStartedKey($key));
         $finished = $this->cache->getGeneration($this->getFinishedKey($key));
-        if ($stamp + ($started === $finished ? $ttl : $this->writerTimeout) > $now) {
+        if ($stamp + ($started === $finished ? $ttl : $writerTimeout) > $now) {
             return null;
         }
 
@@ -362,10 +381,11 @@ class QueryCache
     private function releaseAbandonedOwners(string $owners): bool
     {
         $now = \time();
+        $writerTimeout = $this->getWriterTimeout();
         $abandoned = [];
         foreach ($this->cache->list($owners) as $token) {
             $created = $this->getTokenTime($token);
-            if ($created === null || $created + $this->writerTimeout > $now) {
+            if ($created === null || $created + $writerTimeout > $now) {
                 return false;
             }
 
@@ -377,6 +397,11 @@ class QueryCache
         }
 
         return true;
+    }
+
+    private function getWriterTimeout(): int
+    {
+        return $this->database?->getCacheWriterTimeout() ?? self::WRITER_TIMEOUT;
     }
 
     private function getTokenTime(string $token): ?int

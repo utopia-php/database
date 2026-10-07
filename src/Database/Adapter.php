@@ -42,13 +42,6 @@ abstract class Adapter
     /** @var Value<bool>|null */
     private ?Value $duplicateSkipping = null;
 
-    protected int|string|null $tenant {
-        get => $this->scopedTenant()->get();
-        set {
-            $this->scopedTenant()->set($value);
-        }
-    }
-
     protected bool $tenantPerDocument = false;
 
     protected int $inTransaction = 0;
@@ -59,13 +52,6 @@ abstract class Adapter
     private int $transactionCalls = 0;
 
     protected bool $locks = false;
-
-    protected bool $skipDuplicates {
-        get => $this->duplicateSkipping()->get();
-        set {
-            $this->duplicateSkipping()->set($value);
-        }
-    }
 
     /**
      * @var array<string, mixed>
@@ -167,18 +153,13 @@ abstract class Adapter
     }
 
     /**
-     * Set Database.
-     *
-     * Set database to use for current scope
-     *
-     *
      * @throws DatabaseException
      */
-    public function setDatabase(string $name): bool
+    public function setDatabase(string $name): static
     {
         $this->database = $this->filter($name);
 
-        return true;
+        return $this;
     }
 
     /**
@@ -231,38 +212,29 @@ abstract class Adapter
     }
 
     /**
-     * Set Shared Tables.
-     *
-     * Set whether to share tables between tenants
+     * Whether tenants share tables, told apart by the tenant column.
      */
-    public function setSharedTables(bool $sharedTables): bool
+    public function setSharedTables(bool $sharedTables): static
     {
         $this->sharedTables = $sharedTables;
         $this->limits = null;
 
-        return true;
+        return $this;
     }
 
-    /**
-     * Get Share Tables.
-     *
-     * Get whether to share tables between tenants
-     */
-    public function getSharedTables(): bool
+    public function hasSharedTables(): bool
     {
         return $this->sharedTables;
     }
 
     /**
-     * Set Tenant.
-     *
-     * Set tenant to use if tables are shared
+     * The tenant statements run as under shared tables.
      */
-    public function setTenant(int|string|null $tenant): bool
+    public function setTenant(int|string|null $tenant): static
     {
         $this->scopedTenant()->set($tenant);
 
-        return true;
+        return $this;
     }
 
     /**
@@ -300,9 +272,7 @@ abstract class Adapter
     }
 
     /**
-     * The tenant the calling coroutine's statements run as, exactly as it was set. The adapters read it through
-     * this method rather than the `$tenant` property hook: with the hook on their hot paths, PHP 8.5's tracing JIT
-     * (8.5.10 and 8.5.11) crashes the process.
+     * The tenant the calling coroutine's statements run as, exactly as it was set.
      */
     protected function currentTenant(): int|string|null
     {
@@ -324,23 +294,16 @@ abstract class Adapter
     }
 
     /**
-     * Set Tenant Per Document.
-     *
-     * Set whether to use a different tenant for each document
+     * Whether a document carries its own tenant instead of the adapter's.
      */
-    public function setTenantPerDocument(bool $tenantPerDocument): bool
+    public function setTenantPerDocument(bool $tenantPerDocument): static
     {
         $this->tenantPerDocument = $tenantPerDocument;
 
-        return true;
+        return $this;
     }
 
-    /**
-     * Get Tenant Per Document.
-     *
-     * Get whether to use a different tenant for each document
-     */
-    public function getTenantPerDocument(): bool
+    public function isTenantPerDocument(): bool
     {
         return $this->tenantPerDocument;
     }
@@ -403,16 +366,9 @@ abstract class Adapter
         return $this->metadata;
     }
 
-    /**
-     * Clear existing metadata
-     *
-     * @return $this
-     */
-    public function resetMetadata(): static
+    public function resetMetadata(): void
     {
         $this->metadata = [];
-
-        return $this;
     }
 
     /**
@@ -518,16 +474,9 @@ abstract class Adapter
         return $this;
     }
 
-    /**
-     * Remove all registered query transform hooks.
-     *
-     * @return $this
-     */
-    public function resetTransforms(): static
+    public function resetTransforms(): void
     {
         $this->transforms = [];
-
-        return $this;
     }
 
     /**
@@ -569,22 +518,21 @@ abstract class Adapter
     }
 
     /**
-     * Run a callback with skipDuplicates enabled.
-     * Duplicate key errors during createDocuments() will be silently skipped
-     * instead of thrown. Nestable, and scoped to the calling coroutine and the coroutines it starts.
+     * Run the callback with createDocuments() skipping the documents whose id or unique key already exists instead
+     * of failing. Nestable, and scoped to the calling coroutine and the coroutines it starts.
      *
      * @template T
-     * @param callable(): T $callback
+     *
+     * @param  callable(): T  $callback
      * @return T
      */
-    public function skipDuplicates(callable $callback): mixed
+    public function ignoreDuplicates(callable $callback): mixed
     {
         return $this->duplicateSkipping()->with(true, $callback);
     }
 
     /**
-     * Whether the calling coroutine runs under skipDuplicates(). The adapters read it through this method rather
-     * than the `$skipDuplicates` property hook, for the same tracing JIT crash (php/php-src#22084) as {@see self::currentTenant()}.
+     * Whether the calling coroutine runs under ignoreDuplicates().
      */
     protected function skippingDuplicates(): bool
     {
@@ -842,7 +790,7 @@ abstract class Adapter
      * Create Documents in batches
      *
      * @param  array<Document>  $documents
-     * @return array<Document> The documents written; under skipDuplicates() the skipped ones are left out
+     * @return array<Document> The documents written; under ignoreDuplicates() the skipped ones are left out
      *
      * @throws DatabaseException
      */

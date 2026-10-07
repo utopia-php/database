@@ -27,9 +27,9 @@ class CreateDocumentLogicTest extends TestCase
     protected function setUp(): void
     {
         $this->adapter = self::createStub(Adapter::class);
-        $this->adapter->method('getSharedTables')->willReturn(false);
+        $this->adapter->method('hasSharedTables')->willReturn(false);
         $this->adapter->method('getTenant')->willReturn(null);
-        $this->adapter->method('getTenantPerDocument')->willReturn(false);
+        $this->adapter->method('isTenantPerDocument')->willReturn(false);
         $this->adapter->method('getNamespace')->willReturn('');
         $this->adapter->method('limits')->willReturn(new Limits(
             string: 16777215,
@@ -163,7 +163,7 @@ class CreateDocumentLogicTest extends TestCase
             new Document(['$id' => 'title', 'key' => 'title', 'type' => 'string', 'size' => 128, 'required' => true, 'array' => false, 'signed' => true, 'filters' => []]),
         ];
         $this->setupCollection('testCol', $attributes);
-        $this->database->enableValidation();
+        $this->database->setValidation(true);
 
         $doc = new Document([
             '$permissions' => [Permission::read(Role::any())],
@@ -236,7 +236,7 @@ class CreateDocumentLogicTest extends TestCase
     public function testCreateDocumentValidatesPermissionsFormat(): void
     {
         $this->setupCollection('testCol');
-        $this->database->enableValidation();
+        $this->database->setValidation(true);
 
         $doc = new Document([
             '$permissions' => ['invalid-permission-format'],

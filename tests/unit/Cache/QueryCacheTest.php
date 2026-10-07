@@ -6,7 +6,9 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\Memory;
+use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
+use Utopia\Database\Adapter\Memory as DatabaseMemory;
 use Utopia\Database\Attribute;
 use Utopia\Database\Cache\Entry;
 use Utopia\Database\Cache\Invalidator;
@@ -43,7 +45,7 @@ class QueryCacheTest extends TestCase
     {
         $adapter = new RedisLeasableCache();
         $default = new QueryCache(new Cache($adapter));
-        $custom = new QueryCache(new Cache($adapter), 'custom');
+        $custom = self::attached(new QueryCache(new Cache($adapter)), name: 'custom');
         $entry = $custom->getEntry(new Scope(), 'users', []);
         $this->assertNotNull($entry);
         $this->assertTrue($custom->set($entry, [new Document(['$id' => 'custom'])], $custom->getGeneration($entry)));
@@ -57,6 +59,23 @@ class QueryCacheTest extends TestCase
         $after = $custom->getEntry(new Scope(), 'users', []);
         $this->assertNotNull($after);
         $this->assertSame(['custom'], $this->ids($custom->get($after) ?? []), 'Invalidating one query cache must not retire what a query cache of another name filled');
+    }
+
+    public function testTheNameFollowsTheDatabaseItIsAttachedTo(): void
+    {
+        $adapter = new RedisLeasableCache();
+        $renamed = new QueryCache(new Cache($adapter));
+        $database = (new Database(new DatabaseMemory(), new Cache(new None())))->setQueryCache($renamed);
+        $custom = self::attached(new QueryCache(new Cache($adapter)), name: 'custom');
+        $entry = $custom->getEntry(new Scope(), 'users', []);
+        $this->assertNotNull($entry);
+        $this->assertTrue($custom->set($entry, [new Document(['$id' => 'custom'])], $custom->getGeneration($entry)));
+
+        $database->setCacheName('custom');
+
+        $shared = $renamed->getEntry(new Scope(), 'users', []);
+        $this->assertNotNull($shared);
+        $this->assertSame(['custom'], $this->ids($renamed->get($shared) ?? []), 'A query cache must read under the name its database has now');
     }
 
     public function testSetRegionAndGetRegion(): void
@@ -560,7 +579,7 @@ class QueryCacheTest extends TestCase
     public function testAKilledWriterDoesNotDisableTheQueryCacheForever(): void
     {
         $adapter = new RedisLeasableCache();
-        $queryCache = new QueryCache(new Cache($adapter), writerTimeout: 0);
+        $queryCache = self::attached(new QueryCache(new Cache($adapter)), writerTimeout: 0);
         $scope = new Scope(namespace: 'ns');
         $key = $queryCache->getCollectionKey($scope, 'users');
         $before = $queryCache->getEntry($scope, 'users', []);
@@ -580,7 +599,7 @@ class QueryCacheTest extends TestCase
     {
         $adapter = new RedisLeasableCache();
         $killed = new QueryCache(new Cache($adapter));
-        $writer = new QueryCache(new Cache($adapter), writerTimeout: 0);
+        $writer = self::attached(new QueryCache(new Cache($adapter)), writerTimeout: 0);
         $reader = new QueryCache(new Cache($adapter));
         $scope = new Scope(namespace: 'ns');
         $killed->blockCollection($killed->getCollectionKey($scope, 'users'), $killed->createToken());
@@ -621,7 +640,7 @@ class QueryCacheTest extends TestCase
     {
         $adapter = new RedisLeasableCache();
         $live = new QueryCache(new Cache($adapter));
-        $writer = new QueryCache(new Cache($adapter), writerTimeout: 0);
+        $writer = self::attached(new QueryCache(new Cache($adapter)), writerTimeout: 0);
         $reader = new QueryCache(new Cache($adapter));
         $scope = new Scope(namespace: 'ns');
         $live->blockCollection($live->getCollectionKey($scope, 'users'), 'token-without-a-time');
@@ -634,7 +653,7 @@ class QueryCacheTest extends TestCase
     public function testAWriterPastTheTimeoutRetiresWhatReadersFilledWhileItRan(): void
     {
         $adapter = new RedisLeasableCache();
-        $queryCache = new QueryCache(new Cache($adapter), writerTimeout: 0);
+        $queryCache = self::attached(new QueryCache(new Cache($adapter)), writerTimeout: 0);
         $scope = new Scope(namespace: 'ns');
         $key = $queryCache->getCollectionKey($scope, 'users');
         $token = $queryCache->createToken();
@@ -654,7 +673,7 @@ class QueryCacheTest extends TestCase
     {
         $adapter = new RedisLeasableCache();
         $slow = new QueryCache(new Cache($adapter));
-        $writer = new QueryCache(new Cache($adapter), writerTimeout: 0);
+        $writer = self::attached(new QueryCache(new Cache($adapter)), writerTimeout: 0);
         $scope = new Scope(namespace: 'ns');
         $key = $slow->getCollectionKey($scope, 'users');
         $token = $slow->createToken();
@@ -1059,6 +1078,16 @@ class QueryCacheTest extends TestCase
             $this->assertNotNull($after, "The event must leave '{$collection}' usable");
             $this->assertSame(['cached'], $this->ids($queryCache->get($after) ?? []), "The event must not retire what '{$collection}' filled");
         }
+    }
+
+    private static function attached(QueryCache $queryCache, string $name = 'default', int $writerTimeout = 3600): QueryCache
+    {
+        (new Database(new DatabaseMemory(), new Cache(new None())))
+            ->setCacheName($name)
+            ->setCacheWriterTimeout($writerTimeout)
+            ->setQueryCache($queryCache);
+
+        return $queryCache;
     }
 
     private static function createCache(): Cache&Stub

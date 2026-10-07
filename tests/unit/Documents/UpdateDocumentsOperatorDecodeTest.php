@@ -12,6 +12,7 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Filter\Callback;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Operator;
@@ -26,9 +27,10 @@ final class UpdateDocumentsOperatorDecodeTest extends TestCase
     protected function setUp(): void
     {
         $this->database = new Database(new SQLite(new PDO('sqlite::memory:')), new Cache(new None()), [
-            'wrapped' => [
-                'encode' => static fn (mixed $value): ?string => $value === null ? null : \json_encode(['value' => $value], JSON_THROW_ON_ERROR),
-                'decode' => static function (mixed $value): mixed {
+            new Callback(
+                'wrapped',
+                static fn (mixed $value): ?string => $value === null ? null : \json_encode(['value' => $value], JSON_THROW_ON_ERROR),
+                static function (mixed $value): mixed {
                     if ($value === null) {
                         return null;
                     }
@@ -40,7 +42,7 @@ final class UpdateDocumentsOperatorDecodeTest extends TestCase
 
                     return $decoded['value'];
                 },
-            ],
+            ),
         ]);
         $this->database
             ->setDatabase('operator_decode')

@@ -8,7 +8,7 @@ use Utopia\Database\Adapter\Redis as RedisAdapter;
 use Utopia\Database\Document;
 
 /**
- * Under skipDuplicates() Redis returns only the documents it inserted, so the database counts
+ * Under ignoreDuplicates() Redis returns only the documents it inserted, so the database counts
  * and emits the same documents on every adapter.
  */
 final class RedisSkipDuplicatesTest extends TestCase
@@ -25,7 +25,7 @@ final class RedisSkipDuplicatesTest extends TestCase
         $adapter = new RedisAdapter($client);
         $adapter->setNamespace('skip_duplicates');
 
-        $created = $adapter->skipDuplicates(fn (): array => $adapter->createDocuments(new Document([Document::ID => 'notes']), [
+        $created = $adapter->ignoreDuplicates(fn (): array => $adapter->createDocuments(new Document([Document::ID => 'notes']), [
             new Document([Document::ID => self::STORED]),
             new Document([Document::ID => 'fresh']),
         ]));
@@ -43,7 +43,7 @@ final class RedisSkipDuplicatesTest extends TestCase
         $adapter = new RedisAdapter($client);
         $adapter->setNamespace('skip_duplicates');
 
-        $document = $adapter->skipDuplicates(fn (): Document => $adapter->createDocument(
+        $document = $adapter->ignoreDuplicates(fn (): Document => $adapter->createDocument(
             new Document([Document::ID => 'notes']),
             new Document([Document::ID => self::STORED]),
         ));

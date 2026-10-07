@@ -26,7 +26,7 @@ use Utopia\Database\Storage;
 use Utopia\Database\Validator\Authorization;
 
 /**
- * Under skipDuplicates() a batch document whose id already exists is not written. Its
+ * Under ignoreDuplicates() a batch document whose id already exists is not written. Its
  * permissions must not be written either: a read grant lands in `_perms`, which find(),
  * count() and sum() consult, so the existing document would become readable by every role
  * the replayed copy names. Each case runs with RETURNING and with the read-back that engines
@@ -93,7 +93,7 @@ final class SkipDuplicatesPermissionTest extends TestCase
         $recorder = $this->recordCreatedDocuments();
         /** @var ArrayObject<int, string> $emitted */
         $emitted = new ArrayObject();
-        $created = $this->database->skipDuplicates(fn (): int => $this->database->createDocuments(
+        $created = $this->database->ignoreDuplicates(fn (): int => $this->database->createDocuments(
             self::COLLECTION,
             [
                 $this->note(self::EXISTING, Role::any(), 7),
@@ -124,7 +124,7 @@ final class SkipDuplicatesPermissionTest extends TestCase
         $this->open($sharedTables, $tenantPerDocument, $returning);
 
         $recorder = $this->recordCreatedDocuments();
-        $created = $this->database->skipDuplicates(fn (): int => $this->database->createDocuments(
+        $created = $this->database->ignoreDuplicates(fn (): int => $this->database->createDocuments(
             self::COLLECTION,
             [
                 $this->note(self::FRESH, Role::user(self::ALICE), 1),
@@ -145,7 +145,7 @@ final class SkipDuplicatesPermissionTest extends TestCase
         $this->database->createDocument(self::COLLECTION, $this->note(self::EXISTING, Role::user(self::ALICE), 5));
 
         $recorder = $this->recordCreatedDocuments();
-        $created = $this->database->skipDuplicates(fn (): int => $this->database->createDocuments(
+        $created = $this->database->ignoreDuplicates(fn (): int => $this->database->createDocuments(
             self::COLLECTION,
             [
                 $this->note(self::FRESH, Role::any(), 3, slug: self::EXISTING),
@@ -169,7 +169,7 @@ final class SkipDuplicatesPermissionTest extends TestCase
         $this->database->createDocument(self::COLLECTION, $this->note(self::EXISTING, Role::user(self::ALICE), 5));
 
         $recorder = $this->recordCreatedDocuments();
-        $created = $this->database->skipDuplicates(fn (): int => $this->database->createDocuments(
+        $created = $this->database->ignoreDuplicates(fn (): int => $this->database->createDocuments(
             self::COLLECTION,
             [
                 $this->note(self::FRESH, Role::any(), 3, slug: self::EXISTING),
@@ -190,7 +190,7 @@ final class SkipDuplicatesPermissionTest extends TestCase
         $this->database->createDocument(self::COLLECTION, $this->note(self::EXISTING, Role::user(self::ALICE), 5));
 
         $recorder = $this->recordCreatedDocuments();
-        $created = $this->database->skipDuplicates(fn (): int => $this->database->createDocuments(
+        $created = $this->database->ignoreDuplicates(fn (): int => $this->database->createDocuments(
             self::COLLECTION,
             [
                 $this->note(self::EXISTING, Role::any(), 7),
@@ -226,7 +226,7 @@ final class SkipDuplicatesPermissionTest extends TestCase
 
         /** @var ArrayObject<int, string> $emitted */
         $emitted = new ArrayObject();
-        $created = $this->database->skipDuplicates(fn (): int => $this->database->createDocuments(
+        $created = $this->database->ignoreDuplicates(fn (): int => $this->database->createDocuments(
             self::COLLECTION,
             [
                 $this->note(self::EXISTING, Role::any(), 7),
@@ -305,7 +305,7 @@ final class SkipDuplicatesPermissionTest extends TestCase
             self::SLUG => $slug ?? $id,
         ]);
 
-        if ($this->database->getTenantPerDocument()) {
+        if ($this->database->isTenantPerDocument()) {
             $note->setAttribute('$tenant', $tenant);
         }
 
@@ -333,7 +333,7 @@ final class SkipDuplicatesPermissionTest extends TestCase
      */
     private function read(callable $read, int $tenant = self::TENANT): mixed
     {
-        return $this->database->getTenantPerDocument() ? $this->database->withTenant($tenant, $read) : $read();
+        return $this->database->isTenantPerDocument() ? $this->database->withTenant($tenant, $read) : $read();
     }
 
     /**

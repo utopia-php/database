@@ -25,9 +25,9 @@ class AggregationErrorTest extends TestCase
     private function buildDatabase(array $capabilities): Database
     {
         $adapter = self::createStub(Adapter::class);
-        $adapter->method('getSharedTables')->willReturn(false);
+        $adapter->method('hasSharedTables')->willReturn(false);
         $adapter->method('getTenant')->willReturn(null);
-        $adapter->method('getTenantPerDocument')->willReturn(false);
+        $adapter->method('isTenantPerDocument')->willReturn(false);
         $adapter->method('getNamespace')->willReturn('');
         $adapter->method('limits')->willReturn(new Limits(
             string: 16777215,
@@ -190,7 +190,7 @@ class AggregationErrorTest extends TestCase
             Capability::IndexUnique,
             Capability::DefinedAttributes,
         ]);
-        $db->enableValidation();
+        $db->setValidation(true);
 
         $this->expectException(QueryException::class);
         $db->sum('testCol', 'amount', [Query::equal('nonexistent', ['val'])]);

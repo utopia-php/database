@@ -22,11 +22,13 @@ use Utopia\Database\Collection;
 use Utopia\Database\CollectionUpdate;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Event;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Index;
 use Utopia\Database\Mirror;
+use Utopia\Database\Mirror\Failure;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationshipUpdate;
@@ -96,8 +98,8 @@ final class MirrorReplicationTest extends TestCase
             ->setDatabase('mirror')
             ->setNamespace('replication_'.\uniqid())
             ->create();
-        $this->mirror->onError(function (string $action, Throwable $error): void {
-            $this->errors[] = [$action, $error->getMessage()];
+        $this->mirror->onError(function (Failure $failure): void {
+            $this->errors[] = [$failure->method, $failure->error->getMessage()];
         });
 
         $this->authorization->skip(function (): void {
@@ -291,6 +293,42 @@ final class MirrorReplicationTest extends TestCase
         $this->assertSame([[['first', 'queued']], [['upsertDocuments', 'destination rejected broken']]], $seen['awaited']);
     }
 
+    public function testAwaitReplicationsReturnsAfterItsTimeoutWhileAReplicationIsStillRunning(): void
+    {
+        $this->delays = ['slow' => 0.2];
+        $seen = [];
+
+        $this->inCoroutine(function () use (&$seen): void {
+            $this->mirror->createDocuments(self::NOTES, [new Document([Document::ID => 'first', 'title' => 'slow'])]);
+            $this->mirror->awaitReplications(20);
+            $seen['timedOut'] = $this->titlesWritten();
+            $this->mirror->awaitReplications();
+            $seen['awaited'] = $this->titlesWritten();
+        });
+
+        $this->assertSame([], $seen['timedOut']);
+        $this->assertSame([['first', 'slow']], $seen['awaited']);
+    }
+
+    public function testAQueuedReplicationFailureCarriesItsEvent(): void
+    {
+        /** @var list<Failure> $failures */
+        $failures = [];
+        $this->mirror->onError(static function (Failure $failure) use (&$failures): void {
+            $failures[] = $failure;
+        });
+
+        $this->inCoroutine(function (): void {
+            $this->mirror->upsertDocuments(self::NOTES, [new Document([Document::ID => 'first', 'title' => 'broken'])]);
+            $this->mirror->awaitReplications();
+        });
+
+        $this->assertCount(1, $failures);
+        $this->assertSame('upsertDocuments', $failures[0]->method);
+        $this->assertSame(Event::DocumentsUpsert, $failures[0]->event);
+        $this->assertSame('destination rejected broken', $failures[0]->error->getMessage());
+    }
+
     public function testAwaitReplicationsOutsideACoroutineReturnsAtOnce(): void
     {
         $this->mirror->createDocuments(self::NOTES, [new Document([Document::ID => 'first', 'title' => 'v0'])]);
@@ -301,8 +339,8 @@ final class MirrorReplicationTest extends TestCase
 
     public function testAWriteThroughTheMirrorFromOnErrorDoesNotWaitForTheReplicationThatReportedIt(): void
     {
-        $this->mirror->onError(function (string $action): void {
-            $this->mirror->createDocument(self::NOTES, new Document([Document::ID => 'reported', 'title' => $action]));
+        $this->mirror->onError(function (Failure $failure): void {
+            $this->mirror->createDocument(self::NOTES, new Document([Document::ID => 'reported', 'title' => $failure->method]));
             $this->mirror->awaitReplications();
         });
 
@@ -471,7 +509,7 @@ final class MirrorReplicationTest extends TestCase
         $this->delays = ['skipping' => 0.03];
 
         $this->inCoroutine(function (): void {
-            $this->mirror->skipDuplicates(fn (): int => $this->mirror->createDocuments(self::NOTES, [
+            $this->mirror->ignoreDuplicates(fn (): int => $this->mirror->createDocuments(self::NOTES, [
                 new Document([Document::ID => 'first', 'title' => 'skipping']),
             ]));
             $this->mirror->createDocuments(self::NOTES, [new Document([Document::ID => 'second', 'title' => 'duplicate'])]);
@@ -495,7 +533,7 @@ final class MirrorReplicationTest extends TestCase
 
         $this->assertSame([], $this->errors);
         $this->assertSame([['first', 'early'], ['second', 'late']], $this->titlesWritten());
-        $this->assertFalse($this->destination->getPreserveDates());
+        $this->assertFalse($this->destination->isPreservingDates());
     }
 
     public function testAReplicationDoesNotRecheckTheCallersRequestTimestampOnTheDestination(): void
@@ -528,8 +566,8 @@ final class MirrorReplicationTest extends TestCase
             ->setSharedTables(true)
             ->setTenant(1)
             ->create();
-        $mirror->onError(function (string $action, Throwable $error): void {
-            $this->errors[] = [$action, $error->getMessage()];
+        $mirror->onError(function (Failure $failure): void {
+            $this->errors[] = [$failure->method, $failure->error->getMessage()];
         });
         foreach ([1, 2] as $tenant) {
             $mirror->setTenant($tenant);

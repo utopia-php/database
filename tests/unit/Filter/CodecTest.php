@@ -1,6 +1,6 @@
 <?php
 
-namespace Tests\Unit\Type;
+namespace Tests\Unit\Filter;
 
 use PHPUnit\Framework\TestCase;
 use Tests\Unit\FilterRegistry;
@@ -13,20 +13,21 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Filter\Callback;
+use Utopia\Database\Filter\Codec;
+use Utopia\Database\Filter\Registry;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
-use Utopia\Database\Type\Custom;
-use Utopia\Database\Type\TypeRegistry;
 use Utopia\Query\Schema\ColumnType;
 
-final class CustomTypeTest extends TestCase
+final class CodecTest extends TestCase
 {
     public function testRegisteredTypeEncodesAndDecodesOnItsHandle(): void
     {
         $adapter = new Memory();
-        $registry = new TypeRegistry();
-        $database = $this->database($adapter)->setTypeRegistry($registry);
+        $registry = new Registry();
+        $database = $this->database($adapter)->setFilters($registry);
         $registry->register(new Reversed());
 
         $this->createNote($database, 'hello', ['reversed']);
@@ -37,7 +38,7 @@ final class CustomTypeTest extends TestCase
 
     public function testHandlesWithoutTheRegistryCannotEncodeItsTypes(): void
     {
-        $this->database()->setTypeRegistry($this->registry(new Reversed()));
+        $this->database()->setFilters($this->registry(new Reversed()));
 
         $this->expectException(NotFoundException::class);
         $this->database()->encode($this->notes(), new Document(['body' => 'hello']));
@@ -45,7 +46,7 @@ final class CustomTypeTest extends TestCase
 
     public function testHandlesWithoutTheRegistryCannotDecodeItsTypes(): void
     {
-        $this->database()->setTypeRegistry($this->registry(new Reversed()));
+        $this->database()->setFilters($this->registry(new Reversed()));
 
         $this->expectException(NotFoundException::class);
         $this->database()->decode($this->notes(), new Document(['body' => 'olleh']));
@@ -56,8 +57,8 @@ final class CustomTypeTest extends TestCase
         $adapter = new Memory();
         $this->createNote($this->database($adapter), 'hello');
 
-        $registry = new TypeRegistry();
-        $this->database()->setTypeRegistry($registry);
+        $registry = new Registry();
+        $this->database()->setFilters($registry);
 
         try {
             $registry->register(new Reversed('json'));
@@ -69,7 +70,7 @@ final class CustomTypeTest extends TestCase
 
     public function testARegisteredTypeShadowsAGlobalFilterOnlyOnItsHandle(): void
     {
-        $database = $this->database()->setTypeRegistry($this->registry(new Reversed()));
+        $database = $this->database()->setFilters($this->registry(new Reversed()));
         $other = $this->database();
 
         $previous = FilterRegistry::filters();
@@ -93,7 +94,7 @@ final class CustomTypeTest extends TestCase
         $plain = $this->database();
         $before = $this->documentHash($plain);
 
-        $typed = $this->database()->setTypeRegistry($this->registry(new Reversed()));
+        $typed = $this->database()->setFilters($this->registry(new Reversed()));
 
         $this->assertNotSame($before, $this->documentHash($typed));
         $this->assertSame($before, $this->documentHash($plain));
@@ -101,9 +102,9 @@ final class CustomTypeTest extends TestCase
 
     public function testCacheKeysFollowTheTypeClass(): void
     {
-        $reversed = $this->database()->setTypeRegistry($this->registry(new Reversed('text')));
-        $rot13 = $this->database()->setTypeRegistry($this->registry(new Rot13('text')));
-        $sameClass = $this->database()->setTypeRegistry($this->registry(new Reversed('text')));
+        $reversed = $this->database()->setFilters($this->registry(new Reversed('text')));
+        $rot13 = $this->database()->setFilters($this->registry(new Rot13('text')));
+        $sameClass = $this->database()->setFilters($this->registry(new Reversed('text')));
 
         $this->assertNotSame($this->documentHash($reversed), $this->documentHash($rot13));
         $this->assertNotSame(
@@ -113,20 +114,38 @@ final class CustomTypeTest extends TestCase
         $this->assertSame($this->documentHash($reversed), $this->documentHash($sameClass));
     }
 
-    public function testConstructorFiltersTakePrecedenceOverRegisteredTypes(): void
+    public function testConstructorFiltersEncodeAndDecodeOnTheirHandle(): void
+    {
+        $adapter = new Memory();
+        $database = $this->database($adapter, [new Reversed()]);
+
+        $this->createNote($database, 'hello', ['reversed']);
+
+        $this->assertSame('olleh', $adapter->getDocument($database->getCollection('notes'), 'note')->getAttribute('body'));
+        $this->assertSame('hello', $database->getDocument('notes', 'note')->getAttribute('body'));
+        $this->assertTrue($database->getFilters()->has('reversed'));
+    }
+
+    public function testSetFiltersReplacesTheConstructorFilters(): void
     {
         $identity = static fn (mixed $value): mixed => $value;
-        $filters = ['reversed' => ['encode' => $identity, 'decode' => $identity]];
+        $database = $this->database(filters: [new Callback('reversed', $identity, $identity)])
+            ->setFilters($this->registry(new Reversed()));
+        $registryOnly = $this->database()->setFilters($this->registry(new Reversed()));
 
-        $database = $this->database(filters: $filters)->setTypeRegistry($this->registry(new Reversed()));
-        $constructorOnly = $this->database(filters: $filters);
+        $this->assertSame('hello', $database->decode($this->notes(), new Document(['body' => 'olleh']))->getAttribute('body'));
+        $this->assertSame($this->documentHash($registryOnly), $this->documentHash($database));
+    }
 
-        $this->assertSame('olleh', $database->decode($this->notes(), new Document(['body' => 'olleh']))->getAttribute('body'));
-        $this->assertSame($this->documentHash($constructorOnly), $this->documentHash($database));
+    public function testAConstructorFilterNamedAfterABuiltInIsRejected(): void
+    {
+        $this->expectException(DuplicateException::class);
+
+        $this->database(filters: [new Reversed('json')]);
     }
 
     /**
-     * @param  array<string, array{encode: callable, decode: callable}>  $filters
+     * @param  list<Codec>  $filters
      */
     private function database(?Memory $adapter = null, array $filters = []): Database
     {
@@ -135,9 +154,9 @@ final class CustomTypeTest extends TestCase
             ->setNamespace('types');
     }
 
-    private function registry(Custom $type): TypeRegistry
+    private function registry(Codec $type): Registry
     {
-        $registry = new TypeRegistry();
+        $registry = new Registry();
         $registry->register($type);
 
         return $registry;

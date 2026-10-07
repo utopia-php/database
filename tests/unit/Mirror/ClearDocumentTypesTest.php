@@ -19,7 +19,7 @@ final class ClearDocumentTypesTest extends TestCase
         $destination = new Database(new Memory(), new Cache(new None()));
         $mirror = new Mirror($source, $destination);
 
-        $mirror->clearAllDocumentTypes();
+        $mirror->clearDocumentTypes();
 
         $this->assertSame(Collection::class, $mirror->getDocumentType(Database::METADATA));
         $this->assertSame(Collection::class, $source->getDocumentType(Database::METADATA));
@@ -33,7 +33,7 @@ final class ClearDocumentTypesTest extends TestCase
         $mirror = new Mirror($source, new Database(new Memory(), new Cache(new None())));
         $mirror->setDocumentType(HookFixture::COLLECTION, ClearDocumentTypesPost::class);
 
-        $mirror->clearAllDocumentTypes();
+        $mirror->clearDocumentTypes();
 
         $this->assertNull($mirror->getDocumentType(HookFixture::COLLECTION));
         $this->assertNull($source->getDocumentType(HookFixture::COLLECTION));

@@ -82,10 +82,10 @@ final class AggregateMinorsTest extends TestCase
     public function testSumReadsEachJoinedCollectionDefinitionOnce(): void
     {
         $database = $this->database();
-        $database->enableProfiling();
+        $database->setProfiling(true);
 
         foreach (['validated' => true, 'unvalidated' => false] as $case => $validate) {
-            $validate ? $database->enableValidation() : $database->disableValidation();
+            $validate ? $database->setValidation(true) : $database->setValidation(false);
             $database->getProfiler()?->reset();
 
             $this->assertSame(40, $database->sum('orders', 'price', [Query::join('items', 'item', 'code', '=', 'it')]), $case);

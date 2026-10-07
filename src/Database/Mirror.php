@@ -13,12 +13,13 @@ use Utopia\Database\Cache\Invalidator;
 use Utopia\Database\Cache\QueryCache;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit;
+use Utopia\Database\Filter\Registry;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Hook\Lifecycle;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Hook\Write;
+use Utopia\Database\Mirror\Failure;
 use Utopia\Database\Mirroring\Filter;
-use Utopia\Database\Type\TypeRegistry;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\OrderDirection;
 
@@ -39,9 +40,7 @@ class Mirror extends Database
     protected array $writeFilters = [];
 
     /**
-     * Callbacks to run when an error occurs on the destination database
-     *
-     * @var array<callable(string, Throwable): void>
+     * @var array<callable(Failure): void>
      */
     protected array $errorCallbacks = [];
 
@@ -153,24 +152,31 @@ class Mirror extends Database
     }
 
     /**
-     * @param  callable(string, Throwable): void  $callback
+     * Run the callback with every change the destination fails to apply.
+     *
+     * @param  callable(Failure $failure): void  $callback
      */
-    public function onError(callable $callback): void
+    public function onError(callable $callback): static
     {
         $this->errorCallbacks[] = $callback;
+
+        return $this;
     }
 
     /**
      * Waits until every replication queued through the mirror so far has reached the destination or has been
-     * reported to onError(). Outside a coroutine, and inside a replication, there is nothing to wait for.
+     * reported to onError(), or until the timeout has passed. Outside a coroutine, and inside a replication, there is
+     * nothing to wait for.
+     *
+     * @param  int|null  $timeout  Milliseconds to wait at most; null waits for as long as the replications take
      */
-    public function awaitReplications(): void
+    public function awaitReplications(?int $timeout = null): void
     {
         if ($this->appliesInline()) {
             return;
         }
 
-        $this->latestReplication?->pop();
+        $this->latestReplication?->pop($timeout === null ? -1 : \max($timeout, 1) / 1000);
     }
 
     /**
@@ -268,7 +274,7 @@ class Mirror extends Database
     /**
      * {@inheritdoc}
      */
-    public function setMaxQueryValues(int $max): self
+    public function setMaxQueryValues(int $max): static
     {
         parent::setMaxQueryValues($max);
         $this->source->setMaxQueryValues($max);
@@ -290,15 +296,16 @@ class Mirror extends Database
     }
 
     /**
+     * The query cache is attached to the mirror last, so it takes its name and writer timeout from the mirror.
+     *
      * {@inheritdoc}
      */
     public function setQueryCache(?QueryCache $queryCache): static
     {
-        parent::setQueryCache($queryCache);
         $this->source->setQueryCache($queryCache);
         $this->destination?->setQueryCache($queryCache);
 
-        return $this;
+        return parent::setQueryCache($queryCache);
     }
 
     /**
@@ -416,7 +423,7 @@ class Mirror extends Database
     /**
      * {@inheritdoc}
      */
-    public function setMigrating(bool $migrating): self
+    public function setMigrating(bool $migrating): static
     {
         parent::setMigrating($migrating);
         $this->source->setMigrating($migrating);
@@ -428,11 +435,11 @@ class Mirror extends Database
     /**
      * {@inheritdoc}
      */
-    public function setTypeRegistry(?TypeRegistry $typeRegistry): static
+    public function setFilters(Registry $filters): static
     {
-        parent::setTypeRegistry($typeRegistry);
-        $this->source->setTypeRegistry($typeRegistry);
-        $this->destination?->setTypeRegistry($typeRegistry);
+        parent::setFilters($filters);
+        $this->source->setFilters($filters);
+        $this->destination?->setFilters($filters);
 
         return $this;
     }
@@ -453,23 +460,11 @@ class Mirror extends Database
     /**
      * {@inheritdoc}
      */
-    public function enableFilters(): static
+    public function setFiltering(bool $filtering): static
     {
-        parent::enableFilters();
-        $this->source->enableFilters();
-        $this->destination?->enableFilters();
-
-        return $this;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function disableFilters(): static
-    {
-        parent::disableFilters();
-        $this->source->disableFilters();
-        $this->destination?->disableFilters();
+        parent::setFiltering($filtering);
+        $this->source->setFiltering($filtering);
+        $this->destination?->setFiltering($filtering);
 
         return $this;
     }
@@ -479,13 +474,14 @@ class Mirror extends Database
      *
      * {@inheritdoc}
      */
-    public function skipFilters(callable $callback, ?array $filters = null): mixed
+    public function withFiltering(bool $filtering, callable $callback, ?array $filters = null): mixed
     {
-        $skip = fn (): mixed => parent::skipFilters($callback, $filters);
+        $scoped = fn (): mixed => parent::withFiltering($filtering, $callback, $filters);
         $destination = $this->destination;
 
-        return $this->source->skipFilters(
-            fn (): mixed => $destination === null ? $skip() : $destination->skipFilters($skip, $filters),
+        return $this->source->withFiltering(
+            $filtering,
+            fn (): mixed => $destination === null ? $scoped() : $destination->withFiltering($filtering, $scoped, $filters),
             $filters,
         );
     }
@@ -495,22 +491,11 @@ class Mirror extends Database
      *
      * {@inheritdoc}
      */
-    public function enableProfiling(): static
+    public function setProfiling(bool $profiling): static
     {
-        $this->source->enableProfiling();
-        $this->destination?->enableProfiling();
+        $this->source->setProfiling($profiling);
+        $this->destination?->setProfiling($profiling);
         $this->profiler = $this->source->getProfiler();
-
-        return $this;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function disableProfiling(): static
-    {
-        $this->source->disableProfiling();
-        $this->destination?->disableProfiling();
 
         return $this;
     }
@@ -550,39 +535,24 @@ class Mirror extends Database
     /**
      * {@inheritdoc}
      */
-    public function enableValidation(): static
+    public function setValidation(bool $validation): static
     {
-        $this->delegate(__FUNCTION__);
+        $this->delegate(__FUNCTION__, \func_get_args());
 
-        return parent::enableValidation();
+        return parent::setValidation($validation);
     }
 
     /**
+     * Opens the scope on the mirror, its source and its destination.
+     *
      * {@inheritdoc}
      */
-    public function disableValidation(): static
+    public function withValidation(bool $validation, callable $callback): mixed
     {
-        $this->delegate(__FUNCTION__);
+        $destination = $this->destination;
+        $scoped = $destination === null ? $callback : fn (): mixed => $destination->withValidation($validation, $callback);
 
-        return parent::disableValidation();
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function skipValidation(callable $callback): mixed
-    {
-        return parent::skipValidation(function () use ($callback) {
-            if ($this->destination === null) {
-                return $this->source->skipValidation($callback);
-            }
-
-            $destination = $this->destination;
-
-            return $this->source->skipValidation(
-                fn () => $destination->skipValidation($callback)
-            );
-        });
+        return parent::withValidation($validation, fn (): mixed => $this->source->withValidation($validation, $scoped));
     }
 
     /**
@@ -604,12 +574,12 @@ class Mirror extends Database
      *
      * {@inheritdoc}
      */
-    public function withPreserveDates(callable $callback): mixed
+    public function withPreserveDates(bool $preserve, callable $callback): mixed
     {
         $destination = $this->destination;
-        $scoped = $destination === null ? $callback : fn (): mixed => $destination->withPreserveDates($callback);
+        $scoped = $destination === null ? $callback : fn (): mixed => $destination->withPreserveDates($preserve, $callback);
 
-        return parent::withPreserveDates(fn (): mixed => $this->source->withPreserveDates($scoped));
+        return parent::withPreserveDates($preserve, fn (): mixed => $this->source->withPreserveDates($preserve, $scoped));
     }
 
     /**
@@ -617,12 +587,12 @@ class Mirror extends Database
      *
      * {@inheritdoc}
      */
-    public function withPreserveSequence(callable $callback): mixed
+    public function withPreserveSequence(bool $preserve, callable $callback): mixed
     {
         $destination = $this->destination;
-        $scoped = $destination === null ? $callback : fn (): mixed => $destination->withPreserveSequence($callback);
+        $scoped = $destination === null ? $callback : fn (): mixed => $destination->withPreserveSequence($preserve, $callback);
 
-        return parent::withPreserveSequence(fn (): mixed => $this->source->withPreserveSequence($scoped));
+        return parent::withPreserveSequence($preserve, fn (): mixed => $this->source->withPreserveSequence($preserve, $scoped));
     }
 
     /**
@@ -691,9 +661,9 @@ class Mirror extends Database
      *
      * {@inheritdoc}
      */
-    public function silent(callable $callback, ?array $listeners = null): mixed
+    public function silent(callable $callback, ?array $hooks = null): mixed
     {
-        return parent::silent(fn () => $this->source->silent($callback, $listeners), $listeners);
+        return parent::silent(fn () => $this->source->silent($callback, $hooks), $hooks);
     }
 
     /**
@@ -1213,7 +1183,7 @@ class Mirror extends Database
                     );
                 }
 
-                $destination->withPreserveDates(fn (): Document => $destination->createDocument($collection, $clone));
+                $destination->withPreserveDates(true, fn (): Document => $destination->createDocument($collection, $clone));
 
                 foreach ($this->writeFilters as $filter) {
                     $filter->afterCreateDocument(
@@ -1243,7 +1213,7 @@ class Mirror extends Database
     ): int {
         $onNext = $this->decorating(Event::DocumentsCreate, $collection, $onNext);
         $modified = $this->skippingDuplicates()
-            ? $this->source->skipDuplicates(
+            ? $this->source->ignoreDuplicates(
                 fn () => $this->source->createDocuments($collection, $documents, $batchSize, $onNext, $onError)
             )
             : $this->source->createDocuments($collection, $documents, $batchSize, $onNext, $onError);
@@ -1262,9 +1232,9 @@ class Mirror extends Database
         }
 
         $clones = \array_map(static fn (Document $document): Document => clone $document, $documents);
-        $skipDuplicates = $this->skippingDuplicates();
+        $ignoreDuplicates = $this->skippingDuplicates();
 
-        $this->replicate('createDocuments', function () use ($destination, $collection, $clones, $batchSize, $skipDuplicates): void {
+        $this->replicate('createDocuments', function () use ($destination, $collection, $clones, $batchSize, $ignoreDuplicates): void {
             foreach ($clones as $index => $clone) {
                 foreach ($this->writeFilters as $filter) {
                     $clone = $filter->beforeCreateDocument(
@@ -1278,9 +1248,10 @@ class Mirror extends Database
             }
 
             $create = fn (): mixed => $destination->withPreserveDates(
-                fn (): int => $destination->createDocuments($collection, $clones, $batchSize)
+                true,
+                fn (): int => $destination->createDocuments($collection, $clones, $batchSize),
             );
-            $skipDuplicates ? $destination->skipDuplicates($create) : $create();
+            $ignoreDuplicates ? $destination->ignoreDuplicates($create) : $create();
 
             foreach ($clones as $clone) {
                 foreach ($this->writeFilters as $filter) {
@@ -1330,7 +1301,7 @@ class Mirror extends Database
                     );
                 }
 
-                $destination->withPreserveDates(fn (): Document => $destination->updateDocument($collection, $id, $clone));
+                $destination->withPreserveDates(true, fn (): Document => $destination->updateDocument($collection, $id, $clone));
 
                 foreach ($this->writeFilters as $filter) {
                     $filter->afterUpdateDocument(
@@ -1396,6 +1367,7 @@ class Mirror extends Database
             }
 
             $destination->withPreserveDates(
+                true,
                 fn (): int => $destination->updateDocuments(
                     $collection,
                     $clone,
@@ -1470,6 +1442,7 @@ class Mirror extends Database
             }
 
             $destination->withPreserveDates(
+                true,
                 fn (): int => $destination->upsertDocuments(
                     $collection,
                     $clones,
@@ -1837,15 +1810,45 @@ class Mirror extends Database
 
     protected function logError(string $action, Throwable $error): void
     {
+        $failure = new Failure($action, self::eventOf($action), $error);
+
         foreach ($this->errorCallbacks as $callback) {
-            $callback($action, $error);
+            $callback($failure);
         }
+    }
+
+    private static function eventOf(string $method): ?Event
+    {
+        return match ($method) {
+            'create' => Event::DatabaseCreate,
+            'delete' => Event::DatabaseDelete,
+            'createCollection' => Event::CollectionCreate,
+            'updateCollection' => Event::CollectionUpdate,
+            'deleteCollection' => Event::CollectionDelete,
+            'createAttribute' => Event::AttributeCreate,
+            'createAttributes' => Event::AttributesCreate,
+            'updateAttribute' => Event::AttributeUpdate,
+            'deleteAttribute' => Event::AttributeDelete,
+            'createIndex', 'createIndexes' => Event::IndexCreate,
+            'renameIndex' => Event::IndexRename,
+            'deleteIndex' => Event::IndexDelete,
+            'createDocument' => Event::DocumentCreate,
+            'createDocuments' => Event::DocumentsCreate,
+            'updateDocument' => Event::DocumentUpdate,
+            'updateDocuments' => Event::DocumentsUpdate,
+            'upsertDocuments' => Event::DocumentsUpsert,
+            'deleteDocument' => Event::DocumentDelete,
+            'deleteDocuments' => Event::DocumentsDelete,
+            'increaseDocumentAttribute' => Event::DocumentIncrease,
+            'decreaseDocumentAttribute' => Event::DocumentDecrease,
+            default => null,
+        };
     }
 
     /**
      * {@inheritdoc}
      */
-    public function setAuthorization(Authorization $authorization): self
+    public function setAuthorization(Authorization $authorization): static
     {
         parent::setAuthorization($authorization);
 
@@ -1898,20 +1901,20 @@ class Mirror extends Database
      *
      * @param  string  $collection  Collection ID
      */
-    public function clearDocumentType(string $collection): static
+    public function clearDocumentType(string $collection): void
     {
         $this->delegate(__FUNCTION__, \func_get_args());
 
-        return parent::clearDocumentType($collection);
+        parent::clearDocumentType($collection);
     }
 
     /**
-     * Clear all document type mappings
+     * {@inheritdoc}
      */
-    public function clearAllDocumentTypes(): static
+    public function clearDocumentTypes(): void
     {
         $this->delegate(__FUNCTION__);
 
-        return parent::clearAllDocumentTypes();
+        parent::clearDocumentTypes();
     }
 }

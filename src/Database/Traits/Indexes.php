@@ -392,7 +392,7 @@ trait Indexes
     private function reconcileSchemaOnlyIndex(string $collection, Index $index): bool
     {
         if (! $this->adapter->supports(Capability::SchemaIntrospection)
-            || ($this->getSharedTables() && $this->isMigrating())) {
+            || ($this->hasSharedTables() && $this->isMigrating())) {
             return false;
         }
 
@@ -412,7 +412,7 @@ trait Indexes
                 return true;
             }
 
-            if ($this->getSharedTables()) {
+            if ($this->hasSharedTables()) {
                 throw new DuplicateException('Index exists in the shared table with another definition');
             }
 
@@ -433,7 +433,7 @@ trait Indexes
         $columns = \array_map(\strtolower(...), $schemaIndex->columns);
         $lengths = \array_map(static fn (?int $length): int => $length ?? 0, $schemaIndex->lengths);
 
-        if ($this->getSharedTables() && ($columns[0] ?? '') === Storage::TENANT) {
+        if ($this->hasSharedTables() && ($columns[0] ?? '') === Storage::TENANT) {
             \array_shift($columns);
             \array_shift($lengths);
         }

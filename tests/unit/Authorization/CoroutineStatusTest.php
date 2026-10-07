@@ -215,13 +215,13 @@ final class CoroutineStatusTest extends TestCase
         $this->assertTrue($this->authorization->getStatus());
     }
 
-    public function testEnableInACoroutineStartedInsideWithStatusStaysInThatCoroutine(): void
+    public function testEnableInACoroutineStartedInsideASkipOfADisabledCheckStaysInThatCoroutine(): void
     {
         $seen = [];
 
         $this->inCoroutine(function () use (&$seen): void {
             $this->authorization->disable();
-            $this->authorization->withStatus(false, function () use (&$seen): void {
+            $this->authorization->skip(function () use (&$seen): void {
                 $done = new Channel(1);
 
                 Coroutine::create(function () use (&$seen, $done): void {

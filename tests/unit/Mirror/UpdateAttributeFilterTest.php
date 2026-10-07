@@ -6,7 +6,6 @@ use ArrayObject;
 use Closure;
 use PHPUnit\Framework\TestCase;
 use Tests\Unit\Event\HookFixture;
-use Throwable;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Attribute;
 use Utopia\Database\AttributeUpdate;
@@ -14,6 +13,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Mirror;
+use Utopia\Database\Mirror\Failure;
 use Utopia\Database\Mirroring\Filter;
 
 final class UpdateAttributeFilterTest extends TestCase
@@ -105,8 +105,8 @@ final class UpdateAttributeFilterTest extends TestCase
     {
         /** @var ArrayObject<int, string> $errors */
         $errors = new ArrayObject();
-        $mirror->onError(static function (string $action, Throwable $error) use ($errors): void {
-            $errors[] = $action.': '.$error->getMessage();
+        $mirror->onError(static function (Failure $failure) use ($errors): void {
+            $errors[] = $failure->method.': '.$failure->error->getMessage();
         });
 
         return $errors;

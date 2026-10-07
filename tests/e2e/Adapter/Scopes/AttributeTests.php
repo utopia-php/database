@@ -2804,7 +2804,7 @@ trait AttributeTests
     {
         $database = $this->getDatabase();
 
-        if (! $database->getSharedTables()) {
+        if (! $database->hasSharedTables()) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -3050,7 +3050,7 @@ trait AttributeTests
     {
         $database = $this->getDatabase();
 
-        if (! $database->getSharedTables() || ! $database->getAdapter() instanceof SQL) {
+        if (! $database->hasSharedTables() || ! $database->getAdapter() instanceof SQL) {
             $this->expectNotToPerformAssertions();
 
             return;

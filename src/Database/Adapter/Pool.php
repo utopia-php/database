@@ -139,7 +139,7 @@ class Pool extends Adapter implements Feature\Timeouts
         }
 
         if ($this->skippingDuplicates()) {
-            return $adapter->skipDuplicates(
+            return $adapter->ignoreDuplicates(
                 fn () => $adapter->{$method}(...$arguments)
             );
         }
@@ -170,9 +170,9 @@ class Pool extends Adapter implements Feature\Timeouts
     {
         $adapter->setDatabase($this->getDatabase());
         $adapter->setNamespace($this->getNamespace());
-        $adapter->setSharedTables($this->getSharedTables());
+        $adapter->setSharedTables($this->hasSharedTables());
         $adapter->setTenant($this->getTenant());
-        $adapter->setTenantPerDocument($this->getTenantPerDocument());
+        $adapter->setTenantPerDocument($this->isTenantPerDocument());
         $adapter->setAuthorization($this->authorization);
         $adapter->setLocks($this->locks);
 
@@ -516,7 +516,7 @@ class Pool extends Adapter implements Feature\Timeouts
 
                 return $this->pinned()->with($adapter, function () use ($adapter, $callback): mixed {
                     if ($this->skippingDuplicates()) {
-                        return $adapter->skipDuplicates(
+                        return $adapter->ignoreDuplicates(
                             fn () => $adapter->withTransaction($callback)
                         );
                     }

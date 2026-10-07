@@ -130,7 +130,7 @@ final class JoinedShapesTest extends TestCase
         $this->assertRefused('Invalid query: Attribute not found in schema: weight', fn (): mixed => $database->find('orders', [...$joins, Query::orderAsc('weight')]));
         $this->assertSame(['o1', 'o3'], $this->ids($database->find('orders', [...$joins, Query::orderAsc('ex.price'), Query::orderAsc('$id')])));
 
-        $database->disableValidation();
+        $database->setValidation(false);
         $this->assertRefused($ambiguous, fn (): mixed => $database->find('orders', [...$joins, Query::orderAsc('price')]), 'the adapter without validation');
     }
 

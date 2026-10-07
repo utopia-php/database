@@ -20,6 +20,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Exception\Contention;
+use Utopia\Database\Filter\Callback;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
@@ -173,10 +174,11 @@ final class PreparedCreateTest extends TestCase
 
     public function testAFilterIsAppliedOnceWhenAnAssociativeValueHoldsAStoredDocument(): void
     {
-        $filters = ['wrap' => [
-            'encode' => static fn (mixed $value): mixed => \is_string($value) ? '['.$value.']' : $value,
-            'decode' => static fn (mixed $value): mixed => \is_string($value) && \str_starts_with($value, '[') ? \substr($value, 1, -1) : $value,
-        ]];
+        $filters = [new Callback(
+            'wrap',
+            static fn (mixed $value): mixed => \is_string($value) ? '['.$value.']' : $value,
+            static fn (mixed $value): mixed => \is_string($value) && \str_starts_with($value, '[') ? \substr($value, 1, -1) : $value,
+        )];
 
         foreach (['memory', 'sqlite'] as $engine) {
             foreach ([self::ONE_BY_ONE, self::DEFERRED] as $mode) {
@@ -774,7 +776,7 @@ final class PreparedCreateTest extends TestCase
     }
 
     /**
-     * @param  array<string, array{encode: callable, decode: callable}>  $filters
+     * @param  list<Callback>  $filters
      */
     private function database(string $engine, string $mode, ?int $tenant = null, bool $tenantPerDocument = false, array $filters = []): Database
     {

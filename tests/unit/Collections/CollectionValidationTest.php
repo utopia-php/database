@@ -35,9 +35,9 @@ class CollectionValidationTest extends TestCase
     protected function setUp(): void
     {
         $this->adapter = self::createStub(Adapter::class);
-        $this->adapter->method('getSharedTables')->willReturn(false);
+        $this->adapter->method('hasSharedTables')->willReturn(false);
         $this->adapter->method('getTenant')->willReturn(null);
-        $this->adapter->method('getTenantPerDocument')->willReturn(false);
+        $this->adapter->method('isTenantPerDocument')->willReturn(false);
         $this->adapter->method('getNamespace')->willReturn('');
         $this->adapter->method('limits')->willReturn(new Limits(
             string: 16777215,
@@ -162,7 +162,7 @@ class CollectionValidationTest extends TestCase
     public function testCreateCollectionValidatesPermissionsFormat(): void
     {
         $this->setupEmptyMetadata();
-        $this->database->enableValidation();
+        $this->database->setValidation(true);
 
         $this->expectException(DatabaseException::class);
         $this->database->createCollection(Collection::create(id: 'newCol', permissions: ['bad-format']));
@@ -171,9 +171,9 @@ class CollectionValidationTest extends TestCase
     public function testCreateCollectionWithAttributeLimits(): void
     {
         $adapter = self::createStub(Adapter::class);
-        $adapter->method('getSharedTables')->willReturn(false);
+        $adapter->method('hasSharedTables')->willReturn(false);
         $adapter->method('getTenant')->willReturn(null);
-        $adapter->method('getTenantPerDocument')->willReturn(false);
+        $adapter->method('isTenantPerDocument')->willReturn(false);
         $adapter->method('getNamespace')->willReturn('');
         $adapter->method('limits')->willReturn(new Limits(
             string: 16777215,
@@ -229,7 +229,7 @@ class CollectionValidationTest extends TestCase
         $database
             ->setDatabase('testing')
             ->setNamespace('collections')
-            ->enableValidation();
+            ->setValidation(true);
         $database->create();
 
         $this->expectException(DatabaseException::class);
@@ -246,7 +246,7 @@ class CollectionValidationTest extends TestCase
         $database
             ->setDatabase('testing')
             ->setNamespace('collections')
-            ->enableValidation();
+            ->setValidation(true);
         $database->create();
 
         $collection = $database->createCollection(Collection::create(id: 'users', attributes: [
@@ -263,7 +263,7 @@ class CollectionValidationTest extends TestCase
         $database
             ->setDatabase('testing')
             ->setNamespace('collections')
-            ->enableValidation();
+            ->setValidation(true);
         $database->create();
 
         $collection = $database->createCollection(Collection::create(
@@ -287,7 +287,7 @@ class CollectionValidationTest extends TestCase
         $database
             ->setDatabase('testing')
             ->setNamespace('collections')
-            ->enableValidation();
+            ->setValidation(true);
         $database->create();
 
         $anon = $database->createCollection(Collection::create(id: 'anon'));
@@ -302,9 +302,9 @@ class CollectionValidationTest extends TestCase
     public function testCreateCollectionWithIndexLimits(): void
     {
         $adapter = self::createStub(Adapter::class);
-        $adapter->method('getSharedTables')->willReturn(false);
+        $adapter->method('hasSharedTables')->willReturn(false);
         $adapter->method('getTenant')->willReturn(null);
-        $adapter->method('getTenantPerDocument')->willReturn(false);
+        $adapter->method('isTenantPerDocument')->willReturn(false);
         $adapter->method('getNamespace')->willReturn('');
         $adapter->method('limits')->willReturn(new Limits(
             string: 16777215,

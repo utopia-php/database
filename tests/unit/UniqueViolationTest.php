@@ -240,7 +240,7 @@ final class UniqueViolationTest extends TestCase
         $redis = $this->redis();
         $movie = $this->movie('movie-3', self::TAKEN_SLUG);
 
-        $this->assertSame($movie, $redis->skipDuplicates(fn () => $redis->createDocument($this->collection(), $movie)));
+        $this->assertSame($movie, $redis->ignoreDuplicates(fn () => $redis->createDocument($this->collection(), $movie)));
     }
 
     private function mysqlException(string $message): PDOException

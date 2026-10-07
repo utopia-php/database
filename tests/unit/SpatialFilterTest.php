@@ -24,7 +24,7 @@ class SpatialFilterTest extends TestCase
         );
         $adapter->method('getTenant')->willReturn(null);
         $adapter->method('getNamespace')->willReturn('test');
-        $adapter->method('getSharedTables')->willReturn(false);
+        $adapter->method('hasSharedTables')->willReturn(false);
         $adapter->method('filter')->willReturnArgument(0);
         $adapter->method('decode')->willReturn($point);
 

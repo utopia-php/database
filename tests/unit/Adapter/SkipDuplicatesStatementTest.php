@@ -134,7 +134,7 @@ final class SkipDuplicatesStatementTest extends TestCase
             $documents[] = $document;
         }
 
-        $created = $adapter->skipDuplicates(fn (): array => $adapter->createDocuments(new Document(['$id' => 'notes', 'attributes' => []]), $documents));
+        $created = $adapter->ignoreDuplicates(fn (): array => $adapter->createDocuments(new Document(['$id' => 'notes', 'attributes' => []]), $documents));
 
         return \array_values(\array_map(static fn (Document $document): string => $document->getId(), $created));
     }

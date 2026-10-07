@@ -169,15 +169,22 @@ class Mirror extends Database
      * reported to onError(), or until the timeout has passed. Outside a coroutine, and inside a replication, there is
      * nothing to wait for.
      *
-     * @param  int|null  $timeout  Milliseconds to wait at most; null waits for as long as the replications take
+     * @param  int|null  $timeout  Milliseconds to wait at most: null waits for as long as the replications take, and 0
+     *                             does not wait
+     *
+     * @throws Exception When the timeout is negative
      */
     public function awaitReplications(?int $timeout = null): void
     {
-        if ($this->appliesInline()) {
+        if ($timeout !== null && $timeout < 0) {
+            throw new Exception("A replication timeout cannot be negative, {$timeout} given");
+        }
+
+        if ($timeout === 0 || $this->appliesInline()) {
             return;
         }
 
-        $this->latestReplication?->pop($timeout === null ? -1 : \max($timeout, 1) / 1000);
+        $this->latestReplication?->pop($timeout === null ? -1 : $timeout / 1000);
     }
 
     /**

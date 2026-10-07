@@ -5,9 +5,10 @@ namespace Tests\Unit\Validator;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Query;
-use Utopia\Database\RelationSide;
-use Utopia\Database\RelationType;
+use Utopia\Database\RelationshipSide;
+use Utopia\Database\RelationshipType;
 use Utopia\Database\Validator\IndexedQueries;
 use Utopia\Database\Validator\Queries;
 use Utopia\Database\Validator\Query\Aggregate;
@@ -58,18 +59,17 @@ final class QueryValidatorCoverageTest extends TestCase
     }
 
     #[DataProvider('typesWithoutAValueRule')]
-    public function testAnAttributeTypeWithoutAValueRuleIsAnUnknownDataType(string $type): void
+    public function testAnAttributeTypeWithoutAValueRuleIsRefused(string $type): void
     {
-        $filter = new Filter([new Document([
+        $this->expectException(StructureException::class);
+        $this->expectExceptionMessage('Unknown attribute type: '.$type);
+
+        new Filter([new Document([
             Document::ID => 'amount',
             'key' => 'amount',
             'type' => $type,
             'array' => false,
         ])], ColumnType::Integer->value, self::MAX_VALUES);
-
-        $this->assertFalse($filter->isValid(Query::equal('amount', ['1.5'])));
-        $this->assertSame('Unknown Data type', $filter->getDescription());
-        $this->assertTrue($filter->isValid(Query::isNull('amount')), 'a query without values never reaches the type rule');
     }
 
     public function testAnElemMatchWithAnInvalidNestedFilterIsRejected(): void
@@ -267,10 +267,10 @@ final class QueryValidatorCoverageTest extends TestCase
                     'array' => false,
                     'options' => [
                         'relatedCollection' => 'authors',
-                        'relationType' => RelationType::ManyToOne->value,
+                        'relationType' => RelationshipType::ManyToOne->value,
                         'twoWay' => false,
                         'twoWayKey' => 'books',
-                        'side' => RelationSide::Parent->value,
+                        'side' => RelationshipSide::Parent->value,
                     ],
                 ]),
             ],

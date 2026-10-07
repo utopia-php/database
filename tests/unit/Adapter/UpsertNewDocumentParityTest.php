@@ -32,7 +32,7 @@ final class UpsertNewDocumentParityTest extends TestCase
             ->setNamespace(self::NAMESPACE)
             ->setAuthorization(new Authorization());
         $this->database->create();
-        $this->database->createCollection(new Collection(
+        $this->database->createCollection(Collection::create(
             id: 'items',
             attributes: [
                 Attribute::integer('count', default: 7),

@@ -87,7 +87,7 @@ final class WithCacheTest extends TestCase
             }
         };
         $database = $this->database($adapter, new Cache(new MemoryCache()));
-        $database->createIndex(self::COLLECTION, Index::ttl(key: 'expiry', attributes: ['publishedAt'], ttl: 1));
+        $database->createIndex(self::COLLECTION, Index::ttl(key: 'expiry', attribute: 'publishedAt', ttl: 1));
         $database->createDocument(self::COLLECTION, new Document([Document::ID => 'q3', 'title' => 'Q3', 'publishedAt' => DateTime::now()]));
 
         $this->cached($database, fn (): array => $database->find(self::COLLECTION));
@@ -229,7 +229,7 @@ final class WithCacheTest extends TestCase
         }
         $database->setDatabase('with_cache')->setNamespace('with_cache_'.\uniqid());
         $database->create();
-        $database->getAuthorization()->skip(fn (): mixed => $database->createCollection(new Collection(
+        $database->getAuthorization()->skip(fn (): mixed => $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [Attribute::string(key: 'title', size: 32), Attribute::datetime(key: 'publishedAt')],
             permissions: $permissions ?? [Permission::create(Role::any()), Permission::read(Role::any()), Permission::delete(Role::any())],

@@ -36,7 +36,7 @@ final class JoinVisibilityTest extends TestCase
         $this->database->addHook(new Permissions());
         $this->database->create();
 
-        $this->database->createCollection(new Collection(
+        $this->database->createCollection(Collection::create(
             id: 'customers',
             attributes: [
                 Attribute::string(key: 'name', size: 64),
@@ -45,7 +45,7 @@ final class JoinVisibilityTest extends TestCase
             permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
             documentSecurity: true,
         ));
-        $this->database->createCollection(new Collection(
+        $this->database->createCollection(Collection::create(
             id: 'profiles',
             attributes: [
                 Attribute::string(key: 'customerId', size: 64),
@@ -54,7 +54,7 @@ final class JoinVisibilityTest extends TestCase
             permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
             documentSecurity: true,
         ));
-        $this->database->createCollection(new Collection(
+        $this->database->createCollection(Collection::create(
             id: 'orders',
             attributes: [
                 Attribute::string(key: 'customerId', size: 64),
@@ -63,7 +63,7 @@ final class JoinVisibilityTest extends TestCase
             permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
             documentSecurity: true,
         ));
-        $this->database->createCollection(new Collection(
+        $this->database->createCollection(Collection::create(
             id: 'notes',
             attributes: [
                 Attribute::string(key: 'customerId', size: 64),
@@ -72,7 +72,7 @@ final class JoinVisibilityTest extends TestCase
             permissions: [Permission::create(Role::any())],
             documentSecurity: true,
         ));
-        $this->database->createCollection(new Collection(
+        $this->database->createCollection(Collection::create(
             id: 'ledger',
             attributes: [
                 Attribute::string(key: 'customerId', size: 64),

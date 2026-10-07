@@ -17,7 +17,8 @@ use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
-use Utopia\Query\Schema\Order;
+use Utopia\Query\OrderDirection;
+use Utopia\Query\Schema\ColumnType;
 
 class SchemalessValidationTest extends TestCase
 {
@@ -32,7 +33,7 @@ class SchemalessValidationTest extends TestCase
         $this->adapter->method('getTenant')->willReturn(null);
         $this->adapter->method('getTenantPerDocument')->willReturn(false);
         $this->adapter->method('getNamespace')->willReturn('');
-        $this->adapter->method('getIdAttributeType')->willReturn('string');
+        $this->adapter->method('getIdAttributeType')->willReturn(ColumnType::Integer->value);
         $this->adapter->method('getMaxUIDLength')->willReturn(36);
         $this->adapter->method('getMinDateTime')->willReturn(new DateTime('0000-01-01'));
         $this->adapter->method('getMaxDateTime')->willReturn(new DateTime('9999-12-31'));
@@ -101,7 +102,7 @@ class SchemalessValidationTest extends TestCase
     {
         return new Document([
             '$id' => $id,
-            '$sequence' => $id,
+            '$sequence' => (string) \crc32($id),
             '$collection' => Database::METADATA,
             '$createdAt' => '2024-01-01T00:00:00.000+00:00',
             '$updatedAt' => '2024-01-01T00:00:00.000+00:00',
@@ -197,15 +198,15 @@ class SchemalessValidationTest extends TestCase
             'name' => 'x',
         ]));
 
-        $this->assertTrue($this->database->createIndex(
+        $this->assertSame('duplicate', $this->database->createIndex(
             'sl_idx_dup',
-            Index::key(key: 'duplicate', attributes: ['name'], lengths: [0], orders: [Order::Asc])
-        ));
+            Index::key(key: 'duplicate', attributes: ['name'], lengths: [0], orders: [OrderDirection::Asc])
+        )->key);
 
         try {
             $this->database->createIndex(
                 'sl_idx_dup',
-                Index::key(key: 'duplicate', attributes: ['name'], lengths: [0], orders: [Order::Asc])
+                Index::key(key: 'duplicate', attributes: ['name'], lengths: [0], orders: [OrderDirection::Asc])
             );
             $this->fail('Failed to throw exception');
         } catch (\Exception $e) {
@@ -244,15 +245,15 @@ class SchemalessValidationTest extends TestCase
         $col = $this->makeCollection('sl_ttl_dup');
         $this->setupCollections([$col]);
 
-        $this->assertTrue($this->database->createIndex(
+        $this->assertSame('idx_ttl_expires', $this->database->createIndex(
             'sl_ttl_dup',
-            Index::ttl(key: 'idx_ttl_expires', attributes: ['expiresAt'], orders: [Order::Asc], ttl: 3600)
-        ));
+            Index::ttl(key: 'idx_ttl_expires', attribute: 'expiresAt', ttl: 3600)
+        )->key);
 
         try {
             $this->database->createIndex(
                 'sl_ttl_dup',
-                Index::ttl(key: 'idx_ttl_expires_duplicate', attributes: ['expiresAt'], orders: [Order::Asc], ttl: 7200)
+                Index::ttl(key: 'idx_ttl_expires_duplicate', attribute: 'expiresAt', ttl: 7200)
             );
             $this->fail('Expected exception for duplicate TTL index');
         } catch (\Exception $e) {

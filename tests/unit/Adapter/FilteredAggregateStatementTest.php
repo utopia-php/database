@@ -18,7 +18,6 @@ use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\Builder\SQL as SQLBuilder;
-use Utopia\Query\Builder\Statement;
 use Utopia\Query\Method;
 use Utopia\Query\Schema\ColumnType;
 
@@ -140,7 +139,7 @@ final class FilteredAggregateStatementTest extends TestCase
         ?int $max,
     ): void {
         $adapter = $this->adapter($make, $shared, $tenant, $authorization);
-        $document = new Collection(id: $collection, documentSecurity: $authorization === 'document security');
+        $document = Collection::create(id: $collection, documentSecurity: $authorization === 'document security');
         $queries = self::filters()[$filter]();
 
         $expected = $adapter->builtAggregate($operation, $document, self::filters()[$filter](), $max);
@@ -177,7 +176,7 @@ final class FilteredAggregateStatementTest extends TestCase
         $adapter->setDatabase('database');
         $adapter->setNamespace('namespace');
         $adapter->setAuthorization(new Authorization());
-        $collection = new Collection(id: 'books', documentSecurity: true);
+        $collection = Collection::create(id: 'books', documentSecurity: true);
 
         $adapter->count($collection, [Query::equal('category', ['c3'])]);
         $adapter->count($collection, [Query::greaterThan('score', 1)], 25);
@@ -193,7 +192,7 @@ final class FilteredAggregateStatementTest extends TestCase
         $adapter = $this->adapter(static fn (PDO $pdo): SQL => new MariaDB($pdo), false, null, 'unauthorized');
 
         $this->expectException(QueryException::class);
-        $adapter->count(new Collection(id: 'books'), [new Query(Method::ElemMatch, 'tags', [Query::equal('name', ['x'])])]);
+        $adapter->count(Collection::create(id: 'books'), [new Query(Method::ElemMatch, 'tags', [Query::equal('name', ['x'])])]);
     }
 
     /**

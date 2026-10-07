@@ -46,7 +46,7 @@ class FilterRegistryTest extends TestCase
         $this->registry = FilterRegistry::filters();
 
         $this->database->create();
-        $this->database->createCollection(new Collection(id: 'projects'));
+        $this->database->createCollection(Collection::create(id: 'projects'));
         $this->database->createAttribute('projects', Attribute::string(key: 'name', size: 255));
         $this->database->createDocument('projects', new Document([
             '$id' => 'project',

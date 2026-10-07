@@ -33,13 +33,12 @@ class MetadataCacheTest extends TestCase
 
         $this->database->create();
 
-        $this->database->createCollection(new Collection(id: 'authors'));
+        $this->database->createCollection(Collection::create(id: 'authors'));
         $this->database->createAttribute('authors', Attribute::string(key: 'name'));
 
-        $this->database->createCollection(new Collection(id: 'books'));
+        $this->database->createCollection(Collection::create(id: 'books'));
         $this->database->createAttribute('books', Attribute::string(key: 'title'));
-        $this->database->createRelationship(Relationship::oneToOne(
-            collection: 'books',
+        $this->database->createRelationship('books', Relationship::oneToOne(
             relatedCollection: 'authors',
             twoWay: false,
             key: 'author',

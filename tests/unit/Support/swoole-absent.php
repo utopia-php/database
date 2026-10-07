@@ -32,7 +32,7 @@ echo 'create=ok' . PHP_EOL;
 
 echo 'silent=' . $database->silent(fn () => 'ok') . PHP_EOL;
 
-$database->createCollection(new Collection(
+$database->createCollection(Collection::create(
     id: 'logs',
     permissions: [
         Permission::read(Role::any()),

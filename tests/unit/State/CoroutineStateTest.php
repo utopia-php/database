@@ -92,7 +92,7 @@ final class CoroutineStateTest extends TestCase
 
         $this->whileASiblingIsInside(
             fn (Closure $inside): mixed => $this->database->silent($inside),
-            fn (): bool => $this->database->getCollection(HookFixture::COLLECTION)->isEmpty(),
+            fn (): bool => $this->database->findCollection(HookFixture::COLLECTION) === null,
         );
 
         $this->assertSame([Event::CollectionRead, Event::CollectionRead, Event::CollectionRead], $recorder->getEvents());

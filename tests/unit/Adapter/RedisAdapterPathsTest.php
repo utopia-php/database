@@ -24,8 +24,9 @@ use Utopia\Database\Index;
 use Utopia\Database\Operator;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
-use Utopia\Database\RelationSide;
-use Utopia\Database\RelationType;
+use Utopia\Database\RelationshipSide;
+use Utopia\Database\RelationshipType;
+use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\CursorDirection;
 use Utopia\Query\Method;
@@ -71,12 +72,12 @@ final class RedisAdapterPathsTest extends TestCase
 
     public function testOneToManyKeyRenamedFromTheChildSide(): void
     {
-        $database = $this->petsDatabase(RelationType::OneToMany, key: 'pets', twoWayKey: 'owner');
+        $database = $this->petsDatabase(RelationshipType::OneToMany, key: 'pets', twoWayKey: 'owner');
         $database->createDocument('owners', new Document(['$id' => 'alice', 'name' => 'Alice', 'pets' => [
             new Document(['$id' => 'rex', 'name' => 'Rex']),
         ]]));
 
-        $this->assertTrue($database->updateRelationship('pets', 'owner', newKey: 'keeper'));
+        $database->updateRelationship('pets', 'owner', new RelationshipUpdate(key: 'keeper'));
 
         $pet = $database->getDocument('pets', 'rex');
         $this->assertNull($pet->getAttribute('owner'));
@@ -86,11 +87,11 @@ final class RedisAdapterPathsTest extends TestCase
 
     public function testManyToOneTwoWayKeyRenamedFromTheChildSide(): void
     {
-        $database = $this->petsDatabase(RelationType::ManyToOne, key: 'owner', twoWayKey: 'pets', from: 'pets', to: 'owners');
+        $database = $this->petsDatabase(RelationshipType::ManyToOne, key: 'owner', twoWayKey: 'pets', from: 'pets', to: 'owners');
         $database->createDocument('owners', new Document(['$id' => 'alice', 'name' => 'Alice']));
         $database->createDocument('pets', new Document(['$id' => 'rex', 'name' => 'Rex', 'owner' => 'alice']));
 
-        $this->assertTrue($database->updateRelationship('owners', 'pets', newTwoWayKey: 'master'));
+        $database->updateRelationship('owners', 'pets', new RelationshipUpdate(twoWayKey: 'master'));
 
         $pet = $database->getDocument('pets', 'rex');
         $this->assertNull($pet->getAttribute('owner'));
@@ -130,7 +131,7 @@ final class RedisAdapterPathsTest extends TestCase
     {
         $database = $this->database();
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::NOTES,
             attributes: [Attribute::string(key: 'title', size: 64)],
             permissions: [Permission::create(Role::any())],
@@ -158,7 +159,7 @@ final class RedisAdapterPathsTest extends TestCase
     {
         $database = $this->database();
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::NOTES,
             attributes: [Attribute::string(key: 'title', size: 64)],
             permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())],
@@ -204,16 +205,14 @@ final class RedisAdapterPathsTest extends TestCase
         $database = $this->database()->setSharedTables(true)->setTenant(null);
         $database->create();
         foreach (['books', 'authors'] as $collection) {
-            $database->createCollection(new Collection(
+            $database->createCollection(Collection::create(
                 id: $collection,
                 attributes: [Attribute::string(key: 'name', size: 64)],
                 permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
             ));
         }
-        $database->createRelationship(new Relationship(
-            collection: 'books',
+        $database->createRelationship('books', Relationship::manyToMany(
             relatedCollection: 'authors',
-            type: RelationType::ManyToMany,
             twoWay: true,
             key: 'authors',
             twoWayKey: 'books',
@@ -232,8 +231,10 @@ final class RedisAdapterPathsTest extends TestCase
         ]));
 
         $this->assertTrue($adapter->updateRelationship(
-            new Relationship(collection: 'books', relatedCollection: 'authors', type: RelationType::ManyToMany, twoWay: true, key: 'authors', twoWayKey: 'books', side: RelationSide::Parent),
-            'writers',
+            'books',
+            Relationship::manyToMany(relatedCollection: 'authors', twoWay: true, key: 'authors', twoWayKey: 'books'),
+            RelationshipSide::Parent,
+            new RelationshipUpdate(key: 'writers'),
         ));
 
         $link = $adapter->getDocument(new Document(['$id' => $junction]), 'link');
@@ -245,7 +246,7 @@ final class RedisAdapterPathsTest extends TestCase
     {
         $database = $this->database();
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::NOTES,
             attributes: [Attribute::object(key: 'meta')],
             permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
@@ -266,7 +267,7 @@ final class RedisAdapterPathsTest extends TestCase
         $adapter = $this->adapter();
 
         $this->assertTrue($adapter->deleteIndex('missing', 'by_title'));
-        $this->assertTrue($adapter->createRelationship(new Relationship(collection: 'missing', relatedCollection: 'gone', type: RelationType::OneToOne, twoWay: true, key: 'partner', twoWayKey: 'partnerOf')));
+        $this->assertTrue($adapter->createRelationship('missing', Relationship::oneToOne(relatedCollection: 'gone', twoWay: true, key: 'partner', twoWayKey: 'partnerOf')));
         $this->assertSame(0, $adapter->getSizeOfCollection('missing'));
         $this->assertSame([], $this->hashWrites, 'A collection without storage must not be written to');
 
@@ -395,7 +396,7 @@ final class RedisAdapterPathsTest extends TestCase
     {
         $database = $this->database();
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::NOTES,
             attributes: [Attribute::integer(key: 'count'), Attribute::bigInteger(key: 'big')],
             permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())],
@@ -435,20 +436,21 @@ final class RedisAdapterPathsTest extends TestCase
         $before = [$this->strings, $this->sets, $this->hashes];
 
         $this->assertTrue($adapter->updateRelationship(
-            new Relationship(collection: self::NOTES, relatedCollection: 'tags', type: RelationType::ManyToMany, twoWay: true, key: 'tags', twoWayKey: 'notes', side: RelationSide::Parent),
-            'labels',
-            'entries',
+            self::NOTES,
+            Relationship::manyToMany(relatedCollection: 'tags', twoWay: true, key: 'tags', twoWayKey: 'notes'),
+            RelationshipSide::Parent,
+            new RelationshipUpdate(key: 'labels', twoWayKey: 'entries'),
         ));
 
         $this->assertSame($before, [$this->strings, $this->sets, $this->hashes], 'without stored definitions there is no junction to rename');
     }
 
-    private function petsDatabase(RelationType $type, string $key, string $twoWayKey, string $from = 'owners', string $to = 'pets'): Database
+    private function petsDatabase(RelationshipType $type, string $key, string $twoWayKey, string $from = 'owners', string $to = 'pets'): Database
     {
         $database = $this->database();
         $database->create();
         foreach (['owners', 'pets'] as $collection) {
-            $database->createCollection(new Collection(
+            $database->createCollection(Collection::create(
                 id: $collection,
                 attributes: [Attribute::string(key: 'name', size: 64)],
                 permissions: [
@@ -458,14 +460,13 @@ final class RedisAdapterPathsTest extends TestCase
                 ],
             ));
         }
-        $database->createRelationship(new Relationship(
-            collection: $from,
-            relatedCollection: $to,
-            type: $type,
-            twoWay: true,
-            key: $key,
-            twoWayKey: $twoWayKey,
-        ));
+        $database->createRelationship($from, Relationship::fromArray([
+            'relatedCollection' => $to,
+            'relationType' => $type,
+            'twoWay' => true,
+            'key' => $key,
+            'twoWayKey' => $twoWayKey,
+        ]));
 
         return $database;
     }

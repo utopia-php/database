@@ -10,7 +10,9 @@ use RuntimeException;
 use Throwable;
 use TypeError;
 use Utopia\Database\Attribute;
+use Utopia\Database\AttributeUpdate;
 use Utopia\Database\Collection;
+use Utopia\Database\CollectionUpdate;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
@@ -28,26 +30,28 @@ final class HookFailureTest extends TestCase
     public static function isolatedOperations(): iterable
     {
         yield 'database list' => [Event::DatabaseList, static fn (Database $database): mixed => $database->list()];
-        yield 'collection create' => [Event::CollectionCreate, static fn (Database $database): mixed => $database->createCollection(new Collection(id: 'comments'))];
-        yield 'collection update' => [Event::CollectionUpdate, static fn (Database $database): mixed => $database->updateCollection(HookFixture::COLLECTION, [Permission::read(Role::any())], true)];
+        yield 'collection create' => [Event::CollectionCreate, static fn (Database $database): mixed => $database->createCollection(Collection::create(id: 'comments'))];
+        yield 'collection update' => [Event::CollectionUpdate, static fn (Database $database): mixed => $database->updateCollection(HookFixture::COLLECTION, new CollectionUpdate(permissions: [Permission::read(Role::any())], documentSecurity: true))];
         yield 'collection read' => [Event::CollectionRead, static fn (Database $database): mixed => $database->getCollection(HookFixture::COLLECTION)];
         yield 'collection list' => [Event::CollectionList, static fn (Database $database): mixed => $database->listCollections()];
         yield 'document purge from createAttribute' => [Event::DocumentPurge, static fn (Database $database): mixed => $database->createAttribute(HookFixture::COLLECTION, Attribute::string(key: 'summary', size: 64))];
         yield 'attribute create' => [Event::AttributeCreate, static fn (Database $database): mixed => $database->createAttribute(HookFixture::COLLECTION, Attribute::string(key: 'summary', size: 64))];
         yield 'attributes create' => [Event::AttributesCreate, static fn (Database $database): mixed => $database->createAttributes(HookFixture::COLLECTION, [Attribute::string(key: 'summary', size: 64)])];
-        yield 'attribute update' => [Event::AttributeUpdate, static fn (Database $database): mixed => $database->updateAttributeRequired(HookFixture::COLLECTION, 'title', true)];
-        yield 'attribute delete' => [Event::AttributeDelete, static fn (Database $database): mixed => $database->deleteAttribute(HookFixture::COLLECTION, 'views')];
-        yield 'index rename' => [Event::IndexRename, static function (Database $database): mixed {
-            $database->createIndex(HookFixture::COLLECTION, Index::key(key: 'by_title', attributes: ['title']));
-
-            return $database->renameIndex(HookFixture::COLLECTION, 'by_title', 'by_heading');
+        yield 'attribute update' => [Event::AttributeUpdate, static fn (Database $database): mixed => $database->updateAttribute(HookFixture::COLLECTION, 'title', new AttributeUpdate(required: true))];
+        yield 'attribute delete' => [Event::AttributeDelete, static function (Database $database): void {
+            $database->deleteAttribute(HookFixture::COLLECTION, 'views');
         }];
-        yield 'index delete' => [Event::IndexDelete, static function (Database $database): mixed {
+        yield 'index rename' => [Event::IndexRename, static function (Database $database): void {
             $database->createIndex(HookFixture::COLLECTION, Index::key(key: 'by_title', attributes: ['title']));
-
-            return $database->deleteIndex(HookFixture::COLLECTION, 'by_title');
+            $database->renameIndex(HookFixture::COLLECTION, 'by_title', 'by_heading');
         }];
-        yield 'collection delete' => [Event::CollectionDelete, static fn (Database $database): mixed => $database->deleteCollection(HookFixture::COLLECTION)];
+        yield 'index delete' => [Event::IndexDelete, static function (Database $database): void {
+            $database->createIndex(HookFixture::COLLECTION, Index::key(key: 'by_title', attributes: ['title']));
+            $database->deleteIndex(HookFixture::COLLECTION, 'by_title');
+        }];
+        yield 'collection delete' => [Event::CollectionDelete, static function (Database $database): void {
+            $database->deleteCollection(HookFixture::COLLECTION);
+        }];
     }
 
     /**

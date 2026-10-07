@@ -19,8 +19,9 @@ use Utopia\Database\Event;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Relationship;
+use Utopia\Database\RelationshipDeleteAction;
+use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\Validator\Authorization;
-use Utopia\Query\Schema\ForeignKeyAction;
 
 final class HookErrorCleanupTest extends TestCase
 {
@@ -55,8 +56,8 @@ final class HookErrorCleanupTest extends TestCase
 
         $database->create();
 
-        $this->assertTrue(
-            $database->getCollection(self::COLLECTION)->isEmpty(),
+        $this->assertNull(
+            $database->findCollection(self::COLLECTION),
             'The re-created database served collection metadata cached before the delete',
         );
     }
@@ -65,15 +66,14 @@ final class HookErrorCleanupTest extends TestCase
     {
         $database = $this->database();
         foreach (['parent', 'child'] as $id) {
-            $database->createCollection(new Collection(id: $id, permissions: $this->permissions(), documentSecurity: false));
+            $database->createCollection(Collection::create(id: $id, permissions: $this->permissions(), documentSecurity: false));
         }
-        $database->createRelationship(Relationship::oneToMany(
-            collection: 'parent',
+        $database->createRelationship('parent', Relationship::oneToMany(
             relatedCollection: 'child',
             twoWay: true,
             key: 'children',
             twoWayKey: 'parent',
-            onDelete: ForeignKeyAction::SetNull,
+            onDelete: RelationshipDeleteAction::SetNull,
         ));
         $database->createDocument('parent', new Document([Document::ID => 'owner']));
         $database->createDocument('child', new Document([Document::ID => 'member', 'parent' => 'owner']));
@@ -81,7 +81,7 @@ final class HookErrorCleanupTest extends TestCase
 
         $this->assertInstanceOf(
             TypeError::class,
-            $this->failureOf(fn () => $database->updateRelationship('parent', 'children', newTwoWayKey: 'owner')),
+            $this->failureOf(fn () => $database->updateRelationship('parent', 'children', new RelationshipUpdate(twoWayKey: 'owner'))),
         );
 
         $owner = $database->getDocument('child', 'member')->getAttribute('owner');
@@ -107,7 +107,7 @@ final class HookErrorCleanupTest extends TestCase
 
     private function createNotes(Database $database): void
     {
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [Attribute::string(key: 'name', size: 64)],
             permissions: $this->permissions(),

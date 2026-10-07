@@ -12,8 +12,8 @@ use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Attribute;
 use Utopia\Database\Index;
+use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
-use Utopia\Query\Schema\Order;
 
 final class IndexColumnOrderTest extends TestCase
 {
@@ -48,7 +48,7 @@ final class IndexColumnOrderTest extends TestCase
                 Attribute::string(key: 'status', size: 32),
                 Attribute::string(key: 'name', size: 128),
             ],
-            [Index::key(key: 'tagsfirst', attributes: ['tags', 'status', 'name'], lengths: [255, null, 16], orders: [null, null, Order::Desc])],
+            [Index::key(key: 'tagsfirst', attributes: ['tags', 'status', 'name'], lengths: [255, null, 16], orders: [null, null, OrderDirection::Desc])],
         );
 
         $this->assertStringContainsString($index, $this->statements[0]);
@@ -72,7 +72,7 @@ final class IndexColumnOrderTest extends TestCase
 
         $adapter->createIndex(
             'places',
-            Index::key(key: 'countryfirst', attributes: ['data.country', 'status'], orders: [Order::Desc, null]),
+            Index::key(key: 'countryfirst', attributes: ['data.country', 'status'], orders: [OrderDirection::Desc, null]),
             ['data.country' => ColumnType::Object->value, 'status' => ColumnType::String->value],
         );
 
@@ -85,13 +85,13 @@ final class IndexColumnOrderTest extends TestCase
         $mariadb->createCollection(
             'places',
             [Attribute::string(key: 'name', size: 128)],
-            [Index::key(key: 'twice', attributes: ['name', 'name'], lengths: [8, 16], orders: [Order::Asc, Order::Desc])],
+            [Index::key(key: 'twice', attributes: ['name', 'name'], lengths: [8, 16], orders: [OrderDirection::Asc, OrderDirection::Desc])],
         );
         $this->assertStringContainsString('INDEX `twice` (`name`(8) ASC, `name`(16) DESC)', $this->statements[0]);
 
         $this->statements = [];
         $postgres = $this->createAdapter(Postgres::class, false);
-        $postgres->createIndex('places', Index::key(key: 'twice', attributes: ['name', 'name'], orders: [Order::Asc, Order::Desc]));
+        $postgres->createIndex('places', Index::key(key: 'twice', attributes: ['name', 'name'], orders: [OrderDirection::Asc, OrderDirection::Desc]));
         $this->assertSame(['CREATE INDEX "namespace__places_twice" ON "database"."namespace_places" ("name" ASC, "name" DESC)'], $this->statements);
     }
 
@@ -100,7 +100,7 @@ final class IndexColumnOrderTest extends TestCase
         $adapter = $this->createAdapter(Postgres::class, false);
 
         $adapter->createIndex('places', Index::trigram(key: 'names', attributes: ['name', 'status']));
-        $adapter->createIndex('places', Index::hnswCosine(key: 'embeddings', attributes: ['embedding']));
+        $adapter->createIndex('places', Index::hnswCosine(key: 'embeddings', attribute: 'embedding'));
 
         $this->assertSame([
             'CREATE INDEX "namespace__places_names" ON "database"."namespace_places" USING GIN ("name" gin_trgm_ops, "status" gin_trgm_ops)',

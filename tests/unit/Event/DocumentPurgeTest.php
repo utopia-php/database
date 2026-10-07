@@ -579,7 +579,7 @@ final class DocumentPurgeTest extends TestCase
             ->setTenant(null)
             ->setTenantPerDocument(true);
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: HookFixture::COLLECTION,
             attributes: [Attribute::string(key: 'title', size: 64)],
             permissions: [

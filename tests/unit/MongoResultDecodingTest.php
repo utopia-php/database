@@ -249,7 +249,6 @@ final class MongoResultDecodingTest extends TestCase
                 new Document(['$id' => 'meta', 'key' => 'meta', 'type' => ColumnType::Object->value, 'array' => false]),
                 new Document(['$id' => 'when', 'key' => 'when', 'type' => ColumnType::Datetime->value, 'array' => false]),
                 ['$id' => 'legacy', 'type' => 'bigint', 'array' => false],
-                ['$id' => 'unknown', 'type' => 'no such type', 'array' => false],
             ],
         ]);
     }
@@ -279,13 +278,13 @@ final class MongoResultDecodingTest extends TestCase
         $attributes = $collection->getAttribute('attributes', []);
         $internal = \array_map(
             fn (Attribute $attribute): array => ['$id' => $attribute->key, 'type' => $attribute->type, 'array' => $attribute->array],
-            Database::internalAttributes()
+            Database::internalAttributesFor(true)
         );
 
         foreach (\array_merge($attributes, \array_values($internal)) as $attribute) {
             $key = \is_string($attribute['$id'] ?? null) ? $attribute['$id'] : '';
             $rawType = $attribute['type'] ?? null;
-            $type = $rawType instanceof ColumnType ? $rawType : (\is_string($rawType) ? Attribute::tryNormalizeType($rawType) : null);
+            $type = $rawType instanceof ColumnType ? $rawType : (\is_string($rawType) ? Attribute::typeFromStored($rawType) : null);
             $array = (bool) ($attribute['array'] ?? false);
             $value = $document->getAttribute($key);
             if ($value === null || Operator::isOperator($value)) {

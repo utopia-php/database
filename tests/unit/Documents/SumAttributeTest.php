@@ -28,8 +28,8 @@ final class SumAttributeTest extends TestCase
         $this->database->setDatabase('sums')->setNamespace('sums_'.\uniqid());
         $this->database->create();
         $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
-        $this->database->createCollection(new Collection(id: 'authors', permissions: $permissions));
-        $this->database->createCollection(new Collection(
+        $this->database->createCollection(Collection::create(id: 'authors', permissions: $permissions));
+        $this->database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [
                 Attribute::string(key: 'title', size: 64),
@@ -39,7 +39,7 @@ final class SumAttributeTest extends TestCase
             ],
             permissions: $permissions,
         ));
-        $this->database->createRelationship(Relationship::manyToOne(collection: self::COLLECTION, relatedCollection: 'authors', key: 'author', twoWayKey: 'books'));
+        $this->database->createRelationship(self::COLLECTION, Relationship::manyToOne(relatedCollection: 'authors', key: 'author', twoWayKey: 'books'));
         $this->database->createDocument(self::COLLECTION, new Document([Document::ID => 'dune', 'title' => 'Dune', 'pages' => 7, 'rating' => 4.5, 'chapters' => [1, 2]]));
         $this->database->createDocument(self::COLLECTION, new Document([Document::ID => 'emma', 'title' => 'Emma', 'pages' => 5, 'rating' => 3.0, 'chapters' => [3]]));
     }

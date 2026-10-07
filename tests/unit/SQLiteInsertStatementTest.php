@@ -86,7 +86,7 @@ final class SQLiteInsertStatementTest extends TestCase
 
         $database->create();
         $database->addHook(new Permissions());
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [Attribute::string(key: 'body', size: 64)],
             permissions: [

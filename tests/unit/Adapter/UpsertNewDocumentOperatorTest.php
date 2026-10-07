@@ -33,11 +33,11 @@ final class UpsertNewDocumentOperatorTest extends TestCase
             ->setNamespace(self::NAMESPACE)
             ->setAuthorization(new Authorization());
         $this->database->create();
-        $this->database->createCollection(new Collection(
+        $this->database->createCollection(Collection::create(
             id: 'tasks',
             attributes: [
-                Attribute::datetime('due', default: '2026-01-31T12:30:00.000+00:00', filters: ['datetime']),
-                Attribute::datetime('reminder', filters: ['datetime']),
+                Attribute::datetime('due', default: '2026-01-31T12:30:00.000+00:00'),
+                Attribute::datetime('reminder'),
                 Attribute::boolean('active', default: true),
                 Attribute::boolean('archived'),
                 Attribute::bigInteger('counter', default: PHP_INT_MAX - 5),
@@ -112,7 +112,7 @@ final class UpsertNewDocumentOperatorTest extends TestCase
 
     public function testAnUpsertThatBreaksAUniqueIndexIsAUniqueViolation(): void
     {
-        $this->database->createCollection(new Collection(
+        $this->database->createCollection(Collection::create(
             id: 'accounts',
             attributes: [Attribute::string('email', size: 64)],
             indexes: [Index::unique(key: 'unique_email', attributes: ['email'])],

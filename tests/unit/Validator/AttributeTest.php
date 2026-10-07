@@ -3,13 +3,16 @@
 namespace Tests\Unit\Validator;
 
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Attribute as AttributeVO;
+use Utopia\Database\Attribute;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\ID;
-use Utopia\Database\Validator\Attribute;
+use Utopia\Database\RelationshipSide;
+use Utopia\Database\RelationshipType;
+use Utopia\Database\Validator\AttributeDefinition;
 use Utopia\Database\Validator\Structure;
 use Utopia\Query\Schema\ColumnType;
 
@@ -17,55 +20,50 @@ class AttributeTest extends TestCase
 {
     public function testLegacyBigIntegerMetadataNormalizesToCanonicalType(): void
     {
-        $attribute = AttributeVO::fromDocument(new Document([
+        $attribute = Attribute::fromDocument(new Document([
             '$id' => 'total',
             'type' => 'bigint',
             'size' => 8,
         ]));
 
         $this->assertSame(ColumnType::BigInteger, $attribute->type);
-        $this->assertSame(0, $attribute->size);
+        $this->assertSame(8, $attribute->size);
         $this->assertSame('bigint', $attribute->toDocument()->getAttribute('type'));
 
-        $arrayAttribute = AttributeVO::fromArray([
+        $arrayAttribute = Attribute::fromArray([
             '$id' => 'arrayTotal',
             'type' => 'bigint',
             'size' => 64,
         ]);
 
         $this->assertSame(ColumnType::BigInteger, $arrayAttribute->type);
-        $this->assertSame(0, $arrayAttribute->size);
+        $this->assertSame(64, $arrayAttribute->size);
     }
 
     public function testBigIntegerDefaultsSupportNativeAndStringBoundaries(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxIntLength: 100,
             maxBigIntLength: 100,
             supportUnsignedBigInt: true,
         );
 
-        $this->assertTrue($validator->isValid(new AttributeVO(
+        $this->assertTrue($validator->isValid(Attribute::bigInteger(
             key: 'signed',
-            type: ColumnType::BigInteger,
-            size: PHP_INT_MAX,
             default: PHP_INT_MAX,
         )));
-        $this->assertTrue($validator->isValid(new AttributeVO(
+        $this->assertTrue($validator->isValid(Attribute::bigInteger(
             key: 'signedMinimum',
-            type: ColumnType::BigInteger,
             default: '-9223372036854775808',
         )));
-        $this->assertTrue($validator->isValid(new AttributeVO(
+        $this->assertTrue($validator->isValid(Attribute::bigInteger(
             key: 'unsigned',
-            type: ColumnType::BigInteger,
             default: '18446744073709551615',
             signed: false,
         )));
-        $this->assertTrue($validator->isValid(new AttributeVO(
+        $this->assertTrue($validator->isValid(Attribute::bigInteger(
             key: 'values',
-            type: ColumnType::BigInteger,
             default: ['-9223372036854775808', PHP_INT_MAX],
             array: true,
         )));
@@ -73,26 +71,24 @@ class AttributeTest extends TestCase
 
     public function testBigIntegerDefaultRejectsValuesOutsideSignedRange(): void
     {
-        $validator = new Attribute(attributes: []);
+        $validator = new AttributeDefinition(attributes: []);
 
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('does not match given type bigint');
-        $validator->isValid(new AttributeVO(
+        $validator->isValid(Attribute::bigInteger(
             key: 'total',
-            type: ColumnType::BigInteger,
             default: '9223372036854775808',
         ));
     }
 
     public function testBigIntegerArrayDefaultValidatesEveryValue(): void
     {
-        $validator = new Attribute(attributes: [], supportUnsignedBigInt: true);
+        $validator = new AttributeDefinition(attributes: [], supportUnsignedBigInt: true);
 
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('does not match given type bigint');
-        $validator->isValid(new AttributeVO(
+        $validator->isValid(Attribute::bigInteger(
             key: 'totals',
-            type: ColumnType::BigInteger,
             default: ['1', '18446744073709551616'],
             signed: false,
             array: true,
@@ -101,7 +97,7 @@ class AttributeTest extends TestCase
 
     public function test_duplicate_attribute_id(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [
                 new Document([
                     '$id' => ID::custom('title'),
@@ -139,7 +135,7 @@ class AttributeTest extends TestCase
 
     public function test_valid_string_attribute(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -163,7 +159,7 @@ class AttributeTest extends TestCase
 
     public function test_string_size_too_large(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 1000,
             maxVarcharLength: 65535,
@@ -189,7 +185,7 @@ class AttributeTest extends TestCase
 
     public function test_varchar_size_too_large(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 1000,
@@ -215,7 +211,7 @@ class AttributeTest extends TestCase
 
     public function test_text_size_too_large(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -241,7 +237,7 @@ class AttributeTest extends TestCase
 
     public function test_mediumtext_size_too_large(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -267,7 +263,7 @@ class AttributeTest extends TestCase
 
     public function test_integer_size_too_large(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -293,7 +289,7 @@ class AttributeTest extends TestCase
 
     public function test_unknown_type(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -319,7 +315,7 @@ class AttributeTest extends TestCase
 
     public function test_required_filters_for_datetime(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -345,7 +341,7 @@ class AttributeTest extends TestCase
 
     public function test_valid_datetime_with_filter(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -369,7 +365,7 @@ class AttributeTest extends TestCase
 
     public function test_default_value_on_required_attribute(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -395,7 +391,7 @@ class AttributeTest extends TestCase
 
     public function test_default_value_type_mismatch(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -421,7 +417,7 @@ class AttributeTest extends TestCase
 
     public function test_vector_not_supported(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -448,7 +444,7 @@ class AttributeTest extends TestCase
 
     public function test_vector_cannot_be_array(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -475,7 +471,7 @@ class AttributeTest extends TestCase
 
     public function test_vector_invalid_dimensions(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -502,7 +498,7 @@ class AttributeTest extends TestCase
 
     public function test_vector_dimensions_exceeds_max(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -529,7 +525,7 @@ class AttributeTest extends TestCase
 
     public function test_spatial_not_supported(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -556,7 +552,7 @@ class AttributeTest extends TestCase
 
     public function test_spatial_cannot_be_array(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -583,7 +579,7 @@ class AttributeTest extends TestCase
 
     public function test_spatial_must_have_empty_size(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -610,7 +606,7 @@ class AttributeTest extends TestCase
 
     public function test_object_not_supported(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -637,7 +633,7 @@ class AttributeTest extends TestCase
 
     public function test_object_cannot_be_array(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -664,7 +660,7 @@ class AttributeTest extends TestCase
 
     public function test_object_must_have_empty_size(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -691,7 +687,7 @@ class AttributeTest extends TestCase
 
     public function test_attribute_limit_exceeded(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxAttributes: 5,
             maxWidth: 0,
@@ -721,7 +717,7 @@ class AttributeTest extends TestCase
 
     public function test_row_width_limit_exceeded(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxAttributes: 100,
             maxWidth: 1000,
@@ -751,7 +747,7 @@ class AttributeTest extends TestCase
 
     public function test_vector_default_value_not_array(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -778,7 +774,7 @@ class AttributeTest extends TestCase
 
     public function test_vector_default_value_wrong_element_count(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -805,7 +801,7 @@ class AttributeTest extends TestCase
 
     public function test_vector_default_value_non_numeric_elements(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -832,7 +828,7 @@ class AttributeTest extends TestCase
 
     public function test_longtext_size_too_large(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -858,7 +854,7 @@ class AttributeTest extends TestCase
 
     public function test_valid_varchar_attribute(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -882,7 +878,7 @@ class AttributeTest extends TestCase
 
     public function test_valid_text_attribute(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -906,7 +902,7 @@ class AttributeTest extends TestCase
 
     public function test_valid_mediumtext_attribute(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -930,7 +926,7 @@ class AttributeTest extends TestCase
 
     public function test_valid_longtext_attribute(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -954,7 +950,7 @@ class AttributeTest extends TestCase
 
     public function test_valid_float_attribute(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -978,7 +974,7 @@ class AttributeTest extends TestCase
 
     public function test_valid_boolean_attribute(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1002,7 +998,7 @@ class AttributeTest extends TestCase
 
     public function test_float_default_value_type_mismatch(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1028,7 +1024,7 @@ class AttributeTest extends TestCase
 
     public function test_boolean_default_value_type_mismatch(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1054,7 +1050,7 @@ class AttributeTest extends TestCase
 
     public function test_string_default_value_type_mismatch(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1080,7 +1076,7 @@ class AttributeTest extends TestCase
 
     public function test_valid_string_with_default_value(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1104,7 +1100,7 @@ class AttributeTest extends TestCase
 
     public function test_valid_integer_with_default_value(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1128,7 +1124,7 @@ class AttributeTest extends TestCase
 
     public function test_valid_float_with_default_value(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1152,7 +1148,7 @@ class AttributeTest extends TestCase
 
     public function test_valid_boolean_with_default_value(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1176,7 +1172,7 @@ class AttributeTest extends TestCase
 
     public function test_unsigned_integer_size_limit(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1201,7 +1197,7 @@ class AttributeTest extends TestCase
 
     public function test_unsigned_integer_size_too_large(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1227,7 +1223,7 @@ class AttributeTest extends TestCase
 
     public function test_duplicate_attribute_id_case_insensitive(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [
                 new Document([
                     '$id' => ID::custom('Title'),
@@ -1265,7 +1261,7 @@ class AttributeTest extends TestCase
 
     public function test_duplicate_in_schema(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             schemaAttributes: [
                 new Document([
@@ -1300,7 +1296,7 @@ class AttributeTest extends TestCase
 
     public function test_schema_check_skipped_when_migrating(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             schemaAttributes: [
                 new Document([
@@ -1335,7 +1331,7 @@ class AttributeTest extends TestCase
 
     public function test_valid_linestring_attribute(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1360,7 +1356,7 @@ class AttributeTest extends TestCase
 
     public function test_valid_polygon_attribute(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1385,7 +1381,7 @@ class AttributeTest extends TestCase
 
     public function test_valid_point_attribute(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1410,7 +1406,7 @@ class AttributeTest extends TestCase
 
     public function test_valid_vector_attribute(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1435,7 +1431,7 @@ class AttributeTest extends TestCase
 
     public function test_valid_vector_with_default_value(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1460,7 +1456,7 @@ class AttributeTest extends TestCase
 
     public function test_valid_object_attribute(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1485,7 +1481,7 @@ class AttributeTest extends TestCase
 
     public function test_array_string_attribute(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1509,7 +1505,7 @@ class AttributeTest extends TestCase
 
     public function test_array_with_default_values(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1533,7 +1529,7 @@ class AttributeTest extends TestCase
 
     public function test_array_default_value_type_mismatch(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1559,7 +1555,7 @@ class AttributeTest extends TestCase
 
     public function test_datetime_default_value_must_be_string(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1585,7 +1581,7 @@ class AttributeTest extends TestCase
 
     public function test_valid_datetime_with_default_value(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1609,7 +1605,7 @@ class AttributeTest extends TestCase
 
     public function test_varchar_default_value_type_mismatch(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1635,7 +1631,7 @@ class AttributeTest extends TestCase
 
     public function test_text_default_value_type_mismatch(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1661,7 +1657,7 @@ class AttributeTest extends TestCase
 
     public function test_mediumtext_default_value_type_mismatch(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1687,7 +1683,7 @@ class AttributeTest extends TestCase
 
     public function test_longtext_default_value_type_mismatch(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1713,7 +1709,7 @@ class AttributeTest extends TestCase
 
     public function test_valid_varchar_with_default_value(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1737,7 +1733,7 @@ class AttributeTest extends TestCase
 
     public function test_valid_text_with_default_value(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1761,7 +1757,7 @@ class AttributeTest extends TestCase
 
     public function test_valid_integer_attribute(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1785,7 +1781,7 @@ class AttributeTest extends TestCase
 
     public function test_null_default_value_allowed(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1809,7 +1805,7 @@ class AttributeTest extends TestCase
 
     public function test_array_default_on_non_array_attribute(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1835,7 +1831,7 @@ class AttributeTest extends TestCase
 
     public function test_array_default_allowed_on_json_filter_attribute(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1859,7 +1855,7 @@ class AttributeTest extends TestCase
 
     public function test_object_default_allowed_on_json_filter_attribute(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1883,7 +1879,7 @@ class AttributeTest extends TestCase
 
     public function test_get_type(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1895,7 +1891,7 @@ class AttributeTest extends TestCase
 
     public function test_get_description(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1907,7 +1903,7 @@ class AttributeTest extends TestCase
 
     public function test_is_array(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1919,20 +1915,18 @@ class AttributeTest extends TestCase
 
     public function test_is_valid_with_attribute_vo_directly(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
             maxIntLength: PHP_INT_MAX,
         );
 
-        $attrVO = new AttributeVO(
+        $attrVO = Attribute::string(
             key: 'directAttr',
-            type: ColumnType::String,
             size: 255,
             required: false,
             default: null,
-            signed: true,
             array: false,
             filters: [],
         );
@@ -1942,7 +1936,7 @@ class AttributeTest extends TestCase
 
     public function test_attribute_does_not_collide_with_schema(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             schemaAttributes: [
                 new Document([
@@ -1979,7 +1973,7 @@ class AttributeTest extends TestCase
             return new \Utopia\Validator\Text(100);
         }, ColumnType::Integer);
 
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -2006,22 +2000,18 @@ class AttributeTest extends TestCase
 
     public function test_id_type_attribute_validation(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
             maxIntLength: PHP_INT_MAX,
         );
 
-        $attrVO = new AttributeVO(
+        $attrVO = Attribute::id(
             key: 'myId',
-            type: ColumnType::Id,
-            size: 0,
             required: false,
             default: null,
-            signed: false,
             array: false,
-            filters: [],
         );
 
         $this->assertTrue($validator->isValid($attrVO));
@@ -2029,45 +2019,41 @@ class AttributeTest extends TestCase
 
     public function test_unknown_column_type_in_check_type(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
             maxIntLength: PHP_INT_MAX,
         );
 
-        $attrVO = new AttributeVO(
-            key: 'badtype',
-            type: ColumnType::Enum,
-            size: 0,
-            required: false,
-            default: null,
-            signed: true,
-            array: false,
-            filters: [],
-        );
-
-        $this->expectException(DatabaseException::class);
+        $this->expectException(StructureException::class);
         $this->expectExceptionMessage('Unknown attribute type: enum');
-        $validator->isValid($attrVO);
+        $validator->isValid(Attribute::fromArray([
+            'key' => 'badtype',
+            'type' => ColumnType::Enum,
+            'size' => 0,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]));
     }
 
     public function test_null_default_value_in_validate_default_types(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
             maxIntLength: PHP_INT_MAX,
         );
 
-        $attrVO = new AttributeVO(
+        $attrVO = Attribute::string(
             key: 'nullableField',
-            type: ColumnType::String,
             size: 255,
             required: false,
             default: null,
-            signed: true,
             array: false,
             filters: [],
         );
@@ -2077,7 +2063,7 @@ class AttributeTest extends TestCase
 
     public function test_vector_component_non_numeric_default_type(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -2085,20 +2071,16 @@ class AttributeTest extends TestCase
             supportForVectors: true,
         );
 
-        $attrVO = new AttributeVO(
+        $attrVO = Attribute::vector(
             key: 'vec',
-            type: ColumnType::Vector,
-            size: 3,
+            dimensions: 3,
             required: false,
             default: [1.0, 2.0, 3.0],
-            signed: true,
-            array: false,
-            filters: [],
         );
 
         $this->assertTrue($validator->isValid($attrVO));
 
-        $validator2 = new Attribute(
+        $validator2 = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -2106,15 +2088,11 @@ class AttributeTest extends TestCase
             supportForVectors: true,
         );
 
-        $attrVO2 = new AttributeVO(
+        $attrVO2 = Attribute::vector(
             key: 'vec2',
-            type: ColumnType::Vector,
-            size: 3,
+            dimensions: 3,
             required: false,
             default: [1.0, 'notANumber', 3.0],
-            signed: true,
-            array: false,
-            filters: [],
         );
 
         $this->expectException(DatabaseException::class);
@@ -2124,32 +2102,30 @@ class AttributeTest extends TestCase
 
     public function test_unknown_column_type_with_default_value(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
             maxIntLength: PHP_INT_MAX,
         );
 
-        $attrVO = new AttributeVO(
-            key: 'baddefault',
-            type: ColumnType::Enum,
-            size: 0,
-            required: false,
-            default: 'somevalue',
-            signed: true,
-            array: false,
-            filters: [],
-        );
-
-        $this->expectException(DatabaseException::class);
+        $this->expectException(StructureException::class);
         $this->expectExceptionMessage('Unknown attribute type: enum');
-        $validator->isValid($attrVO);
+        $validator->isValid(Attribute::fromArray([
+            'key' => 'baddefault',
+            'type' => ColumnType::Enum,
+            'size' => 0,
+            'required' => false,
+            'default' => 'somevalue',
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]));
     }
 
     public function test_schema_duplicate_check_with_filter_callback(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             schemaAttributes: [
                 new Document([
@@ -2185,36 +2161,36 @@ class AttributeTest extends TestCase
 
     public function test_relationship_type_passes_check_type(): void
     {
-        $validator = new Attribute(
+        $validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
             maxIntLength: PHP_INT_MAX,
         );
 
-        $attrVO = new AttributeVO(
-            key: 'parent',
-            type: ColumnType::Relationship,
-            size: 0,
-            required: false,
-            default: null,
-            signed: false,
-            array: false,
-            filters: [],
-        );
+        $attrVO = Attribute::fromArray([
+            'key' => 'parent',
+            'type' => ColumnType::Relationship,
+            'size' => 0,
+            'required' => false,
+            'default' => null,
+            'signed' => false,
+            'array' => false,
+            'filters' => [],
+            'options' => ['relatedCollection' => 'parents', 'relationType' => RelationshipType::ManyToOne->value, 'side' => RelationshipSide::Child->value],
+        ]);
 
         $this->assertTrue($validator->isValid($attrVO));
     }
 
     public function testBigIntegerDefaultRejectsNonNumericString(): void
     {
-        $validator = new Attribute(attributes: []);
+        $validator = new AttributeDefinition(attributes: []);
 
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('does not match given type bigint');
-        $validator->isValid(new AttributeVO(
+        $validator->isValid(Attribute::bigInteger(
             key: 'counter',
-            type: ColumnType::BigInteger,
             default: 'not_a_bigint',
         ));
     }

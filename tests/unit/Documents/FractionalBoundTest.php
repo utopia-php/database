@@ -170,7 +170,7 @@ final class FractionalBoundTest extends TestCase
             ->setDatabase('fractional_bound')
             ->setNamespace('fractional_bound');
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [
                 Attribute::integer(key: 'count'),

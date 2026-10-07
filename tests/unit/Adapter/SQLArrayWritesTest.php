@@ -38,7 +38,7 @@ final class SQLArrayWritesTest extends TestCase
             ->setNamespace(self::NAMESPACE)
             ->setAuthorization(new Authorization());
         $this->database->create();
-        $this->database->createCollection(new Collection(
+        $this->database->createCollection(Collection::create(
             id: 'items',
             attributes: [
                 Attribute::string('tags', size: 16, array: true),

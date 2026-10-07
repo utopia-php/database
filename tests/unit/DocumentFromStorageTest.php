@@ -15,6 +15,7 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Structure as StructureException;
+use Utopia\Database\Filter;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 
@@ -131,9 +132,9 @@ final class DocumentFromStorageTest extends TestCase
     public function testJsonFilterDecodesADocumentShapedValueWithANonStringPermission(): void
     {
         $database = new Database(new Memory(), new Cache(new None()));
-        $collection = new Collection(id: 'users', attributes: [
-            Attribute::string(key: 'prefs', size: 1024, filters: ['json']),
-            Attribute::string(key: 'settings', size: 1024, filters: ['json']),
+        $collection = Collection::create(id: 'users', attributes: [
+            Attribute::string(key: 'prefs', size: 1024, filters: [Filter::Json]),
+            Attribute::string(key: 'settings', size: 1024, filters: [Filter::Json]),
         ]);
 
         $decoded = $database->decode($collection, new Document([
@@ -197,11 +198,11 @@ final class DocumentFromStorageTest extends TestCase
             ->setNamespace('from_storage_'.\uniqid());
         $database->getAuthorization()->addRole(Role::any()->toString());
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: 'users',
             attributes: [
                 Attribute::string(key: 'name', size: 64),
-                Attribute::string(key: 'prefs', size: 1024, filters: ['json']),
+                Attribute::string(key: 'prefs', size: 1024, filters: [Filter::Json]),
             ],
             permissions: [Permission::read(Role::any()), Permission::update(Role::any())],
             documentSecurity: false,

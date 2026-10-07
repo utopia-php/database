@@ -36,7 +36,7 @@ final class NullNumericIncrementTest extends TestCase
             ->setNamespace('null_increment_'.\uniqid());
         $this->database->getAuthorization()->addRole(Role::any()->toString());
         $this->database->create();
-        $this->database->createCollection(new Collection(
+        $this->database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [
                 Attribute::integer('integer', required: false),
@@ -228,7 +228,7 @@ final class NullNumericIncrementTest extends TestCase
         $this->pdo = new PDO('sqlite::memory:');
         $database = $this->build(new SQLite($this->pdo));
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [
                 Attribute::integer('integer', required: false),

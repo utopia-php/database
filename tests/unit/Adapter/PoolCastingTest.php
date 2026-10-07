@@ -111,7 +111,7 @@ final class PoolCastingTest extends TestCase
             ->setDatabase('pool_casting')
             ->setNamespace('pool_casting_'.\uniqid());
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: 'posts',
             attributes: [Attribute::string(key: 'title', size: 64)],
             permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())],

@@ -39,7 +39,7 @@ final class SQLDeleteFailureTest extends TestCase
             ->setNamespace(self::NAMESPACE)
             ->setAuthorization(new Authorization());
         $this->database->create();
-        $this->database->createCollection(new Collection(
+        $this->database->createCollection(Collection::create(
             id: 'notes',
             attributes: [Attribute::string('body', size: 64)],
             permissions: [

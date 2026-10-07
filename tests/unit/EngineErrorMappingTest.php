@@ -171,7 +171,7 @@ final class EngineErrorMappingTest extends TestCase
             ->setNamespace(self::NAMESPACE)
             ->setAuthorization(new Authorization());
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: 'orders',
             attributes: [Attribute::string(key: 'category', size: 20)],
             permissions: [Permission::read(Role::any())],

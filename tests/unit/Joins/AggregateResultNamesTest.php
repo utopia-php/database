@@ -212,7 +212,7 @@ final class AggregateResultNamesTest extends TestCase
 
         $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
         foreach (['main', 'a'] as $collection) {
-            $database->createCollection(new Collection(
+            $database->createCollection(Collection::create(
                 id: $collection,
                 attributes: [
                     Attribute::string(key: 'link', size: 64),

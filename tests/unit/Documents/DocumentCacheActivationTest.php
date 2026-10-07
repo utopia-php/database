@@ -71,7 +71,7 @@ final class DocumentCacheActivationTest extends TestCase
         $database = new Database($adapter, $cache);
         $database->setDatabase('activation')->setNamespace($namespace);
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [Attribute::string(key: 'name', size: 32)],
             permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())],

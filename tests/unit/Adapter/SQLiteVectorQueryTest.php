@@ -31,7 +31,7 @@ final class SQLiteVectorQueryTest extends TestCase
             ->setNamespace(self::NAMESPACE)
             ->setAuthorization(new Authorization());
         $this->database->create();
-        $this->database->createCollection(new Collection(
+        $this->database->createCollection(Collection::create(
             id: 'items',
             attributes: [Attribute::string('name', size: 16)],
             permissions: [Permission::create(Role::any()), Permission::read(Role::any())],

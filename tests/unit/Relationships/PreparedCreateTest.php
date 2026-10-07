@@ -15,6 +15,7 @@ use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
+use Utopia\Database\CollectionUpdate;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
@@ -26,9 +27,9 @@ use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
-use Utopia\Database\RelationType;
+use Utopia\Database\RelationshipDeleteAction;
+use Utopia\Database\RelationshipType;
 use Utopia\Database\Validator\Authorization;
-use Utopia\Query\Schema\ForeignKeyAction;
 
 /**
  * A create or update whose related documents are all new prepares them instead of reading each one first and back
@@ -155,12 +156,12 @@ final class PreparedCreateTest extends TestCase
     {
         foreach ([self::ONE_BY_ONE, self::DEFERRED, self::ONE_BY_ONE_WITHOUT_SAVEPOINTS, self::IMMEDIATE] as $mode) {
             $database = $this->database('memory', $mode);
-            self::chain($database, RelationType::OneToMany, 2);
+            self::chain($database, RelationshipType::OneToMany, 2);
             $adapter = $database->getAdapter();
             $this->assertInstanceOf(CountingMemory::class, $adapter);
             $adapter->reset();
 
-            $database->createDocument('level0', self::tree(RelationType::OneToMany, 'root', 0, 2));
+            $database->createDocument('level0', self::tree(RelationshipType::OneToMany, 'root', 0, 2));
 
             if ($mode === self::DEFERRED || $mode === self::IMMEDIATE) {
                 $this->assertSame(0, $adapter->documentReads, 'A '.$mode.' create read a related document');
@@ -181,12 +182,12 @@ final class PreparedCreateTest extends TestCase
             foreach ([self::ONE_BY_ONE, self::DEFERRED] as $mode) {
                 $database = $this->database($engine, $mode, filters: $filters);
                 foreach (['root', 'mid', 'side'] as $collection) {
-                    $database->createCollection(new Collection(id: $collection, attributes: [Attribute::string(key: 'name', size: 64)], permissions: self::permissions(), documentSecurity: true));
+                    $database->createCollection(Collection::create(id: $collection, attributes: [Attribute::string(key: 'name', size: 64)], permissions: self::permissions(), documentSecurity: true));
                 }
-                $database->createCollection(new Collection(id: 'leaf', attributes: [Attribute::string(key: 'name', size: 64, filters: ['wrap'])], permissions: self::permissions(), documentSecurity: true));
-                $database->createRelationship(Relationship::manyToOne(collection: 'root', relatedCollection: 'mid', twoWay: true, key: 'mid', twoWayKey: 'roots', onDelete: ForeignKeyAction::Cascade));
-                $database->createRelationship(Relationship::manyToOne(collection: 'root', relatedCollection: 'side', twoWay: true, key: 'side', twoWayKey: 'roots', onDelete: ForeignKeyAction::Cascade));
-                $database->createRelationship(Relationship::oneToMany(collection: 'mid', relatedCollection: 'leaf', twoWay: true, key: 'leaves', twoWayKey: 'mid', onDelete: ForeignKeyAction::Cascade));
+                $database->createCollection(Collection::create(id: 'leaf', attributes: [Attribute::string(key: 'name', size: 64, filters: ['wrap'])], permissions: self::permissions(), documentSecurity: true));
+                $database->createRelationship('root', Relationship::manyToOne(relatedCollection: 'mid', twoWay: true, key: 'mid', twoWayKey: 'roots', onDelete: RelationshipDeleteAction::Cascade));
+                $database->createRelationship('root', Relationship::manyToOne(relatedCollection: 'side', twoWay: true, key: 'side', twoWayKey: 'roots', onDelete: RelationshipDeleteAction::Cascade));
+                $database->createRelationship('mid', Relationship::oneToMany(relatedCollection: 'leaf', twoWay: true, key: 'leaves', twoWayKey: 'mid', onDelete: RelationshipDeleteAction::Cascade));
                 $database->createDocument('leaf', new Document(['$id' => 'existing', 'name' => 'old']));
 
                 $database->createDocument('root', new Document([
@@ -321,9 +322,9 @@ final class PreparedCreateTest extends TestCase
         $database->create();
         $database->addHook(new Relationships($database, prepare: $prepare));
         foreach (['parents', 'children'] as $collection) {
-            $database->createCollection(new Collection(id: $collection, attributes: [Attribute::string(key: 'name', size: 64)], permissions: self::permissions(), documentSecurity: false));
+            $database->createCollection(Collection::create(id: $collection, attributes: [Attribute::string(key: 'name', size: 64)], permissions: self::permissions(), documentSecurity: false));
         }
-        $database->createRelationship(Relationship::oneToMany(collection: 'parents', relatedCollection: 'children', twoWay: true, key: 'children', twoWayKey: 'parent'));
+        $database->createRelationship('parents', Relationship::oneToMany(relatedCollection: 'children', twoWay: true, key: 'children', twoWayKey: 'parent'));
 
         return $database;
     }
@@ -364,30 +365,30 @@ final class PreparedCreateTest extends TestCase
     private static function writes(): array
     {
         $create = static fn (Database $database, string $collection): Closure => static fn (Document $document): Document => $database->createDocument($collection, $document);
-        $tree = static fn (RelationType $type, int $depth, bool $twoWay = true): Closure => static function (Database $database) use ($type, $depth, $twoWay, $create): array {
+        $tree = static fn (RelationshipType $type, int $depth, bool $twoWay = true): Closure => static function (Database $database) use ($type, $depth, $twoWay, $create): array {
             self::chain($database, $type, $depth, $twoWay);
 
             return [self::tree($type, 'root', 0, $depth), $create($database, 'level0')];
         };
         $nodes = static function (Database $database): void {
-            $database->createCollection(new Collection(id: 'node', attributes: [Attribute::string(key: 'name', size: 64)], permissions: self::permissions(), documentSecurity: true));
-            $database->createCollection(new Collection(id: 'tag', attributes: [Attribute::string(key: 'name', size: 64)], permissions: self::permissions(), documentSecurity: true));
-            $database->createRelationship(Relationship::oneToMany(collection: 'node', relatedCollection: 'tag', twoWay: true, key: 'tags', twoWayKey: 'node', onDelete: ForeignKeyAction::Cascade));
-            $database->createRelationship(Relationship::manyToMany(collection: 'tag', relatedCollection: 'node', twoWay: true, key: 'nodes', twoWayKey: 'labels', onDelete: ForeignKeyAction::Cascade));
+            $database->createCollection(Collection::create(id: 'node', attributes: [Attribute::string(key: 'name', size: 64)], permissions: self::permissions(), documentSecurity: true));
+            $database->createCollection(Collection::create(id: 'tag', attributes: [Attribute::string(key: 'name', size: 64)], permissions: self::permissions(), documentSecurity: true));
+            $database->createRelationship('node', Relationship::oneToMany(relatedCollection: 'tag', twoWay: true, key: 'tags', twoWayKey: 'node', onDelete: RelationshipDeleteAction::Cascade));
+            $database->createRelationship('tag', Relationship::manyToMany(relatedCollection: 'node', twoWay: true, key: 'nodes', twoWayKey: 'labels', onDelete: RelationshipDeleteAction::Cascade));
         };
 
         return [
-            'one to many' => $tree(RelationType::OneToMany, 2),
-            'one to many past the maximum depth' => $tree(RelationType::OneToMany, 4),
-            'one to many one way' => $tree(RelationType::OneToMany, 2, false),
-            'many to many' => $tree(RelationType::ManyToMany, 2),
-            'many to many past the maximum depth' => $tree(RelationType::ManyToMany, 4),
-            'many to many one way' => $tree(RelationType::ManyToMany, 2, false),
-            'many to one' => $tree(RelationType::ManyToOne, 3),
-            'one to one' => $tree(RelationType::OneToOne, 3),
-            'one to one one way' => $tree(RelationType::OneToOne, 3, false),
+            'one to many' => $tree(RelationshipType::OneToMany, 2),
+            'one to many past the maximum depth' => $tree(RelationshipType::OneToMany, 4),
+            'one to many one way' => $tree(RelationshipType::OneToMany, 2, false),
+            'many to many' => $tree(RelationshipType::ManyToMany, 2),
+            'many to many past the maximum depth' => $tree(RelationshipType::ManyToMany, 4),
+            'many to many one way' => $tree(RelationshipType::ManyToMany, 2, false),
+            'many to one' => $tree(RelationshipType::ManyToOne, 3),
+            'one to one' => $tree(RelationshipType::OneToOne, 3),
+            'one to one one way' => $tree(RelationshipType::OneToOne, 3, false),
             'generated ids and own permissions' => static function (Database $database) use ($create): array {
-                self::chain($database, RelationType::OneToMany, 2);
+                self::chain($database, RelationshipType::OneToMany, 2);
 
                 return [new Document([
                     '$id' => 'root',
@@ -400,7 +401,7 @@ final class PreparedCreateTest extends TestCase
                 ]), $create($database, 'level0')];
             },
             'documents mixed with ids' => static function (Database $database) use ($create): array {
-                self::chain($database, RelationType::ManyToMany, 2);
+                self::chain($database, RelationshipType::ManyToMany, 2);
                 $database->createDocument('level1', new Document(['$id' => 'existing', 'name' => 'existing']));
                 $database->createDocument('level2', new Document(['$id' => 'leaf', 'name' => 'leaf']));
 
@@ -415,7 +416,7 @@ final class PreparedCreateTest extends TestCase
                 ]), $create($database, 'level0')];
             },
             'one to many documents mixed with ids' => static function (Database $database) use ($create): array {
-                self::chain($database, RelationType::OneToMany, 2);
+                self::chain($database, RelationshipType::OneToMany, 2);
                 $database->createDocument('level1', new Document(['$id' => 'existing', 'name' => 'existing']));
 
                 return [new Document([
@@ -429,7 +430,7 @@ final class PreparedCreateTest extends TestCase
                 ]), $create($database, 'level0')];
             },
             'existing related documents' => static function (Database $database) use ($create): array {
-                self::chain($database, RelationType::OneToMany, 2);
+                self::chain($database, RelationshipType::OneToMany, 2);
                 $database->createDocument('level1', new Document(['$id' => 'same', 'name' => 'same', 'score' => 1, '$permissions' => [Permission::read(Role::any())]]));
                 $database->createDocument('level1', new Document(['$id' => 'changed', 'name' => 'before', 'score' => 1]));
 
@@ -444,7 +445,7 @@ final class PreparedCreateTest extends TestCase
                 ]), $create($database, 'level0')];
             },
             'existing many to many related document' => static function (Database $database) use ($create): array {
-                self::chain($database, RelationType::ManyToMany, 2);
+                self::chain($database, RelationshipType::ManyToMany, 2);
                 $database->createDocument('level1', new Document(['$id' => 'shared', 'name' => 'shared']));
 
                 return [new Document([
@@ -457,7 +458,7 @@ final class PreparedCreateTest extends TestCase
                 ]), $create($database, 'level0')];
             },
             'associative related document holding a stored one' => static function (Database $database) use ($create): array {
-                self::chain($database, RelationType::ManyToOne, 2);
+                self::chain($database, RelationshipType::ManyToOne, 2);
                 $database->createDocument('level2', new Document(['$id' => 'existing', 'name' => 'before']));
 
                 return [new Document([
@@ -467,7 +468,7 @@ final class PreparedCreateTest extends TestCase
                 ]), $create($database, 'level0')];
             },
             'repeated related document' => static function (Database $database) use ($create): array {
-                self::chain($database, RelationType::ManyToMany, 2);
+                self::chain($database, RelationshipType::ManyToMany, 2);
 
                 return [new Document([
                     '$id' => 'root',
@@ -479,7 +480,7 @@ final class PreparedCreateTest extends TestCase
                 ]), $create($database, 'level0')];
             },
             'one to one by id' => static function (Database $database) use ($create): array {
-                self::chain($database, RelationType::OneToOne, 2);
+                self::chain($database, RelationshipType::OneToOne, 2);
                 $database->createDocument('level2', new Document(['$id' => 'leaf', 'name' => 'leaf']));
 
                 return [new Document([
@@ -489,15 +490,15 @@ final class PreparedCreateTest extends TestCase
                 ]), $create($database, 'level0')];
             },
             'existence checks skipped' => static function (Database $database): array {
-                self::chain($database, RelationType::OneToOne, 2);
+                self::chain($database, RelationshipType::OneToOne, 2);
 
                 return [
-                    self::tree(RelationType::OneToOne, 'root', 0, 2),
+                    self::tree(RelationshipType::OneToOne, 'root', 0, 2),
                     static fn (Document $document): Document => $database->skipRelationshipsExistCheck(static fn (): Document => $database->createDocument('level0', $document)),
                 ];
             },
             'new document then its id' => static function (Database $database) use ($create): array {
-                self::chain($database, RelationType::ManyToMany, 2);
+                self::chain($database, RelationshipType::ManyToMany, 2);
 
                 return [new Document([
                     '$id' => 'root',
@@ -521,10 +522,10 @@ final class PreparedCreateTest extends TestCase
                 ]), $create($database, 'node')];
             },
             'id already taken' => static function (Database $database) use ($create): array {
-                self::chain($database, RelationType::OneToOne, 2);
+                self::chain($database, RelationshipType::OneToOne, 2);
                 $database->createDocument('level0', new Document(['$id' => 'root', 'name' => 'taken']));
 
-                return [self::tree(RelationType::OneToOne, 'root', 0, 2), $create($database, 'level0')];
+                return [self::tree(RelationshipType::OneToOne, 'root', 0, 2), $create($database, 'level0')];
             },
             'related document with the id of the document it belongs to' => static function (Database $database) use ($create, $nodes): array {
                 $nodes($database);
@@ -535,15 +536,15 @@ final class PreparedCreateTest extends TestCase
                 ]), $create($database, 'node')];
             },
             'inside a transaction' => static function (Database $database): array {
-                self::chain($database, RelationType::ManyToMany, 2);
+                self::chain($database, RelationshipType::ManyToMany, 2);
 
                 return [
-                    self::tree(RelationType::ManyToMany, 'root', 0, 2),
+                    self::tree(RelationshipType::ManyToMany, 'root', 0, 2),
                     static fn (Document $document): Document => $database->withTransaction(static fn (): Document => $database->createDocument('level0', $document)),
                 ];
             },
             'created through an update' => static function (Database $database): array {
-                self::chain($database, RelationType::OneToMany, 2);
+                self::chain($database, RelationshipType::OneToMany, 2);
                 $database->createDocument('level0', new Document(['$id' => 'root', 'name' => 'root']));
 
                 return [new Document([
@@ -553,7 +554,7 @@ final class PreparedCreateTest extends TestCase
                 ]), static fn (Document $document): Document => $database->updateDocument('level0', 'root', $document)];
             },
             'one to many update' => static function (Database $database): array {
-                self::chain($database, RelationType::OneToMany, 2);
+                self::chain($database, RelationshipType::OneToMany, 2);
                 $database->createDocument('level0', new Document(['$id' => 'root', 'name' => 'root', 'next' => [
                     new Document(['$id' => 'kept', 'name' => 'kept']),
                     new Document(['$id' => 'dropped', 'name' => 'dropped']),
@@ -571,7 +572,7 @@ final class PreparedCreateTest extends TestCase
                 ]), static fn (Document $document): Document => $database->updateDocument('level0', 'root', $document)];
             },
             'many to many update' => static function (Database $database): array {
-                self::chain($database, RelationType::ManyToMany, 2);
+                self::chain($database, RelationshipType::ManyToMany, 2);
                 $database->createDocument('level0', new Document(['$id' => 'root', 'name' => 'root', 'next' => [
                     new Document(['$id' => 'kept', 'name' => 'kept']),
                     new Document(['$id' => 'dropped', 'name' => 'dropped']),
@@ -588,7 +589,7 @@ final class PreparedCreateTest extends TestCase
                 ]), static fn (Document $document): Document => $database->updateDocument('level0', 'root', $document)];
             },
             'many to one update' => static function (Database $database): array {
-                self::chain($database, RelationType::ManyToOne, 2);
+                self::chain($database, RelationshipType::ManyToOne, 2);
                 $database->createDocument('level1', new Document(['$id' => 'shared', 'name' => 'shared']));
                 $database->createDocument('level0', new Document(['$id' => 'old', 'name' => 'old', 'next' => 'shared']));
 
@@ -601,7 +602,7 @@ final class PreparedCreateTest extends TestCase
                 ]), static fn (Document $document): Document => $database->updateDocument('level1', 'shared', $document)];
             },
             'update with an existing related document' => static function (Database $database): array {
-                self::chain($database, RelationType::OneToMany, 2);
+                self::chain($database, RelationshipType::OneToMany, 2);
                 $database->createDocument('level0', new Document(['$id' => 'root', 'name' => 'root']));
                 $database->createDocument('level1', new Document(['$id' => 'loose', 'name' => 'before']));
 
@@ -613,7 +614,7 @@ final class PreparedCreateTest extends TestCase
                 ]), static fn (Document $document): Document => $database->updateDocument('level0', 'root', $document)];
             },
             'update with an invalid related document' => static function (Database $database): array {
-                self::chain($database, RelationType::ManyToMany, 2);
+                self::chain($database, RelationshipType::ManyToMany, 2);
                 $database->createDocument('level0', new Document(['$id' => 'root', 'name' => 'root']));
 
                 return [new Document([
@@ -624,12 +625,12 @@ final class PreparedCreateTest extends TestCase
                 ]), static fn (Document $document): Document => $database->updateDocument('level0', 'root', $document)];
             },
             'shared tables' => static function (Database $database) use ($create): array {
-                self::chain($database, RelationType::ManyToMany, 2);
+                self::chain($database, RelationshipType::ManyToMany, 2);
 
-                return [self::tree(RelationType::ManyToMany, 'root', 0, 2), $create($database, 'level0')];
+                return [self::tree(RelationshipType::ManyToMany, 'root', 0, 2), $create($database, 'level0')];
             },
             'shared tables with an existing related document' => static function (Database $database) use ($create): array {
-                self::chain($database, RelationType::OneToMany, 2);
+                self::chain($database, RelationshipType::OneToMany, 2);
                 $database->createDocument('level2', new Document(['$id' => 'existing', 'name' => 'before']));
 
                 return [new Document([
@@ -638,13 +639,13 @@ final class PreparedCreateTest extends TestCase
                 ]), $create($database, 'level0')];
             },
             'tenant per document' => static function (Database $database) use ($create): array {
-                self::chain($database, RelationType::OneToMany, 2);
+                self::chain($database, RelationshipType::OneToMany, 2);
                 $tenant = static fn (string $id, array $next = []): Document => new Document(['$id' => $id, 'name' => $id, '$tenant' => 7] + ($next === [] ? [] : ['next' => $next]));
 
                 return [$tenant('root', [$tenant('a', [$tenant('a1')]), $tenant('b')]), $create($database, 'level0')];
             },
             'missing tenant on a related document' => static function (Database $database) use ($create): array {
-                self::chain($database, RelationType::OneToMany, 2);
+                self::chain($database, RelationshipType::OneToMany, 2);
 
                 return [new Document([
                     '$id' => 'root',
@@ -653,7 +654,7 @@ final class PreparedCreateTest extends TestCase
                 ]), $create($database, 'level0')];
             },
             'invalid related document' => static function (Database $database) use ($create): array {
-                self::chain($database, RelationType::OneToMany, 2);
+                self::chain($database, RelationshipType::OneToMany, 2);
 
                 return [new Document([
                     '$id' => 'root',
@@ -664,7 +665,7 @@ final class PreparedCreateTest extends TestCase
                 ]), $create($database, 'level0')];
             },
             'invalid relationship value' => static function (Database $database) use ($create): array {
-                self::chain($database, RelationType::OneToMany, 2);
+                self::chain($database, RelationshipType::OneToMany, 2);
 
                 return [new Document([
                     '$id' => 'root',
@@ -675,14 +676,14 @@ final class PreparedCreateTest extends TestCase
                 ]), $create($database, 'level0')];
             },
             'related collection the caller may not create in' => static function (Database $database) use ($create): array {
-                self::chain($database, RelationType::OneToMany, 2);
-                $database->updateCollection('level2', [Permission::read(Role::any())], true);
+                self::chain($database, RelationshipType::OneToMany, 2);
+                $database->updateCollection('level2', new CollectionUpdate(permissions: [Permission::read(Role::any())], documentSecurity: true));
 
-                return [self::tree(RelationType::OneToMany, 'root', 0, 2), $create($database, 'level0')];
+                return [self::tree(RelationshipType::OneToMany, 'root', 0, 2), $create($database, 'level0')];
             },
             'many to many link the caller may not update' => static function (Database $database) use ($create): array {
-                self::chain($database, RelationType::ManyToMany, 2);
-                $database->updateCollection('level2', [Permission::create(Role::any()), Permission::read(Role::any())], true);
+                self::chain($database, RelationshipType::ManyToMany, 2);
+                $database->updateCollection('level2', new CollectionUpdate(permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: true));
                 $database->createDocument('level2', new Document(['$id' => 'locked', 'name' => 'locked', '$permissions' => [Permission::read(Role::any())]]));
 
                 return [new Document([
@@ -691,7 +692,7 @@ final class PreparedCreateTest extends TestCase
                 ]), $create($database, 'level0')];
             },
             'unreadable existing related document' => static function (Database $database) use ($create): array {
-                self::chain($database, RelationType::OneToMany, 2);
+                self::chain($database, RelationshipType::OneToMany, 2);
                 $database->createDocument('level2', new Document(['$id' => 'hidden', 'name' => 'hidden', '$permissions' => []]));
 
                 return [new Document([
@@ -700,7 +701,7 @@ final class PreparedCreateTest extends TestCase
                 ]), $create($database, 'level0')];
             },
             'unique attribute shared by related documents' => static function (Database $database) use ($create): array {
-                self::chain($database, RelationType::OneToMany, 2);
+                self::chain($database, RelationshipType::OneToMany, 2);
                 $database->createIndex('level2', Index::unique('name', ['name']));
 
                 return [new Document([
@@ -805,10 +806,10 @@ final class PreparedCreateTest extends TestCase
         return $database;
     }
 
-    private static function chain(Database $database, RelationType $type, int $depth, bool $twoWay = true): void
+    private static function chain(Database $database, RelationshipType $type, int $depth, bool $twoWay = true): void
     {
         for ($level = 0; $level <= $depth; $level++) {
-            $database->createCollection(new Collection(
+            $database->createCollection(Collection::create(
                 id: 'level'.$level,
                 attributes: [Attribute::string(key: 'name', size: 64), Attribute::integer(key: 'score')],
                 permissions: self::permissions(),
@@ -817,19 +818,18 @@ final class PreparedCreateTest extends TestCase
         }
 
         for ($level = 0; $level < $depth; $level++) {
-            $database->createRelationship(new Relationship(
-                collection: 'level'.$level,
-                relatedCollection: 'level'.($level + 1),
-                type: $type,
-                twoWay: $twoWay,
-                key: 'next',
-                twoWayKey: 'prev',
-                onDelete: ForeignKeyAction::Cascade,
-            ));
+            $database->createRelationship('level'.$level, Relationship::fromArray([
+                'relatedCollection' => 'level'.($level + 1),
+                'relationType' => $type,
+                'twoWay' => $twoWay,
+                'key' => 'next',
+                'twoWayKey' => 'prev',
+                'onDelete' => RelationshipDeleteAction::Cascade,
+            ]));
         }
     }
 
-    private static function tree(RelationType $type, string $id, int $level, int $depth): Document
+    private static function tree(RelationshipType $type, string $id, int $level, int $depth): Document
     {
         $node = [
             '$id' => $id,
@@ -840,7 +840,7 @@ final class PreparedCreateTest extends TestCase
 
         if ($level < $depth) {
             $node['next'] = match ($type) {
-                RelationType::ManyToOne, RelationType::OneToOne => self::tree($type, $id.'_0', $level + 1, $depth),
+                RelationshipType::ManyToOne, RelationshipType::OneToOne => self::tree($type, $id.'_0', $level + 1, $depth),
                 default => [self::tree($type, $id.'_0', $level + 1, $depth), self::tree($type, $id.'_1', $level + 1, $depth)],
             };
         }

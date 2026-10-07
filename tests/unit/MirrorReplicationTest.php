@@ -16,8 +16,10 @@ use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
+use Utopia\Database\AttributeUpdate;
 use Utopia\Database\Change;
 use Utopia\Database\Collection;
+use Utopia\Database\CollectionUpdate;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
@@ -27,9 +29,8 @@ use Utopia\Database\Index;
 use Utopia\Database\Mirror;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
-use Utopia\Database\RelationType;
+use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\Validator\Authorization;
-use Utopia\Query\Schema\IndexType;
 
 use function Swoole\Coroutine\run;
 
@@ -100,7 +101,7 @@ final class MirrorReplicationTest extends TestCase
         });
 
         $this->authorization->skip(function (): void {
-            $this->mirror->createCollection(new Collection(
+            $this->mirror->createCollection(Collection::create(
                 id: self::NOTES,
                 attributes: [Attribute::string(key: 'title', size: 64), Attribute::integer(key: 'views')],
                 permissions: [
@@ -111,7 +112,7 @@ final class MirrorReplicationTest extends TestCase
                 ],
                 documentSecurity: false,
             ));
-            $this->mirror->createCollection(new Collection(
+            $this->mirror->createCollection(Collection::create(
                 id: self::SECRETS,
                 attributes: [Attribute::string(key: 'title', size: 64)],
                 permissions: [Permission::create(Role::any())],
@@ -339,9 +340,9 @@ final class MirrorReplicationTest extends TestCase
      */
     public static function relationshipChanges(): iterable
     {
-        yield 'deleteRelationship' => [static fn (Mirror $mirror): bool => $mirror->deleteRelationship(self::PARENTS, 'children')];
-        yield 'updateRelationship' => [static fn (Mirror $mirror): bool => $mirror->updateRelationship(self::PARENTS, 'children', newTwoWayKey: 'owner')];
-        yield 'deleteCollection' => [static fn (Mirror $mirror): bool => $mirror->deleteCollection(self::PARENTS)];
+        yield 'deleteRelationship' => [static fn (Mirror $mirror) => $mirror->deleteRelationship(self::PARENTS, 'children')];
+        yield 'updateRelationship' => [static fn (Mirror $mirror): Relationship => $mirror->updateRelationship(self::PARENTS, 'children', new RelationshipUpdate(twoWayKey: 'owner'))];
+        yield 'deleteCollection' => [static fn (Mirror $mirror) => $mirror->deleteCollection(self::PARENTS)];
     }
 
     /**
@@ -532,7 +533,7 @@ final class MirrorReplicationTest extends TestCase
         });
         foreach ([1, 2] as $tenant) {
             $mirror->setTenant($tenant);
-            $mirror->createCollection(new Collection(
+            $mirror->createCollection(Collection::create(
                 id: self::NOTES,
                 attributes: [Attribute::string(key: 'title', size: 64)],
                 permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
@@ -559,16 +560,14 @@ final class MirrorReplicationTest extends TestCase
      */
     public static function schemaChanges(): iterable
     {
-        yield 'deleteAttribute' => [static fn (Mirror $mirror): bool => $mirror->deleteAttribute(self::NOTES, 'views')];
-        yield 'renameAttribute' => [static fn (Mirror $mirror): bool => $mirror->renameAttribute(self::NOTES, 'views', 'count')];
-        yield 'deleteCollection' => [static fn (Mirror $mirror): bool => $mirror->deleteCollection(self::NOTES)];
-        yield 'updateCollection' => [static fn (Mirror $mirror): Document => $mirror->updateCollection(self::NOTES, [Permission::create(Role::any())], false)];
-        yield 'createIndex' => [static fn (Mirror $mirror): bool => $mirror->createIndex(self::NOTES, new Index(key: 'views_index', type: IndexType::Key, attributes: ['views']))];
-        yield 'updateAttributeRequired' => [static fn (Mirror $mirror): Document => $mirror->updateAttributeRequired(self::NOTES, 'title', false)];
-        yield 'createRelationship' => [static fn (Mirror $mirror): bool => $mirror->createRelationship(new Relationship(
-            collection: self::SECRETS,
+        yield 'deleteAttribute' => [static fn (Mirror $mirror) => $mirror->deleteAttribute(self::NOTES, 'views')];
+        yield 'renameAttribute' => [static fn (Mirror $mirror) => $mirror->renameAttribute(self::NOTES, 'views', 'count')];
+        yield 'deleteCollection' => [static fn (Mirror $mirror) => $mirror->deleteCollection(self::NOTES)];
+        yield 'updateCollection' => [static fn (Mirror $mirror): Document => $mirror->updateCollection(self::NOTES, new CollectionUpdate(permissions: [Permission::create(Role::any())], documentSecurity: false))];
+        yield 'createIndex' => [static fn (Mirror $mirror): Index => $mirror->createIndex(self::NOTES, Index::key(key: 'views_index', attributes: ['views']))];
+        yield 'updateAttribute' => [static fn (Mirror $mirror): Attribute => $mirror->updateAttribute(self::NOTES, 'title', new AttributeUpdate(required: false))];
+        yield 'createRelationship' => [static fn (Mirror $mirror): Relationship => $mirror->createRelationship(self::SECRETS, Relationship::manyToOne(
             relatedCollection: self::NOTES,
-            type: RelationType::ManyToOne,
             key: 'note',
         ))];
     }
@@ -592,7 +591,7 @@ final class MirrorReplicationTest extends TestCase
 
     public function testASchemaChangeWaitsForTheQueuedReplicationsOfEveryCollection(): void
     {
-        $this->authorization->skip(fn (): bool => $this->mirror->createAttribute(self::SECRETS, Attribute::integer(key: 'extra')));
+        $this->authorization->skip(fn (): Attribute => $this->mirror->createAttribute(self::SECRETS, Attribute::integer(key: 'extra')));
         $this->delays = ['slow' => 0.05];
         $writesBeforeTheChangeReturned = null;
 
@@ -614,7 +613,7 @@ final class MirrorReplicationTest extends TestCase
         $this->mirror->addHook(new Relationships($this->mirror));
         $this->authorization->skip(function (): void {
             foreach ([self::PARENTS, self::CHILDREN] as $collection) {
-                $this->mirror->createCollection(new Collection(
+                $this->mirror->createCollection(Collection::create(
                     id: $collection,
                     attributes: [Attribute::string(key: 'title', size: 64)],
                     permissions: [
@@ -626,10 +625,8 @@ final class MirrorReplicationTest extends TestCase
                     documentSecurity: false,
                 ));
             }
-            $this->mirror->createRelationship(new Relationship(
-                collection: self::PARENTS,
+            $this->mirror->createRelationship(self::PARENTS, Relationship::oneToMany(
                 relatedCollection: self::CHILDREN,
-                type: RelationType::OneToMany,
                 twoWay: true,
                 key: 'children',
                 twoWayKey: 'parent',

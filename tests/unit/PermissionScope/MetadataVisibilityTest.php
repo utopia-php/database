@@ -28,9 +28,9 @@ final class MetadataVisibilityTest extends TestCase
     {
         $database = $this->database();
         $database->create();
-        $database->createCollection(new Collection(id: 'public', permissions: [Permission::read(Role::any())]));
-        $database->createCollection(new Collection(id: 'private', permissions: [Permission::read(Role::user('admin'))]));
-        $database->createCollection(new Collection(id: 'unlisted', permissions: [Permission::create(Role::any())]));
+        $database->createCollection(Collection::create(id: 'public', permissions: [Permission::read(Role::any())]));
+        $database->createCollection(Collection::create(id: 'private', permissions: [Permission::read(Role::user('admin'))]));
+        $database->createCollection(Collection::create(id: 'unlisted', permissions: [Permission::create(Role::any())]));
 
         $authorization = $database->getAuthorization();
         $authorization->cleanRoles();
@@ -54,10 +54,10 @@ final class MetadataVisibilityTest extends TestCase
         $database = $this->database();
         $database->setSharedTables(true)->setTenant(null);
         $database->create();
-        $database->createCollection(new Collection(id: 'pooled', permissions: [Permission::read(Role::any())]));
+        $database->createCollection(Collection::create(id: 'pooled', permissions: [Permission::read(Role::any())]));
 
         $database->setTenant(1);
-        $database->createCollection(new Collection(id: 'owned', permissions: [Permission::read(Role::any())]));
+        $database->createCollection(Collection::create(id: 'owned', permissions: [Permission::read(Role::any())]));
 
         $database->setTenant(990);
         $pooled = [Query::equal('$id', ['pooled'])];

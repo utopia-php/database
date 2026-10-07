@@ -26,7 +26,6 @@ use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Hook\Transform;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
-use Utopia\Database\RelationType;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Pools\Adapter\Stack;
 use Utopia\Pools\Pool as UtopiaPool;
@@ -355,13 +354,13 @@ final class ParallelPopulationTest extends TestCase
         });
 
         $open = [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any()), Permission::delete(Role::any())];
-        $database->createCollection(new Collection(id: 'parents', permissions: $open, documentSecurity: false, attributes: [Attribute::string('name', 32)]));
-        $database->createCollection(new Collection(id: 'children', permissions: $open, documentSecurity: false, attributes: [Attribute::string('name', 32)]));
-        $database->createCollection(new Collection(id: 'labels', permissions: $open, documentSecurity: false, attributes: [Attribute::string('name', 32)]));
-        $database->createCollection(new Collection(id: 'secrets', permissions: [Permission::create(Role::any())], documentSecurity: true, attributes: [Attribute::string('name', 32)]));
-        $database->createRelationship(new Relationship(collection: 'parents', relatedCollection: 'children', type: RelationType::OneToMany, twoWay: true, key: 'children', twoWayKey: 'parent'));
-        $database->createRelationship(new Relationship(collection: 'parents', relatedCollection: 'labels', type: RelationType::ManyToMany, twoWay: true, key: 'labels', twoWayKey: 'parents'));
-        $database->createRelationship(new Relationship(collection: 'parents', relatedCollection: 'secrets', type: RelationType::ManyToOne, twoWay: false, key: 'secret', twoWayKey: 'parents'));
+        $database->createCollection(Collection::create(id: 'parents', permissions: $open, documentSecurity: false, attributes: [Attribute::string('name', 32)]));
+        $database->createCollection(Collection::create(id: 'children', permissions: $open, documentSecurity: false, attributes: [Attribute::string('name', 32)]));
+        $database->createCollection(Collection::create(id: 'labels', permissions: $open, documentSecurity: false, attributes: [Attribute::string('name', 32)]));
+        $database->createCollection(Collection::create(id: 'secrets', permissions: [Permission::create(Role::any())], documentSecurity: true, attributes: [Attribute::string('name', 32)]));
+        $database->createRelationship('parents', Relationship::oneToMany(relatedCollection: 'children', twoWay: true, key: 'children', twoWayKey: 'parent'));
+        $database->createRelationship('parents', Relationship::manyToMany(relatedCollection: 'labels', twoWay: true, key: 'labels', twoWayKey: 'parents'));
+        $database->createRelationship('parents', Relationship::manyToOne(relatedCollection: 'secrets', twoWay: false, key: 'secret', twoWayKey: 'parents'));
 
         $database->getAuthorization()->skip(function () use ($database, $open): void {
             for ($index = 1; $index <= self::DOCUMENTS; $index++) {

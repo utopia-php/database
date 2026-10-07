@@ -19,6 +19,6 @@ final class AddTableColumnTest extends TestCase
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('Vector columns are only supported on PostgreSQL');
 
-        $adapter->createAttribute('movies', Attribute::vector(key: 'embedding', size: 3));
+        $adapter->createAttribute('movies', Attribute::vector(key: 'embedding', dimensions: 3));
     }
 }

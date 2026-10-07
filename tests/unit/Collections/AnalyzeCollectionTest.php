@@ -31,7 +31,7 @@ final class AnalyzeCollectionTest extends TestCase
             ->setDatabase('analyze')
             ->setNamespace('analyze');
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: 'places',
             attributes: [Attribute::string(key: 'name', size: 32)],
             permissions: [Permission::create(Role::any())],

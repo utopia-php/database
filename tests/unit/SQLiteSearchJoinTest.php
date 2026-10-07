@@ -17,7 +17,6 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
-use Utopia\Query\Schema\IndexType;
 
 final class SQLiteSearchJoinTest extends TestCase
 {
@@ -154,19 +153,19 @@ final class SQLiteSearchJoinTest extends TestCase
             Permission::read(Role::any()),
         ];
 
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::AUTHORS,
             attributes: [Attribute::string(key: 'name', size: 64)],
             permissions: $permissions,
             documentSecurity: false,
         ));
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::POSTS,
             attributes: [
                 Attribute::string(key: 'authorId', size: 64),
                 Attribute::string(key: 'body', size: 256),
             ],
-            indexes: [new Index(key: 'body_search', type: IndexType::Fulltext, attributes: ['body'])],
+            indexes: [Index::fulltext(key: 'body_search', attributes: ['body'])],
             permissions: $permissions,
             documentSecurity: false,
         ));

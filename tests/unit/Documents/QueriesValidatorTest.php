@@ -7,6 +7,7 @@ use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Attribute;
+use Utopia\Database\AttributeUpdate;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -18,7 +19,6 @@ use Utopia\Database\Hook\Lifecycle;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
 use Utopia\Query\Schema\ColumnType;
-use Utopia\Query\Schema\IndexType;
 
 final class QueriesValidatorTest extends TestCase
 {
@@ -37,7 +37,7 @@ final class QueriesValidatorTest extends TestCase
     public function testAnyOtherReadStillUsesTheDocumentsValidator(): void
     {
         $database = $this->database();
-        $database->createIndex(self::COLLECTION, new Index('title_fulltext', IndexType::Fulltext, ['title']));
+        $database->createIndex(self::COLLECTION, Index::fulltext('title_fulltext', ['title']));
 
         $database->count(self::COLLECTION, [Query::search('title', 'Dune')]);
         $database->find(self::COLLECTION, [Query::select(['title']), Query::equal('title', ['Dune'])]);
@@ -52,7 +52,7 @@ final class QueriesValidatorTest extends TestCase
 
         $this->assertSame(1, $database->count(self::COLLECTION, $byYear));
 
-        $database->updateAttribute(self::COLLECTION, 'year', type: ColumnType::String, size: 8);
+        $database->updateAttribute(self::COLLECTION, 'year', new AttributeUpdate(type: ColumnType::String, size: 8));
         $this->assertRefused($database, $byYear, 'Invalid query: Query value is invalid for attribute "year"');
         $this->assertSame(0, $database->count(self::COLLECTION, [Query::equal('year', ['six'])]));
 
@@ -60,7 +60,7 @@ final class QueriesValidatorTest extends TestCase
         $this->assertRefused($database, [Query::equal('year', ['six'])], 'Invalid query: Attribute not found in schema: year');
         $this->assertSame(0, $database->count(self::COLLECTION, [Query::equal('published', ['six'])]));
 
-        $database->updateAttributeFilters(self::COLLECTION, 'published', ['encrypt']);
+        $database->updateAttribute(self::COLLECTION, 'published', new AttributeUpdate(filters: ['encrypt']));
         $this->assertRefused($database, [Query::equal('published', ['six'])], 'Invalid query: Cannot query encrypted attribute: published');
 
         $database->deleteAttribute(self::COLLECTION, 'published');
@@ -78,7 +78,7 @@ final class QueriesValidatorTest extends TestCase
 
         $this->assertRefused($database, $search, 'Searching by attribute "title" requires a fulltext index.');
 
-        $database->createIndex(self::COLLECTION, new Index('title_fulltext', IndexType::Fulltext, ['title']));
+        $database->createIndex(self::COLLECTION, Index::fulltext('title_fulltext', ['title']));
         $database->count(self::COLLECTION, $search);
 
         $database->deleteIndex(self::COLLECTION, 'title_fulltext');
@@ -98,6 +98,7 @@ final class QueriesValidatorTest extends TestCase
         $title = $attributes[0];
         $this->assertInstanceOf(Document::class, $title);
         $title->setAttribute('type', ColumnType::Integer->value);
+        $collection->setAttribute('attributes', $attributes);
         $validator = $database->queriesValidator($collection, $queries);
         $this->assertFalse($validator->isValid($queries));
         $this->assertSame('Invalid query: Query value is invalid for attribute "title"', $validator->getDescription());
@@ -107,7 +108,7 @@ final class QueriesValidatorTest extends TestCase
         $this->assertFalse($validator->isValid($queries));
         $this->assertSame('Invalid query: Attribute not found in schema: title', $validator->getDescription());
 
-        $collection->setAttribute('attributes', [Attribute::string(key: 'title', size: 64)]);
+        $collection->setAttribute('attributes', [Attribute::string(key: 'title', size: 64)->toDocument()]);
         $this->assertTrue($database->queriesValidator($collection, $queries)->isValid($queries));
     }
 
@@ -118,7 +119,7 @@ final class QueriesValidatorTest extends TestCase
             public function handle(Event $event, mixed $data): void
             {
                 if ($event === Event::CollectionRead && $data instanceof Document) {
-                    $data->setAttribute('attributes', [Attribute::integer(key: 'title')]);
+                    $data->setAttribute('attributes', [Attribute::integer(key: 'title')->toDocument()]);
                 }
             }
         });
@@ -141,7 +142,7 @@ final class QueriesValidatorTest extends TestCase
         $this->assertSame(1, $database->count(self::COLLECTION, $queries));
 
         $database->setTenant(2);
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [Attribute::string(key: 'title', size: 64), Attribute::string(key: 'year', size: 8)],
             permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
@@ -175,7 +176,7 @@ final class QueriesValidatorTest extends TestCase
             $database->setSharedTables(true)->setTenant(1);
         }
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [Attribute::string(key: 'title', size: 64), Attribute::integer(key: 'year')],
             permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())],

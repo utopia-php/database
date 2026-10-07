@@ -35,12 +35,11 @@ final class DocumentsValidatorFingerprintTest extends TestCase
         $original = $database->documentsValidator($this->collection());
 
         $renamed = $this->collection();
-        $title = $renamed->attributes[0];
-        $title->key = 'author';
+        $renamed->setAttribute('attributes', [Attribute::string(key: 'author', size: 64)->toDocument()]);
         $resized = $this->collection();
-        $resized->attributes[0]->setAttribute('size', 32);
+        $resized->setAttribute('attributes', [Attribute::string(key: 'title', size: 32)->toDocument()]);
         $added = $this->collection();
-        $added->setAttribute('attributes', [...$added->attributes, Attribute::integer(key: 'pages')]);
+        $added->setAttribute('attributes', [...$added->getAttribute('attributes'), Attribute::integer(key: 'pages')->toDocument()]);
         $indexed = $this->collection();
         $indexed->setAttribute('indexes', []);
         $permitted = $this->collection();
@@ -60,7 +59,7 @@ final class DocumentsValidatorFingerprintTest extends TestCase
 
     private function collection(): Collection
     {
-        return new Collection(
+        return Collection::create(
             id: 'books',
             attributes: [Attribute::string(key: 'title', size: 64)],
             indexes: [Index::key(key: 'by_title', attributes: ['title'])],

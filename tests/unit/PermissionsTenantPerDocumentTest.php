@@ -68,7 +68,7 @@ final class PermissionsTenantPerDocumentTest extends TestCase
             ->setTenantPerDocument(true)
             ->addHook(new Permissions());
         $this->database->create();
-        $this->database->createCollection(new Collection(
+        $this->database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [
                 Attribute::string(key: 'title', size: 64),
@@ -180,7 +180,7 @@ final class PermissionsTenantPerDocumentTest extends TestCase
             ->setNamespace('permissions_not_shared')
             ->addHook(new Permissions());
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [Attribute::string(key: 'title', size: 64)],
             permissions: [Permission::create(Role::any()), Permission::update(Role::any())],

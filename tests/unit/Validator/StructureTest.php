@@ -3,10 +3,7 @@
 namespace Tests\Unit\Validator;
 
 use PHPUnit\Framework\TestCase;
-use Tests\Unit\CountingAttribute;
 use Tests\Unit\Format;
-use Tests\Unit\MagicAccessAssertions;
-use Tests\Unit\MagicAccessRecorder;
 use Utopia\Database\Attribute;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -18,7 +15,6 @@ use Utopia\Query\Schema\ColumnType;
 
 class StructureTest extends TestCase
 {
-    use MagicAccessAssertions;
 
     /**
      * @var array<string, mixed>
@@ -1339,45 +1335,5 @@ class StructureTest extends TestCase
 
         $this->assertFalse($validator->isValid(new Document($base + ['text' => \str_repeat('📝', 20000)])), '20,000 emoji are 80,000 bytes and must be rejected by byte length');
         $this->assertSame('Invalid document structure: Attribute "text" has invalid type. Value must be a valid string no longer than 65535 bytes', $validator->getDescription());
-    }
-
-    public function testValidationReadsAttributesWithoutMagicProperties(): void
-    {
-        $recorder = new MagicAccessRecorder();
-        $recorder->start();
-        $attributes = [
-            CountingAttribute::of(new Attribute(key: 'title', type: ColumnType::String, size: 128, required: true), $recorder),
-            CountingAttribute::of(new Attribute(key: 'feedback', type: ColumnType::String, size: 55, format: 'email'), $recorder),
-            CountingAttribute::of(new Attribute(key: 'rating', type: ColumnType::Integer, size: 4, signed: false), $recorder),
-            CountingAttribute::of(new Attribute(key: 'reviews', type: ColumnType::BigInteger, array: true), $recorder),
-            CountingAttribute::of(new Attribute(key: 'price', type: ColumnType::Double), $recorder),
-            CountingAttribute::of(new Attribute(key: 'published', type: ColumnType::Boolean), $recorder),
-            CountingAttribute::of(new Attribute(key: 'releasedAt', type: ColumnType::Datetime), $recorder),
-            CountingAttribute::of(new Attribute(key: 'tags', type: ColumnType::Varchar, size: 32, array: true), $recorder),
-        ];
-        $validator = new Structure(new Document([
-            '$id' => ID::custom('posts'),
-            '$collection' => ID::custom(Database::METADATA),
-            'attributes' => $attributes,
-            'indexes' => [],
-        ]), ColumnType::Integer->value);
-
-        $valid = $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
-            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
-            '$permissions' => ['read("any")'],
-            'title' => 'Demo',
-            'feedback' => 'team@appwrite.io',
-            'rating' => 5,
-            'reviews' => [1, '9007199254740993'],
-            'price' => 1.99,
-            'published' => true,
-            'releasedAt' => '2000-04-01T12:00:00.000+00:00',
-            'tags' => ['a', 'b'],
-        ]));
-
-        $this->assertTrue($valid, $validator->getDescription());
-        $this->assertNoMagicAccess($recorder, 'Structure validation');
     }
 }

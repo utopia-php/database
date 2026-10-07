@@ -17,6 +17,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Transaction as TransactionException;
+use Utopia\Database\Filter;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
@@ -247,14 +248,14 @@ final class DocumentWriteMinorsTest extends TestCase
             ->setNamespace('write_minors_'.\uniqid());
         $database->getAuthorization()->addRole(Role::any()->toString());
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [
                 Attribute::string('name', size: 64, required: false),
                 Attribute::integer('counter', required: false),
                 Attribute::string('secret', size: 1024, required: false, filters: [self::WRAPPED]),
-                Attribute::string('data', size: 1024, required: false, filters: ['json']),
-                Attribute::datetime('seen', required: false, filters: ['datetime']),
+                Attribute::string('data', size: 1024, required: false, filters: [Filter::Json]),
+                Attribute::datetime('seen', required: false),
             ],
             permissions: [
                 Permission::create(Role::any()),

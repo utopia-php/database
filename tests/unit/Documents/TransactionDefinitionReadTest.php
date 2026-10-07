@@ -12,6 +12,7 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
+use Utopia\Database\CollectionUpdate;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
@@ -50,7 +51,7 @@ final class TransactionDefinitionReadTest extends TestCase
         [$before, $after] = $database->withTransaction(function () use ($database): array {
             $database->updateDocument(self::COLLECTION, 'ada', new Document(['balance' => 2]));
             $before = $database->getCollection(self::COLLECTION);
-            $database->updateCollection(self::COLLECTION, [Permission::read(Role::users())], true);
+            $database->updateCollection(self::COLLECTION, new CollectionUpdate(permissions: [Permission::read(Role::users())], documentSecurity: true));
 
             return [$before, $database->getCollection(self::COLLECTION)];
         });
@@ -70,7 +71,7 @@ final class TransactionDefinitionReadTest extends TestCase
             $database->getCollection(self::COLLECTION);
         });
 
-        $database->updateCollection(self::COLLECTION, [Permission::read(Role::any()), Permission::update(Role::any())], true);
+        $database->updateCollection(self::COLLECTION, new CollectionUpdate(permissions: [Permission::read(Role::any()), Permission::update(Role::any())], documentSecurity: true));
         $database->purgeCachedDocument(Database::METADATA, self::COLLECTION);
 
         $collection = $database->withTransaction(function () use ($database): Collection {
@@ -93,13 +94,15 @@ final class TransactionDefinitionReadTest extends TestCase
             $database->updateDocument(self::COLLECTION, 'ada', new Document(['balance' => 2]));
             $first = $database->getCollection(self::COLLECTION);
             $first->setAttribute('name', 'changed');
-            $first->attributes[0]->setAttribute('size', 1);
+            /** @var list<Document> $attributes */
+            $attributes = $first->getAttribute('attributes');
+            $attributes[0]->setAttribute('size', 1);
 
             return $database->getCollection(self::COLLECTION);
         });
 
         $this->assertSame(self::COLLECTION, $second->getAttribute('name'));
-        $this->assertSame(0, $second->attributes[0]->size);
+        $this->assertSame(0, $second->attributes()[0]->toDocument()->getAttribute('size'));
     }
 
     /**
@@ -140,7 +143,7 @@ final class TransactionDefinitionReadTest extends TestCase
             $database->skipFilters(fn (): Document => $database->getDocument(Database::METADATA, self::COLLECTION)),
         ]);
 
-        $this->assertSame('balance', $collection->attributes[0]->key);
+        $this->assertSame('balance', $collection->attributes()[0]->key);
         $encoded = $raw->getAttribute('attributes');
         $this->assertIsString($encoded);
         $attributes = \json_decode($encoded, true);
@@ -154,7 +157,7 @@ final class TransactionDefinitionReadTest extends TestCase
         $database = new Database($adapter, new Cache(new RedisLeasableCache()));
         $database->setDatabase('transactions')->setNamespace('transactions_'.\uniqid());
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [Attribute::integer(key: 'balance')],
             permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())],

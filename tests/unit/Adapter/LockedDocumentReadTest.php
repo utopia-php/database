@@ -35,7 +35,7 @@ final class LockedDocumentReadTest extends TestCase
     #[DataProvider('adapters')]
     public function testALockedReadSelectsTheDocumentForUpdate(Closure $make, string $select): void
     {
-        $document = $this->adapter($make)->getDocument(new Collection(id: 'books'), 'dune', forUpdate: true);
+        $document = $this->adapter($make)->getDocument(Collection::create(id: 'books'), 'dune', forUpdate: true);
 
         $this->assertSame([$select.' FOR UPDATE'], $this->statements);
         $this->assertSame([[':_uid', 'dune']], $this->bindings);
@@ -50,7 +50,7 @@ final class LockedDocumentReadTest extends TestCase
     #[DataProvider('adapters')]
     public function testAnUnlockedReadSelectsTheDocumentWithoutALock(Closure $make, string $select): void
     {
-        $document = $this->adapter($make)->getDocument(new Collection(id: 'books'), 'dune');
+        $document = $this->adapter($make)->getDocument(Collection::create(id: 'books'), 'dune');
 
         $this->assertSame([$select], $this->statements);
         $this->assertSame('Dune', $document->getAttribute('title'));
@@ -81,8 +81,8 @@ final class LockedDocumentReadTest extends TestCase
         $adapter->setSharedTables(true);
         $adapter->setTenant($tenant);
 
-        $adapter->getDocument(new Collection(id: $collection), 'dune', forUpdate: true);
-        $adapter->getDocument(new Collection(id: $collection), 'dune');
+        $adapter->getDocument(Collection::create(id: $collection), 'dune', forUpdate: true);
+        $adapter->getDocument(Collection::create(id: $collection), 'dune');
 
         $this->assertSame([$select.' FOR UPDATE', $select], $this->statements);
         $this->assertSame([[':_uid', 'dune'], [':_tenant', $tenant], [':_uid', 'dune'], [':_tenant', $tenant]], $this->bindings);

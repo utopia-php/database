@@ -54,7 +54,7 @@ final class MemoryPermissionsTenantPerDocumentTest extends TestCase
             ->setTenant(null)
             ->setTenantPerDocument(true);
         $this->database->create();
-        $this->database->createCollection(new Collection(
+        $this->database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [Attribute::string(key: 'title', size: 64)],
             permissions: [

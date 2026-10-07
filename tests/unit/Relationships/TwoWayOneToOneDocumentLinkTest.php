@@ -222,16 +222,16 @@ final class TwoWayOneToOneDocumentLinkTest extends TestCase
             Permission::delete(Role::any()),
         ];
         foreach (['parent', 'child', 'toy', 'part'] as $collection) {
-            $database->createCollection(new Collection(
+            $database->createCollection(Collection::create(
                 id: $collection,
                 attributes: [Attribute::string(key: 'name', size: 64, required: false)],
                 permissions: $permissions,
                 documentSecurity: false,
             ));
         }
-        $database->createRelationship(Relationship::oneToOne(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'partner', twoWayKey: 'parent'));
-        $database->createRelationship(Relationship::oneToOne(collection: 'child', relatedCollection: 'toy', twoWay: true, key: 'toy', twoWayKey: 'owner'));
-        $database->createRelationship(Relationship::oneToOne(collection: 'toy', relatedCollection: 'part', twoWay: true, key: 'part', twoWayKey: 'toy'));
+        $database->createRelationship('parent', Relationship::oneToOne(relatedCollection: 'child', twoWay: true, key: 'partner', twoWayKey: 'parent'));
+        $database->createRelationship('child', Relationship::oneToOne(relatedCollection: 'toy', twoWay: true, key: 'toy', twoWayKey: 'owner'));
+        $database->createRelationship('toy', Relationship::oneToOne(relatedCollection: 'part', twoWay: true, key: 'part', twoWayKey: 'toy'));
 
         foreach (['c1', 'c2', 'c3'] as $id) {
             $database->createDocument('child', new Document(['$id' => $id]));

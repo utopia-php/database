@@ -21,8 +21,8 @@ use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Operator;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
+use Utopia\Database\RelationshipDeleteAction;
 use Utopia\Database\Validator\Authorization;
-use Utopia\Query\Schema\ForeignKeyAction;
 
 final class RelationshipHookCoverageTest extends TestCase
 {
@@ -61,8 +61,8 @@ final class RelationshipHookCoverageTest extends TestCase
         $this->assertSame([], $database->find('books', [Query::equal('author.publisher.name', ['Lonely'])]));
         $this->assertSame([], $database->find('books', [Query::equal('author.publisher.name', ['Nobody'])]));
 
-        $database->createCollection(new Collection(id: 'countries', attributes: [Attribute::string(key: 'name', size: 64)], permissions: $this->permissions()));
-        $database->createRelationship(Relationship::manyToOne(collection: 'publishers', relatedCollection: 'countries', twoWay: true, key: 'country', twoWayKey: 'publishers'));
+        $database->createCollection(Collection::create(id: 'countries', attributes: [Attribute::string(key: 'name', size: 64)], permissions: $this->permissions()));
+        $database->createRelationship('publishers', Relationship::manyToOne(relatedCollection: 'countries', twoWay: true, key: 'country', twoWayKey: 'publishers'));
         $database->createDocument('countries', new Document([Document::ID => 'nowhere', 'name' => 'Nowhere']));
         $database->createDocument('countries', new Document([Document::ID => 'home', 'name' => 'Home']));
         $database->updateDocument('publishers', 'acme', new Document(['country' => 'home']));
@@ -130,9 +130,9 @@ final class RelationshipHookCoverageTest extends TestCase
             ->setNamespace('race_'.\uniqid());
         $database->create();
         $database->addHook(new Relationships($database));
-        $database->createCollection(new Collection(id: 'parent', permissions: $this->permissions(), documentSecurity: false));
-        $database->createCollection(new Collection(id: 'child', permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: true));
-        $database->createRelationship(Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull));
+        $database->createCollection(Collection::create(id: 'parent', permissions: $this->permissions(), documentSecurity: false));
+        $database->createCollection(Collection::create(id: 'child', permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: true));
+        $database->createRelationship('parent', Relationship::oneToMany(relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: RelationshipDeleteAction::SetNull));
         $database->createDocument('parent', new Document([Document::ID => 'parent1']));
         $database->createDocument('child', new Document([Document::ID => 'child1', Document::PERMISSIONS => [Permission::read(Role::any())]]));
 
@@ -151,8 +151,8 @@ final class RelationshipHookCoverageTest extends TestCase
     public function testARelationshipChangeNestedPastTheMaximumDepthIsDropped(Closure $adapter): void
     {
         $database = $this->library($adapter());
-        $database->createCollection(new Collection(id: 'countries', attributes: [Attribute::string(key: 'name', size: 64)], permissions: $this->permissions()));
-        $database->createRelationship(Relationship::manyToOne(collection: 'publishers', relatedCollection: 'countries', twoWay: true, key: 'country', twoWayKey: 'publishers'));
+        $database->createCollection(Collection::create(id: 'countries', attributes: [Attribute::string(key: 'name', size: 64)], permissions: $this->permissions()));
+        $database->createRelationship('publishers', Relationship::manyToOne(relatedCollection: 'countries', twoWay: true, key: 'country', twoWayKey: 'publishers'));
         $database->createDocument('countries', new Document([Document::ID => 'home', 'name' => 'Home']));
         $database->createDocument('countries', new Document([Document::ID => 'away', 'name' => 'Away']));
         $database->updateDocument('publishers', 'acme', new Document(['country' => 'home']));
@@ -203,10 +203,10 @@ final class RelationshipHookCoverageTest extends TestCase
         $database->addHook(new Relationships($database));
 
         foreach (['books' => 'title', 'authors' => 'name', 'publishers' => 'name'] as $collection => $attribute) {
-            $database->createCollection(new Collection(id: $collection, attributes: [Attribute::string(key: $attribute, size: 64)], permissions: $this->permissions()));
+            $database->createCollection(Collection::create(id: $collection, attributes: [Attribute::string(key: $attribute, size: 64)], permissions: $this->permissions()));
         }
-        $database->createRelationship(Relationship::manyToOne(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books'));
-        $database->createRelationship(Relationship::manyToOne(collection: 'authors', relatedCollection: 'publishers', twoWay: true, key: 'publisher', twoWayKey: 'authors'));
+        $database->createRelationship('books', Relationship::manyToOne(relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books'));
+        $database->createRelationship('authors', Relationship::manyToOne(relatedCollection: 'publishers', twoWay: true, key: 'publisher', twoWayKey: 'authors'));
 
         $database->createDocument('publishers', new Document([Document::ID => 'acme', 'name' => 'Acme']));
         $database->createDocument('authors', new Document([Document::ID => 'ada', 'name' => 'Ada', 'publisher' => 'acme']));

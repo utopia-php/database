@@ -91,7 +91,7 @@ final class DistinctJoinedSelectTest extends TestCase
         $this->database->create();
 
         foreach (['main', 'side'] as $collection) {
-            $this->database->createCollection(new Collection(
+            $this->database->createCollection(Collection::create(
                 id: $collection,
                 attributes: [Attribute::string(key: 'code', size: 16), Attribute::string(key: 'label', size: 32)],
                 permissions: [Permission::create(Role::any()), Permission::read(Role::any())],

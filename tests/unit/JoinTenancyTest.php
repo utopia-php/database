@@ -474,13 +474,13 @@ final class JoinTenancyTest extends TestCase
         $database->create();
 
         $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::AUTHORS,
             attributes: [Attribute::string(key: 'name', size: 64, required: true)],
             permissions: $permissions,
             documentSecurity: $documentSecurity,
         ));
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::BOOKS,
             attributes: [
                 Attribute::string(key: 'authorId', size: 64, required: true),
@@ -489,7 +489,7 @@ final class JoinTenancyTest extends TestCase
             permissions: $permissions,
             documentSecurity: $documentSecurity,
         ));
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::REVIEWS,
             attributes: [
                 Attribute::string(key: 'authorId', size: 64, required: true),
@@ -610,7 +610,7 @@ final class JoinTenancyTest extends TestCase
      */
     private function extras(Database $database, array $rows): void
     {
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::EXTRAS,
             attributes: [
                 Attribute::string(key: 'authorId', size: 64, required: true),

@@ -22,14 +22,14 @@ use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
-use Utopia\Database\RelationType;
+use Utopia\Database\RelationshipDeleteAction;
+use Utopia\Database\RelationshipType;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Queries\Document as DocumentQueries;
 use Utopia\Database\Validator\Query\Aggregate;
 use Utopia\Database\Validator\Query\Join;
 use Utopia\Query\Method;
 use Utopia\Query\Schema\ColumnType;
-use Utopia\Query\Schema\ForeignKeyAction;
 
 /**
  * The query validators refuse the query shapes the library cannot run as written, so find(), count()
@@ -53,12 +53,10 @@ final class QueryValidationTest extends TestCase
         $this->createCollection('authors', [Attribute::string(key: 'name', size: 32)]);
         $this->createCollection('users', [Attribute::string(key: 'name', size: 32)]);
         $this->createCollection('posts', [Attribute::string(key: 'owner', size: 32), Attribute::integer(key: 'votes')]);
-        $this->database->createRelationship(new Relationship(
-            collection: 'posts',
+        $this->database->createRelationship('posts', Relationship::manyToOne(
             relatedCollection: 'authors',
-            type: RelationType::ManyToOne,
             key: 'author',
-            onDelete: ForeignKeyAction::SetNull,
+            onDelete: RelationshipDeleteAction::SetNull,
         ));
 
         $this->createDocument('authors', 'ann', ['name' => 'Ann']);
@@ -81,14 +79,12 @@ final class QueryValidationTest extends TestCase
             Attribute::string(key: 'labels', size: 32, array: true),
             Attribute::string(key: 'ownerRef', size: 32),
         ]);
-        $this->database->createRelationship(new Relationship(
-            collection: 'owners',
+        $this->database->createRelationship('owners', Relationship::oneToMany(
             relatedCollection: 'items',
-            type: RelationType::OneToMany,
             twoWay: true,
             key: 'items',
             twoWayKey: 'owner',
-            onDelete: ForeignKeyAction::SetNull,
+            onDelete: RelationshipDeleteAction::SetNull,
         ));
 
         $this->createDocument('owners', 'ann', ['name' => 'Ann', 'score' => 2, 'active' => true, 'tags' => ['a']]);
@@ -134,7 +130,7 @@ final class QueryValidationTest extends TestCase
     {
         $validator = new Join([
             new Document(['$id' => 'owner', 'key' => 'owner', 'type' => ColumnType::String->value]),
-            new Document(['$id' => 'author', 'key' => 'author', 'type' => ColumnType::Relationship->value, 'options' => ['relationType' => RelationType::ManyToOne->value, 'side' => 'parent', 'relatedCollection' => 'authors']]),
+            new Document(['$id' => 'author', 'key' => 'author', 'type' => ColumnType::Relationship->value, 'options' => ['relationType' => RelationshipType::ManyToOne->value, 'side' => 'parent', 'relatedCollection' => 'authors']]),
         ]);
 
         $this->assertFalse($validator->isValid(Query::join('users', 'owner', '$id', '=', 'author')));
@@ -400,8 +396,8 @@ final class QueryValidationTest extends TestCase
         $database->create();
 
         $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
-        $database->createCollection(new Collection(id: 'customers', attributes: [Attribute::string(key: 'name', size: 32)], permissions: $permissions, documentSecurity: false));
-        $database->createCollection(new Collection(id: 'notes', attributes: [Attribute::string(key: 'customerId', size: 32)], permissions: $permissions, documentSecurity: false));
+        $database->createCollection(Collection::create(id: 'customers', attributes: [Attribute::string(key: 'name', size: 32)], permissions: $permissions, documentSecurity: false));
+        $database->createCollection(Collection::create(id: 'notes', attributes: [Attribute::string(key: 'customerId', size: 32)], permissions: $permissions, documentSecurity: false));
         $database->createDocument('customers', new Document(['$id' => 'c1', 'name' => 'Ann']));
 
         $this->assertInvalidQuery('Invalid query method: join', fn (): mixed => $database->getDocument('customers', 'c1', [Query::join('notes', '$id', 'customerId', '=', 'note')]));
@@ -451,7 +447,7 @@ final class QueryValidationTest extends TestCase
      */
     private function createCollection(string $id, array $attributes): void
     {
-        $this->database->createCollection(new Collection(
+        $this->database->createCollection(Collection::create(
             id: $id,
             attributes: $attributes,
             permissions: [Permission::create(Role::any()), Permission::read(Role::any())],

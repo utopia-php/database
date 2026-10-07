@@ -315,7 +315,7 @@ final class MemoryWritePathsTest extends TestCase
             ->setNamespace('write_paths_'.\uniqid());
         $database->getAuthorization()->addRole(Role::any()->toString());
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [
                 Attribute::string(key: 'addr', size: 128, required: true),

@@ -54,7 +54,7 @@ class CreateCollectionRaceTest extends TestCase
         ]));
 
         try {
-            $database->createCollection(new Collection(id: $collection, attributes: [$name], permissions: [
+            $database->createCollection(Collection::create(id: $collection, attributes: [$name], permissions: [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
             ]));
@@ -100,7 +100,7 @@ class CreateCollectionRaceTest extends TestCase
         $cacheAdapter->failPurge = true;
 
         try {
-            $database->createCollection(new Collection(id: $collection, attributes: [$name], permissions: [
+            $database->createCollection(Collection::create(id: $collection, attributes: [$name], permissions: [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
             ]));

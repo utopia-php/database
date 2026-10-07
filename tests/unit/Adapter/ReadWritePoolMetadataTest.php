@@ -277,7 +277,7 @@ final class ReadWritePoolMetadataTest extends TestCase
             ->setNamespace(self::NAMESPACE)
             ->setAuthorization(new Authorization());
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: 'posts',
             attributes: [Attribute::string(key: 'server', size: 32)],
             permissions: [

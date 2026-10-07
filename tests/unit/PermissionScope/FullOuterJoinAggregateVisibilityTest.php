@@ -137,7 +137,7 @@ final class FullOuterJoinAggregateVisibilityTest extends TestCase
         $database->addHook(new Permissions());
         $database->create();
 
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::AUTHORS,
             attributes: [
                 Attribute::string(key: self::TEAM, size: 16, required: true),
@@ -146,7 +146,7 @@ final class FullOuterJoinAggregateVisibilityTest extends TestCase
             permissions: $this->collectionPermissions($grantAuthors),
             documentSecurity: ! $grantAuthors,
         ));
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::BOOKS,
             attributes: [
                 Attribute::string(key: 'authorId', size: 16, required: true),

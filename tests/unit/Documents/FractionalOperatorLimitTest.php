@@ -68,7 +68,7 @@ final class FractionalOperatorLimitTest extends TestCase
             ->setNamespace('fractional_limits_'.\uniqid());
         $database->getAuthorization()->addRole(Role::any()->toString());
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [
                 Attribute::integer(key: 'count'),

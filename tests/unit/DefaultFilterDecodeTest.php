@@ -14,6 +14,7 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Filter;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
@@ -54,9 +55,9 @@ final class DefaultFilterDecodeTest extends TestCase
     public function testJsonAttributeHoldingAScalarDecodesToTheScalar(\Closure $adapter): void
     {
         $database = $this->database($adapter());
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
-            attributes: [Attribute::string(key: 'payload', size: 64, filters: ['json'])],
+            attributes: [Attribute::string(key: 'payload', size: 64, filters: [Filter::Json])],
             permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
         ));
 

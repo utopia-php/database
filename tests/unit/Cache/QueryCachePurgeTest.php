@@ -126,7 +126,7 @@ final class QueryCachePurgeTest extends TestCase
             ->setNamespace('posts_'.\uniqid());
         $database->create();
         $database->getAuthorization()->addRole(Role::any()->toString());
-        $database->createCollection(new Collection(id: 'posts', permissions: [
+        $database->createCollection(Collection::create(id: 'posts', permissions: [
             Permission::read(Role::any()),
         ], documentSecurity: false));
         $cache->failing = true;
@@ -160,7 +160,7 @@ final class QueryCachePurgeTest extends TestCase
 
         $reader->create();
         $reader->setQueryCache($queryCache ?? new QueryCache(new Cache(new LeasableHashCache())));
-        $reader->createCollection(new Collection(id: 'posts', permissions: [
+        $reader->createCollection(Collection::create(id: 'posts', permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
         ], documentSecurity: false));

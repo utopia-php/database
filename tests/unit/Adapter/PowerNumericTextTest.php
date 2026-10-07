@@ -169,7 +169,7 @@ final class PowerNumericTextTest extends TestCase
         $database = new Database($adapter, new Cache(new NoCache()));
         $database->setDatabase('power_text')->setNamespace('power_text')->setAuthorization(new Authorization());
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: 'items',
             attributes: [Attribute::integer('count', default: 4), Attribute::float('ratio')],
             permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())],

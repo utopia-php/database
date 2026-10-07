@@ -62,7 +62,7 @@ final class SumValidatorCacheTest extends TestCase
         $database = new Database(new Memory(), new Cache(new MemoryCache()));
         $database->setDatabase('sums')->setNamespace('sums_'.\uniqid());
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [Attribute::string(key: 'title', size: 64), Attribute::integer(key: 'pages')],
             permissions: [Permission::create(Role::any()), Permission::read(Role::any())],

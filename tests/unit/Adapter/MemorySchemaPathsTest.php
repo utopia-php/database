@@ -13,7 +13,7 @@ use Utopia\Database\Index;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\Method;
-use Utopia\Query\Schema\Order;
+use Utopia\Query\OrderDirection;
 
 final class MemorySchemaPathsTest extends TestCase
 {
@@ -38,14 +38,14 @@ final class MemorySchemaPathsTest extends TestCase
     {
         [$adapter, $indexOf] = $this->inspectableAdapter();
         $this->createPairs($adapter);
-        $adapter->createIndex(self::COLLECTION, Index::key(key: 'by_all', attributes: ['a', 'b', 'c'], orders: [Order::Asc, Order::Desc, Order::Asc]));
+        $adapter->createIndex(self::COLLECTION, Index::key(key: 'by_all', attributes: ['a', 'b', 'c'], orders: [OrderDirection::Asc, OrderDirection::Desc, OrderDirection::Asc]));
 
         $this->assertTrue($adapter->deleteAttribute(self::COLLECTION, 'a'));
 
         $index = $indexOf(self::COLLECTION, 'by_all');
         $this->assertSame(['b', 'c'], $index['attributes'] ?? null);
-        $this->assertSame([Order::Desc->value, Order::Asc->value], \array_map(
-            static fn (mixed $order): mixed => $order instanceof Order ? $order->value : $order,
+        $this->assertSame([OrderDirection::Desc->value, OrderDirection::Asc->value], \array_map(
+            static fn (mixed $order): mixed => $order instanceof OrderDirection ? $order->value : $order,
             \is_array($index['orders'] ?? null) ? $index['orders'] : [],
         ));
     }

@@ -70,7 +70,7 @@ final class DistinctCapabilityTest extends TestCase
             ->setNamespace('distinct_capability_'.\uniqid());
         $database->getAuthorization()->addRole(Role::any()->toString());
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [Attribute::string('name', size: 32, required: false)],
             permissions: [

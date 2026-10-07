@@ -493,14 +493,14 @@ final class QueryBuilderTenancyTest extends TestCase
         $database->create();
 
         $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::AUTHORS,
             attributes: [Attribute::string(key: 'name', size: 64, required: true)],
             permissions: $permissions,
             documentSecurity: false,
         ));
         foreach (self::NUMBERS as $collection => $number) {
-            $database->createCollection(new Collection(
+            $database->createCollection(Collection::create(
                 id: $collection,
                 attributes: [
                     Attribute::string(key: 'authorId', size: 64, required: true),

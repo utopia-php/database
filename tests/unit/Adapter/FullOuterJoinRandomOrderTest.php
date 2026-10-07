@@ -40,7 +40,7 @@ final class FullOuterJoinRandomOrderTest extends TestCase
         $database->setDatabase('random_order')->setNamespace('random_order')->setAuthorization(new Authorization());
         $database->create();
         foreach (['customers' => [Attribute::string('name', size: 16)], 'notes' => [Attribute::string('customerId', size: 16), Attribute::string('body', size: 16)]] as $id => $attributes) {
-            $database->createCollection(new Collection(id: $id, attributes: $attributes, permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: false));
+            $database->createCollection(Collection::create(id: $id, attributes: $attributes, permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: false));
         }
         foreach (['c1', 'c2', 'c3'] as $customer) {
             $database->createDocument('customers', new Document(['$id' => $customer, 'name' => $customer]));

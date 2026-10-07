@@ -19,6 +19,7 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Index;
+use Utopia\Database\IntegerWidth;
 use Utopia\Database\Validator\Authorization;
 
 final class MemoryAdapterTest extends TestCase
@@ -92,7 +93,7 @@ final class MemoryAdapterTest extends TestCase
     public function testRenamingKeepsItsUniqueValue(): void
     {
         $database = $this->memory();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: 'users',
             attributes: [Attribute::string(key: 'email', size: 128)],
             permissions: $this->everyone(),
@@ -130,9 +131,9 @@ final class MemoryAdapterTest extends TestCase
             $database->create();
             $database->addHook(new Permissions());
             $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
-            $database->createCollection(new Collection(id: 'shared', attributes: [Attribute::string(key: 'name', size: 8)], permissions: $permissions));
+            $database->createCollection(Collection::create(id: 'shared', attributes: [Attribute::string(key: 'name', size: 8)], permissions: $permissions));
             $database->setTenant(self::TENANT);
-            $database->createCollection(new Collection(id: 'owned', attributes: [Attribute::string(key: 'name', size: 8)], permissions: $permissions));
+            $database->createCollection(Collection::create(id: 'owned', attributes: [Attribute::string(key: 'name', size: 8)], permissions: $permissions));
 
             $identifiers = \array_map(static fn (Document $collection): string => $collection->getId(), $database->listCollections());
             \sort($identifiers);
@@ -146,12 +147,12 @@ final class MemoryAdapterTest extends TestCase
     public function testNoChangeUpdateChecksOnlyTheReadPermission(): void
     {
         $database = $this->memory();
-        $database->createCollection(new Collection(id: 'documents'));
+        $database->createCollection(Collection::create(id: 'documents'));
         $database->createAttribute('documents', Attribute::string(key: 'string', size: 128, required: true));
         $database->createAttribute('documents', Attribute::integer(key: 'integer_signed', required: true));
-        $database->createAttribute('documents', Attribute::integer(key: 'integer_unsigned', size: 4, required: true, signed: false));
-        $database->createAttribute('documents', Attribute::integer(key: 'bigint_signed', size: 8, required: true));
-        $database->createAttribute('documents', Attribute::integer(key: 'bigint_unsigned', size: 9, required: true, signed: false));
+        $database->createAttribute('documents', Attribute::integer(key: 'integer_unsigned', required: true, signed: false));
+        $database->createAttribute('documents', Attribute::integer(key: 'bigint_signed', width: IntegerWidth::Bits64, required: true));
+        $database->createAttribute('documents', Attribute::integer(key: 'bigint_unsigned', width: IntegerWidth::Bits64, required: true, signed: false));
         $database->createAttribute('documents', Attribute::double(key: 'float_signed', required: true));
         $database->createAttribute('documents', Attribute::double(key: 'float_unsigned', required: true, signed: false));
         $database->createAttribute('documents', Attribute::boolean(key: 'boolean', required: true));
@@ -204,7 +205,7 @@ final class MemoryAdapterTest extends TestCase
 
     private function createNotes(Database $database): void
     {
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [Attribute::string(key: 'title', size: 64)],
             permissions: [

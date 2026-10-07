@@ -205,10 +205,10 @@ final class RedisUniqueIndexTest extends TestCase
     public function testDroppingACollectionNamedLikeAKeySegmentKeepsOtherGrants(bool $sharedTables): void
     {
         $database = $this->notesDatabase($sharedTables);
-        $database->createCollection(new Collection(id: self::KEY_SEGMENT, attributes: [Attribute::string(key: 'title', size: 64)]));
+        $database->createCollection(Collection::create(id: self::KEY_SEGMENT, attributes: [Attribute::string(key: 'title', size: 64)]));
         $database->createDocument(self::KEY_SEGMENT, new Document(['$id' => self::NOTE, '$permissions' => [Permission::read(Role::any())], 'title' => 'dropped']));
 
-        $this->assertTrue($database->deleteCollection(self::KEY_SEGMENT));
+        $database->deleteCollection(self::KEY_SEGMENT);
         $database->updateDocument(self::NOTES, self::NOTE, $this->readers([self::ALICE]));
 
         $this->assertSame([self::NOTE], $this->readableBy($database, self::ALICE));
@@ -224,7 +224,7 @@ final class RedisUniqueIndexTest extends TestCase
             $this->forget($registry);
         }
 
-        $this->assertTrue($database->deleteCollection(self::NOTES));
+        $database->deleteCollection(self::NOTES);
 
         $this->assertSame([], $this->keysOf($sharedTables, self::NOTES), 'Dropping a collection must remove the grants written before the registry existed');
     }
@@ -237,7 +237,7 @@ final class RedisUniqueIndexTest extends TestCase
             $this->forget($index);
         }
 
-        $this->assertTrue($database->deleteCollection(self::NOTES));
+        $database->deleteCollection(self::NOTES);
 
         $grants = \array_filter($this->keysOf($sharedTables, self::NOTES), static fn (string $key): bool => \str_contains($key, ':perm:'));
         $this->assertSame([], \array_values($grants), 'Dropping a collection must remove the grants it registered, even those its id index no longer lists');
@@ -247,7 +247,7 @@ final class RedisUniqueIndexTest extends TestCase
     public function testSizingACollectionNamedLikeAKeySegmentCountsOnlyItsOwnKeys(bool $sharedTables): void
     {
         $database = $this->notesDatabase($sharedTables);
-        $database->createCollection(new Collection(id: self::KEY_SEGMENT, attributes: [Attribute::string(key: 'title', size: 64)]));
+        $database->createCollection(Collection::create(id: self::KEY_SEGMENT, attributes: [Attribute::string(key: 'title', size: 64)]));
         $database->createDocument(self::KEY_SEGMENT, new Document(['$id' => self::NOTE, '$permissions' => [Permission::read(Role::any())], 'title' => 'sized']));
 
         $this->assertSame($this->bytesOf($sharedTables, self::KEY_SEGMENT), $database->getSizeOfCollection(self::KEY_SEGMENT), 'A collection named like a key segment must not count other collections\' grants');
@@ -286,7 +286,7 @@ final class RedisUniqueIndexTest extends TestCase
         $expected = $this->bytesOf(true, self::NOTES);
 
         $database->withTenant(self::OTHER_TENANT, function () use ($database): void {
-            $database->createCollection(new Collection(
+            $database->createCollection(Collection::create(
                 id: self::NOTES,
                 attributes: [Attribute::string(key: 'title', size: 64)],
                 permissions: [Permission::create(Role::any())],
@@ -321,7 +321,7 @@ final class RedisUniqueIndexTest extends TestCase
 
     private function createUsers(Database $database): void
     {
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::USERS,
             attributes: [Attribute::string(key: 'email', size: 128)],
             permissions: [
@@ -346,7 +346,7 @@ final class RedisUniqueIndexTest extends TestCase
             $database->setTenant(self::TENANT);
         }
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::NOTES,
             attributes: [Attribute::string(key: 'title', size: 64)],
             permissions: [

@@ -88,7 +88,8 @@ final class CreateAttributesRollbackTest extends TestCase
         $this->assertSame([], $this->storedKeys($database));
 
         $this->metadataFailure = null;
-        $this->assertTrue($database->createAttributes(self::COLLECTION, $this->attributes('title', 'nick')));
+        $created = $database->createAttributes(self::COLLECTION, $this->attributes('title', 'nick'));
+        $this->assertSame(['title', 'nick'], \array_map(static fn (Attribute $attribute): string => $attribute->key, $created));
         $this->assertSame(['title', 'nick'], $this->storedKeys($database));
     }
 
@@ -149,7 +150,7 @@ final class CreateAttributesRollbackTest extends TestCase
     {
         return \array_values(\array_map(
             static fn (Attribute $attribute): string => $attribute->key,
-            $database->getCollection(self::COLLECTION)->attributes
+            $database->getCollection(self::COLLECTION)->attributes()
         ));
     }
 
@@ -158,7 +159,7 @@ final class CreateAttributesRollbackTest extends TestCase
         $database = new Database($this->adapter(), new Cache(new MemoryCache()));
         $database->setDatabase('rollback')->setNamespace('rollback_'.\uniqid());
         $database->create();
-        $database->createCollection(new Collection(id: self::COLLECTION));
+        $database->createCollection(Collection::create(id: self::COLLECTION));
 
         return $database;
     }

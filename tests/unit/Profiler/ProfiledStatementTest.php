@@ -38,7 +38,7 @@ final class ProfiledStatementTest extends TestCase
             ->setAuthorization(new Authorization());
         $this->database->addHook(new Permissions());
         $this->database->create();
-        $this->database->createCollection(new Collection(
+        $this->database->createCollection(Collection::create(
             id: 'items',
             attributes: [
                 Attribute::string(key: 'category', size: 16),

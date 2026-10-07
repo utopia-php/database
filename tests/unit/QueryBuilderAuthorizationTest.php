@@ -49,13 +49,13 @@ final class QueryBuilderAuthorizationTest extends TestCase
         $this->database->create();
 
         $this->authorization->skip(function (): void {
-            $this->database->createCollection(new Collection(
+            $this->database->createCollection(Collection::create(
                 id: self::POSTS,
                 attributes: [Attribute::string(key: 'title', size: 64, required: true)],
                 permissions: [Permission::create(Role::users())],
                 documentSecurity: true,
             ));
-            $this->database->createCollection(new Collection(
+            $this->database->createCollection(Collection::create(
                 id: self::PRIVATE,
                 attributes: [Attribute::string(key: 'title', size: 64, required: true)],
                 permissions: [],

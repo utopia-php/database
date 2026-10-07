@@ -52,7 +52,7 @@ final class OrphanIndexTest extends TestCase
         $database = $this->database();
         $database->getAdapter()->createIndex(self::COLLECTION, Index::key(key: self::INDEX, attributes: ['name']));
 
-        $this->assertTrue($database->createIndex(self::COLLECTION, Index::unique(key: self::INDEX, attributes: ['email'])));
+        $this->assertSame(self::INDEX, $database->createIndex(self::COLLECTION, Index::unique(key: self::INDEX, attributes: ['email']))->key);
 
         $this->assertSame([['email'], 0], $this->schemaIndex($database));
         $database->createDocument(self::COLLECTION, new Document(['email' => 'user@example.com']));
@@ -65,7 +65,7 @@ final class OrphanIndexTest extends TestCase
         $database = $this->database();
         $database->getAdapter()->createIndex(self::COLLECTION, Index::key(key: self::INDEX, attributes: ['name']));
 
-        $this->assertTrue($database->createIndex(self::COLLECTION, Index::key(key: self::INDEX, attributes: ['name'])));
+        $this->assertSame(self::INDEX, $database->createIndex(self::COLLECTION, Index::key(key: self::INDEX, attributes: ['name']))->key);
 
         $this->assertSame([['name'], 1], $this->schemaIndex($database));
         $this->assertSame([self::INDEX], $this->indexKeys($database));
@@ -94,7 +94,7 @@ final class OrphanIndexTest extends TestCase
         $first->createIndex(self::COLLECTION, Index::key(key: self::INDEX, attributes: ['name']));
         $second = $this->database(tenant: 2);
 
-        $this->assertTrue($second->createIndex(self::COLLECTION, Index::key(key: self::INDEX, attributes: ['name'])));
+        $this->assertSame(self::INDEX, $second->createIndex(self::COLLECTION, Index::key(key: self::INDEX, attributes: ['name']))->key);
 
         $this->assertSame([['_tenant', 'name'], 1], $this->schemaIndex($first));
         $this->assertSame([self::INDEX], $this->indexKeys($second));
@@ -115,7 +115,7 @@ final class OrphanIndexTest extends TestCase
             $database->create();
         }
 
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [
                 Attribute::string(key: 'name', size: 64),
@@ -172,7 +172,7 @@ final class OrphanIndexTest extends TestCase
     {
         return \array_map(
             static fn (Index $index): string => $index->key,
-            \array_values($database->getCollection(self::COLLECTION)->indexes),
+            \array_values($database->getCollection(self::COLLECTION)->indexes()),
         );
     }
 }

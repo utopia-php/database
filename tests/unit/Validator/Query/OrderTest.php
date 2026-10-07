@@ -3,9 +3,12 @@
 namespace Tests\Unit\Validator\Query;
 
 use PHPUnit\Framework\TestCase;
+use Utopia\Database\Attribute;
 use Utopia\Database\Document;
 use Utopia\Database\Exception;
 use Utopia\Database\Query;
+use Utopia\Database\Relationship;
+use Utopia\Database\RelationshipSide;
 use Utopia\Database\Validator\Query\Order;
 use Utopia\Query\Schema\ColumnType;
 
@@ -62,12 +65,7 @@ class OrderTest extends TestCase
     {
         $validator = new Order(
             attributes: [
-                new Document([
-                    '$id' => 'profile',
-                    'key' => 'profile',
-                    'type' => ColumnType::Relationship->value,
-                    'array' => false,
-                ]),
+                Attribute::relationship('profile', Relationship::oneToOne('profiles'), RelationshipSide::Parent)->toDocument(),
             ],
         );
 

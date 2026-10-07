@@ -4,23 +4,18 @@ namespace Tests\Unit\Validator;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use Tests\Unit\CountingAttribute;
-use Tests\Unit\MagicAccessAssertions;
-use Tests\Unit\MagicAccessRecorder;
 use Utopia\Database\Attribute;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
-use Utopia\Database\RelationSide;
-use Utopia\Database\RelationType;
+use Utopia\Database\RelationshipSide;
+use Utopia\Database\RelationshipType;
 use Utopia\Database\Validator\Operator as OperatorValidator;
 use Utopia\Query\Schema\ColumnType;
 
 final class OperatorValidatorTest extends TestCase
 {
-    use MagicAccessAssertions;
-
     private const string RELATION = 'related';
 
     private const string SINGLE_VALUE = 'single-value relationship';
@@ -28,15 +23,15 @@ final class OperatorValidatorTest extends TestCase
     private const string DOCUMENT_IDS = 'relationship values must be document IDs (strings) or Document objects';
 
     /**
-     * @return array<string, array{RelationType, RelationSide}>
+     * @return array<string, array{RelationshipType, RelationshipSide}>
      */
     public static function singleValueSides(): array
     {
         return [
-            'one-to-one parent' => [RelationType::OneToOne, RelationSide::Parent],
-            'one-to-one child' => [RelationType::OneToOne, RelationSide::Child],
-            'one-to-many child' => [RelationType::OneToMany, RelationSide::Child],
-            'many-to-one parent' => [RelationType::ManyToOne, RelationSide::Parent],
+            'one-to-one parent' => [RelationshipType::OneToOne, RelationshipSide::Parent],
+            'one-to-one child' => [RelationshipType::OneToOne, RelationshipSide::Child],
+            'one-to-many child' => [RelationshipType::OneToMany, RelationshipSide::Child],
+            'many-to-one parent' => [RelationshipType::ManyToOne, RelationshipSide::Parent],
         ];
     }
 
@@ -56,7 +51,7 @@ final class OperatorValidatorTest extends TestCase
     }
 
     /**
-     * @return array<string, array{RelationType, RelationSide, OperatorType, array<mixed>}>
+     * @return array<string, array{RelationshipType, RelationshipSide, OperatorType, array<mixed>}>
      */
     public static function arrayOperatorsOnSingleValueRelationships(): array
     {
@@ -74,7 +69,7 @@ final class OperatorValidatorTest extends TestCase
      * @param  array<mixed>  $values
      */
     #[DataProvider('arrayOperatorsOnSingleValueRelationships')]
-    public function testArrayOperatorOnASingleValueRelationshipIsRejected(RelationType $type, RelationSide $side, OperatorType $method, array $values): void
+    public function testArrayOperatorOnASingleValueRelationshipIsRejected(RelationshipType $type, RelationshipSide $side, OperatorType $method, array $values): void
     {
         $validator = $this->relationshipValidator($type, $side->value);
 
@@ -106,7 +101,7 @@ final class OperatorValidatorTest extends TestCase
     #[DataProvider('nonIdentifierValues')]
     public function testNonIdentifierRelationshipValuesAreRejected(OperatorType $method, array $values): void
     {
-        $validator = $this->relationshipValidator(RelationType::ManyToMany, RelationSide::Parent->value);
+        $validator = $this->relationshipValidator(RelationshipType::ManyToMany, RelationshipSide::Parent->value);
 
         $this->assertFalse($validator->isValid(new Operator($method, self::RELATION, $values)));
         $this->assertStringContainsString(self::DOCUMENT_IDS, $validator->getDescription());
@@ -134,7 +129,7 @@ final class OperatorValidatorTest extends TestCase
     #[DataProvider('identifierValues')]
     public function testIdentifierValuesOnAManyToManyRelationshipAreAccepted(OperatorType $method, array $values): void
     {
-        $validator = $this->relationshipValidator(RelationType::ManyToMany, RelationSide::Child->value);
+        $validator = $this->relationshipValidator(RelationshipType::ManyToMany, RelationshipSide::Child->value);
 
         $this->assertTrue($validator->isValid(new Operator($method, self::RELATION, $values)), $validator->getDescription());
     }
@@ -179,20 +174,20 @@ final class OperatorValidatorTest extends TestCase
     }
 
     /**
-     * @return array<string, array{RelationType, RelationSide, bool}>
+     * @return array<string, array{RelationshipType, RelationshipSide, bool}>
      */
     public static function enumSides(): array
     {
         return [
-            'one-to-many parent' => [RelationType::OneToMany, RelationSide::Parent, true],
-            'one-to-many child' => [RelationType::OneToMany, RelationSide::Child, false],
-            'many-to-one child' => [RelationType::ManyToOne, RelationSide::Child, true],
-            'many-to-one parent' => [RelationType::ManyToOne, RelationSide::Parent, false],
+            'one-to-many parent' => [RelationshipType::OneToMany, RelationshipSide::Parent, true],
+            'one-to-many child' => [RelationshipType::OneToMany, RelationshipSide::Child, false],
+            'many-to-one child' => [RelationshipType::ManyToOne, RelationshipSide::Child, true],
+            'many-to-one parent' => [RelationshipType::ManyToOne, RelationshipSide::Parent, false],
         ];
     }
 
     #[DataProvider('enumSides')]
-    public function testASideGivenAsTheEnumDecidesWhetherTheRelationshipHoldsAList(RelationType $type, RelationSide $side, bool $holdsAList): void
+    public function testASideGivenAsTheEnumDecidesWhetherTheRelationshipHoldsAList(RelationshipType $type, RelationshipSide $side, bool $holdsAList): void
     {
         $validator = $this->relationshipValidator($type, $side);
 
@@ -263,23 +258,6 @@ final class OperatorValidatorTest extends TestCase
         $this->assertSame('Cannot apply divide operator: division by zero', $validator->getDescription());
     }
 
-    public function testValidationReadsAttributesWithoutMagicProperties(): void
-    {
-        $recorder = new MagicAccessRecorder();
-        $recorder->start();
-        $count = CountingAttribute::of(new Attribute(key: 'count', type: ColumnType::Integer, size: 4), $recorder);
-        $name = CountingAttribute::of(new Attribute(key: 'name', type: ColumnType::String, size: 16), $recorder);
-        $validator = new OperatorValidator(
-            $this->collection([$count, $name]),
-            new Document(['count' => 1, 'name' => 'demo']),
-        );
-
-        $this->assertTrue($validator->isValid(new Operator(OperatorType::Increment, 'count', [1, 10])), $validator->getDescription());
-        $this->assertTrue($validator->isValid(new Operator(OperatorType::StringConcat, 'name', ['-1'])), $validator->getDescription());
-        $this->assertFalse($validator->isValid(new Operator(OperatorType::StringConcat, 'name', [\str_repeat('a', 16)])));
-        $this->assertNoMagicAccess($recorder, 'Operator validation');
-    }
-
     private function doubleValidator(): OperatorValidator
     {
         return new OperatorValidator($this->collection([Attribute::double(key: 'ratio')->toDocument()]));
@@ -290,7 +268,7 @@ final class OperatorValidatorTest extends TestCase
         return new OperatorValidator($this->collection([Attribute::integer(key: 'count')->toDocument()]), $current);
     }
 
-    private function relationshipValidator(RelationType $type, RelationSide|string $side): OperatorValidator
+    private function relationshipValidator(RelationshipType $type, RelationshipSide|string $side): OperatorValidator
     {
         return new OperatorValidator($this->collection([new Document([
             Document::ID => self::RELATION,

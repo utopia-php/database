@@ -304,7 +304,7 @@ final class FullOuterJoinChainTest extends TestCase
         $collectionPermissions = [Permission::create(Role::any()), Permission::read(Role::any())];
         foreach (\array_keys(self::LINKS) as $collection) {
             $main = $collection === 'main';
-            $database->createCollection(new Collection(
+            $database->createCollection(Collection::create(
                 id: $collection,
                 attributes: [Attribute::string(key: self::LINK, size: 16, required: true)],
                 permissions: $main && $documentSecurity ? [Permission::create(Role::any())] : $collectionPermissions,
@@ -330,14 +330,14 @@ final class FullOuterJoinChainTest extends TestCase
         $database = $this->database(native: false);
 
         $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: 'main',
             attributes: [Attribute::string(key: 'name', size: 64, required: true)],
             permissions: $permissions,
             documentSecurity: false,
         ));
         foreach (['b', 'c'] as $collection) {
-            $database->createCollection(new Collection(
+            $database->createCollection(Collection::create(
                 id: $collection,
                 attributes: [
                     Attribute::string(key: 'mainId', size: 64, required: true),

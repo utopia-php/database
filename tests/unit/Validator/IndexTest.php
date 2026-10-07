@@ -6,11 +6,11 @@ use Exception;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Attribute;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Index;
-use Utopia\Database\Validator\Index as IndexValidator;
-use Utopia\Database\Validator\IndexedQueries;
+use Utopia\Database\Validator\IndexDefinition;
+use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\IndexType;
-use Utopia\Query\Schema\Order;
 
 class IndexTest extends TestCase
 {
@@ -28,14 +28,14 @@ class IndexTest extends TestCase
     public function test_attribute_not_found(): void
     {
         $attributes = [
-            Attribute::string(key: 'title', format: ''),
+            Attribute::string(key: 'title'),
         ];
 
         $indexes = [
             Index::key(key: 'index1', attributes: ['not_exist']),
         ];
 
-        $validator = new IndexValidator($attributes, $indexes, 768);
+        $validator = new IndexDefinition($attributes, $indexes, 768);
         $index = $indexes[0];
         $this->assertFalse($validator->isValid($index));
         $this->assertEquals('Invalid index attribute "not_exist" not found', $validator->getDescription());
@@ -47,15 +47,15 @@ class IndexTest extends TestCase
     public function test_fulltext_with_non_string(): void
     {
         $attributes = [
-            Attribute::string(key: 'title', format: ''),
-            Attribute::datetime(key: 'date', signed: false, format: '', filters: ['datetime']),
+            Attribute::string(key: 'title'),
+            Attribute::datetime(key: 'date'),
         ];
 
         $indexes = [
-            Index::fullText(key: 'index1', attributes: ['title', 'date']),
+            Index::fulltext(key: 'index1', attributes: ['title', 'date']),
         ];
 
-        $validator = new IndexValidator($attributes, $indexes, 768);
+        $validator = new IndexDefinition($attributes, $indexes, 768);
         $index = $indexes[0];
         $this->assertFalse($validator->isValid($index));
         $this->assertEquals('Attribute "date" cannot be part of a fulltext index, must be of type string', $validator->getDescription());
@@ -67,14 +67,14 @@ class IndexTest extends TestCase
     public function test_index_length(): void
     {
         $attributes = [
-            Attribute::string(key: 'title', size: 769, format: ''),
+            Attribute::string(key: 'title', size: 769),
         ];
 
         $indexes = [
             Index::key(key: 'index1', attributes: ['title']),
         ];
 
-        $validator = new IndexValidator($attributes, $indexes, 768);
+        $validator = new IndexDefinition($attributes, $indexes, 768);
         $index = $indexes[0];
         $this->assertFalse($validator->isValid($index));
         $this->assertEquals('Index length is longer than the maximum: 768', $validator->getDescription());
@@ -86,15 +86,15 @@ class IndexTest extends TestCase
     public function test_multiple_index_length(): void
     {
         $attributes = [
-            Attribute::string(key: 'title', size: 256, format: ''),
-            Attribute::string(key: 'description', size: 1024, format: ''),
+            Attribute::string(key: 'title', size: 256),
+            Attribute::string(key: 'description', size: 1024),
         ];
 
         $indexes = [
-            Index::fullText(key: 'index1', attributes: ['title']),
+            Index::fulltext(key: 'index1', attributes: ['title']),
         ];
 
-        $validator = new IndexValidator($attributes, $indexes, 768);
+        $validator = new IndexDefinition($attributes, $indexes, 768);
         $index = $indexes[0];
         $this->assertTrue($validator->isValid($index));
 
@@ -111,14 +111,14 @@ class IndexTest extends TestCase
     public function test_empty_attributes(): void
     {
         $attributes = [
-            Attribute::string(key: 'title', size: 769, format: ''),
+            Attribute::string(key: 'title', size: 769),
         ];
 
         $indexes = [
-            Index::key(key: 'index1'),
+            Index::fromArray(['key' => 'index1', 'type' => IndexType::Key]),
         ];
 
-        $validator = new IndexValidator($attributes, $indexes, 768);
+        $validator = new IndexDefinition($attributes, $indexes, 768);
         $index = $indexes[0];
         $this->assertFalse($validator->isValid($index));
         $this->assertEquals('No attributes provided for index', $validator->getDescription());
@@ -130,37 +130,37 @@ class IndexTest extends TestCase
     public function test_object_index_validation(): void
     {
         $attributes = [
-            Attribute::object(key: 'data', required: true, signed: false, format: ''),
-            Attribute::string(key: 'name', format: ''),
+            Attribute::object(key: 'data', required: true),
+            Attribute::string(key: 'name'),
         ];
 
         /** @var array<Index> $emptyIndexes */
         $emptyIndexes = [];
 
         // Validator with supportForObjectIndexes enabled
-        $validator = new IndexValidator($attributes, $emptyIndexes, 768, [], false, false, false, false, supportForObjectIndexes: true);
+        $validator = new IndexDefinition($attributes, $emptyIndexes, 768, [], false, false, false, false, supportForObjectIndexes: true);
 
         // Valid: Object index on single VAR_OBJECT attribute
-        $validIndex = Index::object(key: 'idx_gin_valid', attributes: ['data']);
+        $validIndex = Index::object(key: 'idx_gin_valid', attribute: 'data');
         $this->assertTrue($validator->isValid($validIndex));
 
         // Invalid: Object index on non-object attribute
-        $invalidIndexType = Index::object(key: 'idx_gin_invalid_type', attributes: ['name']);
+        $invalidIndexType = Index::object(key: 'idx_gin_invalid_type', attribute: 'name');
         $this->assertFalse($validator->isValid($invalidIndexType));
         $this->assertStringContainsString('Object index can only be created on object attributes', $validator->getDescription());
 
         // Invalid: Object index on multiple attributes
-        $invalidIndexMulti = Index::object(key: 'idx_gin_multi', attributes: ['data', 'name']);
+        $invalidIndexMulti = Index::fromArray(['key' => 'idx_gin_multi', 'type' => IndexType::Object, 'attributes' => ['data', 'name']]);
         $this->assertFalse($validator->isValid($invalidIndexMulti));
         $this->assertStringContainsString('Object index can be created on a single object attribute', $validator->getDescription());
 
         // Invalid: Object index with orders
-        $invalidIndexOrder = Index::object(key: 'idx_gin_order', attributes: ['data'], orders: [Order::Asc]);
+        $invalidIndexOrder = Index::fromArray(['key' => 'idx_gin_order', 'type' => IndexType::Object, 'attributes' => ['data'], 'orders' => [OrderDirection::Asc]]);
         $this->assertFalse($validator->isValid($invalidIndexOrder));
         $this->assertStringContainsString('Object index do not support explicit orders', $validator->getDescription());
 
         // Validator with supportForObjectIndexes disabled should reject GIN
-        $validatorNoSupport = new IndexValidator($attributes, $emptyIndexes, 768, [], false, false, false, false, false);
+        $validatorNoSupport = new IndexDefinition($attributes, $emptyIndexes, 768, [], false, false, false, false, false);
         $this->assertFalse($validatorNoSupport->isValid($validIndex));
         $this->assertEquals('Object indexes are not supported', $validatorNoSupport->getDescription());
     }
@@ -171,19 +171,19 @@ class IndexTest extends TestCase
     public function test_nested_object_path_index_validation(): void
     {
         $attributes = [
-            Attribute::object(key: 'data', required: true, signed: false, format: ''),
-            Attribute::object(key: 'metadata', signed: false, format: ''),
-            Attribute::string(key: 'name', format: ''),
+            Attribute::object(key: 'data', required: true),
+            Attribute::object(key: 'metadata'),
+            Attribute::string(key: 'name'),
         ];
 
         /** @var array<Index> $emptyIndexes */
         $emptyIndexes = [];
 
         // Validator with supportForObjectIndexes enabled
-        $validator = new IndexValidator($attributes, $emptyIndexes, 768, [], false, false, false, false, true, true, true, true, supportForObjects: true);
+        $validator = new IndexDefinition($attributes, $emptyIndexes, 768, [], false, false, false, false, true, true, true, true, supportForObjects: true);
 
         // InValid: INDEX_OBJECT on nested path (dot notation)
-        $validNestedObjectIndex = Index::object(key: 'idx_nested_object', attributes: ['data.key.nestedKey']);
+        $validNestedObjectIndex = Index::object(key: 'idx_nested_object', attribute: 'data.key.nestedKey');
 
         $this->assertFalse($validator->isValid($validNestedObjectIndex));
 
@@ -196,12 +196,12 @@ class IndexTest extends TestCase
         $this->assertTrue($validator->isValid($validNestedKeyIndex));
 
         // Invalid: Nested path on non-object attribute
-        $invalidNestedPath = Index::object(key: 'idx_invalid_nested', attributes: ['name.key']);
+        $invalidNestedPath = Index::object(key: 'idx_invalid_nested', attribute: 'name.key');
         $this->assertFalse($validator->isValid($invalidNestedPath));
         $this->assertStringContainsString('Index attribute "name.key" is only supported on object attributes', $validator->getDescription());
 
         // Invalid: Nested path with non-existent base attribute
-        $invalidBaseAttribute = Index::object(key: 'idx_invalid_base', attributes: ['nonexistent.key']);
+        $invalidBaseAttribute = Index::object(key: 'idx_invalid_base', attribute: 'nonexistent.key');
         $this->assertFalse($validator->isValid($invalidBaseAttribute));
         $this->assertStringContainsString('Invalid index attribute', $validator->getDescription());
 
@@ -216,14 +216,14 @@ class IndexTest extends TestCase
     public function test_duplicated_attributes(): void
     {
         $attributes = [
-            Attribute::string(key: 'title', format: ''),
+            Attribute::string(key: 'title'),
         ];
 
         $indexes = [
-            Index::fullText(key: 'index1', attributes: ['title', 'title']),
+            Index::fulltext(key: 'index1', attributes: ['title', 'title']),
         ];
 
-        $validator = new IndexValidator($attributes, $indexes, 768);
+        $validator = new IndexDefinition($attributes, $indexes, 768);
         $index = $indexes[0];
         $this->assertFalse($validator->isValid($index));
         $this->assertEquals('Duplicate attributes provided', $validator->getDescription());
@@ -235,14 +235,14 @@ class IndexTest extends TestCase
     public function test_duplicated_attributes_different_order(): void
     {
         $attributes = [
-            Attribute::string(key: 'title', format: ''),
+            Attribute::string(key: 'title'),
         ];
 
         $indexes = [
-            Index::fullText(key: 'index1', attributes: ['title', 'title'], orders: [Order::Asc, Order::Desc]),
+            Index::fulltext(key: 'index1', attributes: ['title', 'title']),
         ];
 
-        $validator = new IndexValidator($attributes, $indexes, 768);
+        $validator = new IndexDefinition($attributes, $indexes, 768);
         $index = $indexes[0];
         $this->assertFalse($validator->isValid($index));
     }
@@ -253,14 +253,14 @@ class IndexTest extends TestCase
     public function test_reserved_index_key(): void
     {
         $attributes = [
-            Attribute::string(key: 'title', format: ''),
+            Attribute::string(key: 'title'),
         ];
 
         $indexes = [
-            Index::fullText(key: 'primary', attributes: ['title']),
+            Index::fulltext(key: 'primary', attributes: ['title']),
         ];
 
-        $validator = new IndexValidator($attributes, $indexes, 768, ['PRIMARY']);
+        $validator = new IndexDefinition($attributes, $indexes, 768, ['PRIMARY']);
         $index = $indexes[0];
         $this->assertFalse($validator->isValid($index));
     }
@@ -271,18 +271,18 @@ class IndexTest extends TestCase
     public function test_index_with_no_attribute_support(): void
     {
         $attributes = [
-            Attribute::string(key: 'title', size: 769, format: ''),
+            Attribute::string(key: 'title', size: 769),
         ];
 
         $indexes = [
             Index::key(key: 'index1', attributes: ['new']),
         ];
 
-        $validator = new IndexValidator(attributes: $attributes, indexes: $indexes, maxLength: 768);
+        $validator = new IndexDefinition(attributes: $attributes, indexes: $indexes, maxLength: 768);
         $index = $indexes[0];
         $this->assertFalse($validator->isValid($index));
 
-        $validator = new IndexValidator(attributes: $attributes, indexes: $indexes, maxLength: 768, supportForAttributes: false);
+        $validator = new IndexDefinition(attributes: $attributes, indexes: $indexes, maxLength: 768, supportForAttributes: false);
         $index = $indexes[0];
         $this->assertTrue($validator->isValid($index));
     }
@@ -293,16 +293,16 @@ class IndexTest extends TestCase
     public function test_trigram_index_validation(): void
     {
         $attributes = [
-            Attribute::string(key: 'name', format: ''),
-            Attribute::string(key: 'description', size: 512, format: ''),
-            Attribute::integer(key: 'age', format: ''),
+            Attribute::string(key: 'name'),
+            Attribute::string(key: 'description', size: 512),
+            Attribute::integer(key: 'age'),
         ];
 
         /** @var array<Index> $emptyIndexes */
         $emptyIndexes = [];
 
         // Validator with supportForTrigramIndexes enabled
-        $validator = new IndexValidator($attributes, $emptyIndexes, 768, [], false, false, false, false, false, false, false, false, supportForTrigramIndexes: true);
+        $validator = new IndexDefinition($attributes, $emptyIndexes, 768, [], false, false, false, false, false, false, false, false, supportForTrigramIndexes: true);
 
         // Valid: Trigram index on single VAR_STRING attribute
         $validIndex = Index::trigram(key: 'idx_trigram_valid', attributes: ['name']);
@@ -323,17 +323,17 @@ class IndexTest extends TestCase
         $this->assertStringContainsString('Trigram index can only be created on string type attributes', $validator->getDescription());
 
         // Invalid: Trigram index with orders
-        $invalidIndexOrder = Index::trigram(key: 'idx_trigram_order', attributes: ['name'], orders: [Order::Asc]);
+        $invalidIndexOrder = Index::fromArray(['key' => 'idx_trigram_order', 'type' => IndexType::Trigram, 'attributes' => ['name'], 'orders' => [OrderDirection::Asc]]);
         $this->assertFalse($validator->isValid($invalidIndexOrder));
         $this->assertStringContainsString('Trigram indexes do not support orders or lengths', $validator->getDescription());
 
         // Invalid: Trigram index with lengths
-        $invalidIndexLength = Index::trigram(key: 'idx_trigram_length', attributes: ['name'], lengths: [128]);
+        $invalidIndexLength = Index::fromArray(['key' => 'idx_trigram_length', 'type' => IndexType::Trigram, 'attributes' => ['name'], 'lengths' => [128]]);
         $this->assertFalse($validator->isValid($invalidIndexLength));
         $this->assertStringContainsString('Trigram indexes do not support orders or lengths', $validator->getDescription());
 
         // Validator with supportForTrigramIndexes disabled should reject trigram
-        $validatorNoSupport = new IndexValidator($attributes, $emptyIndexes, 768, [], false, false, false, false, false, false, false, false, false);
+        $validatorNoSupport = new IndexDefinition($attributes, $emptyIndexes, 768, [], false, false, false, false, false, false, false, false, false);
         $this->assertFalse($validatorNoSupport->isValid($validIndex));
         $this->assertEquals('Trigram indexes are not supported', $validatorNoSupport->getDescription());
     }
@@ -344,15 +344,15 @@ class IndexTest extends TestCase
     public function test_ttl_index_validation(): void
     {
         $attributes = [
-            Attribute::datetime(key: 'expiresAt', signed: false, format: '', filters: ['datetime']),
-            Attribute::string(key: 'name', format: ''),
+            Attribute::datetime(key: 'expiresAt'),
+            Attribute::string(key: 'name'),
         ];
 
         /** @var array<Index> $emptyIndexes */
         $emptyIndexes = [];
 
         // Validator with supportForTTLIndexes enabled
-        $validator = new IndexValidator(
+        $validator = new IndexDefinition(
             $attributes,
             $emptyIndexes,
             768,
@@ -374,36 +374,36 @@ class IndexTest extends TestCase
         );
 
         // Valid: TTL index on single datetime attribute with valid TTL
-        $validIndex = Index::ttl(key: 'idx_ttl_valid', attributes: ['expiresAt'], orders: [Order::Asc], ttl: 3600);
+        $validIndex = Index::ttl(key: 'idx_ttl_valid', attribute: 'expiresAt', ttl: 3600);
         $this->assertTrue($validator->isValid($validIndex));
 
         // Invalid: TTL index with ttl = 0
-        $invalidIndexZero = Index::ttl(key: 'idx_ttl_zero', attributes: ['expiresAt'], orders: [Order::Asc], ttl: 0);
-        $this->assertFalse($validator->isValid($invalidIndexZero));
-        $this->assertEquals('TTL must be at least 1 second', $validator->getDescription());
+        $this->assertTtlRefused(0);
 
         // Invalid: TTL index with TTL < 0
-        $invalidIndexNegative = Index::ttl(key: 'idx_ttl_negative', attributes: ['expiresAt'], orders: [Order::Asc], ttl: -100);
-        $this->assertFalse($validator->isValid($invalidIndexNegative));
-        $this->assertEquals('TTL must be at least 1 second', $validator->getDescription());
+        $this->assertTtlRefused(-100);
+
+        // Invalid: stored TTL index without a TTL
+        $this->assertFalse($validator->isValid(new Document(['$id' => 'idx_ttl_missing', 'type' => IndexType::Ttl->value, 'attributes' => ['expiresAt']])));
+        $this->assertSame('TTL must be at least 1 second', $validator->getDescription());
 
         // Invalid: TTL index on non-datetime attribute
-        $invalidIndexType = Index::ttl(key: 'idx_ttl_invalid_type', attributes: ['name'], orders: [Order::Asc], ttl: 3600);
+        $invalidIndexType = Index::ttl(key: 'idx_ttl_invalid_type', attribute: 'name', ttl: 3600);
         $this->assertFalse($validator->isValid($invalidIndexType));
         $this->assertStringContainsString('TTL index can only be created on datetime attributes', $validator->getDescription());
 
         // Invalid: TTL index on multiple attributes
-        $invalidIndexMulti = Index::ttl(key: 'idx_ttl_multi', attributes: ['expiresAt', 'name'], orders: [Order::Asc, Order::Asc], ttl: 3600);
+        $invalidIndexMulti = Index::fromArray(['key' => 'idx_ttl_multi', 'type' => IndexType::Ttl, 'attributes' => ['expiresAt', 'name'], 'orders' => [OrderDirection::Asc, OrderDirection::Asc], 'ttl' => 3600]);
         $this->assertFalse($validator->isValid($invalidIndexMulti));
         $this->assertStringContainsString('TTL indexes must be created on a single datetime attribute', $validator->getDescription());
 
         // Valid: TTL index with minimum valid TTL (1 second)
-        $validIndexMin = Index::ttl(key: 'idx_ttl_min', attributes: ['expiresAt'], orders: [Order::Asc]);
+        $validIndexMin = Index::ttl(key: 'idx_ttl_min', attribute: 'expiresAt', ttl: 1);
         $this->assertTrue($validator->isValid($validIndexMin));
 
         // Invalid: any additional TTL index when another TTL index already exists
         $indexesWithTTL = [$validIndex];
-        $validatorWithExisting = new IndexValidator(
+        $validatorWithExisting = new IndexDefinition(
             $attributes,
             $indexesWithTTL,
             768,
@@ -424,19 +424,19 @@ class IndexTest extends TestCase
             true   // supportForTTLIndexes
         );
 
-        $duplicateTTLIndex = Index::ttl(key: 'idx_ttl_duplicate', attributes: ['expiresAt'], orders: [Order::Asc], ttl: 7200);
+        $duplicateTTLIndex = Index::ttl(key: 'idx_ttl_duplicate', attribute: 'expiresAt', ttl: 7200);
         $this->assertFalse($validatorWithExisting->isValid($duplicateTTLIndex));
         $this->assertEquals('There can be only one TTL index in a collection', $validatorWithExisting->getDescription());
 
         // Validator with supportForTTLIndexes disabled should reject TTL
-        $validatorNoSupport = new IndexValidator($attributes, $indexesWithTTL, 768, [], false, false, false, false, false, false, false, false, false);
+        $validatorNoSupport = new IndexDefinition($attributes, $indexesWithTTL, 768, [], false, false, false, false, false, false, false, false, false);
         $this->assertFalse($validatorNoSupport->isValid($validIndex));
         $this->assertEquals('TTL indexes are not supported', $validatorNoSupport->getDescription());
     }
 
     public function testIndexWithoutATypeIsRejected(): void
     {
-        $validator = new IndexValidator([Attribute::string(key: 'title', size: 64)], [], 768);
+        $validator = new IndexDefinition([Attribute::string(key: 'title', size: 64)], [], 768);
 
         $this->assertFalse($validator->isValid(new Document([
             Document::ID => 'by_title',
@@ -447,7 +447,7 @@ class IndexTest extends TestCase
 
     public function testTtlIndexWithoutATtlIsRejected(): void
     {
-        $validator = new IndexValidator(
+        $validator = new IndexDefinition(
             attributes: [Attribute::datetime(key: 'expiresAt')],
             indexes: [],
             maxLength: 768,
@@ -464,7 +464,7 @@ class IndexTest extends TestCase
 
     public function testUnknownIndexTypeIsAValidationFailure(): void
     {
-        $validator = new IndexValidator([Attribute::string(key: 'title', size: 64)], [], 768);
+        $validator = new IndexDefinition([Attribute::string(key: 'title', size: 64)], [], 768);
 
         $this->assertFalse($validator->isValid(new Document([
             Document::ID => 'by_title',
@@ -474,7 +474,7 @@ class IndexTest extends TestCase
         $this->assertStringStartsWith('Unknown index type: bogus. Must be one of ', $validator->getDescription());
     }
 
-    public function testStoredIndexOfAnUnknownTypeIsReadLeniently(): void
+    public function testStoredIndexOfAnUnknownTypeIsRefusedOnHydration(): void
     {
         $stored = new Document([
             Document::ID => 'by_title',
@@ -482,13 +482,17 @@ class IndexTest extends TestCase
             'attributes' => ['title'],
         ]);
 
-        $this->assertSame(['title'], Index::fromDocument($stored)->attributes);
-        $this->assertTrue((new IndexedQueries([Attribute::string(key: 'title', size: 64)], [$stored]))->isValid([]));
+        try {
+            Index::fromDocument($stored);
+            $this->fail('A stored index of an unknown type must be refused');
+        } catch (IndexException $error) {
+            $this->assertSame('Unknown index type for index "by_title"', $error->getMessage());
+        }
     }
 
     public function testTextAttributeWithoutASizeIsJudgedAgainstTheTextMaximum(): void
     {
-        $validator = new IndexValidator([Attribute::text(key: 'body')], [], 768);
+        $validator = new IndexDefinition([Attribute::text(key: 'body')], [], 768);
 
         $this->assertTrue($validator->isValid(Index::key(key: 'by_body', attributes: ['body'], lengths: [100])), $validator->getDescription());
 
@@ -498,7 +502,7 @@ class IndexTest extends TestCase
 
     public function testKeyAndUniqueIndexesAreRejectedWithoutAdapterSupport(): void
     {
-        $validator = new IndexValidator(
+        $validator = new IndexDefinition(
             attributes: [Attribute::string(key: 'title', size: 64)],
             indexes: [],
             maxLength: 768,
@@ -519,26 +523,37 @@ class IndexTest extends TestCase
         $this->assertSame('Unique index is not supported', $validator->getDescription());
     }
 
-    public function testIndexTypeWithoutValidationRulesIsRejected(): void
+    public function testStoredLegacyIndexTypeIsValidatedAsAKeyIndex(): void
     {
-        $validator = new IndexValidator([Attribute::string(key: 'title', size: 64)], [], 768);
+        $validator = new IndexDefinition([Attribute::string(key: 'title', size: 64)], [], 768);
+        $stored = new Document([Document::ID => 'by_title', 'type' => IndexType::Index->value, 'attributes' => ['title']]);
 
-        $this->assertFalse($validator->isValid(Index::index(key: 'by_title', attributes: ['title'])));
-        $this->assertStringStartsWith('Unknown index type: index. Must be one of ', $validator->getDescription());
+        $this->assertSame(IndexType::Key, Index::fromDocument($stored)->type);
+        $this->assertTrue($validator->isValid($stored), $validator->getDescription());
     }
 
     public function testOrderOnAnArrayAttributeIsRejected(): void
     {
-        $validator = new IndexValidator(
+        $validator = new IndexDefinition(
             attributes: [Attribute::string(key: 'tags', size: 64, array: true)],
             indexes: [],
             maxLength: 768,
             supportForArrayIndexes: true,
         );
 
-        $this->assertFalse($validator->isValid(Index::key(key: 'by_tags', attributes: ['tags'], lengths: [64], orders: [Order::Asc])));
-        $this->assertSame('Invalid index order "'.Order::Asc->value.'" on array attribute "tags"', $validator->getDescription());
+        $this->assertFalse($validator->isValid(Index::key(key: 'by_tags', attributes: ['tags'], lengths: [64], orders: [OrderDirection::Asc])));
+        $this->assertSame('Invalid index order "'.OrderDirection::Asc->value.'" on array attribute "tags"', $validator->getDescription());
 
         $this->assertTrue($validator->isValid(Index::key(key: 'by_tags', attributes: ['tags'], lengths: [64])), $validator->getDescription());
+    }
+
+    private function assertTtlRefused(int $ttl): void
+    {
+        try {
+            Index::fromArray(['key' => 'idx_ttl', 'type' => IndexType::Ttl, 'attributes' => ['expiresAt'], 'ttl' => $ttl]);
+            $this->fail('A TTL index with a TTL of '.$ttl.' must be refused');
+        } catch (IndexException $error) {
+            $this->assertSame('TTL must be at least 1 second', $error->getMessage());
+        }
     }
 }

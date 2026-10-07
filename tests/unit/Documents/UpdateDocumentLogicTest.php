@@ -109,7 +109,7 @@ class UpdateDocumentLogicTest extends TestCase
                     return $existingDoc;
                 }
                 if ($col->getId() === Database::METADATA && $docId === Database::METADATA) {
-                    return new Document(Database::collectionDefinition());
+                    return Database::collectionDefinition();
                 }
 
                 return new Document();

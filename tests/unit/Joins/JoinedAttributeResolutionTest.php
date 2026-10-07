@@ -20,7 +20,6 @@ use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
-use Utopia\Query\Schema\IndexType;
 
 /**
  * A bare aggregate or groupBy attribute names the main collection's attribute when the main
@@ -138,7 +137,7 @@ final class JoinedAttributeResolutionTest extends TestCase
             Attribute::string(key: 'customerId', size: 64),
             Attribute::string(key: 'body', size: 256),
         ], [
-            new Index(key: 'body_fulltext', type: IndexType::Fulltext, attributes: ['body']),
+            Index::fulltext(key: 'body_fulltext', attributes: ['body']),
         ]);
         $this->createCollection('profiles', [
             Attribute::string(key: 'customerId', size: 64),
@@ -366,7 +365,7 @@ final class JoinedAttributeResolutionTest extends TestCase
      */
     private function createCollection(string $id, array $attributes, array $indexes = []): void
     {
-        $this->database->createCollection(new Collection(
+        $this->database->createCollection(Collection::create(
             id: $id,
             attributes: $attributes,
             indexes: $indexes,

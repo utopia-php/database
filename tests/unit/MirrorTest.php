@@ -19,11 +19,13 @@ use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
+use Utopia\Database\AttributeUpdate;
 use Utopia\Database\Cache\Invalidator;
 use Utopia\Database\Cache\QueryCache;
 use Utopia\Database\Capability;
 use Utopia\Database\Change;
 use Utopia\Database\Collection;
+use Utopia\Database\CollectionUpdate;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
@@ -99,9 +101,9 @@ class MirrorTest extends TestCase
             ->create();
 
         $this->assertTrue($source->exists('utopiaTests'));
-        $this->assertTrue($source->exists('utopiaTests', Database::METADATA));
+        $this->assertTrue($source->collectionExists(Database::METADATA, 'utopiaTests'));
         $this->assertTrue($destination->exists('utopiaTests'));
-        $this->assertTrue($destination->exists('utopiaTests', Database::METADATA));
+        $this->assertTrue($destination->collectionExists(Database::METADATA, 'utopiaTests'));
     }
 
     public function testListCollectionsHidesSourceOnlyUpgrades(): void
@@ -113,7 +115,7 @@ class MirrorTest extends TestCase
             ->setNamespace('myapp')
             ->create();
 
-        $mirror->createCollection(new Collection(id: 'actors', permissions: [
+        $mirror->createCollection(Collection::create(id: 'actors', permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
         ]));
@@ -122,7 +124,7 @@ class MirrorTest extends TestCase
         $ids = \array_map(static fn ($collection): string => $collection->getId(), $listed);
 
         $this->assertSame(['actors'], $ids);
-        $this->assertFalse($source->getCollection('upgrades')->isEmpty());
+        $this->assertNotNull($source->findCollection('upgrades'));
     }
 
     public function testSkipValidationRestoresSourceAndDestination(): void
@@ -182,7 +184,7 @@ class MirrorTest extends TestCase
         $mirror = new Mirror($source, self::sqlite());
         $mirror->setDatabase('utopiaTests')->setNamespace('wrapped_'.\uniqid())->create();
         $authorization->skip(function () use ($mirror): void {
-            $mirror->createCollection(new Collection(
+            $mirror->createCollection(Collection::create(
                 id: self::COLLECTION,
                 attributes: [Attribute::string(key: 'title', size: 64)],
                 permissions: [Permission::create(Role::any())],
@@ -787,8 +789,8 @@ class MirrorTest extends TestCase
 
     private static function meta(Database $database): mixed
     {
-        $collection = new Collection(id: self::COLLECTION, attributes: [
-            Attribute::string(key: 'meta', size: 64, filters: ['json']),
+        $collection = Collection::create(id: self::COLLECTION, attributes: [
+            Attribute::string(key: 'meta', size: 64, filters: [\Utopia\Database\Filter::Json]),
         ]);
 
         return $database->decode($collection, new Document(['meta' => '{"filtered":true}']))->getAttribute('meta');
@@ -801,7 +803,7 @@ class MirrorTest extends TestCase
             ->setNamespace('mirror_'.\uniqid())
             ->create();
 
-        $mirror->createCollection(new Collection(
+        $mirror->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [
                 Attribute::string(key: 'title', size: 64),
@@ -1048,8 +1050,8 @@ class MirrorTest extends TestCase
             },
             [false, false],
         ];
-        yield 'exists' => [
-            static fn (Mirror $mirror): mixed => $mirror->exists('mirror', self::COLLECTION),
+        yield 'collectionExists' => [
+            static fn (Mirror $mirror): mixed => $mirror->collectionExists(self::COLLECTION, 'mirror'),
             true,
         ];
         yield 'increaseDocumentAttribute' => [
@@ -1099,11 +1101,11 @@ class MirrorTest extends TestCase
             $destination,
         );
 
-        $created = $mirror->createCollection(new Collection(id: 'filtered', attributes: [Attribute::string(key: 'title', size: 64)]));
+        $created = $mirror->createCollection(Collection::create(id: 'filtered', attributes: [Attribute::string(key: 'title', size: 64)]));
 
         $this->assertSame([['beforeCreateCollection', 'filtered', 'filtered']], $calls->getArrayCopy());
         $this->assertTrue($created->getAttribute('filtered'), 'The filtered collection is what the caller receives');
-        $this->assertFalse($destination->getCollection('filtered')->isEmpty());
+        $this->assertNotNull($destination->findCollection('filtered'));
         $this->assertSame('upgraded', self::upgradeStatus($mirror, 'filtered'));
     }
 
@@ -1116,12 +1118,12 @@ class MirrorTest extends TestCase
         $mirror = $this->filtered([self::recordingFilter($calls, static fn (): ?Document => null)], $source, $destination);
         $errors = self::errors($mirror);
 
-        $created = $mirror->createCollection(new Collection(id: 'skipped', attributes: [Attribute::string(key: 'title', size: 64)]));
+        $created = $mirror->createCollection(Collection::create(id: 'skipped', attributes: [Attribute::string(key: 'title', size: 64)]));
 
         $this->assertSame([['beforeCreateCollection', 'skipped', 'skipped']], $calls->getArrayCopy());
         $this->assertSame('skipped', $created->getId());
-        $this->assertFalse($source->getCollection('skipped')->isEmpty());
-        $this->assertTrue($destination->getCollection('skipped')->isEmpty());
+        $this->assertNotNull($source->findCollection('skipped'));
+        $this->assertNull($destination->findCollection('skipped'));
         $this->assertNull(self::upgradeStatus($mirror, 'skipped'), 'Documents of a collection the destination lacks must not be replicated');
         $this->assertSame([], $errors->getArrayCopy());
     }
@@ -1137,10 +1139,10 @@ class MirrorTest extends TestCase
             $destination,
         );
 
-        $updated = $mirror->updateCollection(self::COLLECTION, [Permission::read(Role::users())], false);
+        $updated = $mirror->updateCollection(self::COLLECTION, new CollectionUpdate(permissions: [Permission::read(Role::users())], documentSecurity: false));
 
         $this->assertSame([['beforeUpdateCollection', self::COLLECTION, self::COLLECTION]], $calls->getArrayCopy());
-        $this->assertTrue($updated->getAttribute('filtered'), 'The filtered collection is what the caller receives');
+        $this->assertNull($updated->getAttribute('filtered'), 'The caller receives the collection the source stored');
         $this->assertSame([Permission::read(Role::users())], $destination->getCollection(self::COLLECTION)->getPermissions());
         $this->assertFalse($destination->getCollection(self::COLLECTION)->getAttribute('documentSecurity'));
     }
@@ -1152,7 +1154,7 @@ class MirrorTest extends TestCase
         $mirror = $this->filtered([self::recordingFilter(new ArrayObject(), static fn (): ?Document => null)], $source, $destination);
         $permissions = $destination->getCollection(self::COLLECTION)->getPermissions();
 
-        $updated = $mirror->updateCollection(self::COLLECTION, [Permission::read(Role::users())], false);
+        $updated = $mirror->updateCollection(self::COLLECTION, new CollectionUpdate(permissions: [Permission::read(Role::users())], documentSecurity: false));
 
         $this->assertFalse($updated->getAttribute('documentSecurity'));
         $this->assertSame([Permission::read(Role::users())], $source->getCollection(self::COLLECTION)->getPermissions());
@@ -1165,9 +1167,9 @@ class MirrorTest extends TestCase
         $source = self::sqlite();
         $mirror = $this->filtered([], $source, self::sqlite());
         $errors = self::errors($mirror);
-        $source->createCollection(new Collection(id: 'sourceOnly', attributes: [Attribute::string(key: 'title', size: 64)]));
+        $source->createCollection(Collection::create(id: 'sourceOnly', attributes: [Attribute::string(key: 'title', size: 64)]));
 
-        $updated = $mirror->updateCollection('sourceOnly', [Permission::read(Role::any())], false);
+        $updated = $mirror->updateCollection('sourceOnly', new CollectionUpdate(permissions: [Permission::read(Role::any())], documentSecurity: false));
 
         $this->assertFalse($updated->getAttribute('documentSecurity'));
         $this->assertSame([Permission::read(Role::any())], $source->getCollection('sourceOnly')->getPermissions());
@@ -1191,7 +1193,7 @@ class MirrorTest extends TestCase
     private static function upgradeStatus(Mirror $mirror, string $collection): mixed
     {
         $source = $mirror->getSource();
-        if ($source->getCollection('upgrades')->isEmpty()) {
+        if ($source->findCollection('upgrades') === null) {
             return null;
         }
 
@@ -1368,7 +1370,7 @@ class MirrorTest extends TestCase
         $mirror = $this->filtered([self::recordingFilter($calls, $transform)], $source, $destination);
         $errors = self::errors($mirror);
 
-        $this->assertTrue($mirror->createAttribute(self::COLLECTION, Attribute::string(key: 'summary', size: 64)));
+        $mirror->createAttribute(self::COLLECTION, Attribute::string(key: 'summary', size: 64));
 
         $this->assertSame([['beforeCreateAttribute', self::COLLECTION, 'summary']], $calls->getArrayCopy());
         $this->assertSame(64, self::attribute($source, 'summary')?->size);
@@ -1390,10 +1392,10 @@ class MirrorTest extends TestCase
         )], $source, $destination);
         $errors = self::errors($mirror);
 
-        $this->assertTrue($mirror->createAttributes(self::COLLECTION, [
+        $mirror->createAttributes(self::COLLECTION, [
             Attribute::string(key: 'dropped', size: 64),
             Attribute::string(key: 'resized', size: 64),
-        ]));
+        ]);
 
         $this->assertSame([
             ['beforeCreateAttribute', self::COLLECTION, 'dropped'],
@@ -1417,10 +1419,10 @@ class MirrorTest extends TestCase
         $mirror = $this->filtered([self::recordingFilter($calls, $transform)], $source, $destination);
         $errors = self::errors($mirror);
 
-        $updated = $mirror->updateAttribute(self::COLLECTION, 'title', size: 100);
+        $updated = $mirror->updateAttribute(self::COLLECTION, 'title', new AttributeUpdate(size: 100));
 
         $this->assertSame([['beforeUpdateAttribute', self::COLLECTION, 'title']], $calls->getArrayCopy());
-        $this->assertSame($size ?? 100, $updated->getAttribute('size'), 'The caller receives the filtered definition, or the source one when the filter skips');
+        $this->assertSame(100, $updated->size, 'The caller receives the definition the source stored');
         $this->assertSame(100, self::attribute($source, 'title')?->size);
         $this->assertSame($size ?? 64, self::attribute($destination, 'title')?->size);
         $this->assertSame([], $errors->getArrayCopy());
@@ -1452,7 +1454,7 @@ class MirrorTest extends TestCase
         $mirror = $this->filtered([self::recordingFilter($calls, $transform)], $source, $destination);
         $errors = self::errors($mirror);
 
-        $this->assertTrue($mirror->createIndex(self::COLLECTION, Index::key(key: 'titles', attributes: ['title'])));
+        $mirror->createIndex(self::COLLECTION, Index::key(key: 'titles', attributes: ['title']));
 
         $this->assertSame([['beforeCreateIndex', self::COLLECTION, 'titles']], $calls->getArrayCopy());
         $this->assertSame(['title'], self::index($source, 'titles')?->attributes);
@@ -1467,23 +1469,22 @@ class MirrorTest extends TestCase
     {
         yield 'createAttribute' => [
             'createAttribute',
-            static fn (Mirror $mirror): mixed => $mirror->createAttribute(self::COLLECTION, Attribute::string(key: 'summary', size: 64)),
+            static fn (Mirror $mirror): Attribute => $mirror->createAttribute(self::COLLECTION, Attribute::string(key: 'summary', size: 64)),
         ];
         yield 'createAttributes' => [
             'createAttributes',
-            static fn (Mirror $mirror): mixed => $mirror->createAttributes(self::COLLECTION, [Attribute::string(key: 'summary', size: 64)]),
+            static fn (Mirror $mirror): array => $mirror->createAttributes(self::COLLECTION, [Attribute::string(key: 'summary', size: 64)]),
         ];
         yield 'deleteAttribute' => [
             'deleteAttribute',
-            static function (Mirror $mirror, Database $source): mixed {
+            static function (Mirror $mirror, Database $source): void {
                 $source->createAttribute(self::COLLECTION, Attribute::string(key: 'summary', size: 64));
-
-                return $mirror->deleteAttribute(self::COLLECTION, 'summary');
+                $mirror->deleteAttribute(self::COLLECTION, 'summary');
             },
         ];
         yield 'createIndex' => [
             'createIndex',
-            static function (Mirror $mirror, Database $source, Database $destination): mixed {
+            static function (Mirror $mirror, Database $source, Database $destination): Index {
                 $destination->createIndex(self::COLLECTION, Index::key(key: 'titles', attributes: ['title']));
 
                 return $mirror->createIndex(self::COLLECTION, Index::key(key: 'titles', attributes: ['title']));
@@ -1491,10 +1492,9 @@ class MirrorTest extends TestCase
         ];
         yield 'deleteIndex' => [
             'deleteIndex',
-            static function (Mirror $mirror, Database $source): mixed {
+            static function (Mirror $mirror, Database $source): void {
                 $source->createIndex(self::COLLECTION, Index::key(key: 'titles', attributes: ['title']));
-
-                return $mirror->deleteIndex(self::COLLECTION, 'titles');
+                $mirror->deleteIndex(self::COLLECTION, 'titles');
             },
         ];
     }
@@ -1513,7 +1513,7 @@ class MirrorTest extends TestCase
             $destination->deleteCollection(self::COLLECTION);
         }
 
-        $this->assertTrue($change($mirror, $source, $destination));
+        $change($mirror, $source, $destination);
 
         $this->assertCount(1, $errors);
         $this->assertSame([$action], \array_column($errors->getArrayCopy(), 0));
@@ -1751,7 +1751,7 @@ class MirrorTest extends TestCase
         $namespace = 'mirror_'.\uniqid();
         foreach ([$source, $destination] as $database) {
             $database->setDatabase('mirror')->setNamespace($namespace)->create();
-            $database->createCollection(new Collection(
+            $database->createCollection(Collection::create(
                 id: self::COLLECTION,
                 attributes: [Attribute::string(key: 'title', size: 64), Attribute::integer(key: 'views')],
                 permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any()), Permission::delete(Role::any())],
@@ -1769,7 +1769,7 @@ class MirrorTest extends TestCase
             $mirror->createDocuments(self::COLLECTION, [new Document([Document::ID => 'fourth', 'title' => 'fourth'])]);
         });
 
-        $this->assertTrue($source->getCollection('upgrades')->isEmpty());
+        $this->assertNull($source->findCollection('upgrades'));
         $this->assertSame(['updated', 'second', null, 'fourth'], \array_map(static fn (string $id): ?string => self::storedTitle($source, $id), ['first', 'second', 'third', 'fourth']));
         $this->assertSame(['first', null, 'third', null], \array_map(static fn (string $id): ?string => self::storedTitle($destination, $id), ['first', 'second', 'third', 'fourth']));
         $this->assertSame([], $errors->getArrayCopy());
@@ -1781,7 +1781,7 @@ class MirrorTest extends TestCase
         $mirror = $this->seed(new Mirror($source));
         $errors = self::errors($mirror);
 
-        $updated = $mirror->updateCollection(self::COLLECTION, [Permission::read(Role::users())], false);
+        $updated = $mirror->updateCollection(self::COLLECTION, new CollectionUpdate(permissions: [Permission::read(Role::users())], documentSecurity: false));
 
         $this->assertSame([Permission::read(Role::users())], $updated->getPermissions());
         $this->assertFalse($updated->getAttribute('documentSecurity'));
@@ -1796,31 +1796,34 @@ class MirrorTest extends TestCase
     {
         yield 'createAttribute' => [
             static fn (Mirror $mirror, Database $source): array => [
-                $mirror->createAttribute(self::COLLECTION, Attribute::string(key: 'summary', size: 64)),
+                $mirror->createAttribute(self::COLLECTION, Attribute::string(key: 'summary', size: 64))->key,
                 self::attribute($source, 'summary')?->size,
             ],
-            [true, 64],
+            ['summary', 64],
         ];
         yield 'createAttributes' => [
             static fn (Mirror $mirror, Database $source): array => [
-                $mirror->createAttributes(self::COLLECTION, [Attribute::string(key: 'summary', size: 64), Attribute::string(key: 'subtitle', size: 32)]),
+                \array_map(
+                    static fn (Attribute $attribute): string => $attribute->key,
+                    $mirror->createAttributes(self::COLLECTION, [Attribute::string(key: 'summary', size: 64), Attribute::string(key: 'subtitle', size: 32)]),
+                ),
                 [self::attribute($source, 'summary')?->size, self::attribute($source, 'subtitle')?->size],
             ],
-            [true, [64, 32]],
+            [['summary', 'subtitle'], [64, 32]],
         ];
         yield 'updateAttribute' => [
             static fn (Mirror $mirror, Database $source): array => [
-                $mirror->updateAttribute(self::COLLECTION, 'title', size: 100)->getAttribute('size'),
+                $mirror->updateAttribute(self::COLLECTION, 'title', new AttributeUpdate(size: 100))->size,
                 self::attribute($source, 'title')?->size,
             ],
             [100, 100],
         ];
         yield 'createIndex' => [
             static fn (Mirror $mirror, Database $source): array => [
-                $mirror->createIndex(self::COLLECTION, Index::key(key: 'titles', attributes: ['title'])),
+                $mirror->createIndex(self::COLLECTION, Index::key(key: 'titles', attributes: ['title']))->key,
                 self::index($source, 'titles')?->attributes,
             ],
-            [true, ['title']],
+            ['titles', ['title']],
         ];
         yield 'upsertDocumentsWithIncrease' => [
             static fn (Mirror $mirror, Database $source): array => [
@@ -1830,19 +1833,22 @@ class MirrorTest extends TestCase
             [1, 'upserted'],
         ];
         yield 'deleteAttribute' => [
-            static fn (Mirror $mirror, Database $source): array => [
-                $mirror->deleteAttribute(self::COLLECTION, 'views'),
-                self::attribute($source, 'views'),
-            ],
-            [true, null],
+            static function (Mirror $mirror, Database $source): array {
+                $mirror->deleteAttribute(self::COLLECTION, 'views');
+
+                return [self::attribute($source, 'views'), self::attribute($source, 'title')?->key];
+            },
+            [null, 'title'],
         ];
         yield 'deleteIndex' => [
             static function (Mirror $mirror, Database $source): array {
                 $source->createIndex(self::COLLECTION, Index::key(key: 'titles', attributes: ['title']));
 
-                return [$mirror->deleteIndex(self::COLLECTION, 'titles'), self::index($source, 'titles')];
+                $mirror->deleteIndex(self::COLLECTION, 'titles');
+
+                return [self::index($source, 'titles'), self::attribute($source, 'title')?->key];
             },
-            [true, null],
+            [null, 'title'],
         ];
         yield 'updateDocument' => [
             static fn (Mirror $mirror, Database $source): array => [
@@ -1889,8 +1895,8 @@ class MirrorTest extends TestCase
         $mirror->createIndex(self::COLLECTION, Index::key(key: 'titles', attributes: ['title']));
         $calls->exchangeArray([]);
 
-        $this->assertTrue($mirror->deleteIndex(self::COLLECTION, 'titles'));
-        $this->assertTrue($mirror->deleteAttribute(self::COLLECTION, 'views'));
+        $mirror->deleteIndex(self::COLLECTION, 'titles');
+        $mirror->deleteAttribute(self::COLLECTION, 'views');
 
         $this->assertSame([
             ['beforeDeleteIndex', self::COLLECTION, 'titles'],
@@ -1909,7 +1915,7 @@ class MirrorTest extends TestCase
 
     private static function attribute(Database $database, string $key): ?Attribute
     {
-        foreach ($database->getCollection(self::COLLECTION)->attributes as $attribute) {
+        foreach ($database->getCollection(self::COLLECTION)->attributes() as $attribute) {
             if ($attribute->key === $key) {
                 return $attribute;
             }
@@ -1920,7 +1926,7 @@ class MirrorTest extends TestCase
 
     private static function index(Database $database, string $key): ?Index
     {
-        foreach ($database->getCollection(self::COLLECTION)->indexes as $index) {
+        foreach ($database->getCollection(self::COLLECTION)->indexes() as $index) {
             if ($index->key === $key) {
                 return $index;
             }

@@ -212,7 +212,7 @@ final class SkipDuplicatesPermissionTest extends TestCase
             ->setDatabase(self::NAMESPACE)
             ->setNamespace(self::NAMESPACE);
         $this->database->create();
-        $this->database->createCollection(new Collection(
+        $this->database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [
                 Attribute::integer(key: self::RANK),
@@ -265,7 +265,7 @@ final class SkipDuplicatesPermissionTest extends TestCase
             ->setTenantPerDocument($tenantPerDocument)
             ->addHook(new Permissions());
         $this->database->create();
-        $this->database->createCollection(new Collection(
+        $this->database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [
                 Attribute::integer(key: self::RANK),

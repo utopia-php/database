@@ -20,7 +20,6 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
-use Utopia\Database\RelationType;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Pools\Pool as UtopiaPool;
 
@@ -41,7 +40,7 @@ final class PoolDelegationTest extends TestCase
             'internal casting' => [static fn (Pool $pool): mixed => $pool->castingBefore(new Document(), new Document()), 'Adapter does not support internal casting'],
             'UTC casting' => [static fn (Pool $pool): mixed => $pool->setUTCDatetime('2026-01-01'), 'Adapter does not support UTC casting'],
             'connection id' => [static fn (Pool $pool): mixed => $pool->getConnectionId(), 'Adapter does not support connection id'],
-            'relationships' => [static fn (Pool $pool): mixed => $pool->createRelationship(new Relationship(collection: 'books', relatedCollection: 'authors', type: RelationType::OneToOne, key: 'author')), 'Adapter does not support relationships'],
+            'relationships' => [static fn (Pool $pool): mixed => $pool->createRelationship('books', Relationship::oneToOne(relatedCollection: 'authors', key: 'author')), 'Adapter does not support relationships'],
         ];
     }
 
@@ -97,7 +96,7 @@ final class PoolDelegationTest extends TestCase
 
         $rows = $database->getAuthorization()->skip(static function () use ($database): array|int {
             $database->create();
-            $database->createCollection(new Collection(
+            $database->createCollection(Collection::create(
                 id: 'books',
                 attributes: [Attribute::string('title', size: 64)],
                 documentSecurity: false,

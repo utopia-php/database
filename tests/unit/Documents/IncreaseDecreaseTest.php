@@ -14,6 +14,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -106,7 +107,7 @@ class IncreaseDecreaseTest extends TestCase
                     return $collection;
                 }
                 if ($col->getId() === Database::METADATA && $docId === Database::METADATA) {
-                    return new Document(Database::collectionDefinition());
+                    return Database::collectionDefinition();
                 }
                 if ($col->getId() === $collectionId && $docId === $existingDoc->getId()) {
                     return $existingDoc;
@@ -268,7 +269,8 @@ class IncreaseDecreaseTest extends TestCase
             $this->numericAttribute('sequence', $type),
         ]);
 
-        $this->expectException(TypeException::class);
+        $this->expectException(StructureException::class);
+        $this->expectExceptionMessage('Unknown attribute type: '.$type->value);
         $this->database->increaseDocumentAttribute('testCol', 'doc1', 'sequence');
     }
 
@@ -279,7 +281,8 @@ class IncreaseDecreaseTest extends TestCase
             $this->numericAttribute('sequence', $type),
         ]);
 
-        $this->expectException(TypeException::class);
+        $this->expectException(StructureException::class);
+        $this->expectExceptionMessage('Unknown attribute type: '.$type->value);
         $this->database->decreaseDocumentAttribute('testCol', 'doc1', 'sequence');
     }
 

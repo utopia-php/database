@@ -7,8 +7,11 @@ use Tests\Unit\Support\CountingMemory;
 use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Cache\Cache;
 use Utopia\Database\Attribute;
+use Utopia\Database\AttributeUpdate;
 use Utopia\Database\Collection;
+use Utopia\Database\CollectionUpdate;
 use Utopia\Database\Database;
+use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
@@ -27,7 +30,7 @@ final class DefinitionModelCacheTest extends TestCase
         $database->createAttribute(self::COLLECTION, Attribute::integer(key: 'pages'));
         $this->assertSame(['title', 'pages'], $this->cachedRead($database, $adapter)['attributes']);
 
-        $database->updateAttribute(self::COLLECTION, 'title', size: 128);
+        $database->updateAttribute(self::COLLECTION, 'title', new AttributeUpdate(size: 128));
         $read = $this->cachedRead($database, $adapter);
         $this->assertSame(128, $read['sizes']['title']);
 
@@ -67,9 +70,10 @@ final class DefinitionModelCacheTest extends TestCase
         $expected = $this->cachedRead($database, $adapter);
 
         $collection = $database->getCollection(self::COLLECTION);
-        $attribute = $collection->attributes[0];
-        $attribute->key = 'renamed';
-        $attribute->setAttribute('size', 1);
+        /** @var list<Document> $attributes */
+        $attributes = $collection->getAttribute('attributes');
+        $attributes[0]->setAttribute('key', 'renamed');
+        $attributes[0]->setAttribute('size', 1);
         $collection->setAttribute('name', 'changed');
         $collection->setAttribute('attributes', []);
 
@@ -84,7 +88,7 @@ final class DefinitionModelCacheTest extends TestCase
 
         $this->assertSame(['any'], $database->getCollection(self::COLLECTION)->getRead());
 
-        $database->updateCollection(self::COLLECTION, [Permission::read(Role::users()), Permission::update(Role::any())], false);
+        $database->updateCollection(self::COLLECTION, new CollectionUpdate(permissions: [Permission::read(Role::users()), Permission::update(Role::any())], documentSecurity: false));
         $this->cachedRead($database, $adapter);
         $collection = $database->getCollection(self::COLLECTION);
         $this->assertSame(['users'], $collection->getRead());
@@ -109,15 +113,15 @@ final class DefinitionModelCacheTest extends TestCase
         $this->assertSame(0, $adapter->metadataReads, 'the definition was not served by the cache');
 
         $sizes = [];
-        foreach ($collection->attributes as $attribute) {
+        foreach ($collection->attributes() as $attribute) {
             $sizes[$attribute->key] = $attribute->size;
         }
 
         return [
-            'attributes' => \array_map(static fn (Attribute $attribute): string => $attribute->key, $collection->attributes),
+            'attributes' => \array_map(static fn (Attribute $attribute): string => $attribute->key, $collection->attributes()),
             'sizes' => $sizes,
-            'indexes' => \array_map(static fn (Index $index): string => $index->key, $collection->indexes),
-            'name' => $collection->name,
+            'indexes' => \array_map(static fn (Index $index): string => $index->key, $collection->indexes()),
+            'name' => $collection->name(),
         ];
     }
 
@@ -126,7 +130,7 @@ final class DefinitionModelCacheTest extends TestCase
         $database = new Database($adapter, $cache);
         $database->setDatabase('definitions')->setNamespace('definitions_'.\uniqid());
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [Attribute::string(key: 'title', size: 64)],
             permissions: [Permission::create(Role::any()), Permission::read(Role::any())],

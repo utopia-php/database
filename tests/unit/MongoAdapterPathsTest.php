@@ -18,8 +18,8 @@ use Utopia\Database\Index;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
 use Utopia\Database\Relationship;
-use Utopia\Database\RelationSide;
-use Utopia\Database\RelationType;
+use Utopia\Database\RelationshipSide;
+use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Mongo\Client;
@@ -49,8 +49,8 @@ final class MongoAdapterPathsTest extends TestCase
         });
         $adapter = $this->adapter();
 
-        $adapter->updateRelationship(new Relationship(collection: 'books', relatedCollection: 'authors', type: RelationType::ManyToMany, twoWay: true, key: 'authors', twoWayKey: 'books', side: RelationSide::Parent), 'writers');
-        $adapter->updateRelationship(new Relationship(collection: 'authors', relatedCollection: 'books', type: RelationType::ManyToMany, twoWay: true, key: 'books', twoWayKey: 'authors', side: RelationSide::Child), 'titles');
+        $adapter->updateRelationship('books', Relationship::manyToMany(relatedCollection: 'authors', twoWay: true, key: 'authors', twoWayKey: 'books'), RelationshipSide::Parent, new RelationshipUpdate(key: 'writers'));
+        $adapter->updateRelationship('authors', Relationship::manyToMany(relatedCollection: 'books', twoWay: true, key: 'books', twoWayKey: 'authors'), RelationshipSide::Child, new RelationshipUpdate(key: 'titles'));
 
         $this->assertSame([
             [self::NAMESPACE.'__11_22', ['$rename' => ['authors' => 'writers']]],
@@ -62,7 +62,7 @@ final class MongoAdapterPathsTest extends TestCase
     {
         $adapter = $this->adapter();
 
-        $adapter->createIndex('books', Index::fullText(key: 'by_text', attributes: ['title']), [], ['locale' => 'en']);
+        $adapter->createIndex('books', Index::fulltext(key: 'by_text', attributes: ['title']), [], ['locale' => 'en']);
         $adapter->createIndex('books', Index::key(key: 'by_title', attributes: ['title']), [], ['locale' => 'en']);
 
         $specifications = \array_map(static fn (array $arguments): mixed => \is_array($arguments[1] ?? null) ? ($arguments[1][0] ?? null) : null, $this->argumentsOf('createIndexes'));

@@ -105,7 +105,7 @@ final class SQLiteLikeEscapeTest extends TestCase
             ->setAuthorization(new Authorization());
         $database->create();
 
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [Attribute::string('name', size: 64)],
             permissions: [

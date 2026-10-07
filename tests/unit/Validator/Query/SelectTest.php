@@ -4,9 +4,12 @@ namespace Tests\Unit\Validator\Query;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Utopia\Database\Attribute;
 use Utopia\Database\Document;
 use Utopia\Database\Exception;
 use Utopia\Database\Query;
+use Utopia\Database\Relationship;
+use Utopia\Database\RelationshipSide;
 use Utopia\Database\Validator\Query\Select;
 use Utopia\Query\Method;
 use Utopia\Query\Schema\ColumnType;
@@ -28,12 +31,7 @@ class SelectTest extends TestCase
                     'type' => ColumnType::String->value,
                     'array' => false,
                 ]),
-                new Document([
-                    '$id' => 'artist',
-                    'key' => 'artist',
-                    'type' => ColumnType::Relationship->value,
-                    'array' => false,
-                ]),
+                Attribute::relationship('artist', Relationship::manyToOne('artists'), RelationshipSide::Parent)->toDocument(),
             ],
         );
     }

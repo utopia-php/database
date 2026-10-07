@@ -6,7 +6,8 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Attribute;
 use Utopia\Database\Index;
-use Utopia\Database\Validator\Index as IndexValidator;
+use Utopia\Database\IntegerWidth;
+use Utopia\Database\Validator\IndexDefinition;
 
 class IndexFloatLengthTest extends TestCase
 {
@@ -26,7 +27,7 @@ class IndexFloatLengthTest extends TestCase
     #[DataProvider('eightByteNumbers')]
     public function test_index_over_the_byte_limit_is_rejected(Attribute $number): void
     {
-        $validator = new IndexValidator(
+        $validator = new IndexDefinition(
             attributes: [Attribute::string(key: 'title', size: 767), $number],
             indexes: [],
             maxLength: self::MARIADB_MAX_INDEX_LENGTH,
@@ -39,7 +40,7 @@ class IndexFloatLengthTest extends TestCase
     #[DataProvider('eightByteNumbers')]
     public function test_index_at_the_byte_limit_is_valid(Attribute $number): void
     {
-        $validator = new IndexValidator(
+        $validator = new IndexDefinition(
             attributes: [Attribute::string(key: 'title', size: 766), $number],
             indexes: [],
             maxLength: self::MARIADB_MAX_INDEX_LENGTH,
@@ -56,14 +57,14 @@ class IndexFloatLengthTest extends TestCase
         return [
             'big integer' => [Attribute::bigInteger(key: 'score')],
             'id' => [Attribute::id(key: 'score')],
-            'integer stored as a big integer' => [Attribute::integer(key: 'score', size: 8)],
+            'integer stored as a big integer' => [Attribute::integer(key: 'score', width: IntegerWidth::Bits64)],
         ];
     }
 
     #[DataProvider('eightByteIntegers')]
     public function testBigIntColumnsCountEightBytes(Attribute $number): void
     {
-        $over = new IndexValidator(
+        $over = new IndexDefinition(
             attributes: [Attribute::string(key: 'title', size: 767), $number],
             indexes: [],
             maxLength: self::MARIADB_MAX_INDEX_LENGTH,
@@ -71,7 +72,7 @@ class IndexFloatLengthTest extends TestCase
         $this->assertFalse($over->isValid(Index::key(key: 'idx_title_score', attributes: ['title', 'score'])));
         $this->assertSame('Index length is longer than the maximum: 768', $over->getDescription());
 
-        $at = new IndexValidator(
+        $at = new IndexDefinition(
             attributes: [Attribute::string(key: 'title', size: 766), $number],
             indexes: [],
             maxLength: self::MARIADB_MAX_INDEX_LENGTH,

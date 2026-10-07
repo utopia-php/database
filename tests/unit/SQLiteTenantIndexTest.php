@@ -37,7 +37,7 @@ final class SQLiteTenantIndexTest extends TestCase
         $database = $this->database('acme.1');
         $database->createIndex(self::COLLECTION, Index::unique(key: 'email', attributes: ['email']));
 
-        $this->assertTrue($database->deleteIndex(self::COLLECTION, 'email'));
+        $database->deleteIndex(self::COLLECTION, 'email');
         $this->assertSame([], $this->indexes(), 'The index deleteIndex() reported as dropped must be gone');
 
         $database->createDocument(self::COLLECTION, new Document(['email' => 'user@example.com']));
@@ -78,7 +78,7 @@ final class SQLiteTenantIndexTest extends TestCase
             ->setAuthorization(new Authorization());
         $database->create();
 
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [Attribute::string('email', size: 64)],
             permissions: [

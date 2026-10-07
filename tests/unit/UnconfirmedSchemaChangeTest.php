@@ -17,7 +17,6 @@ use Utopia\Database\Exception\Unconfirmed as UnconfirmedException;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\Relationship;
-use Utopia\Database\RelationType;
 
 /**
  * Covers schema calls whose definition write ends in Exception\Unconfirmed, as a MongoDB commit whose result could
@@ -30,11 +29,11 @@ final class UnconfirmedSchemaChangeTest extends TestCase
         $unconfirmed = 0;
         $database = $this->database($unconfirmed, collection: 'logs');
 
-        $thrown = $this->attempt(fn (): mixed => $database->createCollection(new Collection(id: 'logs')));
+        $thrown = $this->attempt(fn (): mixed => $database->createCollection(Collection::create(id: 'logs')));
 
         $this->assertSame(1, $unconfirmed, 'An unconfirmed definition write must not run again');
-        $this->assertTrue($database->exists($database->getDatabase(), 'logs'), 'The table of a definition that may be stored must be kept');
-        $this->assertFalse($database->getCollection('logs')->isEmpty());
+        $this->assertTrue($database->collectionExists('logs'), 'The table of a definition that may be stored must be kept');
+        $this->assertNotNull($database->findCollection('logs'));
         $this->assertInstanceOf(UnconfirmedException::class, $thrown);
     }
 
@@ -42,9 +41,9 @@ final class UnconfirmedSchemaChangeTest extends TestCase
     {
         $unconfirmed = 0;
         $database = $this->database($unconfirmed, collection: 'logs', key: 'count');
-        $database->createCollection(new Collection(id: 'logs'));
+        $database->createCollection(Collection::create(id: 'logs'));
 
-        $thrown = $this->attempt(fn (): bool => $database->createAttribute('logs', Attribute::integer(key: 'count')));
+        $thrown = $this->attempt(fn (): Attribute => $database->createAttribute('logs', Attribute::integer(key: 'count')));
 
         $this->assertSame(1, $unconfirmed, 'An unconfirmed definition write must not run again');
         $this->assertTrue($this->hasSchemaAttribute($database, 'logs', 'count'), 'The column of a definition that may be stored must be kept');
@@ -55,10 +54,10 @@ final class UnconfirmedSchemaChangeTest extends TestCase
     {
         $unconfirmed = 0;
         $database = $this->database($unconfirmed, collection: 'logs', key: 'by_count');
-        $database->createCollection(new Collection(id: 'logs'));
+        $database->createCollection(Collection::create(id: 'logs'));
         $database->createAttribute('logs', Attribute::integer(key: 'count'));
 
-        $thrown = $this->attempt(fn (): bool => $database->createIndex('logs', Index::key(key: 'by_count', attributes: ['count'])));
+        $thrown = $this->attempt(fn (): Index => $database->createIndex('logs', Index::key(key: 'by_count', attributes: ['count'])));
 
         $this->assertSame(1, $unconfirmed, 'An unconfirmed definition write must not run again');
         $this->assertTrue($this->hasSchemaIndex($database, 'logs', 'by_count'), 'The index of a definition that may be stored must be kept');
@@ -69,10 +68,10 @@ final class UnconfirmedSchemaChangeTest extends TestCase
     {
         $unconfirmed = 0;
         $database = $this->database($unconfirmed, collection: 'profiles', key: 'account');
-        $database->createCollection(new Collection(id: 'profiles'));
-        $database->createCollection(new Collection(id: 'accounts'));
+        $database->createCollection(Collection::create(id: 'profiles'));
+        $database->createCollection(Collection::create(id: 'accounts'));
 
-        $thrown = $this->attempt(fn (): bool => $database->createRelationship($this->profileAccount()));
+        $thrown = $this->attempt(fn (): Relationship => $database->createRelationship('profiles', $this->profileAccount()));
 
         $this->assertSame(1, $unconfirmed, 'An unconfirmed definition write must not run again');
         $this->assertTrue($this->hasSchemaAttribute($database, 'profiles', 'account'), 'The columns of a relationship that may be stored must be kept');
@@ -85,10 +84,10 @@ final class UnconfirmedSchemaChangeTest extends TestCase
     {
         $unconfirmed = 0;
         $database = $this->database($unconfirmed, collection: 'profiles', key: '_index_account');
-        $database->createCollection(new Collection(id: 'profiles'));
-        $database->createCollection(new Collection(id: 'accounts'));
+        $database->createCollection(Collection::create(id: 'profiles'));
+        $database->createCollection(Collection::create(id: 'accounts'));
 
-        $thrown = $this->attempt(fn (): bool => $database->createRelationship($this->profileAccount()));
+        $thrown = $this->attempt(fn (): Relationship => $database->createRelationship('profiles', $this->profileAccount()));
 
         $this->assertSame(1, $unconfirmed, 'An unconfirmed definition write must not run again');
         $this->assertTrue($this->hasSchemaAttribute($database, 'profiles', 'account'), 'The columns of a relationship that may be stored must be kept');
@@ -213,10 +212,8 @@ final class UnconfirmedSchemaChangeTest extends TestCase
 
     private function profileAccount(): Relationship
     {
-        return new Relationship(
-            collection: 'profiles',
+        return Relationship::oneToOne(
             relatedCollection: 'accounts',
-            type: RelationType::OneToOne,
             twoWay: true,
             key: 'account',
             twoWayKey: 'profile',
@@ -230,7 +227,7 @@ final class UnconfirmedSchemaChangeTest extends TestCase
     {
         return \array_map(
             static fn (Attribute $attribute): string => $attribute->key,
-            \array_values($database->getCollection($collection)->attributes),
+            \array_values($database->getCollection($collection)->attributes()),
         );
     }
 

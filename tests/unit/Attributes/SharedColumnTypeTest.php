@@ -15,6 +15,7 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Mismatch as MismatchException;
+use Utopia\Database\IntegerWidth;
 use Utopia\Database\Validator\Authorization;
 
 final class SharedColumnTypeTest extends TestCase
@@ -56,7 +57,7 @@ final class SharedColumnTypeTest extends TestCase
             'datetime' => [Attribute::datetime(key: 'at')],
             'array' => [Attribute::string(key: 'tags', size: 32, array: true)],
             'point' => [Attribute::point(key: 'shape', required: true)],
-            'vector' => [Attribute::vector(key: 'embedding', size: 3)],
+            'vector' => [Attribute::vector(key: 'embedding', dimensions: 3)],
         ];
     }
 
@@ -67,11 +68,11 @@ final class SharedColumnTypeTest extends TestCase
     {
         return [
             'string over integer' => [Attribute::string(key: 'age', size: 64)],
-            'bigint over integer' => [Attribute::integer(key: 'age', size: 8)],
+            'bigint over integer' => [Attribute::integer(key: 'age', width: IntegerWidth::Bits64)],
             'longer varchar' => [Attribute::string(key: 'name', size: 128)],
             'integer over text' => [Attribute::integer(key: 'body')],
-            'linestring over point' => [Attribute::linestring(key: 'shape')],
-            'wider vector' => [Attribute::vector(key: 'embedding', size: 4)],
+            'linestring over point' => [Attribute::lineString(key: 'shape')],
+            'wider vector' => [Attribute::vector(key: 'embedding', dimensions: 4)],
         ];
     }
 
@@ -205,7 +206,7 @@ final class SharedColumnTypeTest extends TestCase
             ->setDatabase('shared_column_type')
             ->setNamespace('shared_column_type');
         $database->create();
-        $database->createCollection(new Collection(id: 'items'));
+        $database->createCollection(Collection::create(id: 'items'));
 
         return $database;
     }

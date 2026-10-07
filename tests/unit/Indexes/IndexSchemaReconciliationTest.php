@@ -16,7 +16,6 @@ use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
-use Utopia\Query\Schema\IndexType;
 
 final class IndexSchemaReconciliationTest extends TestCase
 {
@@ -50,7 +49,7 @@ final class IndexSchemaReconciliationTest extends TestCase
             }
         });
 
-        $this->assertRefused('Failed to create index', fn (): bool => $database->createIndex(self::COLLECTION, $this->byName()));
+        $this->assertRefused('Failed to create index', fn (): Index => $database->createIndex(self::COLLECTION, $this->byName()));
         $this->assertSame(['existing'], $this->indexKeys($database));
     }
 
@@ -67,7 +66,7 @@ final class IndexSchemaReconciliationTest extends TestCase
             }
         });
 
-        $this->assertTrue($database->createIndex(self::COLLECTION, $this->byName()));
+        $this->assertSame('byName', $database->createIndex(self::COLLECTION, $this->byName())->key);
         $this->assertSame(['existing', 'byName'], $this->indexKeys($database));
     }
 
@@ -108,7 +107,7 @@ final class IndexSchemaReconciliationTest extends TestCase
         $database = $this->database($adapter);
         $this->assertTrue($adapter->renameIndex(self::COLLECTION, 'existing', 'renamed'));
 
-        $this->assertTrue($database->renameIndex(self::COLLECTION, 'existing', 'renamed'));
+        $database->renameIndex(self::COLLECTION, 'existing', 'renamed');
         $this->assertSame(['renamed'], $this->indexKeys($database));
         $this->assertTrue($adapter->renameIndex(self::COLLECTION, 'existing', 'renamed'), 'the index already carries the new name');
     }
@@ -133,7 +132,7 @@ final class IndexSchemaReconciliationTest extends TestCase
         };
         $database = $this->database($adapter);
 
-        $this->assertTrue($database->renameIndex(self::COLLECTION, 'existing', 'renamed'));
+        $database->renameIndex(self::COLLECTION, 'existing', 'renamed');
         $this->assertSame(['existing->renamed', 'renamed->existing', 'existing->renamed'], $adapter->renames);
         $this->assertSame(['renamed'], $this->indexKeys($database));
     }
@@ -201,7 +200,7 @@ final class IndexSchemaReconciliationTest extends TestCase
             }
         });
 
-        $this->assertTrue($database->deleteIndex(self::COLLECTION, 'existing'));
+        $database->deleteIndex(self::COLLECTION, 'existing');
         $this->assertSame([], $this->indexKeys($database));
     }
 
@@ -214,7 +213,7 @@ final class IndexSchemaReconciliationTest extends TestCase
             }
         });
 
-        $this->assertRefused('Failed to delete index', fn (): bool => $database->deleteIndex(self::COLLECTION, 'existing'));
+        $this->assertRefused('Failed to delete index', fn () => $database->deleteIndex(self::COLLECTION, 'existing'));
         $this->assertSame(['existing'], $this->indexKeys($database));
     }
 
@@ -223,10 +222,7 @@ final class IndexSchemaReconciliationTest extends TestCase
      */
     private function indexKeys(Database $database): array
     {
-        /** @var array<Index> $indexes */
-        $indexes = $database->getCollection(self::COLLECTION)->getAttribute('indexes', []);
-
-        return \array_values(\array_map(static fn (Index $index): string => $index->key, $indexes));
+        return \array_map(static fn (Index $index): string => $index->key, $database->getCollection(self::COLLECTION)->indexes());
     }
 
     private function database(Memory $adapter): Database
@@ -234,10 +230,10 @@ final class IndexSchemaReconciliationTest extends TestCase
         $database = new Database($adapter, new Cache(new None()));
         $database->setDatabase('indexes')->setNamespace('reconcile_'.\uniqid());
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [Attribute::string(key: 'name', size: 32), Attribute::string(key: 'sku', size: 32)],
-            indexes: [new Index(key: 'existing', type: IndexType::Key, attributes: ['sku'])],
+            indexes: [Index::key(key: 'existing', attributes: ['sku'])],
             permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
         ));
 
@@ -246,7 +242,7 @@ final class IndexSchemaReconciliationTest extends TestCase
 
     private function byName(): Index
     {
-        return new Index(key: 'byName', type: IndexType::Key, attributes: ['name']);
+        return Index::key(key: 'byName', attributes: ['name']);
     }
 
     /**

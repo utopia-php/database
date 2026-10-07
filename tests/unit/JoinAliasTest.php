@@ -149,14 +149,14 @@ final class JoinAliasTest extends TestCase
         $database->create();
 
         $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: 'main',
             attributes: [Attribute::string(key: 'name', size: 64, required: true)],
             permissions: $permissions,
             documentSecurity: false,
         ));
         foreach (['b', 'c'] as $collection) {
-            $database->createCollection(new Collection(
+            $database->createCollection(Collection::create(
                 id: $collection,
                 attributes: [
                     Attribute::string(key: 'mainId', size: 64, required: true),

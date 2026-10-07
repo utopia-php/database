@@ -164,7 +164,7 @@ final class CustomTypeTest extends TestCase
     private function createNote(Database $database, string $body, array $filters = []): void
     {
         $database->create();
-        $database->createCollection(new Collection(id: 'notes'));
+        $database->createCollection(Collection::create(id: 'notes'));
         $database->createAttribute('notes', Attribute::string(key: 'body', filters: $filters));
         $database->createDocument('notes', new Document([
             '$id' => 'note',

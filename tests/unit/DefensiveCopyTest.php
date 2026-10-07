@@ -14,7 +14,7 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Index;
 use Utopia\Database\Validator\Authorization;
-use Utopia\Query\Schema\Order;
+use Utopia\Query\OrderDirection;
 
 final class DefensiveCopyTest extends TestCase
 {
@@ -25,63 +25,63 @@ final class DefensiveCopyTest extends TestCase
         $definitions = $this->snapshot($attributes, $indexes);
 
         $first = $this->database(new SQLite(new PDO('sqlite::memory:')))
-            ->createCollection(new Collection(id: 'databases', attributes: $attributes, indexes: $indexes));
+            ->createCollection(Collection::create(id: 'databases', attributes: $attributes, indexes: $indexes));
 
         $this->assertSame($definitions, $this->snapshot($attributes, $indexes), 'createCollection() rewrote the definitions it was given');
 
         $second = $this->database(new Memory())
-            ->createCollection(new Collection(id: 'databases', attributes: $attributes, indexes: $indexes));
+            ->createCollection(Collection::create(id: 'databases', attributes: $attributes, indexes: $indexes));
         $fresh = $this->database(new Memory())
-            ->createCollection(new Collection(id: 'databases', attributes: $this->attributes(), indexes: $this->indexes()));
+            ->createCollection(Collection::create(id: 'databases', attributes: $this->attributes(), indexes: $this->indexes()));
 
         $this->assertSame($definitions, $this->snapshot($attributes, $indexes), 'createCollection() rewrote the definitions it was given');
-        $this->assertSame($this->snapshot($fresh->attributes, $fresh->indexes), $this->snapshot($second->attributes, $second->indexes));
-        $this->assertSame($this->snapshot($first->attributes, $first->indexes), $this->snapshot($second->attributes, $second->indexes));
+        $this->assertSame($this->snapshot($fresh->attributes(), $fresh->indexes()), $this->snapshot($second->attributes(), $second->indexes()));
+        $this->assertSame($this->snapshot($first->attributes(), $first->indexes()), $this->snapshot($second->attributes(), $second->indexes()));
 
-        $this->assertSame(['datetime'], $second->attributes[2]->filters);
-        $this->assertSame([null], $second->indexes[0]->lengths);
-        $this->assertSame([Order::Asc], $second->indexes[0]->orders);
-        $this->assertSame([Database::MAX_ARRAY_INDEX_LENGTH], $second->indexes[1]->lengths);
-        $this->assertSame([null], $second->indexes[1]->orders);
+        $this->assertSame(['datetime'], $second->attributes()[2]->filters);
+        $this->assertSame([null], $second->indexes()[0]->lengths);
+        $this->assertSame([OrderDirection::Asc], $second->indexes()[0]->orders);
+        $this->assertSame([Database::MAX_ARRAY_INDEX_LENGTH], $second->indexes()[1]->lengths);
+        $this->assertSame([null], $second->indexes()[1]->orders);
     }
 
     public function testCreateAttributeLeavesCallerAttributeUntouched(): void
     {
         $database = $this->database(new Memory());
-        $database->createCollection(new Collection(id: 'events'));
+        $database->createCollection(Collection::create(id: 'events'));
         $attribute = Attribute::datetime(key: 'startsAt');
-        $definition = $attribute->getArrayCopy();
+        $definition = $attribute->toDocument()->getArrayCopy();
 
         $database->createAttribute('events', $attribute);
 
-        $this->assertSame($definition, $attribute->getArrayCopy());
-        $this->assertSame(['datetime'], $database->getCollection('events')->attributes[0]->filters);
+        $this->assertSame($definition, $attribute->toDocument()->getArrayCopy());
+        $this->assertSame(['datetime'], $database->getCollection('events')->attributes()[0]->filters);
     }
 
     public function testCreateAttributesLeavesCallerAttributesUntouched(): void
     {
         $database = $this->database(new Memory());
-        $database->createCollection(new Collection(id: 'events'));
+        $database->createCollection(Collection::create(id: 'events'));
         $attributes = [Attribute::datetime(key: 'endsAt'), Attribute::string(key: 'label', size: 32)];
         $definitions = $this->snapshot($attributes, []);
 
         $database->createAttributes('events', $attributes);
 
         $this->assertSame($definitions, $this->snapshot($attributes, []));
-        $this->assertSame(['datetime'], $database->getCollection('events')->attributes[0]->filters);
+        $this->assertSame(['datetime'], $database->getCollection('events')->attributes()[0]->filters);
     }
 
     public function testCreateIndexLeavesCallerIndexUntouched(): void
     {
         $database = $this->database(new Memory());
-        $database->createCollection(new Collection(id: 'events', attributes: [Attribute::string(key: 'tags', size: 64, array: true)]));
-        $index = Index::key(key: '_key_tags', attributes: ['tags'], lengths: [64], orders: [Order::Desc]);
-        $definition = $index->getArrayCopy();
+        $database->createCollection(Collection::create(id: 'events', attributes: [Attribute::string(key: 'tags', size: 64, array: true)]));
+        $index = Index::key(key: '_key_tags', attributes: ['tags'], lengths: [64], orders: [OrderDirection::Desc]);
+        $definition = $index->toDocument()->getArrayCopy();
 
         $database->createIndex('events', $index);
 
-        $this->assertSame($definition, $index->getArrayCopy());
-        $stored = $database->getCollection('events')->indexes[0];
+        $this->assertSame($definition, $index->toDocument()->getArrayCopy());
+        $stored = $database->getCollection('events')->indexes()[0];
         $this->assertSame([Database::MAX_ARRAY_INDEX_LENGTH], $stored->lengths);
         $this->assertSame([null], $stored->orders);
     }
@@ -116,8 +116,8 @@ final class DefensiveCopyTest extends TestCase
     private function indexes(): array
     {
         return [
-            Index::key(key: '_key_name', attributes: ['name'], lengths: [256], orders: [Order::Asc]),
-            Index::key(key: '_key_tags', attributes: ['tags'], lengths: [64], orders: [Order::Desc]),
+            Index::key(key: '_key_name', attributes: ['name'], lengths: [256], orders: [OrderDirection::Asc]),
+            Index::key(key: '_key_tags', attributes: ['tags'], lengths: [64], orders: [OrderDirection::Desc]),
         ];
     }
 
@@ -129,8 +129,8 @@ final class DefensiveCopyTest extends TestCase
     private function snapshot(array $attributes, array $indexes): array
     {
         return [
-            'attributes' => \array_values(\array_map(static fn (Attribute $attribute): array => $attribute->getArrayCopy(), $attributes)),
-            'indexes' => \array_values(\array_map(static fn (Index $index): array => $index->getArrayCopy(), $indexes)),
+            'attributes' => \array_values(\array_map(static fn (Attribute $attribute): array => $attribute->toDocument()->getArrayCopy(), $attributes)),
+            'indexes' => \array_values(\array_map(static fn (Index $index): array => $index->toDocument()->getArrayCopy(), $indexes)),
         ];
     }
 }

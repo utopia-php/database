@@ -183,9 +183,9 @@ final class TwoWayOneToOneLinkTest extends TestCase
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
         ];
-        $database->createCollection(new Collection(id: 'parent', permissions: $permissions, documentSecurity: false));
-        $database->createCollection(new Collection(id: 'child', permissions: $permissions, documentSecurity: false));
-        $database->createRelationship(Relationship::oneToOne(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'partner', twoWayKey: 'parent'));
+        $database->createCollection(Collection::create(id: 'parent', permissions: $permissions, documentSecurity: false));
+        $database->createCollection(Collection::create(id: 'child', permissions: $permissions, documentSecurity: false));
+        $database->createRelationship('parent', Relationship::oneToOne(relatedCollection: 'child', twoWay: true, key: 'partner', twoWayKey: 'parent'));
 
         foreach (['a', 'b', 'L', 'free'] as $id) {
             $database->createDocument('child', new Document(['$id' => $id]));

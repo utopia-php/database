@@ -295,7 +295,7 @@ class DispatcherHookTest extends TestCase
         $this->expectException(Error::class);
         $this->expectExceptionMessage('listener bug');
 
-        $database->createCollection(new Collection(id: 'comments'));
+        $database->createCollection(Collection::create(id: 'comments'));
     }
 
     public function testAListenerExceptionAtAnIsolatedEventIsSwallowedAndTheOtherListenersRun(): void
@@ -310,10 +310,10 @@ class DispatcherHookTest extends TestCase
             $ran = true;
         });
 
-        $database->createCollection(new Collection(id: 'comments'));
+        $database->createCollection(Collection::create(id: 'comments'));
 
         $this->assertTrue($ran);
-        $this->assertFalse($database->getCollection('comments')->isEmpty());
+        $this->assertNotNull($database->findCollection('comments'));
     }
 
     public function testAListenerExceptionAtADocumentEventReachesTheCaller(): void
@@ -371,7 +371,7 @@ class DispatcherHookTest extends TestCase
         };
         $database->addHook(new DispatcherHook($dispatcher));
 
-        $database->createCollection(new Collection(id: 'comments'));
+        $database->createCollection(Collection::create(id: 'comments'));
         $this->assertInstanceOf(CollectionCreated::class, $dispatcher->events[0]);
 
         $this->expectException(RuntimeException::class);

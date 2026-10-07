@@ -66,7 +66,7 @@ final class GetDocumentQueryValidationTest extends TestCase
         $database = new Database(new Memory(), new Cache(new MemoryCache()));
         $database->setDatabase('validation')->setNamespace('validation_'.\uniqid());
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [Attribute::string(key: 'author', size: 32), Attribute::string(key: 'body', size: 256)],
             permissions: [Permission::create(Role::any()), Permission::read(Role::any())],

@@ -17,7 +17,7 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Relationship;
-use Utopia\Database\RelationType;
+use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\Validator\Authorization;
 
 final class SQLiteManyToManyRelationshipRenameTest extends TestCase
@@ -41,7 +41,7 @@ final class SQLiteManyToManyRelationshipRenameTest extends TestCase
         $this->database->create();
 
         foreach (['books', 'authors'] as $collection) {
-            $this->database->createCollection(new Collection(
+            $this->database->createCollection(Collection::create(
                 id: $collection,
                 attributes: [Attribute::string('name', size: 64)],
                 permissions: [
@@ -60,7 +60,7 @@ final class SQLiteManyToManyRelationshipRenameTest extends TestCase
         $this->createRelationship(twoWay: false);
         $this->createBook('dune', ['herbert']);
 
-        $this->assertTrue($this->database->updateRelationship('books', 'authors', newTwoWayKey: 'works'));
+        $this->database->updateRelationship('books', 'authors', new RelationshipUpdate(twoWayKey: 'works'));
 
         $this->assertSame(['herbert'], $this->relatedIds('books', 'dune', 'authors'));
 
@@ -75,7 +75,7 @@ final class SQLiteManyToManyRelationshipRenameTest extends TestCase
         $this->createRelationship(twoWay: false);
         $this->createBook('dune', ['herbert']);
 
-        $this->assertTrue($this->database->updateRelationship('books', 'authors', newKey: 'writers'));
+        $this->database->updateRelationship('books', 'authors', new RelationshipUpdate(key: 'writers'));
 
         $this->assertSame(['herbert'], $this->relatedIds('books', 'dune', 'writers'));
 
@@ -93,7 +93,7 @@ final class SQLiteManyToManyRelationshipRenameTest extends TestCase
         $this->createRelationship(twoWay: false);
         $this->createBook('dune', ['herbert']);
 
-        $this->assertTrue($this->database->updateRelationship('books', 'authors', newKey: 'writers', newTwoWayKey: 'works'));
+        $this->database->updateRelationship('books', 'authors', new RelationshipUpdate(key: 'writers', twoWayKey: 'works'));
 
         $this->assertSame(['herbert'], $this->relatedIds('books', 'dune', 'writers'));
 
@@ -111,7 +111,7 @@ final class SQLiteManyToManyRelationshipRenameTest extends TestCase
         $this->createRelationship(twoWay: true);
         $this->createBook('dune', ['herbert']);
 
-        $this->assertTrue($this->database->updateRelationship('books', 'authors', newTwoWayKey: 'works'));
+        $this->database->updateRelationship('books', 'authors', new RelationshipUpdate(twoWayKey: 'works'));
 
         $this->assertSame(['herbert'], $this->relatedIds('books', 'dune', 'authors'));
         $this->assertSame(['dune'], $this->relatedIds('authors', 'herbert', 'works'));
@@ -126,7 +126,7 @@ final class SQLiteManyToManyRelationshipRenameTest extends TestCase
         $this->createRelationship(twoWay: true);
         $this->createBook('dune', ['herbert']);
 
-        $this->assertTrue($this->database->updateRelationship('authors', 'books', newKey: 'works'));
+        $this->database->updateRelationship('authors', 'books', new RelationshipUpdate(key: 'works'));
 
         $this->assertSame(['dune'], $this->relatedIds('authors', 'herbert', 'works'));
         $this->assertSame(['herbert'], $this->relatedIds('books', 'dune', 'authors'));
@@ -142,7 +142,7 @@ final class SQLiteManyToManyRelationshipRenameTest extends TestCase
         $this->createBook('dune', ['herbert']);
 
         try {
-            $this->database->updateRelationship('books', 'authors', newTwoWayKey: 'name');
+            $this->database->updateRelationship('books', 'authors', new RelationshipUpdate(twoWayKey: 'name'));
             $this->fail('Renaming the two-way key onto an existing attribute should be rejected');
         } catch (DuplicateException $error) {
             $this->assertSame('Related attribute already exists', $error->getMessage());
@@ -153,10 +153,8 @@ final class SQLiteManyToManyRelationshipRenameTest extends TestCase
 
     private function createRelationship(bool $twoWay): void
     {
-        $this->database->createRelationship(new Relationship(
-            collection: 'books',
+        $this->database->createRelationship('books', Relationship::manyToMany(
             relatedCollection: 'authors',
-            type: RelationType::ManyToMany,
             twoWay: $twoWay,
             key: 'authors',
             twoWayKey: 'books',

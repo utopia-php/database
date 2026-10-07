@@ -1538,7 +1538,7 @@ class OperatorValidationTest extends TestCase
             ColumnType::BigInteger,
         ] as $type) {
             $validator = $this->makeValidator([
-                new Attribute(key: 'value', type: $type),
+                Attribute::fromArray(['key' => 'value', 'type' => $type]),
             ]);
             $operator = $this->makeOperator(OperatorType::Increment, 'value', [1]);
 

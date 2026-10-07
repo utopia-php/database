@@ -53,7 +53,7 @@ final class SharedColumnTest extends TestCase
         $first = $this->tenantWithAge(1);
         $second = $this->tenant(2);
 
-        $refusal = $this->refusal(fn (): bool => $second->createAttribute(self::COLLECTION, Attribute::string(key: self::KEY, size: 64)));
+        $refusal = $this->refusal(fn (): Attribute => $second->createAttribute(self::COLLECTION, Attribute::string(key: self::KEY, size: 64)));
 
         $this->assertSame(7, $first->getDocument(self::COLLECTION, self::DOCUMENT)->getAttribute(self::KEY));
         $this->assertRefusedAsAnotherType($refusal);
@@ -65,7 +65,7 @@ final class SharedColumnTest extends TestCase
         $first = $this->tenantWithAge(1);
         $second = $this->tenant(2);
 
-        $this->assertTrue($second->createAttribute(self::COLLECTION, Attribute::integer(key: self::KEY)));
+        $this->assertSame(self::KEY, $second->createAttribute(self::COLLECTION, Attribute::integer(key: self::KEY))->key);
 
         $this->assertSame(7, $first->getDocument(self::COLLECTION, self::DOCUMENT)->getAttribute(self::KEY));
         $this->assertSame([self::KEY], $this->keys($second));
@@ -78,7 +78,7 @@ final class SharedColumnTest extends TestCase
         $first = $this->tenantWithAge(1);
         $second = $this->tenant(2);
 
-        $refusal = $this->refusal(fn (): bool => $second->createAttributes(self::COLLECTION, [
+        $refusal = $this->refusal(fn (): array => $second->createAttributes(self::COLLECTION, [
             Attribute::string(key: 'nick', size: 16),
             Attribute::string(key: self::KEY, size: 64),
         ]));
@@ -94,10 +94,11 @@ final class SharedColumnTest extends TestCase
         $first = $this->tenantWithAge(1);
         $second = $this->tenant(2);
 
-        $this->assertTrue($second->createAttributes(self::COLLECTION, [
+        $created = $second->createAttributes(self::COLLECTION, [
             Attribute::integer(key: self::KEY),
             Attribute::string(key: 'nick', size: 16),
-        ]));
+        ]);
+        $this->assertSame([self::KEY, 'nick'], \array_map(static fn (Attribute $attribute): string => $attribute->key, $created));
 
         $this->assertSame(7, $first->getDocument(self::COLLECTION, self::DOCUMENT)->getAttribute(self::KEY));
         $this->assertSame([self::KEY, 'nick'], $this->keys($second));
@@ -147,7 +148,7 @@ final class SharedColumnTest extends TestCase
         $first = $this->tenantWithAge(1);
         $second = $this->tenant(2, adapter: $this->reporting($reported));
 
-        $this->assertTrue($second->createAttribute(self::COLLECTION, $attribute));
+        $this->assertSame($attribute->key, $second->createAttribute(self::COLLECTION, $attribute)->key);
 
         $this->assertSame(7, $first->getDocument(self::COLLECTION, self::DOCUMENT)->getAttribute(self::KEY));
         $this->assertSame([self::KEY], $this->keys($second));
@@ -172,7 +173,7 @@ final class SharedColumnTest extends TestCase
         $first = $this->tenantWithAge(1);
         $second = $this->tenant(2, adapter: $this->reporting($reported));
 
-        $refusal = $this->refusal(fn (): bool => $second->createAttribute(self::COLLECTION, $attribute));
+        $refusal = $this->refusal(fn (): Attribute => $second->createAttribute(self::COLLECTION, $attribute));
 
         $this->assertSame(7, $first->getDocument(self::COLLECTION, self::DOCUMENT)->getAttribute(self::KEY));
         $this->assertRefusedAsAnotherType($refusal);
@@ -223,7 +224,7 @@ final class SharedColumnTest extends TestCase
             $database->create();
         }
 
-        $collection = new Collection(
+        $collection = Collection::create(
             id: self::COLLECTION,
             name: $name,
             permissions: [
@@ -264,7 +265,7 @@ final class SharedColumnTest extends TestCase
     {
         return \array_map(
             static fn (Attribute $attribute): string => $attribute->key,
-            \array_values($database->getCollection(self::COLLECTION)->attributes),
+            \array_values($database->getCollection(self::COLLECTION)->attributes()),
         );
     }
 

@@ -29,8 +29,8 @@ use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Profiler\QueryLog;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
+use Utopia\Database\RelationshipDeleteAction;
 use Utopia\Database\Validator\Authorization;
-use Utopia\Query\Schema\ForeignKeyAction;
 
 /**
  * deleteDocument() fires Event::DocumentUpdate for every document on the other side of a
@@ -93,7 +93,7 @@ final class DeleteRelatedUpdateTest extends TestCase
     public function testDeletingAParentReportsEachChildAsTheSetNullWroteIt(Closure $adapter): void
     {
         $database = $this->database($adapter());
-        $this->relateParentToChildren($database, ForeignKeyAction::SetNull);
+        $this->relateParentToChildren($database, RelationshipDeleteAction::SetNull);
         $this->createFamily($database, 'parent1', ['child1', 'child2']);
 
         $recorder = $this->record($database);
@@ -116,7 +116,7 @@ final class DeleteRelatedUpdateTest extends TestCase
     public function testDeletingAChildReportsTheParentItNeverWrote(Closure $adapter): void
     {
         $database = $this->database($adapter());
-        $this->relateParentToChildren($database, ForeignKeyAction::SetNull);
+        $this->relateParentToChildren($database, RelationshipDeleteAction::SetNull);
         $this->createFamily($database, 'parent1', ['child1', 'child2']);
 
         $recorder = $this->record($database);
@@ -135,9 +135,9 @@ final class DeleteRelatedUpdateTest extends TestCase
     public function testACascadeReportsOnlyThePeersItDidNotRemove(Closure $adapter): void
     {
         $database = $this->database($adapter());
-        $this->relateParentToChildren($database, ForeignKeyAction::Cascade);
-        $database->createCollection(new Collection(id: 'owner', permissions: $this->collectionPermissions(), documentSecurity: true));
-        $database->createRelationship(Relationship::manyToOne(collection: 'parent', relatedCollection: 'owner', twoWay: true, key: 'owner', twoWayKey: 'owned', onDelete: ForeignKeyAction::SetNull));
+        $this->relateParentToChildren($database, RelationshipDeleteAction::Cascade);
+        $database->createCollection(Collection::create(id: 'owner', permissions: $this->collectionPermissions(), documentSecurity: true));
+        $database->createRelationship('parent', Relationship::manyToOne(relatedCollection: 'owner', twoWay: true, key: 'owner', twoWayKey: 'owned', onDelete: RelationshipDeleteAction::SetNull));
         $database->createDocument('owner', new Document(['$id' => 'owner1', '$permissions' => $this->documentPermissions()]));
         $database->createDocument('child', new Document(['$id' => 'child1', '$permissions' => $this->documentPermissions()]));
         $database->createDocument('parent', new Document(['$id' => 'parent1', '$permissions' => $this->documentPermissions(), 'children' => ['child1'], 'owner' => 'owner1']));
@@ -154,9 +154,9 @@ final class DeleteRelatedUpdateTest extends TestCase
         $reads = [];
         foreach (['no lifecycle hook' => null, 'a hook for deletes only' => DocumentDeleted::class, 'a hook for updates' => DocumentUpdated::class] as $case => $listened) {
             $database = $this->database(new SQLite(new PDO('sqlite::memory:')));
-            $this->relateParentToChildren($database, ForeignKeyAction::Cascade);
-            $database->createCollection(new Collection(id: 'owner', permissions: $this->collectionPermissions(), documentSecurity: true));
-            $database->createRelationship(Relationship::manyToOne(collection: 'parent', relatedCollection: 'owner', twoWay: true, key: 'owner', twoWayKey: 'owned', onDelete: ForeignKeyAction::SetNull));
+            $this->relateParentToChildren($database, RelationshipDeleteAction::Cascade);
+            $database->createCollection(Collection::create(id: 'owner', permissions: $this->collectionPermissions(), documentSecurity: true));
+            $database->createRelationship('parent', Relationship::manyToOne(relatedCollection: 'owner', twoWay: true, key: 'owner', twoWayKey: 'owned', onDelete: RelationshipDeleteAction::SetNull));
             $database->createDocument('owner', new Document(['$id' => 'owner1', '$permissions' => $this->documentPermissions()]));
             $database->createDocument('child', new Document(['$id' => 'child1', '$permissions' => $this->documentPermissions()]));
             $database->createDocument('parent', new Document(['$id' => 'parent1', '$permissions' => $this->documentPermissions(), 'children' => ['child1'], 'owner' => 'owner1']));
@@ -195,7 +195,7 @@ final class DeleteRelatedUpdateTest extends TestCase
     public function testDeletingAChildUnderRestrictReportsItsParent(Closure $adapter): void
     {
         $database = $this->database($adapter());
-        $this->relateParentToChildren($database, ForeignKeyAction::Restrict);
+        $this->relateParentToChildren($database, RelationshipDeleteAction::Restrict);
         $this->createFamily($database, 'parent1', ['child1']);
 
         $recorder = $this->record($database);
@@ -212,7 +212,7 @@ final class DeleteRelatedUpdateTest extends TestCase
     {
         $database = $this->database($adapter());
         $this->createCollections($database, 'parent', 'child');
-        $database->createRelationship(Relationship::manyToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: ForeignKeyAction::SetNull));
+        $database->createRelationship('parent', Relationship::manyToMany(relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: RelationshipDeleteAction::SetNull));
         $this->createFamily($database, 'parent1', ['child1', 'child2']);
 
         $recorder = $this->record($database);
@@ -229,7 +229,7 @@ final class DeleteRelatedUpdateTest extends TestCase
     {
         $database = $this->database($adapter());
         $this->createCollections($database, 'parent', 'child');
-        $database->createRelationship(Relationship::oneToOne(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'partner', twoWayKey: 'partnerOf', onDelete: ForeignKeyAction::SetNull));
+        $database->createRelationship('parent', Relationship::oneToOne(relatedCollection: 'child', twoWay: true, key: 'partner', twoWayKey: 'partnerOf', onDelete: RelationshipDeleteAction::SetNull));
         $database->createDocument('child', new Document(['$id' => 'child1', '$permissions' => $this->documentPermissions()]));
         $database->createDocument('parent', new Document(['$id' => 'parent1', '$permissions' => $this->documentPermissions(), 'partner' => 'child1']));
 
@@ -247,10 +247,10 @@ final class DeleteRelatedUpdateTest extends TestCase
     {
         $database = $this->database($adapter());
         $this->createCollections($database, 'parent', 'stray', 'child');
-        $database->createRelationship(Relationship::oneToMany(collection: 'parent', relatedCollection: 'stray', key: 'strays', onDelete: ForeignKeyAction::SetNull));
-        $database->createRelationship(Relationship::manyToOne(collection: 'parent', relatedCollection: 'stray', key: 'stray', twoWayKey: 'strayOf', onDelete: ForeignKeyAction::SetNull));
+        $database->createRelationship('parent', Relationship::oneToMany(relatedCollection: 'stray', key: 'strays', onDelete: RelationshipDeleteAction::SetNull));
+        $database->createRelationship('parent', Relationship::manyToOne(relatedCollection: 'stray', key: 'stray', twoWayKey: 'strayOf', onDelete: RelationshipDeleteAction::SetNull));
         $database->createDocument('stray', new Document(['$id' => 'stray1', '$permissions' => $this->documentPermissions()]));
-        $database->createRelationship(Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull));
+        $database->createRelationship('parent', Relationship::oneToMany(relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: RelationshipDeleteAction::SetNull));
         $database->createDocument('child', new Document(['$id' => 'child1', '$permissions' => $this->documentPermissions()]));
         $database->createDocument('parent', new Document(['$id' => 'parent1', '$permissions' => $this->documentPermissions(), 'strays' => ['stray1'], 'stray' => 'stray1', 'children' => ['child1']]));
 
@@ -268,10 +268,10 @@ final class DeleteRelatedUpdateTest extends TestCase
     public function testAPeerCascadedAwayByAnotherRelationshipIsNotReportedWhileASurvivorIs(Closure $adapter): void
     {
         $database = $this->database($adapter());
-        $this->relateParentToChildren($database, ForeignKeyAction::SetNull);
-        $database->createCollection(new Collection(id: 'pair', permissions: $this->collectionPermissions(), documentSecurity: true));
-        $database->createRelationship(Relationship::manyToOne(collection: 'parent', relatedCollection: 'pair', twoWay: true, key: 'owner', twoWayKey: 'owned', onDelete: ForeignKeyAction::SetNull));
-        $database->createRelationship(Relationship::oneToOne(collection: 'parent', relatedCollection: 'pair', twoWay: true, key: 'buddy', twoWayKey: 'buddyOf', onDelete: ForeignKeyAction::Cascade));
+        $this->relateParentToChildren($database, RelationshipDeleteAction::SetNull);
+        $database->createCollection(Collection::create(id: 'pair', permissions: $this->collectionPermissions(), documentSecurity: true));
+        $database->createRelationship('parent', Relationship::manyToOne(relatedCollection: 'pair', twoWay: true, key: 'owner', twoWayKey: 'owned', onDelete: RelationshipDeleteAction::SetNull));
+        $database->createRelationship('parent', Relationship::oneToOne(relatedCollection: 'pair', twoWay: true, key: 'buddy', twoWayKey: 'buddyOf', onDelete: RelationshipDeleteAction::Cascade));
         $database->createDocument('pair', new Document(['$id' => 'pair1', '$permissions' => $this->documentPermissions()]));
         $database->createDocument('child', new Document(['$id' => 'child1', '$permissions' => $this->documentPermissions()]));
         $database->createDocument('parent', new Document(['$id' => 'parent1', '$permissions' => $this->documentPermissions(), 'owner' => 'pair1', 'buddy' => 'pair1', 'children' => ['child1']]));
@@ -290,10 +290,10 @@ final class DeleteRelatedUpdateTest extends TestCase
     public function testAPeerRemovedDownACascadeChainIsNotReportedWhileItsSiblingIs(Closure $adapter): void
     {
         $database = $this->database($adapter());
-        $this->relateParentToChildren($database, ForeignKeyAction::SetNull);
-        $database->createCollection(new Collection(id: 'pair', permissions: $this->collectionPermissions(), documentSecurity: true));
-        $database->createRelationship(Relationship::oneToOne(collection: 'parent', relatedCollection: 'pair', twoWay: true, key: 'buddy', twoWayKey: 'buddyOf', onDelete: ForeignKeyAction::Cascade));
-        $database->createRelationship(Relationship::oneToOne(collection: 'pair', relatedCollection: 'child', twoWay: true, key: 'tail', twoWayKey: 'tailOf', onDelete: ForeignKeyAction::Cascade));
+        $this->relateParentToChildren($database, RelationshipDeleteAction::SetNull);
+        $database->createCollection(Collection::create(id: 'pair', permissions: $this->collectionPermissions(), documentSecurity: true));
+        $database->createRelationship('parent', Relationship::oneToOne(relatedCollection: 'pair', twoWay: true, key: 'buddy', twoWayKey: 'buddyOf', onDelete: RelationshipDeleteAction::Cascade));
+        $database->createRelationship('pair', Relationship::oneToOne(relatedCollection: 'child', twoWay: true, key: 'tail', twoWayKey: 'tailOf', onDelete: RelationshipDeleteAction::Cascade));
         foreach (['child1', 'child2'] as $childId) {
             $database->createDocument('child', new Document(['$id' => $childId, '$permissions' => $this->documentPermissions()]));
         }
@@ -314,7 +314,7 @@ final class DeleteRelatedUpdateTest extends TestCase
     public function testRelatedUpdatesFireAfterTheDelete(Closure $adapter): void
     {
         $database = $this->database($adapter());
-        $this->relateParentToChildren($database, ForeignKeyAction::SetNull);
+        $this->relateParentToChildren($database, RelationshipDeleteAction::SetNull);
         $this->createFamily($database, 'parent1', ['child1']);
 
         $recorder = $this->record($database);
@@ -330,7 +330,7 @@ final class DeleteRelatedUpdateTest extends TestCase
     public function testASilentDeleteReportsNothingWhileAHeardOneDoes(Closure $adapter): void
     {
         $database = $this->database($adapter());
-        $this->relateParentToChildren($database, ForeignKeyAction::SetNull);
+        $this->relateParentToChildren($database, RelationshipDeleteAction::SetNull);
         $this->createFamily($database, 'parent1', ['child1']);
         $this->createFamily($database, 'parent2', ['child2']);
 
@@ -352,7 +352,7 @@ final class DeleteRelatedUpdateTest extends TestCase
     public function testABulkDeleteReportsNoRelatedUpdatesWhileASingleDeleteDoes(Closure $adapter): void
     {
         $database = $this->database($adapter());
-        $this->relateParentToChildren($database, ForeignKeyAction::SetNull);
+        $this->relateParentToChildren($database, RelationshipDeleteAction::SetNull);
         $this->createFamily($database, 'parent1', ['child1']);
         $this->createFamily($database, 'parent2', ['child2']);
 
@@ -373,7 +373,7 @@ final class DeleteRelatedUpdateTest extends TestCase
     public function testOneFailingReportDoesNotCostTheOthersTheirs(Closure $adapter): void
     {
         $database = $this->database($adapter());
-        $this->relateParentToChildren($database, ForeignKeyAction::SetNull);
+        $this->relateParentToChildren($database, RelationshipDeleteAction::SetNull);
         $this->createFamily($database, 'parent1', ['child1', 'child2']);
 
         $recorder = $this->record($database);
@@ -398,7 +398,7 @@ final class DeleteRelatedUpdateTest extends TestCase
     public function testAFailingDeleteHookDoesNotCostTheRelatedUpdates(Closure $adapter): void
     {
         $database = $this->database($adapter());
-        $this->relateParentToChildren($database, ForeignKeyAction::SetNull);
+        $this->relateParentToChildren($database, RelationshipDeleteAction::SetNull);
         $this->createFamily($database, 'parent1', ['child1']);
 
         $failure = new RuntimeException('delete hook failed');
@@ -423,7 +423,7 @@ final class DeleteRelatedUpdateTest extends TestCase
     {
         $peers = new DeleteRelatedUpdateRetention('child');
         $database = $this->database($adapter($peers->watch(...)));
-        $this->relateParentToChildren($database, ForeignKeyAction::SetNull);
+        $this->relateParentToChildren($database, RelationshipDeleteAction::SetNull);
         $this->createFamily($database, 'parent1', ['child1', 'child2', 'child3']);
         $dispatcher = new DispatcherHook();
         $deleted = [];
@@ -453,7 +453,7 @@ final class DeleteRelatedUpdateTest extends TestCase
     {
         $peers = new DeleteRelatedUpdateRetention('child');
         $database = $this->database($adapter($peers->watch(...)));
-        $this->relateParentToChildren($database, ForeignKeyAction::SetNull);
+        $this->relateParentToChildren($database, RelationshipDeleteAction::SetNull);
         $this->createFamily($database, 'parent1', ['child1', 'child2', 'child3']);
         $this->record($database);
         $database->setMaxQueryValues(1);
@@ -476,7 +476,7 @@ final class DeleteRelatedUpdateTest extends TestCase
     {
         $peers = new DeleteRelatedUpdateRetention('child');
         $database = $this->database($adapter($peers->watch(...)));
-        $this->relateParentToChildren($database, ForeignKeyAction::SetNull);
+        $this->relateParentToChildren($database, RelationshipDeleteAction::SetNull);
         $this->createFamily($database, 'parent1', ['child1', 'child2', 'child3']);
         $recorder = $this->record($database);
         $database->setMaxQueryValues(1);
@@ -510,7 +510,7 @@ final class DeleteRelatedUpdateTest extends TestCase
         };
 
         $database = $this->database($adapter);
-        $this->relateParentToChildren($database, ForeignKeyAction::SetNull);
+        $this->relateParentToChildren($database, RelationshipDeleteAction::SetNull);
         $this->createFamily($database, 'parent1', ['child1', 'child2']);
 
         $recorder = $this->record($database);
@@ -539,16 +539,16 @@ final class DeleteRelatedUpdateTest extends TestCase
         return $database;
     }
 
-    private function relateParentToChildren(Database $database, ForeignKeyAction $onDelete): void
+    private function relateParentToChildren(Database $database, RelationshipDeleteAction $onDelete): void
     {
         $this->createCollections($database, 'parent', 'child');
-        $database->createRelationship(Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: $onDelete));
+        $database->createRelationship('parent', Relationship::oneToMany(relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: $onDelete));
     }
 
     private function createCollections(Database $database, string ...$ids): void
     {
         foreach ($ids as $id) {
-            $database->createCollection(new Collection(id: $id, permissions: $this->collectionPermissions(), documentSecurity: true));
+            $database->createCollection(Collection::create(id: $id, permissions: $this->collectionPermissions(), documentSecurity: true));
         }
     }
 

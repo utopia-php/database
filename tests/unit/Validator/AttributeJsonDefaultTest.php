@@ -8,15 +8,16 @@ use stdClass;
 use Utopia\Database\Attribute;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Validator\Attribute as AttributeValidator;
+use Utopia\Database\Filter;
+use Utopia\Database\Validator\AttributeDefinition;
 
 class AttributeJsonDefaultTest extends TestCase
 {
-    private AttributeValidator $validator;
+    private AttributeDefinition $validator;
 
     protected function setUp(): void
     {
-        $this->validator = new AttributeValidator(
+        $this->validator = new AttributeDefinition(
             attributes: [],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -42,7 +43,7 @@ class AttributeJsonDefaultTest extends TestCase
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage($message);
 
-        $this->validator->isValid(Attribute::string(key: 'meta', size: 65535, default: $default, filters: ['json']));
+        $this->validator->isValid(Attribute::string(key: 'meta', size: 65535, default: $default, filters: [Filter::Json]));
     }
 
     public function test_structured_default_must_be_json_encodable(): void
@@ -50,7 +51,7 @@ class AttributeJsonDefaultTest extends TestCase
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('Default value of json attribute "meta" is not JSON-encodable: Malformed UTF-8 characters, possibly incorrectly encoded');
 
-        $this->validator->isValid(Attribute::string(key: 'meta', size: 65535, default: ['name' => "\xB1\x31"], filters: ['json']));
+        $this->validator->isValid(Attribute::string(key: 'meta', size: 65535, default: ['name' => "\xB1\x31"], filters: [Filter::Json]));
     }
 
     public function test_json_filter_does_not_exempt_non_string_types(): void
@@ -58,7 +59,7 @@ class AttributeJsonDefaultTest extends TestCase
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('Cannot set an array default value for a non-array attribute');
 
-        $this->validator->isValid(Attribute::integer(key: 'count', default: [], filters: ['json']));
+        $this->validator->isValid(Attribute::integer(key: 'count', default: [], filters: [Filter::Json]));
     }
 
     /**
@@ -80,6 +81,6 @@ class AttributeJsonDefaultTest extends TestCase
     #[DataProvider('jsonDocuments')]
     public function test_json_document_default_is_valid(mixed $default): void
     {
-        $this->assertTrue($this->validator->isValid(Attribute::string(key: 'meta', size: 65535, default: $default, filters: ['json'])));
+        $this->assertTrue($this->validator->isValid(Attribute::string(key: 'meta', size: 65535, default: $default, filters: [Filter::Json])));
     }
 }

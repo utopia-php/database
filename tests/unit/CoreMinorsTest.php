@@ -15,6 +15,7 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
+use Utopia\Database\AttributeUpdate;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
@@ -46,8 +47,8 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
-use Utopia\Database\RelationType;
-use Utopia\Database\Validator\Attribute as AttributeValidator;
+use Utopia\Database\RelationshipSide;
+use Utopia\Database\Validator\AttributeDefinition;
 use Utopia\Query\Schema\ColumnType;
 
 final class CoreMinorsTest extends TestCase
@@ -88,7 +89,7 @@ final class CoreMinorsTest extends TestCase
         $writes = 0;
         $database = $this->metadataFailing($failure, $writes);
 
-        $error = $this->attempt(fn (): bool => $database->createAttribute('logs', Attribute::integer(key: 'count')));
+        $error = $this->attempt(fn (): Attribute => $database->createAttribute('logs', Attribute::integer(key: 'count')));
 
         $this->assertInstanceOf(DatabaseException::class, $error);
         $this->assertSame($failure, $error->getPrevious(), 'The deterministic failure must reach the caller');
@@ -101,7 +102,7 @@ final class CoreMinorsTest extends TestCase
         $writes = 0;
         $database = $this->metadataFailing($failure, $writes);
 
-        $error = $this->attempt(fn (): bool => $database->createAttribute('logs', Attribute::integer(key: 'count')));
+        $error = $this->attempt(fn (): Attribute => $database->createAttribute('logs', Attribute::integer(key: 'count')));
 
         $this->assertInstanceOf(DatabaseException::class, $error);
         $this->assertSame($failure, $error->getPrevious());
@@ -118,7 +119,7 @@ final class CoreMinorsTest extends TestCase
         $writes = 0;
         $database = $this->metadataFailing($failure, $writes, inTransaction: true);
 
-        $error = $this->attempt(fn (): bool => $database->createAttribute('logs', Attribute::integer(key: 'count')));
+        $error = $this->attempt(fn (): Attribute => $database->createAttribute('logs', Attribute::integer(key: 'count')));
 
         $this->assertInstanceOf(DatabaseException::class, $error);
         $this->assertSame($failure, $error->getPrevious());
@@ -134,10 +135,10 @@ final class CoreMinorsTest extends TestCase
         $begins = 0;
         $contended = false;
         $database = $this->contendedDatabase($begins, $contended);
-        $database->createCollection(new Collection(id: 'logs'));
+        $database->createCollection(Collection::create(id: 'logs'));
 
         $contended = true;
-        $error = $this->attempt(fn (): bool => $database->createAttribute('logs', Attribute::integer(key: 'count')));
+        $error = $this->attempt(fn (): Attribute => $database->createAttribute('logs', Attribute::integer(key: 'count')));
         $contended = false;
 
         $this->assertInstanceOf(DatabaseException::class, $error);
@@ -150,11 +151,11 @@ final class CoreMinorsTest extends TestCase
         $begins = 0;
         $contended = false;
         $database = $this->contendedDatabase($begins, $contended);
-        $database->createCollection(new Collection(id: 'profiles'));
-        $database->createCollection(new Collection(id: 'accounts'));
+        $database->createCollection(Collection::create(id: 'profiles'));
+        $database->createCollection(Collection::create(id: 'accounts'));
 
         $contended = true;
-        $error = $this->attempt(fn (): bool => $database->createRelationship($this->profileAccount()));
+        $error = $this->attempt(fn (): Relationship => $database->createRelationship('profiles', $this->profileAccount()));
         $contended = false;
 
         $this->assertInstanceOf(DatabaseException::class, $error);
@@ -177,11 +178,11 @@ final class CoreMinorsTest extends TestCase
                 $contended = false;
             },
         );
-        $database->createCollection(new Collection(id: 'profiles'));
-        $database->createCollection(new Collection(id: 'accounts'));
-        $database->createRelationship($this->profileAccount());
+        $database->createCollection(Collection::create(id: 'profiles'));
+        $database->createCollection(Collection::create(id: 'accounts'));
+        $database->createRelationship('profiles', $this->profileAccount());
 
-        $error = $this->attempt(fn (): bool => $database->deleteRelationship('profiles', 'account'));
+        $error = $this->attempt(fn () => $database->deleteRelationship('profiles', 'account'));
         $contended = false;
 
         $this->assertInstanceOf(DatabaseException::class, $error);
@@ -206,10 +207,10 @@ final class CoreMinorsTest extends TestCase
             }
         }, $adapter);
         $this->configure($database);
-        $database->createCollection(new Collection(id: 'logs', attributes: [Attribute::integer(key: 'count')]));
+        $database->createCollection(Collection::create(id: 'logs', attributes: [Attribute::integer(key: 'count')]));
         $failing = true;
 
-        $error = $this->attempt(fn (): bool => $database->createIndex('logs', Index::key(key: 'by_count', attributes: ['count'])));
+        $error = $this->attempt(fn (): Index => $database->createIndex('logs', Index::key(key: 'by_count', attributes: ['count'])));
 
         $this->assertInstanceOf(DatabaseException::class, $error);
         $this->assertSame(
@@ -235,14 +236,14 @@ final class CoreMinorsTest extends TestCase
             }
         }, $adapter);
         $this->configure($database);
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: 'logs',
             attributes: [Attribute::integer(key: 'count')],
             indexes: [Index::key(key: 'by_count', attributes: ['count'])],
         ));
         $failing = true;
 
-        $error = $this->attempt(fn (): bool => $database->deleteIndex('logs', 'by_count'));
+        $error = $this->attempt(fn () => $database->deleteIndex('logs', 'by_count'));
 
         $this->assertInstanceOf(DatabaseException::class, $error);
         $this->assertSame(
@@ -271,10 +272,10 @@ final class CoreMinorsTest extends TestCase
             }
         }, $adapter);
         $this->configure($database);
-        $database->createCollection(new Collection(id: 'logs', attributes: [Attribute::integer(key: 'count')]));
+        $database->createCollection(Collection::create(id: 'logs', attributes: [Attribute::integer(key: 'count')]));
         $failing = true;
 
-        $error = $this->attempt(fn (): bool => $database->createIndex('logs', Index::key(key: 'by_count', attributes: ['count'])));
+        $error = $this->attempt(fn (): Index => $database->createIndex('logs', Index::key(key: 'by_count', attributes: ['count'])));
         $failing = false;
 
         $this->assertInstanceOf(DatabaseException::class, $error, 'createIndex() must fail when its rollback keeps failing');
@@ -283,7 +284,7 @@ final class CoreMinorsTest extends TestCase
             $error->getMessage(),
         );
         $this->assertSame(3, $deletes, 'The index cleanup must be attempted three times');
-        $this->assertSame([], $database->getCollection('logs')->indexes, 'The metadata must list no index');
+        $this->assertSame([], $database->getCollection('logs')->indexes(), 'The metadata must list no index');
     }
 
     /**
@@ -323,10 +324,10 @@ final class CoreMinorsTest extends TestCase
             }
         }, $adapter, new Cache($cache));
         $this->configure($database);
-        $database->createCollection(new Collection(id: 'logs', attributes: [Attribute::integer(key: 'count')]));
+        $database->createCollection(Collection::create(id: 'logs', attributes: [Attribute::integer(key: 'count')]));
         $armed = true;
 
-        $error = $this->attempt(fn (): bool => $database->createIndex('logs', Index::key(key: 'by_count', attributes: ['count'])));
+        $error = $this->attempt(fn (): Index => $database->createIndex('logs', Index::key(key: 'by_count', attributes: ['count'])));
         $armed = false;
         $failing = false;
 
@@ -355,15 +356,15 @@ final class CoreMinorsTest extends TestCase
             }
         }, $adapter);
         $this->configure($database);
-        $database->createCollection(new Collection(id: 'logs', attributes: [Attribute::integer(key: 'count')]));
+        $database->createCollection(Collection::create(id: 'logs', attributes: [Attribute::integer(key: 'count')]));
         $failing = true;
 
-        $error = $this->attempt(fn (): bool => $database->createIndex('logs', Index::key(key: 'by_count', attributes: ['count'])));
+        $error = $this->attempt(fn (): Index => $database->createIndex('logs', Index::key(key: 'by_count', attributes: ['count'])));
         $failing = false;
 
         $this->assertInstanceOf(DatabaseException::class, $error);
         $this->assertSame(1, $deletes, 'An index without a stored definition must be dropped');
-        $this->assertSame([], $database->getCollection('logs')->indexes);
+        $this->assertSame([], $database->getCollection('logs')->indexes());
     }
 
     /**
@@ -397,14 +398,12 @@ final class CoreMinorsTest extends TestCase
         $database = $this->interceptingMetadataWrites(static function (): void {
         }, $adapter, new Cache($cache));
         $this->configure($database);
-        $database->createCollection(new Collection(id: 'profiles'));
-        $database->createCollection(new Collection(id: 'accounts'));
+        $database->createCollection(Collection::create(id: 'profiles'));
+        $database->createCollection(Collection::create(id: 'accounts'));
         $armed = true;
 
-        $error = $this->attempt(fn (): bool => $database->createRelationship(new Relationship(
-            collection: 'profiles',
+        $error = $this->attempt(fn (): Relationship => $database->createRelationship('profiles', Relationship::oneToOne(
             relatedCollection: 'accounts',
-            type: RelationType::OneToOne,
             twoWay: true,
             key: 'account',
             twoWayKey: 'profile',
@@ -447,14 +446,12 @@ final class CoreMinorsTest extends TestCase
         $database = $this->interceptingMetadataWrites(static function (): void {
         }, $adapter, new Cache($cache));
         $this->configure($database);
-        $database->createCollection(new Collection(id: 'profiles'));
-        $database->createCollection(new Collection(id: 'accounts'));
+        $database->createCollection(Collection::create(id: 'profiles'));
+        $database->createCollection(Collection::create(id: 'accounts'));
         $armed = true;
 
-        $error = $this->attempt(fn (): bool => $database->createRelationship(new Relationship(
-            collection: 'profiles',
+        $error = $this->attempt(fn (): Relationship => $database->createRelationship('profiles', Relationship::oneToOne(
             relatedCollection: 'accounts',
-            type: RelationType::OneToOne,
             twoWay: true,
             key: 'account',
             twoWayKey: 'profile',
@@ -473,8 +470,8 @@ final class CoreMinorsTest extends TestCase
 
     public function testTypeMismatchMessagesSayBigint(): void
     {
-        $validator = new AttributeValidator(attributes: []);
-        $error = $this->attempt(fn (): bool => $validator->isValid(new Attribute(key: 'total', type: ColumnType::BigInteger, default: 'many')));
+        $validator = new AttributeDefinition(attributes: []);
+        $error = $this->attempt(fn (): bool => $validator->isValid(Attribute::bigInteger(key: 'total', default: 'many')));
 
         $this->assertInstanceOf(DatabaseException::class, $error);
         $this->assertSame('Default value "many" does not match given type bigint', $error->getMessage());
@@ -482,17 +479,17 @@ final class CoreMinorsTest extends TestCase
         $database = $this->interceptingMetadataWrites(static function (): void {
         });
         $this->configure($database);
-        $database->createCollection(new Collection(id: 'logs', attributes: [Attribute::bigInteger(key: 'total')]));
+        $database->createCollection(Collection::create(id: 'logs', attributes: [Attribute::bigInteger(key: 'total')]));
 
-        $error = $this->attempt(fn (): Document => $database->updateAttributeDefault('logs', 'total', 'many'));
+        $error = $this->attempt(fn (): Attribute => $database->updateAttribute('logs', 'total', new AttributeUpdate(default: 'many')));
 
         $this->assertInstanceOf(DatabaseException::class, $error);
         $this->assertSame('Default value many does not match given type bigint', $error->getMessage());
 
-        $error = $this->attempt(fn (): bool => $validator->isValid(new Attribute(key: 'value', type: ColumnType::Timestamp)));
+        $error = $this->attempt(fn (): bool => $validator->isValid(Attribute::fromArray(['key' => 'value', 'type' => ColumnType::Timestamp])));
 
-        $this->assertInstanceOf(DatabaseException::class, $error);
-        $this->assertStringContainsString(', bigint, ', $error->getMessage(), 'The listed types must use the stored spelling');
+        $this->assertInstanceOf(StructureException::class, $error);
+        $this->assertSame('Unknown attribute type: timestamp', $error->getMessage());
     }
 
     /**
@@ -515,7 +512,7 @@ final class CoreMinorsTest extends TestCase
         $database = $this->interceptingMetadataWrites(static function (): void {
         }, $adapter());
         $this->configure($database);
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: 'users',
             attributes: [Attribute::string(key: 'email', size: 64)],
             indexes: [Index::unique(key: 'by_email', attributes: ['email'])],
@@ -567,8 +564,8 @@ final class CoreMinorsTest extends TestCase
     #[DataProvider('invalidSpatialDefaults')]
     public function testSpatialDefaultsAreValidated(ColumnType $type, array $default, string $reason): void
     {
-        $validator = new AttributeValidator(attributes: [], supportForSpatialAttributes: true);
-        $created = $this->attempt(fn (): bool => $validator->isValid(new Attribute(key: 'shape', type: $type, default: $default)));
+        $validator = new AttributeDefinition(attributes: [], supportForSpatialAttributes: true);
+        $created = $this->attempt(fn (): bool => $validator->isValid(Attribute::fromArray(['key' => 'shape', 'type' => $type, 'default' => $default])));
 
         $this->assertInstanceOf(DatabaseException::class, $created, 'A create must reject the default');
         $this->assertStringContainsString($reason, $created->getMessage());
@@ -576,7 +573,7 @@ final class CoreMinorsTest extends TestCase
         $database = new class ($this->adapter(), new Cache(new None())) extends Database {
             public function checkDefault(ColumnType $type, mixed $default): void
             {
-                $this->validateDefaultTypes($type->value, $default);
+                $this->validateDefaultTypes($type, $default);
             }
         };
         $updated = $this->attempt(function () use ($database, $type, $default): void {
@@ -594,16 +591,16 @@ final class CoreMinorsTest extends TestCase
             [ColumnType::Linestring, [[0.0, 0.0], [1.0, 1.0]]],
             [ColumnType::Polygon, [[[0.0, 0.0], [0.0, 2.0], [2.0, 2.0], [0.0, 0.0]]]],
         ];
-        $validator = new AttributeValidator(attributes: [], supportForSpatialAttributes: true);
+        $validator = new AttributeDefinition(attributes: [], supportForSpatialAttributes: true);
         $database = new class ($this->adapter(), new Cache(new None())) extends Database {
             public function checkDefault(ColumnType $type, mixed $default): void
             {
-                $this->validateDefaultTypes($type->value, $default);
+                $this->validateDefaultTypes($type, $default);
             }
         };
 
         foreach ($defaults as [$type, $default]) {
-            $this->assertTrue($validator->isValid(new Attribute(key: 'shape', type: $type, default: $default)), $type->value);
+            $this->assertTrue($validator->isValid(Attribute::fromArray(['key' => 'shape', 'type' => $type, 'default' => $default])), $type->value);
             $database->checkDefault($type, $default);
         }
     }
@@ -613,7 +610,7 @@ final class CoreMinorsTest extends TestCase
         $database = $this->interceptingMetadataWrites(static function (): void {
         }, new Memory());
         $this->configure($database);
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: 'items',
             attributes: [Attribute::string(key: 'title', size: 64), Attribute::object(key: 'meta')],
             permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())],
@@ -652,13 +649,13 @@ final class CoreMinorsTest extends TestCase
         $database = $this->interceptingMetadataWrites(static function (): void {
         }, $adapter);
         $this->configure($database);
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: 'embeddings',
             permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
         ));
-        $database->createAttribute('embeddings', Attribute::vector(key: 'embedding', size: 3));
+        $database->createAttribute('embeddings', Attribute::vector(key: 'embedding', dimensions: 3));
         $filters = [];
-        foreach ($database->getCollection('embeddings')->attributes as $attribute) {
+        foreach ($database->getCollection('embeddings')->attributes() as $attribute) {
             if ($attribute->key === 'embedding') {
                 $filters = $attribute->filters;
             }
@@ -698,7 +695,7 @@ final class CoreMinorsTest extends TestCase
             }, $this->interceptingAdapter(beforeMetadataWrite: $intercept))
             : $this->interceptingMetadataWrites($intercept);
         $this->configure($database);
-        $database->createCollection(new Collection(id: 'logs'));
+        $database->createCollection(Collection::create(id: 'logs'));
         $failing = true;
 
         return $database;
@@ -738,10 +735,8 @@ final class CoreMinorsTest extends TestCase
 
     private function profileAccount(): Relationship
     {
-        return new Relationship(
-            collection: 'profiles',
+        return Relationship::oneToOne(
             relatedCollection: 'accounts',
-            type: RelationType::OneToOne,
             twoWay: true,
             key: 'account',
             twoWayKey: 'profile',
@@ -829,20 +824,20 @@ final class CoreMinorsTest extends TestCase
             }
 
             #[\Override]
-            public function deleteRelationship(Relationship $relationship): bool
+            public function deleteRelationship(string $collection, Relationship $relationship, RelationshipSide $side): bool
             {
-                $deleted = parent::deleteRelationship($relationship);
+                $deleted = parent::deleteRelationship($collection, $relationship, $side);
                 $this->afterDeleteRelationship?->__invoke();
 
                 return $deleted;
             }
 
             #[\Override]
-            public function createRelationship(Relationship $relationship): bool
+            public function createRelationship(string $collection, Relationship $relationship): bool
             {
                 $this->beforeCreateRelationship?->__invoke();
 
-                return parent::createRelationship($relationship);
+                return parent::createRelationship($collection, $relationship);
             }
 
             #[\Override]
@@ -896,7 +891,7 @@ final class CoreMinorsTest extends TestCase
     {
         return \array_map(
             static fn (Attribute $attribute): string => $attribute->key,
-            \array_values($database->getCollection($collection)->attributes),
+            \array_values($database->getCollection($collection)->attributes()),
         );
     }
 
@@ -907,7 +902,7 @@ final class CoreMinorsTest extends TestCase
     {
         return \array_map(
             static fn (Index $index): string => $index->key,
-            \array_values($database->getCollection($collection)->indexes),
+            \array_values($database->getCollection($collection)->indexes()),
         );
     }
 

@@ -84,7 +84,7 @@ final class NegativeCacheEpochTest extends TestCase
             ->setNamespace('negative_cache_'.\uniqid());
         $database->getAuthorization()->addRole(Role::any()->toString());
         $database->create();
-        $database->createCollection(new Collection(id: 'webhooks', attributes: [
+        $database->createCollection(Collection::create(id: 'webhooks', attributes: [
             Attribute::string(key: 'name'),
         ], permissions: [
             Permission::read(Role::any()),

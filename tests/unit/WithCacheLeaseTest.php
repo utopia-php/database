@@ -36,7 +36,7 @@ class WithCacheLeaseTest extends TestCase
             ->setNamespace('with_cache_' . \uniqid());
 
         $this->database->create();
-        $this->database->createCollection(new Collection(id: 'projects'));
+        $this->database->createCollection(Collection::create(id: 'projects'));
         $this->database->createAttribute('projects', Attribute::string(key: 'name'));
         $this->database->createDocument('projects', new Document([
             '$id' => 'project',
@@ -107,7 +107,7 @@ class WithCacheLeaseTest extends TestCase
             ->setDatabase('utopiaTests')
             ->setNamespace('with_cache_in_flight_' . \uniqid());
         $database->create();
-        $database->createCollection(new Collection(id: 'projects'));
+        $database->createCollection(Collection::create(id: 'projects'));
         $database->createAttribute('projects', Attribute::string(key: 'name'));
         $database->createDocument('projects', new Document([
             '$id' => 'project',

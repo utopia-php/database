@@ -9,7 +9,7 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Attribute;
 use Utopia\Database\Index;
-use Utopia\Query\Schema\Order;
+use Utopia\Query\OrderDirection;
 
 final class PostgresCollectionIndexTest extends TestCase
 {
@@ -35,7 +35,7 @@ final class PostgresCollectionIndexTest extends TestCase
         $adapter->createCollection(
             'places',
             [Attribute::object(key: 'data'), Attribute::string(key: 'status', size: 32)],
-            [Index::key(key: 'countryfirst', attributes: ['data.country', 'status'], orders: [Order::Desc, null])],
+            [Index::key(key: 'countryfirst', attributes: ['data.country', 'status'], orders: [OrderDirection::Desc, null])],
         );
 
         $this->assertSame($statement, $this->statements[\count($this->statements) - 1] ?? null);

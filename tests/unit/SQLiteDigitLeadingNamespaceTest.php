@@ -57,7 +57,7 @@ final class SQLiteDigitLeadingNamespaceTest extends TestCase
             ->addHook(new Permissions());
         $database->create();
 
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [Attribute::string(key: 'title', size: 64)],
             permissions: [Permission::create(Role::any())],

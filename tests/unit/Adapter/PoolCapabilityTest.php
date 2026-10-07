@@ -267,7 +267,7 @@ final class PoolCapabilityTest extends TestCase
             ->setDatabase('pool_capabilities')
             ->setNamespace('pool_capabilities_'.\uniqid());
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: 'posts',
             attributes: [Attribute::string(key: 'title', size: 64)],
             permissions: [Permission::create(Role::any()), Permission::read(Role::any())],

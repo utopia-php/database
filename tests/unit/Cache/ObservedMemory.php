@@ -13,8 +13,6 @@ final class ObservedMemory extends DatabaseMemory
 {
     private ?Closure $metadataCallback = null;
 
-    private ?Closure $validatorCallback = null;
-
     private ?Closure $commitCallback = null;
 
     private ?string $metadataCollection = null;
@@ -23,8 +21,6 @@ final class ObservedMemory extends DatabaseMemory
 
     private int $metadataReads = 0;
 
-    private int $validators = 0;
-
     private int $finds = 0;
 
     public function observeMetadata(string $collection, Closure $callback): void
@@ -32,12 +28,6 @@ final class ObservedMemory extends DatabaseMemory
         $this->metadataCollection = $collection;
         $this->metadataCallback = $callback;
         $this->metadataReads = 0;
-    }
-
-    public function observeValidators(Closure $callback): void
-    {
-        $this->validatorCallback = $callback;
-        $this->validators = 0;
     }
 
     public function observeFinds(string $collection): void
@@ -54,11 +44,6 @@ final class ObservedMemory extends DatabaseMemory
     public function getObservedMetadataReads(): int
     {
         return $this->metadataReads;
-    }
-
-    public function getObservedValidators(): int
-    {
-        return $this->validators;
     }
 
     public function getObservedFinds(): int
@@ -89,21 +74,6 @@ final class ObservedMemory extends DatabaseMemory
         }
 
         return $document;
-    }
-
-    #[\Override]
-    public function getIdAttributeType(): string
-    {
-        if ($this->validatorCallback !== null) {
-            $this->validators++;
-            $callback = $this->validatorCallback;
-            $this->validatorCallback = null;
-            $callback();
-        } elseif ($this->validators > 0) {
-            $this->validators++;
-        }
-
-        return parent::getIdAttributeType();
     }
 
     #[\Override]

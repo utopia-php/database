@@ -64,8 +64,8 @@ final class MariaDBMinorsTest extends TestCase
         $adapter = new Pool(new UtopiaPool(new Stack(), 'no-driver', 1, fn (): MariaDB => $connection, timeout: 0.0));
         $adapter->setAuthorization(new Authorization());
 
-        $this->assertSame($connection->getMaxVarcharLength(), $adapter->getMaxVarcharLength());
-        $this->assertSame($connection->getMaxVarcharLength(), $adapter->getMaxVarcharLength());
+        $this->assertSame($connection->limits()->varchar, $adapter->limits()->varchar);
+        $this->assertSame($connection->limits()->varchar, $adapter->limits()->varchar);
     }
 
     /**

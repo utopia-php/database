@@ -4,6 +4,8 @@ namespace Tests\Unit\Validator;
 
 use Exception;
 use PHPUnit\Framework\TestCase;
+use Tests\Unit\Support\Profiles;
+use Utopia\Database\Capability;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Queries\Document as DocumentQueries;
@@ -54,7 +56,7 @@ class DocumentQueriesTest extends TestCase
      */
     public function test_valid_queries(): void
     {
-        $validator = new DocumentQueries($this->attributes);
+        $validator = new DocumentQueries($this->attributes, Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::Joins]));
 
         $queries = [
             Query::select(['title']),
@@ -71,14 +73,14 @@ class DocumentQueriesTest extends TestCase
      */
     public function test_invalid_queries(): void
     {
-        $validator = new DocumentQueries($this->attributes);
+        $validator = new DocumentQueries($this->attributes, Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::Joins]));
         $queries = [Query::limit(1)];
         $this->assertEquals(false, $validator->isValid($queries));
     }
 
     public function testJoinIsValid(): void
     {
-        $validator = new DocumentQueries($this->documentAttributes());
+        $validator = new DocumentQueries($this->documentAttributes(), Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::Joins]));
 
         $this->assertSame(true, $validator->isValid([
             Query::join('orders', '$id', 'customerId'),
@@ -87,7 +89,7 @@ class DocumentQueriesTest extends TestCase
 
     public function testSelectWithJoinAliasIsValid(): void
     {
-        $validator = new DocumentQueries($this->documentAttributes());
+        $validator = new DocumentQueries($this->documentAttributes(), Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::Joins]));
 
         $this->assertSame(true, $validator->isValid([
             Query::select(['ord.amount']),
@@ -97,7 +99,7 @@ class DocumentQueriesTest extends TestCase
 
     public function testSelectUnprefixedJoinAttributeIsInvalid(): void
     {
-        $validator = new DocumentQueries($this->documentAttributes());
+        $validator = new DocumentQueries($this->documentAttributes(), Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::Joins]));
 
         $this->assertSame(false, $validator->isValid([
             Query::select(['score']),
@@ -108,7 +110,7 @@ class DocumentQueriesTest extends TestCase
 
     public function testSelectWithLeftJoinAliasIsValid(): void
     {
-        $validator = new DocumentQueries($this->documentAttributes());
+        $validator = new DocumentQueries($this->documentAttributes(), Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::Joins]));
 
         $this->assertSame(true, $validator->isValid([
             Query::select(['rev.score']),
@@ -118,7 +120,7 @@ class DocumentQueriesTest extends TestCase
 
     public function testCountIsInvalid(): void
     {
-        $validator = new DocumentQueries($this->documentAttributes());
+        $validator = new DocumentQueries($this->documentAttributes(), Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::Joins]));
 
         $this->assertSame(false, $validator->isValid([Query::count('*', 'cnt')]));
         $this->assertStringContainsString('Invalid query method', $validator->getDescription());
@@ -126,7 +128,7 @@ class DocumentQueriesTest extends TestCase
 
     public function testGroupByIsInvalid(): void
     {
-        $validator = new DocumentQueries($this->documentAttributes());
+        $validator = new DocumentQueries($this->documentAttributes(), Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::Joins]));
 
         $this->assertSame(false, $validator->isValid([Query::groupBy(['name'])]));
         $this->assertStringContainsString('Invalid query method', $validator->getDescription());
@@ -134,7 +136,7 @@ class DocumentQueriesTest extends TestCase
 
     public function testHavingIsInvalid(): void
     {
-        $validator = new DocumentQueries($this->documentAttributes());
+        $validator = new DocumentQueries($this->documentAttributes(), Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::Joins]));
 
         $this->assertSame(false, $validator->isValid([
             Query::having([Query::greaterThan('amount', 1)]),
@@ -144,7 +146,7 @@ class DocumentQueriesTest extends TestCase
 
     public function testDistinctIsInvalid(): void
     {
-        $validator = new DocumentQueries($this->documentAttributes());
+        $validator = new DocumentQueries($this->documentAttributes(), Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::Joins]));
 
         $this->assertSame(false, $validator->isValid([Query::distinct()]));
         $this->assertStringContainsString('Invalid query method', $validator->getDescription());
@@ -152,7 +154,7 @@ class DocumentQueriesTest extends TestCase
 
     public function testUnionIsInvalid(): void
     {
-        $validator = new DocumentQueries($this->documentAttributes());
+        $validator = new DocumentQueries($this->documentAttributes(), Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::Joins]));
 
         $this->assertSame(false, $validator->isValid([
             Query::union([Query::equal('name', ['x'])]),
@@ -162,7 +164,7 @@ class DocumentQueriesTest extends TestCase
 
     public function testUnionAllIsInvalid(): void
     {
-        $validator = new DocumentQueries($this->documentAttributes());
+        $validator = new DocumentQueries($this->documentAttributes(), Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::Joins]));
 
         $this->assertSame(false, $validator->isValid([
             Query::unionAll([Query::equal('name', ['x'])]),
@@ -172,7 +174,7 @@ class DocumentQueriesTest extends TestCase
 
     public function testNaturalJoinIsInvalid(): void
     {
-        $validator = new DocumentQueries($this->documentAttributes());
+        $validator = new DocumentQueries($this->documentAttributes(), Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::Joins]));
 
         $this->assertSame(false, $validator->isValid([Query::naturalJoin('orders')]));
         $this->assertStringContainsString('Natural joins are not supported', $validator->getDescription());
@@ -180,7 +182,7 @@ class DocumentQueriesTest extends TestCase
 
     public function testNestedJoinOnIsValid(): void
     {
-        $validator = new DocumentQueries($this->documentAttributes());
+        $validator = new DocumentQueries($this->documentAttributes(), Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::Joins]));
 
         $this->assertSame(true, $validator->isValid([
             Query::leftJoin('orders', 'ord', [
@@ -191,7 +193,7 @@ class DocumentQueriesTest extends TestCase
 
     public function testNestedJoinOnWithFilterIsValidWithoutFilterValidator(): void
     {
-        $validator = new DocumentQueries($this->documentAttributes());
+        $validator = new DocumentQueries($this->documentAttributes(), Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::Joins]));
 
         $this->assertSame(true, $validator->isValid([
             Query::leftJoin('orders', 'ord', [
@@ -203,7 +205,7 @@ class DocumentQueriesTest extends TestCase
 
     public function testNestedJoinOnRequiresColumns(): void
     {
-        $validator = new DocumentQueries($this->documentAttributes());
+        $validator = new DocumentQueries($this->documentAttributes(), Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::Joins]));
 
         $this->assertSame(false, $validator->isValid([
             Query::leftJoin('orders', 'ord', [
@@ -215,7 +217,7 @@ class DocumentQueriesTest extends TestCase
 
     public function testSelectWithNestedJoinAliasIsValid(): void
     {
-        $validator = new DocumentQueries($this->documentAttributes());
+        $validator = new DocumentQueries($this->documentAttributes(), Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::Joins]));
 
         $this->assertSame(true, $validator->isValid([
             Query::select(['ord.amount']),

@@ -5,14 +5,16 @@ namespace Tests\Unit\Validator;
 use DateTime;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Tests\Unit\Support\Profiles;
+use Utopia\Database\Adapter\Profile;
 use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Document;
 use Utopia\Database\Index;
 use Utopia\Database\IntegerWidth;
 use Utopia\Database\Query;
 use Utopia\Database\RelationshipSide;
 use Utopia\Database\RelationshipType;
-use Utopia\Database\Validator\Queries\Bounds;
 use Utopia\Database\Validator\Queries\Documents;
 use Utopia\Database\Validator\Queries\Narrow;
 use Utopia\Query\Method;
@@ -180,20 +182,20 @@ final class NarrowTest extends TestCase
         $string = [Attribute::string(key: 'title', size: 64)];
         $integer = [Attribute::integer(key: 'title')];
 
-        $this->assertTrue(Narrow::of($queries, $string, $this->bounds(), self::MAX_VALUES, true, true, true)?->isValid($queries));
+        $this->assertTrue(Narrow::of($queries, $string, $this->profile(true, true), self::MAX_VALUES)?->isValid($queries));
 
-        $refused = Narrow::of($queries, $integer, $this->bounds(), self::MAX_VALUES, true, true, true);
+        $refused = Narrow::of($queries, $integer, $this->profile(true, true), self::MAX_VALUES);
         $this->assertFalse($refused?->isValid($queries));
         $this->assertSame('Invalid query: Query value is invalid for attribute "title"', $refused->getDescription());
 
-        $missing = Narrow::of($queries, [], $this->bounds(), self::MAX_VALUES, true, true, true);
+        $missing = Narrow::of($queries, [], $this->profile(true, true), self::MAX_VALUES);
         $this->assertFalse($missing?->isValid($queries));
         $this->assertSame('Invalid query: Attribute not found in schema: title', $missing->getDescription());
     }
 
     public function testAListItWasNotMadeOfIsCheckedByItsValidators(): void
     {
-        $narrow = Narrow::of([Query::equal('title', ['Dune'])], $this->attributes(), $this->bounds(), self::MAX_VALUES, true, true, true);
+        $narrow = Narrow::of([Query::equal('title', ['Dune'])], $this->attributes(), $this->profile(true, true), self::MAX_VALUES);
 
         $this->assertFalse($narrow?->isValid([Query::limit(5)]));
         $this->assertSame('Invalid query method: limit', $narrow->getDescription());
@@ -206,7 +208,7 @@ final class NarrowTest extends TestCase
 
     public function testNothingAnEarlierListRegisteredReachesTheNextOne(): void
     {
-        $narrow = Narrow::of([Query::orderAsc('title'), Query::equal('title', ['Dune'])], $this->attributes(), $this->bounds(), self::MAX_VALUES, true, true, true);
+        $narrow = Narrow::of([Query::orderAsc('title'), Query::equal('title', ['Dune'])], $this->attributes(), $this->profile(true, true), self::MAX_VALUES);
 
         $this->assertFalse($narrow?->isValid([Query::count('*', 'total'), Query::join('other', 'title', 'title', alias: 'o'), Query::orderAsc('total')]));
         $this->assertFalse($narrow->isValid([Query::orderAsc('total')]));
@@ -223,33 +225,31 @@ final class NarrowTest extends TestCase
      */
     private function narrow(array $queries, bool $supportForAttributes, bool $orderRandom): ?Narrow
     {
-        return Narrow::of($queries, $this->attributes(), $this->bounds(), self::MAX_VALUES, $supportForAttributes, true, $orderRandom);
+        return Narrow::of($queries, $this->attributes(), $this->profile($supportForAttributes, $orderRandom), self::MAX_VALUES);
     }
 
     private function documents(bool $supportForAttributes, bool $orderRandom): Documents
     {
-        $bounds = $this->bounds();
-
         return new Documents(
             $this->attributes(),
             [Index::fulltext('title_fulltext', ['title']), Index::key('count_key', ['count'])],
-            $bounds->idAttributeType,
+            $this->profile($supportForAttributes, $orderRandom),
             self::MAX_VALUES,
-            $bounds->maxUIDLength,
-            $bounds->minDateTime,
-            $bounds->maxDateTime,
-            $supportForAttributes,
-            true,
-            true,
-            true,
-            false,
-            $orderRandom,
         );
     }
 
-    private function bounds(): Bounds
+    private function profile(bool $supportForAttributes, bool $orderRandom): Profile
     {
-        return new Bounds(ColumnType::Integer->value, 36, new DateTime('0000-01-01'), new DateTime('9999-12-31 23:59:59'));
+        return Profiles::of(
+            capabilities: [
+                Capability::UnsignedBigInt,
+                Capability::Joins,
+                Capability::Aggregations,
+                ...($supportForAttributes ? [Capability::DefinedAttributes] : []),
+                ...($orderRandom ? [Capability::OrderRandom] : []),
+            ],
+            maxDateTime: new DateTime('9999-12-31 23:59:59'),
+        );
     }
 
     /**

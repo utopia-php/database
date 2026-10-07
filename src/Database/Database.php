@@ -10,6 +10,7 @@ use Throwable;
 use Utopia\Cache\Cache;
 use Utopia\Console;
 use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Adapter\Profile;
 use Utopia\Database\Cache\Invalidator;
 use Utopia\Database\Cache\QueryCache;
 use Utopia\Database\Cache\Scope;
@@ -33,7 +34,6 @@ use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Exception\Unconfirmed as UnconfirmedException;
 use Utopia\Database\Helpers\ID;
-use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Hook\Lifecycle;
 use Utopia\Database\Hook\Named;
 use Utopia\Database\Hook\Relationships;
@@ -44,10 +44,8 @@ use Utopia\Database\State\Snapshot;
 use Utopia\Database\State\Value;
 use Utopia\Database\Type\TypeRegistry;
 use Utopia\Database\Validator\Authorization;
-use Utopia\Database\Validator\Authorization\Input;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Database\Validator\Spatial as SpatialValidator;
-use Utopia\Database\Validator\Structure;
 use Utopia\Query\Method;
 use Utopia\Query\Schema\ColumnType;
 
@@ -165,6 +163,21 @@ class Database
         Storage::UPDATED_AT,
         Storage::INDEX_PERMISSIONS_ID,
         Storage::PERMISSIONS,
+    ];
+
+    /**
+     * The optional adapter features a profile records.
+     */
+    private const array FEATURES = [
+        Feature\Casting::class,
+        Feature\Connection::class,
+        Feature\QueryBuilder::class,
+        Feature\RawQuery::class,
+        Feature\Relationships::class,
+        Feature\Schemaless::class,
+        Feature\Spatial::class,
+        Feature\Timeouts::class,
+        Feature\Upserts::class,
     ];
 
     private const string COLLECTION_NAME = Collection::NAME;
@@ -321,6 +334,8 @@ class Database
     protected int $maxQueryValues = 5000;
 
     protected bool $migrating = false;
+
+    private ?Profile $profile = null;
 
     /**
      * List of collections that should be treated as globally accessible
@@ -718,13 +733,51 @@ class Database
     }
 
     /**
-     * Get ID Attribute Type.
-     *
-     * Returns the type of the internal ID attribute (e.g. integer for SQL, uuid7 for MongoDB)
+     * The type of the internal sequence: integer on SQL, uuid7 on MongoDB.
      */
-    public function getIdAttributeType(): string
+    public function getIdAttributeType(): ColumnType
     {
-        return $this->adapter->getIdAttributeType();
+        return $this->adapter->limits()->idType;
+    }
+
+    /**
+     * The adapter's limits and capabilities and this database's mode, built once and rebuilt when
+     * shared tables, migration or the schemaless mode change.
+     */
+    public function profile(): Profile
+    {
+        return $this->profile ??= new Profile(
+            $this->adapter->limits(),
+            \array_values(\array_filter(Capability::cases(), $this->adapter->supports(...))),
+            \array_values(\array_filter(self::FEATURES, $this->adapter->hasFeature(...))),
+            $this->adapter->getSharedTables(),
+            $this->migrating,
+        );
+    }
+
+    /**
+     * Turn the adapter's schemaless mode on or off. An adapter without a schemaless mode always
+     * enforces its schema, so it only accepts false.
+     *
+     * @throws DatabaseException
+     */
+    public function setSchemaless(bool $schemaless): static
+    {
+        if ($this->adapterHasFeature(Feature\Schemaless::class)) {
+            $this->adapter->setSchemaless($schemaless);
+        } elseif ($schemaless) {
+            throw new DatabaseException('Adapter does not support schemaless');
+        }
+
+        $this->resetProfile();
+
+        return $this;
+    }
+
+    private function resetProfile(): void
+    {
+        $this->profile = null;
+        $this->documentsValidatorCache = [];
     }
 
     /**
@@ -891,16 +944,6 @@ class Database
     }
 
     /**
-     * Get list of keywords that cannot be used
-     *
-     * @return string[]
-     */
-    public function getKeywords(): array
-    {
-        return $this->adapter->getKeywords();
-    }
-
-    /**
      * Set the cache instance
      *
      *
@@ -949,6 +992,7 @@ class Database
     public function setSharedTables(bool $sharedTables): static
     {
         $this->adapter->setSharedTables($sharedTables);
+        $this->resetProfile();
 
         return $this;
     }
@@ -1191,6 +1235,7 @@ class Database
     public function setMigrating(bool $migrating): self
     {
         $this->migrating = $migrating;
+        $this->resetProfile();
 
         return $this;
     }
@@ -2316,24 +2361,48 @@ class Database
     }
 
     /**
-     * Get adapter attribute limit, accounting for internal metadata
-     * Returns 0 to indicate no limit
+     * The attributes a collection may declare besides the internal ones; 0 when there is no limit.
      */
     public function getLimitForAttributes(): int
     {
-        if ($this->adapter->getLimitForAttributes() === 0) {
-            return 0;
-        }
+        $limits = $this->adapter->limits();
 
-        return $this->adapter->getLimitForAttributes() - $this->adapter->getCountOfDefaultAttributes();
+        return $limits->attributes === 0 ? 0 : $limits->attributes - $limits->defaultAttributes;
     }
 
     /**
-     * Get adapter index limit
+     * The indexes a collection may declare besides the internal ones.
      */
     public function getLimitForIndexes(): int
     {
-        return $this->adapter->getLimitForIndexes() - $this->adapter->getCountOfDefaultIndexes();
+        $limits = $this->adapter->limits();
+
+        return $limits->indexes - $limits->defaultIndexes;
+    }
+
+    public function getMaxIndexLength(): int
+    {
+        return $this->adapter->limits()->indexLength;
+    }
+
+    public function getMaxVarcharLength(): int
+    {
+        return $this->adapter->limits()->varchar;
+    }
+
+    public function getMaxUidLength(): int
+    {
+        return $this->adapter->limits()->uidLength;
+    }
+
+    public function getMinDateTime(): NativeDateTime
+    {
+        return $this->adapter->limits()->minDateTime;
+    }
+
+    public function getMaxDateTime(): NativeDateTime
+    {
+        return $this->adapter->limits()->maxDateTime;
     }
 
     /**

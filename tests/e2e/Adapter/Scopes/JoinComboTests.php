@@ -613,7 +613,7 @@ trait JoinComboTests
         [$mCol, $metaCol] = $this->seedJoinHardcoreFixture($database);
 
         $database->createAttribute($mCol, Attribute::object(key: 'profile'));
-        if ($database->getAdapter()->supports(Capability::ObjectIndexes)) {
+        if ($database->getAdapter()->supports(Capability::IndexObject)) {
             $database->createIndex($mCol, Index::key(key: 'idx_jh_profile_email', attributes: ['profile.user.email']));
         }
 
@@ -1058,7 +1058,7 @@ trait JoinComboTests
             $this->assertSame(10, (int) $score);
 
             if (
-                $database->getAdapter()->supports(Capability::Fulltext)
+                $database->getAdapter()->supports(Capability::IndexFulltext)
                 && $this->joinHardcoreHasFulltextIndex($database, $metaCol)
             ) {
                 $searched = $database->find($mCol, [
@@ -2065,7 +2065,7 @@ trait JoinComboTests
         $database->createAttribute($cCol, Attribute::string(key: 'secret', size: 100, required: true));
         $database->createAttribute($cCol, Attribute::integer(key: 'score', required: true));
 
-        if ($database->getAdapter()->supports(Capability::Fulltext)) {
+        if ($database->getAdapter()->supports(Capability::IndexFulltext)) {
             $database->createIndex($metaCol, Index::fulltext(key: 'idx_jh_meta_body', attributes: ['body']));
         }
 
@@ -2227,7 +2227,7 @@ trait JoinComboTests
 
     private function joinHardcoreHasFulltextIndex(Database $database, string $collection): bool
     {
-        if (! $database->getAdapter()->supports(Capability::Fulltext)) {
+        if (! $database->getAdapter()->supports(Capability::IndexFulltext)) {
             return false;
         }
 

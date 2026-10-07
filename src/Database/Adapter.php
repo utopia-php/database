@@ -2,10 +2,10 @@
 
 namespace Utopia\Database;
 
-use DateTime;
 use Exception;
 use Throwable;
 use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Adapter\Limits;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Contention as ContentionException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
@@ -26,6 +26,8 @@ use Utopia\Query\Method;
  */
 abstract class Adapter implements Feature\Attributes, Feature\Collections, Feature\Databases, Feature\Documents, Feature\Indexes, Feature\Transactions
 {
+    protected const string MAX_DATETIME = '9999-12-31 23:59:59';
+
     protected string $database = '';
 
     protected string $hostname = '';
@@ -99,6 +101,8 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     /** @var array<string, true>|null */
     protected ?array $capabilitySet = null;
 
+    protected ?Limits $limits = null;
+
     /**
      * Check if this adapter supports a given capability.
      *
@@ -135,9 +139,9 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     public function capabilities(): array
     {
         return [
-            Capability::Index,
+            Capability::IndexKey,
             Capability::IndexArray,
-            Capability::UniqueIndex,
+            Capability::IndexUnique,
         ];
     }
 
@@ -253,6 +257,7 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     public function setSharedTables(bool $sharedTables): bool
     {
         $this->sharedTables = $sharedTables;
+        $this->limits = null;
 
         return true;
     }
@@ -479,11 +484,6 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     {
         return $this->alterLocks;
     }
-
-    /**
-     * Set support for attributes
-     */
-    abstract public function setSupportForAttributes(bool $support): bool;
 
     /**
      * Register a write hook that intercepts document write operations.
@@ -1015,65 +1015,7 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
      */
     abstract public function getSequences(string $collection, array $documents): array;
 
-    /**
-     * Get max STRING limit
-     */
-    abstract public function getLimitForString(): int;
-
-    /**
-     * Get max INT limit
-     */
-    abstract public function getLimitForInt(): int;
-
-    /**
-     * Get max BIGINT limit
-     *
-     * @return int
-     */
-    abstract public function getLimitForBigInt(): int;
-
-    /**
-     * Get maximum attributes limit.
-     */
-    abstract public function getLimitForAttributes(): int;
-
-    /**
-     * Get maximum index limit.
-     */
-    abstract public function getLimitForIndexes(): int;
-
-    /**
-     * Get the maximum index key length in bytes.
-     */
-    abstract public function getMaxIndexLength(): int;
-
-    /**
-     * Get the maximum VARCHAR length for this adapter
-     */
-    abstract public function getMaxVarcharLength(): int;
-
-    /**
-     * Get the maximum UID length for this adapter
-     */
-    abstract public function getMaxUIDLength(): int;
-
-    /**
-     * Get the minimum supported DateTime value
-     */
-    abstract public function getMinDateTime(): DateTime;
-
-    /**
-     * Get the maximum supported DateTime value
-     */
-    public function getMaxDateTime(): DateTime
-    {
-        return new DateTime('9999-12-31 23:59:59');
-    }
-
-    /**
-     * Get the primitive type of the primary key type for this adapter
-     */
-    abstract public function getIdAttributeType(): string;
+    abstract public function limits(): Limits;
 
     /**
      * Get Collection Size of the raw data
@@ -1088,12 +1030,6 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
      * @throws DatabaseException
      */
     abstract public function getSizeOfCollectionOnDisk(string $collection): int;
-
-    /**
-     * Get maximum width, in bytes, allowed for a SQL row
-     * Return 0 when no restrictions apply
-     */
-    abstract public function getDocumentSizeLimit(): int;
 
     /**
      * Estimate maximum number of bytes required to store a document in $collection.
@@ -1157,41 +1093,9 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
      */
     abstract public function getCountOfIndexes(Document $collection): int;
 
-    /**
-     * Returns number of attributes used by default.
-     */
-    abstract public function getCountOfDefaultAttributes(): int;
-
-    /**
-     * Returns number of indexes used by default.
-     */
-    abstract public function getCountOfDefaultIndexes(): int;
-
-    /**
-     * Get list of keywords that cannot be used
-     *
-     * @return array<string>
-     */
-    abstract public function getKeywords(): array;
-
-    /**
-     * Get List of internal index keys names
-     *
-     * @return array<string>
-     */
-    abstract public function getInternalIndexesKeys(): array;
-
     protected function getInternalKeyForAttribute(string $attribute): string
     {
         return Storage::column($attribute);
-    }
-
-    /**
-     * Handle non utf characters supported?
-     */
-    public function getSupportNonUtfCharacters(): bool
-    {
-        return false;
     }
 
     /**

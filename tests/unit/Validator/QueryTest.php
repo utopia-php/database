@@ -4,6 +4,8 @@ namespace Tests\Unit\Validator;
 
 use Exception;
 use PHPUnit\Framework\TestCase;
+use Tests\Unit\Support\Profiles;
+use Utopia\Database\Capability;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Queries\Documents;
@@ -109,7 +111,7 @@ class QueryTest extends TestCase
      */
     public function test_query(): void
     {
-        $validator = new Documents($this->attributes, [], ColumnType::Integer->value);
+        $validator = new Documents($this->attributes, [], Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::OrderRandom]));
 
         $this->assertEquals(true, $validator->isValid([Query::equal('$id', ['Iron Man', 'Ant Man'])]));
         $this->assertEquals(true, $validator->isValid([Query::equal('$id', ['Iron Man'])]));
@@ -139,7 +141,7 @@ class QueryTest extends TestCase
      */
     public function test_attribute_not_found(): void
     {
-        $validator = new Documents($this->attributes, [], ColumnType::Integer->value);
+        $validator = new Documents($this->attributes, [], Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::OrderRandom]));
 
         $response = $validator->isValid([Query::equal('name', ['Iron Man'])]);
         $this->assertEquals(false, $response);
@@ -155,7 +157,7 @@ class QueryTest extends TestCase
      */
     public function test_attribute_wrong_type(): void
     {
-        $validator = new Documents($this->attributes, [], ColumnType::Integer->value);
+        $validator = new Documents($this->attributes, [], Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::OrderRandom]));
 
         $response = $validator->isValid([Query::equal('title', [1776])]);
         $this->assertEquals(false, $response);
@@ -167,7 +169,7 @@ class QueryTest extends TestCase
      */
     public function test_query_date(): void
     {
-        $validator = new Documents($this->attributes, [], ColumnType::Integer->value);
+        $validator = new Documents($this->attributes, [], Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::OrderRandom]));
 
         $response = $validator->isValid([Query::greaterThan('birthDay', '1960-01-01 10:10:10')]);
         $this->assertEquals(true, $response);
@@ -178,7 +180,7 @@ class QueryTest extends TestCase
      */
     public function test_query_limit(): void
     {
-        $validator = new Documents($this->attributes, [], ColumnType::Integer->value);
+        $validator = new Documents($this->attributes, [], Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::OrderRandom]));
 
         $response = $validator->isValid([Query::limit(25)]);
         $this->assertEquals(true, $response);
@@ -192,7 +194,7 @@ class QueryTest extends TestCase
      */
     public function test_query_offset(): void
     {
-        $validator = new Documents($this->attributes, [], ColumnType::Integer->value);
+        $validator = new Documents($this->attributes, [], Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::OrderRandom]));
 
         $response = $validator->isValid([Query::offset(25)]);
         $this->assertEquals(true, $response);
@@ -206,7 +208,7 @@ class QueryTest extends TestCase
      */
     public function test_query_order(): void
     {
-        $validator = new Documents($this->attributes, [], ColumnType::Integer->value);
+        $validator = new Documents($this->attributes, [], Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::OrderRandom]));
 
         $response = $validator->isValid([Query::orderAsc('title')]);
         $this->assertEquals(true, $response);
@@ -226,7 +228,7 @@ class QueryTest extends TestCase
      */
     public function test_query_cursor(): void
     {
-        $validator = new Documents($this->attributes, [], ColumnType::Integer->value);
+        $validator = new Documents($this->attributes, [], Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::OrderRandom]));
 
         $response = $validator->isValid([Query::cursorAfter(new Document(['$id' => 'asdf']))]);
         $this->assertEquals(true, $response);
@@ -305,7 +307,7 @@ class QueryTest extends TestCase
      */
     public function test_query_empty(): void
     {
-        $validator = new Documents($this->attributes, [], ColumnType::Integer->value);
+        $validator = new Documents($this->attributes, [], Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::OrderRandom]));
 
         $response = $validator->isValid([Query::equal('title', [''])]);
         $this->assertEquals(true, $response);
@@ -334,7 +336,7 @@ class QueryTest extends TestCase
      */
     public function test_or_query(): void
     {
-        $validator = new Documents($this->attributes, [], ColumnType::Integer->value);
+        $validator = new Documents($this->attributes, [], Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::OrderRandom]));
 
         $this->assertFalse($validator->isValid(
             [Query::or(

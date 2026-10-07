@@ -3,9 +3,10 @@
 namespace Utopia\Database\Validator;
 
 use Closure;
-use DateTime;
 use Exception;
+use Utopia\Database\Adapter\Profile;
 use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -56,6 +57,10 @@ class Structure extends Validator
      */
     private readonly array $storedAttributes;
 
+    private readonly bool $supportForAttributes;
+
+    private readonly bool $supportUnsignedBigInt;
+
     /**
      * Structure constructor.
      *
@@ -65,15 +70,13 @@ class Structure extends Validator
      */
     public function __construct(
         protected readonly Document $collection,
-        private readonly string $idAttributeType,
-        private readonly DateTime $minAllowedDate = new DateTime('0000-01-01'),
-        private readonly DateTime $maxAllowedDate = new DateTime('9999-12-31'),
-        private bool $supportForAttributes = true,
-        private readonly bool $supportUnsignedBigInt = true,
+        private readonly Profile $profile,
         private readonly ?Document $currentDocument = null,
         array $storedAttributes = [],
     ) {
         $this->storedAttributes = \array_fill_keys($storedAttributes, true);
+        $this->supportForAttributes = $profile->supports(Capability::DefinedAttributes);
+        $this->supportUnsignedBigInt = $profile->supports(Capability::UnsignedBigInt);
     }
 
     /**
@@ -322,7 +325,7 @@ class Structure extends Validator
 
             switch ($type) {
                 case ColumnType::Id:
-                    $validators[] = new Sequence($this->idAttributeType, $key === Document::SEQUENCE);
+                    $validators[] = new Sequence($this->profile->limits->idType->value, $key === Document::SEQUENCE);
                     break;
 
                 case ColumnType::Text:
@@ -374,8 +377,8 @@ class Structure extends Validator
 
                 case ColumnType::Datetime:
                     $validators[] = new DatetimeValidator(
-                        min: $this->minAllowedDate,
-                        max: $this->maxAllowedDate
+                        min: $this->profile->limits->minDateTime,
+                        max: $this->profile->limits->maxDateTime
                     );
                     break;
 

@@ -4,7 +4,9 @@ namespace Tests\Unit\Validator;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Tests\Unit\Support\Profiles;
 use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -66,7 +68,7 @@ final class StructureFormatTest extends TestCase
         $collection = $this->collection();
         $collection->setAttribute('attributes', [$definition]);
 
-        $validator = new Structure($collection, ColumnType::Integer->value);
+        $validator = new Structure($collection, Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]));
 
         $this->assertSame($valid, $validator->isValid($this->document($code)), $validator->getDescription());
         $this->assertSame([$this->storedShape($definition)], $this->received, 'the format callback receives the attribute in its stored shape');
@@ -79,7 +81,7 @@ final class StructureFormatTest extends TestCase
         $collection = $this->collection();
         $collection->setAttribute('attributes', [new Document($definition)]);
 
-        $validator = new Structure($collection, ColumnType::Integer->value);
+        $validator = new Structure($collection, Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]));
 
         $this->assertSame($valid, $validator->isValid($this->document($code)), $validator->getDescription());
         $this->assertSame([$this->storedShape($definition)], $this->received);

@@ -5,7 +5,6 @@ namespace Utopia\Database\Traits;
 use Exception;
 use Throwable;
 use Utopia\Console;
-use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
@@ -69,7 +68,7 @@ trait Collections
 
         $indexes = $collection->indexes();
 
-        if ($this->validation()->get() && $this->adapter->supports(Capability::TTLIndexes)) {
+        if ($this->validation()->get() && $this->adapter->supports(Capability::IndexTtl)) {
             $ttlIndexes = \array_filter($indexes, static fn (Index $index): bool => $index->type === IndexType::Ttl);
             if (\count($ttlIndexes) > 1) {
                 throw new IndexException('There can be only one TTL index in a collection');
@@ -88,27 +87,7 @@ trait Collections
         );
 
         if ($this->validation()->get()) {
-            $validator = new IndexDefinition(
-                $attributes,
-                [],
-                $this->adapter->getMaxIndexLength(),
-                $this->adapter->getInternalIndexesKeys(),
-                $this->adapter->supports(Capability::IndexArray),
-                $this->adapter->supports(Capability::SpatialIndexNull),
-                $this->adapter->supports(Capability::SpatialIndexOrder),
-                $this->adapter->supports(Capability::Vectors),
-                $this->adapter->supports(Capability::DefinedAttributes),
-                $this->adapter->supports(Capability::MultipleFulltextIndexes),
-                $this->adapter->supports(Capability::IdenticalIndexes),
-                $this->adapter->supports(Capability::ObjectIndexes),
-                $this->adapter->supports(Capability::TrigramIndex),
-                $this->adapter->hasFeature(Feature\Spatial::class),
-                $this->adapter->supports(Capability::Index),
-                $this->adapter->supports(Capability::UniqueIndex),
-                $this->adapter->supports(Capability::Fulltext),
-                $this->adapter->supports(Capability::TTLIndexes),
-                $this->adapter->supports(Capability::Objects)
-            );
+            $validator = new IndexDefinition($attributes, [], $this->profile());
             foreach ($indexes as $index) {
                 if (! $validator->isValid($index)) {
                     throw new IndexException($validator->getDescription());
@@ -116,23 +95,23 @@ trait Collections
             }
         }
 
-        if ($indexes !== [] && $this->adapter->getCountOfIndexes($definition) > $this->adapter->getLimitForIndexes()) {
-            throw new LimitException('Index limit of '.$this->adapter->getLimitForIndexes().' exceeded. Cannot create collection.');
+        if ($indexes !== [] && $this->adapter->getCountOfIndexes($definition) > $this->adapter->limits()->indexes) {
+            throw new LimitException('Index limit of '.$this->adapter->limits()->indexes.' exceeded. Cannot create collection.');
         }
 
         if ($attributes !== []) {
             if (
-                $this->adapter->getLimitForAttributes() > 0 &&
-                $this->adapter->getCountOfAttributes($definition) > $this->adapter->getLimitForAttributes()
+                $this->adapter->limits()->attributes > 0 &&
+                $this->adapter->getCountOfAttributes($definition) > $this->adapter->limits()->attributes
             ) {
-                throw new LimitException('Attribute limit of '.$this->adapter->getLimitForAttributes().' exceeded. Cannot create collection.');
+                throw new LimitException('Attribute limit of '.$this->adapter->limits()->attributes.' exceeded. Cannot create collection.');
             }
 
             if (
-                $this->adapter->getDocumentSizeLimit() > 0 &&
-                $this->adapter->getAttributeWidth($definition) > $this->adapter->getDocumentSizeLimit()
+                $this->adapter->limits()->documentSize > 0 &&
+                $this->adapter->getAttributeWidth($definition) > $this->adapter->limits()->documentSize
             ) {
-                throw new LimitException('Document size limit of '.$this->adapter->getDocumentSizeLimit().' exceeded. Cannot create collection.');
+                throw new LimitException('Document size limit of '.$this->adapter->limits()->documentSize.' exceeded. Cannot create collection.');
             }
         }
 
@@ -421,7 +400,7 @@ trait Collections
      */
     private function fitIndexToAttributes(Index $index, array $attributes): Index
     {
-        $maxIndexLength = $this->adapter->getMaxIndexLength();
+        $maxIndexLength = $this->adapter->limits()->indexLength;
         $lengths = $index->lengths;
         $orders = $index->orders;
 

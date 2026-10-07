@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\RequiresPhpExtension;
 use PHPUnit\Framework\TestCase;
 use Redis;
 use Utopia\Database\Adapter;
+use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\Redis as RedisAdapter;
 use Utopia\Database\Capability;
@@ -34,9 +35,7 @@ final class AttributeSupportToggleTest extends TestCase
     {
         $adapter = $adapter();
 
-        $this->assertTrue($adapter->setSupportForAttributes(false), 'An adapter that always enforces its schema must not report that attribute support was turned off');
-        $this->assertTrue($adapter->supports(Capability::DefinedAttributes));
-        $this->assertTrue($adapter->setSupportForAttributes(true));
+        $this->assertFalse($adapter->hasFeature(Feature\Schemaless::class), 'An adapter that always enforces its schema has no schemaless mode');
         $this->assertTrue($adapter->supports(Capability::DefinedAttributes));
     }
 }

@@ -2482,7 +2482,7 @@ trait SchemalessTests
             return;
         }
 
-        if (! $database->getAdapter()->supports(Capability::TTLIndexes)) {
+        if (! $database->getAdapter()->supports(Capability::IndexTtl)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2615,7 +2615,7 @@ trait SchemalessTests
             return;
         }
 
-        if (! $database->getAdapter()->supports(Capability::TTLIndexes)) {
+        if (! $database->getAdapter()->supports(Capability::IndexTtl)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2822,7 +2822,7 @@ trait SchemalessTests
             return;
         }
 
-        if (! $database->getAdapter()->supports(Capability::TTLIndexes)) {
+        if (! $database->getAdapter()->supports(Capability::IndexTtl)) {
             $this->expectNotToPerformAssertions();
 
             return;

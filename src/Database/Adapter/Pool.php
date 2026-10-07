@@ -2,7 +2,6 @@
 
 namespace Utopia\Database\Adapter;
 
-use DateTime;
 use Throwable;
 use Utopia\Database\Adapter;
 use Utopia\Database\Attribute;
@@ -42,9 +41,9 @@ class Pool extends Adapter
     private ?Value $pinned = null;
 
     /**
-     * Whether borrowed adapters should require attributes to be defined in metadata.
+     * The schemaless mode this handle puts every borrowed adapter in, or null to leave each in its own.
      */
-    protected ?bool $supportForAttributes = null;
+    protected ?bool $schemaless = null;
 
     /**
      * Every connection of one pool runs the same adapter, and handles are often built per
@@ -159,6 +158,7 @@ class Pool extends Adapter
             Feature\ConnectionId::class => 'Adapter does not support connection id',
             Feature\Relationships::class => 'Adapter does not support relationships',
             Feature\Timeouts::class => 'Adapter does not support timeouts',
+            Feature\Schemaless::class => 'Adapter does not support schemaless',
             default => 'Adapter does not support '.$feature,
         };
     }
@@ -173,8 +173,8 @@ class Pool extends Adapter
         $adapter->setAuthorization($this->authorization);
         $adapter->enableAlterLocks($this->alterLocks);
 
-        if ($this->supportForAttributes !== null) {
-            $adapter->setSupportForAttributes($this->supportForAttributes);
+        if ($this->schemaless !== null && $adapter instanceof Feature\Schemaless) {
+            $adapter->setSchemaless($this->schemaless);
         }
 
         $this->syncTimeouts($adapter);
@@ -231,7 +231,7 @@ class Pool extends Adapter
 
     private function supportsDefinedAttributes(): bool
     {
-        $mode = $this->supportForAttributes;
+        $mode = $this->schemaless;
         if ($mode === null) {
             /** @var bool $result */
             $result = $this->delegate('supports', [Capability::DefinedAttributes]);
@@ -929,94 +929,16 @@ class Pool extends Adapter
         return $result;
     }
 
-    /**
-     * {@inheritDoc}
-     */
-    public function getLimitForString(): int
+    #[\Override]
+    public function limits(): Limits
     {
-        /** @var int $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
-        return $result;
-    }
+        if ($this->limits === null) {
+            /** @var Limits $limits */
+            $limits = $this->delegate(__FUNCTION__, \func_get_args());
+            $this->limits = $limits;
+        }
 
-    /**
-     * {@inheritDoc}
-     */
-    public function getLimitForInt(): int
-    {
-        /** @var int $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
-        return $result;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function getLimitForBigInt(): int
-    {
-        /** @var int $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
-        return $result;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function getLimitForAttributes(): int
-    {
-        /** @var int $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
-        return $result;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function getLimitForIndexes(): int
-    {
-        /** @var int $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
-        return $result;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function getMaxIndexLength(): int
-    {
-        /** @var int $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
-        return $result;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function getMaxVarcharLength(): int
-    {
-        /** @var int $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
-        return $result;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function getMaxUIDLength(): int
-    {
-        /** @var int $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
-        return $result;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function getMinDateTime(): DateTime
-    {
-        /** @var DateTime $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
-        return $result;
+        return $this->limits;
     }
 
     /**
@@ -1042,49 +964,9 @@ class Pool extends Adapter
     /**
      * {@inheritDoc}
      */
-    public function getCountOfDefaultAttributes(): int
-    {
-        /** @var int $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
-        return $result;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function getCountOfDefaultIndexes(): int
-    {
-        /** @var int $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
-        return $result;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function getDocumentSizeLimit(): int
-    {
-        /** @var int $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
-        return $result;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
     public function getAttributeWidth(Document $collection): int
     {
         /** @var int $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
-        return $result;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function getKeywords(): array
-    {
-        /** @var array<string> $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());
         return $result;
     }
@@ -1106,16 +988,6 @@ class Pool extends Adapter
     {
         /** @var string $result */
         $result = $this->delegateFeature(Feature\ConnectionId::class, __FUNCTION__, \func_get_args());
-        return $result;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function getInternalIndexesKeys(): array
-    {
-        /** @var array<string> $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
         return $result;
     }
 
@@ -1142,16 +1014,6 @@ class Pool extends Adapter
     protected function execute(mixed $statement): bool
     {
         /** @var bool $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
-        return $result;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function getIdAttributeType(): string
-    {
-        /** @var string $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());
         return $result;
     }
@@ -1238,13 +1100,24 @@ class Pool extends Adapter
     }
 
     /**
-     * {@inheritDoc}
+     * Every adapter this handle borrows afterwards is put in the mode first.
      */
-    public function setSupportForAttributes(bool $support): bool
+    public function setSchemaless(bool $schemaless): static
     {
+        $this->delegateFeature(Feature\Schemaless::class, __FUNCTION__, \func_get_args());
+        $this->schemaless = $schemaless;
+
+        return $this;
+    }
+
+    public function isSchemaless(): bool
+    {
+        if ($this->schemaless !== null) {
+            return $this->schemaless;
+        }
+
         /** @var bool $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
-        $this->supportForAttributes = $support;
+        $result = $this->delegateFeature(Feature\Schemaless::class, __FUNCTION__, \func_get_args());
 
         return $result;
     }
@@ -1260,16 +1133,6 @@ class Pool extends Adapter
         $this->authorization = $authorization;
 
         return $this;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function getSupportNonUtfCharacters(): bool
-    {
-        /** @var bool $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
-        return $result;
     }
 
     /**

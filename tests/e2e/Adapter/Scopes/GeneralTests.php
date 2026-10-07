@@ -768,7 +768,7 @@ trait GeneralTests
         if (! $database->getAdapter()->supports(Capability::Caching)) {
             $this->markTestSkipped('Adapter does not use the document cache.');
         }
-        if (! $database->getAdapter()->supports(Capability::NestedTransactions)) {
+        if (! $database->getAdapter()->supports(Capability::TransactionNested)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1041,7 +1041,7 @@ trait GeneralTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::NestedTransactions)) {
+        if (! $database->getAdapter()->supports(Capability::TransactionNested)) {
             $this->expectNotToPerformAssertions();
 
             return;

@@ -38,11 +38,4 @@ interface Indexes
      * @return bool True on success.
      */
     public function renameIndex(string $collection, string $old, string $new): bool;
-
-    /**
-     * Get the keys of all internal indexes used by the adapter.
-     *
-     * @return array<string> The internal index keys.
-     */
-    public function getInternalIndexesKeys(): array;
 }

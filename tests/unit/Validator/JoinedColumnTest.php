@@ -5,6 +5,8 @@ namespace Tests\Unit\Validator;
 use Closure;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Tests\Unit\Support\Profiles;
+use Utopia\Database\Capability;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\RelationshipSide;
@@ -210,7 +212,7 @@ final class JoinedColumnTest extends TestCase
 
     public function testDocumentQueriesCheckJoinConditionsAgainstTheJoinedCollection(): void
     {
-        $validator = new DocumentQueries($this->attributes());
+        $validator = new DocumentQueries($this->attributes(), Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::Joins]));
         $validator->setJoinedCollections([$this->notes()]);
 
         $this->assertTrue($validator->isValid([
@@ -243,7 +245,7 @@ final class JoinedColumnTest extends TestCase
 
     public function testDocumentQueriesKeepRejectingTopLevelFilters(): void
     {
-        $validator = new DocumentQueries($this->attributes());
+        $validator = new DocumentQueries($this->attributes(), Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::Joins]));
         $validator->setJoinedCollections([$this->notes()]);
 
         $this->assertFalse($validator->isValid([

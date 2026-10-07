@@ -69,8 +69,8 @@ final class PoolCapabilityTest extends TestCase
         $asked->exchangeArray([]);
         $database->getDocument('posts', 'first', $selection);
 
-        $this->assertSame(['DefinedAttributes', 'DefinedAttributes'], $asked->getArrayCopy());
-        $this->assertSame(2, $this->checkouts);
+        $this->assertSame(['DefinedAttributes'], $asked->getArrayCopy());
+        $this->assertSame(1, $this->checkouts);
     }
 
     public function testAWarmValidatedReadWithoutQueriesChecksOutNoConnection(): void
@@ -132,7 +132,7 @@ final class PoolCapabilityTest extends TestCase
 
         $handle = $this->pool($connections);
         $this->assertTrue($handle->supports(Capability::Casting));
-        $this->assertTrue($handle->supports(Capability::Fulltext));
+        $this->assertTrue($handle->supports(Capability::IndexFulltext));
         $this->assertSame(0, $this->checkouts);
     }
 
@@ -160,10 +160,10 @@ final class PoolCapabilityTest extends TestCase
         };
         $pool = $this->pool($this->connections($mongo));
 
-        $mongo->setSupportForAttributes(false);
+        $mongo->setSchemaless(true);
         $this->assertFalse($pool->supports(Capability::DefinedAttributes));
 
-        $mongo->setSupportForAttributes(true);
+        $mongo->setSchemaless(false);
         $this->assertTrue($pool->supports(Capability::DefinedAttributes));
 
         $this->assertSame(2, $this->checkouts);
@@ -180,23 +180,23 @@ final class PoolCapabilityTest extends TestCase
         $connections = $this->connections($mongo);
         $pool = $this->pool($connections);
 
-        $pool->setSupportForAttributes(false);
+        $pool->setSchemaless(true);
         $this->checkouts = 0;
         $this->assertFalse($pool->supports(Capability::DefinedAttributes));
         $this->assertFalse($pool->supports(Capability::DefinedAttributes));
         $this->assertSame(1, $this->checkouts, 'A schema mode the handle set is asked of a connection once');
 
-        $mongo->setSupportForAttributes(true);
+        $mongo->setSchemaless(false);
         $this->assertFalse($pool->supports(Capability::DefinedAttributes), 'Every connection the handle borrows is put in its mode first');
 
-        $pool->setSupportForAttributes(true);
+        $pool->setSchemaless(false);
         $this->checkouts = 0;
         $this->assertTrue($pool->supports(Capability::DefinedAttributes));
         $this->assertTrue($pool->supports(Capability::DefinedAttributes));
         $this->assertSame(1, $this->checkouts, 'Each mode is answered by a connection in that mode');
 
         $other = $this->pool($connections);
-        $other->setSupportForAttributes(false);
+        $other->setSchemaless(true);
         $this->checkouts = 0;
         $this->assertFalse($other->supports(Capability::DefinedAttributes));
         $this->assertTrue($pool->supports(Capability::DefinedAttributes));

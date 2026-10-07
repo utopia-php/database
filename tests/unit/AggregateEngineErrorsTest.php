@@ -122,25 +122,23 @@ final class AggregateEngineErrorsTest extends TestCase
     }
 
     /**
-     * @return array<string, array{0: SQL, 1: bool}>
+     * @return array<string, array{0: SQL}>
      */
     public static function adapterProvider(): array
     {
         return [
-            'MariaDB' => [new MariaDB(new stdClass()), true],
-            'MySQL' => [new MySQL(new stdClass()), true],
-            'Postgres' => [new Postgres(new stdClass()), true],
-            'SQLite' => [new SQLite(new PDO('sqlite::memory:')), false],
-            'SQLite emulating MySQL' => [(new SQLite(new PDO('sqlite::memory:')))->setEmulateMySQL(true), false],
+            'MariaDB' => [new MariaDB(new stdClass())],
+            'MySQL' => [new MySQL(new stdClass())],
+            'Postgres' => [new Postgres(new stdClass())],
+            'SQLite' => [new SQLite(new PDO('sqlite::memory:'))],
+            'SQLite emulating MySQL' => [(new SQLite(new PDO('sqlite::memory:')))->setEmulateMySQL(true)],
         ];
     }
 
     #[DataProvider('adapterProvider')]
-    public function testOnlySQLiteLacksTheStatisticalAndBitwiseAggregates(SQL $adapter, bool $supported): void
+    public function testEverySQLAdapterAnswersAggregations(SQL $adapter): void
     {
         $this->assertTrue($adapter->supports(Capability::Aggregations));
-        $this->assertSame($supported, $adapter->supports(Capability::StatisticalAggregates));
-        $this->assertSame($supported, $adapter->supports(Capability::BitwiseAggregates));
     }
 
     /**

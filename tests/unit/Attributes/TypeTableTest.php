@@ -8,13 +8,16 @@ use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 use ReflectionMethod;
 use ReflectionNamedType;
+use Tests\Unit\Support\Profiles;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
+use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\AttributeUpdate;
+use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -280,7 +283,7 @@ final class TypeTableTest extends TestCase
                 Document::COLLECTION => Database::METADATA,
                 'attributes' => [new Document($this->definition($type))],
             ]),
-            ColumnType::Integer->value,
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
         $document = new Document([
             Document::COLLECTION => 'items',
@@ -519,12 +522,7 @@ final class TypeTableTest extends TestCase
     {
         return new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 16381,
-            maxIntLength: 4294967295,
-            supportForVectors: $supported,
-            supportForSpatialAttributes: $supported,
-            supportForObject: $supported,
+            profile: Profiles::of(capabilities: [...($supported ? [Capability::Vectors] : []), ...($supported ? [Capability::Objects] : [])], features: [...($supported ? [Feature\Spatial::class] : [])], string: 16777216, varchar: 16381, integer: 4294967295),
         );
     }
 

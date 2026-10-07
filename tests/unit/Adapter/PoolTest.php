@@ -169,7 +169,7 @@ final class PoolTest extends TestCase
 
         $pool = new Pool($connections);
         $pool->setAuthorization(new Authorization());
-        $pool->setSupportForAttributes(false);
+        $pool->setSchemaless(true);
 
         $this->assertFalse($pool->supports(Capability::DefinedAttributes));
         $this->assertFalse($second->supports(Capability::DefinedAttributes));

@@ -3,6 +3,8 @@
 namespace Tests\Unit\Validator;
 
 use PHPUnit\Framework\TestCase;
+use Tests\Unit\Support\Profiles;
+use Utopia\Database\Capability;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Queries;
 use Utopia\Database\Validator\Queries\Document as DocumentQueries;
@@ -47,7 +49,7 @@ class QueryShapeJoinCapTest extends TestCase
 
     public function testJoinCapAppliesToSingleDocumentQueries(): void
     {
-        $validator = new DocumentQueries($this->attributes());
+        $validator = new DocumentQueries($this->attributes(), Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::Joins]));
 
         $this->assertTrue($validator->isValid($this->crossJoins(8)), $validator->getDescription());
         $this->assertFalse($validator->isValid($this->crossJoins(9)));

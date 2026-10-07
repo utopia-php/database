@@ -34,16 +34,13 @@ class MySQL extends MariaDB
     public function capabilities(): array
     {
         $remove = [
-            Capability::BoundaryInclusive,
-            Capability::SpatialIndexOrder,
-            Capability::OptionalSpatial,
+            Capability::IndexSpatialOrder,
         ];
 
         return array_values(array_filter(
             array_merge(parent::capabilities(), [
                 Capability::SpatialAxisOrder,
-                Capability::MultiDimensionDistance,
-                Capability::CastIndexArray,
+                Capability::IndexArrayCast,
             ]),
             fn (Capability $c) => ! in_array($c, $remove, true)
         ));
@@ -174,7 +171,7 @@ class MySQL extends MariaDB
         switch ($type) {
             case ColumnType::Point->value:
                 $type = 'POINT SRID 4326';
-                if (! $this->supports(Capability::SpatialIndexNull)) {
+                if (! $this->supports(Capability::IndexSpatialNull)) {
                     if ($required) {
                         $type .= ' NOT NULL';
                     } else {
@@ -186,7 +183,7 @@ class MySQL extends MariaDB
 
             case ColumnType::Linestring->value:
                 $type = 'LINESTRING SRID 4326';
-                if (! $this->supports(Capability::SpatialIndexNull)) {
+                if (! $this->supports(Capability::IndexSpatialNull)) {
                     if ($required) {
                         $type .= ' NOT NULL';
                     } else {
@@ -198,7 +195,7 @@ class MySQL extends MariaDB
 
             case ColumnType::Polygon->value:
                 $type = 'POLYGON SRID 4326';
-                if (! $this->supports(Capability::SpatialIndexNull)) {
+                if (! $this->supports(Capability::IndexSpatialNull)) {
                     if ($required) {
                         $type .= ' NOT NULL';
                     } else {

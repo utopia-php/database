@@ -2,7 +2,6 @@
 
 namespace Tests\Unit\Adapter;
 
-use PDO;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
@@ -12,8 +11,8 @@ use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\ReadWritePool;
-use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Cache\QueryCache;
 use Utopia\Database\Capability;
@@ -40,29 +39,12 @@ final class ReadWritePoolMetadataTest extends TestCase
     public static function metadataCalls(): iterable
     {
         $calls = [
-            'supports' => [Capability::Index],
+            'supports' => [Capability::IndexKey],
             'capabilities' => [],
             'hasFeature' => [Feature\Spatial::class],
-            'setSupportForAttributes' => [true],
-            'getSupportNonUtfCharacters' => [],
-            'getLimitForString' => [],
-            'getLimitForInt' => [],
-            'getLimitForBigInt' => [],
-            'getLimitForAttributes' => [],
-            'getLimitForIndexes' => [],
-            'getMaxIndexLength' => [],
-            'getMaxVarcharLength' => [],
-            'getMaxUIDLength' => [],
-            'getMinDateTime' => [],
-            'getIdAttributeType' => [],
-            'getDocumentSizeLimit' => [],
             'getAttributeWidth' => [new Document()],
             'getCountOfAttributes' => [new Document()],
             'getCountOfIndexes' => [new Document()],
-            'getCountOfDefaultAttributes' => [],
-            'getCountOfDefaultIndexes' => [],
-            'getKeywords' => [],
-            'getInternalIndexesKeys' => [],
             'getBuilder' => ['posts'],
             'getSchema' => [],
             'getColumnType' => ['string', 255, true, false, false],
@@ -217,20 +199,52 @@ final class ReadWritePoolMetadataTest extends TestCase
         );
     }
 
-    public function testConfiguringAttributeSupportKeepsReadsOnTheReplica(): void
+    public function testLimitsAreAnsweredWhereReadsGoWithoutOpeningTheStickyWindow(): void
     {
-        $database = $this->createReplicatedDatabase(
-            new SQLite(new PDO('sqlite::memory:')),
-            new SQLite(new PDO('sqlite::memory:')),
-        );
+        $primary = $this->createMock(CastingAdapterStub::class);
+        $replica = $this->createMock(CastingAdapterStub::class);
+        $pool = $this->createPool($primary, $replica);
+        $limits = (new Memory())->limits();
 
-        $database->getAdapter()->setSupportForAttributes(true);
+        $replica->expects($this->once())->method('limits')->willReturn($limits);
+        $primary->expects($this->never())->method('limits');
+        $replica->expects($this->once())->method('ping')->willReturn(true);
+        $primary->expects($this->never())->method('ping');
+
+        $this->assertSame($limits, $pool->limits());
+        $this->assertTrue($pool->ping(), 'limits() sent the next read to the primary');
+    }
+
+    public function testConfiguringTheSchemalessModeKeepsReadsOnTheReplica(): void
+    {
+        $database = $this->createReplicatedDatabase($this->schemalessMemory(), $this->schemalessMemory());
+
+        $database->setSchemaless(false);
 
         $this->assertSame(
             'replica',
             $database->getDocument('posts', 'post')->getAttribute('server'),
-            'setSupportForAttributes() sent the next read to the primary',
+            'setSchemaless() sent the next read to the primary',
         );
+    }
+
+    private function schemalessMemory(): Memory
+    {
+        return new class () extends Memory implements Feature\Schemaless {
+            private bool $schemaless = false;
+
+            public function setSchemaless(bool $schemaless): static
+            {
+                $this->schemaless = $schemaless;
+
+                return $this;
+            }
+
+            public function isSchemaless(): bool
+            {
+                return $this->schemaless;
+            }
+        };
     }
 
     public function testInternalCastingKeepsReadsOnTheReplica(): void

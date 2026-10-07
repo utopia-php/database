@@ -262,7 +262,7 @@ trait Indexes
             $keys[$key] = true;
         }
 
-        if ($this->adapter->getCountOfIndexes($definition) + \count($indexes) > $this->adapter->getLimitForIndexes()) {
+        if ($this->adapter->getCountOfIndexes($definition) + \count($indexes) > $this->adapter->limits()->indexes) {
             throw new LimitException('Index limit reached. Cannot create new index.');
         }
 
@@ -397,7 +397,7 @@ trait Indexes
         }
 
         $id = \strtolower($this->adapter->filter($index->key));
-        foreach ($this->adapter->getInternalIndexesKeys() as $internal) {
+        foreach ($this->adapter->limits()->internalIndexKeys as $internal) {
             if (\strtolower($this->adapter->filter($internal)) === $id) {
                 return false;
             }

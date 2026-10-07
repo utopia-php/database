@@ -55,7 +55,7 @@ use Utopia\Query\Schema\IndexType;
 /**
  * Database adapter for MongoDB, using the Utopia Mongo client for document-based storage.
  */
-class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relationships, Feature\Timeouts, Feature\Upserts, Feature\UTCCasting
+class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relationships, Feature\Schemaless, Feature\Timeouts, Feature\Upserts, Feature\UTCCasting
 {
     /**
      * @var array<string>
@@ -124,7 +124,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
     protected int $inTransaction = 0;
 
-    protected bool $supportForAttributes = true;
+    protected bool $schemaless = false;
 
     private const array PREFIX_SWAPPED_KEYS = ['permissions', 'createdAt', 'updatedAt', 'collection'];
 
@@ -164,14 +164,10 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     {
         return array_merge(parent::capabilities(), [
             Capability::Objects,
-            Capability::Fulltext,
-            Capability::TTLIndexes,
-            Capability::Regex,
-            Capability::QueryContains,
-            Capability::BatchCreateAttributes,
+            Capability::IndexFulltext,
+            Capability::IndexTtl,
             Capability::Caching,
             Capability::Hostname,
-            Capability::PCRE,
             Capability::Operators,
             Capability::TransactionRetries,
         ]);
@@ -202,24 +198,22 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $this->timeout = 0;
     }
 
-    /**
-     * Set whether the adapter supports schema-based attribute definitions.
-     *
-     * @param bool $support Whether to enable attribute support
-     * @return bool
-     */
-    public function setSupportForAttributes(bool $support): bool
+    public function setSchemaless(bool $schemaless): static
     {
-        $this->supportForAttributes = $support;
-        $this->capabilitySet = null;
+        $this->schemaless = $schemaless;
 
-        return $this->supportForAttributes;
+        return $this;
+    }
+
+    public function isSchemaless(): bool
+    {
+        return $this->schemaless;
     }
 
     public function supports(Capability $feature): bool
     {
         if ($feature === Capability::DefinedAttributes) {
-            return $this->supportForAttributes;
+            return ! $this->schemaless;
         }
 
         return parent::supports($feature);
@@ -2742,88 +2736,28 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     }
 
     /**
-     * Get max STRING limit
+     * Collections hold any number of attributes and documents of any width, so both caps are 0.
      */
-    public function getLimitForString(): int
+    public function limits(): Limits
     {
-        return 2147483647;
-    }
-
-    /**
-     * Get max INT limit
-     */
-    public function getLimitForInt(): int
-    {
-        // Mongo does not handle integers directly, so using MariaDB limit for now
-        return 4294967295;
-    }
-
-    /**
-     * Get max BIGINT limit
-     *
-     * @return int
-     */
-    public function getLimitForBigInt(): int
-    {
-        return Database::MAX_BIG_INT;
-    }
-
-    /**
-     * Get maximum column limit.
-     * Returns 0 to indicate no limit
-     */
-    public function getLimitForAttributes(): int
-    {
-        return 0;
-    }
-
-    /**
-     * Get maximum index limit.
-     * https://docs.mongodb.com/manual/reference/limits/#mongodb-limit-Number-of-Indexes-per-Collection
-     */
-    public function getLimitForIndexes(): int
-    {
-        return 64;
-    }
-
-    /**
-     * Get the maximum combined index key length in bytes.
-     *
-     * @return int
-     */
-    public function getMaxIndexLength(): int
-    {
-        return 1024;
-    }
-
-    /**
-     * Get the maximum VARCHAR length. MongoDB has no distinction, so returns the same as string limit.
-     *
-     * @return int
-     */
-    public function getMaxVarcharLength(): int
-    {
-        return 2147483647;
-    }
-
-    /**
-     * Get the maximum length for unique document IDs.
-     *
-     * @return int
-     */
-    public function getMaxUIDLength(): int
-    {
-        return 255;
-    }
-
-    /**
-     * Get the minimum supported datetime value for MongoDB.
-     *
-     * @return NativeDateTime
-     */
-    public function getMinDateTime(): NativeDateTime
-    {
-        return new NativeDateTime('-9999-01-01 00:00:00');
+        return $this->limits ??= new Limits(
+            string: 2147483647,
+            varchar: 2147483647,
+            integer: 4294967295,
+            bigInteger: Database::MAX_BIG_INT,
+            attributes: 0,
+            indexes: 64,
+            defaultAttributes: \count(Database::internalAttributesFor(true)),
+            defaultIndexes: \count(Database::INTERNAL_INDEXES),
+            indexLength: 1024,
+            uidLength: 255,
+            documentSize: 0,
+            minDateTime: new NativeDateTime('-9999-01-01 00:00:00'),
+            maxDateTime: new NativeDateTime(self::MAX_DATETIME),
+            idType: ColumnType::Uuid7,
+            keywords: [],
+            internalIndexKeys: [],
+        );
     }
 
     /**
@@ -2831,7 +2765,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      */
     public function getCountOfAttributes(Document $collection): int
     {
-        return \count(self::collectionAttributes($collection)) + $this->getCountOfDefaultAttributes();
+        return \count(self::collectionAttributes($collection)) + $this->limits()->defaultAttributes;
     }
 
     /**
@@ -2839,32 +2773,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      */
     public function getCountOfIndexes(Document $collection): int
     {
-        return \count(self::collectionIndexes($collection)) + $this->getCountOfDefaultIndexes();
-    }
-
-    /**
-     * Returns number of attributes used by default.
-     */
-    public function getCountOfDefaultAttributes(): int
-    {
-        return \count(Database::internalAttributesFor(true));
-    }
-
-    /**
-     * Returns number of indexes used by default.
-     */
-    public function getCountOfDefaultIndexes(): int
-    {
-        return \count(Database::INTERNAL_INDEXES);
-    }
-
-    /**
-     * Get maximum width, in bytes, allowed for a SQL row
-     * Return 0 when no restrictions apply
-     */
-    public function getDocumentSizeLimit(): int
-    {
-        return 0;
+        return \count(self::collectionIndexes($collection)) + $this->limits()->defaultIndexes;
     }
 
     /**
@@ -2876,46 +2785,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     public function getAttributeWidth(Document $collection): int
     {
         return 0;
-    }
-
-    /**
-     * Get reserved keywords that cannot be used as identifiers. MongoDB has none.
-     *
-     * @return array<string>
-     */
-    public function getKeywords(): array
-    {
-        return [];
-    }
-
-    /**
-     * Get the keys of internally managed indexes. MongoDB has none exposed.
-     *
-     * @return array<string>
-     */
-    public function getInternalIndexesKeys(): array
-    {
-        return [];
-    }
-
-    /**
-     * Get the internal ID attribute type used by MongoDB (UUID v7).
-     *
-     * @return string
-     */
-    public function getIdAttributeType(): string
-    {
-        return ColumnType::Uuid7->value;
-    }
-
-    /**
-     * Check whether the adapter supports storing non-UTF characters. MongoDB does not.
-     *
-     * @return bool
-     */
-    public function getSupportNonUtfCharacters(): bool
-    {
-        return false;
     }
 
     /**

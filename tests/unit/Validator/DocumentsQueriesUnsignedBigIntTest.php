@@ -3,6 +3,8 @@
 namespace Tests\Unit\Validator;
 
 use PHPUnit\Framework\TestCase;
+use Tests\Unit\Support\Profiles;
+use Utopia\Database\Capability;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Queries\Documents;
@@ -37,9 +39,9 @@ class DocumentsQueriesUnsignedBigIntTest extends TestCase
     public function test_documents_validator_accepts_unsigned_values_above_signed_max_by_default(): void
     {
         $validator = new Documents(
-            attributes: $this->attributes,
-            indexes: [],
-            idAttributeType: ColumnType::Integer->value,
+            $this->attributes,
+            [],
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::OrderRandom]),
         );
 
         $this->assertTrue($validator->isValid([Query::equal('counter', [self::ABOVE_SIGNED_MAX])]), $validator->getDescription());
@@ -58,10 +60,9 @@ class DocumentsQueriesUnsignedBigIntTest extends TestCase
     public function test_adapters_without_unsigned_bigint_still_reject_values_above_signed_max(): void
     {
         $validator = new Documents(
-            attributes: $this->attributes,
-            indexes: [],
-            idAttributeType: ColumnType::Integer->value,
-            supportUnsignedBigInt: false,
+            $this->attributes,
+            [],
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::OrderRandom]),
         );
 
         $this->assertFalse($validator->isValid([Query::equal('counter', [self::ABOVE_SIGNED_MAX])]));

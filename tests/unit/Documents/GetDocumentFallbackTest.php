@@ -88,7 +88,7 @@ final class GetDocumentFallbackTest extends TestCase
         return new class () extends Memory {
             public function capabilities(): array
             {
-                return [...parent::capabilities(), Capability::TTLIndexes];
+                return [...parent::capabilities(), Capability::IndexTtl];
             }
         };
     }

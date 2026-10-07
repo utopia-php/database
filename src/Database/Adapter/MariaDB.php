@@ -52,26 +52,14 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
     {
         return array_merge(parent::capabilities(), [
             Capability::IntegerBooleans,
-            Capability::NumericCasting,
             Capability::AlterLock,
-            Capability::JSONOverlaps,
-            Capability::FulltextWildcard,
-            Capability::PCRE,
-            Capability::SpatialIndexOrder,
-            Capability::OptionalSpatial,
+            Capability::IndexFulltextWildcard,
+            Capability::IndexSpatialOrder,
+            Capability::NonUtfCharacters,
+            Capability::SchemaIntrospection,
             Capability::UpsertOnUniqueIndex,
             Capability::UnsignedBigInt,
         ]);
-    }
-
-    /**
-     * Check whether the adapter supports storing non-UTF characters.
-     *
-     * @return bool
-     */
-    public function getSupportNonUtfCharacters(): bool
-    {
-        return true;
     }
 
     /**
@@ -156,7 +144,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
             foreach ($index->attributes as $nested => $attribute) {
                 $indexOrder = $index->orders[$nested]->value ?? '';
 
-                if ($indexType === IndexType::Spatial && ! $this->supports(Capability::SpatialIndexOrder) && ! empty($indexOrder)) {
+                if ($indexType === IndexType::Spatial && ! $this->supports(Capability::IndexSpatialOrder) && ! empty($indexOrder)) {
                     throw new DatabaseException('Spatial indexes with explicit orders are not supported. Remove the orders to create this index.');
                 }
 
@@ -482,7 +470,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
      */
     private function compileIndexColumn(string $column, bool $array, int $length, string $order): string
     {
-        if ($array && $this->supports(Capability::CastIndexArray)) {
+        if ($array && $this->supports(Capability::IndexArrayCast)) {
             return '(CAST('.$this->quote($column).' AS char('.Database::MAX_ARRAY_INDEX_LENGTH.') ARRAY))';
         }
 

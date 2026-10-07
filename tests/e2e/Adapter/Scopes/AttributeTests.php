@@ -1157,7 +1157,7 @@ trait AttributeTests
         $this->assertEquals('renamed', $collection->attributes()[0]->key);
         $this->assertEquals('renamed', $collection->indexes()[0]->attributes[0]);
 
-        $supportsIdenticalIndexes = $database->getAdapter()->supports(Capability::IdenticalIndexes);
+        $supportsIdenticalIndexes = $database->getAdapter()->supports(Capability::IndexIdentical);
 
         try {
             // Check an update without a new key doesn't cause issues
@@ -1309,7 +1309,7 @@ trait AttributeTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getDocumentSizeLimit() === 0) {
+        if ($database->getAdapter()->limits()->documentSize === 0) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1416,8 +1416,8 @@ trait AttributeTests
         } catch (TruncateException $e) {
         }
 
-        if ($database->getAdapter()->getMaxIndexLength() > 0) {
-            $length = intval($database->getAdapter()->getMaxIndexLength() / 2);
+        if ($database->getAdapter()->limits()->indexLength > 0) {
+            $length = intval($database->getAdapter()->limits()->indexLength / 2);
 
             $database->createAttribute('resize_test', Attribute::string(key: 'attr1', size: $length, required: true));
             $database->createAttribute('resize_test', Attribute::string(key: 'attr2', size: $length, required: true));
@@ -1431,7 +1431,7 @@ trait AttributeTests
                 $database->updateAttribute('resize_test', 'attr1', new AttributeUpdate(type: ColumnType::String, size: 5000));
                 $this->fail('Failed to throw exception');
             } catch (Throwable $e) {
-                $this->assertEquals('Index length is longer than the maximum: '.$database->getAdapter()->getMaxIndexLength(), $e->getMessage());
+                $this->assertEquals('Index length is longer than the maximum: '.$database->getAdapter()->limits()->indexLength, $e->getMessage());
             }
 
             $database->deleteIndex('resize_test', 'index1');
@@ -1451,7 +1451,7 @@ trait AttributeTests
                 $database->updateAttribute('resize_test', 'attr1', new AttributeUpdate(type: ColumnType::String, size: 5000));
                 $this->fail('Failed to throw exception');
             } catch (Throwable $e) {
-                $this->assertEquals('Index length is longer than the maximum: '.$database->getAdapter()->getMaxIndexLength(), $e->getMessage());
+                $this->assertEquals('Index length is longer than the maximum: '.$database->getAdapter()->limits()->indexLength, $e->getMessage());
             }
 
             $database->deleteIndex('resize_test', 'index1');
@@ -1662,7 +1662,7 @@ trait AttributeTests
 
         $database->createAttribute($collection, Attribute::integer(key: 'age', signed: false));
 
-        $database->createAttribute($collection, Attribute::string(key: 'tv_show', size: $database->getAdapter()->getMaxIndexLength() - 68));
+        $database->createAttribute($collection, Attribute::string(key: 'tv_show', size: $database->getAdapter()->limits()->indexLength - 68));
 
         $database->createAttribute($collection, Attribute::string(key: 'short', size: 5, array: true));
 
@@ -1761,7 +1761,7 @@ trait AttributeTests
             $database->createIndex($collection, Index::key(key: 'idx_cards', attributes: ['cards'], lengths: [100]));
         }
 
-        if ($database->getAdapter()->supports(Capability::CastIndexArray)) {
+        if ($database->getAdapter()->supports(Capability::IndexArrayCast)) {
             /**
              * Delete attribute
              */
@@ -1807,7 +1807,7 @@ trait AttributeTests
                     $this->fail('Failed to throw exception');
                 }
             } catch (Throwable $e) {
-                if ($database->getAdapter()->supports(Capability::Fulltext)) {
+                if ($database->getAdapter()->supports(Capability::IndexFulltext)) {
                     $this->assertEquals('"Fulltext" index is forbidden on array attributes', $e->getMessage());
                 } else {
                     $this->assertEquals('Fulltext index is not supported', $e->getMessage());
@@ -1831,7 +1831,7 @@ trait AttributeTests
         $database->createAttribute($collection, Attribute::string(key: 'long_size', size: 2000, array: true));
 
         if ($database->getAdapter()->supports(Capability::IndexArray)) {
-            if ($database->getAdapter()->supports(Capability::DefinedAttributes) && $database->getAdapter()->getMaxIndexLength() > 0) {
+            if ($database->getAdapter()->supports(Capability::DefinedAttributes) && $database->getAdapter()->limits()->indexLength > 0) {
                 // If getMaxIndexLength() > 0 We clear length for array attributes
                 $database->createIndex($collection, Index::key(key: 'indx1', attributes: ['long_size']));
                 $database->deleteIndex($collection, 'indx1');
@@ -1841,7 +1841,7 @@ trait AttributeTests
                     $database->createIndex($collection, Index::key(key: 'indx_numbers', attributes: ['tv_show', 'numbers'])); // [700, 255]
                     $this->fail('Failed to throw exception');
                 } catch (Throwable $e) {
-                    $this->assertEquals('Index length is longer than the maximum: '.$database->getAdapter()->getMaxIndexLength(), $e->getMessage());
+                    $this->assertEquals('Index length is longer than the maximum: '.$database->getAdapter()->limits()->indexLength, $e->getMessage());
                 }
             }
 
@@ -2029,8 +2029,8 @@ trait AttributeTests
 
         $document = $database->getDocument('datetime', 'id1234');
 
-        $min = $database->getAdapter()->getMinDateTime();
-        $max = $database->getAdapter()->getMaxDateTime();
+        $min = $database->getAdapter()->limits()->minDateTime;
+        $max = $database->getAdapter()->limits()->maxDateTime;
         $dateValidator = new DatetimeValidator($min, $max);
         $this->assertEquals(null, $document->getAttribute('date2'));
         $this->assertEquals(true, $dateValidator->isValid($document->getAttribute('date')));
@@ -2809,7 +2809,7 @@ trait AttributeTests
 
         $database->createCollection(Collection::create(id: __FUNCTION__));
 
-        $max = $database->getAdapter()->getLimitForString();
+        $max = $database->getAdapter()->limits()->string;
 
         try {
             $database->createAttributes(__FUNCTION__, [Attribute::string(key: 'foo', size: $max + 1)]);
@@ -2831,7 +2831,7 @@ trait AttributeTests
 
         $database->createCollection(Collection::create(id: __FUNCTION__));
 
-        $limit = (int) ($database->getAdapter()->getLimitForInt() / 2);
+        $limit = (int) ($database->getAdapter()->limits()->integer / 2);
 
         $created = $database->createAttributes(__FUNCTION__, [Attribute::fromArray(['key' => 'foo', 'type' => ColumnType::Integer, 'size' => $limit + 1])]);
 
@@ -2885,7 +2885,7 @@ trait AttributeTests
         }
 
         $originalTenant = $database->getTenant();
-        $integerTenants = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer->value;
+        $integerTenants = $database->getIdAttributeType() === ColumnType::Integer;
         $first = $integerTenants ? 301 : 'tenant_301';
         $second = $integerTenants ? 302 : 'tenant_302';
         $collection = 'sharedColumn_'.\uniqid();
@@ -3131,7 +3131,7 @@ trait AttributeTests
         }
 
         $originalTenant = $database->getTenant();
-        $integerTenants = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer->value;
+        $integerTenants = $database->getIdAttributeType() === ColumnType::Integer;
         $tenants = $integerTenants ? [501, 502] : ['tenant_501', 'tenant_502'];
         $collection = 'sharedRename_'.\uniqid();
         $definition = Collection::create(id: $collection, attributes: [

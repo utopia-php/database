@@ -454,7 +454,7 @@ class Relationships implements Hook
 
     private function createPrepared(): PreparedCreate
     {
-        return new PreparedCreate($this->db->getAdapter()->supports(Capability::NestedTransactions));
+        return new PreparedCreate($this->db->getAdapter()->supports(Capability::TransactionNested));
     }
 
     /**

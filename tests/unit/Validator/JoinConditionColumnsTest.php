@@ -4,6 +4,8 @@ namespace Tests\Unit\Validator;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Tests\Unit\Support\Profiles;
+use Utopia\Database\Capability;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\RelationshipSide;
@@ -120,7 +122,7 @@ final class JoinConditionColumnsTest extends TestCase
 
     public function testDocumentQueriesCheckTheColumnsOfAJoinCondition(): void
     {
-        $validator = new DocumentQueries($this->customers());
+        $validator = new DocumentQueries($this->customers(), Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::Joins]));
         $validator->setJoinedCollections($this->collections());
 
         $this->assertTrue($validator->isValid([Query::leftJoin('notes', 'note', [Query::on('$id', 'customerId')])]), $validator->getDescription());
@@ -248,7 +250,7 @@ final class JoinConditionColumnsTest extends TestCase
     {
         $documents = $this->documents(sharedTables: false);
 
-        $document = new DocumentQueries($this->customers());
+        $document = new DocumentQueries($this->customers(), Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::Joins]));
         $document->setJoinedCollections($this->collections());
 
         $joins = new Queries([new Join($this->customers())]);
@@ -260,12 +262,9 @@ final class JoinConditionColumnsTest extends TestCase
     private function documents(bool $sharedTables): DocumentsQueries
     {
         $validator = new DocumentsQueries(
-            attributes: $this->customers(),
-            indexes: [],
-            idAttributeType: ColumnType::Integer->value,
-            supportForJoins: true,
-            supportForAggregations: true,
-            sharedTables: $sharedTables,
+            $this->customers(),
+            [],
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::Joins, Capability::Aggregations, Capability::OrderRandom], sharedTables: $sharedTables),
         );
         $validator->setJoinedCollections($this->collections());
 

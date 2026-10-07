@@ -2,7 +2,6 @@
 
 namespace Utopia\Database\Adapter;
 
-use DateTime;
 use Exception;
 use PDO;
 use PDOException;
@@ -58,6 +57,8 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
 {
     public const MAX_IDENTIFIER_NAME = 63;
 
+    protected const string MIN_DATETIME = '-4713-01-01 00:00:00';
+
     private const string QUOTED_IDENTIFIER = '/["\x{AB}\x{BB}\x{201C}\x{201D}\x{201E}\x{300C}\x{300D}][\s\x{A0}\x{202F}]*([^"\x{AB}\x{BB}\x{201C}\x{201D}\x{201E}\x{300C}\x{300D}]+?)[\s\x{A0}\x{202F}]*["\x{AB}\x{BB}\x{201C}\x{201D}\x{201E}\x{300C}\x{300D}]/u';
 
     private const string HASHED_IDENTIFIER = '/^[0-9a-f]{32}(?:_[A-Za-z0-9_-]+)?$/';
@@ -83,11 +84,10 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         return array_merge(parent::capabilities(), [
             Capability::Vectors,
             Capability::Objects,
-            Capability::SpatialIndexNull,
-            Capability::MultiDimensionDistance,
-            Capability::TrigramIndex,
-            Capability::POSIX,
-            Capability::ObjectIndexes,
+            Capability::IndexSpatialNull,
+            Capability::IndexTrigram,
+            Capability::IndexObject,
+            Capability::SchemaIntrospection,
         ]);
     }
 
@@ -1033,16 +1033,6 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
     }
 
     /**
-     * Get the minimum supported datetime value for PostgreSQL.
-     *
-     * @return DateTime
-     */
-    public function getMinDateTime(): DateTime
-    {
-        return new DateTime('-4713-01-01 00:00:00');
-    }
-
-    /**
      * Decode a WKB or WKT POINT into a coordinate array [x, y].
      *
      * @param string $wkb The WKB hex or WKT string
@@ -1617,7 +1607,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
 
         return match ($type) {
             ColumnType::Id => 'BIGINT',
-            ColumnType::String => $size <= 0 || $size > $this->getMaxVarcharLength() ? 'TEXT' : "VARCHAR({$size})",
+            ColumnType::String => $size <= 0 || $size > $this->limits()->varchar ? 'TEXT' : "VARCHAR({$size})",
             ColumnType::Varchar => "VARCHAR({$size})",
             ColumnType::Text,
             ColumnType::MediumText,

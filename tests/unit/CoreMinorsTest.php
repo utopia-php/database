@@ -7,11 +7,13 @@ use PDO;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
+use Tests\Unit\Support\Profiles;
 use Throwable;
 use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
+use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
@@ -470,7 +472,7 @@ final class CoreMinorsTest extends TestCase
 
     public function testTypeMismatchMessagesSayBigint(): void
     {
-        $validator = new AttributeDefinition(attributes: []);
+        $validator = new AttributeDefinition(attributes: [], profile: Profiles::of());
         $error = $this->attempt(fn (): bool => $validator->isValid(Attribute::bigInteger(key: 'total', default: 'many')));
 
         $this->assertInstanceOf(DatabaseException::class, $error);
@@ -564,7 +566,7 @@ final class CoreMinorsTest extends TestCase
     #[DataProvider('invalidSpatialDefaults')]
     public function testSpatialDefaultsAreValidated(ColumnType $type, array $default, string $reason): void
     {
-        $validator = new AttributeDefinition(attributes: [], supportForSpatialAttributes: true);
+        $validator = new AttributeDefinition(attributes: [], profile: Profiles::of(features: [Feature\Spatial::class]));
         $created = $this->attempt(fn (): bool => $validator->isValid(Attribute::fromArray(['key' => 'shape', 'type' => $type, 'default' => $default])));
 
         $this->assertInstanceOf(DatabaseException::class, $created, 'A create must reject the default');
@@ -591,7 +593,7 @@ final class CoreMinorsTest extends TestCase
             [ColumnType::Linestring, [[0.0, 0.0], [1.0, 1.0]]],
             [ColumnType::Polygon, [[[0.0, 0.0], [0.0, 2.0], [2.0, 2.0], [0.0, 0.0]]]],
         ];
-        $validator = new AttributeDefinition(attributes: [], supportForSpatialAttributes: true);
+        $validator = new AttributeDefinition(attributes: [], profile: Profiles::of(features: [Feature\Spatial::class]));
         $database = new class ($this->adapter(), new Cache(new None())) extends Database {
             public function checkDefault(ColumnType $type, mixed $default): void
             {

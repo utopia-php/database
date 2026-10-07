@@ -178,7 +178,7 @@ trait Transactions
             if ($returned && $error instanceof UnconfirmedException) {
                 $this->unconfirmedCommits ??= new WeakMap();
                 $this->unconfirmedCommits[$error] = true;
-            } elseif ($this->adapter->supports(Capability::NestedTransactions)) {
+            } elseif ($this->adapter->supports(Capability::TransactionNested)) {
                 $discard();
             }
 

@@ -90,19 +90,14 @@ class Redis extends Adapter implements
     {
         return array_merge(parent::capabilities(), [
             Capability::Schemas,
-            Capability::Fulltext,
+            Capability::IndexFulltext,
             Capability::Casting,
-            Capability::QueryContains,
-            Capability::BatchOperations,
-            Capability::BatchCreateAttributes,
             Capability::AttributeResizing,
             Capability::Objects,
             Capability::Operators,
             Capability::OrderRandom,
             Capability::DefinedAttributes,
-            Capability::NestedTransactions,
-            Capability::PCRE,
-            Capability::Regex,
+            Capability::TransactionNested,
         ]);
     }
 
@@ -1454,99 +1449,41 @@ class Redis extends Adapter implements
         });
     }
 
-    public function getLimitForString(): int
+    public function limits(): Limits
     {
-        return 4294967295;
-    }
-
-    public function getLimitForInt(): int
-    {
-        return 4294967295;
-    }
-
-    public function getLimitForBigInt(): int
-    {
-        return Database::MAX_BIG_INT;
-    }
-
-    public function getLimitForAttributes(): int
-    {
-        return 1017;
-    }
-
-    public function getLimitForIndexes(): int
-    {
-        return 64;
-    }
-
-    public function getMaxIndexLength(): int
-    {
-        return 1024;
-    }
-
-    public function getMaxVarcharLength(): int
-    {
-        return 16381;
-    }
-
-    public function getMaxUIDLength(): int
-    {
-        return 255;
-    }
-
-    public function getMinDateTime(): \DateTime
-    {
-        return new \DateTime('0001-01-01 00:00:00');
-    }
-
-    public function getIdAttributeType(): string
-    {
-        return ColumnType::Integer->value;
+        return $this->limits ??= new Limits(
+            string: 4294967295,
+            varchar: 16381,
+            integer: 4294967295,
+            bigInteger: Database::MAX_BIG_INT,
+            attributes: 1017,
+            indexes: 64,
+            defaultAttributes: \count(Database::internalAttributesFor(true)),
+            defaultIndexes: \count(Database::INTERNAL_INDEXES),
+            indexLength: 1024,
+            uidLength: 255,
+            documentSize: 0,
+            minDateTime: new \DateTime('0001-01-01 00:00:00'),
+            maxDateTime: new \DateTime(self::MAX_DATETIME),
+            idType: ColumnType::Integer,
+            keywords: [],
+            internalIndexKeys: [],
+        );
     }
 
     public function getCountOfAttributes(Document $collection): int
     {
-        return \count(self::collectionAttributes($collection)) + $this->getCountOfDefaultAttributes();
+        return \count(self::collectionAttributes($collection)) + $this->limits()->defaultAttributes;
     }
 
     public function getCountOfIndexes(Document $collection): int
     {
-        return \count(self::collectionIndexes($collection)) + $this->getCountOfDefaultIndexes();
-    }
-
-    public function getCountOfDefaultAttributes(): int
-    {
-        return \count(Database::internalAttributesFor(true));
-    }
-
-    public function getCountOfDefaultIndexes(): int
-    {
-        return \count(Database::INTERNAL_INDEXES);
-    }
-
-    public function getDocumentSizeLimit(): int
-    {
-        return 0;
+        return \count(self::collectionIndexes($collection)) + $this->limits()->defaultIndexes;
     }
 
     public function getAttributeWidth(Document $collection): int
     {
         return 0;
-    }
-
-    public function getKeywords(): array
-    {
-        return [];
-    }
-
-    public function getInternalIndexesKeys(): array
-    {
-        return [];
-    }
-
-    public function setSupportForAttributes(bool $support): bool
-    {
-        return true;
     }
 
     #[\Override]

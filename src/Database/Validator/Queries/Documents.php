@@ -2,8 +2,9 @@
 
 namespace Utopia\Database\Validator\Queries;
 
-use DateTime;
+use Utopia\Database\Adapter\Profile;
 use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Document;
 use Utopia\Database\Index;
 use Utopia\Database\Validator\IndexedQueries;
@@ -33,25 +34,14 @@ class Documents extends IndexedQueries
     /**
      * @param  array<Attribute|Document>  $attributes
      * @param  array<Index|Document>  $indexes
-     * @param  bool  $sharedTables  Whether the tables hold `$tenant`, as they do under shared tables
-     * @param  bool  $supportForOrderRandom  Whether the adapter can order by random (Capability::OrderRandom)
      *
      * @throws \Utopia\Database\Exception
      */
     public function __construct(
         array $attributes,
         array $indexes,
-        string $idAttributeType,
+        Profile $profile,
         int $maxValuesCount = 5000,
-        int $maxUIDLength = 36,
-        DateTime $minAllowedDate = new DateTime('0000-01-01'),
-        DateTime $maxAllowedDate = new DateTime('9999-12-31'),
-        bool $supportForAttributes = true,
-        bool $supportUnsignedBigInt = true,
-        bool $supportForJoins = false,
-        bool $supportForAggregations = false,
-        bool $sharedTables = false,
-        bool $supportForOrderRandom = true,
     ) {
         $attributes = [
             ...\array_map(
@@ -61,32 +51,35 @@ class Documents extends IndexedQueries
             ...self::internalAttributes(),
         ];
 
+        $supportForAttributes = $profile->supports(Capability::DefinedAttributes);
+        $limits = $profile->limits;
+
         $validators = [
             new Limit(),
             new Offset(),
-            new Cursor($maxUIDLength),
+            new Cursor($limits->uidLength),
             new Filter(
                 $attributes,
-                $idAttributeType,
+                $limits->idType->value,
                 $maxValuesCount,
-                $minAllowedDate,
-                $maxAllowedDate,
+                $limits->minDateTime,
+                $limits->maxDateTime,
                 $supportForAttributes,
-                $supportUnsignedBigInt
+                $profile->supports(Capability::UnsignedBigInt),
             ),
-            new Order($attributes, $supportForAttributes, $supportForOrderRandom),
-            new Select($attributes, $supportForAttributes, $sharedTables),
+            new Order($attributes, $supportForAttributes, $profile->supports(Capability::OrderRandom)),
+            new Select($attributes, $supportForAttributes, $profile->sharedTables),
         ];
 
-        if ($supportForJoins) {
+        if ($profile->supports(Capability::Joins)) {
             $validators[] = new Join($attributes, $supportForAttributes);
         }
 
-        if ($supportForAggregations) {
+        if ($profile->supports(Capability::Aggregations)) {
             \array_push(
                 $validators,
-                new Aggregate($attributes, $supportForAttributes, $sharedTables),
-                new GroupBy($attributes, $supportForAttributes, $sharedTables),
+                new Aggregate($attributes, $supportForAttributes, $profile->sharedTables),
+                new GroupBy($attributes, $supportForAttributes, $profile->sharedTables),
                 new Having(),
                 new Distinct(),
             );

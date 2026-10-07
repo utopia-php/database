@@ -4,7 +4,10 @@ namespace Tests\Unit\Validator;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Tests\Unit\Support\Profiles;
+use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\RelationshipSide;
 use Utopia\Database\RelationshipType;
@@ -91,9 +94,7 @@ final class AttributeDefaultTypeTest extends TestCase
     {
         return new AttributeDefinition(
             attributes: [],
-            supportForVectors: $vectors,
-            supportForSpatialAttributes: $spatial,
-            supportForObject: true,
+            profile: Profiles::of(capabilities: [Capability::Objects, ...($vectors ? [Capability::Vectors] : [])], features: [...($spatial ? [Feature\Spatial::class] : [])]),
         );
     }
 }

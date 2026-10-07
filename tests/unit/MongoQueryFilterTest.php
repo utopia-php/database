@@ -5,8 +5,10 @@ namespace Tests\Unit;
 use Closure;
 use PHPUnit\Framework\TestCase;
 use stdClass;
+use Tests\Unit\Support\Profiles;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Index;
@@ -257,12 +259,12 @@ final class MongoQueryFilterTest extends TestCase
 
     public function testDocumentsValidatorRejectsRandomOrderWithoutTheCapability(): void
     {
-        $unsupported = new Documents([], [], ColumnType::Integer->value, supportForOrderRandom: false);
+        $unsupported = new Documents([], [], Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]));
 
         $this->assertFalse($unsupported->isValid([Query::orderRandom()]));
         $this->assertStringContainsString('Random order is not supported', $unsupported->getDescription());
 
-        $supported = new Documents([], [], ColumnType::Integer->value);
+        $supported = new Documents([], [], Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::OrderRandom]));
 
         $this->assertTrue($supported->isValid([Query::orderRandom()]), $supported->getDescription());
     }

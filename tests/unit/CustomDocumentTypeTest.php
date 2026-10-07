@@ -8,12 +8,14 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\None as NoneAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
+use Utopia\Database\Adapter\Limits;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Query\Schema\ColumnType;
 
 class TestUserDocument extends Document
 {
@@ -71,10 +73,24 @@ class CustomDocumentTypeTest extends TestCase
         $this->adapter->method('getSharedTables')->willReturn(false);
         $this->adapter->method('getTenant')->willReturn(null);
         $this->adapter->method('getTenantPerDocument')->willReturn(false);
-        $this->adapter->method('getIdAttributeType')->willReturn('string');
-        $this->adapter->method('getMinDateTime')->willReturn(new DateTime('1970-01-01 00:00:00'));
-        $this->adapter->method('getMaxDateTime')->willReturn(new DateTime('2999-12-31 23:59:59'));
-        $this->adapter->method('getMaxUIDLength')->willReturn(36);
+        $this->adapter->method('limits')->willReturn(new Limits(
+            string: 0,
+            varchar: 0,
+            integer: 0,
+            bigInteger: 0,
+            attributes: 0,
+            indexes: 0,
+            defaultAttributes: 0,
+            defaultIndexes: 0,
+            indexLength: 0,
+            uidLength: 36,
+            documentSize: 0,
+            minDateTime: new DateTime('1970-01-01 00:00:00'),
+            maxDateTime: new DateTime('2999-12-31 23:59:59'),
+            idType: ColumnType::String,
+            keywords: [],
+            internalIndexKeys: [],
+        ));
         $this->adapter->method('supports')->willReturnCallback(function (Capability $cap) {
             return match ($cap) {
                 Capability::DefinedAttributes => true,

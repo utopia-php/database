@@ -2,8 +2,12 @@
 
 namespace Utopia\Database\Validator;
 
+use Closure;
 use stdClass;
+use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Adapter\Profile;
 use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -52,34 +56,18 @@ class AttributeDefinition extends Validator
      *
      * @param  array<Attribute|Document>  $attributes
      * @param  array<Attribute|Document>  $schemaAttributes
-     * @param  callable|null  $attributeCountCallback
-     * @param  callable|null  $attributeWidthCallback
-     * @param  callable|null  $filterCallback
+     * @param  (Closure(Document): int)|null  $attributeCount
+     * @param  (Closure(Document): int)|null  $attributeWidth
+     * @param  (Closure(string): string)|null  $filter
      */
     public function __construct(
         array $attributes,
+        protected readonly Profile $profile,
         array $schemaAttributes = [],
-        protected int $maxAttributes = 0,
-        protected int $maxWidth = 0,
-        protected int $maxStringLength = 0,
-        protected int $maxVarcharLength = 0,
-        protected int $maxIntLength = 0,
-        protected int $maxBigIntLength = 0,
-        protected bool $supportForSchemaAttributes = false,
-        protected bool $supportForVectors = false,
-        protected bool $supportForSpatialAttributes = false,
-        protected bool $supportForObject = false,
-        protected bool $supportUnsignedBigInt = false,
-        protected mixed $attributeCountCallback = null,
-        protected mixed $attributeWidthCallback = null,
-        protected mixed $filterCallback = null,
-        protected bool $isMigrating = false,
-        protected bool $sharedTables = false,
+        protected readonly ?Closure $attributeCount = null,
+        protected readonly ?Closure $attributeWidth = null,
+        protected readonly ?Closure $filter = null,
     ) {
-        if ($this->maxBigIntLength === 0) {
-            $this->maxBigIntLength = $this->maxIntLength;
-        }
-
         foreach ($attributes as $attribute) {
             $typed = $attribute instanceof Attribute ? $attribute : Attribute::fromDocument($attribute);
             $this->attributes[\strtolower($typed->key)] = $typed;
@@ -196,19 +184,18 @@ class AttributeDefinition extends Validator
      */
     public function checkDuplicateInSchema(Attribute $attribute): bool
     {
-        if (! $this->supportForSchemaAttributes) {
+        if (! $this->profile->supports(Capability::SchemaIntrospection)) {
             return true;
         }
 
-        if ($this->sharedTables && $this->isMigrating) {
+        if ($this->profile->sharedTables && $this->profile->migrating) {
             return true;
         }
 
         $id = \strtolower($attribute->key);
 
         foreach ($this->schemaAttributes as $schemaAttribute) {
-            /** @var string $schemaId */
-            $schemaId = $this->filterCallback ? ($this->filterCallback)($schemaAttribute) : $schemaAttribute;
+            $schemaId = $this->filter === null ? $schemaAttribute : ($this->filter)($schemaAttribute);
             if (\strtolower($schemaId) === $id) {
                 $this->message = 'Attribute already exists in schema';
                 throw new DuplicateException($this->message);
@@ -270,24 +257,23 @@ class AttributeDefinition extends Validator
      */
     public function checkAttributeLimits(Attribute $attribute): bool
     {
-        if ($this->attributeCountCallback === null || $this->attributeWidthCallback === null) {
+        if ($this->attributeCount === null || $this->attributeWidth === null) {
             return true;
         }
 
         $document = $attribute->toDocument();
+        $attributeCount = ($this->attributeCount)($document);
+        $attributeWidth = ($this->attributeWidth)($document);
+        $maxAttributes = $this->profile->limits->attributes;
+        $maxWidth = $this->profile->limits->documentSize;
 
-        /** @var int $attributeCount */
-        $attributeCount = ($this->attributeCountCallback)($document);
-        /** @var int $attributeWidth */
-        $attributeWidth = ($this->attributeWidthCallback)($document);
-
-        if ($this->maxAttributes > 0 && $attributeCount > $this->maxAttributes) {
-            $this->message = 'Column limit reached. Cannot create new attribute. Current attribute count is '.$attributeCount.' but the maximum is '.$this->maxAttributes.'. Remove some attributes to free up space.';
+        if ($maxAttributes > 0 && $attributeCount > $maxAttributes) {
+            $this->message = 'Column limit reached. Cannot create new attribute. Current attribute count is '.$attributeCount.' but the maximum is '.$maxAttributes.'. Remove some attributes to free up space.';
             throw new LimitException($this->message);
         }
 
-        if ($this->maxWidth > 0 && $attributeWidth >= $this->maxWidth) {
-            $this->message = 'Row width limit reached. Cannot create new attribute. Current row width is '.$attributeWidth.' bytes but the maximum is '.$this->maxWidth.' bytes. Reduce the size of existing attributes or remove some attributes to free up space.';
+        if ($maxWidth > 0 && $attributeWidth >= $maxWidth) {
+            $this->message = 'Row width limit reached. Cannot create new attribute. Current row width is '.$attributeWidth.' bytes but the maximum is '.$maxWidth.' bytes. Reduce the size of existing attributes or remove some attributes to free up space.';
             throw new LimitException($this->message);
         }
 
@@ -312,15 +298,15 @@ class AttributeDefinition extends Validator
                 break;
 
             case ColumnType::String:
-                if ($size > $this->maxStringLength) {
-                    $this->message = 'Max size allowed for string is: '.number_format($this->maxStringLength);
+                if ($size > $this->profile->limits->string) {
+                    $this->message = 'Max size allowed for string is: '.number_format($this->profile->limits->string);
                     throw new DatabaseException($this->message);
                 }
                 break;
 
             case ColumnType::Varchar:
-                if ($size > $this->maxVarcharLength) {
-                    $this->message = 'Max size allowed for varchar is: '.number_format($this->maxVarcharLength);
+                if ($size > $this->profile->limits->varchar) {
+                    $this->message = 'Max size allowed for varchar is: '.number_format($this->profile->limits->varchar);
                     throw new DatabaseException($this->message);
                 }
                 break;
@@ -347,7 +333,7 @@ class AttributeDefinition extends Validator
                 break;
 
             case ColumnType::Integer:
-                $limit = ($signed) ? $this->maxIntLength / 2 : $this->maxIntLength;
+                $limit = $signed ? $this->profile->limits->integer / 2 : $this->profile->limits->integer;
                 if ($size > $limit) {
                     $this->message = 'Max size allowed for int is: '.number_format($limit);
                     throw new DatabaseException($this->message);
@@ -363,7 +349,7 @@ class AttributeDefinition extends Validator
                 break;
 
             case ColumnType::Object:
-                if (! $this->supportForObject) {
+                if (! $this->profile->supports(Capability::Objects)) {
                     $this->message = 'Object attributes are not supported';
                     throw new DatabaseException($this->message);
                 }
@@ -380,7 +366,7 @@ class AttributeDefinition extends Validator
             case ColumnType::Point:
             case ColumnType::Linestring:
             case ColumnType::Polygon:
-                if (! $this->supportForSpatialAttributes) {
+                if (! $this->profile->hasFeature(Feature\Spatial::class)) {
                     $this->message = 'Spatial attributes are not supported';
                     throw new DatabaseException($this->message);
                 }
@@ -395,7 +381,7 @@ class AttributeDefinition extends Validator
                 break;
 
             case ColumnType::Vector:
-                if (! $this->supportForVectors) {
+                if (! $this->profile->supports(Capability::Vectors)) {
                     $this->message = 'Vector types are not supported by the current database';
                     throw new DatabaseException($this->message);
                 }
@@ -433,33 +419,12 @@ class AttributeDefinition extends Validator
             default:
                 $this->message = 'Unknown attribute type: '.$type->value.'. Must be one of '.\implode(', ', \array_map(
                     Attribute::storedType(...),
-                    $this->availableTypes(),
+                    Attribute::availableTypes($this->profile),
                 ));
                 throw new DatabaseException($this->message);
         }
 
         return true;
-    }
-
-    /**
-     * @return list<ColumnType>
-     */
-    private function availableTypes(): array
-    {
-        $types = [];
-        foreach (Attribute::TYPES as $type) {
-            $available = match ($type) {
-                ColumnType::Object => $this->supportForObject,
-                ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon => $this->supportForSpatialAttributes,
-                ColumnType::Vector => $this->supportForVectors,
-                default => true,
-            };
-            if ($available) {
-                $types[] = $type;
-            }
-        }
-
-        return $types;
     }
 
     /**
@@ -583,7 +548,7 @@ class AttributeDefinition extends Validator
                 }
                 break;
             case ColumnType::BigInteger:
-                if (! (new BigInt($signed, $this->supportUnsignedBigInt))->isValid($default)) {
+                if (! (new BigInt($signed, $this->profile->supports(Capability::UnsignedBigInt)))->isValid($default)) {
                     $this->message = 'Default value '.json_encode($default).' does not match given type '.Attribute::storedType($type);
                     throw new DatabaseException($this->message);
                 }
@@ -623,10 +588,10 @@ class AttributeDefinition extends Validator
                     ColumnType::Datetime->value,
                     ColumnType::Relationship->value,
                 ];
-                if ($this->supportForVectors) {
+                if ($this->profile->supports(Capability::Vectors)) {
                     $supportedTypes[] = ColumnType::Vector->value;
                 }
-                if ($this->supportForSpatialAttributes) {
+                if ($this->profile->hasFeature(Feature\Spatial::class)) {
                     \array_push($supportedTypes, ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value);
                 }
                 $this->message = 'Unknown attribute type: '.$type->value.'. Must be one of '.implode(', ', $supportedTypes);

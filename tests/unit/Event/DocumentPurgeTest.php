@@ -423,7 +423,7 @@ final class DocumentPurgeTest extends TestCase
             {
                 return \array_values(\array_filter(
                     parent::capabilities(),
-                    static fn (Capability $capability): bool => $capability !== Capability::NestedTransactions,
+                    static fn (Capability $capability): bool => $capability !== Capability::TransactionNested,
                 ));
             }
 
@@ -895,7 +895,7 @@ final class DocumentPurgeTest extends TestCase
                 {
                     return \array_values(\array_filter(
                         parent::capabilities(),
-                        static fn (Capability $capability): bool => $capability !== Capability::NestedTransactions,
+                        static fn (Capability $capability): bool => $capability !== Capability::TransactionNested,
                     ));
                 }
 

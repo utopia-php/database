@@ -111,7 +111,7 @@ trait DocumentTests
         $database->createAttribute($collection, Attribute::id(key: 'id'));
 
         $sequence = '1000000';
-        if ($database->getAdapter()->getIdAttributeType() == ColumnType::Uuid7->value) {
+        if ($database->getIdAttributeType() === ColumnType::Uuid7) {
             $sequence = '01890dd5-7331-7f3a-9c1b-123456789abc';
         }
 
@@ -347,7 +347,7 @@ trait DocumentTests
         $database->createCollection(Collection::create(id: __FUNCTION__));
 
         $sequence = 5_000_000_000_000_000;
-        if ($database->getAdapter()->getIdAttributeType() == ColumnType::Uuid7->value) {
+        if ($database->getIdAttributeType() === ColumnType::Uuid7) {
             $sequence = '01995753-881b-78cf-9506-2cffecf8f227';
         }
 
@@ -366,7 +366,7 @@ trait DocumentTests
         $document = $database->findOne(__FUNCTION__, [Query::equal('$sequence', [(string) $sequence])]);
         $this->assertSame((string) $sequence, $document->getSequence());
 
-        if ($database->getAdapter()->getIdAttributeType() == ColumnType::Integer->value) {
+        if ($database->getIdAttributeType() === ColumnType::Integer) {
             $this->assertTrue($sequence === 5_000_000_000_000_000);
             $document = $database->findOne(__FUNCTION__, [Query::equal('$sequence', [$sequence])]);
             $this->assertSame((string) $sequence, $document->getSequence());
@@ -381,7 +381,7 @@ trait DocumentTests
         $database = $this->getDatabase();
 
         $sequence = '1000000';
-        if ($database->getAdapter()->getIdAttributeType() == ColumnType::Uuid7->value) {
+        if ($database->getIdAttributeType() === ColumnType::Uuid7) {
             $sequence = '01890dd5-7331-7f3a-9c1b-123456789abc';
         }
 
@@ -410,7 +410,7 @@ trait DocumentTests
         $this->assertEquals($sequence, $document->getAttribute('id'));
 
         $sequence = '56000';
-        if ($database->getAdapter()->getIdAttributeType() == ColumnType::Uuid7->value) {
+        if ($database->getIdAttributeType() === ColumnType::Uuid7) {
             $sequence = '01890dd5-7331-7f3a-9c1b-123456789def';
         }
 
@@ -592,7 +592,7 @@ trait DocumentTests
         $this->assertNull($documentIdNull->getAttribute('id'));
 
         $sequence = '0';
-        if ($database->getAdapter()->getIdAttributeType() == ColumnType::Uuid7->value) {
+        if ($database->getIdAttributeType() === ColumnType::Uuid7) {
             $sequence = '01890dd5-7331-7f3a-9c1b-123456789abc';
         }
 
@@ -899,7 +899,7 @@ trait DocumentTests
         $offset = 1000000;
         for ($i = $offset; $i <= ($offset + 10); $i++) {
             $sequence = (string) $i;
-            if ($database->getAdapter()->getIdAttributeType() == ColumnType::Uuid7->value) {
+            if ($database->getIdAttributeType() === ColumnType::Uuid7) {
                 // Replace last 6 digits with $i to make it unique
                 $suffix = str_pad(substr((string) $i, -6), 6, '0', STR_PAD_LEFT);
                 $sequence = '01890dd5-7331-7f3a-9c1b-123456'.$suffix;
@@ -1686,7 +1686,7 @@ trait DocumentTests
         /**
          * Fulltext search
          */
-        if ($this->getDatabase()->getAdapter()->supports(Capability::Fulltext)) {
+        if ($this->getDatabase()->getAdapter()->supports(Capability::IndexFulltext)) {
             $this->assertSame('name', $database->createIndex($this->getMoviesCollection(), Index::fulltext(key: 'name', attributes: ['name']))->key);
 
             $documents = $database->find($this->getMoviesCollection(), [
@@ -1702,7 +1702,7 @@ trait DocumentTests
             // TODO: Looks like the MongoDB implementation is a bit more complex, skipping that for now.
             // TODO: I think this needs a changes? how do we distinguish between regular full text and wildcard?
 
-            if ($this->getDatabase()->getAdapter()->supports(Capability::FulltextWildcard)) {
+            if ($this->getDatabase()->getAdapter()->supports(Capability::IndexFulltextWildcard)) {
                 $documents = $database->find($this->getMoviesCollection(), [
                     Query::search('name', 'cap'),
                 ]);
@@ -1719,7 +1719,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::Fulltext)) {
+        if (! $database->getAdapter()->supports(Capability::IndexFulltext)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1753,7 +1753,7 @@ trait DocumentTests
             Query::search('ft', 'al@ba.io'), // tokenized as: al ba io*
         ]);
 
-        if ($database->getAdapter()->supports(Capability::FulltextWildcard)) {
+        if ($database->getAdapter()->supports(Capability::IndexFulltextWildcard)) {
             $this->assertEquals(0, count($documents));
         } else {
             $this->assertEquals(1, count($documents));
@@ -1793,7 +1793,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::Fulltext)) {
+        if (! $database->getAdapter()->supports(Capability::IndexFulltext)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1876,7 +1876,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::Fulltext)) {
+        if (! $database->getAdapter()->supports(Capability::IndexFulltext)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2257,7 +2257,7 @@ trait DocumentTests
         $database = $this->getDatabase();
 
         // Only test if fulltext search is supported
-        if ($this->getDatabase()->getAdapter()->supports(Capability::Fulltext)) {
+        if ($this->getDatabase()->getAdapter()->supports(Capability::IndexFulltext)) {
             // Ensure fulltext index exists (may already exist from previous tests)
             try {
                 $database->createIndex($this->getMoviesCollection(), Index::fulltext(key: 'name', attributes: ['name']));
@@ -2283,7 +2283,7 @@ trait DocumentTests
             $this->assertEquals(6, count($documents));
 
             // Test notSearch with partial term
-            if ($this->getDatabase()->getAdapter()->supports(Capability::FulltextWildcard)) {
+            if ($this->getDatabase()->getAdapter()->supports(Capability::IndexFulltextWildcard)) {
                 $documents = $database->find($this->getMoviesCollection(), [
                     Query::notSearch('name', 'cap'),
                 ]);
@@ -3166,7 +3166,7 @@ trait DocumentTests
 
         if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectException(Exception::class);
-            if (! $this->getDatabase()->getAdapter()->supports(Capability::Fulltext)) {
+            if (! $this->getDatabase()->getAdapter()->supports(Capability::IndexFulltext)) {
                 $this->expectExceptionMessage('Fulltext index is not supported');
             } else {
                 $this->expectExceptionMessage('Attribute "integer_signed" cannot be part of a fulltext index, must be of type string');
@@ -3938,7 +3938,7 @@ trait DocumentTests
             $this->assertSame('year', $database->createAttribute('moviesRegex', Attribute::integer(key: 'year', required: true))->key);
         }
 
-        if ($database->getAdapter()->supports(Capability::TrigramIndex)) {
+        if ($database->getAdapter()->supports(Capability::IndexTrigram)) {
             $database->createIndex('moviesRegex', Index::trigram(key: 'trigram_name', attributes: ['name']));
             $database->createIndex('moviesRegex', Index::trigram(key: 'trigram_director', attributes: ['director']));
         }
@@ -4790,7 +4790,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportNonUtfCharacters()) {
+        if (!$database->getAdapter()->supports(Capability::NonUtfCharacters)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -5791,7 +5791,7 @@ trait DocumentTests
         }
 
         $originalTenant = $database->getTenant();
-        $integerTenants = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer->value;
+        $integerTenants = $database->getIdAttributeType() === ColumnType::Integer;
         $first = $integerTenants ? 41 : 'tenant_41';
         $second = $integerTenants ? 42 : 'tenant_42';
         $collection = 'tenant_ids_'.\substr(\uniqid(), -6);
@@ -7751,7 +7751,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::UniqueIndex)) {
+        if (!$database->getAdapter()->supports(Capability::IndexUnique)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -9989,7 +9989,7 @@ trait DocumentTests
     {
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::UniqueIndex)) {
+        if (! $database->getAdapter()->supports(Capability::IndexUnique)) {
             $this->expectNotToPerformAssertions();
 
             return;

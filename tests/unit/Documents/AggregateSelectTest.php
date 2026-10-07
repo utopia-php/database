@@ -7,10 +7,12 @@ use PDO;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Tests\Unit\Support\NativeFullOuterJoinSQLite;
+use Tests\Unit\Support\Profiles;
 use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -301,11 +303,11 @@ final class AggregateSelectTest extends TestCase
         $attributes = [new Document(['$id' => 'name', 'key' => 'name', 'type' => ColumnType::String->value, 'array' => false])];
         $queries = [Query::select(['name']), Query::count('*', 'rows')];
 
-        $documents = new DocumentsValidator($attributes, [], ColumnType::String->value);
+        $documents = new DocumentsValidator($attributes, [], Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::OrderRandom], idType: ColumnType::String));
         $this->assertFalse($documents->isValid($queries));
         $this->assertSame('Invalid query method: count', $documents->getDescription());
 
-        $document = new DocumentValidator($attributes);
+        $document = new DocumentValidator($attributes, Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::Joins]));
         $this->assertFalse($document->isValid($queries));
         $this->assertSame('Invalid query method: count', $document->getDescription());
     }

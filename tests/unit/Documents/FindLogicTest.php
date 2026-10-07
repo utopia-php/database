@@ -9,6 +9,7 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
+use Utopia\Database\Adapter\Limits;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -49,27 +50,33 @@ class FindLogicTest extends TestCase
         $this->adapter->method('getTenant')->willReturn(null);
         $this->adapter->method('getTenantPerDocument')->willReturn(false);
         $this->adapter->method('getNamespace')->willReturn('');
-        $this->adapter->method('getIdAttributeType')->willReturn('string');
-        $this->adapter->method('getMaxUIDLength')->willReturn(36);
-        $this->adapter->method('getMinDateTime')->willReturn(new DateTime('0000-01-01'));
-        $this->adapter->method('getMaxDateTime')->willReturn(new DateTime('9999-12-31'));
-        $this->adapter->method('getLimitForString')->willReturn(16777215);
-        $this->adapter->method('getLimitForInt')->willReturn(2147483647);
-        $this->adapter->method('getLimitForAttributes')->willReturn(0);
-        $this->adapter->method('getLimitForIndexes')->willReturn(64);
-        $this->adapter->method('getMaxIndexLength')->willReturn(768);
-        $this->adapter->method('getMaxVarcharLength')->willReturn(16383);
-        $this->adapter->method('getDocumentSizeLimit')->willReturn(0);
+        $this->adapter->method('limits')->willReturn(new Limits(
+            string: 16777215,
+            varchar: 16383,
+            integer: 2147483647,
+            bigInteger: 0,
+            attributes: 0,
+            indexes: 64,
+            defaultAttributes: 0,
+            defaultIndexes: 0,
+            indexLength: 768,
+            uidLength: 36,
+            documentSize: 0,
+            minDateTime: new DateTime('0000-01-01'),
+            maxDateTime: new DateTime('9999-12-31'),
+            idType: ColumnType::String,
+            keywords: [],
+            internalIndexKeys: [],
+        ));
         $this->adapter->method('getCountOfAttributes')->willReturn(0);
         $this->adapter->method('getCountOfIndexes')->willReturn(0);
         $this->adapter->method('getAttributeWidth')->willReturn(0);
-        $this->adapter->method('getInternalIndexesKeys')->willReturn([]);
         $this->adapter->method('filter')->willReturnArgument(0);
         $this->adapter->method('supports')->willReturnCallback(function (Capability $cap) {
             return in_array($cap, [
-                Capability::Index,
+                Capability::IndexKey,
                 Capability::IndexArray,
-                Capability::UniqueIndex,
+                Capability::IndexUnique,
                 Capability::DefinedAttributes,
                 Capability::Vectors,
             ]);
@@ -539,7 +546,7 @@ class FindLogicTest extends TestCase
     public function testFindAggregationWithCursorThrows(): void
     {
         $db = $this->buildDbWithCapabilities(self::createStub(Adapter::class), [
-            Capability::Index, Capability::IndexArray, Capability::UniqueIndex,
+            Capability::IndexKey, Capability::IndexArray, Capability::IndexUnique,
             Capability::DefinedAttributes, Capability::Aggregations,
         ]);
 
@@ -560,7 +567,7 @@ class FindLogicTest extends TestCase
     public function testFindWithGroupBy(): void
     {
         $db = $this->buildDbWithCapabilities($this->createMock(Adapter::class), [
-            Capability::Index, Capability::IndexArray, Capability::UniqueIndex,
+            Capability::IndexKey, Capability::IndexArray, Capability::IndexUnique,
             Capability::DefinedAttributes, Capability::Aggregations,
         ], function (Adapter&MockObject $adapter): void {
             $adapter->expects($this->once())
@@ -600,7 +607,7 @@ class FindLogicTest extends TestCase
     public function testFindWithDistinct(): void
     {
         $db = $this->buildDbWithCapabilities($this->createMock(Adapter::class), [
-            Capability::Index, Capability::IndexArray, Capability::UniqueIndex,
+            Capability::IndexKey, Capability::IndexArray, Capability::IndexUnique,
             Capability::DefinedAttributes, Capability::Aggregations,
         ], function (Adapter&MockObject $adapter): void {
             $adapter->expects($this->once())
@@ -636,7 +643,7 @@ class FindLogicTest extends TestCase
     public function testFindDistinctDoesNotAppendSequenceOrder(): void
     {
         $db = $this->buildDbWithCapabilities($this->createMock(Adapter::class), [
-            Capability::Index, Capability::IndexArray, Capability::UniqueIndex,
+            Capability::IndexKey, Capability::IndexArray, Capability::IndexUnique,
             Capability::DefinedAttributes, Capability::Aggregations,
         ], function (Adapter&MockObject $adapter): void {
             $adapter->expects($this->once())
@@ -695,9 +702,9 @@ class FindLogicTest extends TestCase
         $authOnFind = null;
         $db = null;
         $db = $this->buildDbWithCapabilities(self::createStub(Adapter::class), [
-            Capability::Index,
+            Capability::IndexKey,
             Capability::IndexArray,
-            Capability::UniqueIndex,
+            Capability::IndexUnique,
             Capability::DefinedAttributes,
             Capability::Joins,
         ], function (Adapter&Stub $adapter) use (&$authOnFind, &$db): void {
@@ -721,9 +728,9 @@ class FindLogicTest extends TestCase
         $captured = null;
         $db = null;
         $db = $this->buildDbWithCapabilities(self::createStub(Adapter::class), [
-            Capability::Index,
+            Capability::IndexKey,
             Capability::IndexArray,
-            Capability::UniqueIndex,
+            Capability::IndexUnique,
             Capability::DefinedAttributes,
             Capability::Joins,
         ], function (Adapter&Stub $adapter) use (&$authOnCount, &$captured, &$db): void {
@@ -757,9 +764,9 @@ class FindLogicTest extends TestCase
         $authOnSum = null;
         $db = null;
         $db = $this->buildDbWithCapabilities(self::createStub(Adapter::class), [
-            Capability::Index,
+            Capability::IndexKey,
             Capability::IndexArray,
-            Capability::UniqueIndex,
+            Capability::IndexUnique,
             Capability::DefinedAttributes,
             Capability::Joins,
         ], function (Adapter&Stub $adapter) use (&$authOnSum, &$db): void {
@@ -784,9 +791,9 @@ class FindLogicTest extends TestCase
         $db = $this->buildDbWithCapabilities(
             self::createStub(Adapter::class),
             [
-                Capability::Index,
+                Capability::IndexKey,
                 Capability::IndexArray,
-                Capability::UniqueIndex,
+                Capability::IndexUnique,
                 Capability::DefinedAttributes,
                 Capability::Joins,
             ],
@@ -819,9 +826,9 @@ class FindLogicTest extends TestCase
         $db = $this->buildDbWithCapabilities(
             self::createStub(Adapter::class),
             [
-                Capability::Index,
+                Capability::IndexKey,
                 Capability::IndexArray,
-                Capability::UniqueIndex,
+                Capability::IndexUnique,
                 Capability::DefinedAttributes,
                 Capability::Joins,
             ],
@@ -955,7 +962,7 @@ class FindLogicTest extends TestCase
     public function testAggregateDelegatesToFind(): void
     {
         $db = $this->buildDbWithCapabilities($this->createMock(Adapter::class), [
-            Capability::Index, Capability::IndexArray, Capability::UniqueIndex,
+            Capability::IndexKey, Capability::IndexArray, Capability::IndexUnique,
             Capability::DefinedAttributes, Capability::Aggregations,
         ], function (Adapter&MockObject $adapter): void {
             $aggResult = new Document(['cnt' => 10]);
@@ -1152,21 +1159,27 @@ class FindLogicTest extends TestCase
         $adapter->method('getTenant')->willReturn(null);
         $adapter->method('getTenantPerDocument')->willReturn(false);
         $adapter->method('getNamespace')->willReturn('');
-        $adapter->method('getIdAttributeType')->willReturn('string');
-        $adapter->method('getMaxUIDLength')->willReturn(36);
-        $adapter->method('getMinDateTime')->willReturn(new DateTime('0000-01-01'));
-        $adapter->method('getMaxDateTime')->willReturn(new DateTime('9999-12-31'));
-        $adapter->method('getLimitForString')->willReturn(16777215);
-        $adapter->method('getLimitForInt')->willReturn(2147483647);
-        $adapter->method('getLimitForAttributes')->willReturn(0);
-        $adapter->method('getLimitForIndexes')->willReturn(64);
-        $adapter->method('getMaxIndexLength')->willReturn(768);
-        $adapter->method('getMaxVarcharLength')->willReturn(16383);
-        $adapter->method('getDocumentSizeLimit')->willReturn(0);
+        $adapter->method('limits')->willReturn(new Limits(
+            string: 16777215,
+            varchar: 16383,
+            integer: 2147483647,
+            bigInteger: 0,
+            attributes: 0,
+            indexes: 64,
+            defaultAttributes: 0,
+            defaultIndexes: 0,
+            indexLength: 768,
+            uidLength: 36,
+            documentSize: 0,
+            minDateTime: new DateTime('0000-01-01'),
+            maxDateTime: new DateTime('9999-12-31'),
+            idType: ColumnType::String,
+            keywords: [],
+            internalIndexKeys: [],
+        ));
         $adapter->method('getCountOfAttributes')->willReturn(0);
         $adapter->method('getCountOfIndexes')->willReturn(0);
         $adapter->method('getAttributeWidth')->willReturn(0);
-        $adapter->method('getInternalIndexesKeys')->willReturn([]);
         $adapter->method('filter')->willReturnArgument(0);
         $adapter->method('supports')->willReturnCallback(function (Capability $cap) use ($capabilities) {
             return in_array($cap, $capabilities);

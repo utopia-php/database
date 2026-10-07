@@ -3,7 +3,10 @@
 namespace Tests\Unit\Validator;
 
 use PHPUnit\Framework\TestCase;
+use Tests\Unit\Support\Profiles;
+use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
@@ -44,9 +47,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxIntLength: 100,
-            maxBigIntLength: 100,
-            supportUnsignedBigInt: true,
+            profile: Profiles::of(capabilities: [Capability::UnsignedBigInt], integer: 100),
         );
 
         $this->assertTrue($validator->isValid(Attribute::bigInteger(
@@ -71,7 +72,7 @@ class AttributeTest extends TestCase
 
     public function testBigIntegerDefaultRejectsValuesOutsideSignedRange(): void
     {
-        $validator = new AttributeDefinition(attributes: []);
+        $validator = new AttributeDefinition(attributes: [], profile: Profiles::of());
 
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('does not match given type bigint');
@@ -83,7 +84,7 @@ class AttributeTest extends TestCase
 
     public function testBigIntegerArrayDefaultValidatesEveryValue(): void
     {
-        $validator = new AttributeDefinition(attributes: [], supportUnsignedBigInt: true);
+        $validator = new AttributeDefinition(attributes: [], profile: Profiles::of(capabilities: [Capability::UnsignedBigInt]));
 
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('does not match given type bigint');
@@ -111,9 +112,7 @@ class AttributeTest extends TestCase
                     'filters' => [],
                 ]),
             ],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -137,9 +136,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -161,9 +158,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 1000,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 1000, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -187,9 +182,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 1000,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 1000, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -213,9 +206,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -239,9 +230,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -265,9 +254,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: 100,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: 100),
         );
 
         $attribute = new Document([
@@ -291,9 +278,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -317,9 +302,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -343,9 +326,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -367,9 +348,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -393,9 +372,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -419,10 +396,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
-            supportForVectors: false,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -446,10 +420,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
-            supportForVectors: true,
+            profile: Profiles::of(capabilities: [Capability::Vectors], string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -473,10 +444,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
-            supportForVectors: true,
+            profile: Profiles::of(capabilities: [Capability::Vectors], string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -500,10 +468,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
-            supportForVectors: true,
+            profile: Profiles::of(capabilities: [Capability::Vectors], string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -527,10 +492,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
-            supportForSpatialAttributes: false,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -554,10 +516,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
-            supportForSpatialAttributes: true,
+            profile: Profiles::of(features: [Feature\Spatial::class], string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -581,10 +540,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
-            supportForSpatialAttributes: true,
+            profile: Profiles::of(features: [Feature\Spatial::class], string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -608,10 +564,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
-            supportForObject: false,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -635,10 +588,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
-            supportForObject: true,
+            profile: Profiles::of(capabilities: [Capability::Objects], string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -662,10 +612,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
-            supportForObject: true,
+            profile: Profiles::of(capabilities: [Capability::Objects], string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -689,13 +636,9 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxAttributes: 5,
-            maxWidth: 0,
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
-            attributeCountCallback: fn () => 10,
-            attributeWidthCallback: fn () => 100,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX, attributes: 5),
+            attributeCount: fn () => 10,
+            attributeWidth: fn () => 100,
         );
 
         $attribute = new Document([
@@ -719,13 +662,9 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxAttributes: 100,
-            maxWidth: 1000,
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
-            attributeCountCallback: fn () => 5,
-            attributeWidthCallback: fn () => 1500,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX, attributes: 100, documentSize: 1000),
+            attributeCount: fn () => 5,
+            attributeWidth: fn () => 1500,
         );
 
         $attribute = new Document([
@@ -749,10 +688,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
-            supportForVectors: true,
+            profile: Profiles::of(capabilities: [Capability::Vectors], string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -776,10 +712,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
-            supportForVectors: true,
+            profile: Profiles::of(capabilities: [Capability::Vectors], string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -803,10 +736,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
-            supportForVectors: true,
+            profile: Profiles::of(capabilities: [Capability::Vectors], string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -830,9 +760,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -856,9 +784,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -880,9 +806,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -904,9 +828,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -928,9 +850,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -952,9 +872,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -976,9 +894,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -1000,9 +916,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -1026,9 +940,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -1052,9 +964,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -1078,9 +988,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -1102,9 +1010,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -1126,9 +1032,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -1150,9 +1054,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -1174,9 +1076,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: 100,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: 100),
         );
 
         // Unsigned allows double the size
@@ -1199,9 +1099,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: 100,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: 100),
         );
 
         $attribute = new Document([
@@ -1237,9 +1135,7 @@ class AttributeTest extends TestCase
                     'filters' => [],
                 ]),
             ],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -1263,6 +1159,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
+            profile: Profiles::of(capabilities: [Capability::SchemaIntrospection], string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
             schemaAttributes: [
                 new Document([
                     '$id' => ID::custom('existing_column'),
@@ -1271,10 +1168,6 @@ class AttributeTest extends TestCase
                     'size' => 255,
                 ]),
             ],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
-            supportForSchemaAttributes: true,
         );
 
         $attribute = new Document([
@@ -1298,6 +1191,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
+            profile: Profiles::of(capabilities: [Capability::SchemaIntrospection], sharedTables: true, migrating: true, string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
             schemaAttributes: [
                 new Document([
                     '$id' => ID::custom('existing_column'),
@@ -1306,12 +1200,6 @@ class AttributeTest extends TestCase
                     'size' => 255,
                 ]),
             ],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
-            supportForSchemaAttributes: true,
-            isMigrating: true,
-            sharedTables: true,
         );
 
         $attribute = new Document([
@@ -1333,10 +1221,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
-            supportForSpatialAttributes: true,
+            profile: Profiles::of(features: [Feature\Spatial::class], string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -1358,10 +1243,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
-            supportForSpatialAttributes: true,
+            profile: Profiles::of(features: [Feature\Spatial::class], string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -1383,10 +1265,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
-            supportForSpatialAttributes: true,
+            profile: Profiles::of(features: [Feature\Spatial::class], string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -1408,10 +1287,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
-            supportForVectors: true,
+            profile: Profiles::of(capabilities: [Capability::Vectors], string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -1433,10 +1309,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
-            supportForVectors: true,
+            profile: Profiles::of(capabilities: [Capability::Vectors], string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -1458,10 +1331,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
-            supportForObject: true,
+            profile: Profiles::of(capabilities: [Capability::Objects], string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -1483,9 +1353,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -1507,9 +1375,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -1531,9 +1397,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -1557,9 +1421,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -1583,9 +1445,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -1607,9 +1467,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -1633,9 +1491,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -1659,9 +1515,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -1685,9 +1539,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -1711,9 +1563,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -1735,9 +1585,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -1759,9 +1607,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -1783,9 +1629,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -1807,9 +1651,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -1833,9 +1675,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -1857,9 +1697,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -1881,9 +1719,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $this->assertEquals('object', $validator->getType());
@@ -1893,9 +1729,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $this->assertEquals('Invalid attribute', $validator->getDescription());
@@ -1905,9 +1739,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $this->assertFalse($validator->isArray());
@@ -1917,9 +1749,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attrVO = Attribute::string(
@@ -1938,6 +1768,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
+            profile: Profiles::of(capabilities: [Capability::SchemaIntrospection], string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
             schemaAttributes: [
                 new Document([
                     '$id' => ID::custom('existing_column'),
@@ -1946,10 +1777,6 @@ class AttributeTest extends TestCase
                     'size' => 255,
                 ]),
             ],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
-            supportForSchemaAttributes: true,
         );
 
         $attribute = new Document([
@@ -1975,9 +1802,7 @@ class AttributeTest extends TestCase
 
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attribute = new Document([
@@ -2002,9 +1827,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attrVO = Attribute::id(
@@ -2021,9 +1844,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $this->expectException(StructureException::class);
@@ -2044,9 +1865,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attrVO = Attribute::string(
@@ -2065,10 +1884,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
-            supportForVectors: true,
+            profile: Profiles::of(capabilities: [Capability::Vectors], string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attrVO = Attribute::vector(
@@ -2082,10 +1898,7 @@ class AttributeTest extends TestCase
 
         $validator2 = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
-            supportForVectors: true,
+            profile: Profiles::of(capabilities: [Capability::Vectors], string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attrVO2 = Attribute::vector(
@@ -2104,9 +1917,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $this->expectException(StructureException::class);
@@ -2127,6 +1938,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
+            profile: Profiles::of(capabilities: [Capability::SchemaIntrospection], string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
             schemaAttributes: [
                 new Document([
                     '$id' => ID::custom('_prefix_column'),
@@ -2135,11 +1947,7 @@ class AttributeTest extends TestCase
                     'size' => 255,
                 ]),
             ],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
-            supportForSchemaAttributes: true,
-            filterCallback: fn (string $key) => str_replace('_prefix_', '', $key),
+            filter: fn (string $key) => str_replace('_prefix_', '', $key),
         );
 
         $attribute = new Document([
@@ -2163,9 +1971,7 @@ class AttributeTest extends TestCase
     {
         $validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
 
         $attrVO = Attribute::fromArray([
@@ -2185,7 +1991,7 @@ class AttributeTest extends TestCase
 
     public function testBigIntegerDefaultRejectsNonNumericString(): void
     {
-        $validator = new AttributeDefinition(attributes: []);
+        $validator = new AttributeDefinition(attributes: [], profile: Profiles::of());
 
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('does not match given type bigint');

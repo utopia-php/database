@@ -1936,7 +1936,7 @@ class Memory extends Adapter implements Feature\Relationships
 
     public function getCountOfDefaultAttributes(): int
     {
-        return \count(Database::INTERNAL_ATTRIBUTES);
+        return \count(Database::internalAttributesFor(true));
     }
 
     public function getCountOfDefaultIndexes(): int

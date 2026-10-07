@@ -1528,7 +1528,7 @@ class Redis extends Adapter implements
 
     public function getCountOfDefaultAttributes(): int
     {
-        return \count(Database::INTERNAL_ATTRIBUTES);
+        return \count(Database::internalAttributesFor(true));
     }
 
     public function getCountOfDefaultIndexes(): int

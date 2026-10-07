@@ -2911,7 +2911,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      */
     public function getCountOfDefaultAttributes(): int
     {
-        return \count(Database::internalAttributes());
+        return \count(Database::internalAttributesFor(true));
     }
 
     /**
@@ -3333,7 +3333,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     {
         return self::$internalAttributeArrays ??= \array_values(\array_map(
             fn (Attribute $attribute): array => [Document::ID => $attribute->getKey(), 'type' => $attribute->getType(), 'array' => $attribute->isArray()],
-            Database::internalAttributes()
+            Database::internalAttributesFor(true)
         ));
     }
 

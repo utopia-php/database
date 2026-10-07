@@ -53,7 +53,7 @@ class Document extends ArrayObject
     {
         if (self::$internalKeySet === null) {
             self::$internalKeySet = [];
-            foreach (Database::internalAttributes() as $attribute) {
+            foreach (Database::internalAttributesFor(true) as $attribute) {
                 self::$internalKeySet[$attribute->key] = true;
             }
         }

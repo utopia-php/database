@@ -18,6 +18,7 @@ use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
@@ -69,8 +70,8 @@ final class PoolCapabilityTest extends TestCase
         $asked->exchangeArray([]);
         $database->getDocument('posts', 'first', $selection);
 
-        $this->assertSame(['DefinedAttributes'], $asked->getArrayCopy());
-        $this->assertSame(1, $this->checkouts);
+        $this->assertSame(['DefinedAttributes', 'DefinedAttributes'], $asked->getArrayCopy(), 'The database and the query validator each ask the connection, so they answer alike');
+        $this->assertSame(2, $this->checkouts);
     }
 
     public function testAWarmValidatedReadWithoutQueriesChecksOutNoConnection(): void
@@ -201,6 +202,44 @@ final class PoolCapabilityTest extends TestCase
         $this->assertFalse($other->supports(Capability::DefinedAttributes));
         $this->assertTrue($pool->supports(Capability::DefinedAttributes));
         $this->assertSame(0, $this->checkouts, 'Handles over one pool share the answer of each mode');
+    }
+
+    public function testTheProfileFollowsTheConnectionsSchemaModeWhileThePoolLeavesItUnset(): void
+    {
+        $mongo = new class () extends Mongo {
+            public function __construct()
+            {
+            }
+        };
+        $database = new Database($this->pool($this->connections($mongo)), new Cache(new MemoryCache()));
+        $profile = $database->profile();
+
+        $mongo->setSchemaless(true);
+        $this->assertFalse($profile->supports(Capability::DefinedAttributes));
+        $this->assertFalse($database->profile()->supports(Capability::DefinedAttributes));
+
+        $mongo->setSchemaless(false);
+        $this->assertTrue($profile->supports(Capability::DefinedAttributes));
+        $this->assertTrue($database->profile()->supports(Capability::DefinedAttributes));
+    }
+
+    public function testSettingTheSchemaModeOnAPoolOfSchemaEnforcingAdaptersLeavesThemEnforcingIt(): void
+    {
+        $connections = $this->connections(new Memory());
+        $pool = $this->pool($connections);
+        $this->assertFalse($pool->hasFeature(Feature\Schemaless::class));
+        $this->down = true;
+
+        $this->assertSame($pool, $pool->setSchemaless(true), 'Setting the mode must not need a connection');
+        $this->assertSame($pool, $pool->setSchemaless(false));
+
+        $this->down = false;
+        $pool->setSchemaless(true);
+        $this->assertTrue($pool->supports(Capability::DefinedAttributes));
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Adapter does not support schemaless');
+        $pool->isSchemaless();
     }
 
     public function testAFailedFirstCheckoutAnswersNothingAndTheNextOneFillsTheAnswers(): void

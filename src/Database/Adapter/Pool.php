@@ -1090,11 +1090,11 @@ class Pool extends Adapter implements Feature\Timeouts
     }
 
     /**
-     * Every adapter this handle borrows afterwards is put in the mode first.
+     * Every adapter this handle borrows afterwards is put in the mode first; one without a schemaless
+     * mode always enforces its schema and is left as it is.
      */
     public function setSchemaless(bool $schemaless): static
     {
-        $this->delegateFeature(Feature\Schemaless::class, __FUNCTION__, \func_get_args());
         $this->schemaless = $schemaless;
 
         return $this;
@@ -1102,7 +1102,7 @@ class Pool extends Adapter implements Feature\Timeouts
 
     public function isSchemaless(): bool
     {
-        if ($this->schemaless !== null) {
+        if ($this->schemaless !== null && $this->hasFeature(Feature\Schemaless::class)) {
             return $this->schemaless;
         }
 

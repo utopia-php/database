@@ -750,16 +750,28 @@ class Database
 
     /**
      * The adapter's limits and capabilities and this database's mode, built once and rebuilt when
-     * shared tables, migration or the schemaless mode change.
+     * shared tables, migration or the schemaless mode change. DefinedAttributes is asked of the
+     * adapter on every check, as the database asks it.
      */
     public function profile(): Profile
     {
-        return $this->profile ??= new Profile(
-            $this->adapter->limits(),
-            \array_values(\array_filter(Capability::cases(), $this->adapter->supports(...))),
-            \array_values(\array_filter(self::FEATURES, $this->adapter->hasFeature(...))),
-            $this->adapter->getSharedTables(),
+        if ($this->profile !== null) {
+            return $this->profile;
+        }
+
+        $adapter = $this->adapter;
+        $capabilities = \array_filter(
+            Capability::cases(),
+            static fn (Capability $capability): bool => $capability !== Capability::DefinedAttributes && $adapter->supports($capability),
+        );
+
+        return $this->profile = new Profile(
+            $adapter->limits(),
+            \array_values($capabilities),
+            \array_values(\array_filter(self::FEATURES, $adapter->hasFeature(...))),
+            $adapter->getSharedTables(),
             $this->migrating,
+            static fn (): bool => $adapter->supports(Capability::DefinedAttributes),
         );
     }
 

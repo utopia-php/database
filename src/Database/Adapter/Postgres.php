@@ -1881,7 +1881,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     #[\Override]
     protected function newPermissionHook(string $collection, array $roles, string $type = PermissionType::Read->value, string $documentColumn = Storage::UID): Permission\Filter
     {
-        return new class (\array_values($roles), $type, $documentColumn) extends Permission\Filter {
+        return new readonly class (\array_values($roles), $type, $documentColumn) extends Permission\Filter {
             /**
              * @param  list<string>  $roles
              */

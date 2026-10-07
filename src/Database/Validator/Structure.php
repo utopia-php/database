@@ -152,7 +152,7 @@ class Structure extends Validator
      *
      * @param  mixed  $document
      */
-    public function isValid($document): bool
+    public function isValid(mixed $document): bool
     {
         if (! $document instanceof Document) {
             $this->message = 'Value must be an instance of Document';

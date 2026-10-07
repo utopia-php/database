@@ -84,7 +84,7 @@ final class Narrow extends Base
      *
      * @param  mixed  $value
      */
-    public function isValid($value): bool
+    public function isValid(mixed $value): bool
     {
         if (! \is_array($value) || ! self::accepts($value)) {
             return parent::isValid($value);

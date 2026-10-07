@@ -6,6 +6,7 @@ use Closure;
 use InvalidArgumentException;
 use Utopia\Database\Adapter\SQL\Hook\Column\AllowNull;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\PermissionType;
 use Utopia\Query\Builder\Condition;
 use Utopia\Query\Builder\JoinType;
 use Utopia\Query\Hook\Filter as FilterHook;
@@ -18,7 +19,7 @@ use Utopia\Query\Hook\Join\Filter as JoinFilter;
  * Produces an EXISTS/IN subquery against a permissions side table, filtering documents
  * by the current user's roles, permission type, and optionally specific columns.
  */
-class Filter implements FilterHook, JoinFilter
+readonly class Filter implements FilterHook, JoinFilter
 {
     private const string IDENTIFIER_PATTERN = '/^[a-zA-Z_][a-zA-Z0-9_.\-]*$/';
 
@@ -28,7 +29,7 @@ class Filter implements FilterHook, JoinFilter
 
     private const string COLLATION_PATTERN = '/^[a-zA-Z_][a-zA-Z0-9_]*$/';
 
-    protected string $documentCollation = '';
+    protected string $documentCollation;
 
     /**
      * @param  list<string>  $roles
@@ -40,7 +41,7 @@ class Filter implements FilterHook, JoinFilter
     public function __construct(
         protected array $roles,
         protected Closure $permissionsTable,
-        protected string $type = 'read',
+        protected string $type = PermissionType::Read->value,
         protected ?array $columns = null,
         protected string $documentColumn = 'id',
         protected string $permissionDocumentColumn = 'document_id',
@@ -51,11 +52,12 @@ class Filter implements FilterHook, JoinFilter
         protected string $quoteCharacter = '`',
         protected bool $semiJoin = true,
     ) {
-        foreach ([$documentColumn, $permissionDocumentColumn, $permissionRoleColumn, $permissionTypeColumn, $scopeColumn] as $col) {
-            if (! \preg_match(self::IDENTIFIER_PATTERN, $col)) {
-                throw new InvalidArgumentException('Invalid column name: '.$col);
+        foreach ([$documentColumn, $permissionDocumentColumn, $permissionRoleColumn, $permissionTypeColumn, $scopeColumn] as $column) {
+            if (! \preg_match(self::IDENTIFIER_PATTERN, $column)) {
+                throw new InvalidArgumentException('Invalid column name: '.$column);
             }
         }
+        $this->documentCollation = '';
     }
 
     /**
@@ -123,18 +125,12 @@ class Filter implements FilterHook, JoinFilter
             throw new InvalidArgumentException('Invalid collation name: '.$collation);
         }
 
-        $filter = clone $this;
-        $filter->documentCollation = ' COLLATE '.$collation;
-
-        return $filter;
+        return clone($this, ['documentCollation' => ' COLLATE '.$collation]);
     }
 
     public function withoutSemiJoin(): static
     {
-        $filter = clone $this;
-        $filter->semiJoin = false;
-
-        return $filter;
+        return clone($this, ['semiJoin' => false]);
     }
 
     /**

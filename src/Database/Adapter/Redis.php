@@ -3161,8 +3161,8 @@ class Redis extends Adapter implements
         }
 
         $directions = [];
-        foreach ($orderAttributes as $i => $attribute) {
-            $direction = $orderTypes[$i] ?? OrderDirection::Asc;
+        foreach ($orderAttributes as $index => $attribute) {
+            $direction = $orderTypes[$index] ?? OrderDirection::Asc;
             if ($reverse) {
                 $direction = $direction === OrderDirection::Asc ? OrderDirection::Desc : OrderDirection::Asc;
             }
@@ -3220,8 +3220,8 @@ class Redis extends Adapter implements
             }
             $resolved[] = [
                 'attribute' => $attribute,
-                'asc' => $direction === OrderDirection::Asc,
-                'ref' => $cursor[$attribute] ?? null,
+                'direction' => $direction,
+                'reference' => $cursor[$attribute] ?? null,
             ];
         }
 
@@ -3229,25 +3229,26 @@ class Redis extends Adapter implements
         foreach ($documents as $document) {
             foreach ($resolved as $entry) {
                 $current = $this->resolveDocumentAttribute($document, $entry['attribute']);
-                $ref = $entry['ref'];
-                if ($current === $ref) {
+                $reference = $entry['reference'];
+                $ascending = $entry['direction'] === OrderDirection::Asc;
+                if ($current === $reference) {
                     continue;
                 }
                 if ($current === null) {
-                    if (! $entry['asc']) {
+                    if (! $ascending) {
                         $output[] = $document;
                     }
 
                     continue 2;
                 }
-                if ($ref === null) {
-                    if ($entry['asc']) {
+                if ($reference === null) {
+                    if ($ascending) {
                         $output[] = $document;
                     }
 
                     continue 2;
                 }
-                if ($entry['asc'] ? ($current > $ref) : ($current < $ref)) {
+                if ($ascending ? ($current > $reference) : ($current < $reference)) {
                     $output[] = $document;
                 }
 

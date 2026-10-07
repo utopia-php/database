@@ -207,7 +207,7 @@ class Spatial extends Validator
      * @param mixed $value The spatial data to validate
      * @return bool
      */
-    public function isValid($value): bool
+    public function isValid(mixed $value): bool
     {
         if (is_null($value)) {
             return true;

@@ -17,7 +17,7 @@ class ObjectPath extends Validator
         return 'Object path keys must be non-empty and contain only a-z, A-Z, 0-9, underscore and hyphen';
     }
 
-    public function isValid($value): bool
+    public function isValid(mixed $value): bool
     {
         if (! \is_string($value)) {
             return false;

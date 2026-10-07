@@ -30,7 +30,7 @@ class Offset extends Base
      * @param mixed $value The query to validate
      * @return bool
      */
-    public function isValid($value): bool
+    public function isValid(mixed $value): bool
     {
         if (! $value instanceof Query) {
             return false;

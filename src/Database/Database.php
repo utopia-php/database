@@ -139,8 +139,8 @@ class Database
      * @var list<string>
      */
     public const array DEFAULT_FILTERS = [
-        'json',
-        'datetime',
+        Filter::Json->value,
+        Filter::Datetime->value,
         ColumnType::Point->value,
         ColumnType::Linestring->value,
         ColumnType::Polygon->value,
@@ -336,7 +336,7 @@ class Database
         self::$defaultFiltersRegistered = true;
 
         self::addFilter(
-            'json',
+            Filter::Json->value,
             /**
              * @return mixed
              */
@@ -383,7 +383,7 @@ class Database
         );
 
         self::addFilter(
-            'datetime',
+            Filter::Datetime->value,
             /**
              * @return mixed
              */

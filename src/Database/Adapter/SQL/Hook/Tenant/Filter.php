@@ -14,7 +14,7 @@ use Utopia\Query\Hook\Join\Placement;
 /**
  * SQL read hook that generates tenant isolation conditions for shared-table configurations.
  */
-class Filter implements FilterHook, JoinFilter
+final readonly class Filter implements FilterHook, JoinFilter
 {
     /**
      * @var list<int|string|null>

@@ -159,7 +159,7 @@ class Roles extends Validator
      *
      * @param  mixed  $roles
      */
-    public function isValid($roles): bool
+    public function isValid(mixed $roles): bool
     {
         if (! \is_array($roles)) {
             $this->message = 'Roles must be an array of strings.';

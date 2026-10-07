@@ -28,7 +28,7 @@ class Label extends Key
      *
      * Returns true if valid or false if not.
      */
-    public function isValid($value): bool
+    public function isValid(mixed $value): bool
     {
         if (! parent::isValid($value)) {
             return false;

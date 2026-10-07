@@ -73,7 +73,7 @@ abstract class Base extends Validator
      *
      * @param  mixed  $value
      */
-    public function isValid($value): bool
+    public function isValid(mixed $value): bool
     {
         if (! $value instanceof Query) {
             $this->message = 'Value must be a Query';

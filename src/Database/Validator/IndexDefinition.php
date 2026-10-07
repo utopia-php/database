@@ -105,7 +105,7 @@ class IndexDefinition extends Validator
      *
      * @throws DatabaseException
      */
-    public function isValid($value): bool
+    public function isValid(mixed $value): bool
     {
         if ($value instanceof Document) {
             if (! $this->checkStoredDefinition($value)) {

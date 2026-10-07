@@ -3180,15 +3180,15 @@ class Memory extends Adapter implements Feature\Relationships
 
         $reverse = $cursorDirection === CursorDirection::Before;
         $resolved = [];
-        foreach ($orderAttributes as $i => $attribute) {
-            $direction = $orderTypes[$i] ?? OrderDirection::Asc;
+        foreach ($orderAttributes as $index => $attribute) {
+            $direction = $orderTypes[$index] ?? OrderDirection::Asc;
             if ($reverse) {
                 $direction = $direction === OrderDirection::Asc ? OrderDirection::Desc : OrderDirection::Asc;
             }
             $resolved[] = [
                 'column' => $this->mapAttribute($attribute),
-                'asc' => $direction === OrderDirection::Asc,
-                'ref' => $cursor[$attribute] ?? null,
+                'direction' => $direction,
+                'reference' => $cursor[$attribute] ?? null,
             ];
         }
 
@@ -3196,26 +3196,27 @@ class Memory extends Adapter implements Feature\Relationships
         foreach ($rows as $row) {
             foreach ($resolved as $entry) {
                 $current = $row[$entry['column']] ?? null;
-                $ref = $entry['ref'];
-                if ($current === $ref) {
+                $reference = $entry['reference'];
+                $ascending = $entry['direction'] === OrderDirection::Asc;
+                if ($current === $reference) {
                     continue;
                 }
                 // Match applyOrdering: NULLs sort first under ASC.
                 if ($current === null) {
-                    if (! $entry['asc']) {
+                    if (! $ascending) {
                         $output[] = $row;
                     }
 
                     continue 2;
                 }
-                if ($ref === null) {
-                    if ($entry['asc']) {
+                if ($reference === null) {
+                    if ($ascending) {
                         $output[] = $row;
                     }
 
                     continue 2;
                 }
-                if ($entry['asc'] ? ($current > $ref) : ($current < $ref)) {
+                if ($ascending ? ($current > $reference) : ($current < $reference)) {
                     $output[] = $row;
                 }
 

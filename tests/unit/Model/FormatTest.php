@@ -58,6 +58,6 @@ final class FormatTest extends TestCase
         $attribute = Attribute::fromArray(['key' => 'name', 'type' => 'string', 'format' => 'email', 'formatOptions' => 'invalid']);
 
         $this->assertSame('email', $attribute->format?->name);
-        $this->assertSame([], $attribute->format?->options);
+        $this->assertSame([], $attribute->format->options);
     }
 }

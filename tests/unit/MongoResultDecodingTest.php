@@ -281,7 +281,7 @@ final class MongoResultDecodingTest extends TestCase
             Database::internalAttributesFor(true)
         );
 
-        foreach (\array_merge($attributes, \array_values($internal)) as $attribute) {
+        foreach (\array_merge($attributes, $internal) as $attribute) {
             $key = \is_string($attribute['$id'] ?? null) ? $attribute['$id'] : '';
             $rawType = $attribute['type'] ?? null;
             $type = $rawType instanceof ColumnType ? $rawType : (\is_string($rawType) ? Attribute::typeFromStored($rawType) : null);

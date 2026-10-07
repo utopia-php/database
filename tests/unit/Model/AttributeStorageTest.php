@@ -100,11 +100,11 @@ final class AttributeStorageTest extends TestCase
         $this->assertSame(ColumnType::Relationship, $attribute->type);
         $this->assertSame(RelationshipSide::Parent, $attribute->side);
         $this->assertSame('comments', $attribute->relationship?->relatedCollection);
-        $this->assertSame(RelationshipType::OneToMany, $attribute->relationship?->type);
-        $this->assertTrue($attribute->relationship?->twoWay);
-        $this->assertSame('comments', $attribute->relationship?->key);
-        $this->assertSame('post', $attribute->relationship?->twoWayKey);
-        $this->assertSame(RelationshipDeleteAction::Cascade, $attribute->relationship?->onDelete);
+        $this->assertSame(RelationshipType::OneToMany, $attribute->relationship->type);
+        $this->assertTrue($attribute->relationship->twoWay);
+        $this->assertSame('comments', $attribute->relationship->key);
+        $this->assertSame('post', $attribute->relationship->twoWayKey);
+        $this->assertSame(RelationshipDeleteAction::Cascade, $attribute->relationship->onDelete);
     }
 
     public function testRelationshipRoundTripsThroughStorage(): void
@@ -118,7 +118,7 @@ final class AttributeStorageTest extends TestCase
         $this->assertSame($stored->getArrayCopy(), $hydrated->toDocument()->getArrayCopy());
         $this->assertSame(RelationshipSide::Child, $hydrated->side);
         $this->assertSame(RelationshipType::ManyToMany, $hydrated->relationship?->type);
-        $this->assertSame(RelationshipDeleteAction::SetNull, $hydrated->relationship?->onDelete);
+        $this->assertSame(RelationshipDeleteAction::SetNull, $hydrated->relationship->onDelete);
     }
 
     public function testRelationshipOptionsMayArriveAsDocument(): void
@@ -279,7 +279,7 @@ final class AttributeStorageTest extends TestCase
         ]);
 
         $this->assertSame('intRange', $attribute->format?->name);
-        $this->assertSame(['min' => 1, 'max' => 10], $attribute->format?->options);
+        $this->assertSame(['min' => 1, 'max' => 10], $attribute->format->options);
     }
 
     public function testFormatOptionsMayArriveAsDocument(): void

@@ -16,9 +16,10 @@ final class IndexTest extends TestCase
     public function testConstructorIsPrivate(): void
     {
         $this->expectException(\Error::class);
+        $this->expectExceptionMessage('Call to private Utopia\Database\Index::__construct()');
 
         /** @phpstan-ignore new.privateConstructor */
-        new Index('by_age', IndexType::Key, ['age'], [], [], null);
+        $index = new Index('by_age', IndexType::Key, ['age'], [], [], null);
     }
 
     public function testPropertiesAreReadonly(): void

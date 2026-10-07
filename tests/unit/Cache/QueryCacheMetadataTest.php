@@ -63,7 +63,7 @@ final class QueryCacheMetadataTest extends TestCase
         );
     }
 
-    /** @return array<string> */
+    /** @return list<string> */
     private function permissions(): array
     {
         return [

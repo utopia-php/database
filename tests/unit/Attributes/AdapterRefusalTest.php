@@ -71,14 +71,14 @@ final class AdapterRefusalTest extends TestCase
 
     /**
      * @param  (Closure(Attribute): bool)|null  $createAttribute
-     * @param  (Closure(array<Attribute>): bool)|null  $createAttributes
+     * @param  (Closure(list<Attribute>): bool)|null  $createAttributes
      */
     private function database(?Closure $createAttribute = null, ?Closure $createAttributes = null): Database
     {
         $adapter = new class ($createAttribute, $createAttributes) extends Memory {
             /**
              * @param  (Closure(Attribute): bool)|null  $single
-             * @param  (Closure(array<Attribute>): bool)|null  $batch
+             * @param  (Closure(list<Attribute>): bool)|null  $batch
              */
             public function __construct(private readonly ?Closure $single, private readonly ?Closure $batch)
             {
@@ -92,7 +92,7 @@ final class AdapterRefusalTest extends TestCase
             }
 
             /**
-             * @param  array<Attribute>  $attributes
+             * @param  list<Attribute>  $attributes
              */
             #[\Override]
             public function createAttributes(string $collection, array $attributes): bool

@@ -360,8 +360,8 @@ final class JoinedAttributeResolutionTest extends TestCase
     }
 
     /**
-     * @param  array<Attribute>  $attributes
-     * @param  array<Index>  $indexes
+     * @param  list<Attribute>  $attributes
+     * @param  list<Index>  $indexes
      */
     private function createCollection(string $id, array $attributes, array $indexes = []): void
     {

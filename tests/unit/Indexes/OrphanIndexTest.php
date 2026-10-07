@@ -172,7 +172,7 @@ final class OrphanIndexTest extends TestCase
     {
         return \array_map(
             static fn (Index $index): string => $index->key,
-            \array_values($database->getCollection(self::COLLECTION)->indexes()),
+            $database->getCollection(self::COLLECTION)->indexes(),
         );
     }
 }

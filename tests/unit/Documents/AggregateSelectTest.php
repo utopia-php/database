@@ -423,7 +423,7 @@ final class AggregateSelectTest extends TestCase
     }
 
     /**
-     * @param  array<Attribute>  $attributes
+     * @param  list<Attribute>  $attributes
      */
     private function createCollection(Database $database, string $id, array $attributes): void
     {

@@ -148,10 +148,10 @@ final class CreateAttributesRollbackTest extends TestCase
      */
     private function storedKeys(Database $database): array
     {
-        return \array_values(\array_map(
+        return \array_map(
             static fn (Attribute $attribute): string => $attribute->key,
             $database->getCollection(self::COLLECTION)->attributes()
-        ));
+        );
     }
 
     private function database(): Database

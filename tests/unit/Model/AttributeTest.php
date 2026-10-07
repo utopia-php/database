@@ -17,8 +17,9 @@ final class AttributeTest extends TestCase
     public function testConstructorIsNotCallableFromOutside(): void
     {
         $this->expectException(\Error::class);
+        $this->expectExceptionMessage('Call to private Utopia\Database\Attribute::__construct()');
 
-        new Attribute('name', ColumnType::String, 10, false, null, true, false, null, [], null, null); // @phpstan-ignore new.privateConstructor
+        $attribute = new Attribute('name', ColumnType::String, 10, false, null, true, false, null, [], null, null); // @phpstan-ignore new.privateConstructor
     }
 
     public function testTypesListsTheEighteenAttributeTypes(): void

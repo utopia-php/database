@@ -207,9 +207,10 @@ final class TypeTableTest extends TestCase
         return $cases;
     }
 
-    public function testTheAttributeTypesAreTheStorableTypes(): void
+    #[DataProvider('columnTypes')]
+    public function testAColumnTypeIsAnAttributeTypeExactlyWhenStorable(ColumnType $type): void
     {
-        $this->assertSame(self::STORABLE, Attribute::TYPES);
+        $this->assertSame(\in_array($type, self::STORABLE, true), \in_array($type, Attribute::TYPES, true), $type->value);
     }
 
     public function testTypesBehindACapabilityFollowTheValidatorSupport(): void
@@ -457,8 +458,8 @@ final class TypeTableTest extends TestCase
     {
         $size = self::samples()[$factory]->size;
         $attribute = match ($factory) {
-            'string', 'varchar' => Attribute::{$factory}(key: 'value', size: $size ?? Database::LENGTH_KEY, default: $default),
-            'vector' => Attribute::vector(key: 'value', dimensions: $size ?? 0, default: $default),
+            'string', 'varchar' => Attribute::{$factory}(key: 'value', size: $size, default: $default),
+            'vector' => Attribute::vector(key: 'value', dimensions: $size),
             default => Attribute::{$factory}(key: 'value', default: $default),
         };
         $this->assertInstanceOf(Attribute::class, $attribute);

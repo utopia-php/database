@@ -159,7 +159,7 @@ final class SharedRenameTest extends TestCase
     {
         return \array_map(
             static fn (Attribute $attribute): string => $attribute->key,
-            \array_values($database->getCollection(self::COLLECTION)->attributes()),
+            $database->getCollection(self::COLLECTION)->attributes(),
         );
     }
 }

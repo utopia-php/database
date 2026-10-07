@@ -4450,15 +4450,22 @@ trait Documents
      * @param  array<Query>  $queries
      * @return array<Query>
      *
-     * @throws QueryException When an aggregate's default alias is already taken by another aggregate
+     * @throws QueryException When two aggregates are given the same alias, or an aggregate's default alias is already
+     *                         taken by another aggregate
      */
     private static function aliasAggregates(array $queries): array
     {
         $taken = [];
         foreach ($queries as $query) {
-            if ($query->getMethod()->isAggregate() && $query->getAlias() !== '') {
-                $taken[$query->getAlias()] = true;
+            $alias = $query->getAlias();
+            if (! $query->getMethod()->isAggregate() || $alias === '') {
+                continue;
             }
+
+            if (isset($taken[$alias])) {
+                throw new QueryException('Invalid query: Aggregate alias "'.$alias.'" is given to more than one aggregate');
+            }
+            $taken[$alias] = true;
         }
 
         foreach ($queries as $index => $query) {

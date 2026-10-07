@@ -75,6 +75,26 @@ final class AggregateTest extends TestCase
         }
     }
 
+    public function testAnExplicitAliasGivenTwiceIsRefusedTheSameWithValidationOff(): void
+    {
+        $queries = [Query::sum('views', 'total'), Query::max('views', 'total')];
+        $message = 'Invalid query: Aggregate alias "total" is given to more than one aggregate';
+
+        try {
+            $this->database->aggregate(HookFixture::COLLECTION, $queries);
+            $this->fail('Two aggregates came back under one alias');
+        } catch (QueryException $error) {
+            $this->assertSame($message, $error->getMessage());
+        }
+
+        try {
+            $this->database->skipValidation(fn (): array => $this->database->aggregate(HookFixture::COLLECTION, $queries));
+            $this->fail('Two aggregates came back under one alias with validation off');
+        } catch (QueryException $error) {
+            $this->assertSame($message, $error->getMessage());
+        }
+    }
+
     public function testExplicitAliasesSeparateTheSameAggregate(): void
     {
         $rows = $this->database->aggregate(HookFixture::COLLECTION, [Query::sum('views', 'first'), Query::sum('views', 'second')]);

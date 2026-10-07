@@ -36,6 +36,7 @@ use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\ID;
+use Utopia\Database\Hook\Permissions as PermissionsHook;
 use Utopia\Database\Operator;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
@@ -1822,7 +1823,7 @@ trait Documents
                         $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
                     }
 
-                    $document->setAttribute(Document::SKIP_PERMISSIONS_UPDATE, $skipPermissionsUpdate);
+                    $document->setAttribute(PermissionsHook::UNCHANGED, $skipPermissionsUpdate);
 
                     $updateData = [];
                     foreach ($decodedUpdates->getArrayCopy() as $key => $value) {
@@ -1886,7 +1887,7 @@ trait Documents
             $batch = $this->decorateDocuments(Event::DocumentsUpdate, $collection, $batch);
 
             foreach ($batch as $index => $doc) {
-                $doc->removeAttribute(Document::SKIP_PERMISSIONS_UPDATE);
+                $doc->removeAttribute(PermissionsHook::UNCHANGED);
                 try {
                     $onNext && $onNext($doc, $old[$index]);
                 } catch (Throwable $th) {

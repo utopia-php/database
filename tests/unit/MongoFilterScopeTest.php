@@ -12,6 +12,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
+use Utopia\Database\Hook\Write;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\Authorization;
@@ -153,7 +154,7 @@ final class MongoFilterScopeTest extends TestCase
         $adapter = $this->createAdapter()->removeWriteHook(Permissions::class);
         $collection = new Document(['$id' => self::COLLECTION]);
 
-        $this->assertFalse($adapter->hasPermissionHook());
+        $this->assertSame([], \array_filter($adapter->getWriteHooks(), static fn (Write $hook): bool => $hook instanceof Permissions));
 
         $adapter->find($collection);
         $adapter->find($collection, forPermission: PermissionType::Delete);

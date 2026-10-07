@@ -1079,7 +1079,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
                 }
             }
 
-            $row = $this->decorateRow($row, $this->documentMetadata($document));
+            $row = $this->decorateRow($row, $document);
             $builder->set($row);
             $result = $builder->insert();
             $statement = $this->executeResult($result, Event::DocumentCreate);
@@ -1088,8 +1088,8 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
             $lastInsertedId = $this->getDriver()->lastInsertId();
             $document[Document::SEQUENCE] ??= $lastInsertedId;
 
-            $ctx = $this->buildWriteContext($name);
-            $this->runWriteHooks(fn ($hook) => $hook->afterDocumentCreate($name, [$document], $ctx));
+            $context = $this->writeContext();
+            $this->runWriteHooks(fn ($hook) => $hook->afterDocumentCreate($name, [$document], $context));
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -1160,8 +1160,8 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
 
             $this->execute($statement);
 
-            $ctx = $this->buildWriteContext($name, $id);
-            $this->runWriteHooks(fn ($hook) => $hook->afterDocumentUpdate($name, $document, $skipPermissions, $ctx));
+            $context = $this->writeContext($skipPermissions);
+            $this->runWriteHooks(fn ($hook) => $hook->afterDocumentUpdate($name, $id, $document, $context));
         } catch (PDOException $e) {
             throw $this->processException($e);
         }

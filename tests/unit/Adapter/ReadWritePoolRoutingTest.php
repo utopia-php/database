@@ -6,6 +6,7 @@ use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 use Utopia\Database\Adapter;
+use Utopia\Database\Adapter\Pool;
 use Utopia\Database\Adapter\ReadWritePool;
 use Utopia\Pools\Pool as UtopiaPool;
 
@@ -70,8 +71,12 @@ final class ReadWritePoolRoutingTest extends TestCase
     {
         $known = [];
 
-        foreach ((new ReflectionClass(Adapter::class))->getMethods() as $method) {
-            if (! $method->isPrivate()) {
+        foreach ((new ReflectionClass(Adapter::class))->getMethods(\ReflectionMethod::IS_PUBLIC) as $method) {
+            $known[$method->getName()] = true;
+        }
+
+        foreach ((new ReflectionClass(Pool::class))->getMethods(\ReflectionMethod::IS_PROTECTED) as $method) {
+            if ($method->getDeclaringClass()->getName() === Pool::class && (new ReflectionClass(Adapter::class))->hasMethod($method->getName())) {
                 $known[$method->getName()] = true;
             }
         }

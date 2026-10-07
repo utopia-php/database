@@ -126,8 +126,62 @@ final class DeleteActionTest extends TestCase
         $artist = $database->skipRelationships(fn (): Document => $database->getDocument('artists', 'a1'));
         $album = $database->skipRelationships(fn (): Document => $database->getDocument('albums', 'b1'));
 
-        $this->assertFalse($artist->isEmpty());
-        $this->assertSame('a1', $album->getAttribute('artist'));
+        $this->assertFalse($artist->isEmpty(), 'The parent survives the refused delete');
+        $this->assertFalse($album->isEmpty(), 'The child survives the refused delete');
+        $this->assertSame('a1', $album->getAttribute('artist'), 'The child stays linked to its parent');
+    }
+
+    #[DataProvider('unsupportedActions')]
+    public function testCreatingACollectionWithAnUnsupportedActionIsRefused(ForeignKeyAction $action): void
+    {
+        $database = $this->database();
+        $relationship = Relationship::oneToMany('albums', key: 'releases', twoWay: true, twoWayKey: 'artist')->toDocument()->getArrayCopy();
+        $relationship['onDelete'] = $action->value;
+
+        try {
+            $database->createCollection(Collection::fromArray([
+                '$id' => 'labels',
+                'attributes' => [[
+                    'key' => 'releases',
+                    'type' => 'relationship',
+                    'size' => 0,
+                    'required' => false,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                    'options' => [...$relationship, 'side' => 'parent'],
+                ]],
+            ]));
+            $this->fail('Creating a collection whose relationship stores onDelete "'.$action->value.'" must throw');
+        } catch (RelationshipException $exception) {
+            $this->assertStringContainsString('"'.$action->value.'"', $exception->getMessage());
+        }
+
+        $this->assertNull($database->findCollection('labels'));
+    }
+
+    #[DataProvider('unsupportedActions')]
+    public function testACollectionStoringAnUnsupportedActionCannotBeRead(ForeignKeyAction $action): void
+    {
+        $database = $this->database();
+        $database->createRelationship('artists', Relationship::oneToMany('albums', key: 'albums', twoWay: true, twoWayKey: 'artist', onDelete: RelationshipDeleteAction::Cascade));
+        $database->createDocument('albums', new Document(['$id' => 'b1']));
+        $database->createDocument('artists', new Document(['$id' => 'a1', 'albums' => ['b1']]));
+
+        $this->storeDeleteAction($database, 'artists', 'albums', $action->value);
+
+        foreach ([
+            'getCollection' => fn (): mixed => $database->getCollection('artists')->attributes(),
+            'getDocument' => fn (): mixed => $database->getDocument('artists', 'a1'),
+            'find' => fn (): mixed => $database->find('artists'),
+        ] as $read => $callback) {
+            try {
+                $callback();
+                $this->fail($read.' of a collection storing onDelete "'.$action->value.'" must throw');
+            } catch (RelationshipException $exception) {
+                $this->assertStringContainsString('"'.$action->value.'"', $exception->getMessage(), $read);
+            }
+        }
     }
 
     private function storeDeleteAction(Database $database, string $collection, string $key, string $action): void

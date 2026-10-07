@@ -26,7 +26,7 @@ final class IndexRevalidationTest extends TestCase
             ->setNamespace('index_revalidation_'.\uniqid());
         $database->getAuthorization()->addRole(Role::any()->toString());
         $database->create();
-        $this->assertFalse($database->getAdapter()->supports(Capability::IdenticalIndexes));
+        $this->assertFalse($database->getAdapter()->supports(Capability::IndexIdentical));
 
         $database->createCollection(Collection::create(
             id: self::COLLECTION,

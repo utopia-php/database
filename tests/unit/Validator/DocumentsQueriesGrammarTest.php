@@ -4,6 +4,8 @@ namespace Tests\Unit\Validator;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Tests\Unit\Support\Profiles;
+use Utopia\Database\Capability;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Queries\Documents;
@@ -65,9 +67,9 @@ class DocumentsQueriesGrammarTest extends TestCase
     public function test_default_grammar_rejects_extended_methods(Query $query, string $method): void
     {
         $validator = new Documents(
-            attributes: $this->attributes,
-            indexes: [],
-            idAttributeType: ColumnType::Integer->value,
+            $this->attributes,
+            [],
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::OrderRandom]),
         );
 
         $this->assertFalse($validator->isValid([$query]));
@@ -78,10 +80,9 @@ class DocumentsQueriesGrammarTest extends TestCase
     public function test_joins_are_accepted_when_enabled(Query $query, string $method): void
     {
         $validator = new Documents(
-            attributes: $this->attributes,
-            indexes: [],
-            idAttributeType: ColumnType::Integer->value,
-            supportForJoins: true,
+            $this->attributes,
+            [],
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::Joins, Capability::OrderRandom]),
         );
 
         $this->assertTrue($validator->isValid([$query]), $method.': '.$validator->getDescription());
@@ -91,10 +92,9 @@ class DocumentsQueriesGrammarTest extends TestCase
     public function test_aggregations_are_accepted_when_enabled(Query $query, string $method): void
     {
         $validator = new Documents(
-            attributes: $this->attributes,
-            indexes: [],
-            idAttributeType: ColumnType::Integer->value,
-            supportForAggregations: true,
+            $this->attributes,
+            [],
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::Aggregations, Capability::OrderRandom]),
         );
 
         $queries = $method === 'having' ? [Query::groupBy(['rating']), $query] : [$query];
@@ -105,10 +105,9 @@ class DocumentsQueriesGrammarTest extends TestCase
     public function test_enabling_joins_does_not_enable_aggregations(Query $query, string $method): void
     {
         $validator = new Documents(
-            attributes: $this->attributes,
-            indexes: [],
-            idAttributeType: ColumnType::Integer->value,
-            supportForJoins: true,
+            $this->attributes,
+            [],
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::Joins, Capability::OrderRandom]),
         );
 
         $this->assertFalse($validator->isValid([$query]));
@@ -119,10 +118,9 @@ class DocumentsQueriesGrammarTest extends TestCase
     public function test_enabling_aggregations_does_not_enable_joins(Query $query, string $method): void
     {
         $validator = new Documents(
-            attributes: $this->attributes,
-            indexes: [],
-            idAttributeType: ColumnType::Integer->value,
-            supportForAggregations: true,
+            $this->attributes,
+            [],
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::Aggregations, Capability::OrderRandom]),
         );
 
         $this->assertFalse($validator->isValid([$query]));

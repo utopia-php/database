@@ -2,16 +2,16 @@
 
 namespace Utopia\Database\Validator\Queries;
 
-use DateTime;
 use Exception;
+use Utopia\Database\Adapter\Profile;
 use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Document as BaseDocument;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Queries;
 use Utopia\Database\Validator\Query\Filter;
 use Utopia\Database\Validator\Query\Join;
 use Utopia\Database\Validator\Query\Select;
-use Utopia\Query\Schema\ColumnType;
 
 /**
  * Validates queries for single document retrieval: selections of the document's attributes, and,
@@ -28,21 +28,13 @@ class Document extends Queries
 
     /**
      * @param  array<Attribute|BaseDocument>  $attributes
-     * @param  bool  $sharedTables  Whether the tables hold `$tenant`, as they do under shared tables
-     * @param  bool  $supportForJoins  Whether join queries are accepted
      *
      * @throws Exception
      */
     public function __construct(
         array $attributes,
-        private readonly bool $supportForAttributes = true,
-        private readonly string $idAttributeType = ColumnType::Integer->value,
+        private readonly Profile $profile,
         private readonly int $maxValuesCount = 5000,
-        private readonly DateTime $minAllowedDate = new DateTime('0000-01-01'),
-        private readonly DateTime $maxAllowedDate = new DateTime('9999-12-31'),
-        private readonly bool $supportUnsignedBigInt = true,
-        bool $sharedTables = false,
-        bool $supportForJoins = true,
     ) {
         $attributes = [
             ...\array_map(
@@ -54,9 +46,10 @@ class Document extends Queries
 
         $this->attributes = $attributes;
 
-        $validators = [new Select($attributes, $supportForAttributes, $sharedTables)];
+        $supportForAttributes = $profile->supports(Capability::DefinedAttributes);
+        $validators = [new Select($attributes, $supportForAttributes, $profile->sharedTables)];
 
-        if ($supportForJoins) {
+        if ($profile->supports(Capability::Joins)) {
             $validators[] = new Join($attributes, $supportForAttributes);
         }
 
@@ -91,17 +84,19 @@ class Document extends Queries
             return true;
         }
 
+        $supportForAttributes = $this->profile->supports(Capability::DefinedAttributes);
+        $limits = $this->profile->limits;
         $conditions = $this->conditions ??= new Queries([
             new Filter(
                 $this->attributes,
-                $this->idAttributeType,
+                $limits->idType->value,
                 $this->maxValuesCount,
-                $this->minAllowedDate,
-                $this->maxAllowedDate,
-                $this->supportForAttributes,
-                $this->supportUnsignedBigInt,
+                $limits->minDateTime,
+                $limits->maxDateTime,
+                $supportForAttributes,
+                $this->profile->supports(Capability::UnsignedBigInt),
             ),
-            new Join($this->attributes, $this->supportForAttributes),
+            new Join($this->attributes, $supportForAttributes),
         ]);
         $conditions->setJoinedCollections(\array_values($this->joinedCollections));
 

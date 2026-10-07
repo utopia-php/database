@@ -2,7 +2,10 @@
 
 namespace Utopia\Database\Validator;
 
+use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Adapter\Profile;
 use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -42,30 +45,13 @@ class IndexDefinition extends Validator
     /**
      * @param  array<Attribute|Document>  $attributes
      * @param  array<Index|Document>  $indexes
-     * @param  array<string>  $reservedKeys
      *
      * @throws DatabaseException
      */
     public function __construct(
         array $attributes,
         array $indexes,
-        protected int $maxLength,
-        protected array $reservedKeys = [],
-        protected bool $supportForArrayIndexes = false,
-        protected bool $supportForSpatialIndexNull = false,
-        protected bool $supportForSpatialIndexOrder = false,
-        protected bool $supportForVectorIndexes = false,
-        protected bool $supportForAttributes = true,
-        protected bool $supportForMultipleFulltextIndexes = true,
-        protected bool $supportForIdenticalIndexes = true,
-        protected bool $supportForObjectIndexes = false,
-        protected bool $supportForTrigramIndexes = false,
-        protected bool $supportForSpatialIndexes = false,
-        protected bool $supportForKeyIndexes = true,
-        protected bool $supportForUniqueIndexes = true,
-        protected bool $supportForFulltextIndexes = true,
-        protected bool $supportForTTLIndexes = false,
-        protected bool $supportForObjects = false
+        protected readonly Profile $profile,
     ) {
         $this->attributes = [];
         foreach ($attributes as $attribute) {
@@ -200,7 +186,7 @@ class IndexDefinition extends Validator
     public function checkValidIndex(Index $index): bool
     {
         $type = $index->type;
-        if ($this->supportForObjects) {
+        if ($this->profile->supports(Capability::Objects)) {
             $dottedAttributes = array_filter($index->attributes, fn (string $name) => ! isset($this->attributes[\strtolower($name)]) && $this->isDottedAttribute($name));
             if (\count($dottedAttributes)) {
                 foreach ($dottedAttributes as $attribute) {
@@ -219,7 +205,7 @@ class IndexDefinition extends Validator
 
         switch ($type) {
             case IndexType::Key:
-                if (! $this->supportForKeyIndexes) {
+                if (! $this->profile->supports(Capability::IndexKey)) {
                     $this->message = 'Key index is not supported';
 
                     return false;
@@ -227,7 +213,7 @@ class IndexDefinition extends Validator
                 break;
 
             case IndexType::Unique:
-                if (! $this->supportForUniqueIndexes) {
+                if (! $this->profile->supports(Capability::IndexUnique)) {
                     $this->message = 'Unique index is not supported';
 
                     return false;
@@ -235,7 +221,7 @@ class IndexDefinition extends Validator
                 break;
 
             case IndexType::Fulltext:
-                if (! $this->supportForFulltextIndexes) {
+                if (! $this->profile->supports(Capability::IndexFulltext)) {
                     $this->message = 'Fulltext index is not supported';
 
                     return false;
@@ -243,12 +229,12 @@ class IndexDefinition extends Validator
                 break;
 
             case IndexType::Spatial:
-                if (! $this->supportForSpatialIndexes) {
+                if (! $this->profile->hasFeature(Feature\Spatial::class)) {
                     $this->message = 'Spatial indexes are not supported';
 
                     return false;
                 }
-                if (! empty($index->orders) && ! $this->supportForSpatialIndexOrder) {
+                if (! empty($index->orders) && ! $this->profile->supports(Capability::IndexSpatialOrder)) {
                     $this->message = 'Spatial indexes with explicit orders are not supported. Remove the orders to create this index.';
 
                     return false;
@@ -258,7 +244,7 @@ class IndexDefinition extends Validator
             case IndexType::HnswEuclidean:
             case IndexType::HnswCosine:
             case IndexType::HnswDot:
-                if (! $this->supportForVectorIndexes) {
+                if (! $this->profile->supports(Capability::Vectors)) {
                     $this->message = 'Vector indexes are not supported';
 
                     return false;
@@ -266,7 +252,7 @@ class IndexDefinition extends Validator
                 break;
 
             case IndexType::Object:
-                if (! $this->supportForObjectIndexes) {
+                if (! $this->profile->supports(Capability::IndexObject)) {
                     $this->message = 'Object indexes are not supported';
 
                     return false;
@@ -274,7 +260,7 @@ class IndexDefinition extends Validator
                 break;
 
             case IndexType::Trigram:
-                if (! $this->supportForTrigramIndexes) {
+                if (! $this->profile->supports(Capability::IndexTrigram)) {
                     $this->message = 'Trigram indexes are not supported';
 
                     return false;
@@ -282,7 +268,7 @@ class IndexDefinition extends Validator
                 break;
 
             case IndexType::Ttl:
-                if (! $this->supportForTTLIndexes) {
+                if (! $this->profile->supports(Capability::IndexTtl)) {
                     $this->message = 'TTL indexes are not supported';
 
                     return false;
@@ -333,12 +319,12 @@ class IndexDefinition extends Validator
      */
     public function checkValidAttributes(Index $index): bool
     {
-        if (! $this->supportForAttributes) {
+        if (! $this->profile->supports(Capability::DefinedAttributes)) {
             return true;
         }
         foreach ($index->attributes as $attribute) {
             if (! isset($this->attributes[\strtolower($attribute)])) {
-                if ($this->supportForObjects) {
+                if ($this->profile->supports(Capability::Objects)) {
                     $baseAttribute = $this->getBaseAttributeFromDottedAttribute($attribute);
                     if (isset($this->attributes[\strtolower($baseAttribute)])) {
                         continue;
@@ -402,7 +388,7 @@ class IndexDefinition extends Validator
      */
     public function checkFulltextIndexNonString(Index $index): bool
     {
-        if (! $this->supportForAttributes) {
+        if (! $this->profile->supports(Capability::DefinedAttributes)) {
             return true;
         }
         if ($index->type === IndexType::Fulltext) {
@@ -428,7 +414,7 @@ class IndexDefinition extends Validator
      */
     public function checkArrayIndexes(Index $index): bool
     {
-        if (! $this->supportForAttributes) {
+        if (! $this->profile->supports(Capability::DefinedAttributes)) {
             return true;
         }
 
@@ -467,7 +453,7 @@ class IndexDefinition extends Validator
                     return false;
                 }
 
-                if ($this->supportForArrayIndexes === false) {
+                if (! $this->profile->supports(Capability::IndexArray)) {
                     $this->message = 'Indexing an array attribute is not supported';
 
                     return false;
@@ -495,7 +481,7 @@ class IndexDefinition extends Validator
             return true;
         }
 
-        if (! $this->supportForAttributes) {
+        if (! $this->profile->supports(Capability::DefinedAttributes)) {
             return true;
         }
 
@@ -508,7 +494,7 @@ class IndexDefinition extends Validator
             return false;
         }
         foreach ($indexedAttributes as $attributePosition => $attributeName) {
-            if ($this->supportForObjects && ! isset($this->attributes[\strtolower($attributeName)])) {
+            if ($this->profile->supports(Capability::Objects) && ! isset($this->attributes[\strtolower($attributeName)])) {
                 $attributeName = $this->getBaseAttributeFromDottedAttribute($attributeName);
             }
             $attribute = $this->attributes[\strtolower($attributeName)];
@@ -551,8 +537,8 @@ class IndexDefinition extends Validator
             $total += $indexLength;
         }
 
-        if ($total > $this->maxLength && $this->maxLength > 0) {
-            $this->message = 'Index length is longer than the maximum: '.$this->maxLength;
+        if ($total > $this->profile->limits->indexLength && $this->profile->limits->indexLength > 0) {
+            $this->message = 'Index length is longer than the maximum: '.$this->profile->limits->indexLength;
 
             return false;
         }
@@ -570,7 +556,7 @@ class IndexDefinition extends Validator
     {
         $key = \strtolower($index->key);
 
-        foreach ($this->reservedKeys as $reserved) {
+        foreach ($this->profile->limits->internalIndexKeys as $reserved) {
             if ($key === \strtolower($reserved)) {
                 $this->message = 'Index key name is reserved';
 
@@ -595,7 +581,7 @@ class IndexDefinition extends Validator
             return true;
         }
 
-        if ($this->supportForSpatialIndexes === false) {
+        if (! $this->profile->hasFeature(Feature\Spatial::class)) {
             $this->message = 'Spatial indexes are not supported';
 
             return false;
@@ -617,14 +603,14 @@ class IndexDefinition extends Validator
                 return false;
             }
 
-            if (! ($attribute->required ?? false) && ! $this->supportForSpatialIndexNull) {
+            if (! ($attribute->required ?? false) && ! $this->profile->supports(Capability::IndexSpatialNull)) {
                 $this->message = 'Spatial indexes do not allow null values. Mark the attribute "'.$attributeName.'" as required or create the index on a column with no null values.';
 
                 return false;
             }
         }
 
-        if (! empty($index->orders) && ! $this->supportForSpatialIndexOrder) {
+        if (! empty($index->orders) && ! $this->profile->supports(Capability::IndexSpatialOrder)) {
             $this->message = 'Spatial indexes with explicit orders are not supported. Remove the orders to create this index.';
 
             return false;
@@ -676,7 +662,7 @@ class IndexDefinition extends Validator
             return true;
         }
 
-        if ($this->supportForVectorIndexes === false) {
+        if (! $this->profile->supports(Capability::Vectors)) {
             $this->message = 'Vector indexes are not supported';
 
             return false;
@@ -714,7 +700,7 @@ class IndexDefinition extends Validator
             return true;
         }
 
-        if ($this->supportForTrigramIndexes === false) {
+        if (! $this->profile->supports(Capability::IndexTrigram)) {
             $this->message = 'Trigram indexes are not supported';
 
             return false;
@@ -747,13 +733,13 @@ class IndexDefinition extends Validator
     {
         $type = $index->type;
 
-        if ($type === IndexType::Key && $this->supportForKeyIndexes === false) {
+        if ($type === IndexType::Key && ! $this->profile->supports(Capability::IndexKey)) {
             $this->message = 'Key index is not supported';
 
             return false;
         }
 
-        if ($type === IndexType::Unique && $this->supportForUniqueIndexes === false) {
+        if ($type === IndexType::Unique && ! $this->profile->supports(Capability::IndexUnique)) {
             $this->message = 'Unique index is not supported';
 
             return false;
@@ -770,7 +756,7 @@ class IndexDefinition extends Validator
      */
     public function checkMultipleFulltextIndexes(Index $index): bool
     {
-        if ($this->supportForMultipleFulltextIndexes) {
+        if ($this->profile->supports(Capability::IndexFulltextMultiple)) {
             return true;
         }
 
@@ -800,7 +786,7 @@ class IndexDefinition extends Validator
      */
     public function checkIdenticalIndexes(Index $index): bool
     {
-        if ($this->supportForIdenticalIndexes) {
+        if ($this->profile->supports(Capability::IndexIdentical)) {
             return true;
         }
 
@@ -858,7 +844,7 @@ class IndexDefinition extends Validator
             return true;
         }
 
-        if (! $this->supportForObjectIndexes) {
+        if (! $this->profile->supports(Capability::IndexObject)) {
             $this->message = 'Object indexes are not supported';
 
             return false;
@@ -922,7 +908,7 @@ class IndexDefinition extends Validator
         $attribute = $this->findAttribute($attributeName);
         $attributeType = $attribute->type ?? ColumnType::String;
 
-        if ($this->supportForAttributes && $attributeType !== ColumnType::Datetime) {
+        if ($this->profile->supports(Capability::DefinedAttributes) && $attributeType !== ColumnType::Datetime) {
             $this->message = 'TTL index can only be created on datetime attributes. Attribute "'.$attributeName.'" is of type "'.$attributeType->value.'"';
 
             return false;

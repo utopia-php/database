@@ -5,6 +5,7 @@ namespace Tests\Unit\Validator;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use stdClass;
+use Tests\Unit\Support\Profiles;
 use Utopia\Database\Attribute;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -19,9 +20,7 @@ class AttributeJsonDefaultTest extends TestCase
     {
         $this->validator = new AttributeDefinition(
             attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 65535,
-            maxIntLength: PHP_INT_MAX,
+            profile: Profiles::of(string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
         );
     }
 

@@ -28,7 +28,7 @@ class RelationshipMemory extends CountingMemory
 
         return \array_values(\array_filter(
             $capabilities,
-            static fn (Capability $capability): bool => $capability !== Capability::NestedTransactions,
+            static fn (Capability $capability): bool => $capability !== Capability::TransactionNested,
         ));
     }
 

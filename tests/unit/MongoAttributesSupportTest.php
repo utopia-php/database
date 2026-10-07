@@ -8,7 +8,7 @@ use Utopia\Database\Capability;
 
 final class MongoAttributesSupportTest extends TestCase
 {
-    public function testDefinedAttributesFollowsSupportFlag(): void
+    public function testDefinedAttributesFollowsTheSchemalessMode(): void
     {
         $adapter = new class () extends Mongo {
             public function __construct()
@@ -16,12 +16,15 @@ final class MongoAttributesSupportTest extends TestCase
             }
         };
 
+        $this->assertFalse($adapter->isSchemaless());
         $this->assertTrue($adapter->supports(Capability::DefinedAttributes));
 
-        $adapter->setSupportForAttributes(false);
+        $this->assertSame($adapter, $adapter->setSchemaless(true));
+        $this->assertTrue($adapter->isSchemaless());
         $this->assertFalse($adapter->supports(Capability::DefinedAttributes));
 
-        $adapter->setSupportForAttributes(true);
+        $adapter->setSchemaless(false);
+        $this->assertFalse($adapter->isSchemaless());
         $this->assertTrue($adapter->supports(Capability::DefinedAttributes));
     }
 }

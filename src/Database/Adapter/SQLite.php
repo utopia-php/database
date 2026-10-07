@@ -24,6 +24,7 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Operator as OperatorException;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Exception\Unique as UniqueException;
@@ -42,6 +43,7 @@ use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Query\Builder\SQL as SQLBuilder;
+use Utopia\Query\CursorDirection;
 use Utopia\Query\Method;
 use Utopia\Query\Query as BaseQuery;
 use Utopia\Query\Schema\ColumnType;
@@ -92,6 +94,18 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
      */
     private const REGEXP_PATTERN_CACHE_LIMIT = 256;
 
+    private const array MISSING_AGGREGATES = [
+        Method::Stddev,
+        Method::StddevPop,
+        Method::StddevSamp,
+        Method::Variance,
+        Method::VarPop,
+        Method::VarSamp,
+        Method::BitAnd,
+        Method::BitOr,
+        Method::BitXor,
+    ];
+
     /**
      * Attribute → FTS5 table memo per FTS table prefix, which names the
      * tenant under sharedTables. Populated in one pass so multi-attribute
@@ -103,19 +117,12 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
 
     /**
      * When enabled, the adapter reports MariaDB-shaped column metadata,
-     * advertises MariaDB-only capabilities (upserts, attribute resizing,
-     * PCRE regex via the registered UDF), and declares schema-internal
+     * advertises MariaDB-only capabilities (attribute resizing), and declares schema-internal
      * columns (e.g. `_tenant`) using MariaDB-style types so callers that
      * inspect INFORMATION_SCHEMA-style results behave identically across
      * both adapters. Off by default — vanilla SQLite stays vanilla.
      */
     protected bool $emulateMySQL = false;
-
-    /**
-     * Whether the REGEXP UDF actually wired up. Pool/proxy PDOs may not
-     * expose sqliteCreateFunction.
-     */
-    private bool $pcreRegistered = false;
 
     public function __construct(object $pdo)
     {
@@ -129,8 +136,6 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
     {
         parent::reconnect();
 
-        $this->pcreRegistered = false;
-        $this->capabilitySet = null;
         $this->registerUserFunctions();
     }
 
@@ -171,25 +176,10 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             Capability::UpdateLock,
             Capability::Hostname,
             Capability::UpsertOnUniqueIndex,
-            Capability::StatisticalAggregates,
-            Capability::BitwiseAggregates,
         ];
 
         if (! $this->emulateMySQL) {
             $remove[] = Capability::AttributeResizing;
-        }
-
-        if (! $this->pcreRegistered) {
-            $remove[] = Capability::Regex;
-        }
-
-        $extras = [
-            Capability::IntegerBooleans,
-            Capability::NumericCasting,
-        ];
-
-        if ($this->pcreRegistered) {
-            $extras[] = Capability::PCRE;
         }
 
         return array_merge(
@@ -197,7 +187,10 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
                 parent::capabilities(),
                 fn (Capability $c) => ! in_array($c, $remove, true)
             )),
-            $extras
+            [
+                Capability::IntegerBooleans,
+                Capability::SchemaIntrospection,
+            ]
         );
     }
 
@@ -248,6 +241,19 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         return $result;
     }
 
+    #[Override]
+    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read): array
+    {
+        foreach ($queries as $query) {
+            $method = $query->getMethod();
+            if (\in_array($method, self::MISSING_AGGREGATES, true)) {
+                throw new QueryException('Aggregate '.$method->value.' is not supported by this adapter');
+            }
+        }
+
+        return parent::find($collection, $queries, $limit, $offset, $orderAttributes, $orderTypes, $cursor, $cursorDirection, $forPermission);
+    }
+
     /**
      * Register a preg_match-backed REGEXP UDF so the inherited REGEXP
      * path resolves. Best-effort — non-SQLite PDOs simply skip it.
@@ -287,21 +293,12 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
 
         try {
             $pdo = $this->getPDO();
-            $registered = false;
 
             if ($pdo instanceof DatabasePDO) {
-                $registered = $pdo->__call('createFunction', ['REGEXP', $pcre, 2]);
+                $pdo->__call('createFunction', ['REGEXP', $pcre, 2]);
             } elseif (\method_exists($pdo, 'createFunction')) {
-                $registered = $pdo->createFunction('REGEXP', $pcre, 2);
+                $pdo->createFunction('REGEXP', $pcre, 2);
             }
-
-            if ($registered !== true) {
-                return;
-            }
-
-            $this->pcreRegistered = true;
-            // Capability::PCRE is conditional on UDF registration — invalidate cache.
-            $this->capabilitySet = null;
         } catch (\Throwable) {
         }
     }
@@ -1318,12 +1315,11 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
     }
 
     /**
-     * Get list of keywords that cannot be used
-     *  Refference: https://www.sqlite.org/lang_keywords.html
+     * The keywords of https://www.sqlite.org/lang_keywords.html
      *
-     * @return array<string>
+     * @return list<string>
      */
-    public function getKeywords(): array
+    protected function getKeywords(): array
     {
         return [
             'ABORT',
@@ -1512,7 +1508,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             if ($size > 65535) {
                 return 'MEDIUMTEXT';
             }
-            if ($size > $this->getMaxVarcharLength()) {
+            if ($size > $this->limits()->varchar) {
                 return 'TEXT';
             }
 
@@ -2459,11 +2455,6 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
 
         $this->execute($stmt);
         $stmt->closeCursor();
-    }
-
-    public function getSupportNonUtfCharacters(): bool
-    {
-        return false;
     }
 
     /**

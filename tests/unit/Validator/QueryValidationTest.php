@@ -6,11 +6,13 @@ use Closure;
 use PDO;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Tests\Unit\Support\Profiles;
 use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -369,8 +371,8 @@ final class QueryValidationTest extends TestCase
             'on() list with a filter' => Query::join('notes', 'note', [Query::on('$id', 'customerId'), Query::equal('note.body', ['x'])]),
         ];
 
-        $enabled = new DocumentQueries($attributes);
-        $disabled = new DocumentQueries($attributes, supportForJoins: false);
+        $enabled = new DocumentQueries($attributes, Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::Joins]));
+        $disabled = new DocumentQueries($attributes, Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]));
 
         foreach ($joins as $shape => $join) {
             $this->assertTrue($enabled->isValid([$join]), $shape.': '.$enabled->getDescription());

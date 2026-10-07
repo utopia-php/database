@@ -3,12 +3,12 @@
 namespace Tests\Unit;
 
 use PDO;
+use PDOException;
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
-use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -43,31 +43,18 @@ final class SQLiteRegexTest extends TestCase
         $this->assertSame(3, $database->count(self::COLLECTION, [Query::regex('name', self::PATTERN)]));
     }
 
-    public function testRegexIsAdvertisedOnlyWithTheUserFunction(): void
+    public function testRegexNeedsTheUserFunction(): void
     {
-        $registered = new SQLite(new DatabasePDO('sqlite::memory:', null, null));
+        $database = $this->database(new PDO('sqlite::memory:'));
 
-        $this->assertTrue($registered->supports(Capability::Regex));
-        $this->assertTrue($registered->supports(Capability::PCRE));
-
-        $unregistered = new SQLite(new class () extends PDO {
-            public function __construct()
-            {
-            }
-
-            public function createFunction(string $name, callable $callback, int $arguments = -1, int $flags = 0): bool
-            {
-                return false;
-            }
-        });
-
-        $this->assertFalse($unregistered->supports(Capability::Regex));
-        $this->assertFalse($unregistered->supports(Capability::PCRE));
+        $this->expectException(PDOException::class);
+        $this->expectExceptionMessage('no such function: REGEXP');
+        $database->find(self::COLLECTION, [Query::regex('name', self::PATTERN)]);
     }
 
-    private function database(): Database
+    private function database(PDO|DatabasePDO $connection = new DatabasePDO('sqlite::memory:', null, null)): Database
     {
-        $database = new Database(new SQLite(new DatabasePDO('sqlite::memory:', null, null)), new Cache(new None()));
+        $database = new Database(new SQLite($connection), new Cache(new None()));
         $database
             ->setDatabase('regex')
             ->setNamespace('regex')

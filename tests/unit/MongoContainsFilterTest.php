@@ -8,7 +8,6 @@ use PHPUnit\Framework\Attributes\RequiresPhpExtension;
 use PHPUnit\Framework\TestCase;
 use stdClass;
 use Utopia\Database\Adapter\Mongo;
-use Utopia\Database\Capability;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
@@ -22,11 +21,6 @@ final class MongoContainsFilterTest extends TestCase
      * @var list<array<mixed>>
      */
     private array $filters = [];
-
-    public function testMongoDeclaresContainsQueries(): void
-    {
-        $this->assertTrue($this->createAdapter()->supports(Capability::QueryContains));
-    }
 
     public function testContainsOnAnArrayMatchesAnyValue(): void
     {
@@ -52,7 +46,7 @@ final class MongoContainsFilterTest extends TestCase
     public function testSchemalessUnparsableDateStaysAString(): void
     {
         $adapter = $this->createAdapter();
-        $adapter->setSupportForAttributes(false);
+        $adapter->setSchemaless(true);
 
         $this->assertSame(
             ['when' => ['$eq' => '2026-13-45T99:99:99Z']],

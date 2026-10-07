@@ -275,7 +275,7 @@ trait Attributes
             || $update->signed !== null
             || $update->array !== null
             || $update->key !== null
-            || ($updated->isSpatial() && ! $this->adapter->supports(Capability::SpatialIndexNull));
+            || ($updated->isSpatial() && ! $this->adapter->supports(Capability::IndexSpatialNull));
 
         $originalIndexes = $definition->indexes();
         $attributes = self::replacing($attributes, $key, $updated);
@@ -287,13 +287,13 @@ trait Attributes
         }
 
         if (
-            $this->adapter->getDocumentSizeLimit() > 0 &&
-            $this->adapter->getAttributeWidth($definition) >= $this->adapter->getDocumentSizeLimit()
+            $this->adapter->limits()->documentSize > 0 &&
+            $this->adapter->getAttributeWidth($definition) >= $this->adapter->limits()->documentSize
         ) {
             throw new LimitException('Row width limit reached. Cannot update attribute.');
         }
 
-        if ($updated->isSpatial() && ! $this->adapter->supports(Capability::SpatialIndexNull)) {
+        if ($updated->isSpatial() && ! $this->adapter->supports(Capability::IndexSpatialNull)) {
             $this->assertSpatialIndexesRequired($attributes, $indexes);
         }
 
@@ -303,7 +303,7 @@ trait Attributes
             if ($renaming) {
                 $validator = new IndexDependencyValidator(
                     $indexes,
-                    $this->adapter->supports(Capability::CastIndexArray),
+                    $this->adapter->supports(Capability::IndexArrayCast),
                 );
 
                 if (! $validator->isValid($updated)) {
@@ -371,17 +371,17 @@ trait Attributes
         $definition->setAttribute(self::COLLECTION_ATTRIBUTES, $attribute->toDocument(), SetType::Append);
 
         if (
-            $this->adapter->getLimitForAttributes() > 0 &&
-            $this->adapter->getCountOfAttributes($definition) > $this->adapter->getLimitForAttributes()
+            $this->adapter->limits()->attributes > 0 &&
+            $this->adapter->getCountOfAttributes($definition) > $this->adapter->limits()->attributes
         ) {
-            throw new LimitException('Column limit reached. Cannot create new attribute. Current attribute count is '.$this->adapter->getCountOfAttributes($definition).' but the maximum is '.$this->adapter->getLimitForAttributes().'. Remove some attributes to free up space.');
+            throw new LimitException('Column limit reached. Cannot create new attribute. Current attribute count is '.$this->adapter->getCountOfAttributes($definition).' but the maximum is '.$this->adapter->limits()->attributes.'. Remove some attributes to free up space.');
         }
 
         if (
-            $this->adapter->getDocumentSizeLimit() > 0 &&
-            $this->adapter->getAttributeWidth($definition) >= $this->adapter->getDocumentSizeLimit()
+            $this->adapter->limits()->documentSize > 0 &&
+            $this->adapter->getAttributeWidth($definition) >= $this->adapter->limits()->documentSize
         ) {
-            throw new LimitException('Row width limit reached. Cannot create new attribute. Current row width is '.$this->adapter->getAttributeWidth($definition).' bytes but the maximum is '.$this->adapter->getDocumentSizeLimit().' bytes. Reduce the size of existing attributes or remove some attributes to free up space.');
+            throw new LimitException('Row width limit reached. Cannot create new attribute. Current row width is '.$this->adapter->getAttributeWidth($definition).' bytes but the maximum is '.$this->adapter->limits()->documentSize.' bytes. Reduce the size of existing attributes or remove some attributes to free up space.');
         }
 
         return true;
@@ -414,7 +414,7 @@ trait Attributes
         if ($this->validation()->get()) {
             $validator = new IndexDependencyValidator(
                 $indexes,
-                $this->adapter->supports(Capability::CastIndexArray),
+                $this->adapter->supports(Capability::IndexArrayCast),
             );
 
             if (! $validator->isValid($attribute)) {
@@ -480,7 +480,7 @@ trait Attributes
         if ($this->validation()->get()) {
             $validator = new IndexDependencyValidator(
                 $indexes,
-                $this->adapter->supports(Capability::CastIndexArray),
+                $this->adapter->supports(Capability::IndexArrayCast),
             );
 
             if (! $validator->isValid($attributes[$position])) {
@@ -609,23 +609,11 @@ trait Attributes
 
         $validator = new AttributeDefinition(
             attributes: $definition->attributes(),
+            profile: $this->profile(),
             schemaAttributes: $schemaAttributes,
-            maxAttributes: $this->adapter->getLimitForAttributes(),
-            maxWidth: $this->adapter->getDocumentSizeLimit(),
-            maxStringLength: $this->adapter->getLimitForString(),
-            maxVarcharLength: $this->adapter->getMaxVarcharLength(),
-            maxIntLength: $this->adapter->getLimitForInt(),
-            maxBigIntLength: $this->adapter->getLimitForBigInt(),
-            supportForSchemaAttributes: $this->adapter->hasFeature(Feature\SchemaAttributes::class),
-            supportForVectors: $this->adapter->supports(Capability::Vectors),
-            supportForSpatialAttributes: $this->adapter->hasFeature(Feature\Spatial::class),
-            supportForObject: $this->adapter->supports(Capability::Objects),
-            supportUnsignedBigInt: $this->adapter->supports(Capability::UnsignedBigInt),
-            attributeCountCallback: fn (): int => $this->adapter->getCountOfAttributes($withAttribute),
-            attributeWidthCallback: fn (): int => $this->adapter->getAttributeWidth($withAttribute),
-            filterCallback: fn (string $key): string => $this->adapter->filter($key),
-            isMigrating: $this->isMigrating(),
-            sharedTables: $this->getSharedTables(),
+            attributeCount: fn (): int => $this->adapter->getCountOfAttributes($withAttribute),
+            attributeWidth: fn (): int => $this->adapter->getAttributeWidth($withAttribute),
+            filter: $this->adapter->filter(...),
         );
 
         $validator->isValid($attribute);
@@ -644,8 +632,8 @@ trait Attributes
                 if ($size === 0) {
                     throw new DatabaseException('Size length is required');
                 }
-                if ($size > $this->adapter->getLimitForString()) {
-                    throw new DatabaseException('Max size allowed for string is: '.\number_format($this->adapter->getLimitForString()));
+                if ($size > $this->adapter->limits()->string) {
+                    throw new DatabaseException('Max size allowed for string is: '.\number_format($this->adapter->limits()->string));
                 }
                 break;
 
@@ -653,13 +641,13 @@ trait Attributes
                 if ($size === 0) {
                     throw new DatabaseException('Size length is required');
                 }
-                if ($size > $this->adapter->getMaxVarcharLength()) {
-                    throw new DatabaseException('Max size allowed for varchar is: '.\number_format($this->adapter->getMaxVarcharLength()));
+                if ($size > $this->adapter->limits()->varchar) {
+                    throw new DatabaseException('Max size allowed for varchar is: '.\number_format($this->adapter->limits()->varchar));
                 }
                 break;
 
             case ColumnType::Integer:
-                $limit = $attribute->signed ? $this->adapter->getLimitForInt() / 2 : $this->adapter->getLimitForInt();
+                $limit = $attribute->signed ? $this->adapter->limits()->integer / 2 : $this->adapter->limits()->integer;
                 if ($size > $limit) {
                     throw new DatabaseException('Max size allowed for int is: '.\number_format($limit));
                 }
@@ -796,17 +784,7 @@ trait Attributes
 
     private function typeValidator(): AttributeDefinition
     {
-        return new AttributeDefinition(
-            attributes: [],
-            maxStringLength: $this->adapter->getLimitForString(),
-            maxVarcharLength: $this->adapter->getMaxVarcharLength(),
-            maxIntLength: $this->adapter->getLimitForInt(),
-            maxBigIntLength: $this->adapter->getLimitForBigInt(),
-            supportForVectors: $this->adapter->supports(Capability::Vectors),
-            supportForSpatialAttributes: $this->adapter->hasFeature(Feature\Spatial::class),
-            supportForObject: $this->adapter->supports(Capability::Objects),
-            supportUnsignedBigInt: $this->adapter->supports(Capability::UnsignedBigInt),
-        );
+        return new AttributeDefinition([], $this->profile());
     }
 
     /**
@@ -815,27 +793,7 @@ trait Attributes
      */
     private function indexValidator(array $attributes, array $indexes): IndexDefinition
     {
-        return new IndexDefinition(
-            $attributes,
-            $indexes,
-            $this->adapter->getMaxIndexLength(),
-            $this->adapter->getInternalIndexesKeys(),
-            $this->adapter->supports(Capability::IndexArray),
-            $this->adapter->supports(Capability::SpatialIndexNull),
-            $this->adapter->supports(Capability::SpatialIndexOrder),
-            $this->adapter->supports(Capability::Vectors),
-            $this->adapter->supports(Capability::DefinedAttributes),
-            $this->adapter->supports(Capability::MultipleFulltextIndexes),
-            $this->adapter->supports(Capability::IdenticalIndexes),
-            $this->adapter->supports(Capability::ObjectIndexes),
-            $this->adapter->supports(Capability::TrigramIndex),
-            $this->adapter->hasFeature(Feature\Spatial::class),
-            $this->adapter->supports(Capability::Index),
-            $this->adapter->supports(Capability::UniqueIndex),
-            $this->adapter->supports(Capability::Fulltext),
-            $this->adapter->supports(Capability::TTLIndexes),
-            $this->adapter->supports(Capability::Objects)
-        );
+        return new IndexDefinition($attributes, $indexes, $this->profile());
     }
 
     /**

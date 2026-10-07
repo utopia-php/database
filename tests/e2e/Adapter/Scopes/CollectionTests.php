@@ -300,7 +300,7 @@ trait CollectionTests
         $database = $this->getDatabase();
 
         // SQLite does not support fulltext indexes
-        if (! $database->getAdapter()->supports(Capability::Fulltext)) {
+        if (! $database->getAdapter()->supports(Capability::IndexFulltext)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -454,7 +454,7 @@ trait CollectionTests
     public function testKeywords(): void
     {
         $database = $this->getDatabase();
-        $keywords = $database->getKeywords();
+        $keywords = $database->profile()->limits->keywords;
 
         if ($keywords === []) {
             $this->expectNotToPerformAssertions();
@@ -771,7 +771,7 @@ trait CollectionTests
 
         $this->assertCount(1, $database->listCollections());
 
-        if ($database->getAdapter()->supports(Capability::Fulltext)) {
+        if ($database->getAdapter()->supports(Capability::IndexFulltext)) {
             $database->createIndex('people', Index::fulltext(key: 'idx_lifeStory', attributes: ['lifeStory']));
         }
 
@@ -992,8 +992,8 @@ trait CollectionTests
         }
 
         try {
-            $tenant1 = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer->value ? 10 : 'tenant_10';
-            $tenant2 = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer->value ? 20 : 'tenant_20';
+            $tenant1 = $database->getIdAttributeType() === ColumnType::Integer ? 10 : 'tenant_10';
+            $tenant2 = $database->getIdAttributeType() === ColumnType::Integer ? 20 : 'tenant_20';
             $colName = 'mt_' . uniqid();
 
             $database->setTenant($tenant1);
@@ -1050,8 +1050,8 @@ trait CollectionTests
         $originalTenant = $database->getTenant();
 
         try {
-            $tenant1 = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer->value ? 100 : 'tenant_100';
-            $tenant2 = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer->value ? 200 : 'tenant_200';
+            $tenant1 = $database->getIdAttributeType() === ColumnType::Integer ? 100 : 'tenant_100';
+            $tenant2 = $database->getIdAttributeType() === ColumnType::Integer ? 200 : 'tenant_200';
 
             if ($sharedTables) {
                 // Already in shared-tables mode; create() should be idempotent.
@@ -1821,7 +1821,7 @@ trait CollectionTests
     {
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getDocumentSizeLimit() === 0) {
+        if ($database->getAdapter()->limits()->documentSize === 0) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2158,7 +2158,7 @@ trait CollectionTests
         }
 
         $originalTenant = $database->getTenant();
-        $integerTenants = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer->value;
+        $integerTenants = $database->getIdAttributeType() === ColumnType::Integer;
         $first = $integerTenants ? 401 : 'tenant_401';
         $second = $integerTenants ? 402 : 'tenant_402';
         $collection = 'sharedColumnType';
@@ -2222,7 +2222,7 @@ trait CollectionTests
         }
 
         $originalTenant = $database->getTenant();
-        $integerTenants = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer->value;
+        $integerTenants = $database->getIdAttributeType() === ColumnType::Integer;
         $tenants = $integerTenants ? [411, 412] : ['tenant_411', 'tenant_412'];
         $collection = 'sharedColumnSameType';
         $definition = Collection::create(id: $collection, permissions: [

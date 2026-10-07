@@ -6504,7 +6504,7 @@ trait JoinTests
     public function testJoinSearchOnJoinedAttributeRequiresFulltextIndex(): void
     {
         $database = static::getDatabase();
-        if (! $database->getAdapter()->supports(Capability::Joins) || ! $database->getAdapter()->supports(Capability::Fulltext)) {
+        if (! $database->getAdapter()->supports(Capability::Joins) || ! $database->getAdapter()->supports(Capability::IndexFulltext)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -6563,7 +6563,7 @@ trait JoinTests
         $database->createCollection(Collection::create(id: $notes, permissions: $permissions));
         $database->createAttribute($notes, Attribute::string(key: 'customerId', size: 64, required: true));
         $database->createAttribute($notes, Attribute::string(key: 'body', size: 256, required: true));
-        if ($database->getAdapter()->supports(Capability::Fulltext)) {
+        if ($database->getAdapter()->supports(Capability::IndexFulltext)) {
             $database->createIndex($notes, Index::fulltext(key: 'body_fulltext', attributes: ['body']));
         }
 
@@ -8861,7 +8861,7 @@ trait JoinTests
                 $this->assertSame($keys, $iterated, "{$label}: iterate()");
             }
 
-            if ($database->getAdapter()->supports(Capability::Fulltext)) {
+            if ($database->getAdapter()->supports(Capability::IndexFulltext)) {
                 $database->createIndex($authors, Index::fulltext(key: 'j65_name', attributes: ['name']));
                 $queries = [$join, Query::search('name', 'author')];
                 $keys = \array_map($this->joinCursorKey(...), \array_values($database->find($authors, [...$queries, Query::limit(100)])));
@@ -8939,7 +8939,7 @@ trait JoinTests
         ];
 
         try {
-            if ($database->getAdapter()->supports(Capability::Fulltext)) {
+            if ($database->getAdapter()->supports(Capability::IndexFulltext)) {
                 $database->createIndex($authors, Index::fulltext(key: 'j67_name', attributes: ['name']));
                 $reads['inner join, searched'] = [[$inner, Query::search('name', 'gold')], ['a1/n1', 'a1/n2', 'a1/n3', 'a3/n5', 'a6/n10', 'a6/n9', 'a9/n11']];
                 $reads['left join, searched'] = [[$left, Query::search('name', 'iron')], ['a2/n4', 'a5/-', 'a8/-']];

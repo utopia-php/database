@@ -10,12 +10,14 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
+use Utopia\Database\Adapter\Limits;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Helpers\Role;
+use Utopia\Query\Schema\ColumnType;
 
 final class MissingCollectionAggregateTest extends TestCase
 {
@@ -74,11 +76,24 @@ final class MissingCollectionAggregateTest extends TestCase
         $adapter->method('getTenant')->willReturn(null);
         $adapter->method('getTenantPerDocument')->willReturn(false);
         $adapter->method('getNamespace')->willReturn('');
-        $adapter->method('getIdAttributeType')->willReturn('string');
-        $adapter->method('getMaxUIDLength')->willReturn(36);
-        $adapter->method('getMinDateTime')->willReturn(new DateTime('0000-01-01'));
-        $adapter->method('getMaxDateTime')->willReturn(new DateTime('9999-12-31'));
-        $adapter->method('getInternalIndexesKeys')->willReturn([]);
+        $adapter->method('limits')->willReturn(new Limits(
+            string: 0,
+            varchar: 0,
+            integer: 0,
+            bigInteger: 0,
+            attributes: 0,
+            indexes: 0,
+            defaultAttributes: 0,
+            defaultIndexes: 0,
+            indexLength: 0,
+            uidLength: 36,
+            documentSize: 0,
+            minDateTime: new DateTime('0000-01-01'),
+            maxDateTime: new DateTime('9999-12-31'),
+            idType: ColumnType::String,
+            keywords: [],
+            internalIndexKeys: [],
+        ));
         $adapter->method('filter')->willReturnArgument(0);
         $adapter->method('supports')->willReturnCallback(
             static fn (Capability $capability): bool => $capability === Capability::DefinedAttributes

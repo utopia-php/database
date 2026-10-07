@@ -121,23 +121,16 @@ class Memory extends Adapter implements Feature\Relationships
     public function capabilities(): array
     {
         return array_merge(parent::capabilities(), [
-            Capability::AtomicTransactions,
             Capability::Schemas,
-            Capability::Fulltext,
+            Capability::IndexFulltext,
             Capability::Casting,
-            Capability::QueryContains,
-            Capability::BatchOperations,
-            Capability::BatchCreateAttributes,
             Capability::AttributeResizing,
             Capability::Objects,
-            Capability::ObjectIndexes,
+            Capability::IndexObject,
             Capability::Operators,
             Capability::OrderRandom,
             Capability::DefinedAttributes,
-            Capability::NestedTransactions,
-            Capability::PCRE,
-            Capability::Regex,
-            Capability::BoundaryInclusive,
+            Capability::TransactionNested,
             Capability::Caching,
         ]);
     }
@@ -1857,82 +1850,40 @@ class Memory extends Adapter implements Feature\Relationships
         return $this->getSizeOfCollection($collection);
     }
 
-    public function getLimitForString(): int
+    /**
+     * No index is bounded by bytes here, but index validation subtracts from the index length, so it is
+     * Mongo's positive cap.
+     */
+    public function limits(): Limits
     {
-        return 4294967295;
-    }
-
-    public function getLimitForInt(): int
-    {
-        return 4294967295;
-    }
-
-    public function getLimitForAttributes(): int
-    {
-        return 1017;
-    }
-
-    public function getLimitForIndexes(): int
-    {
-        return 64;
-    }
-
-    public function getMaxIndexLength(): int
-    {
-        // Memory does not enforce per-index byte limits, but the Database
-        // layer expects a positive cap so callers can derive sizes via
-        // arithmetic (e.g. `getMaxIndexLength() - 68`). Match Mongo's value.
-        return 1024;
-    }
-
-    public function getMaxVarcharLength(): int
-    {
-        return 16381;
-    }
-
-    public function getMaxUIDLength(): int
-    {
-        return 255;
-    }
-
-    public function getMinDateTime(): \DateTime
-    {
-        return new \DateTime('0001-01-01 00:00:00');
-    }
-
-    public function getIdAttributeType(): string
-    {
-        return ColumnType::Integer->value;
-    }
-
-    public function setSupportForAttributes(bool $support): bool
-    {
-        return true;
+        return $this->limits ??= new Limits(
+            string: 4294967295,
+            varchar: 16381,
+            integer: 4294967295,
+            bigInteger: Database::MAX_BIG_INT,
+            attributes: 1017,
+            indexes: 64,
+            defaultAttributes: \count(Database::internalAttributesFor(true)),
+            defaultIndexes: \count(Database::INTERNAL_INDEXES),
+            indexLength: 1024,
+            uidLength: 255,
+            documentSize: 0,
+            minDateTime: new \DateTime('0001-01-01 00:00:00'),
+            maxDateTime: new \DateTime(self::MAX_DATETIME),
+            idType: ColumnType::Integer,
+            keywords: [],
+            internalIndexKeys: [],
+        );
     }
 
     public function getCountOfAttributes(Document $collection): int
     {
-        return \count(self::collectionAttributes($collection)) + $this->getCountOfDefaultAttributes();
+        return \count(self::collectionAttributes($collection)) + $this->limits()->defaultAttributes;
     }
 
     public function getCountOfIndexes(Document $collection): int
     {
-        return \count(self::collectionIndexes($collection)) + $this->getCountOfDefaultIndexes();
-    }
-
-    public function getCountOfDefaultAttributes(): int
-    {
-        return \count(Database::internalAttributesFor(true));
-    }
-
-    public function getCountOfDefaultIndexes(): int
-    {
-        return \count(Database::INTERNAL_INDEXES);
-    }
-
-    public function getDocumentSizeLimit(): int
-    {
-        return 0;
+        return \count(self::collectionIndexes($collection)) + $this->limits()->defaultIndexes;
     }
 
     public function getAttributeWidth(Document $collection): int
@@ -1954,24 +1905,6 @@ class Memory extends Adapter implements Feature\Relationships
     public function getSchemaIndexes(string $collection): array
     {
         return [];
-    }
-
-    /**
-     * Get max BIGINT limit
-     *
-     * @return int
-     */
-    public function getLimitForBigInt(): int
-    {
-        return Database::MAX_BIG_INT;
-    }
-
-    public function getSupportNonUtfCharacters(): bool
-    {
-        // Memory is a pass-through PHP array, so it does NOT actively reject
-        // non-UTF-8 byte sequences. Returning false skips the inherited
-        // non-UTF-character scope test that asserts adapter rejection.
-        return false;
     }
 
     /**

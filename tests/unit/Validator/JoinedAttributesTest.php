@@ -3,7 +3,9 @@
 namespace Tests\Unit\Validator;
 
 use PHPUnit\Framework\TestCase;
+use Tests\Unit\Support\Profiles;
 use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
@@ -263,11 +265,9 @@ class JoinedAttributesTest extends TestCase
         $attributes = $this->customers->getAttribute('attributes', []);
 
         $validator = new Documents(
-            attributes: $attributes,
-            indexes: [],
-            idAttributeType: ColumnType::Integer->value,
-            supportForJoins: true,
-            supportForAggregations: true,
+            $attributes,
+            [],
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::Joins, Capability::Aggregations, Capability::OrderRandom]),
         );
 
         if ($joinedCollections !== []) {

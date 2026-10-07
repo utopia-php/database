@@ -403,6 +403,17 @@ class Mirror extends Database
     }
 
     /**
+     * The source shares this database's adapter; the destination keeps its own mode.
+     */
+    public function setSchemaless(bool $schemaless): static
+    {
+        parent::setSchemaless($schemaless);
+        $this->source->setSchemaless($schemaless);
+
+        return $this;
+    }
+
+    /**
      * {@inheritdoc}
      */
     public function setMigrating(bool $migrating): self

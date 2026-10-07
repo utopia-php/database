@@ -8,6 +8,7 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
+use Utopia\Database\Adapter\Limits;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -33,26 +34,32 @@ class SchemalessValidationTest extends TestCase
         $this->adapter->method('getTenant')->willReturn(null);
         $this->adapter->method('getTenantPerDocument')->willReturn(false);
         $this->adapter->method('getNamespace')->willReturn('');
-        $this->adapter->method('getIdAttributeType')->willReturn(ColumnType::Integer->value);
-        $this->adapter->method('getMaxUIDLength')->willReturn(36);
-        $this->adapter->method('getMinDateTime')->willReturn(new DateTime('0000-01-01'));
-        $this->adapter->method('getMaxDateTime')->willReturn(new DateTime('9999-12-31'));
-        $this->adapter->method('getLimitForString')->willReturn(16777215);
-        $this->adapter->method('getLimitForInt')->willReturn(2147483647);
-        $this->adapter->method('getLimitForAttributes')->willReturn(0);
-        $this->adapter->method('getLimitForIndexes')->willReturn(64);
-        $this->adapter->method('getMaxIndexLength')->willReturn(768);
-        $this->adapter->method('getMaxVarcharLength')->willReturn(16383);
-        $this->adapter->method('getDocumentSizeLimit')->willReturn(0);
+        $this->adapter->method('limits')->willReturn(new Limits(
+            string: 16777215,
+            varchar: 16383,
+            integer: 2147483647,
+            bigInteger: 0,
+            attributes: 0,
+            indexes: 64,
+            defaultAttributes: 0,
+            defaultIndexes: 0,
+            indexLength: 768,
+            uidLength: 36,
+            documentSize: 0,
+            minDateTime: new DateTime('0000-01-01'),
+            maxDateTime: new DateTime('9999-12-31'),
+            idType: ColumnType::Integer,
+            keywords: [],
+            internalIndexKeys: [],
+        ));
         $this->adapter->method('getCountOfAttributes')->willReturn(0);
         $this->adapter->method('getCountOfIndexes')->willReturn(0);
         $this->adapter->method('getAttributeWidth')->willReturn(0);
-        $this->adapter->method('getInternalIndexesKeys')->willReturn([]);
         $this->adapter->method('filter')->willReturnArgument(0);
         $this->adapter->method('supports')->willReturnCallback(function (Capability $cap) {
             return in_array($cap, [
-                Capability::Index,
-                Capability::TTLIndexes,
+                Capability::IndexKey,
+                Capability::IndexTtl,
             ]);
         });
         $this->adapter->method('startTransaction')->willReturn(true);

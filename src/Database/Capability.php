@@ -10,58 +10,44 @@ namespace Utopia\Database;
  */
 enum Capability
 {
+    case Aggregations;
     case AlterLock;
-    case AtomicTransactions;
     case AttributeResizing;
-    case BatchCreateAttributes;
-    case BatchOperations;
-    case BoundaryInclusive;
     case Caching;
-    case CacheSkipOnFailure;
-    case CastIndexArray;
     case Casting;
     case DefinedAttributes;
-    case Fulltext;
-    case FulltextWildcard;
     case Hostname;
-    case IdenticalIndexes;
-    case Index;
     case IndexArray;
+    case IndexArrayCast;
+    case IndexFulltext;
+    case IndexFulltextMultiple;
+    case IndexFulltextWildcard;
+    case IndexIdentical;
+    case IndexKey;
+    case IndexObject;
+    case IndexSpatialNull;
+    case IndexSpatialOrder;
+    case IndexTrigram;
+    case IndexTtl;
+    case IndexUnique;
     case IntegerBooleans;
-    case JSONOverlaps;
-    case MultiDimensionDistance;
-    case MultipleFulltextIndexes;
+    case Joins;
+    case NonUtfCharacters;
+    case Objects;
+    case Operators;
+    case OrderRandom;
+    case SchemaIntrospection;
+    case Schemas;
+    case SpatialAxisOrder;
     /**
      * A nested transaction that fails rolls back to its savepoint and leaves the enclosing
      * transaction open. Without it a nested call runs inside the enclosing transaction and
      * its writes stay there when it fails.
      */
-    case NestedTransactions;
-    case NumericCasting;
-    case ObjectIndexes;
-    case Objects;
-    case Operators;
-    case OptionalSpatial;
-    case OrderRandom;
-    case PCRE;
-    case POSIX;
-    case QueryContains;
-    case Reconnection;
-    case Regex;
-    case Schemas;
-    case SpatialAxisOrder;
-    case SpatialIndexNull;
-    case SpatialIndexOrder;
-    case TTLIndexes;
+    case TransactionNested;
     case TransactionRetries;
-    case TrigramIndex;
-    case UniqueIndex;
+    case UnsignedBigInt;
     case UpdateLock;
     case UpsertOnUniqueIndex;
-    case UnsignedBigInt;
     case Vectors;
-    case Joins;
-    case Aggregations;
-    case StatisticalAggregates;
-    case BitwiseAggregates;
 }

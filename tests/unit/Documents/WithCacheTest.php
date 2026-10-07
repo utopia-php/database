@@ -83,7 +83,7 @@ final class WithCacheTest extends TestCase
         $adapter = new class () extends Memory {
             public function capabilities(): array
             {
-                return [...parent::capabilities(), Capability::TTLIndexes];
+                return [...parent::capabilities(), Capability::IndexTtl];
             }
         };
         $database = $this->database($adapter, new Cache(new MemoryCache()));

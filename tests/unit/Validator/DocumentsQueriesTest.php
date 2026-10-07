@@ -4,6 +4,8 @@ namespace Tests\Unit\Validator;
 
 use Exception;
 use PHPUnit\Framework\TestCase;
+use Tests\Unit\Support\Profiles;
+use Utopia\Database\Capability;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Query;
@@ -127,7 +129,7 @@ class DocumentsQueriesTest extends TestCase
         $validator = new Documents(
             $this->attributes,
             $this->indexes,
-            ColumnType::Integer->value
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::OrderRandom]),
         );
 
         $queries = [
@@ -165,7 +167,7 @@ class DocumentsQueriesTest extends TestCase
         $validator = new Documents(
             $this->attributes,
             $this->indexes,
-            ColumnType::Integer->value
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::OrderRandom]),
         );
 
         $queries = ['{"method":"notEqual","attribute":"title","values":["Iron Man","Ant Man"]}'];
@@ -195,8 +197,7 @@ class DocumentsQueriesTest extends TestCase
         $validator = new Documents(
             $this->attributes,
             $this->indexes,
-            ColumnType::Integer->value,
-            supportForJoins: true,
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::Joins, Capability::OrderRandom]),
         );
 
         $this->assertTrue($validator->isValid([
@@ -210,8 +211,7 @@ class DocumentsQueriesTest extends TestCase
         $validator = new Documents(
             $this->attributes,
             $this->indexes,
-            ColumnType::Integer->value,
-            supportForJoins: true,
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::Joins, Capability::OrderRandom]),
         );
 
         $this->assertTrue($validator->isValid([
@@ -225,8 +225,7 @@ class DocumentsQueriesTest extends TestCase
         $validator = new Documents(
             $this->attributes,
             $this->indexes,
-            ColumnType::Integer->value,
-            supportForJoins: true,
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::Joins, Capability::OrderRandom]),
         );
 
         $this->assertFalse($validator->isValid([
@@ -241,8 +240,7 @@ class DocumentsQueriesTest extends TestCase
         $validator = new Documents(
             $this->attributes,
             $this->indexes,
-            ColumnType::Integer->value,
-            supportForJoins: true,
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::Joins, Capability::OrderRandom]),
         );
 
         $this->assertTrue($validator->isValid([

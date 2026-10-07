@@ -768,7 +768,7 @@ trait GeneralTests
         if (! $database->getAdapter()->supports(Capability::Caching)) {
             $this->markTestSkipped('Adapter does not use the document cache.');
         }
-        if (! $database->getAdapter()->supports(Capability::NestedTransactions)) {
+        if (! $database->getAdapter()->supports(Capability::TransactionNested)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1041,7 +1041,7 @@ trait GeneralTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::NestedTransactions)) {
+        if (! $database->getAdapter()->supports(Capability::TransactionNested)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1327,13 +1327,13 @@ trait GeneralTests
         $database = $this->getDatabase();
         $adapter = $database->getAdapter();
 
-        if ($adapter->getLimitForAttributes() === 0) {
+        if ($adapter->limits()->attributes === 0) {
             $this->assertSame(0, $database->getLimitForAttributes(), 'An adapter without a column limit reports no limit');
 
             return;
         }
 
-        $this->assertSame($adapter->getLimitForAttributes() - $adapter->getCountOfDefaultAttributes(), $database->getLimitForAttributes(), 'The limit must leave room for the internal columns');
+        $this->assertSame($adapter->limits()->attributes - $adapter->limits()->defaultAttributes, $database->getLimitForAttributes(), 'The limit must leave room for the internal columns');
     }
 
     public function testGetIndexLimit(): void

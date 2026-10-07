@@ -2,7 +2,9 @@
 
 namespace Utopia\Database\Validator\Queries;
 
+use Utopia\Database\Adapter\Profile;
 use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Queries;
 use Utopia\Database\Validator\Query\Base;
@@ -142,11 +144,8 @@ final class Narrow extends Queries
     public static function of(
         array $queries,
         array $attributes,
-        Bounds $bounds,
+        Profile $profile,
         int $maxValuesCount,
-        bool $supportForAttributes,
-        bool $supportUnsignedBigInt,
-        bool $supportForOrderRandom,
     ): ?self {
         $types = [];
         $filtered = [];
@@ -178,6 +177,8 @@ final class Narrow extends Queries
             }
         }
 
+        $supportForAttributes = $profile->supports(Capability::DefinedAttributes);
+        $limits = $profile->limits;
         $validators = [];
         if (isset($types[Base::METHOD_TYPE_LIMIT])) {
             $validators[] = new Limit();
@@ -186,21 +187,21 @@ final class Narrow extends Queries
             $validators[] = new Offset();
         }
         if (isset($types[Base::METHOD_TYPE_CURSOR])) {
-            $validators[] = new Cursor($bounds->maxUIDLength);
+            $validators[] = new Cursor($limits->uidLength);
         }
         if (isset($types[Base::METHOD_TYPE_FILTER])) {
             $validators[] = new Filter(
                 $filterAttributes,
-                $bounds->idAttributeType,
+                $limits->idType->value,
                 $maxValuesCount,
-                $bounds->minDateTime,
-                $bounds->maxDateTime,
+                $limits->minDateTime,
+                $limits->maxDateTime,
                 $supportForAttributes,
-                $supportUnsignedBigInt,
+                $profile->supports(Capability::UnsignedBigInt),
             );
         }
         if (isset($types[Base::METHOD_TYPE_ORDER])) {
-            $validators[] = new Order($orderAttributes, $supportForAttributes, $supportForOrderRandom);
+            $validators[] = new Order($orderAttributes, $supportForAttributes, $profile->supports(Capability::OrderRandom));
         }
 
         return new self($validators);

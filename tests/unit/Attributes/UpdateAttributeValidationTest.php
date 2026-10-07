@@ -9,6 +9,7 @@ use RuntimeException;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
+use Utopia\Database\Adapter\Limits;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
@@ -297,20 +298,20 @@ final class UpdateAttributeValidationTest extends TestCase
     public function testTheSizeRulesApplyOnUpdate(\Closure $adapter): void
     {
         $database = $this->database($adapter());
-        $limits = $database->getAdapter();
+        $limits = $database->getAdapter()->limits();
         $before = $this->definitions($database);
 
         $this->assertRefused('Size length is required', fn (): mixed => $database->updateAttribute(self::COLLECTION, 'label', new AttributeUpdate(size: 0)));
         $this->assertRefused(
-            'Max size allowed for string is: '.\number_format($limits->getLimitForString()),
-            fn (): mixed => $database->updateAttribute(self::COLLECTION, 'label', new AttributeUpdate(size: $limits->getLimitForString() + 1)),
+            'Max size allowed for string is: '.\number_format($limits->string),
+            fn (): mixed => $database->updateAttribute(self::COLLECTION, 'label', new AttributeUpdate(size: $limits->string + 1)),
         );
         $this->assertRefused('Size length is required', fn (): mixed => $database->updateAttribute(self::COLLECTION, 'label', new AttributeUpdate(type: ColumnType::Varchar, size: 0)));
         $this->assertRefused(
-            'Max size allowed for varchar is: '.\number_format($limits->getMaxVarcharLength()),
-            fn (): mixed => $database->updateAttribute(self::COLLECTION, 'label', new AttributeUpdate(type: ColumnType::Varchar, size: $limits->getMaxVarcharLength() + 1)),
+            'Max size allowed for varchar is: '.\number_format($limits->varchar),
+            fn (): mixed => $database->updateAttribute(self::COLLECTION, 'label', new AttributeUpdate(type: ColumnType::Varchar, size: $limits->varchar + 1)),
         );
-        $signedLimit = $limits->getLimitForInt() / 2;
+        $signedLimit = $limits->integer / 2;
         $this->assertRefused(
             'Max size allowed for int is: '.\number_format($signedLimit),
             fn (): mixed => $database->updateAttribute(self::COLLECTION, 'count', new AttributeUpdate(size: (int) $signedLimit + 1)),
@@ -418,9 +419,28 @@ final class UpdateAttributeValidationTest extends TestCase
     public function testAnUpdatePastTheRowWidthLimitIsRefused(): void
     {
         $database = $this->database(new class () extends Memory {
-            public function getDocumentSizeLimit(): int
+            public function limits(): Limits
             {
-                return 1_000;
+                $limits = parent::limits();
+
+                return new Limits(
+                    string: $limits->string,
+                    varchar: $limits->varchar,
+                    integer: $limits->integer,
+                    bigInteger: $limits->bigInteger,
+                    attributes: $limits->attributes,
+                    indexes: $limits->indexes,
+                    defaultAttributes: $limits->defaultAttributes,
+                    defaultIndexes: $limits->defaultIndexes,
+                    indexLength: $limits->indexLength,
+                    uidLength: $limits->uidLength,
+                    documentSize: 1_000,
+                    minDateTime: $limits->minDateTime,
+                    maxDateTime: $limits->maxDateTime,
+                    idType: $limits->idType,
+                    keywords: $limits->keywords,
+                    internalIndexKeys: $limits->internalIndexKeys,
+                );
             }
 
             public function getAttributeWidth(Document $collection): int

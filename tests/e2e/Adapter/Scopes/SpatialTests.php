@@ -87,9 +87,9 @@ trait SpatialTests
             $database->createCollection(Collection::create(id: $collectionName));
 
             // Create spatial attributes using createAttribute method
-            $database->createAttribute($collectionName, Attribute::point(key: 'pointAttr', required: $database->getAdapter()->supports(Capability::SpatialIndexNull) ? false : true));
-            $database->createAttribute($collectionName, Attribute::lineString(key: 'lineAttr', required: $database->getAdapter()->supports(Capability::SpatialIndexNull) ? false : true));
-            $database->createAttribute($collectionName, Attribute::polygon(key: 'polyAttr', required: $database->getAdapter()->supports(Capability::SpatialIndexNull) ? false : true));
+            $database->createAttribute($collectionName, Attribute::point(key: 'pointAttr', required: $database->getAdapter()->supports(Capability::IndexSpatialNull) ? false : true));
+            $database->createAttribute($collectionName, Attribute::lineString(key: 'lineAttr', required: $database->getAdapter()->supports(Capability::IndexSpatialNull) ? false : true));
+            $database->createAttribute($collectionName, Attribute::polygon(key: 'polyAttr', required: $database->getAdapter()->supports(Capability::IndexSpatialNull) ? false : true));
 
             // Create spatial indexes
             $database->createIndex($collectionName, Index::spatial(key: 'point_spatial', attribute: 'pointAttr'));
@@ -322,7 +322,7 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (! ($database->getAdapter()->hasFeature(Feature\Spatial::class)) || ! $database->getAdapter()->supports(Capability::SpatialIndexNull)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Spatial::class)) || ! $database->getAdapter()->supports(Capability::IndexSpatialNull)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -368,14 +368,14 @@ trait SpatialTests
         try {
             $database->createCollection(Collection::create(id: $collectionName));
 
-            $required = $database->getAdapter()->supports(Capability::SpatialIndexNull) ? false : true;
+            $required = $database->getAdapter()->supports(Capability::IndexSpatialNull) ? false : true;
             $database->createAttribute($collectionName, Attribute::point(key: 'pointAttr', required: $required));
             $database->createAttribute($collectionName, Attribute::lineString(key: 'lineAttr', required: $required));
             $database->createAttribute($collectionName, Attribute::polygon(key: 'polyAttr', required: $required));
 
             // Create spatial indexes
             $database->createIndex($collectionName, Index::spatial(key: 'idx_point', attribute: 'pointAttr'));
-            if ($database->getAdapter()->supports(Capability::SpatialIndexNull)) {
+            if ($database->getAdapter()->supports(Capability::IndexSpatialNull)) {
                 $database->createIndex($collectionName, Index::spatial(key: 'idx_line', attribute: 'lineAttr'));
             } else {
                 // Attribute was created as required above; directly create index once
@@ -739,7 +739,7 @@ trait SpatialTests
         }
 
         // Edge cases: Spatial Index Order support (createCollection and createIndex)
-        $orderSupported = $database->getAdapter()->supports(Capability::SpatialIndexOrder);
+        $orderSupported = $database->getAdapter()->supports(Capability::IndexSpatialOrder);
 
         // createCollection with orders
         $collOrderCreate = 'spatial_idx_order_create';
@@ -791,7 +791,7 @@ trait SpatialTests
         }
 
         // Edge cases: Spatial Index Nullability (createCollection and createIndex)
-        $nullSupported = $database->getAdapter()->supports(Capability::SpatialIndexNull);
+        $nullSupported = $database->getAdapter()->supports(Capability::IndexSpatialNull);
 
         // createCollection with required=false
         $collNullCreate = 'spatial_idx_null_create_'.uniqid();
@@ -1913,7 +1913,7 @@ trait SpatialTests
             }
 
             // 2) required=true -> create index -> update required=false
-            $nullSupported = $database->getAdapter()->supports(Capability::SpatialIndexNull);
+            $nullSupported = $database->getAdapter()->supports(Capability::IndexSpatialNull);
             if ($nullSupported) {
                 // Should succeed on adapters that allow nullable spatial indexes
                 $database->updateAttribute($collectionName, 'geom', new AttributeUpdate(required: false));
@@ -1940,7 +1940,7 @@ trait SpatialTests
             }
 
             // 3) Spatial index order support: providing orders should fail if not supported
-            $orderSupported = $database->getAdapter()->supports(Capability::SpatialIndexOrder);
+            $orderSupported = $database->getAdapter()->supports(Capability::IndexSpatialOrder);
             if ($orderSupported) {
                 $database->createIndex($collectionName, Index::spatial(key: 'idx_geom_desc', attribute: 'geom', order: OrderDirection::Desc));
                 // cleanup
@@ -2427,7 +2427,7 @@ trait SpatialTests
 
             return;
         }
-        if ($database->getAdapter()->supports(Capability::SpatialIndexNull)) {
+        if ($database->getAdapter()->supports(Capability::IndexSpatialNull)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2510,7 +2510,7 @@ trait SpatialTests
         $database->createCollection(Collection::create(id: $collectionName));
 
         // Create spatial attributes using createAttribute method
-        $database->createAttribute($collectionName, Attribute::point(key: 'pointAttr', required: $database->getAdapter()->supports(Capability::SpatialIndexNull) ? false : true));
+        $database->createAttribute($collectionName, Attribute::point(key: 'pointAttr', required: $database->getAdapter()->supports(Capability::IndexSpatialNull) ? false : true));
 
         // Create test document
         $doc1 = new Document(
@@ -2539,7 +2539,7 @@ trait SpatialTests
 
             return;
         }
-        if ($database->getAdapter()->supports(Capability::SpatialIndexNull)) {
+        if ($database->getAdapter()->supports(Capability::IndexSpatialNull)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2588,8 +2588,8 @@ trait SpatialTests
             $database->createCollection(Collection::create(id: $collectionName));
             // Use required=true for spatial attributes to support spatial indexes (MariaDB requires this)
             $database->createAttribute($collectionName, Attribute::point(key: 'location', required: true));
-            $database->createAttribute($collectionName, Attribute::lineString(key: 'route', required: $database->getAdapter()->supports(Capability::SpatialIndexNull) ? false : true));
-            $database->createAttribute($collectionName, Attribute::polygon(key: 'area', required: $database->getAdapter()->supports(Capability::SpatialIndexNull) ? false : true));
+            $database->createAttribute($collectionName, Attribute::lineString(key: 'route', required: $database->getAdapter()->supports(Capability::IndexSpatialNull) ? false : true));
+            $database->createAttribute($collectionName, Attribute::polygon(key: 'area', required: $database->getAdapter()->supports(Capability::IndexSpatialNull) ? false : true));
             $database->createAttribute($collectionName, Attribute::string(key: 'name', size: 100));
 
             // Create indexes for spatial queries
@@ -2791,7 +2791,7 @@ trait SpatialTests
         $database = $this->getDatabase();
         $adapter = $database->getAdapter();
 
-        if (! $adapter->hasFeature(Feature\Spatial::class) || ! $adapter->supports(Capability::SpatialIndexNull)) {
+        if (! $adapter->hasFeature(Feature\Spatial::class) || ! $adapter->supports(Capability::IndexSpatialNull)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2944,7 +2944,7 @@ trait SpatialTests
                 $database->createDocument($collection, new Document(['$id' => 'complete', '$permissions' => [Permission::read(Role::any())], ...$shapes]));
                 $this->assertSame($shapes['area'], $database->getDocument($collection, 'complete')->getAttribute('area'));
 
-                if ($adapter->supports(Capability::SpatialIndexNull) || ! $adapter->hasFeature(Feature\SchemaAttributes::class)) {
+                if ($adapter->supports(Capability::IndexSpatialNull) || ! $adapter->hasFeature(Feature\SchemaAttributes::class)) {
                     continue;
                 }
 

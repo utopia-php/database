@@ -59,7 +59,7 @@ class MongoDBTest extends Base
         );
 
         $database = new Database(new Mongo($client), $cache);
-        $database->getAdapter()->setSupportForAttributes(true);
+        $database->setSchemaless(false);
         assert(self::$authorization !== null);
         $database
             ->setAuthorization(self::$authorization)

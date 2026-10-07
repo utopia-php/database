@@ -144,23 +144,23 @@ trait IndexTests
 
         $database->createCollection(Collection::create(id: __FUNCTION__));
 
-        $database->createAttribute(__FUNCTION__, Attribute::string(key: 'title1', size: $database->getAdapter()->getMaxIndexLength() + 300, required: true));
+        $database->createAttribute(__FUNCTION__, Attribute::string(key: 'title1', size: $database->getAdapter()->limits()->indexLength + 300, required: true));
 
         try {
             $database->createIndex(__FUNCTION__, Index::key(key: 'index_title1', attributes: ['title1'], lengths: [0]));
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            $this->assertEquals('Index length is longer than the maximum: '.$database->getAdapter()->getMaxIndexLength(), $e->getMessage());
+            $this->assertEquals('Index length is longer than the maximum: '.$database->getAdapter()->limits()->indexLength, $e->getMessage());
         }
 
         $database->createAttribute(__FUNCTION__, Attribute::string(key: 'title2', size: 100, required: true));
         $database->createIndex(__FUNCTION__, Index::key(key: 'index_title2', attributes: ['title2'], lengths: [0]));
 
         try {
-            $database->updateAttribute(__FUNCTION__, 'title2', new AttributeUpdate(type: ColumnType::String, size: $database->getAdapter()->getMaxIndexLength() + 300, required: true));
+            $database->updateAttribute(__FUNCTION__, 'title2', new AttributeUpdate(type: ColumnType::String, size: $database->getAdapter()->limits()->indexLength + 300, required: true));
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            $this->assertEquals('Index length is longer than the maximum: '.$database->getAdapter()->getMaxIndexLength(), $e->getMessage());
+            $this->assertEquals('Index length is longer than the maximum: '.$database->getAdapter()->limits()->indexLength, $e->getMessage());
         }
     }
 
@@ -180,7 +180,7 @@ trait IndexTests
         $database = $this->getDatabase();
 
         if (! $database->getAdapter()->supports(Capability::DefinedAttributes)
-            || ! $database->getAdapter()->supports(Capability::IdenticalIndexes)) {
+            || ! $database->getAdapter()->supports(Capability::IndexIdentical)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -252,7 +252,7 @@ trait IndexTests
 
     public function testListDocumentSearch(): void
     {
-        $fulltextSupport = $this->getDatabase()->getAdapter()->supports(Capability::Fulltext);
+        $fulltextSupport = $this->getDatabase()->getAdapter()->supports(Capability::IndexFulltext);
         if (! $fulltextSupport) {
             $this->expectNotToPerformAssertions();
 
@@ -296,7 +296,7 @@ trait IndexTests
 
     public function testEmptySearch(): void
     {
-        $fulltextSupport = $this->getDatabase()->getAdapter()->supports(Capability::Fulltext);
+        $fulltextSupport = $this->getDatabase()->getAdapter()->supports(Capability::IndexFulltext);
         if (! $fulltextSupport) {
             $this->expectNotToPerformAssertions();
 
@@ -333,7 +333,7 @@ trait IndexTests
 
     public function testTrigramIndex(): void
     {
-        $trigramSupport = $this->getDatabase()->getAdapter()->supports(Capability::TrigramIndex);
+        $trigramSupport = $this->getDatabase()->getAdapter()->supports(Capability::IndexTrigram);
         if (! $trigramSupport) {
             $this->expectNotToPerformAssertions();
 
@@ -386,7 +386,7 @@ trait IndexTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::TrigramIndex)) {
+        if (! $database->getAdapter()->supports(Capability::IndexTrigram)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -453,7 +453,7 @@ trait IndexTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::TTLIndexes)) {
+        if (! $database->getAdapter()->supports(Capability::IndexTtl)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -553,29 +553,7 @@ trait IndexTests
      */
     private function indexValidator(array $attributes, array $indexes): IndexDefinition
     {
-        $adapter = $this->getDatabase()->getAdapter();
-
-        return new IndexDefinition(
-            $attributes,
-            $indexes,
-            $adapter->getMaxIndexLength(),
-            $adapter->getInternalIndexesKeys(),
-            $adapter->supports(Capability::IndexArray),
-            $adapter->supports(Capability::SpatialIndexNull),
-            $adapter->supports(Capability::SpatialIndexOrder),
-            $adapter->supports(Capability::Vectors),
-            $adapter->supports(Capability::DefinedAttributes),
-            $adapter->supports(Capability::MultipleFulltextIndexes),
-            $adapter->supports(Capability::IdenticalIndexes),
-            $adapter->supports(Capability::ObjectIndexes),
-            $adapter->supports(Capability::TrigramIndex),
-            $adapter->hasFeature(Feature\Spatial::class),
-            $adapter->supports(Capability::Index),
-            $adapter->supports(Capability::UniqueIndex),
-            $adapter->supports(Capability::Fulltext),
-            $adapter->supports(Capability::TTLIndexes),
-            $adapter->supports(Capability::Objects),
-        );
+        return new IndexDefinition($attributes, $indexes, $this->getDatabase()->profile());
     }
 
     public function testIndexValidation(): void
@@ -594,7 +572,7 @@ trait IndexTests
 
         $validator = $this->indexValidator($attributes, $indexes);
 
-        if ($adapter->supports(Capability::IdenticalIndexes)) {
+        if ($adapter->supports(Capability::IndexIdentical)) {
             $errorMessage = 'Index length 701 is larger than the size for title1: 700"';
             $this->assertFalse($validator->isValid($indexes[0]));
             $this->assertSame($errorMessage, $validator->getDescription());
@@ -614,8 +592,8 @@ trait IndexTests
             Index::key(key: 'index1', attributes: ['title1', 'title2'], lengths: [700]),
         ];
 
-        if ($adapter->supports(Capability::DefinedAttributes) && $adapter->getMaxIndexLength() > 0) {
-            $errorMessage = 'Index length is longer than the maximum: '.$adapter->getMaxIndexLength();
+        if ($adapter->supports(Capability::DefinedAttributes) && $adapter->limits()->indexLength > 0) {
+            $errorMessage = 'Index length is longer than the maximum: '.$adapter->limits()->indexLength;
             $this->assertFalse($validator->isValid($indexes[0]));
             $this->assertSame($errorMessage, $validator->getDescription());
 
@@ -639,9 +617,9 @@ trait IndexTests
 
         $this->assertFalse($validator->isValid($newIndex));
 
-        if (! $adapter->supports(Capability::Fulltext)) {
+        if (! $adapter->supports(Capability::IndexFulltext)) {
             $this->assertSame('Fulltext index is not supported', $validator->getDescription());
-        } elseif (! $adapter->supports(Capability::MultipleFulltextIndexes)) {
+        } elseif (! $adapter->supports(Capability::IndexFulltextMultiple)) {
             $this->assertSame('There is already a fulltext index in the collection', $validator->getDescription());
         } elseif ($adapter->supports(Capability::DefinedAttributes)) {
             $this->assertSame('Attribute "integer" cannot be part of a fulltext index, must be of type string', $validator->getDescription());
@@ -654,7 +632,7 @@ trait IndexTests
             }
             $database->deleteCollection('index_length');
         } catch (Exception $e) {
-            if (! $adapter->supports(Capability::Fulltext)) {
+            if (! $adapter->supports(Capability::IndexFulltext)) {
                 $this->assertSame('Fulltext index is not supported', $e->getMessage());
             } else {
                 $this->assertSame('Attribute "integer" cannot be part of a fulltext index, must be of type string', $e->getMessage());
@@ -698,7 +676,7 @@ trait IndexTests
     {
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::Index)) {
+        if (! $database->getAdapter()->supports(Capability::IndexKey)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -728,7 +706,7 @@ trait IndexTests
     {
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::Index)) {
+        if (! $database->getAdapter()->supports(Capability::IndexKey)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -808,7 +786,7 @@ trait IndexTests
         $tenant = $database->getSharedTables() ? ['_tenant'] : [];
         $expected = match (true) {
             $adapter instanceof Postgres => [...$tenant, 'tags', 'status', 'name DESC'],
-            $adapter->supports(Capability::CastIndexArray) => [...$tenant, '', 'status', 'name(16)'],
+            $adapter->supports(Capability::IndexArrayCast) => [...$tenant, '', 'status', 'name(16)'],
             default => [...$tenant, 'tags(255)', 'status', 'name(16)'],
         };
 
@@ -954,7 +932,7 @@ trait IndexTests
 
             $database->createIndex($collectionId, Index::key(key: 'index1', attributes: ['name', 'age'], orders: [OrderDirection::Asc, OrderDirection::Desc]));
 
-            $supportsIdenticalIndexes = $database->getAdapter()->supports(Capability::IdenticalIndexes);
+            $supportsIdenticalIndexes = $database->getAdapter()->supports(Capability::IndexIdentical);
 
             try {
                 $database->createIndex($collectionId, Index::key(key: 'index2', attributes: ['name', 'age'], orders: [OrderDirection::Asc, OrderDirection::Desc]));
@@ -1009,7 +987,7 @@ trait IndexTests
     {
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::Fulltext)) {
+        if (! $database->getAdapter()->supports(Capability::IndexFulltext)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1024,7 +1002,7 @@ trait IndexTests
             $database->createAttribute($collectionId, Attribute::string(key: 'content', size: 256));
             $database->createIndex($collectionId, Index::fulltext(key: 'fulltext_title', attributes: ['title']));
 
-            $supportsMultipleFulltext = $database->getAdapter()->supports(Capability::MultipleFulltextIndexes);
+            $supportsMultipleFulltext = $database->getAdapter()->supports(Capability::IndexFulltextMultiple);
 
             try {
                 $database->createIndex($collectionId, Index::fulltext(key: 'fulltext_content', attributes: ['content']));
@@ -1042,7 +1020,7 @@ trait IndexTests
     {
         $database = static::getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::TTLIndexes)) {
+        if (! $database->getAdapter()->supports(Capability::IndexTtl)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1116,7 +1094,7 @@ trait IndexTests
         $database = $this->getDatabase();
         $adapter = $database->getAdapter();
 
-        if (! $adapter->hasFeature(Feature\SchemaIndexes::class) || ! $adapter->supports(Capability::Fulltext)) {
+        if (! $adapter->hasFeature(Feature\SchemaIndexes::class) || ! $adapter->supports(Capability::IndexFulltext)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1146,7 +1124,7 @@ trait IndexTests
         $database = $this->getDatabase();
         $adapter = $database->getAdapter();
 
-        if (! $adapter->hasFeature(Feature\SchemaIndexes::class) || ! $adapter->supports(Capability::Fulltext)) {
+        if (! $adapter->hasFeature(Feature\SchemaIndexes::class) || ! $adapter->supports(Capability::IndexFulltext)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1173,7 +1151,7 @@ trait IndexTests
                 'body' => 'lazy dog',
             ]));
 
-            $multiple = $adapter->supports(Capability::MultipleFulltextIndexes);
+            $multiple = $adapter->supports(Capability::IndexFulltextMultiple);
             $database->createIndex($collection, Index::fulltext(key: 'title_search', attributes: ['title']));
             if ($multiple) {
                 $database->createIndex($collection, Index::fulltext(key: 'body_search', attributes: ['body']));

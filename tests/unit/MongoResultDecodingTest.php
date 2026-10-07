@@ -281,7 +281,7 @@ final class MongoResultDecodingTest extends TestCase
             {
             }
         };
-        $adapter->setSupportForAttributes($defined);
+        $adapter->setSchemaless(! $defined);
 
         return $adapter;
     }

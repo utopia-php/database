@@ -4,7 +4,9 @@ namespace Tests\Unit\Validator;
 
 use PHPUnit\Framework\TestCase;
 use Tests\Unit\Format;
+use Tests\Unit\Support\Profiles;
 use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception;
@@ -182,7 +184,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            ColumnType::Integer->value
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(false, $validator->isValid('string'));
@@ -197,7 +199,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            ColumnType::Integer->value
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(false, $validator->isValid(new Document()));
@@ -209,7 +211,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document(),
-            ColumnType::Integer->value
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -232,7 +234,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            ColumnType::Integer->value
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -254,7 +256,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            ColumnType::Integer->value
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(true, $validator->isValid(new Document([
@@ -289,7 +291,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            ColumnType::Integer->value
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -313,7 +315,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            ColumnType::Integer->value
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -336,7 +338,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            ColumnType::Integer->value
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(true, $validator->isValid(new Document([
@@ -357,7 +359,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            ColumnType::Integer->value
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -380,7 +382,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            ColumnType::Integer->value
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -449,7 +451,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            ColumnType::Integer->value
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -470,7 +472,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            ColumnType::Integer->value
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -491,7 +493,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            ColumnType::Integer->value
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -529,7 +531,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            ColumnType::Integer->value
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(true, $validator->isValid(new Document([
@@ -595,7 +597,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            ColumnType::Integer->value
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -633,7 +635,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            ColumnType::Integer->value
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -671,7 +673,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            ColumnType::Integer->value
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -694,7 +696,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            ColumnType::Integer->value
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -717,7 +719,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            ColumnType::Integer->value
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -740,7 +742,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            ColumnType::Integer->value
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -761,7 +763,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            ColumnType::Integer->value
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $sqlId = '1000';
@@ -797,7 +799,7 @@ class StructureTest extends TestCase
 
         $validator = new Structure(
             new Document($this->collection),
-            ColumnType::Uuid7->value
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt], idType: ColumnType::Uuid7),
         );
 
         $this->assertEquals(true, $validator->isValid(new Document([
@@ -833,7 +835,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            ColumnType::Integer->value
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         // Operators should be skipped during structure validation
@@ -855,7 +857,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            ColumnType::Integer->value
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         // Multiple operators should all be skipped
@@ -877,7 +879,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            ColumnType::Integer->value
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         // Missing required field (not replaced by operator) should still fail
@@ -901,7 +903,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            ColumnType::Integer->value
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(true, $validator->isValid(new Document([
@@ -955,7 +957,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            ColumnType::Integer->value
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(true, $validator->isValid(new Document([
@@ -1028,7 +1030,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            ColumnType::Integer->value
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(true, $validator->isValid(new Document([
@@ -1086,7 +1088,7 @@ class StructureTest extends TestCase
             'indexes' => [],
         ]);
 
-        $validator = new Structure($collection, ColumnType::Integer->value);
+        $validator = new Structure($collection, Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]));
 
         $base = [
             '$collection' => ID::custom('posts'),
@@ -1117,7 +1119,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            ColumnType::Integer->value
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(true, $validator->isValid(new Document([
@@ -1184,7 +1186,7 @@ class StructureTest extends TestCase
 
         $validator = new Structure(
             new Document($collection),
-            ColumnType::Integer->value
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(true, $validator->isValid(new Document([
@@ -1243,7 +1245,7 @@ class StructureTest extends TestCase
             ],
             'indexes' => [],
         ]);
-        $validator = new Structure($collection, ColumnType::Integer->value);
+        $validator = new Structure($collection, Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]));
         $document = new Document([
             '$collection' => ID::custom('posts'),
             'signed' => '-9223372036854775808',
@@ -1278,7 +1280,7 @@ class StructureTest extends TestCase
             'indexes' => [],
         ]);
 
-        $validator = new Structure($collection, ColumnType::Integer->value);
+        $validator = new Structure($collection, Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]));
 
         $document = new Document([
             '$collection' => ID::custom('posts'),
@@ -1319,7 +1321,7 @@ class StructureTest extends TestCase
             'indexes' => [],
         ]);
 
-        $validator = new Structure($collection, ColumnType::Integer->value);
+        $validator = new Structure($collection, Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]));
 
         $base = [
             '$collection' => ID::custom('posts'),

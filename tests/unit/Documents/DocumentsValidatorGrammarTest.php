@@ -8,7 +8,6 @@ use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\SQLite;
-use Utopia\Database\Capability;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Query\Schema\ColumnType;
@@ -56,26 +55,14 @@ class DocumentsValidatorGrammarTest extends TestCase
         $this->assertTrue($validator->isValid([Query::sum('amount', 'total')]), $validator->getDescription());
     }
 
-    public function testCapabilitiesArePartOfTheCacheKey(): void
+    public function testTheCachedValidatorFollowsTheProfile(): void
     {
-        $adapter = new class () extends Memory {
-            /**
-             * @var array<string, true>
-             */
-            public array $enabled = [];
-
-            public function supports(Capability $feature): bool
-            {
-                return isset($this->enabled[$feature->name]) || parent::supports($feature);
-            }
-        };
-        $database = new DocumentsValidatorDatabase($adapter, new Cache(new None()));
-        $queries = [Query::join('customers', '$id', 'customerId'), Query::sum('amount', 'total')];
+        $database = new DocumentsValidatorDatabase(new Memory(), new Cache(new None()));
+        $queries = [Query::select(['$tenant'])];
 
         $this->assertFalse($database->documentsValidator($this->orders)->isValid($queries));
 
-        $adapter->enabled[Capability::Joins->name] = true;
-        $adapter->enabled[Capability::Aggregations->name] = true;
+        $database->setSharedTables(true);
 
         $validator = $database->documentsValidator($this->orders);
         $this->assertTrue($validator->isValid($queries), $validator->getDescription());

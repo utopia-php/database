@@ -47,7 +47,6 @@ use Utopia\Database\Validator\BigInt;
 use Utopia\Database\Validator\PartialStructure;
 use Utopia\Database\Validator\Permissions;
 use Utopia\Database\Validator\Queries;
-use Utopia\Database\Validator\Queries\Bounds;
 use Utopia\Database\Validator\Queries\Document as DocumentValidator;
 use Utopia\Database\Validator\Queries\Documents as DocumentsValidator;
 use Utopia\Database\Validator\Queries\Narrow;
@@ -300,8 +299,6 @@ trait Documents
 
     private const int DOCUMENTS_VALIDATOR_CACHE_LIMIT = 256;
 
-    private ?Bounds $queryBounds = null;
-
     /** @var array<string, Aggregate> Aggregate validators of sums of declared attributes, by collection schema. */
     private array $sumValidatorCache = [];
 
@@ -316,21 +313,17 @@ trait Documents
      */
     protected function getDocumentsValidator(Document $collection, array $joinedCollections = []): DocumentsValidator
     {
-        $supportForJoins = $this->adapter->supports(Capability::Joins);
-        $supportForAggregations = $this->adapter->supports(Capability::Aggregations);
-
         if ($joinedCollections !== []) {
-            return $this->createDocumentsValidator($collection, $supportForJoins, $supportForAggregations);
+            return $this->createDocumentsValidator($collection);
         }
 
-        $context = $this->getCollectionMetadataCacheKey($collection->getId());
-        $key = $this->documentsValidatorCacheKey($collection, $context, $supportForJoins, $supportForAggregations);
+        $key = $this->documentsValidatorCacheKey($collection);
 
         if (isset($this->documentsValidatorCache[$key])) {
             return $this->documentsValidatorCache[$key];
         }
 
-        $validator = $this->createDocumentsValidator($collection, $supportForJoins, $supportForAggregations);
+        $validator = $this->createDocumentsValidator($collection);
 
         if (\count($this->documentsValidatorCache) >= self::DOCUMENTS_VALIDATOR_CACHE_LIMIT) {
             $this->documentsValidatorCache = [];
@@ -355,11 +348,8 @@ trait Documents
             $narrow = Narrow::of(
                 $queries,
                 Collection::fromDocument($collection)->attributes(),
-                $this->getQueryBounds(),
+                $this->profile(),
                 $this->maxQueryValues,
-                $this->adapter->supports(Capability::DefinedAttributes),
-                $this->adapter->supports(Capability::UnsignedBigInt),
-                $this->adapter->supports(Capability::OrderRandom),
             );
 
             if ($narrow !== null) {
@@ -370,48 +360,23 @@ trait Documents
         return $this->getDocumentsValidator($collection, $joinedCollections);
     }
 
-    private function getQueryBounds(): Bounds
-    {
-        return $this->queryBounds ??= new Bounds(
-            $this->adapter->getIdAttributeType(),
-            $this->adapter->getMaxUIDLength(),
-            $this->adapter->getMinDateTime(),
-            $this->adapter->getMaxDateTime(),
-        );
-    }
-
-    private function createDocumentsValidator(Document $collection, bool $supportForJoins, bool $supportForAggregations): DocumentsValidator
+    protected function createDocumentsValidator(Document $collection): DocumentsValidator
     {
         $definition = Collection::fromDocument($collection);
 
-        return new DocumentsValidator(
-            $definition->attributes(),
-            $definition->indexes(),
-            $this->adapter->getIdAttributeType(),
-            $this->maxQueryValues,
-            $this->adapter->getMaxUIDLength(),
-            $this->adapter->getMinDateTime(),
-            $this->adapter->getMaxDateTime(),
-            $this->adapter->supports(Capability::DefinedAttributes),
-            $this->adapter->supports(Capability::UnsignedBigInt),
-            $supportForJoins,
-            $supportForAggregations,
-            $this->adapter->getSharedTables(),
-            $this->adapter->supports(Capability::OrderRandom),
-        );
+        return new DocumentsValidator($definition->attributes(), $definition->indexes(), $this->profile(), $this->maxQueryValues);
     }
 
     /**
      * Build the composite cache key for the DocumentsValidator cache. Scoping
-     * by namespace + tenant + max-query-values + the join and aggregation
-     * grammar keeps two collections that share an id (different tenant
-     * schemas, different namespace prefixes, different per-request limits or
-     * adapters with different capabilities) from aliasing onto the same
-     * validator.
+     * by namespace + tenant + max-query-values keeps two collections that share
+     * an id (different tenant schemas, different namespace prefixes, different
+     * per-request limits) from aliasing onto the same validator; a new profile
+     * empties the cache.
      */
-    private function documentsValidatorCacheKey(Document $collection, string $context, bool $supportForJoins, bool $supportForAggregations): string
+    private function documentsValidatorCacheKey(Document $collection): string
     {
-        return $context.'::'.$this->maxQueryValues.'::'.(int) $supportForJoins.(int) $supportForAggregations.(int) $this->adapter->getSharedTables().'::'.Collection::fromDocument($collection)->fingerprint();
+        return $this->getCollectionMetadataCacheKey($collection->getId()).'::'.$this->maxQueryValues.'::'.Collection::fromDocument($collection)->fingerprint();
     }
 
     /**
@@ -516,21 +481,7 @@ trait Documents
 
         if ($this->validation()->get() && $queries !== []) {
             $joinedCollections = $this->resolveJoinedCollections($queries);
-            $supportForAttributes = $this->adapter->supports(Capability::DefinedAttributes);
-            $supportForJoins = $this->adapter->supports(Capability::Joins);
-            $validator = $joinedCollections === []
-                ? new DocumentValidator($attributes, $supportForAttributes, sharedTables: $this->adapter->getSharedTables(), supportForJoins: $supportForJoins)
-                : new DocumentValidator(
-                    attributes: $attributes,
-                    supportForAttributes: $supportForAttributes,
-                    idAttributeType: $this->adapter->getIdAttributeType(),
-                    maxValuesCount: $this->maxQueryValues,
-                    minAllowedDate: $this->adapter->getMinDateTime(),
-                    maxAllowedDate: $this->adapter->getMaxDateTime(),
-                    supportUnsignedBigInt: $this->adapter->supports(Capability::UnsignedBigInt),
-                    sharedTables: $this->adapter->getSharedTables(),
-                    supportForJoins: $supportForJoins,
-                );
+            $validator = new DocumentValidator($attributes, $this->profile(), $this->maxQueryValues);
             $validator->setJoinedCollections($joinedCollections);
             if (! $validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
@@ -964,7 +915,7 @@ trait Documents
 
     private function isTtlExpired(Document $collection, Document $document): bool
     {
-        if (! $this->adapter->supports(Capability::TTLIndexes)) {
+        if (! $this->adapter->supports(Capability::IndexTtl)) {
             return false;
         }
         foreach (Collection::fromDocument($collection)->indexes() as $index) {
@@ -1235,11 +1186,7 @@ trait Documents
         if ($this->validation()->get()) {
             $structure = new Structure(
                 collection: $collection,
-                idAttributeType: $this->adapter->getIdAttributeType(),
-                minAllowedDate: $this->adapter->getMinDateTime(),
-                maxAllowedDate: $this->adapter->getMaxDateTime(),
-                supportForAttributes: $this->adapter->supports(Capability::DefinedAttributes),
-                supportUnsignedBigInt: $this->adapter->supports(Capability::UnsignedBigInt)
+                profile: $this->profile()
             );
             if (! $structure->isValid($document)) {
                 throw new StructureException($structure->getDescription());
@@ -1307,11 +1254,7 @@ trait Documents
         $validator = $this->validation()->get()
             ? new Structure(
                 collection: $collection,
-                idAttributeType: $this->adapter->getIdAttributeType(),
-                minAllowedDate: $this->adapter->getMinDateTime(),
-                maxAllowedDate: $this->adapter->getMaxDateTime(),
-                supportForAttributes: $this->adapter->supports(Capability::DefinedAttributes),
-                supportUnsignedBigInt: $this->adapter->supports(Capability::UnsignedBigInt)
+                profile: $this->profile()
             )
             : null;
 
@@ -1644,11 +1587,7 @@ trait Documents
             if ($this->validation()->get()) {
                 $structureValidator = new Structure(
                     collection: $collection,
-                    idAttributeType: $this->adapter->getIdAttributeType(),
-                    minAllowedDate: $this->adapter->getMinDateTime(),
-                    maxAllowedDate: $this->adapter->getMaxDateTime(),
-                    supportForAttributes: $this->adapter->supports(Capability::DefinedAttributes),
-                    supportUnsignedBigInt: $this->adapter->supports(Capability::UnsignedBigInt),
+                    profile: $this->profile(),
                     currentDocument: $old,
                     storedAttributes: $storedAttributes,
                 );
@@ -1809,12 +1748,7 @@ trait Documents
         if ($this->validation()->get()) {
             $validator = new PartialStructure(
                 collection: $collection,
-                idAttributeType: $this->adapter->getIdAttributeType(),
-                minAllowedDate: $this->adapter->getMinDateTime(),
-                maxAllowedDate: $this->adapter->getMaxDateTime(),
-                supportForAttributes: $this->adapter->supports(Capability::DefinedAttributes),
-                supportUnsignedBigInt: $this->adapter->supports(Capability::UnsignedBigInt),
-                currentDocument: null
+                profile: $this->profile(),
             );
 
             if (! $validator->isValid($updates)) {
@@ -2234,11 +2168,7 @@ trait Documents
             if ($this->validation()->get()) {
                 $validator = new Structure(
                     collection: $collection,
-                    idAttributeType: $this->adapter->getIdAttributeType(),
-                    minAllowedDate: $this->adapter->getMinDateTime(),
-                    maxAllowedDate: $this->adapter->getMaxDateTime(),
-                    supportForAttributes: $this->adapter->supports(Capability::DefinedAttributes),
-                    supportUnsignedBigInt: $this->adapter->supports(Capability::UnsignedBigInt),
+                    profile: $this->profile(),
                     currentDocument: $old->isEmpty() ? null : $old
                 );
 
@@ -3797,19 +3727,6 @@ trait Documents
             throw new QueryException('Distinct queries are not supported by this adapter');
         }
 
-        foreach ($aggregations as $aggregation) {
-            $method = $aggregation->getMethod();
-            $capability = match ($method) {
-                Method::Stddev, Method::StddevPop, Method::StddevSamp, Method::Variance, Method::VarPop, Method::VarSamp => Capability::StatisticalAggregates,
-                Method::BitAnd, Method::BitOr, Method::BitXor => Capability::BitwiseAggregates,
-                default => null,
-            };
-
-            if ($capability !== null && ! $this->adapter->supports($capability)) {
-                throw new QueryException('Aggregate '.$method->value.' is not supported by this adapter');
-            }
-        }
-
         if (! empty($joins) && ! $this->adapter->supports(Capability::Joins)) {
             throw new QueryException('Join queries are not supported by this adapter');
         }
@@ -3839,7 +3756,7 @@ trait Documents
             }
 
             if ($joins === [] && ! $distinct && $this->validation()->get() && $cursor->getId() === '') {
-                throw new QueryException('Invalid query: Invalid cursor: '.(new UID($this->adapter->getMaxUIDLength()))->getDescription());
+                throw new QueryException('Invalid query: Invalid cursor: '.(new UID($this->adapter->limits()->uidLength))->getDescription());
             }
 
             if ($distinct) {

@@ -616,7 +616,7 @@ trait ObjectAttributeTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::ObjectIndexes)) {
+        if (! $database->getAdapter()->supports(Capability::IndexObject)) {
             $this->markTestSkipped('Adapter does not support object indexes');
         }
 
@@ -1262,7 +1262,7 @@ trait ObjectAttributeTests
             $this->markTestSkipped('Adapter does not support attributes (schemaful required for nested object attribute indexes)');
         }
 
-        if (! $database->getAdapter()->supports(Capability::ObjectIndexes)) {
+        if (! $database->getAdapter()->supports(Capability::IndexObject)) {
             $this->markTestSkipped('Adapter does not support object attributes');
         }
 
@@ -1336,7 +1336,7 @@ trait ObjectAttributeTests
             $this->markTestSkipped('Adapter does not support attributes (schemaful required for nested object attribute indexes)');
         }
 
-        if (! $database->getAdapter()->supports(Capability::ObjectIndexes)) {
+        if (! $database->getAdapter()->supports(Capability::IndexObject)) {
             $this->markTestSkipped('Adapter does not support object attributes');
         }
 
@@ -2010,7 +2010,7 @@ trait ObjectAttributeTests
         $this->assertGreaterThanOrEqual(1, count($results));
 
         // Edge Case 11: UNIQUE index with updates (duplicate prevention)
-        if ($database->getAdapter()->supports(Capability::IdenticalIndexes)) {
+        if ($database->getAdapter()->supports(Capability::IndexIdentical)) {
             $database->createIndex($collectionId, Index::unique(key: 'idx_unique_email', attributes: ['profile.user.email']));
 
             // Try to create duplicate

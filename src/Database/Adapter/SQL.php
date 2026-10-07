@@ -90,6 +90,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
     private const string FOJ_ROWS_ALIAS = 'foj_rows';
 
+    protected const string MIN_DATETIME = '1000-01-01 00:00:00';
+
     /**
      * The internal attributes `alias.*` returns next to the joined `$id`: those a direct read of the joined
      * collection returns, but `$tenant`, which is the read's own tenant on every joined row.
@@ -178,32 +180,22 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     public function capabilities(): array
     {
         return array_merge(parent::capabilities(), [
-            Capability::AtomicTransactions,
             Capability::Schemas,
-            Capability::BoundaryInclusive,
             Capability::Caching,
-            Capability::Fulltext,
-            Capability::MultipleFulltextIndexes,
-            Capability::Regex,
+            Capability::IndexFulltext,
+            Capability::IndexFulltextMultiple,
             Capability::Casting,
             Capability::UpdateLock,
-            Capability::BatchOperations,
-            Capability::BatchCreateAttributes,
             Capability::TransactionRetries,
-            Capability::NestedTransactions,
-            Capability::QueryContains,
+            Capability::TransactionNested,
             Capability::Operators,
             Capability::OrderRandom,
-            Capability::IdenticalIndexes,
-            Capability::Reconnection,
-            Capability::CacheSkipOnFailure,
+            Capability::IndexIdentical,
             Capability::Hostname,
             Capability::AttributeResizing,
             Capability::DefinedAttributes,
             Capability::Joins,
             Capability::Aggregations,
-            Capability::StatisticalAggregates,
-            Capability::BitwiseAggregates,
         ]);
     }
 
@@ -270,27 +262,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         } catch (Throwable) {
             return '';
         }
-    }
-
-    /**
-     * Get the internal ID attribute type used by SQL adapters.
-     *
-     * @return string
-     */
-    public function getIdAttributeType(): string
-    {
-        return ColumnType::Integer->value;
-    }
-
-    /**
-     * Set whether the adapter supports attribute definitions. Always true for SQL.
-     *
-     * @param bool $support Whether to enable attribute support
-     * @return bool
-     */
-    public function setSupportForAttributes(bool $support): bool
-    {
-        return true;
     }
 
     /**
@@ -2448,46 +2419,29 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
-     * Get max STRING limit
+     * InnoDB caps a table at 1017 columns, 64 indexes and a 65535-byte row; the varchar cap is the floor of
+     * Postgres 16383, MySQL 16381 and MariaDB 16382; a shared table spends one byte of each index key on `_tenant`.
      */
-    public function getLimitForString(): int
+    public function limits(): Limits
     {
-        return 4294967295;
-    }
-
-    /**
-     * Get max INT limit
-     */
-    public function getLimitForInt(): int
-    {
-        return 4294967295;
-    }
-
-    /**
-     * Get max BIGINT limit
-     */
-    public function getLimitForBigInt(): int
-    {
-        return Database::MAX_BIG_INT;
-    }
-
-    /**
-     * Get maximum column limit.
-     * https://mariadb.com/kb/en/innodb-limitations/#limitations-on-schema
-     * Can be inherited by MySQL since we utilize the InnoDB engine
-     */
-    public function getLimitForAttributes(): int
-    {
-        return 1017;
-    }
-
-    /**
-     * Get maximum index limit.
-     * https://mariadb.com/kb/en/innodb-limitations/#limitations-on-schema
-     */
-    public function getLimitForIndexes(): int
-    {
-        return 64;
+        return $this->limits ??= new Limits(
+            string: 4294967295,
+            varchar: 16381,
+            integer: 4294967295,
+            bigInteger: Database::MAX_BIG_INT,
+            attributes: 1017,
+            indexes: 64,
+            defaultAttributes: \count(Database::internalAttributesFor(true)),
+            defaultIndexes: \count(Database::INTERNAL_INDEXES),
+            indexLength: $this->sharedTables ? 767 : 768,
+            uidLength: 36,
+            documentSize: 65535,
+            minDateTime: new \DateTime(static::MIN_DATETIME),
+            maxDateTime: new \DateTime(self::MAX_DATETIME),
+            idType: ColumnType::Integer,
+            keywords: $this->getKeywords(),
+            internalIndexKeys: [Storage::INDEX_PRIMARY, Storage::INDEX_CREATED_AT, Storage::INDEX_UPDATED_AT, Storage::INDEX_TENANT_ID],
+        );
     }
 
     /**
@@ -2495,7 +2449,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      */
     public function getCountOfAttributes(Document $collection): int
     {
-        return \count(self::collectionAttributes($collection)) + $this->getCountOfDefaultAttributes();
+        return \count(self::collectionAttributes($collection)) + $this->limits()->defaultAttributes;
     }
 
     /**
@@ -2503,32 +2457,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      */
     public function getCountOfIndexes(Document $collection): int
     {
-        return \count(self::collectionIndexes($collection)) + $this->getCountOfDefaultIndexes();
-    }
-
-    /**
-     * Returns number of attributes used by default.
-     */
-    public function getCountOfDefaultAttributes(): int
-    {
-        return \count(Database::internalAttributesFor(true));
-    }
-
-    /**
-     * Returns number of indexes used by default.
-     */
-    public function getCountOfDefaultIndexes(): int
-    {
-        return \count(Database::INTERNAL_INDEXES);
-    }
-
-    /**
-     * Get maximum width, in bytes, allowed for a SQL row
-     * Return 0 when no restrictions apply
-     */
-    public function getDocumentSizeLimit(): int
-    {
-        return 65535;
+        return \count(self::collectionIndexes($collection)) + $this->limits()->defaultIndexes;
     }
 
     /**
@@ -2578,7 +2507,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                      * data is stored externally
                      */
                     $total += match (true) {
-                        $attributeSize > $this->getMaxVarcharLength() => 20,
+                        $attributeSize > $this->limits()->varchar => 20,
                         $attributeSize > 255 => $attributeSize * 4 + 2,
                         default => $attributeSize * 4 + 1,
                     };
@@ -2664,50 +2593,16 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
-     * Get the maximum VARCHAR column length supported across SQL engines.
-     *
-     * @return int
-     */
-    public function getMaxVarcharLength(): int
-    {
-        return 16381; // Floor value for Postgres:16383 | MySQL:16381 | MariaDB:16382
-    }
-
-    /**
      * Size of POINT spatial type
      */
     abstract protected function getMaxPointSize(): int;
 
     /**
-     * Get the maximum combined index key length in bytes.
+     * The reserved words of https://mariadb.com/kb/en/reserved-words/
      *
-     * @return int
+     * @return list<string>
      */
-    public function getMaxIndexLength(): int
-    {
-        /**
-         * $tenant int = 1
-         */
-        return $this->sharedTables ? 767 : 768;
-    }
-
-    /**
-     * Get the maximum length for unique document IDs.
-     *
-     * @return int
-     */
-    public function getMaxUIDLength(): int
-    {
-        return 36;
-    }
-
-    /**
-     * Get list of keywords that cannot be used
-     *  Refference: https://mariadb.com/kb/en/reserved-words/
-     *
-     * @return array<string>
-     */
-    public function getKeywords(): array
+    protected function getKeywords(): array
     {
         return [
             'ACCESSIBLE',
@@ -2985,26 +2880,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             'VERSIONING',
             'WITHOUT',
         ];
-    }
-
-    /**
-     * Get the keys of internally managed indexes.
-     *
-     * @return array<string>
-     */
-    public function getInternalIndexesKeys(): array
-    {
-        return [Storage::INDEX_PRIMARY, Storage::INDEX_CREATED_AT, Storage::INDEX_UPDATED_AT, Storage::INDEX_TENANT_ID];
-    }
-
-    /**
-     * Get the minimum supported datetime value.
-     *
-     * @return \DateTime
-     */
-    public function getMinDateTime(): \DateTime
-    {
-        return new \DateTime('1000-01-01 00:00:00');
     }
 
     /**
@@ -3301,7 +3176,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             if ($size > 65535) {
                 return 'MEDIUMTEXT';
             }
-            if ($size > $this->getMaxVarcharLength()) {
+            if ($size > $this->limits()->varchar) {
                 return 'TEXT';
             }
 
@@ -3349,7 +3224,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $modifier = $srid === null ? '' : "({$srid})";
         $nullability = '';
 
-        if (! $this->supports(Capability::SpatialIndexNull)) {
+        if (! $this->supports(Capability::IndexSpatialNull)) {
             if ($required) {
                 $nullability = ' NOT NULL';
             } else {
@@ -4336,7 +4211,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         if (\in_array($type, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon], true)) {
             $column = $this->addSpatialColumn($table, $filteredId, $type);
-            if (! $required || $this->supports(Capability::SpatialIndexNull)) {
+            if (! $required || $this->supports(Capability::IndexSpatialNull)) {
                 $column->nullable();
             }
 
@@ -4355,7 +4230,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             ColumnType::String => match (true) {
                 $size > 16777215 => $table->longText($filteredId),
                 $size > 65535 => $table->mediumText($filteredId),
-                $size > $this->getMaxVarcharLength() => $table->text($filteredId),
+                $size > $this->limits()->varchar => $table->text($filteredId),
                 $size <= 0 => $table->text($filteredId),
                 default => $table->string($filteredId, $size),
             },
@@ -4399,8 +4274,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         if ($size <= 0) {
             throw new DatabaseException('VARCHAR size ' . $size . ' is invalid; must be > 0. Use TEXT, MEDIUMTEXT, or LONGTEXT instead.');
         }
-        if ($size > $this->getMaxVarcharLength()) {
-            throw new DatabaseException('VARCHAR size ' . $size . ' exceeds maximum varchar length ' . $this->getMaxVarcharLength() . '. Use TEXT, MEDIUMTEXT, or LONGTEXT instead.');
+        if ($size > $this->limits()->varchar) {
+            throw new DatabaseException('VARCHAR size ' . $size . ' exceeds maximum varchar length ' . $this->limits()->varchar . '. Use TEXT, MEDIUMTEXT, or LONGTEXT instead.');
         }
     }
 

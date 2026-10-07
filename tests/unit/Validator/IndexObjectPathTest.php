@@ -4,7 +4,9 @@ namespace Tests\Unit\Validator;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Tests\Unit\Support\Profiles;
 use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Index;
 use Utopia\Database\Validator\IndexDefinition as IndexValidator;
 
@@ -15,15 +17,12 @@ class IndexObjectPathTest extends TestCase
     protected function setUp(): void
     {
         $this->validator = new IndexValidator(
-            attributes: [
+            [
                 Attribute::object(key: 'data'),
                 Attribute::string(key: 'title', size: 256),
             ],
-            indexes: [],
-            maxLength: 768,
-            supportForObjectIndexes: true,
-            supportForTrigramIndexes: true,
-            supportForObjects: true,
+            [],
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::IndexFulltextMultiple, Capability::IndexIdentical, Capability::IndexObject, Capability::IndexTrigram, Capability::IndexKey, Capability::IndexUnique, Capability::IndexFulltext, Capability::Objects], indexLength: 768),
         );
     }
 

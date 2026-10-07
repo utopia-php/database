@@ -5,6 +5,7 @@ namespace Tests\Unit\Attributes;
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
+use Utopia\Database\Adapter\Limits;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
@@ -57,9 +58,28 @@ final class CheckAttributeTest extends TestCase
     {
         $adapter = new class () extends Memory {
             #[\Override]
-            public function getLimitForAttributes(): int
+            public function limits(): Limits
             {
-                return $this->getCountOfDefaultAttributes() + \count(Database::collectionDefinition()->attributes());
+                $limits = parent::limits();
+
+                return new Limits(
+                    string: $limits->string,
+                    varchar: $limits->varchar,
+                    integer: $limits->integer,
+                    bigInteger: $limits->bigInteger,
+                    attributes: $limits->defaultAttributes + \count(Database::collectionDefinition()->attributes()),
+                    indexes: $limits->indexes,
+                    defaultAttributes: $limits->defaultAttributes,
+                    defaultIndexes: $limits->defaultIndexes,
+                    indexLength: $limits->indexLength,
+                    uidLength: $limits->uidLength,
+                    documentSize: $limits->documentSize,
+                    minDateTime: $limits->minDateTime,
+                    maxDateTime: $limits->maxDateTime,
+                    idType: $limits->idType,
+                    keywords: $limits->keywords,
+                    internalIndexKeys: $limits->internalIndexKeys,
+                );
             }
         };
         $database = new Database($adapter, new Cache(new None()));

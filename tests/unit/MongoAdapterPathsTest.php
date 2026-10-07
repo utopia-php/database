@@ -252,7 +252,7 @@ final class MongoAdapterPathsTest extends TestCase
     public function testSchemalessCastingKeepsStringsThatAreNotDates(): void
     {
         $adapter = $this->adapter();
-        $adapter->setSupportForAttributes(false);
+        $adapter->setSchemaless(true);
         $collection = new Document(['indexes' => [['$id' => 'expiry', 'type' => 'ttl', 'attributes' => ['expiresAt']]]]);
 
         $document = $adapter->castingBefore($collection, new Document([

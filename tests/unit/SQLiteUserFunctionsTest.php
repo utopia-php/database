@@ -4,11 +4,11 @@ namespace Tests\Unit;
 
 use ErrorException;
 use PDO;
+use PDOException;
 use Pdo\Sqlite as PdoSqlite;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use Utopia\Database\Adapter\SQLite;
-use Utopia\Database\Capability;
 use Utopia\Database\PDO as DatabasePDO;
 
 final class SQLiteUserFunctionsTest extends TestCase
@@ -35,7 +35,6 @@ final class SQLiteUserFunctionsTest extends TestCase
         }
 
         $this->assertSame([], $deprecations);
-        $this->assertTrue($adapter->supports(Capability::PCRE));
         $this->assertRegexp($connection);
     }
 
@@ -45,9 +44,8 @@ final class SQLiteUserFunctionsTest extends TestCase
 
         $this->assertInstanceOf(PdoSqlite::class, $connection);
 
-        $adapter = new SQLite($connection);
+        new SQLite($connection);
 
-        $this->assertTrue($adapter->supports(Capability::PCRE));
         $this->assertRegexp($connection);
     }
 
@@ -60,7 +58,6 @@ final class SQLiteUserFunctionsTest extends TestCase
 
         $adapter->reconnect();
 
-        $this->assertTrue($adapter->supports(Capability::PCRE));
         $this->assertRegexp($connection);
     }
 
@@ -78,14 +75,17 @@ final class SQLiteUserFunctionsTest extends TestCase
             }
         );
 
+        $connection = new PDO('sqlite::memory:');
         try {
-            $adapter = new SQLite(new PDO('sqlite::memory:'));
+            new SQLite($connection);
         } finally {
             restore_error_handler();
         }
 
         $this->assertSame([], $deprecations);
-        $this->assertFalse($adapter->supports(Capability::PCRE));
+        $this->expectException(PDOException::class);
+        $this->expectExceptionMessage('no such function: REGEXP');
+        $connection->query("SELECT 'appwrite' REGEXP '^app'");
     }
 
     public function testDispatchesToTheModernWrapperMethod(): void
@@ -106,13 +106,12 @@ final class SQLiteUserFunctionsTest extends TestCase
             }
         };
 
-        $adapter = new SQLite($connection);
+        new SQLite($connection);
 
         $this->assertSame(['createFunction'], $connection->calls);
-        $this->assertTrue($adapter->supports(Capability::PCRE));
     }
 
-    public function testDoesNotAdvertisePcreWhenRegistrationReturnsFalse(): void
+    public function testARefusedRegistrationLeavesTheAdapterUsable(): void
     {
         $connection = new class () extends PDO {
             public function __construct()
@@ -129,12 +128,12 @@ final class SQLiteUserFunctionsTest extends TestCase
             }
         };
 
-        $adapter = new SQLite($connection);
+        $this->expectNotToPerformAssertions();
 
-        $this->assertFalse($adapter->supports(Capability::PCRE));
+        new SQLite($connection);
     }
 
-    public function testDoesNotAdvertisePcreWhenRegistrationThrows(): void
+    public function testAFailedRegistrationLeavesTheAdapterUsable(): void
     {
         $connection = new class () extends PDO {
             public function __construct()
@@ -151,9 +150,9 @@ final class SQLiteUserFunctionsTest extends TestCase
             }
         };
 
-        $adapter = new SQLite($connection);
+        $this->expectNotToPerformAssertions();
 
-        $this->assertFalse($adapter->supports(Capability::PCRE));
+        new SQLite($connection);
     }
 
     private function assertRegexp(DatabasePDO|PDO $connection): void

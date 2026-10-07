@@ -2369,7 +2369,7 @@ trait AggregationTests
     {
         $database = static::getDatabase();
         $adapter = $database->getAdapter();
-        if (! $adapter->supports(Capability::Aggregations) || ! $adapter->supports(Capability::Fulltext)) {
+        if (! $adapter->supports(Capability::Aggregations) || ! $adapter->supports(Capability::IndexFulltext)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2400,7 +2400,7 @@ trait AggregationTests
     {
         $database = static::getDatabase();
         $adapter = $database->getAdapter();
-        if (! $adapter->supports(Capability::Aggregations) || ! $adapter->supports(Capability::Fulltext) || ! $adapter->supports(Capability::Vectors)) {
+        if (! $adapter->supports(Capability::Aggregations) || ! $adapter->supports(Capability::IndexFulltext) || ! $adapter->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2466,7 +2466,7 @@ trait AggregationTests
     {
         $database = static::getDatabase();
         $adapter = $database->getAdapter();
-        if (! $adapter->supports(Capability::Aggregations) || ! $adapter->supports(Capability::Fulltext)) {
+        if (! $adapter->supports(Capability::Aggregations) || ! $adapter->supports(Capability::IndexFulltext)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2498,7 +2498,7 @@ trait AggregationTests
     {
         $database = static::getDatabase();
         $adapter = $database->getAdapter();
-        if (! $adapter->supports(Capability::Aggregations) || ! $adapter->supports(Capability::Fulltext) || ! $adapter->supports(Capability::Vectors)) {
+        if (! $adapter->supports(Capability::Aggregations) || ! $adapter->supports(Capability::IndexFulltext) || ! $adapter->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2551,7 +2551,7 @@ trait AggregationTests
     {
         $database = static::getDatabase();
         $adapter = $database->getAdapter();
-        if (! $adapter->supports(Capability::Fulltext) || ! $adapter->supports(Capability::Vectors)) {
+        if (! $adapter->supports(Capability::IndexFulltext) || ! $adapter->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2648,7 +2648,7 @@ trait AggregationTests
     {
         $database = static::getDatabase();
         $adapter = $database->getAdapter();
-        if (! $adapter->supports(Capability::Fulltext)) {
+        if (! $adapter->supports(Capability::IndexFulltext)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2696,7 +2696,7 @@ trait AggregationTests
     public function testSearchPagedWithACursorListsEachMatchOnce(): void
     {
         $database = static::getDatabase();
-        if (! $database->getAdapter()->supports(Capability::Fulltext)) {
+        if (! $database->getAdapter()->supports(Capability::IndexFulltext)) {
             $this->expectNotToPerformAssertions();
 
             return;

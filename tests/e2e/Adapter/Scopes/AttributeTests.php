@@ -1160,7 +1160,7 @@ trait AttributeTests
         $supportsIdenticalIndexes = $database->getAdapter()->supports(Capability::IdenticalIndexes);
 
         try {
-            // Check empty newKey doesn't cause issues
+            // Check an update without a new key doesn't cause issues
             $database->updateAttribute(
                 collection: 'rename_test',
                 key: 'renamed',

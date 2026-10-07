@@ -1785,29 +1785,24 @@ class SQLite extends SQL
     }
 
     /**
-     * Bind operator parameters to statement
-     * Override to handle SQLite-specific operator bindings
+     * Toggle, DateSetNow and ArrayUnique bind nothing: getOperatorSql() writes them without placeholders and
+     * advances $bindIndex itself. ArrayFilter binds its comparison value only.
      */
+    #[Override]
     protected function bindOperatorParameters(PDOStatement|DatabasePDOStatement|PDOStatementProxy $statement, Operator $operator, int &$bindIndex): void
     {
         $method = $operator->getMethod();
 
-        // For operators that SQLite doesn't use bind parameters for, skip binding entirely
-        // Note: The bindIndex increment happens in getOperatorSql(), NOT here
         if (in_array($method, [OperatorType::Toggle, OperatorType::DateSetNow, OperatorType::ArrayUnique])) {
-            // These operators don't bind any parameters - they're handled purely in SQL
-            // DO NOT increment bindIndex here as it's already handled in getOperatorSql()
             return;
         }
 
-        // For ARRAY_FILTER, bind the filter value if present
         if ($method === OperatorType::ArrayFilter) {
             $values = $operator->getValues();
             if (! empty($values) && count($values) >= 2) {
                 $filterType = $values[0];
                 $filterValue = $values[1];
 
-                // Only bind if we support this filter type (all comparison operators need binding)
                 $comparisonTypes = ['equal', 'notEqual', 'greaterThan', 'greaterThanEqual', 'lessThan', 'lessThanEqual'];
                 if (in_array($filterType, $comparisonTypes)) {
                     $bindKey = "op_{$bindIndex}";
@@ -1820,7 +1815,6 @@ class SQLite extends SQL
             return;
         }
 
-        // For all other operators, use parent implementation
         parent::bindOperatorParameters($statement, $operator, $bindIndex);
     }
 

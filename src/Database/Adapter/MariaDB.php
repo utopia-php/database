@@ -644,10 +644,10 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
 
             $spatialMap = \array_fill_keys($spatialAttributes, true);
 
-            foreach ($attributes as $attr => $value) {
-                $column = $this->filter($attr);
+            foreach ($attributes as $attribute => $value) {
+                $column = $this->filter($attribute);
 
-                if (isset($spatialMap[$attr])) {
+                if (isset($spatialMap[$attribute])) {
                     $value = $this->encodeSpatialWriteValue($value);
                     $value = (\is_bool($value)) ? (int) $value : $value;
                     $row[$column] = $value;

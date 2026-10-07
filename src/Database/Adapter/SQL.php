@@ -1232,8 +1232,8 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                         $signature = 'no_ops';
                     } else {
                         $parts = [];
-                        foreach ($operators as $attr => $operation) {
-                            $parts[] = $attr.':'.$operation->getMethod()->value.':'.json_encode($operation->getValues());
+                        foreach ($operators as $attribute => $operation) {
+                            $parts[] = $attribute.':'.$operation->getMethod()->value.':'.json_encode($operation->getValues());
                         }
                         sort($parts);
                         $signature = implode('|', $parts);
@@ -3692,16 +3692,14 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     ): void {
         $builder = $this->createBuilder()->into($this->getTableRaw($name));
 
-        foreach ($spatialAttributes as $spatialCol) {
-            $builder->insertColumnExpression($spatialCol, $this->getSpatialGeometryFromText('?'));
+        foreach ($spatialAttributes as $spatialColumn) {
+            $builder->insertColumnExpression($spatialColumn, $this->getSpatialGeometryFromText('?'));
         }
 
-        // Postgres requires an alias on the INSERT target for conflict resolution
         if ($this->insertRequiresAlias()) {
             $builder->insertAs('target');
         }
 
-        // Collect all column names and build rows
         $allColumnNames = [];
         $documentsData = [];
 
@@ -3713,7 +3711,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 $currentRegularAttributes = $extracted['updates'];
                 $extractedOperators = $extracted['operators'];
 
-                // For new documents, apply operators to attribute defaults
                 if ($change->old->isEmpty() && ! empty($extractedOperators)) {
                     foreach ($extractedOperators as $operatorKey => $operator) {
                         $default = $attributeDefaults[$operatorKey] ?? null;
@@ -3739,37 +3736,33 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
             $currentRegularAttributes = $this->decorateRow($currentRegularAttributes, $this->documentMetadata($document));
 
-            foreach (\array_keys($currentRegularAttributes) as $colName) {
-                $allColumnNames[$colName] = true;
+            foreach (\array_keys($currentRegularAttributes) as $column) {
+                $allColumnNames[$column] = true;
             }
 
             $documentsData[] = $currentRegularAttributes;
         }
 
-        // Include operator column names in the column set
-        foreach (\array_keys($operators) as $colName) {
-            $allColumnNames[$colName] = true;
+        foreach (\array_keys($operators) as $column) {
+            $allColumnNames[$column] = true;
         }
 
         $allColumnNames = \array_keys($allColumnNames);
         \sort($allColumnNames);
 
-        // Hoist hot-loop guards: spatial set lookup is O(1) via array_flip, and
-        // IntegerBooleans support is a constant for the lifetime of the adapter.
         $spatialMap = \array_fill_keys($spatialAttributes, true);
-        $intBools = $this->supports(Capability::IntegerBooleans);
+        $integerBooleans = $this->supports(Capability::IntegerBooleans);
 
-        // Build rows for the builder, applying JSON/boolean/spatial conversions
-        foreach ($documentsData as $docAttrs) {
+        foreach ($documentsData as $values) {
             $row = [];
             foreach ($allColumnNames as $key) {
-                $value = $docAttrs[$key] ?? null;
+                $value = $values[$key] ?? null;
                 if (isset($spatialMap[$key])) {
                     $value = $this->encodeSpatialWriteValue($value);
                 } elseif (\is_array($value)) {
                     $value = \json_encode($value);
                 }
-                if ($intBools && ! isset($spatialMap[$key])) {
+                if ($integerBooleans && ! isset($spatialMap[$key])) {
                     $value = (\is_bool($value)) ? (int) $value : $value;
                 }
                 $row[$key] = $value;
@@ -3777,55 +3770,46 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             $builder->set($row);
         }
 
-        // Determine conflict keys
         $conflictKeys = $this->sharedTables ? [Storage::UID, Storage::TENANT] : [Storage::UID];
 
-        // Determine which columns to update on conflict
         $skipColumns = [Storage::UID, Storage::SEQUENCE, Storage::CREATED_AT, Storage::TENANT];
 
         if (! empty($attribute)) {
-            // Increment mode: only update the increment column and _updatedAt
             $updateColumns = [$this->filter($attribute), Storage::UPDATED_AT];
         } else {
-            // Normal mode: update all columns except the skip set
             $updateColumns = \array_values(\array_filter(
                 $allColumnNames,
-                fn ($c) => ! \in_array($c, $skipColumns)
+                static fn (int|string $column): bool => ! \in_array($column, $skipColumns)
             ));
         }
 
         $builder->onConflict($conflictKeys, $updateColumns);
 
-        // Apply conflict-resolution expressions
-        // Column names passed to conflictSetRaw() must match the names in onConflict().
-        // The expression-generating methods handle their own quoting/filtering internally.
+        // conflictSetRaw() takes the column names given to onConflict(); the expression methods quote their own.
         if (! empty($attribute)) {
-            // Increment attribute
-            $filteredAttr = $this->filter($attribute);
+            $incrementColumn = $this->filter($attribute);
             if ($this->sharedTables) {
-                $builder->conflictSetRaw($filteredAttr, $this->getConflictTenantIncrementExpression($filteredAttr));
+                $builder->conflictSetRaw($incrementColumn, $this->getConflictTenantIncrementExpression($incrementColumn));
                 $builder->conflictSetRaw(Storage::UPDATED_AT, $this->getConflictTenantExpression(Storage::UPDATED_AT));
             } else {
-                $builder->conflictSetRaw($filteredAttr, $this->getConflictIncrementExpression($filteredAttr));
+                $builder->conflictSetRaw($incrementColumn, $this->getConflictIncrementExpression($incrementColumn));
             }
         } elseif (! empty($operators)) {
-            // Operator columns
-            foreach ($allColumnNames as $colName) {
-                if (\in_array($colName, $skipColumns)) {
+            foreach ($allColumnNames as $column) {
+                if (\in_array($column, $skipColumns)) {
                     continue;
                 }
-                if (isset($operators[$colName])) {
-                    $filteredCol = $this->filter($colName);
-                    $opResult = $this->getOperatorUpsertExpression($filteredCol, $operators[$colName]);
-                    $builder->conflictSetRaw($colName, $opResult['expression'], $opResult['bindings']);
+                if (isset($operators[$column])) {
+                    $filteredColumn = $this->filter($column);
+                    $expression = $this->getOperatorUpsertExpression($filteredColumn, $operators[$column]);
+                    $builder->conflictSetRaw($column, $expression['expression'], $expression['bindings']);
                 } elseif ($this->sharedTables) {
-                    $builder->conflictSetRaw($colName, $this->getConflictTenantExpression($colName));
+                    $builder->conflictSetRaw($column, $this->getConflictTenantExpression($column));
                 }
             }
         } elseif ($this->sharedTables) {
-            // Shared tables without operators or increment: tenant-guard all update columns
-            foreach ($updateColumns as $col) {
-                $builder->conflictSetRaw($col, $this->getConflictTenantExpression($col));
+            foreach ($updateColumns as $column) {
+                $builder->conflictSetRaw($column, $this->getConflictTenantExpression($column));
             }
         }
 

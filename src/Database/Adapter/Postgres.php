@@ -1074,16 +1074,16 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
                 $row[Storage::SEQUENCE] = $document->getSequence();
             }
 
-            foreach ($spatialAttributes as $spatialCol) {
-                $builder->insertColumnExpression($spatialCol, $this->getSpatialGeometryFromText('?'));
+            foreach ($spatialAttributes as $spatialColumn) {
+                $builder->insertColumnExpression($spatialColumn, $this->getSpatialGeometryFromText('?'));
             }
 
             $spatialMap = \array_fill_keys($spatialAttributes, true);
 
-            foreach ($attributes as $attr => $value) {
-                $column = $this->filter($attr);
+            foreach ($attributes as $attribute => $value) {
+                $column = $this->filter($attribute);
 
-                if (isset($spatialMap[$attr])) {
+                if (isset($spatialMap[$attribute])) {
                     $row[$column] = $this->encodeSpatialWriteValue($value);
                     $builder->insertColumnExpression($column, $this->getSpatialGeometryFromText('?'));
                 } else {

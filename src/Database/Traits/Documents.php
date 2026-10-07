@@ -36,7 +36,6 @@ use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\ID;
-use Utopia\Database\Index as IndexModel;
 use Utopia\Database\Operator;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
@@ -132,9 +131,9 @@ trait Documents
     {
         $current ??= 0;
 
-        if (Attribute::isIntegerType($attribute->getType())) {
-            if (! $attribute->isSigned()
-                && $attribute->getType() === ColumnType::BigInteger
+        if ($attribute->isInteger()) {
+            if (! $attribute->signed
+                && $attribute->type === ColumnType::BigInteger
                 && ! $this->adapter->supports(Capability::UnsignedBigInt)) {
                 throw new TypeException('Unsigned 64-bit arithmetic is not supported by this adapter.');
             }
@@ -148,15 +147,15 @@ trait Documents
             $result = $increase
                 ? BigInt::add($current, $value)
                 : BigInt::subtract($current, $value);
-            $bounds = Attribute::getNumericBounds($attribute->getType(), $attribute->isSigned());
+            $bounds = $attribute->bounds();
             if ($bounds === null) {
                 throw new TypeException('Attribute value must be numeric.');
             }
-            if (BigInt::compare($result, $bounds['max']) > 0) {
-                throw new LimitException('Attribute value exceeds maximum limit: '.$bounds['max']);
+            if (BigInt::compare($result, $bounds->max) > 0) {
+                throw new LimitException('Attribute value exceeds maximum limit: '.$bounds->max);
             }
-            if (BigInt::compare($result, $bounds['min']) < 0) {
-                throw new LimitException('Attribute value exceeds minimum limit: '.$bounds['min']);
+            if (BigInt::compare($result, $bounds->min) < 0) {
+                throw new LimitException('Attribute value exceeds minimum limit: '.$bounds->min);
             }
 
             return $result;
@@ -168,13 +167,13 @@ trait Documents
 
         $current = $this->getNativeNumber($current);
         $value = $this->getNativeNumber($value);
-        $bounds = Attribute::getNumericBounds($attribute->getType(), $attribute->isSigned());
+        $bounds = $attribute->bounds();
 
         if ($bounds === null || (\is_float($current) && ! \is_finite($current))) {
             throw new TypeException('Attribute value must be a finite numeric value.');
         }
-        $maximum = $this->getNativeNumber($bounds['max']);
-        $minimum = $this->getNativeNumber($bounds['min']);
+        $maximum = $this->getNativeNumber($bounds->max);
+        $minimum = $this->getNativeNumber($bounds->min);
 
         if ($current > $maximum) {
             throw new LimitException('Attribute value exceeds maximum limit: '.$maximum);
@@ -222,8 +221,8 @@ trait Documents
 
     private function declaredAttribute(Collection $collection, string $key): ?Attribute
     {
-        foreach ($collection->getDeclaredAttributes() as $attribute) {
-            if ($attribute->getKey() === $key) {
+        foreach ($collection->attributes() as $attribute) {
+            if ($attribute->key === $key) {
                 return $attribute;
             }
         }
@@ -231,9 +230,49 @@ trait Documents
         return null;
     }
 
+    /**
+     * @return list<Attribute>
+     */
+    private static function relationshipAttributes(Collection $collection): array
+    {
+        $relationships = [];
+        foreach ($collection->attributes() as $attribute) {
+            if ($attribute->relationship !== null) {
+                $relationships[] = $attribute;
+            }
+        }
+
+        return $relationships;
+    }
+
+    /**
+     * The single-valued numeric attribute an increase or decrease changes; null when the adapter does not define
+     * attributes.
+     *
+     * @throws NotFoundException
+     * @throws TypeException
+     */
+    private function numericAttribute(Collection $collection, string $key): ?Attribute
+    {
+        if (! $this->adapter->supports(Capability::DefinedAttributes)) {
+            return null;
+        }
+
+        $attribute = $this->declaredAttribute($collection, $key);
+        if ($attribute === null) {
+            throw new NotFoundException('Attribute not found');
+        }
+
+        if (! $attribute->isNumeric() || $attribute->array) {
+            throw new TypeException('Attribute must be an integer or float and can not be an array.');
+        }
+
+        return $attribute;
+    }
+
     private function isDeclaredInteger(?Attribute $attribute): bool
     {
-        return $attribute !== null && ! $attribute->isArray() && Attribute::isIntegerType($attribute->getType());
+        return $attribute !== null && ! $attribute->array && $attribute->isInteger();
     }
 
     private function assertIntegerChange(int|float|string $value): void
@@ -317,16 +356,15 @@ trait Documents
     protected function getQueriesValidator(Document $collection, array $queries, array $joinedCollections = []): Queries
     {
         if ($joinedCollections === [] && Narrow::accepts($queries)) {
-            $attributes = $collection->getAttribute('attributes', []);
-            $narrow = \is_array($attributes) ? Narrow::of(
+            $narrow = Narrow::of(
                 $queries,
-                $attributes,
+                Collection::fromDocument($collection)->attributes(),
                 $this->getQueryBounds(),
                 $this->maxQueryValues,
                 $this->adapter->supports(Capability::DefinedAttributes),
                 $this->adapter->supports(Capability::UnsignedBigInt),
                 $this->adapter->supports(Capability::OrderRandom),
-            ) : null;
+            );
 
             if ($narrow !== null) {
                 return $narrow;
@@ -348,14 +386,11 @@ trait Documents
 
     private function createDocumentsValidator(Document $collection, bool $supportForJoins, bool $supportForAggregations): DocumentsValidator
     {
-        /** @var array<Document> $attributes */
-        $attributes = $collection->getAttribute('attributes', []);
-        /** @var array<Document> $indexes */
-        $indexes = $collection->getAttribute('indexes', []);
+        $definition = Collection::fromDocument($collection);
 
         return new DocumentsValidator(
-            $attributes,
-            $indexes,
+            $definition->attributes(),
+            $definition->indexes(),
             $this->adapter->getIdAttributeType(),
             $this->maxQueryValues,
             $this->adapter->getMaxUIDLength(),
@@ -389,11 +424,13 @@ trait Documents
      */
     private function collectionFingerprint(Document $collection): string
     {
+        $definition = Collection::fromDocument($collection);
+
         return \hash('xxh128', \serialize([
-            'attributes' => $collection->getAttribute('attributes', []),
-            'indexes' => $collection->getAttribute('indexes', []),
-            'permissions' => $collection->getAttribute(Document::PERMISSIONS, []),
-            'documentSecurity' => (bool) $collection->getAttribute('documentSecurity', false),
+            $definition->attributes(),
+            $definition->indexes(),
+            $definition->getPermissions(),
+            $definition->documentSecurity(),
         ]));
     }
 
@@ -491,12 +528,7 @@ trait Documents
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        if ($collection->isEmpty()) {
-            throw new NotFoundException('Collection not found');
-        }
-
-        /** @var array<Document> $attributes */
-        $attributes = $collection->getAttribute('attributes', []);
+        $attributes = $collection->attributes();
 
         $this->checkQueryTypes($queries);
 
@@ -525,12 +557,7 @@ trait Documents
             }
         }
 
-        /** @var array<Document> $allAttributes */
-        $allAttributes = $collection->getAttribute('attributes', []);
-        $relationships = \array_filter(
-            $allAttributes,
-            fn (Attribute|Document $attribute) => Attribute::isRelationship($attribute)
-        );
+        $relationships = self::relationshipAttributes($collection);
 
         $grouped = Query::groupForDatabase($queries);
         $selects = $grouped['selections'];
@@ -739,13 +766,6 @@ trait Documents
             $documents = $this->silent(fn () => $this->relationshipHook->populateDocuments([$document], $collection, $this->relationshipHook->getFetchDepth(), $nestedSelections));
             $document = $documents[0];
         }
-
-        /** @var array<Document> $cacheCheckAttrs */
-        $cacheCheckAttrs = $collection->getAttribute('attributes', []);
-        $relationships = \array_filter(
-            $cacheCheckAttrs,
-            fn (Attribute|Document $attribute) => Attribute::isRelationship($attribute)
-        );
 
         try {
             if ($fillEpoch !== null && empty($relationships)) {
@@ -967,25 +987,21 @@ trait Documents
         if (! $this->adapter->supports(Capability::TTLIndexes)) {
             return false;
         }
-        /** @var array<IndexModel> $indexes */
-        $indexes = $collection->getAttribute('indexes', []);
-        foreach ($indexes as $index) {
-            if ($index->getType() !== IndexType::Ttl) {
+        foreach (Collection::fromDocument($collection)->indexes() as $index) {
+            if ($index->type !== IndexType::Ttl) {
                 continue;
             }
-            $ttlSeconds = $index->getTtl();
-            $ttlAttr = $index->getIndexedAttributes()[0] ?? null;
-            if ($ttlSeconds <= 0 || ! $ttlAttr) {
+            $seconds = $index->ttl ?? 0;
+            $attribute = $index->attributes[0] ?? null;
+            if ($seconds <= 0 || $attribute === null || $attribute === '') {
                 return false;
             }
-            /** @var string $ttlAttrStr */
-            $ttlAttrStr = $ttlAttr;
-            $val = $document->getAttribute($ttlAttrStr);
-            if (is_string($val)) {
+            $value = $document->getAttribute($attribute);
+            if (\is_string($value)) {
                 try {
-                    $start = new PhpDateTime($val);
+                    $start = new PhpDateTime($value);
 
-                    return (new PhpDateTime()) > (clone $start)->modify("+{$ttlSeconds} seconds");
+                    return (new PhpDateTime()) > $start->modify("+{$seconds} seconds");
                 } catch (Throwable) {
                     return false;
                 }
@@ -1023,7 +1039,7 @@ trait Documents
         }
 
         // Always preserve internal attributes (use hashmap for O(1) lookup)
-        $internalKeys = \array_map(fn (array $attr) => $attr[Document::ID] ?? '', $this->getInternalAttributes());
+        $internalKeys = \array_map(static fn (Attribute $attribute): string => $attribute->key, $this->internalAttributes());
         foreach ($internalKeys as $key) {
             /** @var string $key */
             $attributesToKeep[$key] = true;
@@ -1302,10 +1318,7 @@ trait Documents
 
         $time = DateTime::now();
         $modified = 0;
-        $hasRelationships = ! empty(\array_filter(
-            $collection->getDeclaredAttributes(),
-            static fn (Attribute $attribute): bool => $attribute->getType() === ColumnType::Relationship,
-        ));
+        $hasRelationships = self::relationshipAttributes($collection) !== [];
 
         // Hoisted: validator only depends on the collection + adapter properties,
         // both stable for this call. Allocating once and reusing across all
@@ -1766,9 +1779,6 @@ trait Documents
 
         $batchSize = \min(Database::INSERT_BATCH_SIZE, \max(1, $batchSize));
         $collection = $this->silent(fn () => $this->getCollection($collection));
-        if ($collection->isEmpty()) {
-            throw new DatabaseException('Collection not found');
-        }
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
         $skipAuth = $this->authorization->isValid(new Input(PermissionType::Update, $collection->getUpdate()));
@@ -1776,11 +1786,6 @@ trait Documents
         if (! $skipAuth && ! $documentSecurity && $collection->getId() !== self::METADATA) {
             throw new AuthorizationException($this->authorization->getDescription());
         }
-
-        /** @var array<Document> $attributes */
-        $attributes = $collection->getAttribute('attributes', []);
-        /** @var array<Document> $indexes */
-        $indexes = $collection->getAttribute('indexes', []);
 
         $this->checkQueryTypes($queries);
 
@@ -2107,16 +2112,16 @@ trait Documents
         $batchSize = \min(Database::INSERT_BATCH_SIZE, \max(1, $batchSize));
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
-        /** @var array<Document> $collectionAttributes */
-        $collectionAttributes = $collection->getAttribute('attributes', []);
+        $collectionAttributes = $collection->attributes();
         $time = DateTime::now();
         $created = 0;
         $updated = 0;
         $operatorIds = [];
         $seenIds = [];
-        $hasRelationships = ! empty(\array_filter(
-            $collection->getDeclaredAttributes(),
-            static fn (Attribute $attribute): bool => $attribute->getType() === ColumnType::Relationship,
+        $hasRelationships = self::relationshipAttributes($collection) !== [];
+        $internalKeys = \array_flip(\array_map(
+            static fn (Attribute $attribute): string => $attribute->key,
+            self::internalAttributesFor(true)
         ));
         $existing = $this->findDocumentsToUpsert($collection->getId(), $documents);
 
@@ -2131,12 +2136,7 @@ trait Documents
             $operators = $extracted['operators'];
             $regularUpdates = $extracted['updates'];
 
-            $internalKeys = \array_map(
-                fn (Attribute $attr) => $attr->getKey(),
-                self::internalAttributes()
-            );
-
-            $regularUpdatesUserOnly = \array_diff_key($regularUpdates, \array_flip($internalKeys));
+            $regularUpdatesUserOnly = \array_diff_key($regularUpdates, $internalKeys);
 
             $skipPermissionsUpdate = true;
 
@@ -2171,12 +2171,7 @@ trait Documents
 
                 // Also check if old document has attributes that new document doesn't
                 if (! $hasChanges) {
-                    $internalKeys = \array_map(
-                        fn (Attribute $attr) => $attr->getKey(),
-                        self::internalAttributes()
-                    );
-
-                    $oldUserAttributes = array_diff_key($oldAttributes, array_flip($internalKeys));
+                    $oldUserAttributes = \array_diff_key($oldAttributes, $internalKeys);
 
                     foreach (array_keys($oldUserAttributes) as $oldAttrKey) {
                         if (! array_key_exists($oldAttrKey, $regularUpdatesUserOnly)) {
@@ -2230,13 +2225,11 @@ trait Documents
 
             // Force matching optional parameter sets
             // Doesn't use decode as that intentionally skips null defaults to reduce payload size
-            foreach ($collectionAttributes as $attr) {
-                /** @var string $attrId */
-                $attrId = $attr[Document::ID];
-                if (! $attr->getAttribute('required') && ! \array_key_exists($attrId, (array) $document)) {
+            foreach ($collectionAttributes as $declared) {
+                if (! $declared->required && ! \array_key_exists($declared->key, (array) $document)) {
                     $document->setAttribute(
-                        $attrId,
-                        $old->getAttribute($attrId, ($attr['default'] ?? null))
+                        $declared->key,
+                        $old->getAttribute($declared->key, $declared->default)
                     );
                 }
             }
@@ -2506,25 +2499,7 @@ trait Documents
         $this->assertPositiveChange($value);
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
-        $numericAttribute = null;
-        if ($this->adapter->supports(Capability::DefinedAttributes)) {
-            /** @var array<Attribute> $allAttrs */
-            $allAttrs = $collection->getAttribute('attributes', []);
-            $matchedAttrs = \array_filter($allAttrs, function (Attribute $a) use ($attribute) {
-                return $a->getKey() === $attribute;
-            });
-
-            if (empty($matchedAttrs)) {
-                throw new NotFoundException('Attribute not found');
-            }
-
-            /** @var Attribute $matchedAttr */
-            $matchedAttr = \end($matchedAttrs);
-            if (! Attribute::isNumericType($matchedAttr->getType()) || $matchedAttr->isArray()) {
-                throw new TypeException('Attribute must be an integer or float and can not be an array.');
-            }
-            $numericAttribute = $matchedAttr;
-        }
+        $numericAttribute = $this->numericAttribute($collection, $attribute);
 
         if ($this->isDeclaredInteger($numericAttribute ?? $this->declaredAttribute($collection, $attribute))) {
             $this->assertIntegerChange($value);
@@ -2569,7 +2544,7 @@ trait Documents
                 $result = $currentVal + $this->getNativeNumber($value);
             }
             $exceedsMaximum = ! \is_null($max) && (
-                $numericAttribute instanceof Attribute && Attribute::isIntegerType($numericAttribute->getType())
+                $numericAttribute?->isInteger() === true
                     ? BigInt::compare($result, $max) > 0
                     : $result > $max
             );
@@ -2581,7 +2556,7 @@ trait Documents
             $updatedAt = $document->getUpdatedAt();
             $updatedAt = (empty($updatedAt) || ! $this->datePreservation()->get()) ? $time : DateTime::setTimezone($updatedAt);
             if ($max !== null) {
-                $max = $numericAttribute instanceof Attribute && Attribute::isIntegerType($numericAttribute->getType())
+                $max = $numericAttribute?->isInteger() === true
                     ? BigInt::subtract($max, $value)
                     : $this->getNativeNumber($max) - $this->getNativeNumber($value);
             }
@@ -2590,7 +2565,7 @@ trait Documents
                 $collection->getId(),
                 $id,
                 $attribute,
-                $numericAttribute instanceof Attribute && Attribute::isIntegerType($numericAttribute->getType())
+                $numericAttribute?->isInteger() === true
                     ? BigInt::toNative($value)
                     : $this->getNativeNumber($value),
                 $updatedAt,
@@ -2645,25 +2620,7 @@ trait Documents
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        $numericAttribute = null;
-        if ($this->adapter->supports(Capability::DefinedAttributes)) {
-            /** @var array<Attribute> $decAllAttrs */
-            $decAllAttrs = $collection->getAttribute('attributes', []);
-            $matchedDecAttrs = \array_filter($decAllAttrs, function (Attribute $a) use ($attribute) {
-                return $a->getKey() === $attribute;
-            });
-
-            if (empty($matchedDecAttrs)) {
-                throw new NotFoundException('Attribute not found');
-            }
-
-            /** @var Attribute $matchedDecAttr */
-            $matchedDecAttr = \end($matchedDecAttrs);
-            if (! Attribute::isNumericType($matchedDecAttr->getType()) || $matchedDecAttr->isArray()) {
-                throw new TypeException('Attribute must be an integer or float and can not be an array.');
-            }
-            $numericAttribute = $matchedDecAttr;
-        }
+        $numericAttribute = $this->numericAttribute($collection, $attribute);
 
         if ($this->isDeclaredInteger($numericAttribute ?? $this->declaredAttribute($collection, $attribute))) {
             $this->assertIntegerChange($value);
@@ -2708,7 +2665,7 @@ trait Documents
                 $result = $currentDecVal - $this->getNativeNumber($value);
             }
             $belowMinimum = ! \is_null($min) && (
-                $numericAttribute instanceof Attribute && Attribute::isIntegerType($numericAttribute->getType())
+                $numericAttribute?->isInteger() === true
                     ? BigInt::compare($result, $min) < 0
                     : $result < $min
             );
@@ -2720,7 +2677,7 @@ trait Documents
             $updatedAt = $document->getUpdatedAt();
             $updatedAt = (empty($updatedAt) || ! $this->datePreservation()->get()) ? $time : DateTime::setTimezone($updatedAt);
             if ($min !== null) {
-                $min = $numericAttribute instanceof Attribute && Attribute::isIntegerType($numericAttribute->getType())
+                $min = $numericAttribute?->isInteger() === true
                     ? BigInt::add($min, $value)
                     : $this->getNativeNumber($min) + $this->getNativeNumber($value);
             }
@@ -2729,7 +2686,7 @@ trait Documents
                 $collection->getId(),
                 $id,
                 $attribute,
-                $numericAttribute instanceof Attribute && Attribute::isIntegerType($numericAttribute->getType())
+                $numericAttribute?->isInteger() === true
                     ? BigInt::negate($value)
                     : $this->getNativeNumber($value) * -1,
                 $updatedAt,
@@ -2892,9 +2849,6 @@ trait Documents
 
         $batchSize = \min(Database::DELETE_BATCH_SIZE, \max(1, $batchSize));
         $collection = $this->silent(fn () => $this->getCollection($collection));
-        if ($collection->isEmpty()) {
-            throw new DatabaseException('Collection not found');
-        }
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
         $skipAuth = $this->authorization->isValid(new Input(PermissionType::Delete, $collection->getDelete()));
@@ -2902,11 +2856,6 @@ trait Documents
         if (! $skipAuth && ! $documentSecurity && $collection->getId() !== self::METADATA) {
             throw new AuthorizationException($this->authorization->getDescription());
         }
-
-        /** @var array<Document> $attributes */
-        $attributes = $collection->getAttribute('attributes', []);
-        /** @var array<Document> $indexes */
-        $indexes = $collection->getAttribute('indexes', []);
 
         $this->checkQueryTypes($queries);
 
@@ -3551,8 +3500,7 @@ trait Documents
      */
     public function purgeCachedQueries(string $collection, ?string $namespace = null): bool
     {
-        $collectionDocument = $this->silent(fn () => $this->getCollection($collection));
-        $collection = $collectionDocument->isEmpty() ? $collection : $collectionDocument->getId();
+        $collection = $this->silent(fn () => $this->findCollection($collection))?->getId() ?? $collection;
         $epochKey = $this->getQueryCacheKey($collection, $namespace).'#epoch';
 
         try {
@@ -3632,9 +3580,9 @@ trait Documents
                 $collectionId = $cached['collection'] ?? null;
 
                 if (\is_string($collectionId) && $collectionId !== '') {
-                    $collection = $this->silent(fn () => $this->getCollection($collectionId));
+                    $collection = $this->silent(fn () => $this->findCollection($collectionId));
 
-                    if ($collection->isEmpty()) {
+                    if ($collection === null) {
                         $decoded = false;
                     } else {
                         $documentSecurity = $collection->getAttribute('documentSecurity', false);
@@ -3825,15 +3773,6 @@ trait Documents
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        if ($collection->isEmpty()) {
-            throw new NotFoundException('Collection not found');
-        }
-
-        /** @var array<Document> $attributes */
-        $attributes = $collection->getAttribute('attributes', []);
-        /** @var array<Document> $indexes */
-        $indexes = $collection->getAttribute('indexes', []);
-
         $this->checkQueryTypes($queries);
 
         $joinedCollectionsById = null;
@@ -3850,11 +3789,7 @@ trait Documents
             throw new AuthorizationException($this->authorization->getDescription());
         }
 
-        /** @var array<Document> $relationships */
-        $relationships = \array_filter(
-            $attributes,
-            fn (Attribute|Document $attribute) => Attribute::isRelationship($attribute)
-        );
+        $relationships = self::relationshipAttributes($collection);
 
         $grouped = Query::groupForDatabase($queries);
         $filters = $grouped['filters'];
@@ -4285,15 +4220,6 @@ trait Documents
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        if ($collection->isEmpty()) {
-            throw new NotFoundException('Collection not found');
-        }
-
-        /** @var array<Document> $attributes */
-        $attributes = $collection->getAttribute('attributes', []);
-        /** @var array<Document> $indexes */
-        $indexes = $collection->getAttribute('indexes', []);
-
         $this->checkQueryTypes($queries);
 
         $joinedCollections = null;
@@ -4310,11 +4236,7 @@ trait Documents
             throw new AuthorizationException($this->authorization->getDescription());
         }
 
-        /** @var array<Document> $relationships */
-        $relationships = \array_filter(
-            $attributes,
-            fn (Attribute|Document $attribute) => Attribute::isRelationship($attribute)
-        );
+        $relationships = self::relationshipAttributes($collection);
 
         $prepared = $this->prepareFilterJoinQueries($collection, $queries, $relationships, $collectionGranted, $joinedCollections);
         if ($prepared === null) {
@@ -4351,15 +4273,6 @@ trait Documents
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        if ($collection->isEmpty()) {
-            throw new NotFoundException('Collection not found');
-        }
-
-        /** @var array<Document> $attributes */
-        $attributes = $collection->getAttribute('attributes', []);
-        /** @var array<Document> $indexes */
-        $indexes = $collection->getAttribute('indexes', []);
-
         $this->checkQueryTypes($queries);
 
         $joinedCollections = null;
@@ -4384,11 +4297,7 @@ trait Documents
             throw new AuthorizationException($this->authorization->getDescription());
         }
 
-        /** @var array<Document> $relationships */
-        $relationships = \array_filter(
-            $attributes,
-            fn (Attribute|Document $attribute) => Attribute::isRelationship($attribute)
-        );
+        $relationships = self::relationshipAttributes($collection);
 
         $prepared = $this->prepareFilterJoinQueries($collection, $queries, $relationships, $collectionGranted, $joinedCollections);
         if ($prepared === null) {
@@ -4467,10 +4376,8 @@ trait Documents
 
         $aliases = [];
         foreach ($joinedCollections as $alias => $joined) {
-            /** @var array<Attribute|Document> $joinedAttributes */
-            $joinedAttributes = $joined->getAttribute('attributes', []);
-            foreach ($joinedAttributes as $declared) {
-                if ($declared->getId() === $attribute && ! Attribute::isRelationship($declared)) {
+            foreach (Collection::fromDocument($joined)->attributes() as $declared) {
+                if ($declared->key === $attribute && $declared->relationship === null) {
                     $aliases[] = $alias;
                     break;
                 }
@@ -4486,16 +4393,8 @@ trait Documents
 
     private function declaresSumAttribute(Document $collection, string $attribute): bool
     {
-        foreach (self::internalAttributes() as $internal) {
-            if ($internal->getKey() === $attribute) {
-                return true;
-            }
-        }
-
-        /** @var array<Attribute|Document> $attributes */
-        $attributes = $collection->getAttribute('attributes', []);
-        foreach ($attributes as $declared) {
-            if ($declared->getId() === $attribute) {
+        foreach ([...self::internalAttributesFor(true), ...Collection::fromDocument($collection)->attributes()] as $declared) {
+            if ($declared->key === $attribute) {
                 return true;
             }
         }
@@ -4514,12 +4413,11 @@ trait Documents
      */
     private function validateSumAttribute(Document $collection, string $attribute, array $queries, ?array $joinedCollections = null): void
     {
-        /** @var array<Document> $attributes */
-        $attributes = $collection->getAttribute('attributes', []);
+        $attributes = Collection::fromDocument($collection)->attributes();
 
         foreach ($attributes as $declared) {
-            if ($declared->getAttribute('key', $declared->getId()) === $attribute) {
-                if (isset(Aggregate::numericTypes([$declared])[$attribute])) {
+            if ($declared->key === $attribute) {
+                if (! $declared->array && $declared->isNumeric()) {
                     return;
                 }
                 break;
@@ -4549,7 +4447,7 @@ trait Documents
      * collection schema like the documents validators. It is never handed joins, so no state of
      * one sum reaches the next.
      *
-     * @param  array<Document>  $attributes
+     * @param  list<Attribute>  $attributes
      */
     private function getSumValidator(Document $collection, array $attributes, bool $supportForAttributes): Aggregate
     {
@@ -4909,7 +4807,7 @@ trait Documents
      * read resolves them once and hands them to validation, authorization, the adapter and decoding.
      *
      * @param  array<Query>  $queries
-     * @return array<string, Document>
+     * @return array<string, Collection>
      *
      * @throws QueryException
      */
@@ -4927,8 +4825,8 @@ trait Documents
                 continue;
             }
 
-            $collection = $this->silent(fn () => $this->getCollection($id));
-            if ($collection->isEmpty()) {
+            $collection = $this->silent(fn () => $this->findCollection($id));
+            if ($collection === null) {
                 throw new QueryException("Joined collection '{$id}' not found");
             }
 
@@ -4940,7 +4838,7 @@ trait Documents
 
     /**
      * @param  array<Query>  $queries
-     * @param  array<Document>  $relationships
+     * @param  list<Attribute>  $relationships
      * @param  array<string, Document>|null  $joinedCollections  The collection each join names, by its id
      * @return array{0: Document, 1: array<Query>, 2: bool}|null
      */
@@ -5033,9 +4931,9 @@ trait Documents
             }
             $authorized[$joinCollectionId] = true;
 
-            $joinCollection = $joinedCollections[$joinCollectionId] ?? new Document();
+            $joinCollection = $joinedCollections[$joinCollectionId] ?? null;
 
-            if ($joinCollection->isEmpty()) {
+            if ($joinCollection === null) {
                 throw new QueryException("Joined collection '{$joinCollectionId}' not found");
             }
 
@@ -5116,13 +5014,12 @@ trait Documents
                 continue;
             }
 
-            $joinCollection = $joinedCollections[$joinCollectionId] ?? new Document();
-            /** @var array<Attribute|Document> $attributes */
-            $attributes = $joinCollection->getAttribute('attributes', []);
             $keys = [];
-            foreach ($attributes as $attribute) {
-                if (! Attribute::isRelationship($attribute)) {
-                    $keys[] = $attribute->getId();
+            if (isset($joinedCollections[$joinCollectionId])) {
+                foreach (Collection::fromDocument($joinedCollections[$joinCollectionId])->attributes() as $attribute) {
+                    if ($attribute->relationship === null) {
+                        $keys[] = $attribute->key;
+                    }
                 }
             }
             $joinAttributes[$joinCollectionId] = $keys;
@@ -5260,19 +5157,14 @@ trait Documents
         // Allow querying internal attributes
         /** @var array<string> $keys */
         $keys = \array_map(
-            fn (array $attribute) => $attribute[Document::ID] ?? '',
-            $this->getInternalAttributes()
+            static fn (Attribute $attribute): string => $attribute->key,
+            $this->internalAttributes()
         );
 
-        /** @var array<Document> $collAttrs */
-        $collAttrs = $collection->getAttribute('attributes', []);
-        foreach ($collAttrs as $attribute) {
-            if (Attribute::isRelationship($attribute)) {
-                continue;
+        foreach (Collection::fromDocument($collection)->attributes() as $attribute) {
+            if ($attribute->relationship === null) {
+                $keys[] = $attribute->key;
             }
-            /** @var string $attrKey */
-            $attrKey = $attribute->getAttribute('key', $attribute->getId());
-            $keys[] = $attrKey;
         }
         if ($this->adapter->supports(Capability::DefinedAttributes)) {
             $invalid = \array_diff($selections, $keys);

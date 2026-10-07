@@ -1258,8 +1258,8 @@ trait Documents
      * @param  string  $collection  The collection identifier
      * @param  array<Document>  $documents  The documents to create
      * @param  int  $batchSize  Number of documents per batch insert
-     * @param  (callable(Document): void)|null  $onNext  Callback invoked for each created document
-     * @param  (callable(Throwable): void)|null  $onError  Callback invoked on per-document errors
+     * @param  (callable(Document): void)|null  $onNext  Callback given each created document once its batch is written
+     * @param  (callable(Throwable): void)|null  $onError  Callback given an error $onNext throws, after which the write goes on; without it that error is rethrown. It never sees an error of the write itself, which is always thrown
      * @return int The number of documents created
      *
      * @throws AuthorizationException
@@ -1734,8 +1734,8 @@ trait Documents
      * @param  Document  $updates  The document containing fields to update
      * @param  array<Query>  $queries  Queries to filter documents for update
      * @param  int  $batchSize  Number of documents per batch update
-     * @param  (callable(Document $updated, Document $old): void)|null  $onNext  Callback invoked for each updated document
-     * @param  (callable(Throwable): void)|null  $onError  Callback invoked on per-document errors
+     * @param  (callable(Document $updated, Document $old): void)|null  $onNext  Callback given each updated document once its batch is written, with a copy of the document as it was read before the update
+     * @param  (callable(Throwable): void)|null  $onError  Callback given an error $onNext throws, after which the write goes on; without it that error is rethrown. It never sees an error of the write itself, which is always thrown
      * @return int The number of documents updated
      *
      * @throws AuthorizationException
@@ -2032,8 +2032,8 @@ trait Documents
      * @param  string  $collection  The collection identifier
      * @param  array<Document>  $documents  The documents to create or update
      * @param  int  $batchSize  Number of documents per batch
-     * @param  (callable(Document, ?Document): void)|null  $onNext  Callback invoked for each upserted document with optional old document
-     * @param  (callable(Throwable): void)|null  $onError  Callback invoked on per-document errors
+     * @param  (callable(Document $upserted, ?Document $old): void)|null  $onNext  Callback given each upserted document once its batch is written, with the stored document it updated, or null when it was created
+     * @param  (callable(Throwable): void)|null  $onError  Callback given an error $onNext throws, after which the write goes on; without it that error is rethrown. It never sees an error of the write itself, which is always thrown
      * @return int The number of documents created or updated
      *
      * @throws StructureException
@@ -2062,8 +2062,8 @@ trait Documents
      * @param  string  $collection  The collection identifier
      * @param  string  $attribute  The attribute to increment on update
      * @param  array<Document>  $documents  The documents to create or update
-     * @param  (callable(Document, ?Document): void)|null  $onNext  Callback invoked for each upserted document with optional old document
-     * @param  (callable(Throwable): void)|null  $onError  Callback invoked on per-document errors
+     * @param  (callable(Document $upserted, ?Document $old): void)|null  $onNext  Callback given each upserted document once its batch is written, with the stored document it updated, or null when it was created
+     * @param  (callable(Throwable): void)|null  $onError  Callback given an error $onNext throws, after which the write goes on; without it that error is rethrown. It never sees an error of the write itself, which is always thrown
      * @param  int  $batchSize  Number of documents per batch
      * @return int The number of documents created or updated
      *
@@ -2861,8 +2861,8 @@ trait Documents
      * @param  string  $collection  The collection identifier
      * @param  array<Query>  $queries  Queries to filter documents for deletion
      * @param  int  $batchSize  Number of documents per batch deletion
-     * @param  (callable(Document, Document): void)|null  $onNext  Callback invoked for each deleted document
-     * @param  (callable(Throwable): void)|null  $onError  Callback invoked on per-document errors
+     * @param  (callable(Document $deleted, Document $copy): void)|null  $onNext  Callback given each deleted document once its batch is deleted, and a copy of that same document taken before the delete, not a separately stored version
+     * @param  (callable(Throwable): void)|null  $onError  Callback given an error $onNext throws, after which the write goes on; without it that error is rethrown. It never sees an error of the write itself, which is always thrown
      * @return int The number of documents deleted
      *
      * @throws AuthorizationException

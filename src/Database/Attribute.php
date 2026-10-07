@@ -2,37 +2,15 @@
 
 namespace Utopia\Database;
 
-use Utopia\Database\Helpers\ID;
+use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Adapter\Profile;
+use Utopia\Database\Exception\Structure;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Query\Schema\ColumnType;
 
-/**
- * Represents a database collection attribute with its type, constraints, and formatting options.
- *
- * @property string $key
- * @property ColumnType $type
- * @property int $size
- * @property bool $required
- * @property mixed $default
- * @property bool $signed
- * @property bool $array
- * @property string|null $format
- * @property array<string, mixed> $formatOptions
- * @property array<string> $filters
- * @property string|null $status
- * @property array<string, mixed>|null $options
- */
-class Attribute extends Document
+final readonly class Attribute
 {
-    private const string PERSISTED_BIG_INTEGER = 'bigint';
-
-    /** @var array<string, true>|null */
-    private static ?array $storedTypes = null;
-
     /**
-     * The column types an attribute can be stored as. Object, spatial and vector attributes also need
-     * the adapter to support them.
-     *
      * @var list<ColumnType>
      */
     public const array TYPES = [
@@ -56,1386 +34,591 @@ class Attribute extends Document
         ColumnType::Vector,
     ];
 
+    private const string STORED_BIG_INTEGER = 'bigint';
+
+    private const string KEY = 'key';
+
+    private const string TYPE = 'type';
+
+    private const string SIZE = 'size';
+
+    private const string REQUIRED = 'required';
+
+    private const string DEFAULT = 'default';
+
+    private const string SIGNED = 'signed';
+
+    private const string ARRAY = 'array';
+
+    private const string FORMAT = 'format';
+
+    private const string FORMAT_OPTIONS = 'formatOptions';
+
+    private const string FILTERS = 'filters';
+
+    private const string OPTIONS = 'options';
+
+    private const string SIDE = 'side';
+
+    private const string RELATED_COLLECTION = 'relatedCollection';
+
+    private const string RELATION_TYPE = 'relationType';
+
+    private const string TWO_WAY = 'twoWay';
+
+    private const string TWO_WAY_KEY = 'twoWayKey';
+
+    private const string ON_DELETE = 'onDelete';
+
     /**
-     * @param  array<string, mixed>  $formatOptions
-     * @param  array<string>  $filters
-     * @param  array<string, mixed>|null  $options
+     * @param  list<string>  $filters
      */
-    public function __construct(
-        string $key = '',
-        ColumnType $type = ColumnType::String,
-        int $size = 0,
-        bool $required = false,
-        mixed $default = null,
-        bool $signed = true,
-        bool $array = false,
-        ?string $format = null,
-        array $formatOptions = [],
-        array $filters = [],
-        ?string $status = null,
-        ?array $options = null,
+    private function __construct(
+        public string $key,
+        public ColumnType $type,
+        public ?int $size,
+        public bool $required,
+        public mixed $default,
+        public bool $signed,
+        public bool $array,
+        public ?Format $format,
+        public array $filters,
+        public ?Relationship $relationship,
+        public ?RelationshipSide $side,
     ) {
-        if ($type === ColumnType::BigInteger) {
-            $size = 0;
+    }
+
+    /**
+     * @param  list<Filter|string>  $filters
+     */
+    public static function string(string $key, int $size = Database::LENGTH_KEY, bool $required = false, mixed $default = null, bool $array = false, ?Format $format = null, array $filters = []): self
+    {
+        return self::scalar($key, ColumnType::String, $size, $required, $default, true, $array, $format, $filters);
+    }
+
+    /**
+     * @param  list<Filter|string>  $filters
+     */
+    public static function varchar(string $key, int $size = Database::LENGTH_KEY, bool $required = false, mixed $default = null, bool $array = false, ?Format $format = null, array $filters = []): self
+    {
+        return self::scalar($key, ColumnType::Varchar, $size, $required, $default, true, $array, $format, $filters);
+    }
+
+    /**
+     * @param  list<Filter|string>  $filters
+     */
+    public static function text(string $key, ?int $size = null, bool $required = false, mixed $default = null, bool $array = false, ?Format $format = null, array $filters = []): self
+    {
+        return self::scalar($key, ColumnType::Text, $size, $required, $default, true, $array, $format, $filters);
+    }
+
+    /**
+     * @param  list<Filter|string>  $filters
+     */
+    public static function mediumText(string $key, ?int $size = null, bool $required = false, mixed $default = null, bool $array = false, ?Format $format = null, array $filters = []): self
+    {
+        return self::scalar($key, ColumnType::MediumText, $size, $required, $default, true, $array, $format, $filters);
+    }
+
+    /**
+     * @param  list<Filter|string>  $filters
+     */
+    public static function longText(string $key, ?int $size = null, bool $required = false, mixed $default = null, bool $array = false, ?Format $format = null, array $filters = []): self
+    {
+        return self::scalar($key, ColumnType::LongText, $size, $required, $default, true, $array, $format, $filters);
+    }
+
+    /**
+     * @param  int|list<int>|null  $default
+     * @param  list<Filter|string>  $filters
+     */
+    public static function integer(string $key, bool $required = false, int|array|null $default = null, bool $signed = true, bool $array = false, IntegerWidth $width = IntegerWidth::Bits32, ?Format $format = null, array $filters = []): self
+    {
+        return self::scalar($key, ColumnType::Integer, $width->size(), $required, $default, $signed, $array, $format, $filters);
+    }
+
+    /**
+     * @param  int|string|list<int|string>|null  $default
+     * @param  list<Filter|string>  $filters
+     */
+    public static function bigInteger(string $key, bool $required = false, int|string|array|null $default = null, bool $signed = true, bool $array = false, ?Format $format = null, array $filters = []): self
+    {
+        return self::scalar($key, ColumnType::BigInteger, null, $required, $default, $signed, $array, $format, $filters);
+    }
+
+    /**
+     * @param  float|int|list<float|int>|null  $default
+     * @param  list<Filter|string>  $filters
+     */
+    public static function float(string $key, bool $required = false, float|int|array|null $default = null, bool $signed = true, bool $array = false, ?Format $format = null, array $filters = []): self
+    {
+        return self::scalar($key, ColumnType::Float, null, $required, $default, $signed, $array, $format, $filters);
+    }
+
+    /**
+     * @param  float|int|list<float|int>|null  $default
+     * @param  list<Filter|string>  $filters
+     */
+    public static function double(string $key, bool $required = false, float|int|array|null $default = null, bool $signed = true, bool $array = false, ?Format $format = null, array $filters = []): self
+    {
+        return self::scalar($key, ColumnType::Double, null, $required, $default, $signed, $array, $format, $filters);
+    }
+
+    /**
+     * @param  bool|list<bool>|null  $default
+     * @param  list<Filter|string>  $filters
+     */
+    public static function boolean(string $key, bool $required = false, bool|array|null $default = null, bool $array = false, array $filters = []): self
+    {
+        return self::scalar($key, ColumnType::Boolean, null, $required, $default, true, $array, null, $filters);
+    }
+
+    /**
+     * @param  string|list<string>|null  $default
+     */
+    public static function datetime(string $key, bool $required = false, string|array|null $default = null, bool $array = false): self
+    {
+        return new self($key, ColumnType::Datetime, null, $required, $default, false, $array, null, [Filter::Datetime->value], null, null);
+    }
+
+    /**
+     * @param  array<mixed>|null  $default
+     */
+    public static function point(string $key, bool $required = false, ?array $default = null): self
+    {
+        return self::filtered($key, ColumnType::Point, null, $required, $default, Filter::Point);
+    }
+
+    /**
+     * @param  array<mixed>|null  $default
+     */
+    public static function lineString(string $key, bool $required = false, ?array $default = null): self
+    {
+        return self::filtered($key, ColumnType::Linestring, null, $required, $default, Filter::LineString);
+    }
+
+    /**
+     * @param  array<mixed>|null  $default
+     */
+    public static function polygon(string $key, bool $required = false, ?array $default = null): self
+    {
+        return self::filtered($key, ColumnType::Polygon, null, $required, $default, Filter::Polygon);
+    }
+
+    /**
+     * @param  list<float|int>|null  $default
+     */
+    public static function vector(string $key, int $dimensions, bool $required = false, ?array $default = null): self
+    {
+        return self::filtered($key, ColumnType::Vector, $dimensions, $required, $default, Filter::Vector);
+    }
+
+    /**
+     * @param  array<mixed>|null  $default
+     */
+    public static function object(string $key, bool $required = false, ?array $default = null): self
+    {
+        return self::filtered($key, ColumnType::Object, null, $required, $default, Filter::Object);
+    }
+
+    public static function id(string $key, bool $required = false, int|string|null $default = null, bool $array = false): self
+    {
+        return self::scalar($key, ColumnType::Id, null, $required, $default, true, $array, null, []);
+    }
+
+    /**
+     * @throws Structure
+     */
+    public static function relationship(string $key, Relationship $relationship, RelationshipSide $side): self
+    {
+        if ($relationship->key === null) {
+            $relationship = $relationship->apply(new RelationshipUpdate(key: $key));
+        } elseif ($relationship->key !== $key) {
+            throw new Structure('Relationship key "'.$relationship->key.'" does not match attribute key "'.$key.'"');
         }
 
-        $data = [
-            self::ID => $key,
-            'key' => $key,
-            'type' => self::persistedType($type),
-            'size' => $size,
-            'required' => $required,
-            'default' => $default,
-            'signed' => $signed,
-            'array' => $array,
-            'format' => $format === '' ? null : $format,
-            'formatOptions' => $formatOptions,
-            'filters' => $filters,
-        ];
-        if ($status !== null) {
-            $data['status'] = $status;
-        }
-        if ($options !== null) {
-            $data['options'] = $options;
-        }
-        parent::__construct($data);
+        return new self($key, ColumnType::Relationship, null, false, null, true, false, null, [], $relationship, $side);
     }
 
     /**
-     * @return (
-     *     $name is 'key' ? string :
-     *     $name is 'type' ? ColumnType :
-     *     $name is 'size' ? int :
-     *     $name is 'required' ? bool :
-     *     $name is 'default' ? mixed :
-     *     $name is 'signed' ? bool :
-     *     $name is 'array' ? bool :
-     *     $name is 'format' ? string|null :
-     *     $name is 'formatOptions' ? array<string, mixed> :
-     *     $name is 'filters' ? array<string> :
-     *     $name is 'status' ? string|null :
-     *     $name is 'options' ? array<string, mixed>|null :
-     *     mixed
-     * )
+     * @throws Structure
      */
-    public function __get(string $name): mixed
+    public static function fromDocument(Document $document): self
     {
-        return match ($name) {
-            'key' => $this->getKey(),
-            'type' => $this->getType(),
-            'size' => $this->getSize(),
-            'required' => $this->isRequired(),
-            'default' => $this->getDefault(),
-            'signed' => $this->isSigned(),
-            'array' => $this->isArray(),
-            'format' => $this->getFormat(),
-            'formatOptions' => $this->getFormatOptions(),
-            'filters' => $this->getFilters(),
-            'status' => $this->getStatus(),
-            'options' => $this->getOptions(),
-            default => $this->getAttribute($name),
-        };
-    }
+        $key = $document->getAttribute(self::KEY);
 
-    public function getKey(): string
-    {
-        /** @var string $key */
-        $key = $this->getAttribute('key', $this->getId());
-
-        return $key;
-    }
-
-    public function getType(): ColumnType
-    {
-        /** @var ColumnType|string $type */
-        $type = $this->getAttribute('type', ColumnType::String->value);
-
-        return self::normalizeType($type);
-    }
-
-    public function getSize(): int
-    {
-        /** @var int $size */
-        $size = $this->getAttribute('size', 0);
-
-        return $size;
-    }
-
-    public function isRequired(): bool
-    {
-        return (bool) $this->getAttribute('required', false);
-    }
-
-    public function getDefault(): mixed
-    {
-        return $this->getAttribute('default');
-    }
-
-    public function isSigned(): bool
-    {
-        return (bool) $this->getAttribute('signed', true);
-    }
-
-    public function isArray(): bool
-    {
-        return (bool) $this->getAttribute('array', false);
-    }
-
-    public function getFormat(): ?string
-    {
-        $format = $this->getAttribute('format');
-
-        return \is_string($format) && $format !== '' ? $format : null;
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    public function getFormatOptions(): array
-    {
-        $formatOptions = $this->getAttribute('formatOptions', []);
-        if (! \is_array($formatOptions)) {
-            return [];
-        }
-        /** @var array<string, mixed> $formatOptions */
-
-        return $formatOptions;
-    }
-
-    /**
-     * @return array<string>
-     */
-    public function getFilters(): array
-    {
-        $filters = $this->getAttribute('filters', []);
-        if (! \is_array($filters)) {
-            return [];
-        }
-        /** @var array<string> $filters */
-
-        return $filters;
-    }
-
-    /**
-     * @param  array<string>  $filters
-     */
-    public function setFilters(array $filters): static
-    {
-        return $this->setAttribute('filters', $filters);
-    }
-
-    public function getStatus(): ?string
-    {
-        $status = $this->getAttribute('status');
-
-        return \is_string($status) ? $status : null;
-    }
-
-    /**
-     * @return array<string, mixed>|null
-     */
-    public function getOptions(): ?array
-    {
-        $options = $this->getAttribute('options');
-        if (! \is_array($options)) {
-            return null;
-        }
-        /** @var array<string, mixed> $options */
-
-        return $options;
-    }
-
-    public function __set(string $name, mixed $value): void
-    {
-        match ($name) {
-            'key' => $this->setAttribute('key', $value)->setAttribute(self::ID, $value),
-            'type' => $this->setAttribute('type', $value),
-            'size' => $this->setAttribute('size', $value),
-            'required' => $this->setAttribute('required', $value),
-            'default' => $this->setAttribute('default', $value),
-            'signed' => $this->setAttribute('signed', $value),
-            'array' => $this->setAttribute('array', $value),
-            'format' => $this->setAttribute('format', $value === '' ? null : $value),
-            'formatOptions' => $this->setAttribute('formatOptions', $value),
-            'filters' => $this->setAttribute('filters', $value),
-            'status' => $this->setAttribute('status', $value),
-            'options' => $this->setAttribute('options', $value),
-            default => $this->setAttribute($name, $value),
-        };
-    }
-
-    public function __isset(string $name): bool
-    {
-        return match ($name) {
-            'key', 'type', 'size', 'required', 'default', 'signed', 'array', 'format', 'formatOptions', 'filters', 'status', 'options' => true,
-            default => $this->offsetExists($name),
-        };
-    }
-
-    /**
-     * @param  string|null  $key
-     */
-    #[\Override]
-    public function offsetSet(mixed $key, mixed $value): void
-    {
-        $type = $key === 'type' && ($value instanceof ColumnType || \is_string($value))
-            ? self::tryNormalizeType($value)
-            : null;
-
-        parent::offsetSet($key, $type === null ? $value : self::persistedType($type));
-    }
-
-    /**
-     * @param  array<string, mixed>  $formatOptions
-     * @param  array<string>  $filters
-     * @param  array<string, mixed>|null  $options
-     */
-    public static function string(
-        string $key = '',
-        int $size = Database::LENGTH_KEY,
-        bool $required = false,
-        mixed $default = null,
-        bool $signed = true,
-        bool $array = false,
-        ?string $format = null,
-        array $formatOptions = [],
-        array $filters = [],
-        ?string $status = null,
-        ?array $options = null,
-    ): Attribute\StringType {
-        return new Attribute\StringType(
-            key: $key,
-            size: $size,
-            required: $required,
-            default: $default,
-            signed: $signed,
-            array: $array,
-            format: $format,
-            formatOptions: $formatOptions,
-            filters: $filters,
-            status: $status,
-            options: $options,
+        return self::hydrate(
+            \is_string($key) ? $key : $document->getId(),
+            $document->getAttribute(self::TYPE),
+            $document->getAttribute(self::SIZE),
+            $document->getAttribute(self::REQUIRED),
+            $document->getAttribute(self::DEFAULT),
+            $document->getAttribute(self::SIGNED),
+            $document->getAttribute(self::ARRAY),
+            $document->getAttribute(self::FORMAT),
+            $document->getAttribute(self::FORMAT_OPTIONS),
+            $document->getAttribute(self::FILTERS),
+            $document->getAttribute(self::OPTIONS),
         );
     }
 
     /**
-     * @param  array<string, mixed>  $formatOptions
-     * @param  array<string>  $filters
-     * @param  array<string, mixed>|null  $options
-     */
-    public static function varchar(
-        string $key = '',
-        int $size = Database::LENGTH_KEY,
-        bool $required = false,
-        mixed $default = null,
-        bool $signed = true,
-        bool $array = false,
-        ?string $format = null,
-        array $formatOptions = [],
-        array $filters = [],
-        ?string $status = null,
-        ?array $options = null,
-    ): Attribute\Varchar {
-        return new Attribute\Varchar(
-            key: $key,
-            size: $size,
-            required: $required,
-            default: $default,
-            signed: $signed,
-            array: $array,
-            format: $format,
-            formatOptions: $formatOptions,
-            filters: $filters,
-            status: $status,
-            options: $options,
-        );
-    }
-
-    /**
-     * @param  array<string, mixed>  $formatOptions
-     * @param  array<string>  $filters
-     * @param  array<string, mixed>|null  $options
-     */
-    public static function text(
-        string $key = '',
-        int $size = 0,
-        bool $required = false,
-        mixed $default = null,
-        bool $signed = true,
-        bool $array = false,
-        ?string $format = null,
-        array $formatOptions = [],
-        array $filters = [],
-        ?string $status = null,
-        ?array $options = null,
-    ): Attribute\Text {
-        return new Attribute\Text(
-            key: $key,
-            size: $size,
-            required: $required,
-            default: $default,
-            signed: $signed,
-            array: $array,
-            format: $format,
-            formatOptions: $formatOptions,
-            filters: $filters,
-            status: $status,
-            options: $options,
-        );
-    }
-
-    /**
-     * A text attribute declared without a size (size 0, the default of text(), mediumText() and
-     * longText()) holds up to the engine's maximum for its type.
-     */
-    public function resolvedSize(): int
-    {
-        $size = $this->getSize();
-        if ($size > 0) {
-            return $size;
-        }
-
-        return match ($this->getType()) {
-            ColumnType::Text => Database::MAX_TEXT_BYTES,
-            ColumnType::MediumText => Database::MAX_MEDIUMTEXT_BYTES,
-            ColumnType::LongText => Database::MAX_LONGTEXT_BYTES,
-            default => $size,
-        };
-    }
-
-    /**
-     * @param  array<string, mixed>  $formatOptions
-     * @param  array<string>  $filters
-     * @param  array<string, mixed>|null  $options
-     */
-    public static function mediumText(
-        string $key = '',
-        int $size = 0,
-        bool $required = false,
-        mixed $default = null,
-        bool $signed = true,
-        bool $array = false,
-        ?string $format = null,
-        array $formatOptions = [],
-        array $filters = [],
-        ?string $status = null,
-        ?array $options = null,
-    ): Attribute\MediumText {
-        return new Attribute\MediumText(
-            key: $key,
-            size: $size,
-            required: $required,
-            default: $default,
-            signed: $signed,
-            array: $array,
-            format: $format,
-            formatOptions: $formatOptions,
-            filters: $filters,
-            status: $status,
-            options: $options,
-        );
-    }
-
-    /**
-     * @param  array<string, mixed>  $formatOptions
-     * @param  array<string>  $filters
-     * @param  array<string, mixed>|null  $options
-     */
-    public static function longText(
-        string $key = '',
-        int $size = 0,
-        bool $required = false,
-        mixed $default = null,
-        bool $signed = true,
-        bool $array = false,
-        ?string $format = null,
-        array $formatOptions = [],
-        array $filters = [],
-        ?string $status = null,
-        ?array $options = null,
-    ): Attribute\LongText {
-        return new Attribute\LongText(
-            key: $key,
-            size: $size,
-            required: $required,
-            default: $default,
-            signed: $signed,
-            array: $array,
-            format: $format,
-            formatOptions: $formatOptions,
-            filters: $filters,
-            status: $status,
-            options: $options,
-        );
-    }
-
-    /**
-     * @param  array<string, mixed>  $formatOptions
-     * @param  array<string>  $filters
-     * @param  array<string, mixed>|null  $options
-     */
-    public static function integer(
-        string $key = '',
-        int $size = 0,
-        bool $required = false,
-        mixed $default = null,
-        bool $signed = true,
-        bool $array = false,
-        ?string $format = null,
-        array $formatOptions = [],
-        array $filters = [],
-        ?string $status = null,
-        ?array $options = null,
-    ): Attribute\Integer {
-        return new Attribute\Integer(
-            key: $key,
-            size: $size,
-            required: $required,
-            default: $default,
-            signed: $signed,
-            array: $array,
-            format: $format,
-            formatOptions: $formatOptions,
-            filters: $filters,
-            status: $status,
-            options: $options,
-        );
-    }
-
-    /**
-     * @param  array<string, mixed>  $formatOptions
-     * @param  array<string>  $filters
-     * @param  array<string, mixed>|null  $options
-     */
-    public static function bigInteger(
-        string $key = '',
-        int $size = 0,
-        bool $required = false,
-        mixed $default = null,
-        bool $signed = true,
-        bool $array = false,
-        ?string $format = null,
-        array $formatOptions = [],
-        array $filters = [],
-        ?string $status = null,
-        ?array $options = null,
-    ): Attribute\BigInteger {
-        return new Attribute\BigInteger(
-            key: $key,
-            size: $size,
-            required: $required,
-            default: $default,
-            signed: $signed,
-            array: $array,
-            format: $format,
-            formatOptions: $formatOptions,
-            filters: $filters,
-            status: $status,
-            options: $options,
-        );
-    }
-
-    /**
-     * @param  array<string, mixed>  $formatOptions
-     * @param  array<string>  $filters
-     * @param  array<string, mixed>|null  $options
-     */
-    public static function float(
-        string $key = '',
-        int $size = 0,
-        bool $required = false,
-        mixed $default = null,
-        bool $signed = true,
-        bool $array = false,
-        ?string $format = null,
-        array $formatOptions = [],
-        array $filters = [],
-        ?string $status = null,
-        ?array $options = null,
-    ): Attribute\FloatType {
-        return new Attribute\FloatType(
-            key: $key,
-            size: $size,
-            required: $required,
-            default: $default,
-            signed: $signed,
-            array: $array,
-            format: $format,
-            formatOptions: $formatOptions,
-            filters: $filters,
-            status: $status,
-            options: $options,
-        );
-    }
-
-    /**
-     * @param  array<string, mixed>  $formatOptions
-     * @param  array<string>  $filters
-     * @param  array<string, mixed>|null  $options
-     */
-    public static function double(
-        string $key = '',
-        int $size = 0,
-        bool $required = false,
-        mixed $default = null,
-        bool $signed = true,
-        bool $array = false,
-        ?string $format = null,
-        array $formatOptions = [],
-        array $filters = [],
-        ?string $status = null,
-        ?array $options = null,
-    ): Attribute\Double {
-        return new Attribute\Double(
-            key: $key,
-            size: $size,
-            required: $required,
-            default: $default,
-            signed: $signed,
-            array: $array,
-            format: $format,
-            formatOptions: $formatOptions,
-            filters: $filters,
-            status: $status,
-            options: $options,
-        );
-    }
-
-    /**
-     * @param  array<string, mixed>  $formatOptions
-     * @param  array<string>  $filters
-     * @param  array<string, mixed>|null  $options
-     */
-    public static function boolean(
-        string $key = '',
-        int $size = 0,
-        bool $required = false,
-        mixed $default = null,
-        bool $signed = true,
-        bool $array = false,
-        ?string $format = null,
-        array $formatOptions = [],
-        array $filters = [],
-        ?string $status = null,
-        ?array $options = null,
-    ): Attribute\Boolean {
-        return new Attribute\Boolean(
-            key: $key,
-            size: $size,
-            required: $required,
-            default: $default,
-            signed: $signed,
-            array: $array,
-            format: $format,
-            formatOptions: $formatOptions,
-            filters: $filters,
-            status: $status,
-            options: $options,
-        );
-    }
-
-    /**
-     * @param  array<string, mixed>  $formatOptions
-     * @param  array<string>  $filters
-     * @param  array<string, mixed>|null  $options
-     */
-    public static function datetime(
-        string $key = '',
-        int $size = 0,
-        bool $required = false,
-        mixed $default = null,
-        bool $signed = true,
-        bool $array = false,
-        ?string $format = null,
-        array $formatOptions = [],
-        array $filters = [],
-        ?string $status = null,
-        ?array $options = null,
-    ): Attribute\Datetime {
-        return new Attribute\Datetime(
-            key: $key,
-            size: $size,
-            required: $required,
-            default: $default,
-            signed: $signed,
-            array: $array,
-            format: $format,
-            formatOptions: $formatOptions,
-            filters: $filters,
-            status: $status,
-            options: $options,
-        );
-    }
-
-    /**
-     * @param  array<string, mixed>  $formatOptions
-     * @param  array<string>  $filters
-     * @param  array<string, mixed>|null  $options
-     */
-    public static function point(
-        string $key = '',
-        int $size = 0,
-        bool $required = false,
-        mixed $default = null,
-        bool $signed = true,
-        bool $array = false,
-        ?string $format = null,
-        array $formatOptions = [],
-        array $filters = [],
-        ?string $status = null,
-        ?array $options = null,
-    ): Attribute\Point {
-        return new Attribute\Point(
-            key: $key,
-            size: $size,
-            required: $required,
-            default: $default,
-            signed: $signed,
-            array: $array,
-            format: $format,
-            formatOptions: $formatOptions,
-            filters: $filters,
-            status: $status,
-            options: $options,
-        );
-    }
-
-    /**
-     * @param  array<string, mixed>  $formatOptions
-     * @param  array<string>  $filters
-     * @param  array<string, mixed>|null  $options
-     */
-    public static function linestring(
-        string $key = '',
-        int $size = 0,
-        bool $required = false,
-        mixed $default = null,
-        bool $signed = true,
-        bool $array = false,
-        ?string $format = null,
-        array $formatOptions = [],
-        array $filters = [],
-        ?string $status = null,
-        ?array $options = null,
-    ): Attribute\Linestring {
-        return new Attribute\Linestring(
-            key: $key,
-            size: $size,
-            required: $required,
-            default: $default,
-            signed: $signed,
-            array: $array,
-            format: $format,
-            formatOptions: $formatOptions,
-            filters: $filters,
-            status: $status,
-            options: $options,
-        );
-    }
-
-    /**
-     * @param  array<string, mixed>  $formatOptions
-     * @param  array<string>  $filters
-     * @param  array<string, mixed>|null  $options
-     */
-    public static function polygon(
-        string $key = '',
-        int $size = 0,
-        bool $required = false,
-        mixed $default = null,
-        bool $signed = true,
-        bool $array = false,
-        ?string $format = null,
-        array $formatOptions = [],
-        array $filters = [],
-        ?string $status = null,
-        ?array $options = null,
-    ): Attribute\Polygon {
-        return new Attribute\Polygon(
-            key: $key,
-            size: $size,
-            required: $required,
-            default: $default,
-            signed: $signed,
-            array: $array,
-            format: $format,
-            formatOptions: $formatOptions,
-            filters: $filters,
-            status: $status,
-            options: $options,
-        );
-    }
-
-    /**
-     * @param  array<string, mixed>  $formatOptions
-     * @param  array<string>  $filters
-     * @param  array<string, mixed>|null  $options
-     */
-    public static function vector(
-        string $key = '',
-        int $size = 0,
-        bool $required = false,
-        mixed $default = null,
-        bool $signed = true,
-        bool $array = false,
-        ?string $format = null,
-        array $formatOptions = [],
-        array $filters = [],
-        ?string $status = null,
-        ?array $options = null,
-    ): Attribute\Vector {
-        return new Attribute\Vector(
-            key: $key,
-            size: $size,
-            required: $required,
-            default: $default,
-            signed: $signed,
-            array: $array,
-            format: $format,
-            formatOptions: $formatOptions,
-            filters: $filters,
-            status: $status,
-            options: $options,
-        );
-    }
-
-    /**
-     * @param  array<string, mixed>  $formatOptions
-     * @param  array<string>  $filters
-     * @param  array<string, mixed>|null  $options
-     */
-    public static function id(
-        string $key = '',
-        int $size = 0,
-        bool $required = false,
-        mixed $default = null,
-        bool $signed = true,
-        bool $array = false,
-        ?string $format = null,
-        array $formatOptions = [],
-        array $filters = [],
-        ?string $status = null,
-        ?array $options = null,
-    ): Attribute\Id {
-        return new Attribute\Id(
-            key: $key,
-            size: $size,
-            required: $required,
-            default: $default,
-            signed: $signed,
-            array: $array,
-            format: $format,
-            formatOptions: $formatOptions,
-            filters: $filters,
-            status: $status,
-            options: $options,
-        );
-    }
-
-    /**
-     * @param  array<string, mixed>  $formatOptions
-     * @param  array<string>  $filters
-     * @param  array<string, mixed>|null  $options
-     */
-    public static function object(
-        string $key = '',
-        int $size = 0,
-        bool $required = false,
-        mixed $default = null,
-        bool $signed = true,
-        bool $array = false,
-        ?string $format = null,
-        array $formatOptions = [],
-        array $filters = [],
-        ?string $status = null,
-        ?array $options = null,
-    ): Attribute\ObjectType {
-        return new Attribute\ObjectType(
-            key: $key,
-            size: $size,
-            required: $required,
-            default: $default,
-            signed: $signed,
-            array: $array,
-            format: $format,
-            formatOptions: $formatOptions,
-            filters: $filters,
-            status: $status,
-            options: $options,
-        );
-    }
-
-    /**
-     * @param  array<string, mixed>  $formatOptions
-     * @param  array<string>  $filters
-     * @param  array<string, mixed>|null  $options
-     */
-    public static function relationship(
-        string $key = '',
-        int $size = 0,
-        bool $required = false,
-        mixed $default = null,
-        bool $signed = true,
-        bool $array = false,
-        ?string $format = null,
-        array $formatOptions = [],
-        array $filters = [],
-        ?string $status = null,
-        ?array $options = null,
-    ): Attribute\Relationship {
-        return new Attribute\Relationship(
-            key: $key,
-            size: $size,
-            required: $required,
-            default: $default,
-            signed: $signed,
-            array: $array,
-            format: $format,
-            formatOptions: $formatOptions,
-            filters: $filters,
-            status: $status,
-            options: $options,
-        );
-    }
-
-    public static function persistedType(ColumnType $type): string
-    {
-        return $type === ColumnType::BigInteger ? self::PERSISTED_BIG_INTEGER : $type->value;
-    }
-
-    public static function normalizeType(ColumnType|string $type): ColumnType
-    {
-        if ($type instanceof ColumnType) {
-            return $type;
-        }
-
-        return $type === self::PERSISTED_BIG_INTEGER ? ColumnType::BigInteger : ColumnType::from($type);
-    }
-
-    public static function tryNormalizeType(ColumnType|string $type): ?ColumnType
-    {
-        if ($type instanceof ColumnType) {
-            return $type;
-        }
-
-        return $type === self::PERSISTED_BIG_INTEGER ? ColumnType::BigInteger : ColumnType::tryFrom($type);
-    }
-
-    /**
-     * The types in {@see self::TYPES} that the given capabilities make available, in table order.
+     * @param  array<string, mixed>  $data
      *
-     * @return list<ColumnType>
+     * @throws Structure
      */
-    public static function availableTypes(bool $objects, bool $spatial, bool $vectors): array
+    public static function fromArray(array $data): self
     {
-        return \array_values(\array_filter(
-            self::TYPES,
-            fn (ColumnType $type): bool => match (true) {
-                $type === ColumnType::Object => $objects,
-                self::isSpatialType($type) => $spatial,
-                $type === ColumnType::Vector => $vectors,
-                default => true,
-            },
-        ));
+        $key = $data[self::KEY] ?? $data[Document::ID] ?? '';
+
+        return self::hydrate(
+            \is_string($key) ? $key : '',
+            $data[self::TYPE] ?? null,
+            $data[self::SIZE] ?? null,
+            $data[self::REQUIRED] ?? null,
+            $data[self::DEFAULT] ?? null,
+            $data[self::SIGNED] ?? null,
+            $data[self::ARRAY] ?? null,
+            $data[self::FORMAT] ?? null,
+            $data[self::FORMAT_OPTIONS] ?? null,
+            $data[self::FILTERS] ?? null,
+            $data[self::OPTIONS] ?? null,
+        );
     }
 
-    public static function isSpatialType(ColumnType|string $type): bool
-    {
-        $type = self::tryNormalizeType($type);
-
-        return \in_array($type, [
-            ColumnType::Point,
-            ColumnType::Linestring,
-            ColumnType::Polygon,
-        ], true);
-    }
-
-    public static function isNumericType(ColumnType|string $type): bool
-    {
-        $type = self::tryNormalizeType($type);
-
-        return \in_array($type, [
-            ColumnType::Integer,
-            ColumnType::BigInteger,
-            ColumnType::Float,
-            ColumnType::Double,
-        ], true);
-    }
-
-    public static function isIntegerType(ColumnType|string $type): bool
-    {
-        $type = self::tryNormalizeType($type);
-
-        return \in_array($type, [
-            ColumnType::Integer,
-            ColumnType::BigInteger,
-        ], true);
-    }
-
-    /**
-     * @return array{min: int|float|string, max: int|float|string}|null
-     */
-    public static function getNumericBounds(ColumnType|string $type, bool $signed = true): ?array
-    {
-        $type = self::tryNormalizeType($type);
-
-        return match ($type) {
-            ColumnType::Integer => [
-                'min' => $signed ? Database::MIN_INT : 0,
-                'max' => Database::MAX_INT,
-            ],
-            ColumnType::BigInteger => [
-                'min' => $signed ? \PHP_INT_MIN : 0,
-                'max' => $signed ? Database::MAX_BIG_INT : BigInt::UNSIGNED_MAX,
-            ],
-            ColumnType::Float,
-            ColumnType::Double => [
-                'min' => $signed ? -Database::MAX_DOUBLE : 0,
-                'max' => Database::MAX_DOUBLE,
-            ],
-            default => null,
-        };
-    }
-
-    /**
-     * Convert this attribute to a Document representation.
-     *
-     * @return Document
-     */
     public function toDocument(): Document
     {
-        $key = $this->getKey();
         $data = [
-            Document::ID => ID::custom($key),
-            'key' => $key,
-            'type' => self::persistedType($this->getType()),
-            'size' => $this->getSize(),
-            'required' => $this->isRequired(),
-            'default' => $this->getDefault(),
-            'signed' => $this->isSigned(),
-            'array' => $this->isArray(),
-            'format' => $this->getFormat(),
-            'formatOptions' => $this->getFormatOptions(),
-            'filters' => $this->getFilters(),
+            Document::ID => $this->key,
+            self::KEY => $this->key,
+            self::TYPE => self::storedType($this->type),
+            self::SIZE => $this->size ?? 0,
+            self::REQUIRED => $this->required,
+            self::DEFAULT => $this->default,
+            self::SIGNED => $this->signed,
+            self::ARRAY => $this->array,
+            self::FORMAT => $this->format?->name,
+            self::FORMAT_OPTIONS => $this->format === null ? [] : $this->format->options,
+            self::FILTERS => $this->filters,
         ];
 
-        $status = $this->getStatus();
-        if ($status !== null) {
-            $data['status'] = $status;
-        }
-
-        $options = $this->getOptions();
-        if ($options !== null) {
-            $data['options'] = $options;
+        if ($this->relationship !== null) {
+            $data[self::OPTIONS] = [
+                self::RELATED_COLLECTION => $this->relationship->relatedCollection,
+                self::RELATION_TYPE => $this->relationship->type->value,
+                self::TWO_WAY => $this->relationship->twoWay,
+                self::TWO_WAY_KEY => $this->relationship->twoWayKey,
+                self::ON_DELETE => $this->relationship->onDelete->value,
+                self::SIDE => $this->side?->value,
+            ];
         }
 
         return new Document($data);
     }
 
     /**
-     * Create an Attribute instance from a Document.
-     *
-     * @param Document $document The document to convert
-     * @return self
+     * @throws Structure
      */
-    public static function fromDocument(Document $document): self
+    public function apply(AttributeUpdate $update): self
     {
-        /** @var string $key */
-        $key = $document->getAttribute('key', $document->getId());
-        /** @var ColumnType|string $type */
-        $type = $document->getAttribute('type', 'string');
-        /** @var int $size */
-        $size = $document->getAttribute('size', 0);
-        /** @var bool $required */
-        $required = $document->getAttribute('required', false);
-        /** @var bool $signed */
-        $signed = $document->getAttribute('signed', true);
-        /** @var bool $array */
-        $array = $document->getAttribute('array', false);
-        /** @var string|null $format */
-        $format = $document->getAttribute('format');
-        /** @var array<string, mixed> $formatOptions */
-        $formatOptions = $document->getAttribute('formatOptions', []);
-        /** @var array<string> $filters */
-        $filters = $document->getAttribute('filters', []);
-        /** @var string|null $status */
-        $status = $document->getAttribute('status');
-        /** @var array<string, mixed>|null $options */
-        $options = $document->getAttribute('options');
-
-        return self::make(
-            key: $key,
-            type: self::normalizeType($type),
-            size: $size,
-            required: $required,
-            default: $document->getAttribute('default'),
-            signed: $signed,
-            array: $array,
-            format: $format,
-            formatOptions: $formatOptions,
-            filters: $filters,
-            status: $status,
-            options: $options,
-        );
-    }
-
-    /**
-     * Cheap relationship-type check that avoids materializing a typed Attribute.
-     * Use in hot read paths where only the type matters.
-     *
-     * Mirrors the normalization in {@see self::fromDocument()} — accepts both
-     * the (always-stored) string form and the defensive ColumnType-enum form.
-     */
-    public static function isRelationship(self|Document $attribute): bool
-    {
-        $type = $attribute->getAttribute('type');
-
-        if ($type === ColumnType::Relationship->value || $type === ColumnType::Relationship) {
-            return true;
-        }
-
-        if (! $attribute instanceof self || $type instanceof ColumnType || (\is_string($type) && isset(self::storedTypes()[$type]))) {
-            return false;
-        }
-
-        return $attribute->getType() === ColumnType::Relationship;
-    }
-
-    /**
-     * Every type string an attribute can be stored with, as keys.
-     *
-     * @return array<string, true>
-     */
-    private static function storedTypes(): array
-    {
-        if (self::$storedTypes === null) {
-            $types = [self::PERSISTED_BIG_INTEGER => true];
-            foreach (ColumnType::cases() as $case) {
-                $types[$case->value] = true;
+        $type = $update->type ?? $this->type;
+        if ($type !== $this->type) {
+            if ($type === ColumnType::Relationship || $this->type === ColumnType::Relationship) {
+                throw new Structure('A relationship attribute cannot change type; use updateRelationship()');
             }
-            self::$storedTypes = $types;
+            self::assertType($type);
         }
 
-        return self::$storedTypes;
-    }
+        $key = $update->key ?? $this->key;
+        $relationship = $this->relationship;
+        if ($relationship !== null && $relationship->key !== $key) {
+            $relationship = $relationship->apply(new RelationshipUpdate(key: $key));
+        }
 
-    /**
-     * Create from an associative array (used by batch operations).
-     *
-     * @param  array<string, mixed>  $data
-     * @return self
-     */
-    public static function fromArray(array $data): self
-    {
-        /** @var ColumnType|string $type */
-        $type = $data['type'] ?? 'string';
-
-        /** @var string $key */
-        $key = $data[Document::ID] ?? $data['key'] ?? '';
-        /** @var int $size */
-        $size = $data['size'] ?? 0;
-        /** @var bool $required */
-        $required = $data['required'] ?? false;
-        /** @var bool $signed */
-        $signed = $data['signed'] ?? true;
-        /** @var bool $array */
-        $array = $data['array'] ?? false;
-        /** @var string|null $format */
-        $format = $data['format'] ?? null;
-        /** @var array<string, mixed> $formatOptions */
-        $formatOptions = $data['formatOptions'] ?? [];
-        /** @var array<string> $filters */
-        $filters = $data['filters'] ?? [];
-        /** @var string|null $status */
-        $status = $data['status'] ?? null;
-        /** @var array<string, mixed>|null $options */
-        $options = $data['options'] ?? null;
-
-        return self::make(
-            key: $key,
-            type: self::normalizeType($type),
-            size: $size,
-            required: $required,
-            default: $data['default'] ?? null,
-            signed: $signed,
-            array: $array,
-            format: $format,
-            formatOptions: $formatOptions,
-            filters: $filters,
-            status: $status,
-            options: $options,
+        return new self(
+            $key,
+            $type,
+            self::normalizeSize($update->size ?? $this->size),
+            $update->required ?? $this->required,
+            $update->changesDefault() ? $update->default : $this->default,
+            $update->signed ?? $this->signed,
+            $update->array ?? $this->array,
+            $update->format ?? $this->format,
+            $update->filters === null ? $this->filters : Filter::names($update->filters),
+            $relationship,
+            $this->side,
         );
     }
 
+    /**
+     * @param  list<Filter|string>  $filters
+     */
+    public function withFilters(array $filters): self
+    {
+        return new self(
+            $this->key,
+            $this->type,
+            $this->size,
+            $this->required,
+            $this->default,
+            $this->signed,
+            $this->array,
+            $this->format,
+            Filter::names($filters),
+            $this->relationship,
+            $this->side,
+        );
+    }
+
+    public function width(): ?IntegerWidth
+    {
+        return $this->type === ColumnType::Integer ? IntegerWidth::fromSize($this->size) : null;
+    }
+
+    public function resolvedSize(): int
+    {
+        if ($this->size !== null && $this->size > 0) {
+            return $this->size;
+        }
+
+        return match ($this->type) {
+            ColumnType::Text => Database::MAX_TEXT_BYTES,
+            ColumnType::MediumText => Database::MAX_MEDIUMTEXT_BYTES,
+            ColumnType::LongText => Database::MAX_LONGTEXT_BYTES,
+            default => 0,
+        };
+    }
+
+    public function isSpatial(): bool
+    {
+        return match ($this->type) {
+            ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon => true,
+            default => false,
+        };
+    }
+
+    public function isNumeric(): bool
+    {
+        return match ($this->type) {
+            ColumnType::Integer, ColumnType::BigInteger, ColumnType::Float, ColumnType::Double => true,
+            default => false,
+        };
+    }
+
+    public function isInteger(): bool
+    {
+        return $this->type === ColumnType::Integer || $this->type === ColumnType::BigInteger;
+    }
+
+    public function bounds(): ?NumericBounds
+    {
+        return match ($this->type) {
+            ColumnType::Integer => new NumericBounds(
+                $this->signed ? Database::MIN_INT : 0,
+                Database::MAX_INT,
+            ),
+            ColumnType::BigInteger => new NumericBounds(
+                $this->signed ? \PHP_INT_MIN : 0,
+                $this->signed ? Database::MAX_BIG_INT : BigInt::UNSIGNED_MAX,
+            ),
+            ColumnType::Float, ColumnType::Double => new NumericBounds(
+                $this->signed ? -Database::MAX_DOUBLE : 0,
+                Database::MAX_DOUBLE,
+            ),
+            default => null,
+        };
+    }
+
+    public static function isRelationship(Document $attribute): bool
+    {
+        $type = $attribute->getAttribute(self::TYPE);
+
+        return $type === ColumnType::Relationship->value || $type === ColumnType::Relationship;
+    }
 
     /**
-     * @param  array<string, mixed>  $formatOptions
-     * @param  array<string>  $filters
-     * @param  array<string, mixed>|null  $options
+     * @throws Structure
      */
-    private static function make(
+    public static function typeFromStored(string $type): ColumnType
+    {
+        $columnType = $type === self::STORED_BIG_INTEGER ? ColumnType::BigInteger : ColumnType::tryFrom($type);
+        if ($columnType === null) {
+            throw new Structure('Unknown attribute type: '.$type);
+        }
+
+        self::assertType($columnType);
+
+        return $columnType;
+    }
+
+    public static function storedType(ColumnType $type): string
+    {
+        return $type === ColumnType::BigInteger ? self::STORED_BIG_INTEGER : $type->value;
+    }
+
+    /**
+     * @return list<ColumnType>
+     */
+    public static function availableTypes(Profile $profile): array
+    {
+        $objects = $profile->supports(Capability::Objects);
+        $spatial = $profile->hasFeature(Feature\Spatial::class);
+        $vectors = $profile->supports(Capability::Vectors);
+
+        $types = [];
+        foreach (self::TYPES as $type) {
+            $available = match ($type) {
+                ColumnType::Object => $objects,
+                ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon => $spatial,
+                ColumnType::Vector => $vectors,
+                default => true,
+            };
+            if ($available) {
+                $types[] = $type;
+            }
+        }
+
+        return $types;
+    }
+
+    /**
+     * @param  list<Filter|string>  $filters
+     */
+    private static function scalar(string $key, ColumnType $type, ?int $size, bool $required, mixed $default, bool $signed, bool $array, ?Format $format, array $filters): self
+    {
+        return new self($key, $type, self::normalizeSize($size), $required, $default, $signed, $array, $format, Filter::names($filters), null, null);
+    }
+
+    /**
+     * @param  array<mixed>|null  $default
+     */
+    private static function filtered(string $key, ColumnType $type, ?int $size, bool $required, ?array $default, Filter $filter): self
+    {
+        return new self($key, $type, self::normalizeSize($size), $required, $default, true, false, null, [$filter->value], null, null);
+    }
+
+    private static function normalizeSize(?int $size): ?int
+    {
+        return $size === 0 ? null : $size;
+    }
+
+    /**
+     * @throws Structure
+     */
+    private static function assertType(ColumnType $type): void
+    {
+        if (! \in_array($type, self::TYPES, true)) {
+            throw new Structure('Unknown attribute type: '.$type->value);
+        }
+    }
+
+    /**
+     * @throws Structure
+     */
+    private static function resolveType(mixed $type): ColumnType
+    {
+        if (\is_string($type)) {
+            return self::typeFromStored($type);
+        }
+
+        if ($type instanceof ColumnType) {
+            self::assertType($type);
+
+            return $type;
+        }
+
+        throw new Structure('Attribute type must be a string, '.\get_debug_type($type).' given');
+    }
+
+    /**
+     * @throws Structure
+     */
+    private static function hydrate(
         string $key,
-        ColumnType $type,
-        int $size,
-        bool $required,
+        mixed $type,
+        mixed $size,
+        mixed $required,
         mixed $default,
-        bool $signed,
-        bool $array,
-        ?string $format,
-        array $formatOptions,
-        array $filters,
-        ?string $status = null,
-        ?array $options = null,
+        mixed $signed,
+        mixed $array,
+        mixed $format,
+        mixed $formatOptions,
+        mixed $filters,
+        mixed $options,
     ): self {
-        return match ($type) {
-            ColumnType::String => new Attribute\StringType(
-                key: $key,
-                size: $size,
-                required: $required,
-                default: $default,
-                signed: $signed,
-                array: $array,
-                format: $format,
-                formatOptions: $formatOptions,
-                filters: $filters,
-                status: $status,
-                options: $options,
-            ),
-            ColumnType::Varchar => new Attribute\Varchar(
-                key: $key,
-                size: $size,
-                required: $required,
-                default: $default,
-                signed: $signed,
-                array: $array,
-                format: $format,
-                formatOptions: $formatOptions,
-                filters: $filters,
-                status: $status,
-                options: $options,
-            ),
-            ColumnType::Text => new Attribute\Text(
-                key: $key,
-                size: $size,
-                required: $required,
-                default: $default,
-                signed: $signed,
-                array: $array,
-                format: $format,
-                formatOptions: $formatOptions,
-                filters: $filters,
-                status: $status,
-                options: $options,
-            ),
-            ColumnType::MediumText => new Attribute\MediumText(
-                key: $key,
-                size: $size,
-                required: $required,
-                default: $default,
-                signed: $signed,
-                array: $array,
-                format: $format,
-                formatOptions: $formatOptions,
-                filters: $filters,
-                status: $status,
-                options: $options,
-            ),
-            ColumnType::LongText => new Attribute\LongText(
-                key: $key,
-                size: $size,
-                required: $required,
-                default: $default,
-                signed: $signed,
-                array: $array,
-                format: $format,
-                formatOptions: $formatOptions,
-                filters: $filters,
-                status: $status,
-                options: $options,
-            ),
-            ColumnType::Integer => new Attribute\Integer(
-                key: $key,
-                size: $size,
-                required: $required,
-                default: $default,
-                signed: $signed,
-                array: $array,
-                format: $format,
-                formatOptions: $formatOptions,
-                filters: $filters,
-                status: $status,
-                options: $options,
-            ),
-            ColumnType::BigInteger => new Attribute\BigInteger(
-                key: $key,
-                size: $size,
-                required: $required,
-                default: $default,
-                signed: $signed,
-                array: $array,
-                format: $format,
-                formatOptions: $formatOptions,
-                filters: $filters,
-                status: $status,
-                options: $options,
-            ),
-            ColumnType::Float => new Attribute\FloatType(
-                key: $key,
-                size: $size,
-                required: $required,
-                default: $default,
-                signed: $signed,
-                array: $array,
-                format: $format,
-                formatOptions: $formatOptions,
-                filters: $filters,
-                status: $status,
-                options: $options,
-            ),
-            ColumnType::Double => new Attribute\Double(
-                key: $key,
-                size: $size,
-                required: $required,
-                default: $default,
-                signed: $signed,
-                array: $array,
-                format: $format,
-                formatOptions: $formatOptions,
-                filters: $filters,
-                status: $status,
-                options: $options,
-            ),
-            ColumnType::Boolean => new Attribute\Boolean(
-                key: $key,
-                size: $size,
-                required: $required,
-                default: $default,
-                signed: $signed,
-                array: $array,
-                format: $format,
-                formatOptions: $formatOptions,
-                filters: $filters,
-                status: $status,
-                options: $options,
-            ),
-            ColumnType::Datetime => new Attribute\Datetime(
-                key: $key,
-                size: $size,
-                required: $required,
-                default: $default,
-                signed: $signed,
-                array: $array,
-                format: $format,
-                formatOptions: $formatOptions,
-                filters: $filters,
-                status: $status,
-                options: $options,
-            ),
-            ColumnType::Point => new Attribute\Point(
-                key: $key,
-                size: $size,
-                required: $required,
-                default: $default,
-                signed: $signed,
-                array: $array,
-                format: $format,
-                formatOptions: $formatOptions,
-                filters: $filters,
-                status: $status,
-                options: $options,
-            ),
-            ColumnType::Linestring => new Attribute\Linestring(
-                key: $key,
-                size: $size,
-                required: $required,
-                default: $default,
-                signed: $signed,
-                array: $array,
-                format: $format,
-                formatOptions: $formatOptions,
-                filters: $filters,
-                status: $status,
-                options: $options,
-            ),
-            ColumnType::Polygon => new Attribute\Polygon(
-                key: $key,
-                size: $size,
-                required: $required,
-                default: $default,
-                signed: $signed,
-                array: $array,
-                format: $format,
-                formatOptions: $formatOptions,
-                filters: $filters,
-                status: $status,
-                options: $options,
-            ),
-            ColumnType::Vector => new Attribute\Vector(
-                key: $key,
-                size: $size,
-                required: $required,
-                default: $default,
-                signed: $signed,
-                array: $array,
-                format: $format,
-                formatOptions: $formatOptions,
-                filters: $filters,
-                status: $status,
-                options: $options,
-            ),
-            ColumnType::Id => new Attribute\Id(
-                key: $key,
-                size: $size,
-                required: $required,
-                default: $default,
-                signed: $signed,
-                array: $array,
-                format: $format,
-                formatOptions: $formatOptions,
-                filters: $filters,
-                status: $status,
-                options: $options,
-            ),
-            ColumnType::Object => new Attribute\ObjectType(
-                key: $key,
-                size: $size,
-                required: $required,
-                default: $default,
-                signed: $signed,
-                array: $array,
-                format: $format,
-                formatOptions: $formatOptions,
-                filters: $filters,
-                status: $status,
-                options: $options,
-            ),
-            ColumnType::Relationship => new Attribute\Relationship(
-                key: $key,
-                size: $size,
-                required: $required,
-                default: $default,
-                signed: $signed,
-                array: $array,
-                format: $format,
-                formatOptions: $formatOptions,
-                filters: $filters,
-                status: $status,
-                options: $options,
-            ),
-            default => new self(
-                key: $key,
-                type: $type,
-                size: $size,
-                required: $required,
-                default: $default,
-                signed: $signed,
-                array: $array,
-                format: $format,
-                formatOptions: $formatOptions,
-                filters: $filters,
-                status: $status,
-                options: $options,
-            ),
-        };
+        $columnType = self::resolveType($type);
+
+        $relationship = null;
+        $side = null;
+        if ($columnType === ColumnType::Relationship) {
+            [$relationship, $side] = self::hydrateRelationship($key, $options);
+        }
+
+        return new self(
+            $key,
+            $columnType,
+            self::normalizeSize(\is_numeric($size) ? (int) $size : null),
+            (bool) ($required ?? false),
+            $default,
+            (bool) ($signed ?? true),
+            (bool) ($array ?? false),
+            self::hydrateFormat($format, $formatOptions),
+            self::hydrateFilters($filters),
+            $relationship,
+            $side,
+        );
+    }
+
+    private static function hydrateFormat(mixed $format, mixed $options): ?Format
+    {
+        if (! \is_string($format) || $format === '') {
+            return null;
+        }
+
+        if ($options instanceof Document) {
+            $options = $options->getArrayCopy();
+        }
+
+        /** @var array<string, mixed> $options */
+        $options = \is_array($options) ? $options : [];
+
+        return new Format($format, $options);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function hydrateFilters(mixed $filters): array
+    {
+        /** @var list<string> */
+        return \is_array($filters) ? \array_values($filters) : [];
+    }
+
+    /**
+     * @return array{Relationship, RelationshipSide}
+     *
+     * @throws Structure
+     */
+    private static function hydrateRelationship(string $key, mixed $options): array
+    {
+        if ($options instanceof Document) {
+            $options = $options->getArrayCopy();
+        }
+
+        if (! \is_array($options)) {
+            throw new Structure('Relationship attribute "'.$key.'" has no relationship options');
+        }
+
+        $side = $options[self::SIDE] ?? RelationshipSide::Parent->value;
+        $side = $side instanceof RelationshipSide ? $side : RelationshipSide::tryFrom(\is_string($side) ? $side : '');
+        if ($side === null) {
+            throw new Structure('Relationship attribute "'.$key.'" has an unknown side');
+        }
+
+        unset($options[self::SIDE]);
+        $options[self::KEY] = $key;
+
+        /** @var array<string, mixed> $options */
+        return [Relationship::fromArray($options), $side];
     }
 }

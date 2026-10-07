@@ -97,6 +97,18 @@ class Collection extends Document
         return new self($data);
     }
 
+    /**
+     * The collection a stored definition describes; a definition that already is one is returned as it is, so its
+     * hydrated attributes and indexes are kept.
+     *
+     * @throws StructureException
+     * @throws IndexException
+     */
+    public static function fromDocument(Document $document): self
+    {
+        return $document instanceof self ? $document : self::fromArray($document->getArrayCopy());
+    }
+
     public function toDocument(): Document
     {
         $document = new Document();

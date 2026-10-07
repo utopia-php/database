@@ -60,7 +60,7 @@ trait Attributes
     public function createAttribute(string $collection, Attribute $attribute): Attribute
     {
         $definition = $this->silent(fn () => $this->getCollection($collection));
-        $attribute = $attribute->withFilters($attribute->filters);
+        $attribute = self::normalise($attribute);
 
         $schemaAttributes = $this->adapter->hasFeature(Feature\SchemaAttributes::class)
             ? $this->getSchemaAttributes($definition->getId())
@@ -142,7 +142,7 @@ trait Attributes
                 throw new DatabaseException('Missing attribute key');
             }
 
-            $attribute = $attribute->withFilters($attribute->filters);
+            $attribute = self::normalise($attribute);
             $existsInSchema = false;
 
             try {
@@ -930,6 +930,16 @@ trait Attributes
         }
 
         return null;
+    }
+
+    /**
+     * The attribute with every field normalised for its type, as it is stored.
+     *
+     * @throws StructureException
+     */
+    private static function normalise(Attribute $attribute): Attribute
+    {
+        return $attribute->apply(new AttributeUpdate());
     }
 
     /**

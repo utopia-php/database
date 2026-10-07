@@ -41,10 +41,7 @@ trait Collections
     public function createCollection(Collection $collection): Collection
     {
         $id = $collection->getId();
-        $attributes = \array_map(
-            static fn (Attribute $attribute): Attribute => $attribute->withFilters($attribute->filters),
-            $collection->attributes(),
-        );
+        $attributes = \array_map(self::normalise(...), $collection->attributes());
         $permissions = $collection->declaredPermissions() ?? [Permission::create(Role::any())];
 
         $typeValidator = $this->typeValidator();

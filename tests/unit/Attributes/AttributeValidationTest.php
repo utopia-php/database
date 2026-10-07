@@ -160,32 +160,40 @@ class AttributeValidationTest extends TestCase
     {
         $this->setupCollection('testCol');
 
-        $result = $this->database->createAttribute('testCol', Attribute::string(key: 'name', size: 128));
-        $this->assertTrue($result);
+        $created = $this->database->createAttribute('testCol', Attribute::string(key: 'name', size: 128));
+
+        $this->assertSame('name', $created->key);
+        $this->assertSame(Attribute::string(key: 'name', size: 128)->type, $created->type);
     }
 
     public function testCreateAttributeSucceedsWithInteger(): void
     {
         $this->setupCollection('testCol');
 
-        $result = $this->database->createAttribute('testCol', Attribute::integer(key: 'age'));
-        $this->assertTrue($result);
+        $created = $this->database->createAttribute('testCol', Attribute::integer(key: 'age'));
+
+        $this->assertSame('age', $created->key);
+        $this->assertSame(Attribute::integer(key: 'age')->type, $created->type);
     }
 
     public function testCreateAttributeSucceedsWithBoolean(): void
     {
         $this->setupCollection('testCol');
 
-        $result = $this->database->createAttribute('testCol', Attribute::boolean(key: 'active'));
-        $this->assertTrue($result);
+        $created = $this->database->createAttribute('testCol', Attribute::boolean(key: 'active'));
+
+        $this->assertSame('active', $created->key);
+        $this->assertSame(Attribute::boolean(key: 'active')->type, $created->type);
     }
 
     public function testCreateAttributeSucceedsWithDouble(): void
     {
         $this->setupCollection('testCol');
 
-        $result = $this->database->createAttribute('testCol', Attribute::double(key: 'score'));
-        $this->assertTrue($result);
+        $created = $this->database->createAttribute('testCol', Attribute::double(key: 'score'));
+
+        $this->assertSame('score', $created->key);
+        $this->assertSame(Attribute::double(key: 'score')->type, $created->type);
     }
 
     public function testCreateAttributeEnforcesAttributeCountLimit(): void
@@ -234,7 +242,7 @@ class AttributeValidationTest extends TestCase
                     return $collection;
                 }
                 if ($col->getId() === Database::METADATA && $docId === Database::METADATA) {
-                    return new Document(Database::collectionDefinition());
+                    return Database::collectionDefinition();
                 }
 
                 return new Document();
@@ -295,7 +303,7 @@ class AttributeValidationTest extends TestCase
                     return $collection;
                 }
                 if ($col->getId() === Database::METADATA && $docId === Database::METADATA) {
-                    return new Document(Database::collectionDefinition());
+                    return Database::collectionDefinition();
                 }
 
                 return new Document();
@@ -318,8 +326,8 @@ class AttributeValidationTest extends TestCase
         $this->setupCollection('testCol', $existingAttrs);
         $this->adapter->method('deleteAttribute')->willReturn(true);
 
-        $result = $this->database->deleteAttribute('testCol', 'name');
-        $this->assertTrue($result);
+        $this->expectNotToPerformAssertions();
+        $this->database->deleteAttribute('testCol', 'name');
     }
 
     public function testDeleteAttributeThrowsOnNotFound(): void

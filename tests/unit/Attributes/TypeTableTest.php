@@ -14,14 +14,18 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
+use Utopia\Database\AttributeUpdate;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
-use Utopia\Database\Validator\Attribute as AttributeValidator;
+use Utopia\Database\RelationshipSide;
+use Utopia\Database\RelationshipType;
+use Utopia\Database\Validator\AttributeDefinition;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Structure;
 use Utopia\Query\Schema\ColumnType;
@@ -80,14 +84,14 @@ final class TypeTableTest extends TestCase
     private const array UNAVAILABLE = [
         Memory::class => [
             'point' => 'Spatial attributes are not supported',
-            'linestring' => 'Spatial attributes are not supported',
+            'lineString' => 'Spatial attributes are not supported',
             'polygon' => 'Spatial attributes are not supported',
             'vector' => 'Vector types are not supported by the current database',
         ],
         SQLite::class => [
             'object' => 'Object attributes are not supported',
             'point' => 'Spatial attributes are not supported',
-            'linestring' => 'Spatial attributes are not supported',
+            'lineString' => 'Spatial attributes are not supported',
             'polygon' => 'Spatial attributes are not supported',
             'vector' => 'Vector types are not supported by the current database',
         ],
@@ -113,7 +117,7 @@ final class TypeTableTest extends TestCase
             'id' => new TypeSample(value: '7', readType: 'string'),
             'object' => new TypeSample(value: ['colour' => 'red'], readType: 'array', default: ['colour' => 'blue']),
             'point' => new TypeSample(value: [1.0, 2.0], readType: 'array'),
-            'linestring' => new TypeSample(value: [[1.0, 2.0], [3.0, 4.0]], readType: 'array'),
+            'lineString' => new TypeSample(value: [[1.0, 2.0], [3.0, 4.0]], readType: 'array'),
             'polygon' => new TypeSample(value: [[[0.0, 0.0], [0.0, 1.0], [1.0, 1.0], [0.0, 0.0]]], readType: 'array'),
             'vector' => new TypeSample(value: [1.0, 2.0, 3.0], readType: 'array', size: 3),
         ];
@@ -203,32 +207,23 @@ final class TypeTableTest extends TestCase
         return $cases;
     }
 
-    public function testAvailableTypesFollowTheTableAndTheCapabilities(): void
+    public function testTheAttributeTypesAreTheStorableTypes(): void
     {
-        $everywhere = [
-            ColumnType::String,
-            ColumnType::Varchar,
-            ColumnType::Text,
-            ColumnType::MediumText,
-            ColumnType::LongText,
-            ColumnType::Integer,
-            ColumnType::BigInteger,
-            ColumnType::Float,
-            ColumnType::Double,
-            ColumnType::Boolean,
-            ColumnType::Datetime,
-            ColumnType::Id,
-            ColumnType::Relationship,
+        $this->assertSame(self::STORABLE, Attribute::TYPES);
+    }
+
+    public function testTypesBehindACapabilityFollowTheValidatorSupport(): void
+    {
+        $gated = [
+            'Object attributes are not supported' => Attribute::object(key: 'value'),
+            'Spatial attributes are not supported' => Attribute::point(key: 'value'),
+            'Vector types are not supported by the current database' => Attribute::vector(key: 'value', dimensions: 3),
         ];
 
-        $this->assertSame(self::STORABLE, Attribute::availableTypes(objects: true, spatial: true, vectors: true));
-        $this->assertSame($everywhere, Attribute::availableTypes(objects: false, spatial: false, vectors: false));
-        $this->assertSame([...$everywhere, ColumnType::Object], Attribute::availableTypes(objects: true, spatial: false, vectors: false));
-        $this->assertSame(
-            [...$everywhere, ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon],
-            Attribute::availableTypes(objects: false, spatial: true, vectors: false),
-        );
-        $this->assertSame([...$everywhere, ColumnType::Vector], Attribute::availableTypes(objects: false, spatial: false, vectors: true));
+        foreach ($gated as $message => $attribute) {
+            $this->assertRejected($message, fn (): bool => $this->typeValidator(supported: false)->checkType($attribute));
+            $this->assertTrue($this->typeValidator(supported: true)->checkType($attribute), $attribute->type->value);
+        }
     }
 
     #[DataProvider('columnTypes')]
@@ -249,7 +244,8 @@ final class TypeTableTest extends TestCase
             if (
                 $method->isPublic()
                 && $returnType instanceof ReflectionNamedType
-                && \is_subclass_of($returnType->getName(), Attribute::class)
+                && \in_array($returnType->getName(), ['self', Attribute::class], true)
+                && ! \str_starts_with($method->getName(), 'from')
             ) {
                 $factories[] = $method->getName();
             }
@@ -265,37 +261,24 @@ final class TypeTableTest extends TestCase
     #[DataProvider('columnTypes')]
     public function testCheckTypeFollowsTheTable(ColumnType $type): void
     {
-        $validator = new AttributeValidator(
-            attributes: [],
-            maxStringLength: 16777216,
-            maxVarcharLength: 16381,
-            maxIntLength: 4294967295,
-            supportForVectors: true,
-            supportForSpatialAttributes: true,
-            supportForObject: true,
-        );
-        $attribute = new Attribute(key: 'value', type: $type, size: $this->validSize($type));
-
-        if (\in_array($type, self::STORABLE, true)) {
-            $this->assertTrue($validator->checkType($attribute));
-
-            return;
+        if (! \in_array($type, self::STORABLE, true)) {
+            $this->expectException(StructureException::class);
+            $this->expectExceptionMessage('Unknown attribute type: '.$type->value);
         }
 
-        $this->expectException(DatabaseException::class);
-        $this->expectExceptionMessage('Unknown attribute type: '.$type->value.'.');
-        $validator->checkType($attribute);
+        $attribute = Attribute::fromArray($this->definition($type));
+
+        $this->assertTrue($this->typeValidator(supported: true)->checkType($attribute));
     }
 
     #[DataProvider('columnTypes')]
     public function testStructureFollowsTheTable(ColumnType $type): void
     {
-        $attribute = new Attribute(key: 'value', type: $type, size: $this->validSize($type));
         $structure = new Structure(
             new Document([
                 Document::ID => 'items',
                 Document::COLLECTION => Database::METADATA,
-                'attributes' => [$attribute->toDocument()],
+                'attributes' => [new Document($this->definition($type))],
             ]),
             ColumnType::Integer->value,
         );
@@ -306,14 +289,12 @@ final class TypeTableTest extends TestCase
             'value' => $this->validValue($type),
         ]);
 
-        if (\in_array($type, self::STORABLE, true)) {
-            $this->assertTrue($structure->isValid($document), $structure->getDescription());
-
-            return;
+        if (! \in_array($type, self::STORABLE, true)) {
+            $this->expectException(StructureException::class);
+            $this->expectExceptionMessage('Unknown attribute type: '.$type->value);
         }
 
-        $this->assertFalse($structure->isValid($document));
-        $this->assertStringContainsString('Unknown attribute type "'.$type->value.'"', $structure->getDescription());
+        $this->assertTrue($structure->isValid($document), $structure->getDescription());
     }
 
     /**
@@ -323,19 +304,19 @@ final class TypeTableTest extends TestCase
     public function testUnstorableTypesAreRejectedUpFront(ColumnType $type, string $adapter): void
     {
         $database = $this->database($adapter);
-        $database->createCollection(new Collection(id: 'items', permissions: $this->permissions()));
+        $database->createCollection(Collection::create(id: 'items', permissions: $this->permissions()));
 
-        $message = 'Unknown attribute type: '.$type->value.'.';
-        $this->assertRejected($message, fn () => $database->createAttribute('items', new Attribute(key: 'value', type: $type)));
-        $this->assertRejected($message, fn () => $database->createAttributes('items', [new Attribute(key: 'value', type: $type)]));
-        $this->assertRejected($message, fn () => $database->createCollection(new Collection(
+        $message = 'Unknown attribute type: '.$type->value;
+        $this->assertRejected($message, fn () => $database->createAttribute('items', Attribute::fromArray(['key' => 'value', 'type' => $type])));
+        $this->assertRejected($message, fn () => $database->createAttributes('items', [Attribute::fromArray(['key' => 'value', 'type' => $type])]));
+        $this->assertRejected($message, fn () => $database->createCollection(Collection::create(
             id: 'inline',
-            attributes: [new Attribute(key: 'value', type: $type)],
+            attributes: [Attribute::fromArray(['key' => 'value', 'type' => $type])],
             permissions: $this->permissions(),
         )));
 
-        $this->assertTrue($database->getCollection('inline')->isEmpty());
-        $this->assertSame([], $database->getCollection('items')->attributes);
+        $this->assertNull($database->findCollection('inline'));
+        $this->assertSame([], $database->getCollection('items')->attributes());
     }
 
     /**
@@ -345,16 +326,16 @@ final class TypeTableTest extends TestCase
     public function testTypesTheAdapterCannotStoreAreRejectedUpFront(string $factory, string $adapter, string $message): void
     {
         $database = $this->database($adapter);
-        $database->createCollection(new Collection(id: 'items', permissions: $this->permissions()));
+        $database->createCollection(Collection::create(id: 'items', permissions: $this->permissions()));
 
         $this->assertRejected($message, fn () => $database->createAttribute('items', $this->attribute($factory)));
-        $this->assertRejected($message, fn () => $database->createCollection(new Collection(
+        $this->assertRejected($message, fn () => $database->createCollection(Collection::create(
             id: 'inline',
             attributes: [$this->attribute($factory)],
             permissions: $this->permissions(),
         )));
 
-        $this->assertTrue($database->getCollection('inline')->isEmpty());
+        $this->assertNull($database->findCollection('inline'));
     }
 
     /**
@@ -365,9 +346,9 @@ final class TypeTableTest extends TestCase
     {
         $sample = self::samples()[$factory];
         $database = $this->database($adapter);
-        $database->createCollection(new Collection(id: 'items', permissions: $this->permissions()));
+        $database->createCollection(Collection::create(id: 'items', permissions: $this->permissions()));
 
-        $this->assertTrue($database->createAttribute('items', $this->attribute($factory)));
+        $this->assertSame($this->attribute($factory)->type, $database->createAttribute('items', $this->attribute($factory))->type);
         $this->write($database, ['value' => $sample->value]);
 
         $this->assertStored($sample->readType, $sample->value, $database->getDocument('items', 'one')->getAttribute('value'));
@@ -381,7 +362,7 @@ final class TypeTableTest extends TestCase
     {
         $sample = self::samples()[$factory];
         $database = $this->database($adapter);
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: 'items',
             attributes: [$this->attribute($factory)],
             permissions: $this->permissions(),
@@ -400,14 +381,14 @@ final class TypeTableTest extends TestCase
     {
         $sample = self::samples()[$factory];
         $database = $this->database($adapter);
-        $database->createCollection(new Collection(id: 'items', permissions: $this->permissions()));
+        $database->createCollection(Collection::create(id: 'items', permissions: $this->permissions()));
         $database->createAttribute('items', $this->attribute($factory));
         $this->write($database, ['value' => $sample->value]);
 
-        $updated = $database->updateAttribute('items', 'value', newKey: 'renamed');
+        $updated = $database->updateAttribute('items', 'value', new AttributeUpdate(key: 'renamed'));
 
-        $this->assertSame('renamed', $updated->getAttribute('key'));
-        $this->assertSame(Attribute::normalizeType($this->attribute($factory)->type), Attribute::normalizeType($this->storedType($updated)));
+        $this->assertSame('renamed', $updated->key);
+        $this->assertSame($this->attribute($factory)->type, $updated->type);
         $this->assertStored($sample->readType, $sample->value, $database->getDocument('items', 'one')->getAttribute('renamed'));
     }
 
@@ -419,14 +400,14 @@ final class TypeTableTest extends TestCase
     {
         $sample = self::samples()[$factory];
         $database = $this->database($adapter);
-        $database->createCollection(new Collection(id: 'items', permissions: $this->permissions()));
+        $database->createCollection(Collection::create(id: 'items', permissions: $this->permissions()));
         $database->createAttribute('items', $this->attribute($factory, $sample->default));
         $this->write($database);
 
         $this->assertStored($sample->readType, $sample->default, $database->getDocument('items', 'one')->getAttribute('value'));
 
-        $updated = $database->updateAttributeDefault('items', 'value', $sample->value);
-        $this->assertSame($sample->value, $updated->getAttribute('default'));
+        $updated = $database->updateAttribute('items', 'value', new AttributeUpdate(default: $sample->value));
+        $this->assertSame($sample->value, $updated->default);
     }
 
     /**
@@ -436,12 +417,12 @@ final class TypeTableTest extends TestCase
     public function testDefaultOnATypeWithoutScalarDefaultsIsAMismatch(string $adapter): void
     {
         $database = $this->database($adapter);
-        $database->createCollection(new Collection(id: 'items', permissions: $this->permissions()));
+        $database->createCollection(Collection::create(id: 'items', permissions: $this->permissions()));
         $database->createAttribute('items', Attribute::id(key: 'value'));
 
         $this->assertRejected(
             'Default value 5 does not match given type id',
-            fn () => $database->updateAttributeDefault('items', 'value', '5'),
+            fn () => $database->updateAttribute('items', 'value', new AttributeUpdate(default: '5')),
         );
     }
 
@@ -453,7 +434,7 @@ final class TypeTableTest extends TestCase
     {
         $sample = self::samples()[$factory];
         $database = $this->database($adapter);
-        $database->createCollection(new Collection(id: 'items', permissions: $this->permissions()));
+        $database->createCollection(Collection::create(id: 'items', permissions: $this->permissions()));
         $database->createAttribute('items', $this->attribute($factory));
         $this->write($database, ['value' => $sample->value]);
 
@@ -474,8 +455,12 @@ final class TypeTableTest extends TestCase
 
     private function attribute(string $factory, mixed $default = null): Attribute
     {
-        $sample = self::samples()[$factory];
-        $attribute = Attribute::{$factory}(key: 'value', size: $sample->size, default: $default);
+        $size = self::samples()[$factory]->size;
+        $attribute = match ($factory) {
+            'string', 'varchar' => Attribute::{$factory}(key: 'value', size: $size ?? Database::LENGTH_KEY, default: $default),
+            'vector' => Attribute::vector(key: 'value', dimensions: $size ?? 0, default: $default),
+            default => Attribute::{$factory}(key: 'value', default: $default),
+        };
         $this->assertInstanceOf(Attribute::class, $attribute);
 
         return $attribute;
@@ -530,12 +515,31 @@ final class TypeTableTest extends TestCase
         $this->assertSame($expected, $actual);
     }
 
-    private function storedType(Document $attribute): ColumnType|string
+    private function typeValidator(bool $supported): AttributeDefinition
     {
-        $type = $attribute->getAttribute('type');
-        $this->assertTrue($type instanceof ColumnType || \is_string($type));
+        return new AttributeDefinition(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 16381,
+            maxIntLength: 4294967295,
+            supportForVectors: $supported,
+            supportForSpatialAttributes: $supported,
+            supportForObject: $supported,
+        );
+    }
 
-        return $type;
+    /**
+     * @return array<string, mixed>
+     */
+    private function definition(ColumnType $type): array
+    {
+        return [
+            Document::ID => 'value',
+            'key' => 'value',
+            'type' => $type->value,
+            'size' => $this->validSize($type),
+            'options' => ['relatedCollection' => 'others', 'relationType' => RelationshipType::OneToOne->value, 'side' => RelationshipSide::Parent->value],
+        ];
     }
 
     private function assertRejected(string $message, callable $operation): void

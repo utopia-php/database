@@ -103,9 +103,9 @@ final class OrphanColumnTypeTest extends TestCase
         [$database, $adapter] = $this->database();
         $adapter->createAttribute(self::COLLECTION, Attribute::bigInteger(key: self::KEY));
 
-        $this->assertRefused(fn () => $database->createAttribute(self::COLLECTION, new Attribute(key: self::KEY, type: $type)));
+        $this->assertRefused(fn () => $database->createAttribute(self::COLLECTION, Attribute::fromArray(['key' => self::KEY, 'type' => $type])), StructureException::class);
 
-        $this->assertSame([], $database->getCollection(self::COLLECTION)->attributes);
+        $this->assertSame([], $database->getCollection(self::COLLECTION)->attributes());
     }
 
     #[DataProvider('unstorableTypes')]
@@ -114,9 +114,9 @@ final class OrphanColumnTypeTest extends TestCase
         [$database, $adapter] = $this->database();
         $adapter->createAttribute(self::COLLECTION, Attribute::bigInteger(key: self::KEY));
 
-        $this->assertRefused(fn () => $database->createAttributes(self::COLLECTION, [new Attribute(key: self::KEY, type: $type)]));
+        $this->assertRefused(fn () => $database->createAttributes(self::COLLECTION, [Attribute::fromArray(['key' => self::KEY, 'type' => $type])]), StructureException::class);
 
-        $this->assertSame([], $database->getCollection(self::COLLECTION)->attributes);
+        $this->assertSame([], $database->getCollection(self::COLLECTION)->attributes());
     }
 
     #[DataProvider('unstorableTypes')]
@@ -126,13 +126,13 @@ final class OrphanColumnTypeTest extends TestCase
         $adapter->createAttribute(self::COLLECTION, Attribute::string(key: self::KEY, size: 64));
         $orphan = $this->schemaColumnType($database);
 
-        $this->assertRefused(fn () => $database->createAttribute(self::COLLECTION, new Attribute(key: self::KEY, type: $type)));
+        $this->assertRefused(fn () => $database->createAttribute(self::COLLECTION, Attribute::fromArray(['key' => self::KEY, 'type' => $type])), StructureException::class);
         $this->assertSame($orphan, $this->schemaColumnType($database));
 
-        $this->assertRefused(fn () => $database->createAttributes(self::COLLECTION, [new Attribute(key: self::KEY, type: $type)]));
+        $this->assertRefused(fn () => $database->createAttributes(self::COLLECTION, [Attribute::fromArray(['key' => self::KEY, 'type' => $type])]), StructureException::class);
         $this->assertSame($orphan, $this->schemaColumnType($database));
 
-        $this->assertSame([], $database->getCollection(self::COLLECTION)->attributes);
+        $this->assertSame([], $database->getCollection(self::COLLECTION)->attributes());
     }
 
     public function testCreateAttributeReusesAnOrphanColumnOfTheSameType(): void
@@ -140,7 +140,7 @@ final class OrphanColumnTypeTest extends TestCase
         [$database, $adapter] = $this->databaseWithAnOrphanValue(Attribute::string(key: self::KEY, size: 64));
         $orphan = $this->schemaColumnType($database);
 
-        $this->assertTrue($database->createAttribute(self::COLLECTION, Attribute::string(key: self::KEY, size: 64)));
+        $this->assertSame(self::KEY, $database->createAttribute(self::COLLECTION, Attribute::string(key: self::KEY, size: 64))->key);
 
         $this->assertSame($orphan, $this->schemaColumnType($database));
         $this->assertSame([self::KEY], $this->keys($database));
@@ -152,7 +152,7 @@ final class OrphanColumnTypeTest extends TestCase
         [$database, $adapter] = $this->databaseWithAnOrphanValue(Attribute::integer(key: self::KEY));
         $orphan = $this->schemaColumnType($database);
 
-        $this->assertTrue($database->createAttribute(self::COLLECTION, Attribute::string(key: self::KEY, size: 64)));
+        $this->assertSame(self::KEY, $database->createAttribute(self::COLLECTION, Attribute::string(key: self::KEY, size: 64))->key);
 
         $this->assertNotSame($orphan, $this->schemaColumnType($database));
         $this->assertSame(\strtolower($adapter->getColumnType(ColumnType::String->value, 64)), $this->schemaColumnType($database));
@@ -167,10 +167,12 @@ final class OrphanColumnTypeTest extends TestCase
         [$database, $adapter] = $this->databaseWithAnOrphanValue(Attribute::string(key: self::KEY, size: 64));
         $orphan = $this->schemaColumnType($database);
 
-        $this->assertTrue($database->createAttributes(self::COLLECTION, [
+        $created = $database->createAttributes(self::COLLECTION, [
             Attribute::string(key: self::KEY, size: 64),
             Attribute::integer(key: 'count'),
-        ]));
+        ]);
+
+        $this->assertSame([self::KEY, 'count'], \array_map(static fn (Attribute $attribute): string => $attribute->key, $created));
 
         $this->assertSame($orphan, $this->schemaColumnType($database));
         $this->assertSame([self::KEY, 'count'], $this->keys($database));
@@ -182,10 +184,12 @@ final class OrphanColumnTypeTest extends TestCase
         [$database, $adapter] = $this->databaseWithAnOrphanValue(Attribute::integer(key: self::KEY));
         $orphan = $this->schemaColumnType($database);
 
-        $this->assertTrue($database->createAttributes(self::COLLECTION, [
+        $created = $database->createAttributes(self::COLLECTION, [
             Attribute::string(key: self::KEY, size: 64),
             Attribute::integer(key: 'count'),
-        ]));
+        ]);
+
+        $this->assertSame([self::KEY, 'count'], \array_map(static fn (Attribute $attribute): string => $attribute->key, $created));
 
         $this->assertNotSame($orphan, $this->schemaColumnType($database));
         $this->assertSame(\strtolower($adapter->getColumnType(ColumnType::String->value, 64)), $this->schemaColumnType($database));
@@ -201,7 +205,7 @@ final class OrphanColumnTypeTest extends TestCase
         $database->createAttribute(self::COLLECTION, Attribute::string(key: 'before', size: 64));
         $adapter->renameAttribute(self::COLLECTION, 'before', 'after');
 
-        $this->assertTrue($database->renameAttribute(self::COLLECTION, 'before', 'after'));
+        $database->renameAttribute(self::COLLECTION, 'before', 'after');
 
         $this->assertSame(['after'], $this->keys($database));
     }
@@ -223,7 +227,7 @@ final class OrphanColumnTypeTest extends TestCase
         }
 
         $this->assertSame([], \array_intersect(['age', 'nick'], $this->columns($database, self::UNVALIDATED)));
-        $this->assertSame([], $database->getCollection(self::UNVALIDATED)->attributes);
+        $this->assertSame([], $database->getCollection(self::UNVALIDATED)->attributes());
     }
 
     public function testCreateAttributesRollbackCollectsCleanupErrors(): void
@@ -265,7 +269,7 @@ final class OrphanColumnTypeTest extends TestCase
             ->setDatabase('orphan_column_type')
             ->setNamespace('orphan_column_type_'.\uniqid());
         $database->create();
-        $collection = new Collection(id: self::UNVALIDATED, name: \str_repeat('n', self::OVERSIZED_NAME_LENGTH));
+        $collection = Collection::create(id: self::UNVALIDATED, name: \str_repeat('n', self::OVERSIZED_NAME_LENGTH));
         $database->skipValidation(fn (): Collection => $database->createCollection($collection));
 
         return $database;
@@ -306,7 +310,7 @@ final class OrphanColumnTypeTest extends TestCase
     {
         return \array_map(
             static fn (Attribute $attribute): string => $attribute->key,
-            \array_values($database->getCollection(self::COLLECTION)->attributes),
+            \array_values($database->getCollection(self::COLLECTION)->attributes()),
         );
     }
 
@@ -323,7 +327,7 @@ final class OrphanColumnTypeTest extends TestCase
             ->setDatabase('orphan_column_type')
             ->setNamespace('orphan_column_type_'.\uniqid());
         $database->create();
-        $database->createCollection(new Collection(id: self::COLLECTION));
+        $database->createCollection(Collection::create(id: self::COLLECTION));
 
         return [$database, $adapter];
     }
@@ -342,12 +346,15 @@ final class OrphanColumnTypeTest extends TestCase
         $this->fail('The orphan column is no longer in the schema');
     }
 
-    private function assertRefused(callable $operation): void
+    /**
+     * @param  class-string<DatabaseException>  $expected
+     */
+    private function assertRefused(callable $operation, string $expected = DatabaseException::class): void
     {
         try {
             $operation();
         } catch (DatabaseException $error) {
-            $this->assertSame(DatabaseException::class, $error::class, $error->getMessage());
+            $this->assertSame($expected, $error::class, $error->getMessage());
 
             return;
         }

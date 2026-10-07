@@ -33,7 +33,7 @@ final class AdapterRefusalTest extends TestCase
             $this->assertSame('Failed to create attribute', $error->getMessage());
         }
 
-        $this->assertSame([], $database->getCollection(self::COLLECTION)->attributes);
+        $this->assertSame([], $database->getCollection(self::COLLECTION)->attributes());
     }
 
     public function testABatchTheAdapterDidNotCreateIsAnErrorAndStaysOutOfTheMetadata(): void
@@ -47,7 +47,7 @@ final class AdapterRefusalTest extends TestCase
             $this->assertSame('Failed to create attributes', $error->getMessage());
         }
 
-        $this->assertSame([], $database->getCollection(self::COLLECTION)->attributes);
+        $this->assertSame([], $database->getCollection(self::COLLECTION)->attributes());
     }
 
     public function testAMismatchWhileCreatingADuplicateBatchOneByOneReachesTheCaller(): void
@@ -66,7 +66,7 @@ final class AdapterRefusalTest extends TestCase
             $this->assertSame('Attribute exists in the shared table with another type', $error->getMessage());
         }
 
-        $this->assertSame([], $database->getCollection(self::COLLECTION)->attributes);
+        $this->assertSame([], $database->getCollection(self::COLLECTION)->attributes());
     }
 
     /**
@@ -107,7 +107,7 @@ final class AdapterRefusalTest extends TestCase
             ->setDatabase('refusal')
             ->setNamespace('refusal_'.\uniqid());
         $database->create();
-        $database->createCollection(new Collection(id: self::COLLECTION));
+        $database->createCollection(Collection::create(id: self::COLLECTION));
 
         return $database;
     }

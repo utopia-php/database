@@ -8,9 +8,13 @@ use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Attribute;
+use Utopia\Database\AttributeUpdate;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
+use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
 
 final class RelaxRequiredTest extends TestCase
@@ -26,7 +30,7 @@ final class RelaxRequiredTest extends TestCase
         });
 
         try {
-            $database->updateAttribute('items', 'name', required: false);
+            $database->updateAttribute('items', 'name', new AttributeUpdate(required: false));
             $this->fail('Expected the failed relax to surface');
         } catch (DatabaseException $error) {
             $this->assertSame('Relaxing the column failed', $error->getMessage());
@@ -46,7 +50,7 @@ final class RelaxRequiredTest extends TestCase
         });
 
         try {
-            $database->updateAttribute('items', 'name', required: false);
+            $database->updateAttribute('items', 'name', new AttributeUpdate(required: false));
             $this->fail('Expected the unconfirmed relax to surface');
         } catch (DatabaseException $error) {
             $this->assertSame('Failed to update attribute', $error->getMessage());
@@ -55,37 +59,22 @@ final class RelaxRequiredTest extends TestCase
         $this->assertTrue($this->storedAttribute($database, 'name')->required);
     }
 
-    public function testRequiredOnlyChangeRelaxesWithoutRewritingTheColumn(): void
+    public function testRelaxedAttributeAcceptsADocumentWithoutIt(): void
     {
-        $adapter = new class () extends Memory {
-            /**
-             * @var list<string>
-             */
-            public array $calls = [];
+        $database = $this->database(new Memory());
 
-            #[\Override]
-            public function relaxAttributeRequired(string $collection, string $id): bool
-            {
-                $this->calls[] = 'relax '.$id;
+        $updated = $database->updateAttribute('items', 'name', new AttributeUpdate(required: false));
 
-                return parent::relaxAttributeRequired($collection, $id);
-            }
-
-            #[\Override]
-            public function updateAttribute(string $collection, Attribute $attribute, ?string $newKey = null): bool
-            {
-                $this->calls[] = 'update '.$attribute->key;
-
-                return parent::updateAttribute($collection, $attribute, $newKey);
-            }
-        };
-        $database = $this->database($adapter);
-
-        $updated = $database->updateAttribute('items', 'name', required: false);
-
-        $this->assertFalse($updated->getAttribute('required'));
+        $this->assertFalse($updated->required);
         $this->assertFalse($this->storedAttribute($database, 'name')->required);
-        $this->assertSame(['relax name'], $adapter->calls);
+
+        $created = $database->createDocument('items', new Document([
+            Document::ID => 'nameless',
+            Document::PERMISSIONS => [Permission::read(Role::any())],
+        ]));
+
+        $this->assertSame('nameless', $created->getId());
+        $this->assertNull($database->getDocument('items', 'nameless')->getAttribute('name'));
     }
 
     private function database(Adapter $adapter): Database
@@ -96,7 +85,7 @@ final class RelaxRequiredTest extends TestCase
             ->setDatabase('relax_required')
             ->setNamespace('relax_required_'.\uniqid());
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: 'items',
             attributes: [Attribute::string(key: 'name', size: 64, required: true)],
         ));
@@ -106,7 +95,7 @@ final class RelaxRequiredTest extends TestCase
 
     private function storedAttribute(Database $database, string $key): Attribute
     {
-        foreach ($database->getCollection('items')->attributes as $attribute) {
+        foreach ($database->getCollection('items')->attributes() as $attribute) {
             if ($attribute->key === $key) {
                 return $attribute;
             }

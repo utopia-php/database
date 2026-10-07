@@ -1113,6 +1113,52 @@ class Mirror extends Database
     }
 
     /**
+     * @param  list<Index>  $indexes
+     * @return list<Index>
+     */
+    public function createIndexes(string $collection, array $indexes): array
+    {
+        $result = $this->source->createIndexes($collection, $indexes);
+
+        $destination = $this->destination;
+        if ($destination === null) {
+            return $result;
+        }
+
+        try {
+            $this->inOrder(function () use ($destination, $collection, $result): void {
+                $filtered = [];
+                foreach ($result as $index) {
+                    $document = $index->toDocument();
+
+                    foreach ($this->writeFilters as $filter) {
+                        $document = $filter->beforeCreateIndex(
+                            source: $this->source,
+                            destination: $destination,
+                            collectionId: $collection,
+                            indexId: $index->key,
+                            index: $document,
+                        );
+                        if ($document === null) {
+                            continue 2;
+                        }
+                    }
+
+                    $filtered[] = Index::fromDocument($document);
+                }
+
+                if ($filtered !== []) {
+                    $destination->createIndexes($collection, $filtered);
+                }
+            });
+        } catch (Throwable $error) {
+            $this->logError('createIndexes', $error);
+        }
+
+        return $result;
+    }
+
+    /**
      * {@inheritdoc}
      */
     public function deleteIndex(string $collection, string $id): bool

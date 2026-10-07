@@ -18,6 +18,7 @@ use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
+use Utopia\Database\PermissionType;
 use Utopia\Database\Relationship;
 
 /**
@@ -247,7 +248,7 @@ trait MetadataCacheTests
 
         $updated = $database->getCollection($collection);
         $this->assertTrue($updated->getAttribute('documentSecurity'));
-        $this->assertSame(['any'], $updated->getRead());
+        $this->assertSame(['any'], $updated->getPermissionsByType(PermissionType::Read));
     }
 
     public function testDeleteCollectionIsVisibleToTheNextRead(): void

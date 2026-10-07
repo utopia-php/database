@@ -12,7 +12,7 @@ final class StorageTest extends TestCase
     {
         $this->assertSame(Storage::UID, Storage::column(Document::ID));
         $this->assertSame(Storage::SEQUENCE, Storage::column(Document::SEQUENCE));
-        $this->assertSame(Document::INTERNAL_ID, Storage::column(Document::INTERNAL_ID));
+        $this->assertSame('$internalId', Storage::column('$internalId'));
         $this->assertSame('title', Storage::column('title'));
         $this->assertFalse(\defined(Storage::class.'::ID'));
     }

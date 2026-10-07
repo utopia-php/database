@@ -42,7 +42,7 @@ class AuthorizationTest extends TestCase
 
         $object = $this->authorization;
 
-        $this->assertEquals($object->isValid(new Input(PermissionType::Read, $document->getRead())), false);
+        $this->assertEquals($object->isValid(new Input(PermissionType::Read, $document->getPermissionsByType(PermissionType::Read))), false);
         $this->assertEquals($object->isValid(new Input(PermissionType::Read, [])), false);
         $this->assertEquals($object->getDescription(), 'No permissions provided for action \'read\'');
 
@@ -54,37 +54,37 @@ class AuthorizationTest extends TestCase
         $this->assertEquals($this->authorization->hasRole(''), false);
         $this->assertEquals($this->authorization->hasRole(Role::any()->toString()), true);
 
-        $this->assertEquals($object->isValid(new Input(PermissionType::Read, $document->getRead())), true);
+        $this->assertEquals($object->isValid(new Input(PermissionType::Read, $document->getPermissionsByType(PermissionType::Read))), true);
 
         $this->authorization->cleanRoles();
 
-        $this->assertEquals($object->isValid(new Input(PermissionType::Read, $document->getRead())), false);
+        $this->assertEquals($object->isValid(new Input(PermissionType::Read, $document->getPermissionsByType(PermissionType::Read))), false);
 
         $this->authorization->addRole(Role::team('123')->toString());
 
-        $this->assertEquals($object->isValid(new Input(PermissionType::Read, $document->getRead())), true);
+        $this->assertEquals($object->isValid(new Input(PermissionType::Read, $document->getPermissionsByType(PermissionType::Read))), true);
 
         $this->authorization->cleanRoles();
         $this->authorization->disable();
 
-        $this->assertEquals($object->isValid(new Input(PermissionType::Read, $document->getRead())), true);
+        $this->assertEquals($object->isValid(new Input(PermissionType::Read, $document->getPermissionsByType(PermissionType::Read))), true);
 
         $this->authorization->reset();
 
-        $this->assertEquals($object->isValid(new Input(PermissionType::Read, $document->getRead())), false);
+        $this->assertEquals($object->isValid(new Input(PermissionType::Read, $document->getPermissionsByType(PermissionType::Read))), false);
 
         $this->authorization->setDefaultStatus(false);
         $this->authorization->disable();
 
-        $this->assertEquals($object->isValid(new Input(PermissionType::Read, $document->getRead())), true);
+        $this->assertEquals($object->isValid(new Input(PermissionType::Read, $document->getPermissionsByType(PermissionType::Read))), true);
 
         $this->authorization->reset();
 
-        $this->assertEquals($object->isValid(new Input(PermissionType::Read, $document->getRead())), true);
+        $this->assertEquals($object->isValid(new Input(PermissionType::Read, $document->getPermissionsByType(PermissionType::Read))), true);
 
         $this->authorization->enable();
 
-        $this->assertEquals($object->isValid(new Input(PermissionType::Read, $document->getRead())), false);
+        $this->assertEquals($object->isValid(new Input(PermissionType::Read, $document->getPermissionsByType(PermissionType::Read))), false);
 
         $this->authorization->addRole('textX');
 
@@ -95,9 +95,9 @@ class AuthorizationTest extends TestCase
         $this->assertNotContains('textX', $this->authorization->getRoles());
 
         // Test skip method
-        $this->assertEquals($object->isValid(new Input(PermissionType::Read, $document->getRead())), false);
+        $this->assertEquals($object->isValid(new Input(PermissionType::Read, $document->getPermissionsByType(PermissionType::Read))), false);
         $this->assertEquals($this->authorization->skip(function () use ($object, $document) {
-            return $object->isValid(new Input(PermissionType::Read, $document->getRead()));
+            return $object->isValid(new Input(PermissionType::Read, $document->getPermissionsByType(PermissionType::Read)));
         }), true);
     }
 

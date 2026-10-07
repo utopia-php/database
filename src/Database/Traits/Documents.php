@@ -36,6 +36,7 @@ use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\ID;
+use Utopia\Database\Hook\Permissions as PermissionsHook;
 use Utopia\Database\Operator;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
@@ -574,8 +575,8 @@ trait Documents
             if ($collection->getId() !== self::METADATA) {
 
                 if (! $this->authorization->isValid(new Input(PermissionType::Read, [
-                    ...$collection->getRead(),
-                    ...($documentSecurity ? $document->getRead() : []),
+                    ...$collection->getPermissionsByType(PermissionType::Read),
+                    ...($documentSecurity ? $document->getPermissionsByType(PermissionType::Read) : []),
                 ]))) {
                     return $this->createDocumentInstance($collection->getId(), []);
                 }
@@ -617,7 +618,7 @@ trait Documents
             return $document;
         }
 
-        $collectionGranted = $this->authorization->isValid(new Input(PermissionType::Read, $collection->getRead()));
+        $collectionGranted = $this->authorization->isValid(new Input(PermissionType::Read, $collection->getPermissionsByType(PermissionType::Read)));
         $skipAuth = empty($joins)
             && $collection->getId() !== self::METADATA
             && $collectionGranted;
@@ -676,8 +677,8 @@ trait Documents
 
         if ($collection->getId() !== self::METADATA) {
             if (! $this->authorization->isValid(new Input(PermissionType::Read, [
-                ...$collection->getRead(),
-                ...($documentSecurity ? $document->getRead() : []),
+                ...$collection->getPermissionsByType(PermissionType::Read),
+                ...($documentSecurity ? $document->getPermissionsByType(PermissionType::Read) : []),
             ]))) {
                 return $this->createDocumentInstance($collection->getId(), []);
             }
@@ -1139,7 +1140,7 @@ trait Documents
     private function prepareDocument(Document $collection, Document $document): Document
     {
         if ($collection->getId() !== self::METADATA) {
-            $isValid = $this->authorization->isValid(new Input(PermissionType::Create, $collection->getCreate()));
+            $isValid = $this->authorization->isValid(new Input(PermissionType::Create, $collection->getPermissionsByType(PermissionType::Create)));
             if (! $isValid) {
                 throw new AuthorizationException($this->authorization->getDescription());
             }
@@ -1238,7 +1239,7 @@ trait Documents
         $batchSize = \min(Database::INSERT_BATCH_SIZE, \max(1, $batchSize));
         $collection = $this->silent(fn () => $this->getCollection($collection));
         if ($collection->getId() !== self::METADATA) {
-            if (! $this->authorization->isValid(new Input(PermissionType::Create, $collection->getCreate()))) {
+            if (! $this->authorization->isValid(new Input(PermissionType::Create, $collection->getPermissionsByType(PermissionType::Create)))) {
                 throw new AuthorizationException($this->authorization->getDescription());
             }
         }
@@ -1440,7 +1441,7 @@ trait Documents
                     }
                 }
 
-                $internalKeys = [Document::INTERNAL_ID, Document::COLLECTION, Document::TENANT, Document::SEQUENCE];
+                $internalKeys = [Document::COLLECTION, Document::TENANT, Document::SEQUENCE];
 
                 // Compare if the document has any changes
                 foreach ($document as $key => $value) {
@@ -1542,13 +1543,13 @@ trait Documents
                 }
 
                 $updatePermissions = [
-                    ...$collection->getUpdate(),
-                    ...($documentSecurity ? $old->getUpdate() : []),
+                    ...$collection->getPermissionsByType(PermissionType::Update),
+                    ...($documentSecurity ? $old->getPermissionsByType(PermissionType::Update) : []),
                 ];
 
                 $readPermissions = [
-                    ...$collection->getRead(),
-                    ...($documentSecurity ? $old->getRead() : []),
+                    ...$collection->getPermissionsByType(PermissionType::Read),
+                    ...($documentSecurity ? $old->getPermissionsByType(PermissionType::Read) : []),
                 ];
 
                 if ($shouldUpdate) {
@@ -1698,7 +1699,7 @@ trait Documents
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
-        $skipAuth = $this->authorization->isValid(new Input(PermissionType::Update, $collection->getUpdate()));
+        $skipAuth = $this->authorization->isValid(new Input(PermissionType::Update, $collection->getPermissionsByType(PermissionType::Update)));
 
         if (! $skipAuth && ! $documentSecurity && $collection->getId() !== self::METADATA) {
             throw new AuthorizationException($this->authorization->getDescription());
@@ -1822,7 +1823,7 @@ trait Documents
                         $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
                     }
 
-                    $document->setAttribute(Document::SKIP_PERMISSIONS_UPDATE, $skipPermissionsUpdate);
+                    $document->setAttribute(PermissionsHook::UNCHANGED, $skipPermissionsUpdate);
 
                     $updateData = [];
                     foreach ($decodedUpdates->getArrayCopy() as $key => $value) {
@@ -1886,7 +1887,7 @@ trait Documents
             $batch = $this->decorateDocuments(Event::DocumentsUpdate, $collection, $batch);
 
             foreach ($batch as $index => $doc) {
-                $doc->removeAttribute(Document::SKIP_PERMISSIONS_UPDATE);
+                $doc->removeAttribute(PermissionsHook::UNCHANGED);
                 try {
                     $onNext && $onNext($doc, $old[$index]);
                 } catch (Throwable $th) {
@@ -2076,12 +2077,12 @@ trait Documents
             // If old is not empty AND documentSecurity is enabled, check if user has update permission on the collection or document
 
             if ($old->isEmpty()) {
-                if (! $this->authorization->isValid(new Input(PermissionType::Create, $collection->getCreate()))) {
+                if (! $this->authorization->isValid(new Input(PermissionType::Create, $collection->getPermissionsByType(PermissionType::Create)))) {
                     throw new AuthorizationException($this->authorization->getDescription());
                 }
             } elseif (! $this->authorization->isValid(new Input(PermissionType::Update, \array_merge(
-                $collection->getUpdate(),
-                ((bool) $documentSecurity ? $old->getUpdate() : [])
+                $collection->getPermissionsByType(PermissionType::Update),
+                ((bool) $documentSecurity ? $old->getPermissionsByType(PermissionType::Update) : [])
             )))) {
                 throw new AuthorizationException($this->authorization->getDescription());
             }
@@ -2400,8 +2401,8 @@ trait Documents
                 $documentSecurity = $collection->getAttribute('documentSecurity', false);
 
                 if (! $this->authorization->isValid(new Input(PermissionType::Update, \array_merge(
-                    $collection->getUpdate(),
-                    ((bool) $documentSecurity ? $document->getUpdate() : [])
+                    $collection->getPermissionsByType(PermissionType::Update),
+                    ((bool) $documentSecurity ? $document->getPermissionsByType(PermissionType::Update) : [])
                 )))) {
                     throw new AuthorizationException($this->authorization->getDescription());
                 }
@@ -2521,8 +2522,8 @@ trait Documents
                 $documentSecurity = $collection->getAttribute('documentSecurity', false);
 
                 if (! $this->authorization->isValid(new Input(PermissionType::Update, \array_merge(
-                    $collection->getUpdate(),
-                    ((bool) $documentSecurity ? $document->getUpdate() : [])
+                    $collection->getPermissionsByType(PermissionType::Update),
+                    ((bool) $documentSecurity ? $document->getPermissionsByType(PermissionType::Update) : [])
                 )))) {
                     throw new AuthorizationException($this->authorization->getDescription());
                 }
@@ -2621,8 +2622,8 @@ trait Documents
                 $documentSecurity = $collection->getAttribute('documentSecurity', false);
 
                 if (! $this->authorization->isValid(new Input(PermissionType::Delete, [
-                    ...$collection->getDelete(),
-                    ...($documentSecurity ? $document->getDelete() : []),
+                    ...$collection->getPermissionsByType(PermissionType::Delete),
+                    ...($documentSecurity ? $document->getPermissionsByType(PermissionType::Delete) : []),
                 ]))) {
                     throw new AuthorizationException($this->authorization->getDescription());
                 }
@@ -2728,7 +2729,7 @@ trait Documents
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
-        $skipAuth = $this->authorization->isValid(new Input(PermissionType::Delete, $collection->getDelete()));
+        $skipAuth = $this->authorization->isValid(new Input(PermissionType::Delete, $collection->getPermissionsByType(PermissionType::Delete)));
 
         if (! $skipAuth && ! $documentSecurity && $collection->getId() !== self::METADATA) {
             throw new AuthorizationException($this->authorization->getDescription());
@@ -3463,7 +3464,7 @@ trait Documents
                         $decoded = false;
                     } else {
                         $documentSecurity = $collection->getAttribute('documentSecurity', false);
-                        $skipAuth = $this->authorization->isValid(new Input(PermissionType::Read, $collection->getRead()));
+                        $skipAuth = $this->authorization->isValid(new Input(PermissionType::Read, $collection->getPermissionsByType(PermissionType::Read)));
 
                         if (! $skipAuth && ! $documentSecurity && $collection->getId() !== self::METADATA) {
                             throw new AuthorizationException($this->authorization->getDescription());
@@ -3493,7 +3494,7 @@ trait Documents
                                 }
 
                                 if (! $skipAuth && $documentSecurity && $collection->getId() !== self::METADATA) {
-                                    if (! $this->authorization->isValid(new Input(PermissionType::Read, $document->getRead()))) {
+                                    if (! $this->authorization->isValid(new Input(PermissionType::Read, $document->getPermissionsByType(PermissionType::Read)))) {
                                         if ($type === 'document') {
                                             $decoded = false;
                                             break;
@@ -4094,7 +4095,7 @@ trait Documents
         }
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
-        $collectionGranted = $this->authorization->isValid(new Input(PermissionType::Read, $collection->getRead()));
+        $collectionGranted = $this->authorization->isValid(new Input(PermissionType::Read, $collection->getPermissionsByType(PermissionType::Read)));
 
         if (! $collectionGranted && ! $documentSecurity && $collection->getId() !== self::METADATA) {
             throw new AuthorizationException($this->authorization->getDescription());
@@ -4155,7 +4156,7 @@ trait Documents
         }
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
-        $collectionGranted = $this->authorization->isValid(new Input(PermissionType::Read, $collection->getRead()));
+        $collectionGranted = $this->authorization->isValid(new Input(PermissionType::Read, $collection->getPermissionsByType(PermissionType::Read)));
 
         if (! $collectionGranted && ! $documentSecurity && $collection->getId() !== self::METADATA) {
             throw new AuthorizationException($this->authorization->getDescription());

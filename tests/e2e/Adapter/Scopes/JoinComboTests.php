@@ -1943,8 +1943,6 @@ trait JoinComboTests
             Document::COLLECTION,
             Document::DISTANCE,
             Document::DELETED_AT,
-            Document::INTERNAL_ID,
-            Document::SKIP_PERMISSIONS_UPDATE,
         ], true);
     }
 

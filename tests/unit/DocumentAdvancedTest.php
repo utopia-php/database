@@ -49,110 +49,7 @@ class DocumentAdvancedTest extends TestCase
         $this->assertSame(99, $clonedItems[0]->getAttribute('val'));
     }
 
-    public function testFindWithSubjectKey(): void
-    {
-        $doc = new Document([
-            '$id' => 'root',
-            'items' => [
-                new Document(['$id' => 'item1', 'name' => 'first']),
-                new Document(['$id' => 'item2', 'name' => 'second']),
-            ],
-        ]);
-
-        $found = $doc->find('name', 'second', 'items');
-        $this->assertInstanceOf(Document::class, $found);
-        $this->assertSame('item2', $found->getId());
-    }
-
-    public function testFindReturnsDocumentOnDirectMatch(): void
-    {
-        $doc = new Document(['$id' => 'test', 'status' => 'active']);
-
-        $result = $doc->find('status', 'active');
-        $this->assertInstanceOf(Document::class, $result);
-        $this->assertSame('test', $result->getId());
-    }
-
-    public function testFindReturnsFalseWhenNotFound(): void
-    {
-        $doc = new Document([
-            '$id' => 'test',
-            'items' => [
-                new Document(['$id' => 'a', 'name' => 'alpha']),
-            ],
-        ]);
-
-        $this->assertFalse($doc->find('name', 'nonexistent', 'items'));
-    }
-
-    public function testFindReturnsFalseForDirectMismatch(): void
-    {
-        $doc = new Document(['$id' => 'test', 'status' => 'active']);
-        $this->assertFalse($doc->find('status', 'inactive'));
-    }
-
-    public function testFindAndReplaceWithSubject(): void
-    {
-        $doc = new Document([
-            '$id' => 'root',
-            'items' => [
-                new Document(['$id' => 'a', 'name' => 'alpha']),
-                new Document(['$id' => 'b', 'name' => 'beta']),
-            ],
-        ]);
-
-        $result = $doc->findAndReplace('name', 'alpha', new Document(['$id' => 'a', 'name' => 'replaced']), 'items');
-        $this->assertTrue($result);
-
-        /** @var array<Document> $items */
-        $items = $doc->getAttribute('items');
-        $this->assertSame('replaced', $items[0]->getAttribute('name'));
-    }
-
-    public function testFindAndReplaceReturnsFalseForMissing(): void
-    {
-        $doc = new Document([
-            '$id' => 'root',
-            'items' => [
-                new Document(['$id' => 'a', 'name' => 'alpha']),
-            ],
-        ]);
-
-        $this->assertFalse($doc->findAndReplace('name', 'nonexistent', 'new', 'items'));
-    }
-
-    public function testFindAndRemoveWithSubject(): void
-    {
-        $doc = new Document([
-            '$id' => 'root',
-            'items' => [
-                new Document(['$id' => 'a', 'name' => 'alpha']),
-                new Document(['$id' => 'b', 'name' => 'beta']),
-                new Document(['$id' => 'c', 'name' => 'gamma']),
-            ],
-        ]);
-
-        $result = $doc->findAndRemove('name', 'beta', 'items');
-        $this->assertTrue($result);
-
-        /** @var array<Document> $items */
-        $items = $doc->getAttribute('items');
-        $this->assertCount(2, $items);
-    }
-
-    public function testFindAndRemoveReturnsFalseForMissing(): void
-    {
-        $doc = new Document([
-            '$id' => 'root',
-            'items' => [
-                new Document(['$id' => 'a', 'name' => 'alpha']),
-            ],
-        ]);
-
-        $this->assertFalse($doc->findAndRemove('name', 'nonexistent', 'items'));
-    }
-
-    public function testGetArrayCopyWithAllowFilter(): void
+    public function testOnlyKeepsTheGivenKeys(): void
     {
         $doc = new Document([
             '$id' => 'test',
@@ -161,7 +58,7 @@ class DocumentAdvancedTest extends TestCase
             'age' => 30,
         ]);
 
-        $copy = $doc->getArrayCopy(['name', 'email']);
+        $copy = $doc->only(['name', 'email']);
 
         $this->assertArrayHasKey('name', $copy);
         $this->assertArrayHasKey('email', $copy);
@@ -169,7 +66,7 @@ class DocumentAdvancedTest extends TestCase
         $this->assertArrayNotHasKey('age', $copy);
     }
 
-    public function testGetArrayCopyWithDisallowFilter(): void
+    public function testExceptDropsTheGivenKeys(): void
     {
         $doc = new Document([
             '$id' => 'test',
@@ -178,7 +75,7 @@ class DocumentAdvancedTest extends TestCase
             'password' => '12345',
         ]);
 
-        $copy = $doc->getArrayCopy([], ['secret', 'password']);
+        $copy = $doc->except(['secret', 'password']);
 
         $this->assertArrayHasKey('$id', $copy);
         $this->assertArrayHasKey('name', $copy);
@@ -415,22 +312,6 @@ class DocumentAdvancedTest extends TestCase
         $this->assertCount(2, $children);
         $this->assertSame('a', $children[0]->getId());
         $this->assertSame('b', $children[1]->getId());
-    }
-
-    public function testFindWithArrayValues(): void
-    {
-        $doc = new Document([
-            '$id' => 'root',
-            'items' => [
-                ['name' => 'alpha', 'score' => 1],
-                ['name' => 'beta', 'score' => 2],
-            ],
-        ]);
-
-        $found = $doc->find('name', 'beta', 'items');
-        $this->assertIsArray($found);
-        $this->assertSame('beta', $found['name']);
-        $this->assertSame(2, $found['score']);
     }
 
     public function testGetArrayCopyWithEmptyArrayValues(): void

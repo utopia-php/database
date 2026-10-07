@@ -15,6 +15,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
+use Utopia\Database\PermissionType;
 
 final class DefinitionModelCacheTest extends TestCase
 {
@@ -86,18 +87,18 @@ final class DefinitionModelCacheTest extends TestCase
         $database = $this->database($adapter, new Cache(new MemoryCache()));
         $this->cachedRead($database, $adapter);
 
-        $this->assertSame(['any'], $database->getCollection(self::COLLECTION)->getRead());
+        $this->assertSame(['any'], $database->getCollection(self::COLLECTION)->getPermissionsByType(PermissionType::Read));
 
         $database->updateCollection(self::COLLECTION, new CollectionUpdate(permissions: [Permission::read(Role::users()), Permission::update(Role::any())], documentSecurity: false));
         $this->cachedRead($database, $adapter);
         $collection = $database->getCollection(self::COLLECTION);
-        $this->assertSame(['users'], $collection->getRead());
-        $this->assertSame(['any'], $collection->getUpdate());
+        $this->assertSame(['users'], $collection->getPermissionsByType(PermissionType::Read));
+        $this->assertSame(['any'], $collection->getPermissionsByType(PermissionType::Update));
 
         $collection->setAttribute('$permissions', [Permission::read(Role::guests())]);
-        $this->assertSame(['guests'], $collection->getRead());
-        $this->assertSame([], $collection->getUpdate());
-        $this->assertSame(['users'], $database->getCollection(self::COLLECTION)->getRead());
+        $this->assertSame(['guests'], $collection->getPermissionsByType(PermissionType::Read));
+        $this->assertSame([], $collection->getPermissionsByType(PermissionType::Update));
+        $this->assertSame(['users'], $database->getCollection(self::COLLECTION)->getPermissionsByType(PermissionType::Read));
     }
 
     /**

@@ -140,26 +140,26 @@ class DocumentTest extends TestCase
 
     public function test_get_create(): void
     {
-        $this->assertEquals(['any', 'user:creator'], $this->document->getCreate());
-        $this->assertEquals([], $this->empty->getCreate());
+        $this->assertEquals(['any', 'user:creator'], $this->document->getPermissionsByType(PermissionType::Create));
+        $this->assertEquals([], $this->empty->getPermissionsByType(PermissionType::Create));
     }
 
     public function test_get_read(): void
     {
-        $this->assertEquals(['user:123', 'team:123'], $this->document->getRead());
-        $this->assertEquals([], $this->empty->getRead());
+        $this->assertEquals(['user:123', 'team:123'], $this->document->getPermissionsByType(PermissionType::Read));
+        $this->assertEquals([], $this->empty->getPermissionsByType(PermissionType::Read));
     }
 
     public function test_get_update(): void
     {
-        $this->assertEquals(['any', 'user:updater'], $this->document->getUpdate());
-        $this->assertEquals([], $this->empty->getUpdate());
+        $this->assertEquals(['any', 'user:updater'], $this->document->getPermissionsByType(PermissionType::Update));
+        $this->assertEquals([], $this->empty->getPermissionsByType(PermissionType::Update));
     }
 
     public function test_get_delete(): void
     {
-        $this->assertEquals(['any', 'user:deleter'], $this->document->getDelete());
-        $this->assertEquals([], $this->empty->getDelete());
+        $this->assertEquals(['any', 'user:deleter'], $this->document->getPermissionsByType(PermissionType::Delete));
+        $this->assertEquals([], $this->empty->getPermissionsByType(PermissionType::Delete));
     }
 
     public function test_get_permission_by_type(): void
@@ -261,121 +261,6 @@ class DocumentTest extends TestCase
     {
         $this->document->removeAttribute('list');
         $this->assertEquals([], $this->document->getAttribute('list', []));
-    }
-
-    public function test_find(): void
-    {
-        $this->assertEquals(null, $this->document->find('find', 'one'));
-
-        $this->document->setAttribute('findString', 'demo');
-        $this->assertEquals($this->document, $this->document->find('findString', 'demo'));
-
-        $this->document->setAttribute('findArray', ['demo']);
-        $this->assertEquals(null, $this->document->find('findArray', 'demo'));
-        $this->assertEquals($this->document, $this->document->find('findArray', ['demo']));
-
-        /** @var array<Document> $children */
-        $children = $this->document->getAttribute('children');
-        $this->assertEquals($children[0], $this->document->find('name', 'x', 'children'));
-        $this->assertEquals($children[2], $this->document->find('name', 'z', 'children'));
-        $this->assertEquals(null, $this->document->find('name', 'v', 'children'));
-    }
-
-    public function test_find_and_replace(): void
-    {
-        $id = $this->id;
-        $collection = $this->collection;
-
-        $document = new Document([
-            '$id' => ID::custom($id),
-            '$collection' => ID::custom($collection),
-            '$permissions' => [
-                Permission::read(Role::user(ID::custom('123'))),
-                Permission::read(Role::team(ID::custom('123'))),
-                Permission::create(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-            'title' => 'This is a test.',
-            'list' => [
-                'one',
-            ],
-            'children' => [
-                new Document(['name' => 'x']),
-                new Document(['name' => 'y']),
-                new Document(['name' => 'z']),
-            ],
-        ]);
-
-        $this->assertEquals(true, $document->findAndReplace('name', 'x', new Document(['name' => '1', 'test' => true]), 'children'));
-        /** @var array<array<string, mixed>> $children */
-        $children = $document->getAttribute('children');
-        $this->assertEquals('1', $children[0]['name']);
-        $this->assertEquals(true, $children[0]['test']);
-
-        // Array with wrong value
-        $this->assertEquals(false, $document->findAndReplace('name', 'xy', new Document(['name' => '1', 'test' => true]), 'children'));
-
-        // Array with wrong key
-        $this->assertEquals(false, $document->findAndReplace('namex', 'x', new Document(['name' => '1', 'test' => true]), 'children'));
-
-        // No array
-        $this->assertEquals(true, $document->findAndReplace('title', 'This is a test.', 'new'));
-        $this->assertEquals('new', $document->getAttribute('title'));
-
-        // No array with wrong value
-        $this->assertEquals(false, $document->findAndReplace('title', 'test', 'new'));
-
-        // No array with wrong key
-        $this->assertEquals(false, $document->findAndReplace('titlex', 'This is a test.', 'new'));
-    }
-
-    public function test_find_and_remove(): void
-    {
-        $id = $this->id;
-        $collection = $this->collection;
-
-        $document = new Document([
-            '$id' => ID::custom($id),
-            '$collection' => ID::custom($collection),
-            '$permissions' => [
-                Permission::read(Role::user(ID::custom('123'))),
-                Permission::read(Role::team(ID::custom('123'))),
-                Permission::create(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-            'title' => 'This is a test.',
-            'list' => [
-                'one',
-            ],
-            'children' => [
-                new Document(['name' => 'x']),
-                new Document(['name' => 'y']),
-                new Document(['name' => 'z']),
-            ],
-        ]);
-        $this->assertEquals(true, $document->findAndRemove('name', 'x', 'children'));
-        /** @var array<array<string, mixed>> $childrenAfterRemove */
-        $childrenAfterRemove = $document->getAttribute('children');
-        $this->assertEquals('y', $childrenAfterRemove[1]['name']);
-        $this->assertCount(2, $childrenAfterRemove);
-
-        // Array with wrong value
-        $this->assertEquals(false, $document->findAndRemove('name', 'xy', 'children'));
-
-        // Array with wrong key
-        $this->assertEquals(false, $document->findAndRemove('namex', 'x', 'children'));
-
-        // No array
-        $this->assertEquals(true, $document->findAndRemove('title', 'This is a test.'));
-        $this->assertEquals(false, $document->isset('title'));
-
-        // No array with wrong value
-        $this->assertEquals(false, $document->findAndRemove('title', 'new'));
-
-        // No array with wrong key
-        $this->assertEquals(false, $document->findAndRemove('titlex', 'This is a test.'));
     }
 
     public function test_is_empty(): void
@@ -510,7 +395,7 @@ class DocumentTest extends TestCase
         $this->assertSame($input['children']['first'], $children['first']->getArrayCopy());
     }
 
-    public function testArrayCopyPreservesKeysAndFiltersNestedDocuments(): void
+    public function testExceptPreservesKeysAndFiltersTopLevelKeysOnly(): void
     {
         $document = new Document([
             'name' => 'parent',
@@ -518,12 +403,12 @@ class DocumentTest extends TestCase
             'values' => [7 => 'seven', 'null' => null, 'empty' => []],
             'children' => ['child' => new Document(['name' => 'nested', 'secret' => 'hidden'])],
         ]);
-        $copy = $document->getArrayCopy(['name', 'secret', 'values', 'children'], ['secret']);
+        $copy = $document->except(['secret']);
 
         $this->assertSame([
             'name' => 'parent',
             'values' => [7 => 'seven', 'null' => null, 'empty' => []],
-            'children' => ['child' => ['name' => 'nested']],
+            'children' => ['child' => ['name' => 'nested', 'secret' => 'hidden']],
         ], $copy);
         $copy['values'][7] = 'changed';
         $copy['children']['child']['name'] = 'changed';
@@ -629,47 +514,47 @@ class DocumentTest extends TestCase
     public function testArrayAccessPermissionWriteRefreshesRoles(): void
     {
         $document = new Document([Document::PERMISSIONS => [Permission::read(Role::user('old'))]]);
-        $this->assertSame(['user:old'], $document->getRead());
+        $this->assertSame(['user:old'], $document->getPermissionsByType(PermissionType::Read));
 
         $document[Document::PERMISSIONS] = [Permission::read(Role::any())];
 
-        $this->assertSame(['any'], $document->getRead());
+        $this->assertSame(['any'], $document->getPermissionsByType(PermissionType::Read));
         $this->assertSame([Permission::read(Role::any())], $document->getPermissions());
     }
 
     public function testUnsetPermissionsClearsRoles(): void
     {
         $document = new Document([Document::PERMISSIONS => [Permission::read(Role::any())]]);
-        $this->assertSame(['any'], $document->getRead());
+        $this->assertSame(['any'], $document->getPermissionsByType(PermissionType::Read));
 
         unset($document[Document::PERMISSIONS]);
 
-        $this->assertSame([], $document->getRead());
+        $this->assertSame([], $document->getPermissionsByType(PermissionType::Read));
         $this->assertSame([], $document->getPermissions());
     }
 
     public function testExchangeArrayRefreshesRoles(): void
     {
         $document = new Document([Document::PERMISSIONS => [Permission::read(Role::any())]]);
-        $this->assertSame(['any'], $document->getRead());
+        $this->assertSame(['any'], $document->getPermissionsByType(PermissionType::Read));
 
         $document->exchangeArray([Document::PERMISSIONS => [Permission::read(Role::user('new'))]]);
 
-        $this->assertSame(['user:new'], $document->getRead());
+        $this->assertSame(['user:new'], $document->getPermissionsByType(PermissionType::Read));
     }
 
     public function testReferenceWriteToPermissionsRefreshesRoles(): void
     {
         $document = new Document([Document::PERMISSIONS => [Permission::read(Role::user('old'))]]);
-        $this->assertSame(['user:old'], $document->getRead());
+        $this->assertSame(['user:old'], $document->getPermissionsByType(PermissionType::Read));
 
         $permissions = &$document[Document::PERMISSIONS];
         $this->assertIsArray($permissions);
         $permissions[] = Permission::update(Role::any());
         unset($permissions);
 
-        $this->assertSame(['user:old'], $document->getRead());
-        $this->assertSame(['any'], $document->getUpdate());
+        $this->assertSame(['user:old'], $document->getPermissionsByType(PermissionType::Read));
+        $this->assertSame(['any'], $document->getPermissionsByType(PermissionType::Update));
     }
 
     public function testGetPermissionsNormalisesArrayAccessWrites(): void
@@ -686,7 +571,7 @@ class DocumentTest extends TestCase
             $document->getPermissions(),
         );
         $this->assertSame('["read(\"any\")","update(\"user:editor\")"]', \json_encode($document->getPermissions()));
-        $this->assertSame(['user:editor'], $document->getUpdate());
+        $this->assertSame(['user:editor'], $document->getPermissionsByType(PermissionType::Update));
     }
 
     public function testConstructorRejectsNonStringPermissions(): void
@@ -730,7 +615,7 @@ class DocumentTest extends TestCase
         }
 
         $this->assertSame([Permission::read(Role::any())], $document->getPermissions());
-        $this->assertSame(['any'], $document->getRead());
+        $this->assertSame(['any'], $document->getPermissionsByType(PermissionType::Read));
     }
 
     public function testSetAttributeRejectsPermissionsThatAreNotAnArray(): void
@@ -759,23 +644,7 @@ class DocumentTest extends TestCase
         ]);
 
         $this->assertSame([Permission::read(Role::any())], $document->getPermissions());
-        $this->assertSame(['any'], $document->getRead());
-    }
-
-    public function testFindAndReplaceInPlainArrayChildren(): void
-    {
-        $document = new Document([
-            'children' => [
-                ['name' => 'x'],
-                ['name' => 'y'],
-            ],
-        ]);
-
-        $this->assertTrue($document->findAndReplace('name', 'x', ['name' => '1'], 'children'));
-        $this->assertSame([['name' => '1'], ['name' => 'y']], $document->getAttribute('children'));
-
-        $this->assertFalse($document->findAndReplace('name', 'missing', ['name' => '2'], 'children'));
-        $this->assertSame([['name' => '1'], ['name' => 'y']], $document->getAttribute('children'));
+        $this->assertSame(['any'], $document->getPermissionsByType(PermissionType::Read));
     }
 
     /**
@@ -865,78 +734,5 @@ class DocumentTest extends TestCase
 
         $this->assertSame(['name' => 'x'], $document->getDocument('map')->getArrayCopy());
         $this->assertSame($child, $document->getDocument('child'));
-    }
-
-    public function testFindAndRemoveRemovesAPlainArrayItemFromASubject(): void
-    {
-        $document = new Document([
-            'items' => [
-                ['name' => 'x'],
-                ['name' => 'y'],
-            ],
-        ]);
-
-        $this->assertTrue($document->findAndRemove('name', 'x', 'items'));
-        $this->assertSame([1 => ['name' => 'y']], $document->getAttribute('items'));
-
-        $this->assertFalse($document->findAndRemove('name', 'missing', 'items'));
-        $this->assertSame([1 => ['name' => 'y']], $document->getAttribute('items'));
-    }
-
-    public function testFindAndReplaceWithoutSubjectPrefersTheTopLevelKey(): void
-    {
-        $document = new Document([
-            'meta' => ['title' => 'x'],
-            'title' => 'x',
-        ]);
-
-        $this->assertTrue($document->findAndReplace('title', 'x', 'y'));
-        $this->assertSame('y', $document->getAttribute('title'));
-        $this->assertSame(['title' => 'x'], $document->getAttribute('meta'));
-    }
-
-    public function testFindAndReplaceWithoutSubjectIgnoresNestedMatches(): void
-    {
-        $document = new Document(['meta' => ['title' => 'x']]);
-
-        $this->assertFalse($document->findAndReplace('title', 'x', 'y'));
-        $this->assertSame(['title' => 'x'], $document->getAttribute('meta'));
-    }
-
-    public function testFindAndReplaceWithADocumentSubjectReplacesInsideIt(): void
-    {
-        $document = new Document(['child' => new Document(['$id' => 'c', 'name' => 'x'])]);
-
-        $this->assertTrue($document->findAndReplace('name', 'x', 'y', 'child'));
-        $this->assertSame('y', $document->getDocument('child')->getAttribute('name'));
-    }
-
-    public function testFindAndRemoveWithoutSubjectPrefersTheTopLevelKey(): void
-    {
-        $document = new Document([
-            'meta' => ['title' => 'x'],
-            'title' => 'x',
-        ]);
-
-        $this->assertTrue($document->findAndRemove('title', 'x'));
-        $this->assertFalse($document->isSet('title'));
-        $this->assertSame(['title' => 'x'], $document->getAttribute('meta'));
-    }
-
-    public function testFindAndRemoveWithADocumentSubjectRemovesInsideIt(): void
-    {
-        $document = new Document(['child' => new Document(['$id' => 'c', 'name' => 'x'])]);
-
-        $this->assertTrue($document->findAndRemove('name', 'x', 'child'));
-        $this->assertFalse($document->getDocument('child')->isSet('name'));
-        $this->assertSame('c', $document->getDocument('child')->getId());
-    }
-
-    public function testFindAndRemoveWithoutSubjectIgnoresNestedMatches(): void
-    {
-        $document = new Document(['meta' => ['title' => 'x']]);
-
-        $this->assertFalse($document->findAndRemove('title', 'x'));
-        $this->assertSame(['title' => 'x'], $document->getAttribute('meta'));
     }
 }

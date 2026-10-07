@@ -38,6 +38,7 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\IntegerWidth;
 use Utopia\Database\PDO as DatabasePDO;
+use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\SetType;
@@ -2572,11 +2573,11 @@ trait DocumentTests
 
         $new = $this->getDatabase()->getDocument($new->getCollection(), $new->getId());
 
-        $this->assertContains('guests', $new->getRead());
-        $this->assertContains('guests', $new->getWrite());
-        $this->assertContains('guests', $new->getCreate());
-        $this->assertContains('guests', $new->getUpdate());
-        $this->assertContains('guests', $new->getDelete());
+        $this->assertContains('guests', $new->getPermissionsByType(PermissionType::Read));
+        $this->assertContains('guests', $this->writeRoles($new));
+        $this->assertContains('guests', $new->getPermissionsByType(PermissionType::Create));
+        $this->assertContains('guests', $new->getPermissionsByType(PermissionType::Update));
+        $this->assertContains('guests', $new->getPermissionsByType(PermissionType::Delete));
 
         $new->setAttribute('$permissions', $oldPermissions);
 
@@ -2584,11 +2585,11 @@ trait DocumentTests
 
         $new = $this->getDatabase()->getDocument($new->getCollection(), $new->getId());
 
-        $this->assertNotContains('guests', $new->getRead());
-        $this->assertNotContains('guests', $new->getWrite());
-        $this->assertNotContains('guests', $new->getCreate());
-        $this->assertNotContains('guests', $new->getUpdate());
-        $this->assertNotContains('guests', $new->getDelete());
+        $this->assertNotContains('guests', $new->getPermissionsByType(PermissionType::Read));
+        $this->assertNotContains('guests', $this->writeRoles($new));
+        $this->assertNotContains('guests', $new->getPermissionsByType(PermissionType::Create));
+        $this->assertNotContains('guests', $new->getPermissionsByType(PermissionType::Update));
+        $this->assertNotContains('guests', $new->getPermissionsByType(PermissionType::Delete));
 
         // Test change document ID
         $id = $new->getId();
@@ -5632,8 +5633,8 @@ trait DocumentTests
             $this->assertEquals(5, count($documents));
             $this->assertNotEmpty($documents[0]->getId());
             $this->assertEquals($this->getMoviesCollection(), $documents[0]->getCollection());
-            $this->assertEquals(['any', 'user:1', 'user:2'], $documents[0]->getRead());
-            $this->assertEquals(['any', 'user:1x', 'user:2x'], $documents[0]->getWrite());
+            $this->assertEquals(['any', 'user:1', 'user:2'], $documents[0]->getPermissionsByType(PermissionType::Read));
+            $this->assertEquals(['any', 'user:1x', 'user:2x'], $this->writeRoles($documents[0]));
             $this->assertEquals('Frozen', $documents[0]->getAttribute('name'));
             $this->assertEquals('Chris Buck & Jennifer Lee', $documents[0]->getAttribute('director'));
             $this->assertIsString($documents[0]->getAttribute('director'));
@@ -6978,9 +6979,9 @@ trait DocumentTests
         $this->assertEquals(count($values), count($documents));
         $this->assertNotEmpty($documents[0]->getId());
         $this->assertEquals($collection, $documents[0]->getCollection());
-        $this->assertEquals(['any'], $documents[0]->getRead());
-        $this->assertEquals(['any'], $documents[0]->getUpdate());
-        $this->assertEquals(['any'], $documents[0]->getDelete());
+        $this->assertEquals(['any'], $documents[0]->getPermissionsByType(PermissionType::Read));
+        $this->assertEquals(['any'], $documents[0]->getPermissionsByType(PermissionType::Update));
+        $this->assertEquals(['any'], $documents[0]->getPermissionsByType(PermissionType::Delete));
         $this->assertEquals($values[0], $documents[0]->getAttribute('value'));
 
         /**
@@ -7588,10 +7589,10 @@ trait DocumentTests
         $this->assertEquals('608fdbe51361a', $result->getAttribute('$id'));
         $this->assertContains('read("any")', $result->getPermissions());
         $this->assertContains('read("any")', $result->getPermissions());
-        $this->assertContains('any', $result->getRead());
+        $this->assertContains('any', $result->getPermissionsByType(PermissionType::Read));
         $this->assertContains(Permission::create(Role::user(ID::custom('608fdbe51361a'))), $result->getPermissions());
-        $this->assertContains('user:608fdbe51361a', $result->getCreate());
-        $this->assertContains('user:608fdbe51361a', $result->getWrite());
+        $this->assertContains('user:608fdbe51361a', $result->getPermissionsByType(PermissionType::Create));
+        $this->assertContains('user:608fdbe51361a', $this->writeRoles($result));
         $this->assertEquals('test@example.com', $result->getAttribute('email'));
         $this->assertEquals(false, $result->getAttribute('emailVerification'));
         $this->assertEquals(1, $result->getAttribute('status'));
@@ -7612,10 +7613,10 @@ trait DocumentTests
         $this->assertEquals('608fdbe51361a', $result->getAttribute('$id'));
         $this->assertContains('read("any")', $result->getPermissions());
         $this->assertContains('read("any")', $result->getPermissions());
-        $this->assertContains('any', $result->getRead());
+        $this->assertContains('any', $result->getPermissionsByType(PermissionType::Read));
         $this->assertContains(Permission::create(Role::user('608fdbe51361a')), $result->getPermissions());
-        $this->assertContains('user:608fdbe51361a', $result->getCreate());
-        $this->assertContains('user:608fdbe51361a', $result->getWrite());
+        $this->assertContains('user:608fdbe51361a', $result->getPermissionsByType(PermissionType::Create));
+        $this->assertContains('user:608fdbe51361a', $this->writeRoles($result));
         $this->assertEquals('test@example.com', $result->getAttribute('email'));
         $this->assertEquals(false, $result->getAttribute('emailVerification'));
         $this->assertEquals(1, $result->getAttribute('status'));
@@ -7683,8 +7684,8 @@ trait DocumentTests
 
         $new = $this->getDatabase()->getDocument($new->getCollection(), $new->getId());
 
-        $this->assertContains('guests', $new->getRead());
-        $this->assertContains('guests', $new->getCreate());
+        $this->assertContains('guests', $new->getPermissionsByType(PermissionType::Read));
+        $this->assertContains('guests', $new->getPermissionsByType(PermissionType::Create));
 
         $database = $this->getDatabase();
         $collection = 'dupCase';
@@ -7712,9 +7713,9 @@ trait DocumentTests
 
         $updated = $database->getDocument($collection, 'CaseSensitive');
         $this->assertSame('CaseSensitive', $updated->getId());
-        $this->assertContains('guests', $updated->getRead());
-        $this->assertContains('guests', $updated->getCreate());
-        $this->assertContains('any', $updated->getCreate());
+        $this->assertContains('guests', $updated->getPermissionsByType(PermissionType::Read));
+        $this->assertContains('guests', $updated->getPermissionsByType(PermissionType::Create));
+        $this->assertContains('any', $updated->getPermissionsByType(PermissionType::Create));
     }
 
     /**
@@ -8693,6 +8694,20 @@ trait DocumentTests
 
         // Cleanup
         $database->deleteCollection($collection);
+    }
+
+    /**
+     * The roles holding create, update and delete permission on the document.
+     *
+     * @return array<string>
+     */
+    private function writeRoles(Document $document): array
+    {
+        return \array_unique(\array_intersect(
+            $document->getPermissionsByType(PermissionType::Create),
+            $document->getPermissionsByType(PermissionType::Update),
+            $document->getPermissionsByType(PermissionType::Delete),
+        ));
     }
 
     private function assertReadServedFromCache(Database $database, callable $read, string $message): void

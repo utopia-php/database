@@ -3,8 +3,11 @@
 namespace Tests\Unit\Validator;
 
 use PHPUnit\Framework\TestCase;
+use Utopia\Database\Attribute;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
+use Utopia\Database\Relationship;
+use Utopia\Database\RelationshipSide;
 use Utopia\Database\Validator\Queries\Documents;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
@@ -34,7 +37,7 @@ class JoinedAttributesTest extends TestCase
             $this->attribute('amount', ColumnType::Integer),
             $this->attribute('status', ColumnType::String),
             $this->attribute('memo', ColumnType::String),
-            $this->attribute('customer', ColumnType::Relationship),
+            Attribute::relationship('customer', Relationship::manyToOne('customers'), RelationshipSide::Parent)->toDocument(),
         ]);
         $this->refunds = $this->collection('refunds', [
             $this->attribute('customerId', ColumnType::String),

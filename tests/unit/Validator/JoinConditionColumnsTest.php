@@ -6,8 +6,8 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
-use Utopia\Database\RelationSide;
-use Utopia\Database\RelationType;
+use Utopia\Database\RelationshipSide;
+use Utopia\Database\RelationshipType;
 use Utopia\Database\Validator\Queries;
 use Utopia\Database\Validator\Queries\Document as DocumentQueries;
 use Utopia\Database\Validator\Queries\Documents as DocumentsQueries;
@@ -281,8 +281,8 @@ final class JoinConditionColumnsTest extends TestCase
             $this->attribute('name', ColumnType::String),
             $this->attribute('score', ColumnType::Integer),
             $this->attribute('secret', ColumnType::String, filters: ['encrypt']),
-            $this->relationship('library', RelationType::OneToOne, RelationSide::Parent),
-            $this->relationship('books', RelationType::OneToMany, RelationSide::Parent),
+            $this->relationship('library', RelationshipType::OneToOne, RelationshipSide::Parent),
+            $this->relationship('books', RelationshipType::OneToMany, RelationshipSide::Parent),
         ];
     }
 
@@ -303,11 +303,11 @@ final class JoinConditionColumnsTest extends TestCase
             ]),
             $this->collection('libraries', [
                 $this->attribute('name', ColumnType::String),
-                $this->relationship('person', RelationType::OneToOne, RelationSide::Child),
+                $this->relationship('person', RelationshipType::OneToOne, RelationshipSide::Child),
             ]),
             $this->collection('books', [
                 $this->attribute('title', ColumnType::String),
-                $this->relationship('owner', RelationType::OneToMany, RelationSide::Child),
+                $this->relationship('owner', RelationshipType::OneToMany, RelationshipSide::Child),
             ]),
         ];
     }
@@ -337,7 +337,7 @@ final class JoinConditionColumnsTest extends TestCase
         ]);
     }
 
-    private function relationship(string $key, RelationType $type, RelationSide $side): Document
+    private function relationship(string $key, RelationshipType $type, RelationshipSide $side): Document
     {
         return new Document([
             '$id' => $key,

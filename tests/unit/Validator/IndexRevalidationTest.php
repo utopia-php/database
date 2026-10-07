@@ -7,6 +7,7 @@ use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Attribute;
+use Utopia\Database\AttributeUpdate;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
@@ -27,15 +28,15 @@ final class IndexRevalidationTest extends TestCase
         $database->create();
         $this->assertFalse($database->getAdapter()->supports(Capability::IdenticalIndexes));
 
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [Attribute::string(key: 'name', size: 64)],
             indexes: [Index::key(key: 'by_name', attributes: ['name'])],
         ));
 
-        $updated = $database->updateAttribute(self::COLLECTION, 'name', size: 128);
+        $updated = $database->updateAttribute(self::COLLECTION, 'name', new AttributeUpdate(size: 128));
 
-        $this->assertSame(128, $updated->getAttribute('size'));
-        $this->assertSame(128, $database->getCollection(self::COLLECTION)->attributes[0]->size);
+        $this->assertSame(128, $updated->size);
+        $this->assertSame(128, $database->getCollection(self::COLLECTION)->attributes()[0]->size);
     }
 }

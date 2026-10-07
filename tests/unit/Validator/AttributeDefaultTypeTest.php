@@ -4,9 +4,11 @@ namespace Tests\Unit\Validator;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Attribute as AttributeVO;
+use Utopia\Database\Attribute;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Validator\Attribute;
+use Utopia\Database\RelationshipSide;
+use Utopia\Database\RelationshipType;
+use Utopia\Database\Validator\AttributeDefinition;
 use Utopia\Query\Schema\ColumnType;
 
 final class AttributeDefaultTypeTest extends TestCase
@@ -31,7 +33,12 @@ final class AttributeDefaultTypeTest extends TestCase
     {
         $validator = $this->validator(vectors: false, spatial: false);
 
-        $message = $this->refusal($validator, new AttributeVO(key: 'value', type: $type, default: $default));
+        $message = $this->refusal($validator, Attribute::fromArray([
+            'key' => 'value',
+            'type' => $type,
+            'default' => $default,
+            'options' => ['relatedCollection' => 'others', 'relationType' => RelationshipType::OneToOne->value, 'side' => RelationshipSide::Parent->value],
+        ]));
 
         $this->assertStringStartsWith("Unknown attribute type: {$type->value}. Must be one of ", $message);
         $this->assertStringContainsString(ColumnType::String->value, $message);
@@ -44,7 +51,7 @@ final class AttributeDefaultTypeTest extends TestCase
     {
         $message = $this->refusal(
             $this->validator(vectors: true, spatial: true),
-            new AttributeVO(key: 'value', type: ColumnType::Object, default: 'x'),
+            Attribute::fromArray(['key' => 'value', 'type' => ColumnType::Object, 'default' => 'x']),
         );
 
         $this->assertStringContainsString(ColumnType::Vector->value, $message);
@@ -54,7 +61,7 @@ final class AttributeDefaultTypeTest extends TestCase
 
         $vectorsOnly = $this->refusal(
             $this->validator(vectors: true, spatial: false),
-            new AttributeVO(key: 'value', type: ColumnType::Id, default: 'x'),
+            Attribute::id(key: 'value', default: 'x'),
         );
         $this->assertStringContainsString(ColumnType::Vector->value, $vectorsOnly);
         $this->assertStringNotContainsString(ColumnType::Polygon->value, $vectorsOnly);
@@ -64,10 +71,10 @@ final class AttributeDefaultTypeTest extends TestCase
     {
         $validator = $this->validator(vectors: true, spatial: true);
 
-        $this->assertTrue($validator->checkDefaultValue(new AttributeVO(key: 'value', type: ColumnType::Object, default: ['nested' => 'x'])));
+        $this->assertTrue($validator->checkDefaultValue(Attribute::object(key: 'value', default: ['nested' => 'x'])));
     }
 
-    private function refusal(Attribute $validator, AttributeVO $attribute): string
+    private function refusal(AttributeDefinition $validator, Attribute $attribute): string
     {
         try {
             $validator->checkDefaultValue($attribute);
@@ -80,9 +87,9 @@ final class AttributeDefaultTypeTest extends TestCase
         $this->fail("A scalar default on {$attribute->type->value} must be refused");
     }
 
-    private function validator(bool $vectors, bool $spatial): Attribute
+    private function validator(bool $vectors, bool $spatial): AttributeDefinition
     {
-        return new Attribute(
+        return new AttributeDefinition(
             attributes: [],
             supportForVectors: $vectors,
             supportForSpatialAttributes: $spatial,

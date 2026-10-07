@@ -7,8 +7,8 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
-use Utopia\Database\RelationSide;
-use Utopia\Database\RelationType;
+use Utopia\Database\RelationshipSide;
+use Utopia\Database\RelationshipType;
 use Utopia\Database\Validator\Queries;
 use Utopia\Database\Validator\Queries\Document as DocumentQueries;
 use Utopia\Database\Validator\Query\Aggregate;
@@ -307,7 +307,7 @@ final class JoinedColumnTest extends TestCase
                 '$id' => 'customer',
                 'key' => 'customer',
                 'type' => ColumnType::Relationship->value,
-                'options' => ['relationType' => RelationType::ManyToMany->value, 'side' => RelationSide::Parent->value],
+                'options' => ['relatedCollection' => 'customers', 'relationType' => RelationshipType::ManyToMany->value, 'side' => RelationshipSide::Parent->value],
             ]),
         ]);
     }

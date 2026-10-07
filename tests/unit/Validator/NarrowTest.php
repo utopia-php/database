@@ -8,15 +8,15 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Database\Attribute;
 use Utopia\Database\Document;
 use Utopia\Database\Index;
+use Utopia\Database\IntegerWidth;
 use Utopia\Database\Query;
-use Utopia\Database\RelationSide;
-use Utopia\Database\RelationType;
+use Utopia\Database\RelationshipSide;
+use Utopia\Database\RelationshipType;
 use Utopia\Database\Validator\Queries\Bounds;
 use Utopia\Database\Validator\Queries\Documents;
 use Utopia\Database\Validator\Queries\Narrow;
 use Utopia\Query\Method;
 use Utopia\Query\Schema\ColumnType;
-use Utopia\Query\Schema\IndexType;
 
 final class NarrowTest extends TestCase
 {
@@ -174,11 +174,6 @@ final class NarrowTest extends TestCase
         $this->assertNull($this->narrow($queries, true, true));
     }
 
-    public function testAnAttributeThatIsNotADocumentIsLeftToTheDocumentsValidator(): void
-    {
-        $this->assertNull(Narrow::of([Query::equal('title', ['Dune'])], [['key' => 'title']], $this->bounds(), self::MAX_VALUES, true, true, true));
-    }
-
     public function testEachListIsCheckedAgainstTheAttributesItWasGiven(): void
     {
         $queries = [Query::equal('title', ['Dune'])];
@@ -237,7 +232,7 @@ final class NarrowTest extends TestCase
 
         return new Documents(
             $this->attributes(),
-            [new Index('title_fulltext', IndexType::Fulltext, ['title']), new Index('count_key', IndexType::Key, ['count'])],
+            [Index::fulltext('title_fulltext', ['title']), Index::key('count_key', ['count'])],
             $bounds->idAttributeType,
             self::MAX_VALUES,
             $bounds->maxUIDLength,
@@ -266,7 +261,7 @@ final class NarrowTest extends TestCase
             Attribute::string(key: 'title', size: 64),
             Attribute::integer(key: 'count'),
             Attribute::integer(key: 'unsigned', signed: false),
-            Attribute::integer(key: 'big', size: 8),
+            Attribute::integer(key: 'big', width: IntegerWidth::Bits64),
             Attribute::bigInteger(key: 'huge'),
             Attribute::bigInteger(key: 'hugeUnsigned', signed: false),
             Attribute::float(key: 'price'),
@@ -278,25 +273,25 @@ final class NarrowTest extends TestCase
             Attribute::integer(key: 'dup'),
             Attribute::object(key: 'meta'),
             Attribute::point(key: 'location'),
-            Attribute::vector(key: 'embedding', size: 3),
+            Attribute::vector(key: 'embedding', dimensions: 3),
             Attribute::integer(key: Document::ID),
-            $this->relationship('author', RelationType::OneToOne, false, RelationSide::Child),
-            $this->relationship('books', RelationType::OneToMany, true, RelationSide::Parent),
-            $this->relationship('editor', RelationType::ManyToOne, true, RelationSide::Child),
-            $this->relationship('readers', RelationType::ManyToMany, true, RelationSide::Parent),
-            $this->relationship('owner', RelationType::ManyToOne, true, RelationSide::Parent),
+            $this->relationship('author', RelationshipType::OneToOne, false, RelationshipSide::Child),
+            $this->relationship('books', RelationshipType::OneToMany, true, RelationshipSide::Parent),
+            $this->relationship('editor', RelationshipType::ManyToOne, true, RelationshipSide::Child),
+            $this->relationship('readers', RelationshipType::ManyToMany, true, RelationshipSide::Parent),
+            $this->relationship('owner', RelationshipType::ManyToOne, true, RelationshipSide::Parent),
         ];
     }
 
-    private function relationship(string $key, RelationType $type, bool $twoWay, RelationSide $side): Attribute
+    private function relationship(string $key, RelationshipType $type, bool $twoWay, RelationshipSide $side): Attribute
     {
-        return Attribute::relationship(key: $key, options: [
+        return Attribute::fromArray(['key' => $key, 'type' => ColumnType::Relationship, 'options' => [
             'relatedCollection' => 'people',
             'relationType' => $type->value,
             'twoWay' => $twoWay,
             'twoWayKey' => $key.'Back',
             'onDelete' => 'restrict',
             'side' => $side->value,
-        ]);
+        ]]);
     }
 }

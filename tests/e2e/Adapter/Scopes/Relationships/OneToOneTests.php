@@ -4,7 +4,6 @@ namespace Tests\E2E\Adapter\Scopes\Relationships;
 
 use Exception;
 use Utopia\Database\Adapter\Feature;
-use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
@@ -1828,7 +1827,7 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) || $this->engineIs(Mongo::class)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) || ! $this->supportsBulkWrites()) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2146,7 +2145,7 @@ trait OneToOneTests
 
         if (
             ! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) ||
-            $this->engineIs(Mongo::class)
+            ! $this->supportsBulkWrites()
         ) {
             $this->expectNotToPerformAssertions();
 
@@ -2223,7 +2222,7 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) || $this->engineIs(Mongo::class)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) || ! $this->supportsBulkWrites()) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2506,7 +2505,7 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) || $this->engineIs(Mongo::class)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) || ! $this->supportsBulkWrites()) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2546,7 +2545,7 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) || $this->engineIs(Mongo::class)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) || ! $this->supportsBulkWrites()) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2590,7 +2589,7 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) || $this->engineIs(Mongo::class)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) || ! $this->supportsBulkWrites()) {
             $this->expectNotToPerformAssertions();
 
             return;

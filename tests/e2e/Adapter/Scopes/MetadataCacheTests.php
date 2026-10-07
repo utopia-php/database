@@ -5,8 +5,6 @@ namespace Tests\E2E\Adapter\Scopes;
 use RuntimeException;
 use Throwable;
 use Utopia\Database\Adapter\Feature;
-use Utopia\Database\Adapter\Memory;
-use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Attribute;
 use Utopia\Database\AttributeUpdate;
 use Utopia\Database\Capability;
@@ -397,7 +395,7 @@ trait MetadataCacheTests
     {
         $database = $this->getDatabase();
 
-        if (! $this->engineIs(SQL::class, Memory::class)) {
+        if (! $this->supportsAtomicTransactions()) {
             $this->expectNotToPerformAssertions();
 
             return;

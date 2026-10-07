@@ -1902,7 +1902,7 @@ trait AggregationTests
     {
         $database = static::getDatabase();
         $adapter = $database->getAdapter();
-        if (! $adapter->supports(Capability::Aggregations) || $adapter->hasFeature(SQLite::class)) {
+        if (! $adapter->supports(Capability::Aggregations) || $this->engineIs(SQLite::class)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1924,7 +1924,7 @@ trait AggregationTests
     public function testSearchWithoutAFulltextIndexIsAnInvalidQuery(): void
     {
         $database = static::getDatabase();
-        if (! $database->getAdapter()->hasFeature(MariaDB::class)) {
+        if (! $this->engineIs(MariaDB::class)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1949,7 +1949,7 @@ trait AggregationTests
     public function testMoreTablesThanTheEngineCanJoinIsAnInvalidQuery(): void
     {
         $database = static::getDatabase();
-        if (! $database->getAdapter()->hasFeature(MariaDB::class)) {
+        if (! $this->engineIs(MariaDB::class)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2000,7 +2000,7 @@ trait AggregationTests
         $this->assertSame([$longest], \array_keys($total[0]));
         $this->assertSame(2785, $this->intAttribute($total[0], $longest));
 
-        if ($this->engineIs(SQL::class) && ! $this->engineIs(SQLite::class)) {
+        if ($this->supportsBitwiseAggregates()) {
             $grouped = $database->aggregate($collection, [Query::bitOr('price', $longest), Query::groupBy(['category']), Query::orderAsc('category')]);
             $this->assertSame(
                 [['books', 63], ['clothing', 126], ['electronics', 2036]],
@@ -2031,7 +2031,7 @@ trait AggregationTests
 
         $queries = [Query::distinct(), Query::select(['name']), Query::orderAsc('score')];
 
-        if ($adapter->hasFeature(Postgres::class) || $adapter->hasFeature(MySQL::class)) {
+        if ($this->engineIs(Postgres::class, MySQL::class)) {
             $this->assertRejectedAsQueryShape(
                 fn () => $database->find($collection, $queries),
                 'A distinct() query can only be ordered by a selected attribute on this database',
@@ -2165,7 +2165,7 @@ trait AggregationTests
     public function testBitwiseAggregateUnderALongAliasLeavesAnotherAggregateItsValue(): void
     {
         $database = static::getDatabase();
-        if (! $this->engineIs(SQL::class) || $this->engineIs(SQLite::class)) {
+        if (! $this->supportsBitwiseAggregates()) {
             $this->expectNotToPerformAssertions();
 
             return;

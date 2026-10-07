@@ -2,267 +2,277 @@
 
 namespace Utopia\Database;
 
-use Utopia\Database\Helpers\ID;
+use Utopia\Database\Exception\Index as IndexException;
+use Utopia\Database\Exception\Structure as StructureException;
 
-/**
- * A collection metadata document. Nested attributes and indexes are Attribute and Index models.
- *
- * @property string $id
- * @property string $name
- * @property array<Attribute> $attributes
- * @property array<Index> $indexes
- * @property array<string>|null $permissions
- * @property bool $documentSecurity
- * @property array<string, mixed> $metadata
- */
 class Collection extends Document
 {
+    /** @var list<Attribute>|null */
+    private ?array $attributeModels = null;
+
+    private mixed $attributeSource = null;
+
+    /** @var list<Index>|null */
+    private ?array $indexModels = null;
+
+    private mixed $indexSource = null;
+
     /**
-     * @param  array<Attribute|Document|array<string, mixed>>  $attributes
-     * @param  array<Index|Document|array<string, mixed>>  $indexes
-     * @param  array<string>|null  $permissions  Null means default create-any; empty means none
+     * @param  array<string, mixed>  $input
+     */
+    private function __construct(array $input)
+    {
+        parent::__construct($input);
+    }
+
+    /**
+     * @param  list<Attribute>  $attributes
+     * @param  list<Index>  $indexes
+     * @param  list<string>|null  $permissions  null grants the default create-any permission on creation; [] grants none
      * @param  array<string, mixed>  $metadata
      */
-    public function __construct(
-        string $id = '',
+    public static function create(
+        string $id,
         string $name = '',
         array $attributes = [],
         array $indexes = [],
         ?array $permissions = null,
         bool $documentSecurity = true,
-        public array $metadata = [],
-    ) {
+        array $metadata = [],
+    ): self {
         $data = [
-            self::ID => ID::custom($id),
+            self::ID => $id,
             'name' => $name !== '' ? $name : $id,
-            'attributes' => self::castAttributes($attributes),
-            'indexes' => self::castIndexes($indexes),
+            'attributes' => \array_map(static fn (Attribute $attribute): Document => $attribute->toDocument(), $attributes),
+            'indexes' => \array_map(static fn (Index $index): Document => $index->toDocument(), $indexes),
+            'documentSecurity' => $documentSecurity,
         ];
-        if ($id !== '') {
-            $data['documentSecurity'] = $documentSecurity;
-        }
+
         if ($permissions !== null) {
             $data[self::PERMISSIONS] = $permissions;
         }
 
-        parent::__construct(\array_merge($data, $this->metadata));
-    }
-
-    public function isEmpty(): bool
-    {
-        return $this->getId() === '';
+        return new self(\array_merge($data, $metadata));
     }
 
     /**
      * @param  array<string, mixed>  $data
+     *
+     * @throws StructureException
+     * @throws IndexException
      */
     public static function fromArray(array $data): self
     {
         $id = $data[self::ID] ?? '';
-        if (! \is_string($id)) {
-            $id = '';
+        $data[self::ID] = $id = \is_string($id) ? $id : '';
+
+        $name = $data['name'] ?? '';
+        $data['name'] = \is_string($name) && $name !== '' ? $name : $id;
+
+        if (\array_key_exists(self::PERMISSIONS, $data) && ! \is_array($data[self::PERMISSIONS])) {
+            unset($data[self::PERMISSIONS]);
         }
 
-        $name = $data['name'] ?? $id;
-        if (! \is_string($name)) {
-            $name = $id;
+        $data['documentSecurity'] = (bool) ($data['documentSecurity'] ?? true);
+        $data['attributes'] = self::attributeDocuments($data['attributes'] ?? []);
+        $data['indexes'] = self::indexDocuments($data['indexes'] ?? []);
+
+        return new self($data);
+    }
+
+    public function toDocument(): Document
+    {
+        $document = new Document();
+        $document->exchangeArray(\iterator_to_array(clone $this));
+
+        return $document;
+    }
+
+    /**
+     * @return list<Attribute>
+     *
+     * @throws StructureException
+     */
+    public function attributes(): array
+    {
+        $source = $this->getAttribute('attributes', []);
+        if ($this->attributeModels !== null && $source === $this->attributeSource) {
+            return $this->attributeModels;
         }
 
-        $permissions = null;
-        if (\array_key_exists(self::PERMISSIONS, $data) && \is_array($data[self::PERMISSIONS])) {
-            /** @var array<string> $permissions */
-            $permissions = $data[self::PERMISSIONS];
-        }
-
-        $rawAttributes = $data['attributes'] ?? [];
-        $rawIndexes = $data['indexes'] ?? [];
-
-        $collection = new self(
-            id: $id,
-            name: $name,
-            attributes: \is_array($rawAttributes) ? self::castAttributes($rawAttributes) : [],
-            indexes: \is_array($rawIndexes) ? self::castIndexes($rawIndexes) : [],
-            permissions: $permissions,
-            documentSecurity: (bool) ($data['documentSecurity'] ?? true),
-        );
-
-        if (\is_string($rawAttributes)) {
-            $collection->setAttribute('attributes', $rawAttributes);
-        }
-        if (\is_string($rawIndexes)) {
-            $collection->setAttribute('indexes', $rawIndexes);
-        }
-
-        foreach ($data as $key => $value) {
-            if (\in_array($key, [self::ID, 'name', 'attributes', 'indexes', self::PERMISSIONS, 'documentSecurity'], true)) {
-                continue;
+        $models = [];
+        if (\is_array($source)) {
+            foreach ($source as $attribute) {
+                $models[] = match (true) {
+                    $attribute instanceof Document => Attribute::fromDocument($attribute),
+                    $attribute instanceof Attribute => $attribute,
+                    \is_array($attribute) => Attribute::fromDocument(new Document(self::stringKeyed($attribute))),
+                    default => throw new StructureException('Collection attributes must be attribute documents'),
+                };
             }
-            $collection->setAttribute($key, $value);
         }
 
-        return $collection;
+        $this->attributeSource = $source;
+
+        return $this->attributeModels = $models;
     }
 
     /**
-     * @return (
-     *     $name is 'id' ? string :
-     *     $name is 'name' ? string :
-     *     $name is 'attributes' ? array<Attribute> :
-     *     $name is 'indexes' ? array<Index> :
-     *     $name is 'permissions' ? array<string>|null :
-     *     $name is 'documentSecurity' ? bool :
-     *     mixed
-     * )
+     * @return list<Index>
+     *
+     * @throws IndexException
      */
-    public function __get(string $name): mixed
+    public function indexes(): array
     {
-        switch ($name) {
-            case 'id':
-                return $this->getId();
-            case 'name':
-                return $this->getName();
-            case 'attributes':
-                return $this->getDeclaredAttributes();
-            case 'indexes':
-                return $this->getIndexes();
-            case 'permissions':
-                return $this->getDeclaredPermissions();
-            case 'documentSecurity':
-                return $this->hasDocumentSecurity();
-            default:
-                return $this->getAttribute($name);
+        $source = $this->getAttribute('indexes', []);
+        if ($this->indexModels !== null && $source === $this->indexSource) {
+            return $this->indexModels;
         }
+
+        $models = [];
+        if (\is_array($source)) {
+            foreach ($source as $index) {
+                $models[] = match (true) {
+                    $index instanceof Document => Index::fromDocument($index),
+                    $index instanceof Index => $index,
+                    \is_array($index) => Index::fromArray(self::stringKeyed($index)),
+                    default => throw new IndexException('Collection indexes must be index documents'),
+                };
+            }
+        }
+
+        $this->indexSource = $source;
+
+        return $this->indexModels = $models;
     }
 
-    public function getName(): string
+    public function name(): string
     {
-        /** @var string $name */
-        $name = $this->getAttribute('name', $this->getId());
+        $name = $this->getAttribute('name');
 
-        return $name;
+        return \is_string($name) && $name !== '' ? $name : $this->getId();
     }
 
-    /**
-     * @return array<string>|null
-     */
-    public function getDeclaredPermissions(): ?array
-    {
-        return $this->offsetExists(self::PERMISSIONS) ? $this->getPermissions() : null;
-    }
-
-    public function hasDocumentSecurity(): bool
+    public function documentSecurity(): bool
     {
         return (bool) $this->getAttribute('documentSecurity', true);
     }
 
     /**
-     * @return array<Attribute>
+     * @return list<string>|null
      */
-    public function getDeclaredAttributes(): array
+    public function declaredPermissions(): ?array
     {
-        return self::castAttributes($this->getArray('attributes'));
+        return $this->offsetExists(self::PERMISSIONS) ? $this->getPermissions() : null;
+    }
+
+    public function offsetSet(mixed $key, mixed $value): void
+    {
+        parent::offsetSet($key, $value);
+        $this->forget();
+    }
+
+    public function offsetUnset(mixed $key): void
+    {
+        parent::offsetUnset($key);
+        $this->forget();
+    }
+
+    public function append(mixed $value): void
+    {
+        parent::append($value);
+        $this->forget();
     }
 
     /**
-     * @return array<Index>
+     * @param  array<string, mixed>|object  $array
+     * @return array<mixed>
      */
-    public function getIndexes(): array
+    public function exchangeArray(array|object $array): array
     {
-        return self::castIndexes($this->getArray('indexes'));
+        $previous = parent::exchangeArray($array);
+        $this->forget();
+
+        return $previous;
     }
 
-    public function __set(string $name, mixed $value): void
+    private function forget(): void
     {
-        match ($name) {
-            'id' => $this->setAttribute(self::ID, $value),
-            'name' => $this->setAttribute('name', $value),
-            'attributes' => $this->setAttribute('attributes', $value),
-            'indexes' => $this->setAttribute('indexes', $value),
-            'permissions' => $this->setAttribute(self::PERMISSIONS, $value ?? []),
-            'documentSecurity' => $this->setAttribute('documentSecurity', $value),
-            default => $this->setAttribute($name, $value),
-        };
-    }
-
-    public function __isset(string $name): bool
-    {
-        return match ($name) {
-            'id', 'name', 'attributes', 'indexes', 'permissions', 'documentSecurity', 'metadata' => true,
-            default => $this->offsetExists($name),
-        };
+        $this->attributeModels = null;
+        $this->attributeSource = null;
+        $this->indexModels = null;
+        $this->indexSource = null;
     }
 
     /**
-     * @param  mixed  $attributes
-     * @return array<Attribute>
+     * @return list<Document>|string
+     *
+     * @throws StructureException
      */
-    private static function castAttributes(mixed $attributes): array
+    private static function attributeDocuments(mixed $attributes): array|string
     {
+        if (\is_string($attributes)) {
+            return $attributes;
+        }
+
         if (! \is_array($attributes)) {
             return [];
         }
 
-        $cast = [];
-        foreach ($attributes as $attr) {
-            if ($attr instanceof Attribute) {
-                $cast[] = $attr;
-
-                continue;
-            }
-            if ($attr instanceof Document) {
-                $cast[] = Attribute::fromArray($attr->getArrayCopy());
-
-                continue;
-            }
-            if (! \is_array($attr)) {
-                throw new \InvalidArgumentException('Collection attributes must be Attribute models');
-            }
-            $typed = [];
-            foreach ($attr as $name => $item) {
-                if (\is_string($name)) {
-                    $typed[$name] = $item;
-                }
-            }
-            $cast[] = Attribute::fromArray($typed);
+        $documents = [];
+        foreach ($attributes as $attribute) {
+            $documents[] = match (true) {
+                $attribute instanceof Attribute => $attribute->toDocument(),
+                $attribute instanceof Document => $attribute,
+                \is_array($attribute) => new Document(self::stringKeyed($attribute)),
+                default => throw new StructureException('Collection attributes must be attribute documents'),
+            };
         }
 
-        return $cast;
+        return $documents;
     }
 
     /**
-     * @param  mixed  $indexes
-     * @return array<Index>
+     * @return list<Document>|string
+     *
+     * @throws IndexException
      */
-    private static function castIndexes(mixed $indexes): array
+    private static function indexDocuments(mixed $indexes): array|string
     {
+        if (\is_string($indexes)) {
+            return $indexes;
+        }
+
         if (! \is_array($indexes)) {
             return [];
         }
 
-        $cast = [];
-        foreach ($indexes as $idx) {
-            if ($idx instanceof Index) {
-                $cast[] = $idx;
-
-                continue;
-            }
-            if ($idx instanceof Document) {
-                $cast[] = Index::fromArray($idx->getArrayCopy());
-
-                continue;
-            }
-            if (! \is_array($idx)) {
-                throw new \InvalidArgumentException('Collection indexes must be Index models');
-            }
-            $typed = [];
-            foreach ($idx as $name => $item) {
-                if (\is_string($name)) {
-                    $typed[$name] = $item;
-                }
-            }
-            $cast[] = Index::fromArray($typed);
+        $documents = [];
+        foreach ($indexes as $index) {
+            $documents[] = match (true) {
+                $index instanceof Index => $index->toDocument(),
+                $index instanceof Document => $index,
+                \is_array($index) => new Document(self::stringKeyed($index)),
+                default => throw new IndexException('Collection indexes must be index documents'),
+            };
         }
 
-        return $cast;
+        return $documents;
+    }
+
+    /**
+     * @param  array<mixed>  $data
+     * @return array<string, mixed>
+     */
+    private static function stringKeyed(array $data): array
+    {
+        $keyed = [];
+        foreach ($data as $key => $value) {
+            if (\is_string($key)) {
+                $keyed[$key] = $value;
+            }
+        }
+
+        return $keyed;
     }
 }

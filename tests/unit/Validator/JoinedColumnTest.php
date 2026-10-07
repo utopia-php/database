@@ -137,7 +137,7 @@ final class JoinedColumnTest extends TestCase
     public function testEachAliasResolvesToItsOwnCollection(): void
     {
         $validator = $this->validator([$this->notes(), $this->orders()]);
-        $joins = [self::join(), Query::join('orders', '$id', 'customerId', '=', 'purchase')];
+        $joins = [self::join(), Query::join('orders', 'purchase', [Query::on('$id', 'customerId')])];
 
         $this->assertTrue($validator->isValid([...$joins, Query::equal('purchase.amount', [1]), Query::equal('note.body', ['x'])]), $validator->getDescription());
 
@@ -148,7 +148,7 @@ final class JoinedColumnTest extends TestCase
     public function testCollectionJoinedTwiceIsCheckedUnderBothAliases(): void
     {
         $validator = $this->validator([$this->notes()]);
-        $joins = [self::join(), Query::leftJoin('notes', '$id', 'customerId', '=', 'again')];
+        $joins = [self::join(), Query::leftJoin('notes', 'again', [Query::on('$id', 'customerId')])];
 
         $this->assertTrue($validator->isValid([...$joins, Query::select(['note.body', 'again.body'])]), $validator->getDescription());
 
@@ -257,7 +257,7 @@ final class JoinedColumnTest extends TestCase
 
     private static function join(): Query
     {
-        return Query::join('notes', '$id', 'customerId', '=', 'note');
+        return Query::join('notes', 'note', [Query::on('$id', 'customerId')]);
     }
 
     /**

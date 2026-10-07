@@ -240,7 +240,7 @@ final class QueryShapeDatabaseTest extends TestCase
             '$permissions' => [Permission::read(Role::any())],
         ]));
         $noRows = [
-            Query::fullOuterJoin('refunds', 'status', 'status', '=', 'refund'),
+            Query::fullOuterJoin('refunds', 'refund', [Query::on('status', 'status')]),
             Query::equal('status', ['nonexistent']),
         ];
 

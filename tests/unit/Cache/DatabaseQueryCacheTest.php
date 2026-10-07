@@ -454,7 +454,7 @@ final class DatabaseQueryCacheTest extends TestCase
         $database->createCollection(Collection::create(id: 'parents', permissions: self::permissions(), documentSecurity: false));
         $database->createCollection(Collection::create(id: 'children', permissions: self::permissions(), documentSecurity: false));
 
-        $queries = [Query::join('children', '$id', '$id')];
+        $queries = [Query::join('children', 'j0', [Query::on('$id', '$id')])];
         $database->find('parents', $queries);
         $database->createDocument('children', new Document(['$id' => 'child']));
         $database->find('parents', $queries);

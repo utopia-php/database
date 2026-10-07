@@ -2338,8 +2338,8 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      */
     private function bitwiseResultName(array $row, BaseQuery $aggregate): ?string
     {
-        $alias = $aggregate->getValue('');
-        if (\is_string($alias) && $alias !== '') {
+        $alias = $aggregate->getAlias();
+        if ($alias !== '') {
             return \array_key_exists($alias, $row) ? $alias : null;
         }
 
@@ -3896,11 +3896,8 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         }
 
         if ($method->isJoin()) {
-            if ($query->isNestedJoin()) {
-                foreach ($query->getJoinOnQueries() as $onQuery) {
-                    if ($onQuery->getMethod() === Method::On) {
-                        continue;
-                    }
+            foreach ($query->getJoinOnQueries() as $onQuery) {
+                if ($onQuery->getMethod() !== Method::On) {
                     $this->remapDottedQuery($onQuery, $aliasSet, $mainAttributes);
                 }
             }
@@ -4281,9 +4278,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     private function remapJoinQueries(array &$queries): array
     {
         $joinTablePrefixes = [];
-        $joinIndex = 0;
-        $alias = Query::DEFAULT_ALIAS;
-        $takenAliases = $this->declaredJoinAliases($queries);
+        $this->assertJoinAliases($queries);
 
         foreach ($queries as $query) {
             if (! $query->getMethod()->isJoin()) {
@@ -4291,33 +4286,11 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             }
 
             $joinTable = $query->getAttribute();
-            $resolvedTable = $this->getTableRaw($this->filter($joinTable));
-            $query->setAttribute($resolvedTable);
+            $query->setAttribute($this->getTableRaw($this->filter($joinTable)));
 
-            $method = $query->getMethod();
-            $joinAlias = $query->getJoinAlias();
-            if ($joinAlias === '') {
-                $joinAlias = Storage::joinAlias($joinIndex, $takenAliases);
-            }
-            $joinIndex++;
-
-            if ($method === Method::CrossJoin || $method === Method::NaturalJoin) {
-                $query->setValues([$joinAlias]);
-            } elseif ($query->isNestedJoin()) {
-                $query->setValues($this->remapNestedJoinValues($query, $alias, $joinAlias));
-            } else {
-                $values = $query->getValues();
-                if (\count($values) >= 3) {
-                    $left = $values[0] ?? null;
-                    $right = $values[2] ?? null;
-                    if (! \is_string($left) || ! \is_string($right)) {
-                        throw new QueryException('Join columns must be strings');
-                    }
-                    $values[0] = $this->qualifyJoinColumn($left, $alias);
-                    $values[2] = $this->qualifyJoinColumn($right, $joinAlias);
-                    $values[3] = $joinAlias;
-                    $query->setValues($values);
-                }
+            $joinAlias = $query->getAlias();
+            if ($query->isNestedJoin()) {
+                $query->setValues($this->remapJoinOnQueries($query, Query::DEFAULT_ALIAS, $joinAlias));
             }
 
             $joinTablePrefixes[] = ['table' => $joinTable, 'alias' => $joinAlias];
@@ -4328,11 +4301,10 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
     /**
      * @param  array<BaseQuery>  $queries
-     * @return array<string, true> Every alias the joins declare, lower-cased
      *
-     * @throws QueryException
+     * @throws QueryException  when a join alias is invalid or declared more than once
      */
-    private function declaredJoinAliases(array $queries): array
+    private function assertJoinAliases(array $queries): void
     {
         $declared = [];
         foreach ($queries as $query) {
@@ -4340,11 +4312,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 continue;
             }
 
-            $alias = $query->getJoinAlias();
-            if ($alias === '') {
-                continue;
-            }
-
+            $alias = $query->getAlias();
             $invalid = JoinValidator::describeInvalidAlias($alias);
             if ($invalid !== null) {
                 throw new QueryException($invalid);
@@ -4356,24 +4324,22 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             }
             $declared[$key] = true;
         }
-
-        return $declared;
     }
 
     /**
-     * @return list<mixed>
+     * @return list<BaseQuery>
      */
-    private function remapNestedJoinValues(BaseQuery $query, string $mainAlias, string $joinAlias): array
+    private function remapJoinOnQueries(BaseQuery $query, string $mainAlias, string $joinAlias): array
     {
-        $values = [$joinAlias];
+        $values = [];
         foreach ($query->getJoinOnQueries() as $onQuery) {
-            $values[] = $this->remapNestedJoinOnQuery($onQuery, $mainAlias, $joinAlias);
+            $values[] = $this->remapJoinOnQuery($onQuery, $mainAlias, $joinAlias);
         }
 
         return $values;
     }
 
-    private function remapNestedJoinOnQuery(BaseQuery $onQuery, string $mainAlias, string $joinAlias): BaseQuery
+    private function remapJoinOnQuery(BaseQuery $onQuery, string $mainAlias, string $joinAlias): BaseQuery
     {
         if ($onQuery->getMethod() !== Method::On) {
             return $onQuery;
@@ -4446,7 +4412,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 continue;
             }
 
-            $joinAlias = $query->getJoinAlias();
+            $joinAlias = $query->getAlias();
 
             if ($method === Method::FullOuterJoin) {
                 if ($fullJoinAlias !== null) {
@@ -4538,21 +4504,15 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         }
 
         $columns = [];
-        if ($join->isNestedJoin()) {
-            foreach ($join->getJoinOnQueries() as $condition) {
-                if ($condition->getMethod() === Method::On) {
-                    $values = $condition->getValues();
-                    $columns[] = $values[0] ?? null;
-                    $columns[] = $values[2] ?? null;
-                }
+        foreach ($join->getJoinOnQueries() as $condition) {
+            if ($condition->getMethod() === Method::On) {
+                $values = $condition->getValues();
+                $columns[] = $values[0] ?? null;
+                $columns[] = $values[2] ?? null;
             }
-        } else {
-            $values = $join->getValues();
-            $columns[] = $values[0] ?? null;
-            $columns[] = $values[2] ?? null;
         }
 
-        $joinAlias = $join->getJoinAlias();
+        $joinAlias = $join->getAlias();
         $aliases = [];
         foreach ($columns as $column) {
             if (! \is_string($column)) {
@@ -5128,9 +5088,8 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             }
 
             $aggregationQueries[] = $query;
-            $aggregateAlias = $query->getValue('');
-            if ($method->isAggregate() && \is_string($aggregateAlias) && $aggregateAlias !== '') {
-                $aggregateAliases[$aggregateAlias] = true;
+            if ($method->isAggregate() && $query->getAlias() !== '') {
+                $aggregateAliases[$query->getAlias()] = true;
             }
         }
 

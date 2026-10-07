@@ -84,12 +84,12 @@ final class FullOuterJoinChainTest extends TestCase
     public static function reportedChains(): iterable
     {
         yield 'right join on the main collection' => [[
-            Query::fullOuterJoin('b', '$id', 'mainId', '=', 'b'),
-            Query::rightJoin('c', '$id', 'mainId', '=', 'c'),
+            Query::fullOuterJoin('b', 'b', [Query::on('$id', 'mainId')]),
+            Query::rightJoin('c', 'c', [Query::on('$id', 'mainId')]),
         ]];
         yield 'right join on the full outer joined collection' => [[
-            Query::fullOuterJoin('b', '$id', 'mainId', '=', 'b'),
-            Query::rightJoin('c', 'b.mainId', 'mainId', '=', 'c'),
+            Query::fullOuterJoin('b', 'b', [Query::on('$id', 'mainId')]),
+            Query::rightJoin('c', 'c', [Query::on('b.mainId', 'mainId')]),
         ]];
     }
 
@@ -152,8 +152,8 @@ final class FullOuterJoinChainTest extends TestCase
     {
         $database = $this->linkedDatabase(native: false, documentSecurity: false);
         $joins = [
-            Query::fullOuterJoin('a', self::LINK, self::LINK, '=', 'a'),
-            Query::fullOuterJoin('b', 'a.'.self::LINK, self::LINK, '=', 'b'),
+            Query::fullOuterJoin('a', 'a', [Query::on(self::LINK, self::LINK)]),
+            Query::fullOuterJoin('b', 'b', [Query::on('a.'.self::LINK, self::LINK)]),
         ];
 
         try {
@@ -172,8 +172,8 @@ final class FullOuterJoinChainTest extends TestCase
         $database = $this->linkedDatabase(native: true, documentSecurity: false);
 
         $rows = $this->rows($database, [
-            Query::fullOuterJoin('a', self::LINK, self::LINK, '=', 'a'),
-            Query::fullOuterJoin('b', 'a.'.self::LINK, self::LINK, '=', 'b'),
+            Query::fullOuterJoin('a', 'a', [Query::on(self::LINK, self::LINK)]),
+            Query::fullOuterJoin('b', 'b', [Query::on('a.'.self::LINK, self::LINK)]),
         ]);
 
         $this->assertSame([
@@ -195,9 +195,9 @@ final class FullOuterJoinChainTest extends TestCase
         $this->expectExceptionMessage('A right join after a full outer join has to join on a table joined before it, or on the full outer joined table');
 
         $database->find('main', [
-            Query::fullOuterJoin('a', self::LINK, self::LINK, '=', 'a'),
+            Query::fullOuterJoin('a', 'a', [Query::on(self::LINK, self::LINK)]),
             Query::crossJoin('b', 'b'),
-            Query::rightJoin('c', 'b.'.self::LINK, self::LINK, '=', 'c'),
+            Query::rightJoin('c', 'c', [Query::on('b.'.self::LINK, self::LINK)]),
         ]);
     }
 
@@ -252,10 +252,10 @@ final class FullOuterJoinChainTest extends TestCase
 
             $left = $reference === 'main' ? self::LINK : $reference.'.'.self::LINK;
             $joins[] = match (Method::from($method)) {
-                Method::Join => Query::join($collection, $left, self::LINK, '=', $collection),
-                Method::LeftJoin => Query::leftJoin($collection, $left, self::LINK, '=', $collection),
-                Method::RightJoin => Query::rightJoin($collection, $left, self::LINK, '=', $collection),
-                default => Query::fullOuterJoin($collection, $left, self::LINK, '=', $collection),
+                Method::Join => Query::join($collection, $collection, [Query::on($left, self::LINK)]),
+                Method::LeftJoin => Query::leftJoin($collection, $collection, [Query::on($left, self::LINK)]),
+                Method::RightJoin => Query::rightJoin($collection, $collection, [Query::on($left, self::LINK)]),
+                default => Query::fullOuterJoin($collection, $collection, [Query::on($left, self::LINK)]),
             };
             $labels[] = "{$method} {$collection} on {$reference}";
             if ($method === Method::FullOuterJoin->value) {
@@ -276,7 +276,7 @@ final class FullOuterJoinChainTest extends TestCase
      */
     private function rows(Database $database, array $joins): array
     {
-        $aliases = \array_map(static fn (Query $join): string => $join->getJoinAlias(), $joins);
+        $aliases = \array_map(static fn (Query $join): string => $join->getAlias(), $joins);
         $documents = $database->find('main', [
             ...$joins,
             Query::select(['$id', ...\array_map(static fn (string $alias): string => $alias.'.$id', $aliases)]),

@@ -79,7 +79,7 @@ final class DottedAttributeKeyTest extends TestCase
     public function testJoinAliasesStillQualifyAJoinedColumn(): void
     {
         $database = $this->database();
-        $join = Query::join(self::ORDERS, '$id', 'personId', '=', 'ord');
+        $join = Query::join(self::ORDERS, 'ord', [Query::on('$id', 'personId')]);
 
         $this->assertSame(['a'], $this->ids($database->find(self::PEOPLE, [$join, Query::equal('dots.name', ['v'])])));
         $this->assertSame(1, $database->count(self::PEOPLE, [$join, Query::equal('dots.name', ['v'])]));
@@ -91,8 +91,8 @@ final class DottedAttributeKeyTest extends TestCase
     public function testExistsQualifiesAJoinedInternalAttribute(): void
     {
         $database = $this->database();
-        $join = Query::join(self::ORDERS, '$id', 'personId', '=', 'ord');
-        $leftJoin = Query::leftJoin(self::ORDERS, '$id', 'personId', '=', 'ord');
+        $join = Query::join(self::ORDERS, 'ord', [Query::on('$id', 'personId')]);
+        $leftJoin = Query::leftJoin(self::ORDERS, 'ord', [Query::on('$id', 'personId')]);
 
         $this->assertSame(['a'], $this->ids($database->find(self::PEOPLE, [$join, Query::exists(['ord.$id'])])));
         $this->assertSame(['b', 'c', 'd'], $this->ids($database->find(self::PEOPLE, [$leftJoin, Query::notExists(['ord.$id'])])));
@@ -135,7 +135,7 @@ final class DottedAttributeKeyTest extends TestCase
         $this->assertSame(['a', 'b'], $this->ids($database->find(self::PEOPLE, [Query::search('dots.name', 'v')])));
         $this->assertSame(2, $database->count(self::PEOPLE, [Query::search('dots.name', 'v')]));
         $this->assertSame(1, $database->count(self::PEOPLE, [
-            Query::join(self::ORDERS, '$id', 'personId', '=', 'ord'),
+            Query::join(self::ORDERS, 'ord', [Query::on('$id', 'personId')]),
             Query::search('dots.name', 'v'),
         ]));
     }

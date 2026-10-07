@@ -194,7 +194,7 @@ final class JoinedInternalAttributesTest extends TestCase
 
     private function join(Method $method): Query
     {
-        return new Query($method, self::BOOKS, ['$id', '=', 'authorId', self::BOOK]);
+        return new Query($method, self::BOOKS, [Query::on('$id', 'authorId')], self::BOOK);
     }
 
     private function key(Document $row): string

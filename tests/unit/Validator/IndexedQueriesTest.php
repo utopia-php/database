@@ -13,6 +13,7 @@ use Utopia\Database\Validator\Query\Join;
 use Utopia\Database\Validator\Query\Limit;
 use Utopia\Database\Validator\Query\Offset;
 use Utopia\Database\Validator\Query\Order;
+use Utopia\Query\Method;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 
@@ -214,7 +215,7 @@ class IndexedQueriesTest extends TestCase
         ])]);
 
         $this->assertTrue($validator->isValid([
-            Query::leftJoin('meta', '$id', 'mainId', '=', 'meta'),
+            Query::leftJoin('meta', 'meta', [Query::on('$id', 'mainId')]),
             Query::search('meta.body', 'needle'),
         ]), $validator->getDescription());
 
@@ -272,10 +273,10 @@ class IndexedQueriesTest extends TestCase
         ])]);
 
         $this->assertFalse($validator->isValid([
-            Query::leftJoin('meta', 'meta', [
+            new Query(Method::LeftJoin, 'meta', [
                 Query::on('$id', 'mainId'),
                 Query::search('name', 'needle'),
-            ]),
+            ], 'meta'),
         ]));
         $this->assertSame(
             'Invalid query: Unsupported join ON condition: search',
@@ -283,10 +284,10 @@ class IndexedQueriesTest extends TestCase
         );
 
         $this->assertFalse($validator->isValid([
-            Query::leftJoin('meta', 'meta', [
+            new Query(Method::LeftJoin, 'meta', [
                 Query::on('$id', 'mainId'),
                 Query::search('meta.body', 'needle'),
-            ]),
+            ], 'meta'),
         ]), 'the builder compiles no search into an ON list, fulltext index or not');
         $this->assertSame(
             'Invalid query: Unsupported join ON condition: search',
@@ -317,10 +318,10 @@ class IndexedQueriesTest extends TestCase
 
         $this->assertFalse($validator->isValid([
             Query::vectorDot('embedding', [0.1, 0.2, 0.3]),
-            Query::leftJoin('meta', 'meta', [
+            new Query(Method::LeftJoin, 'meta', [
                 Query::on('$id', 'mainId'),
                 Query::vectorCosine('embedding', [0.3, 0.4, 0.5]),
-            ]),
+            ], 'meta'),
         ]));
         $this->assertSame(
             'Invalid query: Unsupported join ON condition: vectorCosine',
@@ -350,10 +351,10 @@ class IndexedQueriesTest extends TestCase
         );
 
         $this->assertFalse($validator->isValid([
-            Query::leftJoin('meta', 'meta', [
+            new Query(Method::LeftJoin, 'meta', [
                 Query::on('$id', 'mainId'),
                 Query::vectorCosine('embedding', [0.3, 0.4, 0.5]),
-            ]),
+            ], 'meta'),
         ]));
         $this->assertSame(
             'Invalid query: Unsupported join ON condition: vectorCosine',

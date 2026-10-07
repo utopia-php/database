@@ -34,7 +34,7 @@ trait MySQLJoinPlanTests
             $this->seed($database, $customers, [Role::any(), Role::user(self::HIDDEN)]);
 
             $this->assertJoinOrderSearchStaysSmall($database, $customers, \array_map(
-                static fn (int $peer): Query => Query::join($customers, '$id', '$id', '=', 'peer'.$peer),
+                static fn (int $peer): Query => Query::join($customers, 'peer'.$peer, [Query::on('$id', '$id')]),
                 \range(1, 8),
             ));
         } finally {
@@ -56,11 +56,11 @@ trait MySQLJoinPlanTests
 
             $this->assertJoinOrderSearchStaysSmall($database, $customers, [
                 ...\array_map(
-                    static fn (int $peer): Query => Query::join($customers, '$id', '$id', '=', 'peer'.$peer),
+                    static fn (int $peer): Query => Query::join($customers, 'peer'.$peer, [Query::on('$id', '$id')]),
                     \range(1, 4),
                 ),
                 ...\array_map(
-                    static fn (int $label): Query => Query::join($labels, 'name', 'name', '=', 'label'.$label),
+                    static fn (int $label): Query => Query::join($labels, 'label'.$label, [Query::on('name', 'name')]),
                     \range(1, 4),
                 ),
             ]);
@@ -103,7 +103,7 @@ trait MySQLJoinPlanTests
 
             for ($count = 1; $count <= self::OUTER_JOIN_LINKS; $count++) {
                 $joins = \array_map(
-                    static fn (int $link): Query => Query::leftJoin($links[$link - 1], 'name', 'name', '=', 'c'.$link),
+                    static fn (int $link): Query => Query::leftJoin($links[$link - 1], 'c'.$link, [Query::on('name', 'name')]),
                     \range(1, $count),
                 );
 

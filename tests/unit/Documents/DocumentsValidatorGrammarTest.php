@@ -40,7 +40,7 @@ class DocumentsValidatorGrammarTest extends TestCase
     {
         $validator = (new DocumentsValidatorDatabase(new Memory(), new Cache(new None())))->documentsValidator($this->orders);
 
-        $this->assertFalse($validator->isValid([Query::join('customers', '$id', 'customerId')]));
+        $this->assertFalse($validator->isValid([Query::join('customers', 'j0', [Query::on('$id', 'customerId')])]));
         $this->assertSame('Invalid query method: join', $validator->getDescription());
 
         $this->assertFalse($validator->isValid([Query::sum('amount', 'total')]));
@@ -51,7 +51,7 @@ class DocumentsValidatorGrammarTest extends TestCase
     {
         $validator = (new DocumentsValidatorDatabase(new SQLite(new PDO('sqlite::memory:')), new Cache(new None())))->documentsValidator($this->orders);
 
-        $this->assertTrue($validator->isValid([Query::join('customers', '$id', 'customerId')]), $validator->getDescription());
+        $this->assertTrue($validator->isValid([Query::join('customers', 'j0', [Query::on('$id', 'customerId')])]), $validator->getDescription());
         $this->assertTrue($validator->isValid([Query::sum('amount', 'total')]), $validator->getDescription());
     }
 

@@ -24,8 +24,8 @@ final readonly class JoinChain
     }
 
     /**
-     * @param array<Query> $queries The read's queries; joins are keyed the way the builder hands
-     *                              them to join filters: by alias, or by table without one
+     * @param array<Query> $queries The read's queries; joins are keyed by alias, as the builder
+     *                              hands them to join filters
      */
     public static function fromQueries(array $queries): self
     {
@@ -42,8 +42,7 @@ final readonly class JoinChain
             };
 
             if ($type !== null) {
-                $alias = $query->getJoinAlias();
-                $joins[$alias !== '' ? $alias : $query->getAttribute()] = $type;
+                $joins[$query->getAlias()] = $type;
             }
         }
 

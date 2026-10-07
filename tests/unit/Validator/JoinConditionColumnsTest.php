@@ -33,16 +33,16 @@ final class JoinConditionColumnsTest extends TestCase
      */
     public static function joinsOverColumnsTheTablesHave(): iterable
     {
-        $note = Query::join('notes', '$id', 'customerId', '=', 'note');
+        $note = Query::join('notes', 'note', [Query::on('$id', 'customerId')]);
 
         yield 'main $id to a joined attribute' => [[$note]];
         yield 'an on condition under the join alias' => [[Query::leftJoin('notes', 'note', [Query::on('$id', 'note.customerId'), Query::on('$createdAt', '$updatedAt', '<')])]];
-        yield 'a join after the join it names' => [[$note, Query::join('replies', 'note.$id', 'noteId', '=', 'reply')]];
-        yield 'a join after a cross join it names' => [[Query::crossJoin('replies', 'reply'), Query::rightJoin('notes', 'reply.noteId', '$id', '=', 'note')]];
-        yield 'internal attributes on both sides' => [[Query::join('notes', '$sequence', '$sequence', '<', 'note')]];
-        yield 'a relationship that holds a column on the left' => [[Query::join('libraries', 'library', '$id', '=', 'lib')]];
-        yield 'a relationship that holds a column on the right' => [[Query::leftJoin('books', '$id', 'owner', '=', 'book')]];
-        yield 'a join without an alias' => [[Query::join('notes', '$id', 'customerId')]];
+        yield 'a join after the join it names' => [[$note, Query::join('replies', 'reply', [Query::on('note.$id', 'noteId')])]];
+        yield 'a join after a cross join it names' => [[Query::crossJoin('replies', 'reply'), Query::rightJoin('notes', 'note', [Query::on('reply.noteId', '$id')])]];
+        yield 'internal attributes on both sides' => [[Query::join('notes', 'note', [Query::on('$sequence', '$sequence', '<')])]];
+        yield 'a relationship that holds a column on the left' => [[Query::join('libraries', 'lib', [Query::on('library', '$id')])]];
+        yield 'a relationship that holds a column on the right' => [[Query::leftJoin('books', 'book', [Query::on('$id', 'owner')])]];
+        yield 'a join without an alias' => [[Query::join('notes', 'j0', [Query::on('$id', 'customerId')])]];
     }
 
     /**
@@ -61,29 +61,29 @@ final class JoinConditionColumnsTest extends TestCase
      */
     public static function joinsNamingNoColumn(): iterable
     {
-        $note = Query::join('notes', '$id', 'customerId', '=', 'note');
+        $note = Query::join('notes', 'note', [Query::on('$id', 'customerId')]);
         $notFound = 'Invalid query: Attribute not found in schema: ';
         $left = 'Invalid query: The left column of a join condition must belong to the main collection or to a join declared before it: ';
         $right = 'Invalid query: The right column of a join condition must belong to the joined collection: ';
 
-        yield 'an unknown left column' => [[Query::join('notes', 'nothing', 'customerId', '=', 'note')], $notFound.'nothing'];
-        yield 'an unknown right column' => [[Query::join('notes', '$id', 'nothing', '=', 'note')], $notFound.'nothing'];
+        yield 'an unknown left column' => [[Query::join('notes', 'note', [Query::on('nothing', 'customerId')])], $notFound.'nothing'];
+        yield 'an unknown right column' => [[Query::join('notes', 'note', [Query::on('$id', 'nothing')])], $notFound.'nothing'];
         yield 'an unknown left column of an on condition' => [[Query::leftJoin('notes', 'note', [Query::on('nothing', 'customerId')])], $notFound.'nothing'];
         yield 'an unknown right column of an on condition' => [[Query::leftJoin('notes', 'note', [Query::on('$id', 'customerId'), Query::on('$id', 'note.nothing')])], $notFound.'note.nothing'];
-        yield 'an unknown column of an earlier join' => [[$note, Query::join('replies', 'note.nothing', 'noteId', '=', 'reply')], $notFound.'note.nothing'];
-        yield 'an internal attribute a filter cannot compare' => [[Query::join('notes', '$permissions', 'customerId', '=', 'note')], $notFound.'$permissions'];
-        yield 'a derived internal attribute' => [[Query::join('notes', '$id', '$collection', '=', 'note')], $notFound.'$collection'];
-        yield 'a relationship without a column on the left' => [[Query::join('books', 'books', '$id', '=', 'book')], 'Invalid query: Cannot join on virtual relationship attribute: books'];
-        yield 'a relationship without a column on the right' => [[Query::join('libraries', '$id', 'person', '=', 'lib')], 'Invalid query: Cannot join on virtual relationship attribute: person'];
-        yield 'a join declared after it' => [[Query::join('replies', 'note.$id', 'noteId', '=', 'reply'), $note], $left.'note.$id'];
-        yield 'its own alias on the left' => [[Query::join('notes', 'note.customerId', '$id', '=', 'note')], $left.'note.customerId'];
-        yield 'an alias no join declares on the left' => [[Query::join('notes', 'other.$id', 'customerId', '=', 'note')], $left.'other.$id'];
-        yield 'the main alias on the left' => [[Query::join('notes', Query::DEFAULT_ALIAS.'.$id', 'customerId', '=', 'note')], $left.Query::DEFAULT_ALIAS.'.$id'];
-        yield 'an earlier join on the right' => [[$note, Query::join('replies', '$id', 'note.$id', '=', 'reply')], $right.'note.$id'];
-        yield 'the main alias on the right' => [[Query::join('notes', '$id', Query::DEFAULT_ALIAS.'.name', '=', 'note')], $right.Query::DEFAULT_ALIAS.'.name'];
-        yield 'no right column' => [[new Query(Method::Join, 'notes', ['$id', '='])], 'Invalid query: Join ON requires left and right columns'];
-        yield 'a right column that is not a string' => [[new Query(Method::LeftJoin, 'notes', ['$id', '=', 5, 'note'])], 'Invalid query: Join ON requires left and right columns'];
-        yield 'an operator no engine compares with' => [[Query::join('notes', '$id', 'customerId', '~', 'note')], 'Invalid query: Invalid join operator: ~'];
+        yield 'an unknown column of an earlier join' => [[$note, Query::join('replies', 'reply', [Query::on('note.nothing', 'noteId')])], $notFound.'note.nothing'];
+        yield 'an internal attribute a filter cannot compare' => [[Query::join('notes', 'note', [Query::on('$permissions', 'customerId')])], $notFound.'$permissions'];
+        yield 'a derived internal attribute' => [[Query::join('notes', 'note', [Query::on('$id', '$collection')])], $notFound.'$collection'];
+        yield 'a relationship without a column on the left' => [[Query::join('books', 'book', [Query::on('books', '$id')])], 'Invalid query: Cannot join on virtual relationship attribute: books'];
+        yield 'a relationship without a column on the right' => [[Query::join('libraries', 'lib', [Query::on('$id', 'person')])], 'Invalid query: Cannot join on virtual relationship attribute: person'];
+        yield 'a join declared after it' => [[Query::join('replies', 'reply', [Query::on('note.$id', 'noteId')]), $note], $left.'note.$id'];
+        yield 'its own alias on the left' => [[Query::join('notes', 'note', [Query::on('note.customerId', '$id')])], $left.'note.customerId'];
+        yield 'an alias no join declares on the left' => [[Query::join('notes', 'note', [Query::on('other.$id', 'customerId')])], $left.'other.$id'];
+        yield 'the main alias on the left' => [[Query::join('notes', 'note', [Query::on(Query::DEFAULT_ALIAS.'.$id', 'customerId')])], $left.Query::DEFAULT_ALIAS.'.$id'];
+        yield 'an earlier join on the right' => [[$note, Query::join('replies', 'reply', [Query::on('$id', 'note.$id')])], $right.'note.$id'];
+        yield 'the main alias on the right' => [[Query::join('notes', 'note', [Query::on('$id', Query::DEFAULT_ALIAS.'.name')])], $right.Query::DEFAULT_ALIAS.'.name'];
+        yield 'no right column' => [[Query::join('notes', 'note', [Query::on('$id', '')])], 'Invalid query: Join ON requires left and right columns'];
+        yield 'a right column that is not a string' => [[Query::leftJoin('notes', 'note', [new Query(Method::On, '', ['$id', '=', 5])])], 'Invalid query: Join ON requires left and right columns'];
+        yield 'an operator no engine compares with' => [[Query::join('notes', 'note', [Query::on('$id', 'customerId', '~')])], 'Invalid query: Invalid join operator: ~'];
     }
 
     /**
@@ -102,10 +102,10 @@ final class JoinConditionColumnsTest extends TestCase
     {
         $validator = new Queries([new Join()]);
 
-        $this->assertTrue($validator->isValid([Query::join('orders', 'user_id', 'id')]), $validator->getDescription());
-        $this->assertTrue($validator->isValid([Query::join('orders', 'user_id', 'id', '=', 'ord'), Query::join('items', 'ord.anything', 'orderId', '=', 'item')]), $validator->getDescription());
+        $this->assertTrue($validator->isValid([Query::join('orders', 'j0', [Query::on('user_id', 'id')])]), $validator->getDescription());
+        $this->assertTrue($validator->isValid([Query::join('orders', 'ord', [Query::on('user_id', 'id')]), Query::join('items', 'item', [Query::on('ord.anything', 'orderId')])]), $validator->getDescription());
 
-        $this->assertFalse($validator->isValid([Query::join('items', 'ord.anything', 'orderId', '=', 'item'), Query::join('orders', 'user_id', 'id', '=', 'ord')]), 'the order of the joins is still checked');
+        $this->assertFalse($validator->isValid([Query::join('items', 'item', [Query::on('ord.anything', 'orderId')]), Query::join('orders', 'ord', [Query::on('user_id', 'id')])]), 'the order of the joins is still checked');
         $this->assertSame('Invalid query: The left column of a join condition must belong to the main collection or to a join declared before it: ord.anything', $validator->getDescription());
     }
 
@@ -114,9 +114,9 @@ final class JoinConditionColumnsTest extends TestCase
         $validator = new Queries([new Join($this->customers(), supportForAttributes: false)]);
         $validator->setJoinedCollections($this->collections());
 
-        $this->assertTrue($validator->isValid([Query::join('notes', 'anything', 'whatever', '=', 'note')]), $validator->getDescription());
+        $this->assertTrue($validator->isValid([Query::join('notes', 'note', [Query::on('anything', 'whatever')])]), $validator->getDescription());
 
-        $this->assertFalse($validator->isValid([Query::join('notes', 'reply.anything', 'whatever', '=', 'note')]));
+        $this->assertFalse($validator->isValid([Query::join('notes', 'note', [Query::on('reply.anything', 'whatever')])]));
         $this->assertSame('Invalid query: The left column of a join condition must belong to the main collection or to a join declared before it: reply.anything', $validator->getDescription());
     }
 
@@ -135,8 +135,8 @@ final class JoinConditionColumnsTest extends TestCase
     {
         $validator = $this->validators()['documents'];
 
-        $this->assertTrue($validator->isValid([Query::join('notes', '$id', 'customerId', '=', 'note')]), $validator->getDescription());
-        $this->assertFalse($validator->isValid([Query::join('replies', 'note.$id', 'noteId', '=', 'reply')]), 'an alias of the previous query set is not declared in this one');
+        $this->assertTrue($validator->isValid([Query::join('notes', 'note', [Query::on('$id', 'customerId')])]), $validator->getDescription());
+        $this->assertFalse($validator->isValid([Query::join('replies', 'reply', [Query::on('note.$id', 'noteId')])]), 'an alias of the previous query set is not declared in this one');
     }
 
     /**
@@ -144,7 +144,7 @@ final class JoinConditionColumnsTest extends TestCase
      */
     public static function internalAttributesWithoutAColumn(): iterable
     {
-        $note = Query::join('notes', '$id', 'customerId', '=', 'note');
+        $note = Query::join('notes', 'note', [Query::on('$id', 'customerId')]);
 
         yield '$collection counted' => [[Query::count('$collection', 'total')], '$collection', false];
         yield '$collection grouped' => [[Query::count('*', 'rows'), Query::groupBy(['$collection'])], '$collection', false];
@@ -177,7 +177,7 @@ final class JoinConditionColumnsTest extends TestCase
             $validator = $this->documents($sharedTables);
 
             $this->assertTrue($validator->isValid([Query::select(['name', '$collection'])]), $validator->getDescription());
-            $this->assertFalse($validator->isValid([Query::join('notes', '$id', 'customerId', '=', 'note'), Query::select(['note.$collection'])]));
+            $this->assertFalse($validator->isValid([Query::join('notes', 'note', [Query::on('$id', 'customerId')]), Query::select(['note.$collection'])]));
         }
     }
 
@@ -196,7 +196,7 @@ final class JoinConditionColumnsTest extends TestCase
 
     public function testEncryptedJoinedAttributeCannotBeFiltered(): void
     {
-        $join = Query::join('notes', '$id', 'customerId', '=', 'note');
+        $join = Query::join('notes', 'note', [Query::on('$id', 'customerId')]);
         $validator = $this->documents(sharedTables: false);
 
         foreach ([
@@ -219,7 +219,7 @@ final class JoinConditionColumnsTest extends TestCase
     public static function aggregateAliases(): iterable
     {
         $grouped = static fn (string $alias, string $attribute): string => 'Invalid query: Aggregate alias "'.$alias.'" is the name the groupBy attribute "'.$attribute.'" is returned under';
-        $join = Query::join('notes', '$id', 'customerId', '=', 'note');
+        $join = Query::join('notes', 'note', [Query::on('$id', 'customerId')]);
 
         yield 'a grouped attribute' => [[Query::count('*', 'name'), Query::groupBy(['name'])], $grouped('name', 'name')];
         yield 'a grouped joined attribute' => [[$join, Query::count('*', 'body'), Query::groupBy(['name', 'note.body'])], $grouped('body', 'note.body')];

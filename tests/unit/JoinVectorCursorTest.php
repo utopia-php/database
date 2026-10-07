@@ -118,7 +118,7 @@ final class JoinVectorCursorTest extends TestCase
             new Document(['$id' => 'collection']),
             [
                 Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),
-                Query::join('meta', '$id', 'mainId', '=', 'meta'),
+                Query::join('meta', 'meta', [Query::on('$id', 'mainId')]),
             ],
             limit: 5,
             orderAttributes: $orderAttributes,

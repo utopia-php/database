@@ -115,7 +115,7 @@ final class PermissionSubqueryTest extends TestCase
         $database = $this->database($shared);
 
         $documents = $this->recording(fn (): array => $database->find(self::COLLECTION, [
-            Query::join(self::COLLECTION, '$id', '$id', '=', 'peer'),
+            Query::join(self::COLLECTION, 'peer', [Query::on('$id', '$id')]),
             Query::limit(self::DOCUMENTS),
         ]));
 
@@ -190,7 +190,7 @@ final class PermissionSubqueryTest extends TestCase
 
     public function testMySQLUnaliasedOuterJoinIsHinted(): void
     {
-        $sql = $this->mySQLFindSql([Query::leftJoin('orders', '$id', 'customerId')]);
+        $sql = $this->mySQLFindSql([Query::leftJoin('orders', 'j0', [Query::on('$id', 'customerId')])]);
 
         $this->assertSame(1, \substr_count($sql, self::NO_SEMIJOIN), $sql);
     }
@@ -236,8 +236,8 @@ final class PermissionSubqueryTest extends TestCase
         $sql = $this->mySQLFindSql([
             self::joinOnId(JoinType::Left, 'orders1', 'o1'),
             self::join(JoinType::Left, 'orders2', 'o2'),
-            Query::leftJoin('orders3', 'o1.customerId', '$id', '=', 'o3'),
-            Query::join('orders4', 'customerId', '$id', '=', 'o4'),
+            Query::leftJoin('orders3', 'o3', [Query::on('o1.customerId', '$id')]),
+            Query::join('orders4', 'o4', [Query::on('customerId', '$id')]),
         ]);
 
         $this->assertSame([true], $this->checks($sql, 'o1'), $sql);
@@ -249,20 +249,20 @@ final class PermissionSubqueryTest extends TestCase
     private static function joinOnId(JoinType $joinType, string $collection, string $alias): Query
     {
         return match ($joinType) {
-            JoinType::Left => Query::leftJoin($collection, 'customerId', '$id', '=', $alias),
-            JoinType::Right => Query::rightJoin($collection, 'customerId', '$id', '=', $alias),
-            JoinType::FullOuter => Query::fullOuterJoin($collection, 'customerId', '$id', '=', $alias),
-            default => Query::join($collection, 'customerId', '$id', '=', $alias),
+            JoinType::Left => Query::leftJoin($collection, $alias, [Query::on('customerId', '$id')]),
+            JoinType::Right => Query::rightJoin($collection, $alias, [Query::on('customerId', '$id')]),
+            JoinType::FullOuter => Query::fullOuterJoin($collection, $alias, [Query::on('customerId', '$id')]),
+            default => Query::join($collection, $alias, [Query::on('customerId', '$id')]),
         };
     }
 
     private static function join(JoinType $joinType, string $collection, string $alias): Query
     {
         return match ($joinType) {
-            JoinType::Left => Query::leftJoin($collection, '$id', 'customerId', '=', $alias),
-            JoinType::Right => Query::rightJoin($collection, '$id', 'customerId', '=', $alias),
-            JoinType::FullOuter => Query::fullOuterJoin($collection, '$id', 'customerId', '=', $alias),
-            default => Query::join($collection, '$id', 'customerId', '=', $alias),
+            JoinType::Left => Query::leftJoin($collection, $alias, [Query::on('$id', 'customerId')]),
+            JoinType::Right => Query::rightJoin($collection, $alias, [Query::on('$id', 'customerId')]),
+            JoinType::FullOuter => Query::fullOuterJoin($collection, $alias, [Query::on('$id', 'customerId')]),
+            default => Query::join($collection, $alias, [Query::on('$id', 'customerId')]),
         };
     }
 

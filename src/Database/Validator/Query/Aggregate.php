@@ -135,8 +135,8 @@ class Aggregate extends Base
         $this->aliases = [];
 
         foreach ($aggregations as $aggregation) {
-            $alias = $aggregation->getValue('');
-            if (\is_string($alias) && $alias !== '') {
+            $alias = $aggregation->getAlias();
+            if ($alias !== '') {
                 $this->aliases[$alias] = ($this->aliases[$alias] ?? 0) + 1;
             }
         }
@@ -198,27 +198,30 @@ class Aggregate extends Base
             return false;
         }
 
-        $alias = $query->getValues()[0] ?? null;
+        $alias = $query->getAlias();
+        if ($alias === '') {
+            return true;
+        }
 
-        if ($alias !== null && (! \is_string($alias) || \preg_match(self::ALIAS_PATTERN, $alias) !== 1)) {
+        if (\preg_match(self::ALIAS_PATTERN, $alias) !== 1) {
             $this->message = 'Invalid aggregate alias';
 
             return false;
         }
 
-        if (\is_string($alias) && \strlen($alias) > self::MAX_ALIAS_LENGTH) {
+        if (\strlen($alias) > self::MAX_ALIAS_LENGTH) {
             $this->message = 'Aggregate alias is too long: at most '.self::MAX_ALIAS_LENGTH.' characters are allowed';
 
             return false;
         }
 
-        if (\is_string($alias) && ($this->aliases[$alias] ?? 0) > 1) {
+        if (($this->aliases[$alias] ?? 0) > 1) {
             $this->message = 'Aggregate alias "'.$alias.'" is given to more than one aggregate';
 
             return false;
         }
 
-        if (\is_string($alias) && isset($this->groups[$alias])) {
+        if (isset($this->groups[$alias])) {
             $this->message = 'Aggregate alias "'.$alias.'" is the name the groupBy attribute "'.$this->groups[$alias].'" is returned under';
 
             return false;

@@ -83,9 +83,9 @@ final class AggregateResultNamesTest extends TestCase
         $grouped = static fn (string $alias, string $attribute): string => 'Invalid query: Aggregate alias "'.$alias.'" is the name the groupBy attribute "'.$attribute.'" is returned under';
 
         yield 'a grouped main attribute' => [static fn (): array => [Query::count('*', 'link'), Query::groupBy(['link'])], $grouped('link', 'link')];
-        yield 'a grouped main attribute over a join' => [static fn (): array => [Query::join('a', 'link', 'link', '=', 'a'), Query::count('*', 'label'), Query::groupBy(['label'])], $grouped('label', 'label')];
-        yield 'a grouped main attribute over a full outer join' => [static fn (): array => [Query::fullOuterJoin('a', 'link', 'link', '=', 'a'), Query::count('*', 'label'), Query::groupBy(['label'])], $grouped('label', 'label')];
-        yield 'a grouped joined attribute' => [static fn (): array => [Query::join('a', 'link', 'link', '=', 'a'), Query::sum('score', 'score'), Query::groupBy(['a.score'])], $grouped('score', 'a.score')];
+        yield 'a grouped main attribute over a join' => [static fn (): array => [Query::join('a', 'a', [Query::on('link', 'link')]), Query::count('*', 'label'), Query::groupBy(['label'])], $grouped('label', 'label')];
+        yield 'a grouped main attribute over a full outer join' => [static fn (): array => [Query::fullOuterJoin('a', 'a', [Query::on('link', 'link')]), Query::count('*', 'label'), Query::groupBy(['label'])], $grouped('label', 'label')];
+        yield 'a grouped joined attribute' => [static fn (): array => [Query::join('a', 'a', [Query::on('link', 'link')]), Query::sum('score', 'score'), Query::groupBy(['a.score'])], $grouped('score', 'a.score')];
         yield 'a grouped internal attribute' => [static fn (): array => [Query::count('*', '_uid'), Query::groupBy(['$id'])], $grouped('_uid', '$id')];
         yield 'another aggregate' => [static fn (): array => [Query::count('*', 'rows'), Query::sum('score', 'rows')], 'Invalid query: Aggregate alias "rows" is given to more than one aggregate'];
     }
@@ -116,7 +116,7 @@ final class AggregateResultNamesTest extends TestCase
         );
         $this->assertSame(
             [['score' => 10, 'label' => 'first']],
-            $this->rows($database->find('main', [Query::join('a', 'link', 'link', '=', 'a'), Query::sum('score', 'score'), Query::groupBy(['a.label'])])),
+            $this->rows($database->find('main', [Query::join('a', 'a', [Query::on('link', 'link')]), Query::sum('score', 'score'), Query::groupBy(['a.label'])])),
         );
     }
 
@@ -187,7 +187,7 @@ final class AggregateResultNamesTest extends TestCase
 
     private function join(Method $method): Query
     {
-        return new Query($method, 'a', ['link', '=', 'link', 'a']);
+        return new Query($method, 'a', [Query::on('link', 'link')], 'a');
     }
 
     /**

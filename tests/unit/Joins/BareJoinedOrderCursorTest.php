@@ -135,7 +135,7 @@ final class BareJoinedOrderCursorTest extends TestCase
     #[DataProvider('validation')]
     public function testBareNameSeveralJoinsDeclareIsRefusedForACursorRead(bool $validate): void
     {
-        $joins = [$this->join(Method::LeftJoin), Query::leftJoin(self::OTHER, '$id', 'store', '=', 'of')];
+        $joins = [$this->join(Method::LeftJoin), Query::leftJoin(self::OTHER, 'of', [Query::on('$id', 'store')])];
         $cursor = $this->database->find(self::MAIN, [...$joins, Query::orderAsc(self::ALIAS.'.price'), Query::limit(1)])[0];
 
         if (! $validate) {
@@ -152,7 +152,7 @@ final class BareJoinedOrderCursorTest extends TestCase
 
     private function join(Method $method): Query
     {
-        return new Query($method, self::JOINED, ['$id', '=', 'store', self::ALIAS]);
+        return new Query($method, self::JOINED, [Query::on('$id', 'store')], self::ALIAS);
     }
 
     /**

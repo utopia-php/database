@@ -202,7 +202,7 @@ class DocumentsQueriesTest extends TestCase
 
         $this->assertTrue($validator->isValid([
             Query::equal('sec.amount', [777]),
-            Query::join('orders', '$id', 'customerId', '=', 'sec'),
+            Query::join('orders', 'sec', [Query::on('$id', 'customerId')]),
         ]), $validator->getDescription());
     }
 
@@ -216,7 +216,7 @@ class DocumentsQueriesTest extends TestCase
 
         $this->assertTrue($validator->isValid([
             Query::orderAsc('sec.amount'),
-            Query::join('orders', '$id', 'customerId', '=', 'sec'),
+            Query::join('orders', 'sec', [Query::on('$id', 'customerId')]),
         ]), $validator->getDescription());
     }
 
@@ -230,7 +230,7 @@ class DocumentsQueriesTest extends TestCase
 
         $this->assertFalse($validator->isValid([
             Query::equal('other.amount', [777]),
-            Query::join('orders', '$id', 'customerId', '=', 'sec'),
+            Query::join('orders', 'sec', [Query::on('$id', 'customerId')]),
         ]));
         $this->assertSame('Invalid query: Attribute not found in schema: other', $validator->getDescription());
     }
@@ -244,7 +244,7 @@ class DocumentsQueriesTest extends TestCase
         );
 
         $this->assertTrue($validator->isValid([
-            Query::join('meta', '$id', 'mainId', '=', 'meta'),
+            Query::join('meta', 'meta', [Query::on('$id', 'mainId')]),
             Query::and([
                 Query::equal('title', ['Main']),
                 Query::or([

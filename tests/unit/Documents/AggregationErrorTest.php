@@ -151,7 +151,7 @@ class AggregationErrorTest extends TestCase
 
         $this->expectException(QueryException::class);
         $this->expectExceptionMessage('Join queries are not supported');
-        $db->skipValidation(fn () => $db->find('testCol', [Query::join('other', 'fk', '$id')]));
+        $db->skipValidation(fn () => $db->find('testCol', [Query::join('other', 'j0', [Query::on('fk', '$id')])]));
     }
 
     public function testCountWithJoinOnUnsupportedAdapterThrows(): void
@@ -165,7 +165,7 @@ class AggregationErrorTest extends TestCase
 
         $this->expectException(QueryException::class);
         $this->expectExceptionMessage('Join queries are not supported');
-        $db->skipValidation(fn () => $db->count('testCol', [Query::join('other', 'fk', '$id')]));
+        $db->skipValidation(fn () => $db->count('testCol', [Query::join('other', 'j0', [Query::on('fk', '$id')])]));
     }
 
     public function testSumWithJoinOnUnsupportedAdapterThrows(): void
@@ -179,7 +179,7 @@ class AggregationErrorTest extends TestCase
 
         $this->expectException(QueryException::class);
         $this->expectExceptionMessage('Join queries are not supported');
-        $db->skipValidation(fn () => $db->sum('testCol', 'amount', [Query::join('other', 'fk', '$id')]));
+        $db->skipValidation(fn () => $db->sum('testCol', 'amount', [Query::join('other', 'j0', [Query::on('fk', '$id')])]));
     }
 
     public function testSumValidatesQueriesWhenEnabled(): void

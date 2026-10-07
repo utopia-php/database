@@ -83,7 +83,7 @@ class DocumentQueriesTest extends TestCase
         $validator = new DocumentQueries($this->documentAttributes(), Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::Joins]));
 
         $this->assertSame(true, $validator->isValid([
-            Query::join('orders', '$id', 'customerId'),
+            Query::join('orders', 'j0', [Query::on('$id', 'customerId')]),
         ]), $validator->getDescription());
     }
 
@@ -93,7 +93,7 @@ class DocumentQueriesTest extends TestCase
 
         $this->assertSame(true, $validator->isValid([
             Query::select(['ord.amount']),
-            Query::join('orders', '$id', 'customerId', '=', 'ord'),
+            Query::join('orders', 'ord', [Query::on('$id', 'customerId')]),
         ]), $validator->getDescription());
     }
 
@@ -103,7 +103,7 @@ class DocumentQueriesTest extends TestCase
 
         $this->assertSame(false, $validator->isValid([
             Query::select(['score']),
-            Query::leftJoin('reviews', '$id', 'prod_uid'),
+            Query::leftJoin('reviews', 'j0', [Query::on('$id', 'prod_uid')]),
         ]));
         $this->assertSame('Invalid query: Attribute not found in schema: score', $validator->getDescription());
     }
@@ -114,7 +114,7 @@ class DocumentQueriesTest extends TestCase
 
         $this->assertSame(true, $validator->isValid([
             Query::select(['rev.score']),
-            Query::leftJoin('reviews', '$id', 'prod_uid', '=', 'rev'),
+            Query::leftJoin('reviews', 'rev', [Query::on('$id', 'prod_uid')]),
         ]), $validator->getDescription());
     }
 
@@ -176,7 +176,7 @@ class DocumentQueriesTest extends TestCase
     {
         $validator = new DocumentQueries($this->documentAttributes(), Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::Joins]));
 
-        $this->assertSame(false, $validator->isValid([Query::naturalJoin('orders')]));
+        $this->assertSame(false, $validator->isValid([Query::naturalJoin('orders', 'j0')]));
         $this->assertStringContainsString('Natural joins are not supported', $validator->getDescription());
     }
 

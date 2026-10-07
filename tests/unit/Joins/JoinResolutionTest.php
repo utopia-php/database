@@ -76,7 +76,7 @@ final class JoinResolutionTest extends TestCase
         $this->assertNotSame([], $expected, 'the fixture has to match some rows');
         $this->assertNotSame(['k1', 'k2', 'k3', 'k4'], $expected, 'the fixture has to leave some rows out');
 
-        $join = Query::join('themes', 'theme', '$id', '=', 'th');
+        $join = Query::join('themes', 'th', [Query::on('theme', '$id')]);
 
         $this->assertSame($expected, $this->ids($this->database->find('tickets', [$join, $joined])), 'find()');
         $this->assertSame(\count($expected), $this->database->count('tickets', [$join, $joined]), 'count()');
@@ -114,7 +114,7 @@ final class JoinResolutionTest extends TestCase
         $this->assertContains('k2', $expected);
 
         $this->assertSame($expected, $this->ids($this->database->find('tickets', [
-            Query::join('themes', 'theme', '$id', '=', 'th'),
+            Query::join('themes', 'th', [Query::on('theme', '$id')]),
             Query::equal('th.$createdAt', [$sameInstantElsewhere]),
         ])));
     }
@@ -131,7 +131,7 @@ final class JoinResolutionTest extends TestCase
         $this->assertSame(['2024-01-01T09:00:00.000+00:00', '2024-01-01T11:00:00.000+00:00'], $expected);
 
         $joined = $this->database->find('tickets', [
-            Query::join('themes', 'theme', '$id', '=', 'th'),
+            Query::join('themes', 'th', [Query::on('theme', '$id')]),
             Query::count('*', 'total'),
             Query::groupBy(['th.when']),
             Query::having([Query::greaterThan('th.when', self::LATER_THAN_EIGHT_UTC)]),
@@ -149,7 +149,7 @@ final class JoinResolutionTest extends TestCase
     public function testAMaximumOfADatetimeIsComparedInHavingAsTheDatetimeIs(): void
     {
         $rows = $this->database->find('tickets', [
-            Query::join('themes', 'theme', '$id', '=', 'th'),
+            Query::join('themes', 'th', [Query::on('theme', '$id')]),
             Query::max('th.when', 'latest'),
             Query::groupBy(['name']),
             Query::having([Query::greaterThan('latest', self::LATER_THAN_EIGHT_UTC)]),
@@ -182,8 +182,8 @@ final class JoinResolutionTest extends TestCase
         };
         $this->database = $this->database(new Cache($cache));
 
-        $join = Query::join('themes', 'theme', '$id', '=', 'th');
-        $selfJoin = Query::join('themes', 'th.$id', '$id', '=', 'tx');
+        $join = Query::join('themes', 'th', [Query::on('theme', '$id')]);
+        $selfJoin = Query::join('themes', 'tx', [Query::on('th.$id', '$id')]);
         $reads = [
             'find()' => fn (): mixed => $this->database->find('tickets', [$join, Query::containsAny('th.tags', ['a'])]),
             'find() of an aggregate' => fn (): mixed => $this->database->find('tickets', [$join, Query::sum('th.score', 'total')]),
@@ -211,7 +211,7 @@ final class JoinResolutionTest extends TestCase
     public function testMoreJoinsThanTheCapAreRefusedWithoutValidation(): void
     {
         $joins = static fn (int $count): array => \array_map(
-            static fn (int $index): Query => Query::join('themes', 'theme', '$id', '=', 'th'.$index),
+            static fn (int $index): Query => Query::join('themes', 'th'.$index, [Query::on('theme', '$id')]),
             \range(1, $count),
         );
 
@@ -236,7 +236,7 @@ final class JoinResolutionTest extends TestCase
 
     public function testAnUnmatchedOuterRowWithoutASelectedIdIsDropped(): void
     {
-        $join = Query::leftJoin('themes', 'theme', '$id', '=', 'th');
+        $join = Query::leftJoin('themes', 'th', [Query::on('theme', '$id')]);
         $select = Query::select(['name', 'th.tags', 'th.when']);
 
         $rows = [];
@@ -268,7 +268,7 @@ final class JoinResolutionTest extends TestCase
     public function testADistinctOuterJoinReadSelectsNoJoinedIdOfItsOwn(): void
     {
         $rows = $this->database->find('tickets', [
-            Query::leftJoin('themes', 'theme', '$id', '=', 'th'),
+            Query::leftJoin('themes', 'th', [Query::on('theme', '$id')]),
             Query::select(['th.score']),
             Query::distinct(),
         ]);
@@ -280,7 +280,7 @@ final class JoinResolutionTest extends TestCase
 
     public function testAJoinedSelectLeavesUnselectedAttributesOut(): void
     {
-        $join = Query::join('themes', 'theme', '$id', '=', 'th');
+        $join = Query::join('themes', 'th', [Query::on('theme', '$id')]);
         $select = Query::select(['name', 'th.name']);
 
         $rows = $this->database->find('tickets', [$join, $select, Query::equal('$id', ['k1'])]);

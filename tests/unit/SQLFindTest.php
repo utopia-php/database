@@ -98,7 +98,7 @@ final class SQLFindTest extends TestCase
     public function testJoinWithoutSelectLeavesJoinedInternalsOut(): void
     {
         $sql = $this->captureFindSql([
-            Query::leftJoin('orders', '$id', 'customerId'),
+            Query::leftJoin('orders', 'j0', [Query::on('$id', 'customerId')]),
         ]);
 
         $this->assertJoinProjection($sql);
@@ -125,7 +125,7 @@ final class SQLFindTest extends TestCase
     public function testEmulatesFullOuterJoinWithOuterLimit(): void
     {
         $sql = $this->captureFindSql(
-            [Query::fullOuterJoin('orders', '$id', 'customerId')],
+            [Query::fullOuterJoin('orders', 'j0', [Query::on('$id', 'customerId')])],
             limit: 2,
         );
 
@@ -137,7 +137,7 @@ final class SQLFindTest extends TestCase
     public function testEmulatesFullOuterJoinOrderByIsUnambiguousAfterUnion(): void
     {
         $sql = $this->captureFindSql(
-            [Query::fullOuterJoin('orders', '$id', 'customerId')],
+            [Query::fullOuterJoin('orders', 'j0', [Query::on('$id', 'customerId')])],
             limit: 2,
             orderAttributes: [Document::SEQUENCE],
             orderTypes: [OrderDirection::Asc],
@@ -152,7 +152,7 @@ final class SQLFindTest extends TestCase
     {
         $sql = $this->captureFindSql(
             [
-                Query::fullOuterJoin('orders', '$id', 'customerId'),
+                Query::fullOuterJoin('orders', 'j0', [Query::on('$id', 'customerId')]),
                 Query::select(['name']),
             ],
             limit: 2,
@@ -168,7 +168,7 @@ final class SQLFindTest extends TestCase
     public function testEmulatesFullOuterJoinOrderByHandlesMultipleAttributes(): void
     {
         $sql = $this->captureFindSql(
-            [Query::fullOuterJoin('orders', '$id', 'customerId')],
+            [Query::fullOuterJoin('orders', 'j0', [Query::on('$id', 'customerId')])],
             limit: 2,
             orderAttributes: ['name', Document::SEQUENCE],
             orderTypes: [OrderDirection::Asc, OrderDirection::Asc],
@@ -198,7 +198,7 @@ final class SQLFindTest extends TestCase
 
         $results = $this->adapter($statement)->find(
             new Document(['$id' => 'collection']),
-            [Query::fullOuterJoin('orders', '$id', 'customerId')],
+            [Query::fullOuterJoin('orders', 'j0', [Query::on('$id', 'customerId')])],
             limit: 1,
             orderAttributes: [Document::SEQUENCE],
             orderTypes: [OrderDirection::Asc],
@@ -231,7 +231,7 @@ final class SQLFindTest extends TestCase
         $results = $this->adapter($statement)->find(
             new Document(['$id' => 'collection']),
             [
-                Query::fullOuterJoin('orders', '$id', 'customerId'),
+                Query::fullOuterJoin('orders', 'j0', [Query::on('$id', 'customerId')]),
                 Query::select(['name']),
             ],
             limit: 1,
@@ -274,8 +274,8 @@ final class SQLFindTest extends TestCase
         $results = $this->adapter($statement)->find(
             new Document(['$id' => 'collection']),
             [
-                Query::join('peers', '$id', 'mainId', '=', 'alpha'),
-                Query::join('peers', 'peerKey', '$id', '=', 'beta'),
+                Query::join('peers', 'alpha', [Query::on('$id', 'mainId')]),
+                Query::join('peers', 'beta', [Query::on('peerKey', '$id')]),
                 Query::select(['name', 'alpha.$id', 'beta.$id', 'alpha.label', 'beta.label', 'alpha.score']),
             ],
         );
@@ -312,7 +312,7 @@ final class SQLFindTest extends TestCase
         $results = $this->adapter($statement)->find(
             new Document(['$id' => 'collection']),
             [
-                Query::join('collection', '$id', '$id', '=', 'twin'),
+                Query::join('collection', 'twin', [Query::on('$id', '$id')]),
                 Query::select(['name', 'twin.$id', 'twin.name', 'twin.$permissions']),
             ],
         );
@@ -344,7 +344,7 @@ final class SQLFindTest extends TestCase
         $results = $this->adapter($statement)->find(
             new Document(['$id' => 'collection']),
             [
-                Query::rightJoin('tail', '$id', 'mainId', '=', 'tail'),
+                Query::rightJoin('tail', 'tail', [Query::on('$id', 'mainId')]),
                 Query::select(['name', 'tail.score']),
             ],
         );
@@ -358,7 +358,7 @@ final class SQLFindTest extends TestCase
     {
         $sql = $this->captureFindSql([
             Query::distinct(),
-            Query::join('orders', '$id', 'customerId', '=', 'b'),
+            Query::join('orders', 'b', [Query::on('$id', 'customerId')]),
             Query::select(['$id', 'name', 'b.label']),
         ]);
 
@@ -370,7 +370,7 @@ final class SQLFindTest extends TestCase
     public function testSelectedJoinIdentityIsProjectedAsQualifiedInternal(): void
     {
         $sql = $this->captureFindSql([
-            Query::join('peers', '$id', 'mainId', '=', 'alpha'),
+            Query::join('peers', 'alpha', [Query::on('$id', 'mainId')]),
             Query::select(['name', 'alpha.$id', 'alpha.label']),
         ]);
 
@@ -383,7 +383,7 @@ final class SQLFindTest extends TestCase
     public function testJoinSideSearchUsesJoinAlias(): void
     {
         $sql = $this->captureFindSql([
-            Query::leftJoin('meta', '$id', 'mainId', '=', 'meta'),
+            Query::leftJoin('meta', 'meta', [Query::on('$id', 'mainId')]),
             Query::search('meta.body', 'needle'),
         ]);
 
@@ -410,7 +410,7 @@ final class SQLFindTest extends TestCase
     public function testEmulatesFullOuterJoinCursorAfterUsesJoinQualifiedOrder(): void
     {
         $sql = $this->captureFindSql(
-            [Query::fullOuterJoin('meta', '$id', 'mainId', '=', 'meta')],
+            [Query::fullOuterJoin('meta', 'meta', [Query::on('$id', 'mainId')])],
             limit: 1,
             orderAttributes: ['meta.score', Document::SEQUENCE],
             orderTypes: [OrderDirection::Asc, OrderDirection::Asc],
@@ -434,7 +434,7 @@ final class SQLFindTest extends TestCase
     {
         $sql = $this->captureFindSql(
             [
-                Query::join('orders', '$id', 'customerId', '=', 'orders'),
+                Query::join('orders', 'orders', [Query::on('$id', 'customerId')]),
                 Query::equal('meta.score', [1]),
                 Query::equal('orders.email', ['a@b.co']),
                 Query::equal('orders.$id', ['order-1']),
@@ -529,7 +529,7 @@ final class SQLFindTest extends TestCase
 
         $adapter->find(
             new Document(['$id' => 'database_1_collection_1', Database::JOIN_DOCUMENT_SECURITY => $joinDocumentSecurity]),
-            [Query::join('database_1_collection_2', '$id', 'mainId')],
+            [Query::join('database_1_collection_2', 'j0', [Query::on('$id', 'mainId')])],
         );
 
         $this->assertNotSame('', $sql);
@@ -559,7 +559,7 @@ final class SQLFindTest extends TestCase
         $adapter->setAuthorization($authorization);
 
         $adapter->find(new Document(['$id' => 'collection']), [
-            Query::leftJoin('meta', '$id', 'mainId', '=', 'meta'),
+            Query::leftJoin('meta', 'meta', [Query::on('$id', 'mainId')]),
             $search,
         ]);
 

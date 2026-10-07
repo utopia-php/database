@@ -42,8 +42,6 @@ final readonly class Storage
 
     public const string INDEX_PERMISSIONS_ID = '_permissions_id';
 
-    public const string JOIN_ALIAS_PREFIX = 'j';
-
     /**
      * @var array<string, string>
      */
@@ -95,22 +93,5 @@ final readonly class Storage
     public static function permissionsTable(string $collection): string
     {
         return $collection.self::PERMS_SUFFIX;
-    }
-
-    /**
-     * The alias a join that declares none has its values returned under: the prefix and the join's
-     * position among the query's joins, or the next number no other alias of the query takes.
-     *
-     * @param  array<string, true>  $taken  Lower-cased aliases in use; the alias returned is added
-     */
-    public static function joinAlias(int $position, array &$taken): string
-    {
-        do {
-            $alias = self::JOIN_ALIAS_PREFIX.$position++;
-        } while (isset($taken[$alias]));
-
-        $taken[$alias] = true;
-
-        return $alias;
     }
 }

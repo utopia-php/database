@@ -23,7 +23,7 @@ final class SQLJoinedReadsTest extends TestCase
     public function testALockingReadWithAJoinIsRefused(): void
     {
         $database = $this->database(new SQLite(new PDO('sqlite::memory:')));
-        $join = Query::join('notes', '$id', 'customerId', '=', 'note');
+        $join = Query::join('notes', 'note', [Query::on('$id', 'customerId')]);
 
         $this->assertSame('c1', $database->getDocument('customers', 'c1', [$join])->getId());
 
@@ -36,7 +36,7 @@ final class SQLJoinedReadsTest extends TestCase
     public function testAFullOuterJoinFollowedByANestedLeftJoinReachesBothHalves(): void
     {
         $queries = [
-            Query::fullOuterJoin('notes', '$id', 'customerId', '=', 'note'),
+            Query::fullOuterJoin('notes', 'note', [Query::on('$id', 'customerId')]),
             Query::leftJoin('replies', 'reply', [Query::on('note.$id', 'noteId')]),
             Query::select(['name', 'note.body', 'reply.text']),
         ];
@@ -55,7 +55,7 @@ final class SQLJoinedReadsTest extends TestCase
     public function testAFullOuterJoinFollowedByANestedRightJoinKeepsOnlyMatchedReplies(): void
     {
         $queries = [
-            Query::fullOuterJoin('notes', '$id', 'customerId', '=', 'note'),
+            Query::fullOuterJoin('notes', 'note', [Query::on('$id', 'customerId')]),
             Query::rightJoin('replies', 'reply', [Query::on('note.$id', 'noteId')]),
             Query::select(['name', 'note.body', 'reply.text']),
         ];
@@ -67,7 +67,7 @@ final class SQLJoinedReadsTest extends TestCase
 
     public function testADistinctFullOuterJoinWithoutNamedSelectsIsOrdered(): void
     {
-        $join = Query::fullOuterJoin('notes', '$id', 'customerId', '=', 'note');
+        $join = Query::fullOuterJoin('notes', 'note', [Query::on('$id', 'customerId')]);
 
         foreach ([[], [Query::select(['*'])]] as $select) {
             $queries = [Query::distinct(), $join, ...$select, Query::orderDesc('name')];

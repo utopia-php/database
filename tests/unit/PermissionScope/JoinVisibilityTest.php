@@ -99,7 +99,7 @@ final class JoinVisibilityTest extends TestCase
 
     public function testJoinKeepsMainRowsReadableThroughTheCollectionGrant(): void
     {
-        $join = Query::leftJoin('profiles', '$id', 'customerId', '=', 'profile');
+        $join = Query::leftJoin('profiles', 'profile', [Query::on('$id', 'customerId')]);
 
         $this->assertSame(['bare', 'open'], $this->ids($this->database->find('customers')));
         $this->assertSame(
@@ -120,7 +120,7 @@ final class JoinVisibilityTest extends TestCase
 
     public function testJoinedCollectionWithCollectionGrantShowsEveryRow(): void
     {
-        $join = Query::join('orders', '$id', 'customerId', '=', 'ord');
+        $join = Query::join('orders', 'ord', [Query::on('$id', 'customerId')]);
 
         $this->assertSame([100, 9999], $this->integers($this->database->find('orders'), 'amount'));
         $this->assertSame(
@@ -136,7 +136,7 @@ final class JoinVisibilityTest extends TestCase
 
     public function testJoinedCollectionWithOnlyDocumentGrantsShowsTheCallerRows(): void
     {
-        $join = Query::join('notes', '$id', 'customerId', '=', 'note');
+        $join = Query::join('notes', 'note', [Query::on('$id', 'customerId')]);
 
         $this->assertSame(['mine'], $this->strings($this->database->find('notes'), 'text'));
         $this->assertSame(
@@ -163,12 +163,12 @@ final class JoinVisibilityTest extends TestCase
         $this->assertSame(['open'], $this->ids($adapter->find($collection)), 'Without joins the Database layer grants by disabling authorization, never by marking the collection');
         $this->assertSame(1, $adapter->count($collection));
         $this->assertSame(1, $adapter->sum($collection, 'visits'));
-        $this->assertSame(['bare', 'open'], $this->ids($adapter->find($collection, [Query::leftJoin('profiles', '$id', 'customerId', '=', 'profile')])));
+        $this->assertSame(['bare', 'open'], $this->ids($adapter->find($collection, [Query::leftJoin('profiles', 'profile', [Query::on('$id', 'customerId')])])));
     }
 
     public function testJoinedCollectionWithoutGrantOrDocumentSecurityIsRejected(): void
     {
-        $join = Query::join('ledger', '$id', 'customerId', '=', 'ledger');
+        $join = Query::join('ledger', 'ledger', [Query::on('$id', 'customerId')]);
 
         $this->assertRejected(fn () => $this->database->find('ledger'));
         $this->assertRejected(fn () => $this->database->find('customers', [$join]), "joined collection 'ledger'");

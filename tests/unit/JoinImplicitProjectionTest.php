@@ -31,7 +31,7 @@ final class JoinImplicitProjectionTest extends TestCase
         $database = $this->database(sharedTables: false);
 
         $rows = $database->find('customers', [
-            Query::join('orders', '$id', 'customerId', '=', 'ord'),
+            Query::join('orders', 'ord', [Query::on('$id', 'customerId')]),
         ]);
 
         $this->assertCount(1, $rows);
@@ -49,7 +49,7 @@ final class JoinImplicitProjectionTest extends TestCase
         $database = $this->database(sharedTables: false);
 
         $rows = $database->find('customers', [
-            Query::leftJoin('orders', '$id', 'customerId'),
+            Query::leftJoin('orders', 'j0', [Query::on('$id', 'customerId')]),
         ]);
 
         $this->assertCount(2, $rows);
@@ -66,8 +66,8 @@ final class JoinImplicitProjectionTest extends TestCase
         $database = $this->database(sharedTables: false);
 
         $rows = $database->find('customers', [
-            Query::join('orders', '$id', 'customerId', '=', 'first'),
-            Query::leftJoin('orders', '$id', 'customerId', '=', 'second'),
+            Query::join('orders', 'first', [Query::on('$id', 'customerId')]),
+            Query::leftJoin('orders', 'second', [Query::on('$id', 'customerId')]),
         ]);
 
         $this->assertCount(1, $rows);
@@ -84,7 +84,7 @@ final class JoinImplicitProjectionTest extends TestCase
         $database = $this->database(sharedTables: true);
 
         $rows = $database->find('customers', [
-            Query::join('orders', '$id', 'customerId', '=', 'ord'),
+            Query::join('orders', 'ord', [Query::on('$id', 'customerId')]),
         ]);
 
         $this->assertCount(1, $rows);
@@ -97,7 +97,7 @@ final class JoinImplicitProjectionTest extends TestCase
         $database = $this->database(sharedTables: false);
 
         $rows = $database->find('customers', [
-            Query::fullOuterJoin('orders', '$id', 'customerId', '=', 'ord'),
+            Query::fullOuterJoin('orders', 'ord', [Query::on('$id', 'customerId')]),
             Query::orderAsc('ord.total'),
         ]);
 
@@ -118,7 +118,7 @@ final class JoinImplicitProjectionTest extends TestCase
         $database = $this->database(sharedTables: false);
 
         $document = $database->getDocument('customers', 'c1', [
-            Query::leftJoin('orders', '$id', 'customerId', '=', 'ord'),
+            Query::leftJoin('orders', 'ord', [Query::on('$id', 'customerId')]),
         ]);
 
         $this->assertSame($this->keys('ord'), $this->sortedKeys($document));
@@ -130,7 +130,7 @@ final class JoinImplicitProjectionTest extends TestCase
         $database = $this->database(sharedTables: false);
 
         $rows = $database->find('customers', [
-            Query::join('orders', '$id', 'customerId', '=', 'ord'),
+            Query::join('orders', 'ord', [Query::on('$id', 'customerId')]),
             Query::select(['name', 'ord.$id', 'ord.$permissions', 'ord.$createdAt']),
         ]);
 

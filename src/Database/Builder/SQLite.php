@@ -40,7 +40,7 @@ class SQLite extends Base implements Filtering
     {
         $sql = parent::compileJoin($query);
 
-        foreach ($this->joinComparisons($query) as [$left, $operator, $right]) {
+        foreach ($this->onComparisons($query->getJoinOnQueries()) as [$left, $operator, $right]) {
             if (! \in_array($operator, self::EQUALITY_OPERATORS, true) || (! $this->isCollated($left) && ! $this->isCollated($right))) {
                 continue;
             }
@@ -126,7 +126,7 @@ class SQLite extends Base implements Filtering
     protected function compileArrayFilter(Method $method, string $attribute, Query $query): string
     {
         if ($method === Method::NotContains) {
-            return $this->compileNotContaining($attribute, $this->compileJsonOverlapsExpr($attribute, [$query->getValues()]));
+            return $this->compileNotContaining($attribute, $this->compileJsonOverlapsExpression($attribute, [$query->getValues()]));
         }
 
         return parent::compileArrayFilter($method, $attribute, $query);
@@ -136,7 +136,7 @@ class SQLite extends Base implements Filtering
      * @param  array<mixed>  $values
      */
     #[\Override]
-    protected function compileJsonContainsExpr(string $attribute, array $values, bool $not): string
+    protected function compileJsonContainsExpression(string $attribute, array $values, bool $not): string
     {
         $expression = '('.\implode(' AND ', $this->compileElementMatches($attribute, $values[0])).')';
 
@@ -147,7 +147,7 @@ class SQLite extends Base implements Filtering
      * @param  array<mixed>  $values
      */
     #[\Override]
-    protected function compileJsonOverlapsExpr(string $attribute, array $values): string
+    protected function compileJsonOverlapsExpression(string $attribute, array $values): string
     {
         return '('.\implode(' OR ', $this->compileElementMatches($attribute, $values[0])).')';
     }
@@ -164,18 +164,6 @@ class SQLite extends Base implements Filtering
         $name = $separator === false ? $resolved : \substr($resolved, $separator + 1);
 
         return \in_array($name, self::COLLATED_COLUMNS, true);
-    }
-
-    /**
-     * @return list<array{string, string, string}>
-     */
-    private function joinComparisons(Query $query): array
-    {
-        if ($query->isNestedJoin()) {
-            return $this->onComparisons($query->getJoinOnQueries());
-        }
-
-        return $this->comparison($query->getValues());
     }
 
     /**

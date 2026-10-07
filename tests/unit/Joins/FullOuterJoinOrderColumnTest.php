@@ -80,7 +80,7 @@ final class FullOuterJoinOrderColumnTest extends TestCase
     {
         $emulated = $this->database(native: false, sharedTables: $sharedTables);
         $native = $this->database(native: true, sharedTables: $sharedTables);
-        $join = Query::fullOuterJoin(self::JOINED, self::LINK, self::LINK, '=', 'j');
+        $join = Query::fullOuterJoin(self::JOINED, 'j', [Query::on(self::LINK, self::LINK)]);
 
         $this->assertReadsMatch($emulated, $native, 'j', [
             'ordered by the attribute' => [
@@ -107,21 +107,21 @@ final class FullOuterJoinOrderColumnTest extends TestCase
 
         $this->assertSame(
             [['m1', 'first', 'j1', 1]],
-            $this->summaries([$emulated->getDocument(self::MAIN, 'm1', [Query::leftJoin(self::JOINED, self::LINK, self::LINK, '=', $alias)])], $alias),
+            $this->summaries([$emulated->getDocument(self::MAIN, 'm1', [Query::leftJoin(self::JOINED, $alias, [Query::on(self::LINK, self::LINK)])])], $alias),
             'getDocument',
         );
 
         $this->assertReadsMatch($emulated, $native, $alias, [
             'joined' => [
-                [Query::join(self::JOINED, self::LINK, self::LINK, '=', $alias)],
+                [Query::join(self::JOINED, $alias, [Query::on(self::LINK, self::LINK)])],
                 [['m1', 'first', 'j1', 1]],
             ],
             'left joined, selecting its columns' => [
-                [Query::leftJoin(self::JOINED, self::LINK, self::LINK, '=', $alias), Query::select(['$id', self::NOTE, "{$alias}.\$id", "{$alias}.score"])],
+                [Query::leftJoin(self::JOINED, $alias, [Query::on(self::LINK, self::LINK)]), Query::select(['$id', self::NOTE, "{$alias}.\$id", "{$alias}.score"])],
                 [['m1', 'first', 'j1', 1], ['m2', 'second', null, null]],
             ],
             'full outer joined, ordered by its column' => [
-                [Query::fullOuterJoin(self::JOINED, self::LINK, self::LINK, '=', $alias), Query::orderDesc("{$alias}.score")],
+                [Query::fullOuterJoin(self::JOINED, $alias, [Query::on(self::LINK, self::LINK)]), Query::orderDesc("{$alias}.score")],
                 [['', null, 'j2', 3], ['m1', 'first', 'j1', 1], ['m2', 'second', null, null]],
             ],
         ]);

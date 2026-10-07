@@ -13,13 +13,13 @@ final class JoinChainTest extends TestCase
     {
         $chain = JoinChain::fromQueries([
             Query::equal('name', ['a']),
-            Query::join('books', '$id', 'authorId', '=', 'book'),
+            Query::join('books', 'book', [Query::on('$id', 'authorId')]),
             Query::crossJoin('extras', 'extra'),
-            Query::rightJoin('reviews', '$id', 'authorId'),
-            Query::fullOuterJoin('notes', '$id', 'authorId', '=', 'note'),
+            Query::rightJoin('reviews', 'review', [Query::on('$id', 'authorId')]),
+            Query::fullOuterJoin('notes', 'note', [Query::on('$id', 'authorId')]),
         ]);
 
-        $this->assertSame(['extra', 'reviews'], $chain->preceding('note'), 'A join without an alias is keyed by its table');
+        $this->assertSame(['extra', 'review'], $chain->preceding('note'), 'Joins are keyed by their alias');
         $this->assertTrue($chain->has(JoinType::Cross));
         $this->assertFalse($chain->has(JoinType::Left));
     }

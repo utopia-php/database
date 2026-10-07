@@ -102,16 +102,16 @@ final class BoundedJoinSortTest extends TestCase
      */
     public static function reads(): iterable
     {
-        $notes = Query::leftJoin('notes', '$id', 'author', '=', 'n');
-        $innerNotes = Query::join('notes', '$id', 'author', '=', 'n');
+        $notes = Query::leftJoin('notes', 'n', [Query::on('$id', 'author')]);
+        $innerNotes = Query::join('notes', 'n', [Query::on('$id', 'author')]);
         $joins = [
             'notes' => [$notes],
-            'notes and their tags' => [$notes, Query::leftJoin('tags', 'n.$id', 'note', '=', 't')],
-            'notes and the author\'s tags' => [$notes, Query::leftJoin('tags', '$id', 'author', '=', 't')],
+            'notes and their tags' => [$notes, Query::leftJoin('tags', 't', [Query::on('n.$id', 'note')])],
+            'notes and the author\'s tags' => [$notes, Query::leftJoin('tags', 't', [Query::on('$id', 'author')])],
             'inner notes' => [$innerNotes],
-            'inner notes and their inner tags' => [$innerNotes, Query::join('tags', 'n.$id', 'note', '=', 't')],
-            'notes and their inner tags' => [$notes, Query::join('tags', 'n.$id', 'note', '=', 't')],
-            'notes and the author\'s inner tags' => [$notes, Query::join('tags', '$id', 'author', '=', 't')],
+            'inner notes and their inner tags' => [$innerNotes, Query::join('tags', 't', [Query::on('n.$id', 'note')])],
+            'notes and their inner tags' => [$notes, Query::join('tags', 't', [Query::on('n.$id', 'note')])],
+            'notes and the author\'s inner tags' => [$notes, Query::join('tags', 't', [Query::on('$id', 'author')])],
         ];
         $orders = [
             'default order' => [],
@@ -127,9 +127,9 @@ final class BoundedJoinSortTest extends TestCase
             'a joined attribute in a range' => [Query::between('n.rank', 1, 2)],
             'a joined attribute above a value, grouped with one below' => [Query::or([Query::greaterThan('n.rank', 2), Query::lessThan('n.rank', 2)])],
             'a main and a joined condition grouped with and' => [Query::and([Query::lessThan('rank', 4), Query::greaterThanEqual('n.rank', 1)])],
-            'a condition on the tags of the notes' => [Query::leftJoin('tags', 'n.$id', 'note', '=', 't'), Query::isNotNull('t.$id')],
+            'a condition on the tags of the notes' => [Query::leftJoin('tags', 't', [Query::on('n.$id', 'note')]), Query::isNotNull('t.$id')],
             'a joined condition grouped with and inside or' => [Query::or([Query::and([Query::lessThan('n.rank', 2), Query::or([Query::isNull('n.rank'), Query::equal('n.rank', [1])])]), Query::greaterThan('n.rank', 3)])],
-            'a condition on the notes and on the author\'s tags' => [Query::leftJoin('tags', '$id', 'author', '=', 't'), Query::lessThanEqual('n.rank', 3), Query::startsWith('t.note', 'n0')],
+            'a condition on the notes and on the author\'s tags' => [Query::leftJoin('tags', 't', [Query::on('$id', 'author')]), Query::lessThanEqual('n.rank', 3), Query::startsWith('t.note', 'n0')],
         ];
 
         foreach ([self::PLAIN, self::GRANTED, self::SHARED] as $mode) {
@@ -156,7 +156,7 @@ final class BoundedJoinSortTest extends TestCase
             yield "{$mode}: notes, main conditions grouped" => [$mode, [$notes, Query::or([Query::lessThan('rank', 2), Query::isNull('rank')])], true];
             yield "{$mode}: inner notes, a main and a joined condition" => [$mode, [$innerNotes, Query::notEqual('name', 'cedar'), Query::lessThan('n.rank', 3), Query::orderAsc('rank')], false];
             yield "{$mode}: inner notes, a joined attribute that is not set" => [$mode, [$innerNotes, Query::isNull('n.rank')], false];
-            yield "{$mode}: notes and their inner tags, a joined condition that keeps notes without a rank" => [$mode, [$notes, Query::join('tags', 'n.$id', 'note', '=', 't'), Query::or([Query::isNull('n.rank'), Query::lessThan('n.rank', 4)])], false];
+            yield "{$mode}: notes and their inner tags, a joined condition that keeps notes without a rank" => [$mode, [$notes, Query::join('tags', 't', [Query::on('n.$id', 'note')]), Query::or([Query::isNull('n.rank'), Query::lessThan('n.rank', 4)])], false];
             yield "{$mode}: notes, a search on a main attribute" => [$mode, [$notes, Query::search('name', 'amber')], true];
             yield "{$mode}: notes, a search matching every author" => [$mode, [$notes, Query::search('name', 'one'), Query::orderAsc('rank')], true];
             yield "{$mode}: inner notes, a search and a joined condition" => [$mode, [$innerNotes, Query::search('name', 'one'), Query::isNotNull('n.rank'), Query::orderDesc('rank')], false];
@@ -167,13 +167,13 @@ final class BoundedJoinSortTest extends TestCase
             yield "{$mode}: notes, a joined attribute that is not set or below a value" => [$mode, [$notes, Query::or([Query::isNull('n.rank'), Query::lessThan('n.rank', 2)])], false];
             yield "{$mode}: notes, a grouped condition naming a joined and a main attribute" => [$mode, [$notes, Query::or([Query::equal('n.rank', [1]), Query::isNull('rank')])], false];
             yield "{$mode}: inner notes, a grouped condition naming a joined and a main attribute" => [$mode, [$innerNotes, Query::or([Query::equal('n.rank', [1]), Query::isNull('rank')])], false];
-            yield "{$mode}: notes and their tags, a grouped condition naming both" => [$mode, [$notes, Query::leftJoin('tags', 'n.$id', 'note', '=', 't'), Query::or([Query::equal('n.rank', [1]), Query::isNotNull('t.$id')])], false];
+            yield "{$mode}: notes and their tags, a grouped condition naming both" => [$mode, [$notes, Query::leftJoin('tags', 't', [Query::on('n.$id', 'note')]), Query::or([Query::equal('n.rank', [1]), Query::isNotNull('t.$id')])], false];
             yield "{$mode}: notes, ordered by a joined attribute first" => [$mode, [$notes, Query::orderAsc('n.rank')], false];
             yield "{$mode}: inner notes, ordered by a joined attribute first" => [$mode, [$innerNotes, Query::orderAsc('n.rank')], false];
             yield "{$mode}: notes, ordered by a main attribute that is not unique, then a joined one" => [$mode, [$notes, Query::orderAsc('rank'), Query::orderAsc('n.rank')], false];
-            yield "{$mode}: notes, right join" => [$mode, [Query::rightJoin('notes', '$id', 'author', '=', 'n'), Query::orderAsc('rank')], false];
-            yield "{$mode}: notes, right join behind an inner join" => [$mode, [$innerNotes, Query::rightJoin('tags', '$id', 'author', '=', 't')], false];
-            yield "{$mode}: notes, full outer join" => [$mode, [Query::fullOuterJoin('notes', '$id', 'author', '=', 'n')], false];
+            yield "{$mode}: notes, right join" => [$mode, [Query::rightJoin('notes', 'n', [Query::on('$id', 'author')]), Query::orderAsc('rank')], false];
+            yield "{$mode}: notes, right join behind an inner join" => [$mode, [$innerNotes, Query::rightJoin('tags', 't', [Query::on('$id', 'author')])], false];
+            yield "{$mode}: notes, full outer join" => [$mode, [Query::fullOuterJoin('notes', 'n', [Query::on('$id', 'author')])], false];
             yield "{$mode}: notes, main attributes selected" => [$mode, [$notes, Query::orderAsc('rank'), Query::select(['name', 'rank'])], false];
         }
     }
@@ -270,7 +270,7 @@ final class BoundedJoinSortTest extends TestCase
     public function testAnotherTenantsMainRowsTakeNoPlaceInTheBoundedPage(): void
     {
         [$sorted, $bounding] = $this->databases(self::SHARED);
-        $queries = [Query::leftJoin('notes', '$id', 'author', '=', 'n'), Query::limit(4)];
+        $queries = [Query::leftJoin('notes', 'n', [Query::on('$id', 'author')]), Query::limit(4)];
 
         foreach ([1, 2] as $tenant) {
             $sorted->setTenant($tenant);
@@ -292,7 +292,7 @@ final class BoundedJoinSortTest extends TestCase
     public function testAReadThatShowsNoJoinedAttributeIsNotBounded(): void
     {
         [$sorted, $bounding] = $this->databases(self::PLAIN);
-        $queries = [Query::leftJoin('notes', '$id', 'author', '=', 'n'), Query::select(['name'])];
+        $queries = [Query::leftJoin('notes', 'n', [Query::on('$id', 'author')]), Query::select(['name'])];
 
         $this->assertSame($this->rows($sorted, $queries, [Query::limit(5)]), $this->rows($bounding, $queries, [Query::limit(5)]));
         $this->assertNull($this->boundedMainRows($bounding));

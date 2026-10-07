@@ -65,7 +65,7 @@ final class AggregateMinorsTest extends TestCase
     public function testSumResolvesAJoinDeclaredAttribute(): void
     {
         $database = $this->database();
-        $item = Query::join('items', 'item', 'code', '=', 'it');
+        $item = Query::join('items', 'it', [Query::on('item', 'code')]);
 
         $this->assertSame(40, $database->sum('orders', 'price', [$item]), 'a name only the join declares');
         $this->assertSame(
@@ -88,7 +88,7 @@ final class AggregateMinorsTest extends TestCase
             $validate ? $database->enableValidation() : $database->disableValidation();
             $database->getProfiler()?->reset();
 
-            $this->assertSame(40, $database->sum('orders', 'price', [Query::join('items', 'item', 'code', '=', 'it')]), $case);
+            $this->assertSame(40, $database->sum('orders', 'price', [Query::join('items', 'it', [Query::on('item', 'code')])]), $case);
 
             $reads = \array_filter(
                 $database->getProfiler()?->getLogs() ?? [],
@@ -101,8 +101,8 @@ final class AggregateMinorsTest extends TestCase
     public function testSumRefusesABareNameNoCollectionOrSeveralJoinsDeclare(): void
     {
         $database = $this->database();
-        $item = Query::join('items', 'item', 'code', '=', 'it');
-        $extra = Query::join('extras', 'item', 'code', '=', 'ex');
+        $item = Query::join('items', 'it', [Query::on('item', 'code')]);
+        $extra = Query::join('extras', 'ex', [Query::on('item', 'code')]);
 
         foreach ([
             'two joins declare it' => [fn (): int|float => $database->sum('orders', 'price', [$item, $extra]), 'Invalid query: Attribute "price" is ambiguous across joins; qualify it with a join alias'],
@@ -124,8 +124,8 @@ final class AggregateMinorsTest extends TestCase
     {
         foreach (['join' => [false, 'join'], 'emulated full outer join' => [false, 'fullOuterJoin'], 'native full outer join' => [true, 'fullOuterJoin']] as $case => [$native, $method]) {
             $database = $this->database($native);
-            $item = Query::$method('items', 'item', 'code', '=', 'it');
-            $extra = Query::join('extras', 'item', 'code', '=', 'ex');
+            $item = Query::$method('items', 'it', [Query::on('item', 'code')]);
+            $extra = Query::join('extras', 'ex', [Query::on('item', 'code')]);
 
             $this->assertSame(
                 [['orders' => 2, 'name' => 'x', 'it.name' => 'apple'], ['orders' => 1, 'name' => 'y', 'it.name' => 'banana']],
@@ -158,8 +158,8 @@ final class AggregateMinorsTest extends TestCase
         $this->assertSame(
             [['orders' => 2, 'it.code' => 'a', 'ex.code' => 'a']],
             $this->rows($database->find('orders', [
-                Query::join('items', 'item', 'code', '=', 'it'),
-                Query::join('extras', 'item', 'code', '=', 'ex'),
+                Query::join('items', 'it', [Query::on('item', 'code')]),
+                Query::join('extras', 'ex', [Query::on('item', 'code')]),
                 Query::count('*', 'orders'),
                 Query::groupBy(['it.code', 'ex.code']),
             ])),

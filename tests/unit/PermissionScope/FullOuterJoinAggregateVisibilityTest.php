@@ -205,7 +205,7 @@ final class FullOuterJoinAggregateVisibilityTest extends TestCase
 
     private function join(): Query
     {
-        return Query::fullOuterJoin(self::BOOKS, '$id', 'authorId', '=', self::BOOK);
+        return Query::fullOuterJoin(self::BOOKS, self::BOOK, [Query::on('$id', 'authorId')]);
     }
 
     /**

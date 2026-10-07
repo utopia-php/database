@@ -54,7 +54,7 @@ final class AggregateSelectTest extends TestCase
      */
     public static function ungroupedSelects(): iterable
     {
-        $note = Query::join('notes', '$id', 'customerId', '=', 'note');
+        $note = Query::join('notes', 'note', [Query::on('$id', 'customerId')]);
 
         yield 'an attribute next to a count' => [[Query::count('*', 'rows'), Query::select(['name'])], 'name'];
         yield 'an attribute next to a sum' => [[Query::sum('balance', 'total'), Query::select(['name'])], 'name'];
@@ -98,8 +98,8 @@ final class AggregateSelectTest extends TestCase
     {
         yield 'a count' => [[Query::count('*', 'rows'), Query::select(['*'])], [['rows' => 3]]];
         yield 'a count and a sum' => [[Query::count('*', 'rows'), Query::sum('balance', 'total'), Query::select(['*'])], [['rows' => 3, 'total' => 60]]];
-        yield 'a count over a join' => [[Query::join('notes', '$id', 'customerId', '=', 'note'), Query::count('*', 'rows'), Query::select(['*'])], [['rows' => 3]]];
-        yield 'a count over a left join' => [[Query::leftJoin('notes', '$id', 'customerId', '=', 'note'), Query::count('*', 'rows'), Query::select(['*'])], [['rows' => 4]]];
+        yield 'a count over a join' => [[Query::join('notes', 'note', [Query::on('$id', 'customerId')]), Query::count('*', 'rows'), Query::select(['*'])], [['rows' => 3]]];
+        yield 'a count over a left join' => [[Query::leftJoin('notes', 'note', [Query::on('$id', 'customerId')]), Query::count('*', 'rows'), Query::select(['*'])], [['rows' => 4]]];
     }
 
     /**
@@ -138,7 +138,7 @@ final class AggregateSelectTest extends TestCase
         );
         $this->assertSame(
             [['rows' => 2, 'name' => 'first'], ['rows' => 1, 'name' => 'second']],
-            $this->rows($this->database->find('customers', [Query::join('notes', '$id', 'customerId', '=', 'note'), Query::count('*', 'rows'), Query::groupBy(['note.name']), Query::select($selects), Query::orderAsc('note.name')])),
+            $this->rows($this->database->find('customers', [Query::join('notes', 'note', [Query::on('$id', 'customerId')]), Query::count('*', 'rows'), Query::groupBy(['note.name']), Query::select($selects), Query::orderAsc('note.name')])),
         );
     }
 
@@ -157,7 +157,7 @@ final class AggregateSelectTest extends TestCase
         if ($native) {
             $this->database = $this->database(new NativeFullOuterJoinSQLite(new PDO('sqlite::memory:')));
         }
-        $note = Query::fullOuterJoin('notes', '$id', 'customerId', '=', 'note');
+        $note = Query::fullOuterJoin('notes', 'note', [Query::on('$id', 'customerId')]);
 
         $this->assertSame([['rows' => 5]], $this->rows($this->database->find('customers', [$note, Query::count('*', 'rows'), Query::select(['*'])])));
         $this->assertSame([['rows' => 5]], $this->rows($this->database->find('customers', [$note, Query::count('*', 'rows'), Query::select(['*', 'account.*', 'account.region.*'])])));
@@ -173,7 +173,7 @@ final class AggregateSelectTest extends TestCase
      */
     public static function groupedSelects(): iterable
     {
-        $note = Query::join('notes', '$id', 'customerId', '=', 'note');
+        $note = Query::join('notes', 'note', [Query::on('$id', 'customerId')]);
 
         yield 'a grouped attribute' => [
             [Query::count('*', 'rows'), Query::groupBy(['status']), Query::select(['status']), Query::orderAsc('status')],
@@ -237,7 +237,7 @@ final class AggregateSelectTest extends TestCase
         $this->assertSame(
             [['rows' => 1, 'name' => null], ['rows' => 2, 'name' => 'first'], ['rows' => 1, 'name' => 'second'], ['rows' => 1, 'name' => 'third']],
             $this->rows($this->database->find('customers', [
-                Query::fullOuterJoin('notes', '$id', 'customerId', '=', 'note'),
+                Query::fullOuterJoin('notes', 'note', [Query::on('$id', 'customerId')]),
                 Query::count('*', 'rows'),
                 Query::groupBy(['note.name']),
                 Query::select(['note.name']),
@@ -290,7 +290,7 @@ final class AggregateSelectTest extends TestCase
         $this->assertInstanceOf(Document::class, $region);
         $this->assertSame('eu', $region->getAttribute('code'));
 
-        $joined = $this->database->find('customers', [Query::join('notes', '$id', 'customerId', '=', 'note'), Query::select(['name', 'note.name']), Query::orderAsc('note.$id')]);
+        $joined = $this->database->find('customers', [Query::join('notes', 'note', [Query::on('$id', 'customerId')]), Query::select(['name', 'note.name']), Query::orderAsc('note.$id')]);
         $this->assertSame(['first', 'second', 'first'], \array_map(static fn (Document $customer): mixed => $customer->getAttribute('note.name'), $joined));
     }
 

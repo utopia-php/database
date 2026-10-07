@@ -124,6 +124,10 @@ class Join extends Base
      */
     public static function describeInvalidAlias(string $alias): ?string
     {
+        if ($alias === '') {
+            return 'Join alias is required';
+        }
+
         if (\preg_match(self::ALIAS_PATTERN, $alias) !== 1) {
             return 'Join alias must start with a letter or an underscore and contain only letters, digits and underscores';
         }
@@ -179,8 +183,8 @@ class Join extends Base
             return false;
         }
 
-        $alias = $query->getJoinAlias();
-        $invalidAlias = $alias === '' ? null : self::describeInvalidAlias($alias);
+        $alias = $query->getAlias();
+        $invalidAlias = self::describeInvalidAlias($alias);
         if ($invalidAlias !== null) {
             $this->message = $invalidAlias;
 
@@ -199,21 +203,13 @@ class Join extends Base
             return false;
         }
 
-        if ($alias !== '') {
-            $this->declared[$alias] = $join;
-        }
+        $this->declared[$alias] = $join;
 
         return true;
     }
 
     private function isValidConditions(Query $query, string $alias, ?JoinedCollection $join): bool
     {
-        if (! $query->isNestedJoin()) {
-            $values = $query->getValues();
-
-            return $this->isValidCondition($values[0] ?? null, $values[1] ?? null, $values[2] ?? null, $alias, $join);
-        }
-
         $onQueries = $query->getJoinOnQueries();
         if ($onQueries === []) {
             $this->message = 'Join ON requires at least one condition';
@@ -307,7 +303,7 @@ class Join extends Base
         $name = $column;
         $dot = \strpos($column, '.');
         if ($dot !== false) {
-            if ($alias === '' || \substr($column, 0, $dot) !== $alias) {
+            if (\substr($column, 0, $dot) !== $alias) {
                 $this->message = 'The right column of a join condition must belong to the joined collection: '.$column;
 
                 return false;
@@ -360,7 +356,7 @@ class Join extends Base
     private function joinOf(Query $query): ?JoinedCollection
     {
         foreach ($this->joins as $join) {
-            if ($join->collection === $query->getAttribute() && $join->alias === $query->getJoinAlias()) {
+            if ($join->collection === $query->getAttribute() && $join->alias === $query->getAlias()) {
                 return $join;
             }
         }

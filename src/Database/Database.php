@@ -2534,8 +2534,8 @@ class Database
     {
         foreach ($queries as $query) {
             $method = $query->getMethod();
-            $alias = $query->getValue('');
-            if (! $method->isAggregate() || ! \is_string($alias) || $alias === '') {
+            $alias = $query->getAlias();
+            if (! $method->isAggregate() || $alias === '') {
                 continue;
             }
 

@@ -88,7 +88,7 @@ final class SQLiteSearchJoinTest extends TestCase
 
     private function join(): Query
     {
-        return Query::join(self::POSTS, '$id', 'authorId', '=', self::ALIAS);
+        return Query::join(self::POSTS, self::ALIAS, [Query::on('$id', 'authorId')]);
     }
 
     /**

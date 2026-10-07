@@ -42,7 +42,6 @@ use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\RelationshipSide;
 use Utopia\Database\RelationshipType;
-use Utopia\Database\Storage;
 use Utopia\Database\Validator\Authorization\Input;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Database\Validator\PartialStructure;
@@ -4209,7 +4208,7 @@ trait Documents
     }
 
     /**
-     * The collection each join given an alias reads, by that alias.
+     * The collection each join reads, by its alias.
      *
      * @param  array<Query>  $queries
      * @param  array<string, Document>|null  $joinedCollections  The collection each join names, by its id
@@ -4219,7 +4218,7 @@ trait Documents
     {
         $joins = \array_values(\array_filter(
             $queries,
-            static fn (Query $query): bool => $query->getMethod()->isJoin() && $query->getJoinAlias() !== '',
+            static fn (Query $query): bool => $query->getMethod()->isJoin(),
         ));
 
         return $this->joinedCollectionsByAlias($joins, $joinedCollections);
@@ -4546,11 +4545,12 @@ trait Documents
      */
     private function joinMatchesAtMostOneRow(Query $join, string $alias): bool
     {
-        if (! \in_array($join->getMethod(), [Method::Join, Method::LeftJoin], true) || $join->isNestedJoin()) {
+        $on = $join->getJoinOnQueries();
+        if (! \in_array($join->getMethod(), [Method::Join, Method::LeftJoin], true) || \count($on) !== 1 || $on[0]->getMethod() !== Method::On) {
             return false;
         }
 
-        [$left, $operator, $right] = \array_pad($join->getValues(), 3, null);
+        [$left, $operator, $right] = \array_pad($on[0]->getValues(), 3, null);
         if ($operator !== '=' || ! \is_string($left) || ! \is_string($right)) {
             return false;
         }
@@ -4897,8 +4897,7 @@ trait Documents
     }
 
     /**
-     * The collection each join reads, by the alias its values come back under: the alias the join
-     * declares, or the one generated for it.
+     * The collection each join reads, by the alias its values come back under.
      *
      * @param  array<Query>  $joins
      * @param  array<string, Document>|null  $joinedCollections  The collection each join names, by its id
@@ -4911,22 +4910,10 @@ trait Documents
         }
 
         $joinedCollections ??= $this->resolveJoinedCollections($joins);
-        $taken = [];
-        foreach ($joins as $join) {
-            $alias = $join->getJoinAlias();
-            if ($alias !== '') {
-                $taken[\strtolower($alias)] = true;
-            }
-        }
 
         $collections = [];
-        foreach (\array_values($joins) as $position => $join) {
-            $alias = $join->getJoinAlias();
-            if ($alias === '') {
-                $alias = Storage::joinAlias($position, $taken);
-            }
-
-            $collections[$alias] = $joinedCollections[$join->getAttribute()] ?? new Document();
+        foreach ($joins as $join) {
+            $collections[$join->getAlias()] = $joinedCollections[$join->getAttribute()] ?? new Document();
         }
 
         return $collections;

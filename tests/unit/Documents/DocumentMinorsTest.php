@@ -75,6 +75,7 @@ final class DocumentMinorsTest extends TestCase
         $authorization = new Authorization();
         $authorization->addRole(Role::any()->toString());
         $database = new class (new Memory(), new Cache(new None())) extends Database {
+            #[\Override]
             public function getDocument(string $collection, string $id, array $queries = [], bool $forUpdate = false): Document
             {
                 $document = parent::getDocument($collection, $id, $queries, $forUpdate);
@@ -248,6 +249,7 @@ final class DocumentMinorsTest extends TestCase
                 parent::__construct();
             }
 
+            #[\Override]
             public function capabilities(): array
             {
                 return \array_values(\array_filter(

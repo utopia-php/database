@@ -181,6 +181,7 @@ final class BulkWriteGuardsTest extends TestCase
                 parent::__construct($adapter, $cache);
             }
 
+            #[\Override]
             public function find(string $collection, array $queries = [], PermissionType $forPermission = PermissionType::Read): array
             {
                 if ($collection === 'tasks') {

@@ -81,6 +81,7 @@ final class WithCacheTest extends TestCase
     public function testACachedDocumentPastItsTimeToLiveIsRecomputed(): void
     {
         $adapter = new class () extends Memory {
+            #[\Override]
             public function capabilities(): array
             {
                 return [...parent::capabilities(), Capability::IndexTtl];

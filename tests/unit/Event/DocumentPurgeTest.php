@@ -234,6 +234,7 @@ final class DocumentPurgeTest extends TestCase
         $adapter = new class () extends Memory {
             public int $commitFailures = 0;
 
+            #[\Override]
             public function commitTransaction(): bool
             {
                 if ($this->commitFailures > 0) {

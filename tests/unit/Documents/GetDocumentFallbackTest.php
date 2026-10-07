@@ -86,6 +86,7 @@ final class GetDocumentFallbackTest extends TestCase
     private function ttlMemory(): Memory
     {
         return new class () extends Memory {
+            #[\Override]
             public function capabilities(): array
             {
                 return [...parent::capabilities(), Capability::IndexTtl];

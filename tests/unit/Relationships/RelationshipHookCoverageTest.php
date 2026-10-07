@@ -114,6 +114,7 @@ final class RelationshipHookCoverageTest extends TestCase
                 parent::__construct($adapter, $cache);
             }
 
+            #[\Override]
             public function getDocument(string $collection, string $id, array $queries = [], bool $forUpdate = false): Document
             {
                 $document = parent::getDocument($collection, $id, $queries, $forUpdate);

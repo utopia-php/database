@@ -186,6 +186,7 @@ final class SharedColumnTypeTest extends TestCase
     private function createRefusingDatabase(): Database
     {
         $adapter = new class (new PDO('sqlite::memory:')) extends SQLite {
+            #[\Override]
             public function createAttribute(string $collection, Attribute $attribute): bool
             {
                 throw new MismatchException('Attribute exists in the shared table with another type');
@@ -194,6 +195,7 @@ final class SharedColumnTypeTest extends TestCase
             /**
              * @param  array<Attribute>  $attributes
              */
+            #[\Override]
             public function createAttributes(string $collection, array $attributes): bool
             {
                 throw new MismatchException('Attribute exists in the shared table with another type');

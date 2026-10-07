@@ -54,6 +54,7 @@ final class CollectionGuardsTest extends TestCase
         $adapter = new class () extends Memory {
             public bool $failDrops = false;
 
+            #[\Override]
             public function deleteCollection(string $id): bool
             {
                 if ($this->failDrops) {
@@ -69,6 +70,7 @@ final class CollectionGuardsTest extends TestCase
                 parent::__construct($adapter, $cache);
             }
 
+            #[\Override]
             public function createDocument(string $collection, Document $document): Document
             {
                 if ($collection === self::METADATA && $document->getId() === 'failing') {
@@ -140,6 +142,7 @@ final class CollectionGuardsTest extends TestCase
                 parent::__construct($adapter, $cache);
             }
 
+            #[\Override]
             public function deleteDocument(string $collection, string $id): bool
             {
                 if ($collection === self::METADATA) {
@@ -221,6 +224,7 @@ final class CollectionGuardsTest extends TestCase
                 parent::__construct($adapter, $cache);
             }
 
+            #[\Override]
             public function createDocument(string $collection, Document $document): Document
             {
                 if ($collection === self::METADATA && $document->getId() === 'raced') {
@@ -230,6 +234,7 @@ final class CollectionGuardsTest extends TestCase
                 return parent::createDocument($collection, $document);
             }
 
+            #[\Override]
             public function purgeCachedDocument(string $collection, string $id): void
             {
                 if ($id === 'raced') {
@@ -263,6 +268,7 @@ final class CollectionGuardsTest extends TestCase
         $adapter = new class () extends Memory {
             public bool $failCreates = false;
 
+            #[\Override]
             public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
             {
                 if ($this->failCreates) {
@@ -279,6 +285,7 @@ final class CollectionGuardsTest extends TestCase
                 parent::__construct($adapter, $cache);
             }
 
+            #[\Override]
             public function deleteDocument(string $collection, string $id): bool
             {
                 if ($collection === self::METADATA) {

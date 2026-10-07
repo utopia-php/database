@@ -497,6 +497,7 @@ final class DeleteRelatedUpdateTest extends TestCase
         $adapter = new class () extends Memory {
             public bool $failNextCommit = false;
 
+            #[\Override]
             public function commitTransaction(): bool
             {
                 if ($this->failNextCommit && $this->inTransaction === 1) {

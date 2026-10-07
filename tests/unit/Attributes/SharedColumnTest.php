@@ -247,6 +247,7 @@ final class SharedColumnTest extends TestCase
                 parent::__construct($pdo);
             }
 
+            #[\Override]
             public function getSchemaAttributes(string $collection): array
             {
                 return \array_map(

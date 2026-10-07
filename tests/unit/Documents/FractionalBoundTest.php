@@ -156,6 +156,7 @@ final class FractionalBoundTest extends TestCase
         $authorization->addRole(Role::any()->toString());
 
         $adapter = $definedAttributes ? new Memory() : new class () extends Memory {
+            #[\Override]
             public function capabilities(): array
             {
                 return \array_values(\array_filter(

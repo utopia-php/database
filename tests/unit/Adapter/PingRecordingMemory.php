@@ -21,6 +21,7 @@ final class PingRecordingMemory extends Memory implements Feature\Connection
         $this->pause = $pause;
     }
 
+    #[\Override]
     public function ping(): bool
     {
         $before = $this->getTenant();
@@ -37,6 +38,7 @@ final class PingRecordingMemory extends Memory implements Feature\Connection
         return true;
     }
 
+    #[\Override]
     public function reconnect(): void
     {
     }

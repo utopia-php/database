@@ -104,6 +104,7 @@ final class PoolCapabilityTest extends TestCase
                 parent::__construct();
             }
 
+            #[\Override]
             public function supports(Capability $feature): bool
             {
                 $this->asked->append($feature->name);

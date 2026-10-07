@@ -165,6 +165,7 @@ final class OrphanIndexTest extends TestCase
                 return $type === IndexType::Fulltext ? IndexType::Key : $type;
             }
 
+            #[\Override]
             public function getSchemaIndexes(string $collection): array
             {
                 $prefix = '/^'.\preg_quote($this->getNamespace(), '/').'_[^_]*_'.\preg_quote($this->filter($collection), '/').'_/';

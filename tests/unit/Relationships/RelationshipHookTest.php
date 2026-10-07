@@ -1008,6 +1008,7 @@ final class RelationshipHookTest extends TestCase
             /** @var array<string, int> */
             public array $largestValueCounts = [];
 
+            #[\Override]
             public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read): array
             {
                 $this->largestValueCounts[$collection->getId()] = \max($this->largestValueCounts[$collection->getId()] ?? 0, $this->largestValueCount($queries));

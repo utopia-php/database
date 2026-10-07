@@ -539,7 +539,7 @@ class FindLogicTest extends TestCase
         $this->expectException(QueryException::class);
         $this->expectExceptionMessage('Join queries are not supported');
         $this->database->skipValidation(fn () => $this->database->find('testCol', [
-            Query::join('other', 'fk', '$id'),
+            Query::join('other', 'j0', [Query::on('fk', '$id')]),
         ]));
     }
 
@@ -716,7 +716,7 @@ class FindLogicTest extends TestCase
         }, extraCollections: ['other' => $this->collectionDoc('other')]);
 
         $db->skipValidation(fn () => $db->find('testCol', [
-            Query::join('other', 'fk', '$id'),
+            Query::join('other', 'j0', [Query::on('fk', '$id')]),
         ]));
 
         $this->assertTrue($authOnFind);
@@ -743,7 +743,7 @@ class FindLogicTest extends TestCase
         }, extraCollections: ['other' => $this->collectionDoc('other')]);
 
         $db->skipValidation(fn () => $db->count('testCol', [
-            Query::join('other', 'fk', '$id'),
+            Query::join('other', 'j0', [Query::on('fk', '$id')]),
             Query::equal('status', ['ok']),
         ]));
 
@@ -778,7 +778,7 @@ class FindLogicTest extends TestCase
         }, extraCollections: ['other' => $this->collectionDoc('other')]);
 
         $db->skipValidation(fn () => $db->sum('testCol', 'status', [
-            Query::join('other', 'fk', '$id'),
+            Query::join('other', 'j0', [Query::on('fk', '$id')]),
         ]));
 
         $this->assertTrue($authOnSum);
@@ -811,7 +811,7 @@ class FindLogicTest extends TestCase
         );
 
         $db->skipValidation(fn () => $db->find('database_1_collection_1', [
-            Query::leftJoin('database_1_collection_2', '$id', 'mainId', '=', 'rev'),
+            Query::leftJoin('database_1_collection_2', 'rev', [Query::on('$id', 'mainId')]),
         ]));
 
         $this->assertIsArray($captured);
@@ -848,7 +848,7 @@ class FindLogicTest extends TestCase
         );
 
         $db->skipValidation(fn () => $db->getDocument('testCol', 'doc1', [
-            Query::join('other', 'fk', '$id'),
+            Query::join('other', 'j0', [Query::on('fk', '$id')]),
         ]));
 
         $this->assertTrue($authOnGet);
@@ -1235,7 +1235,7 @@ class FindLogicTest extends TestCase
         $this->expectException(QueryException::class);
         $this->expectExceptionMessage('Join queries are not supported by this adapter');
         $this->database->skipValidation(fn () => $this->database->getDocument('testCol', 'doc1', [
-            Query::join('other', 'fk', '$id'),
+            Query::join('other', 'j0', [Query::on('fk', '$id')]),
         ]));
     }
 }

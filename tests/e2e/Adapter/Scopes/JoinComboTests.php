@@ -30,8 +30,8 @@ trait JoinComboTests
 
         $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $pubCol, $secCol): void {
             $results = $database->find($mCol, [
-                Query::leftJoin($pubCol, '$id', 'mainId', '=', 'pub'),
-                Query::join($secCol, '$id', 'mainId', '=', 'sec'),
+                Query::leftJoin($pubCol, 'pub', [Query::on('$id', 'mainId')]),
+                Query::join($secCol, 'sec', [Query::on('$id', 'mainId')]),
             ]);
 
             $this->assertSame(5, \count($results));
@@ -64,9 +64,9 @@ trait JoinComboTests
 
         $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $selfCol, $cCol): void {
             $results = $database->find($selfCol, [
-                Query::join($selfCol, 'tag', 'tag', '=', 'visible'),
-                Query::join($selfCol, 'tag', 'tag', '=', 'hidden'),
-                Query::join($cCol, 'visible.$id', 'selfId', '=', 'c'),
+                Query::join($selfCol, 'visible', [Query::on('tag', 'tag')]),
+                Query::join($selfCol, 'hidden', [Query::on('tag', 'tag')]),
+                Query::join($cCol, 'c', [Query::on('visible.$id', 'selfId')]),
                 Query::select(['visible.payload', 'hidden.payload', 'c.secret']),
             ]);
 
@@ -94,7 +94,7 @@ trait JoinComboTests
 
         $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $pubCol, $secCol): void {
             $ordered = $database->find($mCol, [
-                Query::leftJoin($secCol, '$id', 'mainId', '=', 'sec'),
+                Query::leftJoin($secCol, 'sec', [Query::on('$id', 'mainId')]),
                 Query::orderDesc('sec.score'),
             ]);
             $this->assertComboSecretsHidden($ordered);
@@ -104,7 +104,7 @@ trait JoinComboTests
             $this->assertSame($scores, $this->sortedDesc($scores));
 
             $limited = $database->find($mCol, [
-                Query::leftJoin($secCol, '$id', 'mainId', '=', 'sec'),
+                Query::leftJoin($secCol, 'sec', [Query::on('$id', 'mainId')]),
                 Query::orderDesc('sec.score'),
                 Query::limit(2),
             ]);
@@ -116,7 +116,7 @@ trait JoinComboTests
             );
 
             $offset = $database->find($mCol, [
-                Query::leftJoin($secCol, '$id', 'mainId', '=', 'sec'),
+                Query::leftJoin($secCol, 'sec', [Query::on('$id', 'mainId')]),
                 Query::orderDesc('sec.score'),
                 Query::limit(2),
                 Query::offset(1),
@@ -129,7 +129,7 @@ trait JoinComboTests
             );
 
             $foj = $database->find($mCol, [
-                Query::fullOuterJoin($pubCol, '$id', 'mainId', '=', 'pub'),
+                Query::fullOuterJoin($pubCol, 'pub', [Query::on('$id', 'mainId')]),
                 Query::orderDesc('pub.score'),
             ]);
             $this->assertComboSecretsHidden($foj);
@@ -140,7 +140,7 @@ trait JoinComboTests
             $this->assertSame($fojScores, $this->sortedDesc($fojScores));
 
             $fojLimited = $database->find($mCol, [
-                Query::fullOuterJoin($pubCol, '$id', 'mainId', '=', 'pub'),
+                Query::fullOuterJoin($pubCol, 'pub', [Query::on('$id', 'mainId')]),
                 Query::orderDesc('pub.score'),
                 Query::limit(2),
                 Query::offset(1),
@@ -175,7 +175,7 @@ trait JoinComboTests
 
         $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $secCol): void {
             $results = $database->find($mCol, [
-                Query::join($secCol, '$id', 'mainId', '=', 'rev'),
+                Query::join($secCol, 'rev', [Query::on('$id', 'mainId')]),
                 Query::equal('rev.score', [777]),
                 Query::select(['name']),
             ]);
@@ -205,7 +205,7 @@ trait JoinComboTests
 
         $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $secCol): void {
             $aggregated = $database->find($mCol, [
-                Query::join($secCol, '$id', 'mainId', '=', 'rev'),
+                Query::join($secCol, 'rev', [Query::on('$id', 'mainId')]),
                 Query::equal('name', ['Main']),
                 Query::sum('rev.score', 'total'),
                 Query::count('*', 'cnt'),
@@ -224,7 +224,7 @@ trait JoinComboTests
             $this->assertNotSame(3, (int) $cnt);
 
             $havingSum = $database->find($mCol, [
-                Query::join($secCol, '$id', 'mainId', '=', 'rev'),
+                Query::join($secCol, 'rev', [Query::on('$id', 'mainId')]),
                 Query::sum('rev.score', 'total'),
                 Query::count('*', 'cnt'),
                 Query::groupBy(['name']),
@@ -234,7 +234,7 @@ trait JoinComboTests
             $this->assertComboSecretsHidden($havingSum);
 
             $havingCount = $database->find($mCol, [
-                Query::join($secCol, '$id', 'mainId', '=', 'rev'),
+                Query::join($secCol, 'rev', [Query::on('$id', 'mainId')]),
                 Query::sum('rev.score', 'total'),
                 Query::count('*', 'cnt'),
                 Query::groupBy(['name']),
@@ -260,7 +260,7 @@ trait JoinComboTests
 
         $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $pubCol): void {
             $full = $database->find($mCol, [
-                Query::join($pubCol, '$id', 'mainId', '=', 'pub'),
+                Query::join($pubCol, 'pub', [Query::on('$id', 'mainId')]),
                 Query::orderAsc('pub.score'),
             ]);
             $this->assertSame(2, \count($full));
@@ -268,7 +268,7 @@ trait JoinComboTests
             $this->assertSame([10, 313], $this->comboNumericScores($full));
 
             $first = $database->find($mCol, [
-                Query::join($pubCol, '$id', 'mainId', '=', 'pub'),
+                Query::join($pubCol, 'pub', [Query::on('$id', 'mainId')]),
                 Query::orderAsc('pub.score'),
                 Query::limit(1),
             ]);
@@ -277,7 +277,7 @@ trait JoinComboTests
             $this->assertComboSecretsHidden($first);
 
             $next = $database->find($mCol, [
-                Query::join($pubCol, '$id', 'mainId', '=', 'pub'),
+                Query::join($pubCol, 'pub', [Query::on('$id', 'mainId')]),
                 Query::orderAsc('pub.score'),
                 Query::cursorAfter($first[0]),
                 Query::limit(1),
@@ -304,8 +304,8 @@ trait JoinComboTests
 
         $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $pubCol, $secCol): void {
             $results = $database->find($mCol, [
-                Query::fullOuterJoin($pubCol, '$id', 'mainId', '=', 'pub'),
-                Query::leftJoin($secCol, '$id', 'mainId', '=', 'sec'),
+                Query::fullOuterJoin($pubCol, 'pub', [Query::on('$id', 'mainId')]),
+                Query::leftJoin($secCol, 'sec', [Query::on('$id', 'mainId')]),
                 Query::isNull('sec.score'),
                 Query::select(['name', 'pub.score']),
             ]);
@@ -380,8 +380,8 @@ trait JoinComboTests
 
         $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $pubCol, $secCol): void {
             $unmatched = $database->getDocument($mCol, 'm2', [
-                Query::leftJoin($pubCol, '$id', 'mainId', '=', 'pub'),
-                Query::join($secCol, '$id', 'mainId', '=', 'sec'),
+                Query::leftJoin($pubCol, 'pub', [Query::on('$id', 'mainId')]),
+                Query::join($secCol, 'sec', [Query::on('$id', 'mainId')]),
             ]);
             $this->assertSame(false, $unmatched->isEmpty());
             $this->assertSame('m2', $unmatched->getId());
@@ -391,8 +391,8 @@ trait JoinComboTests
             $this->assertSame(313, (int) $unmatchedScore);
 
             $matched = $database->getDocument($mCol, 'm1', [
-                Query::leftJoin($pubCol, '$id', 'mainId', '=', 'pub'),
-                Query::join($secCol, '$id', 'mainId', '=', 'sec'),
+                Query::leftJoin($pubCol, 'pub', [Query::on('$id', 'mainId')]),
+                Query::join($secCol, 'sec', [Query::on('$id', 'mainId')]),
             ]);
             $this->assertSame(false, $matched->isEmpty());
             $this->assertSame('m1', $matched->getId());
@@ -416,7 +416,7 @@ trait JoinComboTests
 
         $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $secCol): void {
             $results = $database->find($mCol, [
-                Query::leftJoin($secCol, '$id', 'mainId', '=', 'sec'),
+                Query::leftJoin($secCol, 'sec', [Query::on('$id', 'mainId')]),
                 Query::select(['name', 'sec.$id', 'sec.$permissions']),
             ]);
 
@@ -455,8 +455,8 @@ trait JoinComboTests
 
         $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $selfCol, $cCol, $documentLevel): void {
             $visible = $database->find($mCol, [
-                Query::join($selfCol, '$id', 'mainId', '=', 'mid'),
-                Query::join($cCol, 'mid.$id', 'selfId', '=', 'c'),
+                Query::join($selfCol, 'mid', [Query::on('$id', 'mainId')]),
+                Query::join($cCol, 'c', [Query::on('mid.$id', 'selfId')]),
             ]);
             $this->assertGreaterThanOrEqual(1, \count($visible));
             $visibleEncoded = \json_encode(\array_map(static function (Document $document): array {
@@ -471,8 +471,8 @@ trait JoinComboTests
             $database->updateCollection($cCol, new CollectionUpdate(permissions: $documentLevel, documentSecurity: true));
 
             $hidden = $database->find($mCol, [
-                Query::join($selfCol, '$id', 'mainId', '=', 'mid'),
-                Query::join($cCol, 'mid.$id', 'selfId', '=', 'c'),
+                Query::join($selfCol, 'mid', [Query::on('$id', 'mainId')]),
+                Query::join($cCol, 'c', [Query::on('mid.$id', 'selfId')]),
             ]);
             $this->assertGreaterThanOrEqual(1, \count($hidden));
             $this->assertComboSecretsHidden($hidden);
@@ -499,8 +499,8 @@ trait JoinComboTests
 
         $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $pubCol, $secCol): void {
             $visible = [
-                Query::leftJoin($pubCol, '$id', 'mainId', '=', 'pub'),
-                Query::join($secCol, '$id', 'mainId', '=', 'sec'),
+                Query::leftJoin($pubCol, 'pub', [Query::on('$id', 'mainId')]),
+                Query::join($secCol, 'sec', [Query::on('$id', 'mainId')]),
                 Query::equal('sec.score', [313]),
             ];
             $found = $database->find($mCol, $visible);
@@ -510,8 +510,8 @@ trait JoinComboTests
             $this->assertContains(313, $this->comboNumericScores($found));
 
             $hiddenScore = [
-                Query::leftJoin($pubCol, '$id', 'mainId', '=', 'pub'),
-                Query::join($secCol, '$id', 'mainId', '=', 'sec'),
+                Query::leftJoin($pubCol, 'pub', [Query::on('$id', 'mainId')]),
+                Query::join($secCol, 'sec', [Query::on('$id', 'mainId')]),
                 Query::equal('sec.score', [777]),
             ];
             $hiddenScoreFound = $database->find($mCol, $hiddenScore);
@@ -520,8 +520,8 @@ trait JoinComboTests
             $this->assertComboSecretsHidden($hiddenScoreFound);
 
             $hiddenSecret = [
-                Query::leftJoin($pubCol, '$id', 'mainId', '=', 'pub'),
-                Query::join($secCol, '$id', 'mainId', '=', 'sec'),
+                Query::leftJoin($pubCol, 'pub', [Query::on('$id', 'mainId')]),
+                Query::join($secCol, 'sec', [Query::on('$id', 'mainId')]),
                 Query::equal('sec.secret', ['combo-secret-alpha']),
             ];
             $hiddenSecretFound = $database->find($mCol, $hiddenSecret);
@@ -563,7 +563,7 @@ trait JoinComboTests
 
         $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $pubCol): void {
             $selected = $database->find($mCol, [
-                Query::leftJoin($pubCol, '$id', 'mainId', '=', 'pub'),
+                Query::leftJoin($pubCol, 'pub', [Query::on('$id', 'mainId')]),
                 Query::select(['name', 'rev.score']),
                 Query::orderDesc('rev.score'),
             ]);
@@ -583,7 +583,7 @@ trait JoinComboTests
             $this->assertSame(false, \in_array(777, $dotted, true));
 
             $filtered = $database->find($mCol, [
-                Query::leftJoin($pubCol, '$id', 'mainId', '=', 'pub'),
+                Query::leftJoin($pubCol, 'pub', [Query::on('$id', 'mainId')]),
                 Query::equal('rev.score', [21]),
             ]);
             $this->assertGreaterThanOrEqual(1, \count($filtered));
@@ -637,7 +637,7 @@ trait JoinComboTests
 
         $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $metaCol): void {
             $results = $database->find($mCol, [
-                Query::leftJoin($metaCol, '$id', 'mainId', '=', 'meta'),
+                Query::leftJoin($metaCol, 'meta', [Query::on('$id', 'mainId')]),
                 Query::select(['name', 'profile', 'meta.score']),
                 Query::equal('profile.user.email', ['alice@hard.example']),
                 Query::equal('meta.score', [10]),
@@ -677,8 +677,8 @@ trait JoinComboTests
 
         $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $peerCol): void {
             $results = $database->find($mCol, [
-                Query::join($peerCol, '$id', 'mainId', '=', 'alpha'),
-                Query::join($peerCol, 'peerKey', '$id', '=', 'beta'),
+                Query::join($peerCol, 'alpha', [Query::on('$id', 'mainId')]),
+                Query::join($peerCol, 'beta', [Query::on('peerKey', '$id')]),
                 Query::equal('alpha.label', ['alpha-one']),
                 Query::equal('beta.label', ['beta-key']),
                 Query::select(['name', 'alpha.$id', 'beta.$id', 'alpha.label', 'beta.label', 'alpha.score']),
@@ -714,7 +714,7 @@ trait JoinComboTests
 
         $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol): void {
             $results = $database->find($mCol, [
-                Query::join($mCol, '$id', '$id', '=', 'twin'),
+                Query::join($mCol, 'twin', [Query::on('$id', '$id')]),
                 Query::select(['name', 'rank', 'twin.$id', 'twin.name', 'twin.$permissions']),
                 Query::orderAsc('rank'),
             ]);
@@ -756,9 +756,9 @@ trait JoinComboTests
 
         $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $metaCol, $bCol, $cCol): void {
             $results = $database->find($mCol, [
-                Query::leftJoin($metaCol, '$id', 'mainId', '=', 'meta'),
-                Query::join($bCol, '$id', 'mainId', '=', 'mid'),
-                Query::rightJoin($cCol, '$id', 'mainId', '=', 'tail'),
+                Query::leftJoin($metaCol, 'meta', [Query::on('$id', 'mainId')]),
+                Query::join($bCol, 'mid', [Query::on('$id', 'mainId')]),
+                Query::rightJoin($cCol, 'tail', [Query::on('$id', 'mainId')]),
                 Query::select(['name', 'meta.score', 'mid.label', 'tail.secret', 'tail.score']),
             ]);
 
@@ -802,8 +802,8 @@ trait JoinComboTests
         $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $aCol, $bCol, $cCol): void {
             $results = $database->find($aCol, [
                 Query::distinct(),
-                Query::join($bCol, '$id', 'aId', '=', 'b'),
-                Query::join($cCol, 'b.$id', 'bId', '=', 'c'),
+                Query::join($bCol, 'b', [Query::on('$id', 'aId')]),
+                Query::join($cCol, 'c', [Query::on('b.$id', 'bId')]),
                 Query::select(['$id', 'name', 'b.label', 'c.secret', 'c.score']),
             ]);
 
@@ -844,7 +844,7 @@ trait JoinComboTests
 
         $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $metaCol): void {
             $ordered = [
-                Query::fullOuterJoin($metaCol, '$id', 'mainId', '=', 'meta'),
+                Query::fullOuterJoin($metaCol, 'meta', [Query::on('$id', 'mainId')]),
                 Query::orderAsc('meta.score'),
             ];
 
@@ -936,7 +936,7 @@ trait JoinComboTests
 
         $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $metaCol): void {
             $mixed = $database->find($mCol, [
-                Query::join($metaCol, '$id', 'mainId', '=', 'meta'),
+                Query::join($metaCol, 'meta', [Query::on('$id', 'mainId')]),
                 Query::and([
                     Query::equal('name', ['Main']),
                     Query::or([
@@ -955,7 +955,7 @@ trait JoinComboTests
             $this->assertSame(10, (int) $score);
 
             $hiddenOnly = $database->find($mCol, [
-                Query::join($metaCol, '$id', 'mainId', '=', 'meta'),
+                Query::join($metaCol, 'meta', [Query::on('$id', 'mainId')]),
                 Query::and([
                     Query::equal('name', ['Main']),
                     Query::or([
@@ -984,7 +984,7 @@ trait JoinComboTests
 
         $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $metaCol): void {
             $ordered = [
-                Query::join($metaCol, '$id', 'mainId', '=', 'meta'),
+                Query::join($metaCol, 'meta', [Query::on('$id', 'mainId')]),
                 Query::orderAsc('rank'),
                 Query::orderDesc('meta.score'),
             ];
@@ -1040,7 +1040,7 @@ trait JoinComboTests
 
         $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $metaCol): void {
             $results = $database->find($mCol, [
-                Query::leftJoin($metaCol, '$id', 'mainId', '=', 'meta'),
+                Query::leftJoin($metaCol, 'meta', [Query::on('$id', 'mainId')]),
                 Query::containsString('meta.body', ['hard-needle']),
                 Query::between('meta.score', 1, 50),
                 Query::startsWith('meta.label', 'visible'),
@@ -1062,7 +1062,7 @@ trait JoinComboTests
                 && $this->joinHardcoreHasFulltextIndex($database, $metaCol)
             ) {
                 $searched = $database->find($mCol, [
-                    Query::leftJoin($metaCol, '$id', 'mainId', '=', 'meta'),
+                    Query::leftJoin($metaCol, 'meta', [Query::on('$id', 'mainId')]),
                     Query::search('meta.body', 'needle'),
                 ]);
                 $this->assertGreaterThanOrEqual(1, \count($searched));
@@ -1087,7 +1087,7 @@ trait JoinComboTests
 
         $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $metaCol): void {
             $results = $database->find($mCol, [
-                Query::rightJoin($metaCol, '$id', 'mainId', '=', 'meta'),
+                Query::rightJoin($metaCol, 'meta', [Query::on('$id', 'mainId')]),
                 Query::select(['name', 'meta.score', 'meta.secret']),
             ]);
 
@@ -1134,7 +1134,7 @@ trait JoinComboTests
 
         $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $metaCol): void {
             $results = $database->find($mCol, [
-                Query::join($metaCol, '$id', 'mainId', '=', 'meta'),
+                Query::join($metaCol, 'meta', [Query::on('$id', 'mainId')]),
                 Query::equal('meta.score', [8686]),
                 Query::select(['name', 'meta.score', 'meta.secret']),
             ]);
@@ -1222,7 +1222,7 @@ trait JoinComboTests
 
             $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $metaCol): void {
                 $results = $database->find($mCol, [
-                    Query::leftJoin($metaCol, '$id', 'mainId', '=', 'sec'),
+                    Query::leftJoin($metaCol, 'sec', [Query::on('$id', 'mainId')]),
                     Query::select(['name', 'sec.score', 'sec.secret', 'sec.$tenant']),
                 ]);
 
@@ -1286,7 +1286,7 @@ trait JoinComboTests
             $this->assertSame(['hm1', 'hm2', 'hm3'], $withoutIds);
 
             $joinedQueries = [
-                Query::leftJoin($metaCol, '$id', 'mainId', '=', 'meta'),
+                Query::leftJoin($metaCol, 'meta', [Query::on('$id', 'mainId')]),
                 Query::select(['name', 'meta.score', 'meta.secret']),
             ];
             $joined = $database->find($mCol, $joinedQueries);
@@ -1304,7 +1304,7 @@ trait JoinComboTests
             $this->assertSame(\count($joined), $database->count($mCol, $joinedQueries));
 
             $sum = $database->sum($mCol, 'meta.score', [
-                Query::leftJoin($metaCol, '$id', 'mainId', '=', 'meta'),
+                Query::leftJoin($metaCol, 'meta', [Query::on('$id', 'mainId')]),
             ]);
             $this->assertSame(358, (int) $sum);
 
@@ -1335,8 +1335,8 @@ trait JoinComboTests
 
         $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $peerCol): void {
             $results = $database->find($mCol, [
-                Query::join($peerCol, '$id', 'mainId', '=', 'alpha'),
-                Query::join($peerCol, 'peerKey', '$id', '=', 'beta'),
+                Query::join($peerCol, 'alpha', [Query::on('$id', 'mainId')]),
+                Query::join($peerCol, 'beta', [Query::on('peerKey', '$id')]),
                 Query::and([
                     Query::equal('alpha.label', ['alpha-one']),
                     Query::or([
@@ -1359,8 +1359,8 @@ trait JoinComboTests
             $this->assertNotSame('peer-hidden', $results[0]->getId());
 
             $hiddenOnly = $database->find($mCol, [
-                Query::join($peerCol, '$id', 'mainId', '=', 'alpha'),
-                Query::join($peerCol, 'peerKey', '$id', '=', 'beta'),
+                Query::join($peerCol, 'alpha', [Query::on('$id', 'mainId')]),
+                Query::join($peerCol, 'beta', [Query::on('peerKey', '$id')]),
                 Query::or([
                     Query::equal('alpha.score', [8686]),
                     Query::equal('beta.secret', ['combo-hard-alpha']),
@@ -1386,7 +1386,7 @@ trait JoinComboTests
 
         $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $metaCol): void {
             $left = $database->find($mCol, [
-                Query::leftJoin($metaCol, '$id', 'mainId', '=', 'meta'),
+                Query::leftJoin($metaCol, 'meta', [Query::on('$id', 'mainId')]),
             ]);
             $this->assertGreaterThanOrEqual(3, \count($left));
             $this->assertComboSecretsHidden($left);
@@ -1401,14 +1401,14 @@ trait JoinComboTests
             $this->assertSame(false, \in_array(42, $leftScores, true));
 
             $innerHidden = $database->find($mCol, [
-                Query::join($metaCol, '$id', 'mainId', '=', 'meta'),
+                Query::join($metaCol, 'meta', [Query::on('$id', 'mainId')]),
                 Query::equal('meta.score', [8686]),
             ]);
             $this->assertSame(0, \count($innerHidden));
             $this->assertComboSecretsHidden($innerHidden);
 
             $foj = $database->find($mCol, [
-                Query::fullOuterJoin($metaCol, '$id', 'mainId', '=', 'meta'),
+                Query::fullOuterJoin($metaCol, 'meta', [Query::on('$id', 'mainId')]),
             ]);
             $this->assertGreaterThanOrEqual(2, \count($foj));
             $this->assertComboSecretsHidden($foj);
@@ -1433,8 +1433,8 @@ trait JoinComboTests
 
         $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $metaCol, $peerCol): void {
             $ordered = [
-                Query::fullOuterJoin($metaCol, '$id', 'mainId', '=', 'meta'),
-                Query::join($peerCol, '$id', 'mainId', '=', 'peer'),
+                Query::fullOuterJoin($metaCol, 'meta', [Query::on('$id', 'mainId')]),
+                Query::join($peerCol, 'peer', [Query::on('$id', 'mainId')]),
                 Query::orderAsc('meta.score'),
                 Query::select(['name', 'meta.$id', 'meta.score', 'peer.$id', 'peer.label']),
             ];
@@ -1503,7 +1503,7 @@ trait JoinComboTests
 
         $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $metaCol): void {
             $queries = [
-                Query::leftJoin($metaCol, '$id', 'mainId', '=', 'meta'),
+                Query::leftJoin($metaCol, 'meta', [Query::on('$id', 'mainId')]),
                 Query::select(['name', 'meta.score', 'meta.$id', 'meta.$permissions']),
             ];
 
@@ -1556,7 +1556,7 @@ trait JoinComboTests
 
         $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $metaCol): void {
             $foj = [
-                Query::fullOuterJoin($metaCol, '$id', 'mainId', '=', 'meta'),
+                Query::fullOuterJoin($metaCol, 'meta', [Query::on('$id', 'mainId')]),
             ];
             $found = $database->find($mCol, $foj);
             $this->assertGreaterThanOrEqual(2, \count($found));
@@ -1566,7 +1566,7 @@ trait JoinComboTests
             $this->assertContains(42, $this->comboNumericScores($found));
 
             $this->assertSame(0, $database->count($mCol, [
-                Query::fullOuterJoin($metaCol, '$id', 'mainId', '=', 'meta'),
+                Query::fullOuterJoin($metaCol, 'meta', [Query::on('$id', 'mainId')]),
                 Query::equal('meta.score', [8686]),
             ]));
 
@@ -1590,7 +1590,7 @@ trait JoinComboTests
 
         $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $metaCol): void {
             $notNull = $database->find($mCol, [
-                Query::leftJoin($metaCol, '$id', 'mainId', '=', 'meta'),
+                Query::leftJoin($metaCol, 'meta', [Query::on('$id', 'mainId')]),
                 Query::isNotNull('meta.secret'),
                 Query::select(['name', 'meta.score', 'meta.secret']),
             ]);
@@ -1615,7 +1615,7 @@ trait JoinComboTests
             $this->assertSame(false, \in_array('combo-hard-alpha', $secrets, true));
 
             $notEqual = $database->find($mCol, [
-                Query::leftJoin($metaCol, '$id', 'mainId', '=', 'meta'),
+                Query::leftJoin($metaCol, 'meta', [Query::on('$id', 'mainId')]),
                 Query::notEqual('meta.score', 8686),
                 Query::select(['name', 'meta.score', 'meta.secret']),
             ]);
@@ -1624,7 +1624,7 @@ trait JoinComboTests
             $this->assertSame(false, \in_array(8686, $this->comboNumericScores($notEqual), true));
 
             $notContains = $database->find($mCol, [
-                Query::leftJoin($metaCol, '$id', 'mainId', '=', 'meta'),
+                Query::leftJoin($metaCol, 'meta', [Query::on('$id', 'mainId')]),
                 Query::notContains('meta.secret', ['combo-hard-alpha']),
                 Query::select(['name', 'meta.score', 'meta.secret']),
             ]);
@@ -1648,7 +1648,7 @@ trait JoinComboTests
 
         $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $metaCol, $peerCol): void {
             $first = $database->find($mCol, [
-                Query::join($metaCol, '$id', 'mainId', '=', 'meta'),
+                Query::join($metaCol, 'meta', [Query::on('$id', 'mainId')]),
                 Query::equal('meta.score', [10]),
             ]);
             $this->assertSame(1, \count($first));
@@ -1658,7 +1658,7 @@ trait JoinComboTests
 
             try {
                 $database->find($mCol, [
-                    Query::join($peerCol, '$id', 'mainId', '=', 'peer'),
+                    Query::join($peerCol, 'peer', [Query::on('$id', 'mainId')]),
                     Query::equal('meta.score', [8686]),
                 ]);
                 $this->fail('Expected QueryException for stale join alias');

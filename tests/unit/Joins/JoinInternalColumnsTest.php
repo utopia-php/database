@@ -183,18 +183,18 @@ final class JoinInternalColumnsTest extends TestCase
      */
     public static function joinConditionsNamingNoColumn(): iterable
     {
-        $note = Query::join('notes', '$id', 'customerId', '=', 'note');
+        $note = Query::join('notes', 'note', [Query::on('$id', 'customerId')]);
         $notFound = 'Invalid query: Attribute not found in schema: ';
 
-        yield 'an unknown right column' => [[Query::join('notes', '$id', 'nothing', '=', 'note')], $notFound.'nothing'];
-        yield 'an unknown left column' => [[Query::join('notes', 'nothing', 'customerId', '=', 'note')], $notFound.'nothing'];
+        yield 'an unknown right column' => [[Query::join('notes', 'note', [Query::on('$id', 'nothing')])], $notFound.'nothing'];
+        yield 'an unknown left column' => [[Query::join('notes', 'note', [Query::on('nothing', 'customerId')])], $notFound.'nothing'];
         yield 'an unknown right column of an on condition' => [[Query::leftJoin('notes', 'note', [Query::on('$id', 'nothing')])], $notFound.'nothing'];
         yield 'an unknown left column of an on condition' => [[Query::leftJoin('notes', 'note', [Query::on('nothing', 'customerId')])], $notFound.'nothing'];
         yield 'an unknown right column under the join alias' => [[Query::leftJoin('notes', 'note', [Query::on('$id', 'note.nothing')])], $notFound.'note.nothing'];
-        yield 'an unknown column of an earlier join' => [[$note, Query::join('replies', 'note.nothing', 'noteId', '=', 'reply')], $notFound.'note.nothing'];
-        yield 'a main attribute under the join alias' => [[Query::rightJoin('notes', '$id', 'note.name', '=', 'note')], $notFound.'note.name'];
+        yield 'an unknown column of an earlier join' => [[$note, Query::join('replies', 'reply', [Query::on('note.nothing', 'noteId')])], $notFound.'note.nothing'];
+        yield 'a main attribute under the join alias' => [[Query::rightJoin('notes', 'note', [Query::on('$id', 'note.name')])], $notFound.'note.name'];
         yield 'a join declared after it' => [
-            [Query::join('replies', 'note.$id', 'noteId', '=', 'reply'), $note],
+            [Query::join('replies', 'reply', [Query::on('note.$id', 'noteId')]), $note],
             'Invalid query: The left column of a join condition must belong to the main collection or to a join declared before it: note.$id',
         ];
     }
@@ -216,28 +216,28 @@ final class JoinInternalColumnsTest extends TestCase
         $note = $this->join(Method::Join);
 
         $this->assertSame(3, $this->database->count('customers', [Query::leftJoin('notes', 'note', [Query::on('$id', 'note.customerId')]), Query::isNotNull('note.$id')]));
-        $this->assertSame(1, $this->database->count('customers', [$note, Query::join('replies', 'note.$id', 'noteId', '=', 'reply')]), 'a chained join reads the join before it');
-        $this->assertSame(1, $this->database->count('customers', [Query::crossJoin('replies', 'reply'), Query::join('notes', 'reply.noteId', '$id', '=', 'note'), Query::equal('note.customerId', ['c1']), Query::equal('$id', ['c1'])]), 'a cross join declares its alias for the joins after it');
-        $this->assertSame(3, $this->database->count('customers', [Query::join('notes', '$sequence', '$sequence', '<', 'note'), Query::equal('note.$id', ['n4'])]), 'internal columns are compared on both sides');
+        $this->assertSame(1, $this->database->count('customers', [$note, Query::join('replies', 'reply', [Query::on('note.$id', 'noteId')])]), 'a chained join reads the join before it');
+        $this->assertSame(1, $this->database->count('customers', [Query::crossJoin('replies', 'reply'), Query::join('notes', 'note', [Query::on('reply.noteId', '$id')]), Query::equal('note.customerId', ['c1']), Query::equal('$id', ['c1'])]), 'a cross join declares its alias for the joins after it');
+        $this->assertSame(3, $this->database->count('customers', [Query::join('notes', 'note', [Query::on('$sequence', '$sequence', '<')]), Query::equal('note.$id', ['n4'])]), 'internal columns are compared on both sides');
     }
 
     public function testJoinConditionOverARelationshipNamesItsColumn(): void
     {
         $this->useRelationships();
 
-        $persons = $this->database->find('persons', [Query::join('libraries', 'library', '$id', '=', 'lib'), Query::select(['name', 'lib.name'])]);
+        $persons = $this->database->find('persons', [Query::join('libraries', 'lib', [Query::on('library', '$id')]), Query::select(['name', 'lib.name'])]);
         $this->assertSame(['Central'], \array_map(static fn (Document $person): mixed => $person->getAttribute('lib.name'), $persons), 'the parent side of a one-to-one relationship holds a column');
 
-        $this->assertSame([['rows' => 2]], $this->rows($this->database->find('persons', [Query::join('books', '$id', 'owner', '=', 'book'), Query::count('*', 'rows')])), 'the child side of a one-to-many relationship holds a column');
-        $this->assertSame(2, $this->database->count('books', [Query::join('persons', 'owner', '$id', '=', 'person')]));
+        $this->assertSame([['rows' => 2]], $this->rows($this->database->find('persons', [Query::join('books', 'book', [Query::on('$id', 'owner')]), Query::count('*', 'rows')])), 'the child side of a one-to-many relationship holds a column');
+        $this->assertSame(2, $this->database->count('books', [Query::join('persons', 'person', [Query::on('owner', '$id')])]));
 
         $this->assertInvalidQuery(
             'Invalid query: Cannot join on virtual relationship attribute: books',
-            fn (): mixed => $this->database->find('persons', [Query::join('books', 'books', '$id', '=', 'book')]),
+            fn (): mixed => $this->database->find('persons', [Query::join('books', 'book', [Query::on('books', '$id')])]),
         );
         $this->assertInvalidQuery(
             'Invalid query: Cannot join on virtual relationship attribute: person',
-            fn (): mixed => $this->database->find('persons', [Query::join('libraries', '$id', 'person', '=', 'lib')]),
+            fn (): mixed => $this->database->find('persons', [Query::join('libraries', 'lib', [Query::on('$id', 'person')])]),
         );
     }
 
@@ -280,7 +280,7 @@ final class JoinInternalColumnsTest extends TestCase
 
     public function testEncryptedJoinedAttributeCannotBeFiltered(): void
     {
-        $vault = Query::join('secrets', '$id', 'holderId', '=', 'vault');
+        $vault = Query::join('secrets', 'vault', [Query::on('$id', 'holderId')]);
 
         $this->assertInvalidQuery('Invalid query: Cannot query encrypted attribute: secret', fn (): mixed => $this->database->find('secrets', [Query::equal('secret', ['x'])]));
         $this->assertInvalidQuery('Invalid query: Cannot query encrypted attribute: vault.secret', fn (): mixed => $this->database->find('customers', [$vault, Query::equal('vault.secret', ['x'])]));
@@ -315,7 +315,7 @@ final class JoinInternalColumnsTest extends TestCase
 
     private function join(Method $method): Query
     {
-        return new Query($method, 'notes', ['$id', '=', 'customerId', 'note']);
+        return new Query($method, 'notes', [Query::on('$id', 'customerId')], 'note');
     }
 
     /**

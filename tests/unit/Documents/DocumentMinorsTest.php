@@ -217,7 +217,7 @@ final class DocumentMinorsTest extends TestCase
     public function testAJoinOnAMissingCollectionIsRefused(): void
     {
         $database = $this->database(new SQLite(new PDO('sqlite::memory:')));
-        $join = Query::join('missing', 'count', 'count', alias: 'gone');
+        $join = Query::join('missing', 'gone', [Query::on('count', 'count')]);
 
         foreach ([
             fn (): mixed => $database->find(self::COLLECTION, [$join]),

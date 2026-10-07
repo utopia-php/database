@@ -192,7 +192,7 @@ final class JoinedColumnValidationTest extends TestCase
             ])],
             'join chained on $id' => [static fn (Database $database): mixed => $database->find('customers', [
                 self::join(),
-                Query::join('replies', 'note.$id', 'noteId', '=', 'reply'),
+                Query::join('replies', 'reply', [Query::on('note.$id', 'noteId')]),
                 Query::select(['name', 'reply.text']),
             ])],
             'count() with a known column' => [static fn (Database $database): mixed => $database->count('customers', [self::join(), Query::equal('note.body', ['needle'])])],
@@ -391,7 +391,7 @@ final class JoinedColumnValidationTest extends TestCase
 
     private static function join(): Query
     {
-        return Query::join('notes', '$id', 'customerId', '=', 'note');
+        return Query::join('notes', 'note', [Query::on('$id', 'customerId')]);
     }
 
     /**

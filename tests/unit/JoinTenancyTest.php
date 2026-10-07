@@ -531,10 +531,10 @@ final class JoinTenancyTest extends TestCase
     private function join(Method $method, string $collection, string $alias): Query
     {
         return match ($method) {
-            Method::Join => Query::join($collection, '$id', 'authorId', '=', $alias),
-            Method::LeftJoin => Query::leftJoin($collection, '$id', 'authorId', '=', $alias),
-            Method::RightJoin => Query::rightJoin($collection, '$id', 'authorId', '=', $alias),
-            Method::FullOuterJoin => Query::fullOuterJoin($collection, '$id', 'authorId', '=', $alias),
+            Method::Join => Query::join($collection, $alias, [Query::on('$id', 'authorId')]),
+            Method::LeftJoin => Query::leftJoin($collection, $alias, [Query::on('$id', 'authorId')]),
+            Method::RightJoin => Query::rightJoin($collection, $alias, [Query::on('$id', 'authorId')]),
+            Method::FullOuterJoin => Query::fullOuterJoin($collection, $alias, [Query::on('$id', 'authorId')]),
             Method::CrossJoin => Query::crossJoin($collection, $alias),
             default => throw new \InvalidArgumentException("{$method->value} is not a join this test covers"),
         };
@@ -646,10 +646,10 @@ final class JoinTenancyTest extends TestCase
     private static function joinOn(Method $method, string $collection, string $alias, string $on): Query
     {
         return match ($method) {
-            Method::Join => Query::join($collection, $on, 'authorId', '=', $alias),
-            Method::LeftJoin => Query::leftJoin($collection, $on, 'authorId', '=', $alias),
-            Method::RightJoin => Query::rightJoin($collection, $on, 'authorId', '=', $alias),
-            Method::FullOuterJoin => Query::fullOuterJoin($collection, $on, 'authorId', '=', $alias),
+            Method::Join => Query::join($collection, $alias, [Query::on($on, 'authorId')]),
+            Method::LeftJoin => Query::leftJoin($collection, $alias, [Query::on($on, 'authorId')]),
+            Method::RightJoin => Query::rightJoin($collection, $alias, [Query::on($on, 'authorId')]),
+            Method::FullOuterJoin => Query::fullOuterJoin($collection, $alias, [Query::on($on, 'authorId')]),
             Method::CrossJoin => Query::crossJoin($collection, $alias),
             default => throw new \InvalidArgumentException("{$method->value} is not a join this test covers"),
         };
@@ -712,7 +712,7 @@ final class JoinTenancyTest extends TestCase
     private function numbers(array $joins): array
     {
         return \array_map(
-            static fn (Query $join): string => $join->getJoinAlias().'.'.self::NUMBERS[$join->getAttribute()],
+            static fn (Query $join): string => $join->getAlias().'.'.self::NUMBERS[$join->getAttribute()],
             $joins,
         );
     }

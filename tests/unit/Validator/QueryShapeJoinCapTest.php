@@ -37,10 +37,10 @@ class QueryShapeJoinCapTest extends TestCase
 
         $mixed = [
             ...$this->crossJoins(4),
-            Query::join('orders', '$id', 'customer', '=', 'first'),
-            Query::leftJoin('orders', '$id', 'customer', '=', 'second'),
-            Query::rightJoin('orders', '$id', 'customer', '=', 'third'),
-            Query::fullOuterJoin('orders', '$id', 'customer', '=', 'fourth'),
+            Query::join('orders', 'first', [Query::on('$id', 'customer')]),
+            Query::leftJoin('orders', 'second', [Query::on('$id', 'customer')]),
+            Query::rightJoin('orders', 'third', [Query::on('$id', 'customer')]),
+            Query::fullOuterJoin('orders', 'fourth', [Query::on('$id', 'customer')]),
             Query::join('orders', 'fifth', [Query::on('$id', 'fifth.customer')]),
         ];
         $this->assertFalse($validator->isValid($mixed), 'every kind of join counts towards the cap');

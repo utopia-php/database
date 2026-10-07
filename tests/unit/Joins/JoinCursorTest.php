@@ -42,7 +42,7 @@ final class JoinCursorTest extends TestCase
 
     public function testCursorWithoutItsJoinedOrderValueIsRefusedByName(): void
     {
-        $queries = [Query::join('notes', '$id', 'author', '=', 'n'), Query::orderAsc('n.rank')];
+        $queries = [Query::join('notes', 'n', [Query::on('$id', 'author')]), Query::orderAsc('n.rank')];
         $cursor = $this->database->find('authors', [...$queries, Query::limit(1)])[0];
         $cursor->removeAttribute('n.rank');
         $this->assertNotNull($cursor->getAttribute('rank'), 'the main document\'s attribute of the same name is there to fall back to');
@@ -84,13 +84,13 @@ final class JoinCursorTest extends TestCase
     #[DataProvider('matchedJoins')]
     public function testCursorPagingOverAOneToManyJoinReturnsEveryJoinedRowOnce(Method $join, array $order, array $rows): void
     {
-        $this->assertPagesEveryRowOnce([new Query($join, 'notes', ['$id', '=', 'author', 'n']), ...$order], $rows);
+        $this->assertPagesEveryRowOnce([new Query($join, 'notes', [Query::on('$id', 'author')], 'n'), ...$order], $rows);
     }
 
     public function testCursorFromAnotherJoinShapeIsRefusedByTheJoinedIdItLacks(): void
     {
-        $read = [Query::join('notes', '$id', 'author', '=', 'n'), Query::orderAsc('rank')];
-        $foreign = $this->database->find('authors', [Query::join('notes', '$id', 'author', '=', 'other'), Query::orderAsc('rank'), Query::limit(1)])[0];
+        $read = [Query::join('notes', 'n', [Query::on('$id', 'author')]), Query::orderAsc('rank')];
+        $foreign = $this->database->find('authors', [Query::join('notes', 'other', [Query::on('$id', 'author')]), Query::orderAsc('rank'), Query::limit(1)])[0];
 
         foreach ([$foreign, $this->database->getDocument('authors', 'a1')] as $cursor) {
             try {
@@ -105,7 +105,7 @@ final class JoinCursorTest extends TestCase
 
     public function testJoinedCursorOnTheLastRowReturnsNothing(): void
     {
-        $queries = [Query::join('notes', '$id', 'author', '=', 'n'), Query::orderAsc('n.rank')];
+        $queries = [Query::join('notes', 'n', [Query::on('$id', 'author')]), Query::orderAsc('n.rank')];
         $rows = $this->database->find('authors', $queries);
 
         $this->assertSame([], $this->database->find('authors', [...$queries, Query::cursorAfter($rows[\count($rows) - 1])]));
@@ -209,7 +209,7 @@ final class JoinCursorTest extends TestCase
             $this->useDatabase(new NativeFullOuterJoinSQLite(new PDO('sqlite::memory:')));
         }
 
-        $this->assertPagesEveryRowOnce([new Query($join, 'notes', ['$id', '=', 'author', 'n']), ...$order], $rows);
+        $this->assertPagesEveryRowOnce([new Query($join, 'notes', [Query::on('$id', 'author')], 'n'), ...$order], $rows);
     }
 
     public function testPlainReadRefusesACursorWithoutAnIdAsBefore(): void
@@ -229,13 +229,13 @@ final class JoinCursorTest extends TestCase
         yield 'distinct read, descending' => ['notes', [Query::distinct(), Query::select(['label']), Query::orderDesc('label')], 'label', ['z', 'y', 'x']];
         yield 'distinct read over a join' => [
             'authors',
-            [Query::join('notes', '$id', 'author', '=', 'n'), Query::distinct(), Query::select(['n.label']), Query::orderAsc('n.label')],
+            [Query::join('notes', 'n', [Query::on('$id', 'author')]), Query::distinct(), Query::select(['n.label']), Query::orderAsc('n.label')],
             'n.label',
             ['x', 'y'],
         ];
         yield 'distinct read over a left join, nulls included' => [
             'authors',
-            [Query::leftJoin('notes', '$id', 'author', '=', 'n'), Query::distinct(), Query::select(['n.rank']), Query::orderAsc('n.rank')],
+            [Query::leftJoin('notes', 'n', [Query::on('$id', 'author')]), Query::distinct(), Query::select(['n.rank']), Query::orderAsc('n.rank')],
             'n.rank',
             [null, 1, 2],
         ];
@@ -356,7 +356,7 @@ final class JoinCursorTest extends TestCase
     #[DataProvider('unpageableJoinedReads')]
     public function testPagingAJoinedReadItCannotPageFailsBeforeYieldingARow(Method $join, string $helper, array $queries, string $missing): void
     {
-        $queries = [new Query($join, 'notes', ['$id', '=', 'author', 'n']), ...$queries];
+        $queries = [new Query($join, 'notes', [Query::on('$id', 'author')], 'n'), ...$queries];
         $rows = $helper === 'cursor'
             ? $this->database->cursor('authors', $queries, 2)
             : $this->database->iterate('authors', [...$queries, Query::limit(2)]);
@@ -377,7 +377,7 @@ final class JoinCursorTest extends TestCase
 
     public function testPagingAJoinedReadThatFitsOnePageNeedsNoPagingValue(): void
     {
-        $rows = \iterator_to_array($this->database->cursor('authors', [Query::join('notes', '$id', 'author', '=', 'n'), Query::select(['name', 'n.rank'])], 10), false);
+        $rows = \iterator_to_array($this->database->cursor('authors', [Query::join('notes', 'n', [Query::on('$id', 'author')]), Query::select(['name', 'n.rank'])], 10), false);
 
         $this->assertCount(5, $rows);
     }
@@ -430,7 +430,7 @@ final class JoinCursorTest extends TestCase
             $this->createDocument('drafts', $id, ['author' => 'a1', 'label' => $label]);
         }
 
-        $document = $this->database->getDocument('authors', 'a1', [new Query($join, 'drafts', ['$id', '=', 'author', 'd'])]);
+        $document = $this->database->getDocument('authors', 'a1', [new Query($join, 'drafts', [Query::on('$id', 'author')], 'd')]);
 
         $this->assertSame('d-first', $document->getAttribute('d.$id'));
         $this->assertSame('z', $document->getAttribute('d.label'));
@@ -474,12 +474,12 @@ final class JoinCursorTest extends TestCase
      */
     public static function joinTieKeys(): iterable
     {
-        yield 'join on the joined $id' => [Query::join('authors', 'author', '$id', '=', 'a'), false];
-        yield 'left join on the joined $id, qualified' => [Query::leftJoin('authors', 'author', 'a.$id', '=', 'a'), false];
-        yield 'join on another joined attribute' => [Query::join('authors', 'author', 'name', '=', 'a'), true];
-        yield 'right join on the joined $id' => [Query::rightJoin('authors', 'author', '$id', '=', 'a'), true];
-        yield 'full outer join on the joined $id' => [Query::fullOuterJoin('authors', 'author', '$id', '=', 'a'), true];
-        yield 'join on the joined $id with another operator' => [Query::join('authors', 'author', '$id', '!=', 'a'), true];
+        yield 'join on the joined $id' => [Query::join('authors', 'a', [Query::on('author', '$id')]), false];
+        yield 'left join on the joined $id, qualified' => [Query::leftJoin('authors', 'a', [Query::on('author', 'a.$id')]), false];
+        yield 'join on another joined attribute' => [Query::join('authors', 'a', [Query::on('author', 'name')]), true];
+        yield 'right join on the joined $id' => [Query::rightJoin('authors', 'a', [Query::on('author', '$id')]), true];
+        yield 'full outer join on the joined $id' => [Query::fullOuterJoin('authors', 'a', [Query::on('author', '$id')]), true];
+        yield 'join on the joined $id with another operator' => [Query::join('authors', 'a', [Query::on('author', '$id', '!=')]), true];
     }
 
     #[DataProvider('joinTieKeys')]
@@ -535,7 +535,7 @@ final class JoinCursorTest extends TestCase
     #[DataProvider('joinedTieKeysBySelection')]
     public function testJoinedIdBreaksTiesOnlyWhereTheRowsShowTheJoin(Method $join, array $queries, array $columns): void
     {
-        $queries = [new Query($join, 'notes', ['$id', '=', 'author', 'n']), ...$queries];
+        $queries = [new Query($join, 'notes', [Query::on('$id', 'author')], 'n'), ...$queries];
 
         $this->database->enableProfiling();
         $this->database->getProfiler()?->reset();
@@ -556,7 +556,7 @@ final class JoinCursorTest extends TestCase
 
     public function testCursorFromARowThatShowsNoJoinedIdIsRefusedAsBefore(): void
     {
-        $queries = [Query::leftJoin('notes', '$id', 'author', '=', 'n'), Query::select(['name'])];
+        $queries = [Query::leftJoin('notes', 'n', [Query::on('$id', 'author')]), Query::select(['name'])];
         $cursor = $this->database->find('authors', [...$queries, Query::limit(1)])[0];
 
         $this->database->enableProfiling();

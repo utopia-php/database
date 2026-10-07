@@ -87,7 +87,7 @@ final class EmptySetAggregateContractTest extends TestCase
     public function testBitwiseAggregatesOverAFullOuterJoinWithNoInputValuesAreNull(string $adapter): void
     {
         $rows = $this->find($adapter, inputs: 0, queries: [
-            Query::fullOuterJoin('other', '$id', 'collectionId', '=', 'joined'),
+            Query::fullOuterJoin('other', 'joined', [Query::on('$id', 'collectionId')]),
             Query::count('*', 'rows'),
             Query::bitAnd('joined.flags', 'all_bits'),
             Query::bitOr('joined.flags', 'any_bits'),

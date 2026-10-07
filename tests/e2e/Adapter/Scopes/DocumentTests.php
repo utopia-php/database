@@ -10407,8 +10407,8 @@ trait DocumentTests
             }
             $database->createDocument($extras, new Document(['$id' => 'a', '$permissions' => [], 'code' => 'a', 'price' => 100]));
 
-            $item = Query::join($items, 'item', 'code', '=', 'it');
-            $extra = Query::join($extras, 'item', 'code', '=', 'ex');
+            $item = Query::join($items, 'it', [Query::on('item', 'code')]);
+            $extra = Query::join($extras, 'ex', [Query::on('item', 'code')]);
 
             $this->assertEquals(40, $database->sum($orders, 'price', [$item]));
             $this->assertEquals(40, $database->sum($orders, 'it.price', [$item]));
@@ -10474,7 +10474,7 @@ trait DocumentTests
                 return \array_map(static fn (Document $document): array => $document->getArrayCopy(), $documents);
             };
 
-            foreach (['join' => Query::join($items, 'item', 'code', '=', 'it'), 'full outer join' => Query::fullOuterJoin($items, 'item', 'code', '=', 'it')] as $case => $join) {
+            foreach (['join' => Query::join($items, 'it', [Query::on('item', 'code')]), 'full outer join' => Query::fullOuterJoin($items, 'it', [Query::on('item', 'code')])] as $case => $join) {
                 $this->assertEquals(
                     [['orders' => 2, 'name' => 'x', 'it.name' => 'apple'], ['orders' => 1, 'name' => 'y', 'it.name' => 'banana']],
                     $rows($database->find($orders, [$join, Query::count('*', 'orders'), Query::groupBy(['name', 'it.name']), Query::orderAsc('name')])),
@@ -10538,8 +10538,8 @@ trait DocumentTests
             }
             $database->createDocument($extras, new Document(['$id' => 'a', '$permissions' => [], 'code' => 'a', 'price' => 100]));
 
-            $item = Query::join($items, 'item', 'code', '=', 'it');
-            $extra = Query::join($extras, 'item', 'code', '=', 'ex');
+            $item = Query::join($items, 'it', [Query::on('item', 'code')]);
+            $extra = Query::join($extras, 'ex', [Query::on('item', 'code')]);
             $ids = static function (array $documents): array {
                 /** @var array<Document> $documents */
                 return \array_map(static fn (Document $document): string => $document->getId(), $documents);
@@ -10554,7 +10554,7 @@ trait DocumentTests
             $this->assertNull($rows[1]->getAttribute('quantity'));
 
             $this->assertSame(['o2', 'o1', 'o3'], $ids($database->find($orders, [$item, Query::orderDesc('price'), Query::orderAsc('$id')])));
-            $this->assertSame(['o2', 'o1', 'o3'], $ids($database->find($orders, [Query::fullOuterJoin($items, 'item', 'code', '=', 'it'), Query::orderDesc('price'), Query::orderAsc('$id')])));
+            $this->assertSame(['o2', 'o1', 'o3'], $ids($database->find($orders, [Query::fullOuterJoin($items, 'it', [Query::on('item', 'code')]), Query::orderDesc('price'), Query::orderAsc('$id')])));
             $this->assertSame(['o2', 'o1', 'o3'], $ids($database->find($orders, [$item, Query::orderDesc('name'), Query::orderAsc('$id')])), 'a name the main collection declares reads the main table');
             $this->assertEquals(
                 [['orders' => 1, 'code' => 'b'], ['orders' => 2, 'code' => 'a']],

@@ -55,7 +55,7 @@ final class SQLJoinWithoutValidationTest extends TestCase
             $sequences[$customer->getId()] = (int) $customer->getSequence();
         }
 
-        $sum = $this->database->sum('customers', '$sequence', [Query::join('notes', '$id', 'customerId', '=', 'note')]);
+        $sum = $this->database->sum('customers', '$sequence', [Query::join('notes', 'note', [Query::on('$id', 'customerId')])]);
 
         $this->assertSame($sequences['c1'] * 2 + $sequences['c2'], $sum);
     }
@@ -63,9 +63,9 @@ final class SQLJoinWithoutValidationTest extends TestCase
     public function testAJoinWithANonStringColumnIsAQueryError(): void
     {
         $this->expectException(QueryException::class);
-        $this->expectExceptionMessage('Join columns must be strings');
+        $this->expectExceptionMessage('Join ON requires left and right columns');
 
-        $this->database->find('customers', [new Query(Method::LeftJoin, 'notes', ['$id', '=', 5, 'note'])]);
+        $this->database->find('customers', [Query::leftJoin('notes', 'note', [new Query(Method::On, '', ['$id', '=', 5])])]);
     }
 
     public function testANestedJoinConditionWithoutAColumnIsAQueryError(): void
@@ -91,7 +91,7 @@ final class SQLJoinWithoutValidationTest extends TestCase
         $this->expectException(QueryException::class);
         $this->expectExceptionMessage("Joined collection '' not found");
 
-        $this->database->find('customers', [Query::join('', '$id', 'customerId')]);
+        $this->database->find('customers', [Query::join('', 'j0', [Query::on('$id', 'customerId')])]);
     }
 
     /**
@@ -99,7 +99,7 @@ final class SQLJoinWithoutValidationTest extends TestCase
      */
     public static function sumsOverAnUnknownPrefix(): array
     {
-        $join = [Query::join('notes', '$id', 'customerId', '=', 'note')];
+        $join = [Query::join('notes', 'note', [Query::on('$id', 'customerId')])];
 
         return [
             'plain name beside a join' => ['other.body', $join],

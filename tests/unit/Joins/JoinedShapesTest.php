@@ -31,7 +31,7 @@ final class JoinedShapesTest extends TestCase
     public function testAJoinWildcardSelectsTheJoinedColumnsNextToOtherSelects(): void
     {
         $database = $this->database();
-        $item = Query::join('items', 'item', 'code', '=', 'it');
+        $item = Query::join('items', 'it', [Query::on('item', 'code')]);
 
         $rows = $database->find('orders', [$item, Query::select(['name', 'it.*']), Query::orderAsc('$id')]);
         $this->assertSame(['x', 'y', 'x'], \array_map(static fn (Document $row): mixed => $row->getAttribute('name'), $rows));
@@ -57,7 +57,7 @@ final class JoinedShapesTest extends TestCase
             'a joined attribute named as well is selected once',
         );
 
-        $both = $database->find('orders', [$item, Query::join('extras', 'item', 'code', '=', 'ex'), Query::select(['quantity', 'ex.*'])]);
+        $both = $database->find('orders', [$item, Query::join('extras', 'ex', [Query::on('item', 'code')]), Query::select(['quantity', 'ex.*'])]);
         $this->assertCount(2, $both);
         $this->assertSame(['ex.$createdAt', 'ex.$id', 'ex.$permissions', 'ex.$sequence', 'ex.$updatedAt', 'ex.code', 'ex.price'], $this->joinedKeys($both[0]));
 
@@ -70,7 +70,7 @@ final class JoinedShapesTest extends TestCase
     public function testAJoinWildcardIsRefusedWhereItNamesNoJoinOrInAnAggregation(): void
     {
         $database = $this->database();
-        $item = Query::join('items', 'item', 'code', '=', 'it');
+        $item = Query::join('items', 'it', [Query::on('item', 'code')]);
 
         $this->assertRefused(
             'Invalid query: Cannot select "it.*": an aggregation query can only select the attributes it groups by',
@@ -91,7 +91,7 @@ final class JoinedShapesTest extends TestCase
     {
         foreach (['join' => [false, 'join'], 'emulated full outer join' => [false, 'fullOuterJoin'], 'native full outer join' => [true, 'fullOuterJoin']] as $case => [$native, $method]) {
             $database = $this->database($native);
-            $item = Query::$method('items', 'item', 'code', '=', 'it');
+            $item = Query::$method('items', 'it', [Query::on('item', 'code')]);
 
             $this->assertSame(
                 $this->ids($database->find('orders', [$item, Query::orderDesc('it.price'), Query::orderAsc('$id')])),
@@ -115,7 +115,7 @@ final class JoinedShapesTest extends TestCase
     public function testAnOrderOnANameTheMainCollectionDeclaresReadsTheMainTable(): void
     {
         $database = $this->database();
-        $item = Query::join('items', 'item', 'code', '=', 'it');
+        $item = Query::join('items', 'it', [Query::on('item', 'code')]);
 
         $this->assertSame(['o2', 'o1', 'o3'], $this->ids($database->find('orders', [$item, Query::orderDesc('name'), Query::orderAsc('$id')])), 'orders are named y, x, x; their items apple, banana');
     }
@@ -123,7 +123,7 @@ final class JoinedShapesTest extends TestCase
     public function testAnOrderOnABareNameSeveralOrNoCollectionsDeclareIsRefused(): void
     {
         $database = $this->database();
-        $joins = [Query::join('items', 'item', 'code', '=', 'it'), Query::join('extras', 'item', 'code', '=', 'ex')];
+        $joins = [Query::join('items', 'it', [Query::on('item', 'code')]), Query::join('extras', 'ex', [Query::on('item', 'code')])];
         $ambiguous = 'Attribute "price" is ambiguous across joins; qualify it with a join alias';
 
         $this->assertRefused('Invalid query: '.$ambiguous, fn (): mixed => $database->find('orders', [...$joins, Query::orderAsc('price')]));

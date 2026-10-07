@@ -48,7 +48,7 @@ final class FullOuterJoinRandomOrderTest extends TestCase
         foreach (['n1' => 'c1', 'n2' => 'c1', 'n3' => 'c2', 'n4' => 'cx'] as $note => $customer) {
             $database->createDocument('notes', new Document(['$id' => $note, 'customerId' => $customer, 'body' => $note]));
         }
-        $join = Query::fullOuterJoin('notes', '$id', 'customerId', '=', 'note');
+        $join = Query::fullOuterJoin('notes', 'note', [Query::on('$id', 'customerId')]);
         $select = Query::select(['name', 'note.body']);
 
         $this->assertSame(
@@ -94,7 +94,7 @@ final class FullOuterJoinRandomOrderTest extends TestCase
 
         $adapter->find(
             new Document(['$id' => 'customers']),
-            [Query::fullOuterJoin('notes', '$id', 'customerId', '=', 'note')],
+            [Query::fullOuterJoin('notes', 'note', [Query::on('$id', 'customerId')])],
             limit: 10,
             orderAttributes: [''],
             orderTypes: [OrderDirection::Random],

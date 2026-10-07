@@ -25,8 +25,8 @@ final class JoinAliasTest extends TestCase
         $database = $this->database();
 
         $rows = $database->find('main', [
-            Query::join('b', '$id', 'mainId', '=', 'j1'),
-            Query::join('c', '$id', 'mainId'),
+            Query::join('b', 'j1', [Query::on('$id', 'mainId')]),
+            Query::join('c', 'j2', [Query::on('$id', 'mainId')]),
             Query::select(['name', 'j1.score']),
         ]);
 
@@ -40,16 +40,16 @@ final class JoinAliasTest extends TestCase
         $database = $this->database();
 
         $rows = $database->find('main', [
-            Query::join('b', '$id', 'mainId'),
-            Query::join('c', '$id', 'mainId', '=', 'j0'),
+            Query::join('b', 'j1', [Query::on('$id', 'mainId')]),
+            Query::join('c', 'j0', [Query::on('$id', 'mainId')]),
             Query::select(['name', 'j0.score']),
         ]);
 
         $this->assertCount(1, $rows);
         $this->assertSame(10, $rows[0]->getAttribute('j0.score'));
         $this->assertSame(1, $database->count('main', [
-            Query::join('b', '$id', 'mainId'),
-            Query::join('c', '$id', 'mainId', '=', 'j0'),
+            Query::join('b', 'j1', [Query::on('$id', 'mainId')]),
+            Query::join('c', 'j0', [Query::on('$id', 'mainId')]),
         ]));
     }
 
@@ -111,28 +111,28 @@ final class JoinAliasTest extends TestCase
     public static function collidingAliases(): iterable
     {
         yield 'the same alias twice' => [[
-            Query::join('b', '$id', 'mainId', '=', 'x'),
-            Query::join('c', '$id', 'mainId', '=', 'x'),
+            Query::join('b', 'x', [Query::on('$id', 'mainId')]),
+            Query::join('c', 'x', [Query::on('$id', 'mainId')]),
         ]];
         yield 'aliases that differ only in case' => [[
-            Query::join('b', '$id', 'mainId', '=', 'x'),
-            Query::leftJoin('c', '$id', 'mainId', '=', 'X'),
+            Query::join('b', 'x', [Query::on('$id', 'mainId')]),
+            Query::leftJoin('c', 'X', [Query::on('$id', 'mainId')]),
         ]];
         yield 'the main collection alias' => [[
-            Query::join('b', '$id', 'mainId', '=', Query::DEFAULT_ALIAS),
+            Query::join('b', Query::DEFAULT_ALIAS, [Query::on('$id', 'mainId')]),
         ]];
         yield 'the main collection alias in another case' => [[
-            Query::join('b', '$id', 'mainId', '=', \strtoupper(Query::DEFAULT_ALIAS)),
+            Query::join('b', \strtoupper(Query::DEFAULT_ALIAS), [Query::on('$id', 'mainId')]),
         ]];
         yield 'a cross join alias that repeats an earlier one' => [[
-            Query::join('b', '$id', 'mainId', '=', 'x'),
+            Query::join('b', 'x', [Query::on('$id', 'mainId')]),
             Query::crossJoin('c', 'x'),
         ]];
         yield 'an alias that is not an identifier' => [[
-            Query::join('b', '$id', 'mainId', '=', 'my-alias'),
+            Query::join('b', 'my-alias', [Query::on('$id', 'mainId')]),
         ]];
         yield 'a nested join alias that repeats an earlier one' => [[
-            Query::join('b', '$id', 'mainId', '=', 'x'),
+            Query::join('b', 'x', [Query::on('$id', 'mainId')]),
             Query::leftJoin('c', 'x', [Query::on('$id', 'mainId')]),
         ]];
     }

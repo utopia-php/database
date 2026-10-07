@@ -52,7 +52,7 @@ trait JoinTests
         }
 
         $results = $database->find($pCol, [
-            Query::leftJoin($rCol, '$id', 'prod_uid'),
+            Query::leftJoin($rCol, 'j0', [Query::on('$id', 'prod_uid')]),
             Query::count('*', 'cnt'),
             Query::groupBy(['name']),
         ]);
@@ -107,7 +107,7 @@ trait JoinTests
         }
 
         $results = $database->find($pCol, [
-            Query::leftJoin($rCol, '$id', 'prod_uid'),
+            Query::leftJoin($rCol, 'j0', [Query::on('$id', 'prod_uid')]),
             Query::count('*', 'cnt'),
             Query::avg('score', 'avg_score'),
             Query::groupBy(['name']),
@@ -162,7 +162,7 @@ trait JoinTests
         }
 
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::count('*', 'order_count'),
             Query::sum('amount', 'total_amount'),
             Query::avg('amount', 'avg_amount'),
@@ -223,7 +223,7 @@ trait JoinTests
         }
 
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::count('*', 'cnt'),
             Query::sum('amount', 'total'),
             Query::groupBy(['cust_uid', 'status']),
@@ -293,7 +293,7 @@ trait JoinTests
         }
 
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::count('*', 'cnt'),
             Query::groupBy(['cust_uid']),
             Query::having([Query::greaterThan('cnt', 1)]),
@@ -348,7 +348,7 @@ trait JoinTests
         }
 
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::avg('amount', 'avg_amt'),
             Query::groupBy(['cust_uid']),
             Query::having([Query::greaterThan('avg_amt', 100)]),
@@ -404,7 +404,7 @@ trait JoinTests
         }
 
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::sum('amount', 'total'),
             Query::groupBy(['cust_uid']),
             Query::having([Query::greaterThan('total', 250)]),
@@ -458,7 +458,7 @@ trait JoinTests
         }
 
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::sum('amount', 'total'),
             Query::groupBy(['cust_uid']),
             Query::having([Query::between('total', 100, 500)]),
@@ -511,7 +511,7 @@ trait JoinTests
         }
 
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::countDistinct('product', 'uniq_prod'),
         ]);
 
@@ -562,7 +562,7 @@ trait JoinTests
         }
 
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::min('amount', 'min_amt'),
             Query::max('amount', 'max_amt'),
             Query::groupBy(['cust_uid']),
@@ -624,7 +624,7 @@ trait JoinTests
         }
 
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::equal('status', ['done']),
             Query::count('*', 'cnt'),
             Query::sum('amount', 'total'),
@@ -679,7 +679,7 @@ trait JoinTests
         }
 
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::between('amount', 100, 300),
             Query::count('*', 'cnt'),
             Query::sum('amount', 'total'),
@@ -725,7 +725,7 @@ trait JoinTests
         }
 
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::greaterThan('amount', 15),
             Query::lessThanEqual('amount', 40),
             Query::count('*', 'cnt'),
@@ -768,7 +768,7 @@ trait JoinTests
         ]));
 
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::count('*', 'cnt'),
         ]);
 
@@ -809,7 +809,7 @@ trait JoinTests
         ]));
 
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::equal('status', ['ghost']),
             Query::count('*', 'cnt'),
         ]);
@@ -859,7 +859,7 @@ trait JoinTests
         ]));
 
         $results = $database->find($pCol, [
-            Query::leftJoin($oCol, '$id', 'prod_uid'),
+            Query::leftJoin($oCol, 'j0', [Query::on('$id', 'prod_uid')]),
             Query::sum('amount', 'total'),
             Query::groupBy(['name']),
         ]);
@@ -921,7 +921,7 @@ trait JoinTests
         }
 
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::equal('status', ['done']),
             Query::greaterThan('amount', 100),
             Query::sum('amount', 'total'),
@@ -975,7 +975,7 @@ trait JoinTests
         }
 
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::count('*', 'cnt'),
             Query::sum('amount', 'total'),
             Query::groupBy(['cust_uid']),
@@ -1028,7 +1028,7 @@ trait JoinTests
         }
 
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::notEqual('status', 'cancel'),
             Query::count('*', 'cnt'),
             Query::sum('amount', 'total'),
@@ -1079,7 +1079,7 @@ trait JoinTests
         }
 
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::startsWith('tag', 'promo'),
             Query::count('*', 'cnt'),
             Query::sum('amount', 'total'),
@@ -1134,7 +1134,7 @@ trait JoinTests
         }
 
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::equal('status', ['done', 'open']),
             Query::count('*', 'cnt'),
             Query::sum('amount', 'total'),
@@ -1197,7 +1197,7 @@ trait JoinTests
         }
 
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::sum('amount', 'total'),
             Query::groupBy(['cust_uid']),
             Query::having([Query::lessThan('total', 100)]),
@@ -1249,7 +1249,7 @@ trait JoinTests
         ]));
 
         $results = $database->find($pCol, [
-            Query::leftJoin($oCol, '$id', 'prod_uid'),
+            Query::leftJoin($oCol, 'j0', [Query::on('$id', 'prod_uid')]),
             Query::count('*', 'cnt'),
             Query::groupBy(['name']),
             Query::having([Query::greaterThan('cnt', 1)]),
@@ -1302,7 +1302,7 @@ trait JoinTests
         }
 
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::count('*', 'cnt'),
             Query::sum('amount', 'total'),
             Query::avg('amount', 'avg_amt'),
@@ -1373,7 +1373,7 @@ trait JoinTests
         }
 
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::count('*', 'cnt'),
             Query::sum('amount', 'total'),
             Query::groupBy(['cust_uid']),
@@ -1446,8 +1446,8 @@ trait JoinTests
         ]));
 
         $joinQuery = match ($joinMethod) {
-            'join' => Query::join($oCol, '$id', 'prod_uid'),
-            'leftJoin' => Query::leftJoin($oCol, '$id', 'prod_uid'),
+            'join' => Query::join($oCol, 'j0', [Query::on('$id', 'prod_uid')]),
+            'leftJoin' => Query::leftJoin($oCol, 'j0', [Query::on('$id', 'prod_uid')]),
             default => throw new \InvalidArgumentException('Unknown join method: '.$joinMethod),
         };
 
@@ -1519,7 +1519,7 @@ trait JoinTests
         };
 
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             $aggQuery,
         ]);
 
@@ -1604,7 +1604,7 @@ trait JoinTests
         };
 
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::count('*', $alias),
             Query::groupBy(['cust_uid']),
             Query::having([$havingQuery]),
@@ -1657,7 +1657,7 @@ trait JoinTests
         }
 
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::sum('amount', 'total'),
             Query::groupBy(['cust_uid']),
             Query::orderDesc('total'),
@@ -1703,7 +1703,7 @@ trait JoinTests
         }
 
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::sum('amount', 'total'),
             Query::groupBy(['cust_uid']),
             Query::orderDesc('total'),
@@ -1750,7 +1750,7 @@ trait JoinTests
         }
 
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::sum('amount', 'total'),
             Query::groupBy(['cust_uid']),
             Query::orderDesc('total'),
@@ -1813,7 +1813,7 @@ trait JoinTests
         // HAVING count >= 2 AND sum > 200 → c2 (cnt=2, sum=300) and c4 (cnt=4, sum=2600)
         // c1 excluded (cnt=1), c3 excluded (cnt=3, sum=150 < 200)
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::count('*', 'cnt'),
             Query::sum('amount', 'total'),
             Query::groupBy(['cust_uid']),
@@ -1872,7 +1872,7 @@ trait JoinTests
         }
 
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::count('*', 'cnt'),
             Query::groupBy(['cust_uid']),
             Query::having([Query::equal('cnt', [2])]),
@@ -1913,7 +1913,7 @@ trait JoinTests
 
         // Main table (orders) is empty
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::count('*', 'cnt'),
         ]);
 
@@ -1955,7 +1955,7 @@ trait JoinTests
         }
 
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::count('*', 'cnt'),
             Query::groupBy(['cust_uid']),
             Query::orderDesc('cust_uid'),
@@ -2027,8 +2027,8 @@ trait JoinTests
 
         // Join both customers and products from orders
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
-            Query::join($pCol, 'prod_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
+            Query::join($pCol, 'j1', [Query::on('prod_uid', '$id')]),
             Query::count('*', 'order_cnt'),
             Query::sum('amount', 'total'),
             Query::groupBy(['cust_uid']),
@@ -2092,7 +2092,7 @@ trait JoinTests
         // Sums: c1=10, c2=300, c3=1100
         // NOT BETWEEN 50 AND 500 → c1 (10) and c3 (1100)
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::sum('amount', 'total'),
             Query::groupBy(['cust_uid']),
             Query::having([Query::notBetween('total', 50, 500)]),
@@ -2150,7 +2150,7 @@ trait JoinTests
 
         // Filter done only, group by customer, order by total ascending
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::equal('status', ['done']),
             Query::sum('amount', 'total'),
             Query::groupBy(['cust_uid']),
@@ -2206,7 +2206,7 @@ trait JoinTests
 
         // Counts: c1=1, c2=2, c3=2. HAVING count != 2 → c1 only
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::count('*', 'cnt'),
             Query::groupBy(['cust_uid']),
             Query::having([Query::notEqual('cnt', 2)]),
@@ -2253,7 +2253,7 @@ trait JoinTests
         ]));
 
         $results = $database->find($pCol, [
-            Query::leftJoin($oCol, '$id', 'prod_uid'),
+            Query::leftJoin($oCol, 'j0', [Query::on('$id', 'prod_uid')]),
             Query::count('*', 'cnt'),
             Query::groupBy(['name']),
         ]);
@@ -2309,7 +2309,7 @@ trait JoinTests
 
         // Filter electronics only, group by customer
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::equal('category', ['electronics']),
             Query::count('*', 'cnt'),
             Query::sum('amount', 'total'),
@@ -2325,7 +2325,7 @@ trait JoinTests
 
         // Now books only
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::equal('category', ['books']),
             Query::count('*', 'cnt'),
             Query::sum('amount', 'total'),
@@ -2386,7 +2386,7 @@ trait JoinTests
         // c1/done (3), c1/open (1), c2/done (1), c2/open (2)
         // Should return c1/done and c2/open
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::count('*', 'cnt'),
             Query::sum('amount', 'total'),
             Query::groupBy(['cust_uid', 'status']),
@@ -2450,7 +2450,7 @@ trait JoinTests
         }
 
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::countDistinct('product', 'unique_products'),
             Query::groupBy(['cust_uid']),
         ]);
@@ -2514,7 +2514,7 @@ trait JoinTests
         // c1 done sum=300, c2 done sum=50, c3 done sum=900
         // → c1 and c3 match
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::equal('status', ['done']),
             Query::sum('amount', 'total'),
             Query::groupBy(['cust_uid']),
@@ -2567,7 +2567,7 @@ trait JoinTests
 
         // Get top 3 products by order count, descending
         $results = $database->find($pCol, [
-            Query::leftJoin($oCol, '$id', 'prod_uid'),
+            Query::leftJoin($oCol, 'j0', [Query::on('$id', 'prod_uid')]),
             Query::count('*', 'order_cnt'),
             Query::groupBy(['name']),
             Query::orderDesc('order_cnt'),
@@ -2624,7 +2624,7 @@ trait JoinTests
         }
 
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::endsWith('tag', 'express'),
             Query::count('*', 'cnt'),
             Query::sum('amount', 'total'),
@@ -2676,7 +2676,7 @@ trait JoinTests
 
         // HAVING sum <= 200 → c1 (100) and c2 (200)
         $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
+            Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::sum('amount', 'total'),
             Query::groupBy(['cust_uid']),
             Query::having([Query::lessThanEqual('total', 200)]),
@@ -2740,7 +2740,7 @@ trait JoinTests
         ]));
 
         $results = $database->getAuthorization()->skip(fn () => $database->find($pCol, [
-            Query::rightJoin($rCol, '$id', 'prod_uid'),
+            Query::rightJoin($rCol, 'j0', [Query::on('$id', 'prod_uid')]),
             Query::select(['name']),
         ]));
 
@@ -2788,7 +2788,7 @@ trait JoinTests
         }
 
         $results = $database->find($aCol, [
-            Query::crossJoin($bCol),
+            Query::crossJoin($bCol, 'j0'),
         ]);
 
         $this->assertCount(6, $results);
@@ -2839,7 +2839,7 @@ trait JoinTests
         ]));
 
         $results = $database->getAuthorization()->skip(fn () => $database->find($pCol, [
-            Query::fullOuterJoin($rCol, '$id', 'prod_uid'),
+            Query::fullOuterJoin($rCol, 'j0', [Query::on('$id', 'prod_uid')]),
             Query::select(['name']),
         ]));
 
@@ -2899,7 +2899,7 @@ trait JoinTests
         ]));
 
         $results = $database->getAuthorization()->skip(fn () => $database->find($pCol, [
-            Query::fullOuterJoin($rCol, '$id', 'prod_uid'),
+            Query::fullOuterJoin($rCol, 'j0', [Query::on('$id', 'prod_uid')]),
             Query::select(['name']),
         ]));
 
@@ -2932,7 +2932,7 @@ trait JoinTests
 
         try {
             $database->find($pCol, [
-                Query::naturalJoin($rCol),
+                Query::naturalJoin($rCol, 'j0'),
             ]);
             $this->fail('Expected QueryException for natural join');
         } catch (QueryException $exception) {
@@ -2976,7 +2976,7 @@ trait JoinTests
         }
 
         $results = $database->find($lCol, [
-            Query::join($rCol, 'value', 'threshold', '>'),
+            Query::join($rCol, 'j0', [Query::on('value', 'threshold', '>')]),
         ]);
 
         $this->assertCount(3, $results);
@@ -3017,7 +3017,7 @@ trait JoinTests
         ]));
 
         $results = $database->find($cCol, [
-            Query::join($oCol, '$id', 'cust_uid', '=', 'ord'),
+            Query::join($oCol, 'ord', [Query::on('$id', 'cust_uid')]),
             Query::select(['name', 'ord.amount']),
         ]);
 
@@ -3075,8 +3075,8 @@ trait JoinTests
         ]));
 
         $results = $database->find($cCol, [
-            Query::join($oCol, '$id', 'cust_uid', '=', 'ord'),
-            Query::join($iCol, 'ord.$id', 'order_uid', '=', 'itm'),
+            Query::join($oCol, 'ord', [Query::on('$id', 'cust_uid')]),
+            Query::join($iCol, 'itm', [Query::on('ord.$id', 'order_uid')]),
             Query::select(['name', 'ord.amount', 'itm.sku']),
         ]);
 
@@ -3124,7 +3124,7 @@ trait JoinTests
 
         $results = $database->find($cCol, [
             Query::select(['name', 'ord.amount']),
-            Query::join($oCol, '$id', 'cust_uid', '=', 'ord'),
+            Query::join($oCol, 'ord', [Query::on('$id', 'cust_uid')]),
         ]);
 
         $this->assertCount(1, $results);
@@ -3180,7 +3180,7 @@ trait JoinTests
         ]));
 
         $results = $database->find($pCol, [
-            Query::rightJoin($rCol, '$id', 'prod_uid'),
+            Query::rightJoin($rCol, 'j0', [Query::on('$id', 'prod_uid')]),
             Query::select(['name']),
         ]);
 
@@ -3245,7 +3245,7 @@ trait JoinTests
         ]));
 
         $results = $database->find($pCol, [
-            Query::fullOuterJoin($rCol, '$id', 'prod_uid'),
+            Query::fullOuterJoin($rCol, 'j0', [Query::on('$id', 'prod_uid')]),
             Query::select(['name']),
         ]);
 
@@ -3297,8 +3297,8 @@ trait JoinTests
 
         try {
             $results = $database->find($col, [
-                Query::join($col, 'tag', 'tag', '=', 'visible'),
-                Query::join($col, 'tag', 'tag', '=', 'hidden'),
+                Query::join($col, 'visible', [Query::on('tag', 'tag')]),
+                Query::join($col, 'hidden', [Query::on('tag', 'tag')]),
                 Query::select(['visible.payload', 'hidden.code']),
             ]);
 
@@ -3370,7 +3370,7 @@ trait JoinTests
 
         try {
             $results = $database->find($cCol, [
-                Query::rightJoin($oCol, '$id', 'customerId'),
+                Query::rightJoin($oCol, 'j0', [Query::on('$id', 'customerId')]),
             ]);
 
             $this->assertGreaterThanOrEqual(1, \count($results));
@@ -3446,7 +3446,7 @@ trait JoinTests
 
         try {
             $results = $database->find($cCol, [
-                Query::fullOuterJoin($oCol, '$id', 'customerId'),
+                Query::fullOuterJoin($oCol, 'j0', [Query::on('$id', 'customerId')]),
             ]);
 
             $this->assertGreaterThanOrEqual(1, \count($results));
@@ -3549,7 +3549,7 @@ trait JoinTests
 
             $database->setTenant(1);
             $results = $database->find($pCol, [
-                Query::rightJoin($rCol, '$id', 'prod_uid', '=', 'rev'),
+                Query::rightJoin($rCol, 'rev', [Query::on('$id', 'prod_uid')]),
                 Query::select(['name', 'rev.score']),
             ]);
 
@@ -3626,7 +3626,7 @@ trait JoinTests
         ]));
 
         $document = $database->getDocument($pCol, 'p1', [
-            Query::join($rCol, '$id', 'prod_uid'),
+            Query::join($rCol, 'j0', [Query::on('$id', 'prod_uid')]),
         ]);
 
         $this->assertSame(false, $document->isEmpty());
@@ -3665,7 +3665,7 @@ trait JoinTests
         ]));
 
         $document = $database->getDocument($pCol, 'p2', [
-            Query::leftJoin($rCol, '$id', 'prod_uid'),
+            Query::leftJoin($rCol, 'j0', [Query::on('$id', 'prod_uid')]),
         ]);
 
         $this->assertSame(false, $document->isEmpty());
@@ -3704,7 +3704,7 @@ trait JoinTests
         ]));
 
         $document = $database->getDocument($pCol, 'p2', [
-            Query::join($rCol, '$id', 'prod_uid'),
+            Query::join($rCol, 'j0', [Query::on('$id', 'prod_uid')]),
         ]);
 
         $this->assertSame(true, $document->isEmpty());
@@ -3740,7 +3740,7 @@ trait JoinTests
         ]));
 
         $document = $database->getDocument($pCol, 'p2', [
-            Query::rightJoin($rCol, '$id', 'prod_uid'),
+            Query::rightJoin($rCol, 'j0', [Query::on('$id', 'prod_uid')]),
         ]);
 
         $this->assertSame(true, $document->isEmpty());
@@ -3786,7 +3786,7 @@ trait JoinTests
         ]));
 
         $document = $database->getDocument($pCol, 'p1', [
-            Query::join($rCol, '$id', 'prod_uid'),
+            Query::join($rCol, 'j0', [Query::on('$id', 'prod_uid')]),
         ]);
 
         $this->assertSame(false, $document->isEmpty());
@@ -3830,7 +3830,7 @@ trait JoinTests
         ]));
 
         $document = $database->getDocument($pCol, 'p1', [
-            Query::join($rCol, '$id', 'prod_uid', '=', 'rev'),
+            Query::join($rCol, 'rev', [Query::on('$id', 'prod_uid')]),
             Query::select(['name', 'rev.score']),
         ]);
 
@@ -3873,7 +3873,7 @@ trait JoinTests
         $this->expectException(QueryException::class);
         try {
             $database->getDocument($pCol, 'p1', [
-                Query::join($rCol, '$id', 'prod_uid'),
+                Query::join($rCol, 'j0', [Query::on('$id', 'prod_uid')]),
                 Query::count('*', 'cnt'),
             ]);
         } finally {
@@ -3903,7 +3903,7 @@ trait JoinTests
 
         try {
             $database->getDocument($pCol, 'p1', [
-                Query::naturalJoin($rCol),
+                Query::naturalJoin($rCol, 'j0'),
             ]);
             $this->fail('Expected QueryException for natural join');
         } catch (QueryException $exception) {
@@ -3947,7 +3947,7 @@ trait JoinTests
 
         $database->getDocument($pCol, 'p1');
         $document = $database->getDocument($pCol, 'p1', [
-            Query::leftJoin($rCol, '$id', 'prod_uid', '=', 'rev'),
+            Query::leftJoin($rCol, 'rev', [Query::on('$id', 'prod_uid')]),
             Query::select(['rev.score']),
         ]);
 
@@ -3999,19 +3999,19 @@ trait JoinTests
         ]));
 
         $inner = $database->getDocument($pCol, 'p1', [
-            Query::join($rCol, '$id', 'prod_uid'),
+            Query::join($rCol, 'j0', [Query::on('$id', 'prod_uid')]),
         ]);
         $this->assertSame(false, $inner->isEmpty());
         $this->assertSame('p1', $inner->getId());
 
         $left = $database->getDocument($pCol, 'p1', [
-            Query::leftJoin($rCol, '$id', 'prod_uid'),
+            Query::leftJoin($rCol, 'j0', [Query::on('$id', 'prod_uid')]),
         ]);
         $this->assertSame(false, $left->isEmpty());
         $this->assertSame('p1', $left->getId());
 
         $unmatched = $database->getDocument($pCol, 'p2', [
-            Query::leftJoin($rCol, '$id', 'prod_uid'),
+            Query::leftJoin($rCol, 'j0', [Query::on('$id', 'prod_uid')]),
         ]);
         $this->assertSame(false, $unmatched->isEmpty());
         $this->assertSame('p2', $unmatched->getId());
@@ -4047,7 +4047,7 @@ trait JoinTests
         ]));
 
         $document = $database->getDocument($pCol, 'p2', [
-            Query::fullOuterJoin($rCol, '$id', 'prod_uid'),
+            Query::fullOuterJoin($rCol, 'j0', [Query::on('$id', 'prod_uid')]),
         ]);
 
         $this->assertSame(false, $document->isEmpty());
@@ -4099,7 +4099,7 @@ trait JoinTests
 
         try {
             $document = $database->getDocument($pCol, 'p1', [
-                Query::fullOuterJoin($rCol, '$id', 'prod_uid'),
+                Query::fullOuterJoin($rCol, 'j0', [Query::on('$id', 'prod_uid')]),
             ]);
             $this->assertSame(false, $document->isEmpty());
             $this->assertSame('p1', $document->getId());
@@ -4111,7 +4111,7 @@ trait JoinTests
             }
 
             $left = $database->getDocument($pCol, 'p1', [
-                Query::leftJoin($rCol, '$id', 'prod_uid'),
+                Query::leftJoin($rCol, 'j0', [Query::on('$id', 'prod_uid')]),
             ]);
             $this->assertSame(false, $left->isEmpty());
             $this->assertSame('p1', $left->getId());
@@ -4167,7 +4167,7 @@ trait JoinTests
         ]));
 
         $results = $database->find($pCol, [
-            Query::fullOuterJoin($rCol, '$id', 'prod_uid'),
+            Query::fullOuterJoin($rCol, 'j0', [Query::on('$id', 'prod_uid')]),
             Query::limit(2),
         ]);
 
@@ -4206,7 +4206,7 @@ trait JoinTests
         }
 
         $queries = [
-            Query::fullOuterJoin($rCol, '$id', 'prod_uid'),
+            Query::fullOuterJoin($rCol, 'j0', [Query::on('$id', 'prod_uid')]),
             Query::orderAsc('name'),
         ];
 
@@ -4268,11 +4268,11 @@ trait JoinTests
 
         $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $jCol): void {
             $joins = [
-                Query::join($jCol, '$id', 'mainId'),
-                Query::leftJoin($jCol, '$id', 'mainId'),
-                Query::rightJoin($jCol, '$id', 'mainId'),
-                Query::fullOuterJoin($jCol, '$id', 'mainId'),
-                Query::crossJoin($jCol),
+                Query::join($jCol, 'j0', [Query::on('$id', 'mainId')]),
+                Query::leftJoin($jCol, 'j1', [Query::on('$id', 'mainId')]),
+                Query::rightJoin($jCol, 'j2', [Query::on('$id', 'mainId')]),
+                Query::fullOuterJoin($jCol, 'j3', [Query::on('$id', 'mainId')]),
+                Query::crossJoin($jCol, 'j4'),
             ];
 
             foreach ($joins as $join) {
@@ -4289,7 +4289,7 @@ trait JoinTests
 
             try {
                 $document = $database->getDocument($mCol, 'm1', [
-                    Query::join($jCol, '$id', 'mainId'),
+                    Query::join($jCol, 'j0', [Query::on('$id', 'mainId')]),
                 ]);
                 if (! $document->isEmpty()) {
                     $this->assertJoinAttributesAbsent($document);
@@ -4338,7 +4338,7 @@ trait JoinTests
 
         $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $jCol): void {
             $results = $database->find($mCol, [
-                Query::join($jCol, '$id', 'mainId'),
+                Query::join($jCol, 'j0', [Query::on('$id', 'mainId')]),
             ]);
 
             $this->assertGreaterThanOrEqual(1, \count($results));
@@ -4383,14 +4383,14 @@ trait JoinTests
 
         $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $jCol): void {
             $results = $database->find($mCol, [
-                Query::leftJoin($jCol, '$id', 'mainId', '=', 'rev'),
+                Query::leftJoin($jCol, 'rev', [Query::on('$id', 'mainId')]),
                 Query::select(['name', 'rev.score']),
             ]);
 
             $this->assertGreaterThanOrEqual(1, \count($results));
             $this->assertContains(999, $this->aliasedScores($results));
 
-            $rewritten = Query::leftJoin('jp_dsoff_public', '$id', 'mainId', '=', 'rev');
+            $rewritten = Query::leftJoin('jp_dsoff_public', 'rev', [Query::on('$id', 'mainId')]);
             $rewritten->setAttribute($jCol);
             $rewrittenResults = $database->find($mCol, [
                 $rewritten,
@@ -4400,7 +4400,7 @@ trait JoinTests
             $this->assertContains(999, $this->aliasedScores($rewrittenResults));
 
             $document = $database->getDocument($mCol, 'm1', [
-                Query::leftJoin($jCol, '$id', 'mainId', '=', 'rev'),
+                Query::leftJoin($jCol, 'rev', [Query::on('$id', 'mainId')]),
                 Query::select(['name', 'rev.score']),
             ]);
             $this->assertSame(false, $document->isEmpty());
@@ -4446,7 +4446,7 @@ trait JoinTests
 
         $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $jCol): void {
             $results = $database->find($mCol, [
-                Query::join($jCol, '$id', 'mainId'),
+                Query::join($jCol, 'j0', [Query::on('$id', 'mainId')]),
             ]);
 
             $this->assertGreaterThanOrEqual(1, \count($results));
@@ -4495,7 +4495,7 @@ trait JoinTests
 
         $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $jCol): void {
             $results = $database->find($mCol, [
-                Query::leftJoin($jCol, '$id', 'mainId'),
+                Query::leftJoin($jCol, 'j0', [Query::on('$id', 'mainId')]),
             ]);
 
             $this->assertGreaterThanOrEqual(2, \count($results));
@@ -4565,7 +4565,7 @@ trait JoinTests
 
         $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $jCol): void {
             $results = $database->find($mCol, [
-                Query::rightJoin($jCol, '$id', 'mainId'),
+                Query::rightJoin($jCol, 'j0', [Query::on('$id', 'mainId')]),
             ]);
 
             $this->assertGreaterThanOrEqual(1, \count($results));
@@ -4644,7 +4644,7 @@ trait JoinTests
 
         $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $jCol): void {
             $results = $database->find($mCol, [
-                Query::fullOuterJoin($jCol, '$id', 'mainId'),
+                Query::fullOuterJoin($jCol, 'j0', [Query::on('$id', 'mainId')]),
             ]);
 
             $ids = \array_map(static fn (Document $document): string => $document->getId(), $results);
@@ -4725,7 +4725,7 @@ trait JoinTests
 
         $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $jCol): void {
             $results = $database->find($mCol, [
-                Query::crossJoin($jCol),
+                Query::crossJoin($jCol, 'j0'),
             ]);
 
             $this->assertSame(2, \count($results));
@@ -4784,12 +4784,12 @@ trait JoinTests
 
         $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $jCol): void {
             $innerSecret = $database->getDocument($mCol, 'm1', [
-                Query::join($jCol, '$id', 'mainId'),
+                Query::join($jCol, 'j0', [Query::on('$id', 'mainId')]),
             ]);
             $this->assertSame(true, $innerSecret->isEmpty());
 
             $innerPublic = $database->getDocument($mCol, 'm2', [
-                Query::join($jCol, '$id', 'mainId'),
+                Query::join($jCol, 'j0', [Query::on('$id', 'mainId')]),
             ]);
             $this->assertSame(false, $innerPublic->isEmpty());
             $this->assertSame('m2', $innerPublic->getId());
@@ -4799,7 +4799,7 @@ trait JoinTests
             $this->assertSame(10, (int) $publicScore);
 
             $leftSecret = $database->getDocument($mCol, 'm1', [
-                Query::leftJoin($jCol, '$id', 'mainId'),
+                Query::leftJoin($jCol, 'j0', [Query::on('$id', 'mainId')]),
             ]);
             $this->assertSame(false, $leftSecret->isEmpty());
             $this->assertSame('m1', $leftSecret->getId());
@@ -4808,13 +4808,13 @@ trait JoinTests
             $this->assertNullishScore($leftSecret);
 
             $leftPublic = $database->getDocument($mCol, 'm2', [
-                Query::leftJoin($jCol, '$id', 'mainId'),
+                Query::leftJoin($jCol, 'j0', [Query::on('$id', 'mainId')]),
             ]);
             $this->assertSame(false, $leftPublic->isEmpty());
             $this->assertSame('m2', $leftPublic->getId());
 
             $rightSecret = $database->getDocument($mCol, 'm1', [
-                Query::rightJoin($jCol, '$id', 'mainId'),
+                Query::rightJoin($jCol, 'j0', [Query::on('$id', 'mainId')]),
             ]);
             if (! $rightSecret->isEmpty()) {
                 $this->assertSame('m1', $rightSecret->getId());
@@ -4822,14 +4822,14 @@ trait JoinTests
             }
 
             $rightPublic = $database->getDocument($mCol, 'm2', [
-                Query::rightJoin($jCol, '$id', 'mainId'),
+                Query::rightJoin($jCol, 'j0', [Query::on('$id', 'mainId')]),
             ]);
             $this->assertSame(false, $rightPublic->isEmpty());
             $this->assertSame('m2', $rightPublic->getId());
             $this->assertSecretJoinHidden($rightPublic, 'j-secret', 999);
 
             $fojSecret = $database->getDocument($mCol, 'm1', [
-                Query::fullOuterJoin($jCol, '$id', 'mainId'),
+                Query::fullOuterJoin($jCol, 'j0', [Query::on('$id', 'mainId')]),
             ]);
             $this->assertSame(false, $fojSecret->isEmpty());
             $this->assertSame('m1', $fojSecret->getId());
@@ -4838,14 +4838,14 @@ trait JoinTests
             $this->assertNullishScore($fojSecret);
 
             $fojPublic = $database->getDocument($mCol, 'm2', [
-                Query::fullOuterJoin($jCol, '$id', 'mainId'),
+                Query::fullOuterJoin($jCol, 'j0', [Query::on('$id', 'mainId')]),
             ]);
             $this->assertSame(false, $fojPublic->isEmpty());
             $this->assertSame('m2', $fojPublic->getId());
             $this->assertSecretJoinHidden($fojPublic, 'j-secret', 999);
 
             $fojUnmatched = $database->getDocument($mCol, 'm3', [
-                Query::fullOuterJoin($jCol, '$id', 'mainId'),
+                Query::fullOuterJoin($jCol, 'j0', [Query::on('$id', 'mainId')]),
             ]);
             $this->assertSame(false, $fojUnmatched->isEmpty());
             $this->assertSame('m3', $fojUnmatched->getId());
@@ -4891,7 +4891,7 @@ trait JoinTests
 
         $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $jCol): void {
             $finds = $database->find($mCol, [
-                Query::leftJoin($jCol, '$id', 'mainId', '=', 'rev'),
+                Query::leftJoin($jCol, 'rev', [Query::on('$id', 'mainId')]),
                 Query::select(['name', 'rev.score']),
             ]);
             foreach ($finds as $document) {
@@ -4901,7 +4901,7 @@ trait JoinTests
             $this->assertSame(false, \in_array(999, $this->numericScores($finds), true));
 
             $document = $database->getDocument($mCol, 'm1', [
-                Query::leftJoin($jCol, '$id', 'mainId', '=', 'rev'),
+                Query::leftJoin($jCol, 'rev', [Query::on('$id', 'mainId')]),
                 Query::select(['rev.score']),
             ]);
             $this->assertSame(false, $document->isEmpty());
@@ -4993,9 +4993,9 @@ trait JoinTests
             $database->setTenant(1);
             $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $jCol): void {
                 foreach ([
-                    [Query::join($jCol, '$id', 'mainId')],
-                    [Query::leftJoin($jCol, '$id', 'mainId')],
-                    [Query::fullOuterJoin($jCol, '$id', 'mainId')],
+                    [Query::join($jCol, 'j0', [Query::on('$id', 'mainId')])],
+                    [Query::leftJoin($jCol, 'j0', [Query::on('$id', 'mainId')])],
+                    [Query::fullOuterJoin($jCol, 'j0', [Query::on('$id', 'mainId')])],
                 ] as $queries) {
                     $results = $database->find($mCol, $queries);
                     $this->assertGreaterThanOrEqual(1, \count($results));
@@ -5079,7 +5079,7 @@ trait JoinTests
 
         $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $jCol): void {
             $results = $database->find($mCol, [
-                Query::join($jCol, '$id', 'mainId'),
+                Query::join($jCol, 'j0', [Query::on('$id', 'mainId')]),
             ]);
             $scores = $this->numericScores($results);
             $this->assertContains(10, $scores);
@@ -5092,7 +5092,7 @@ trait JoinTests
 
         $this->withAuthorizationRoles($database, [Role::user('jp-acl')->toString()], function () use ($database, $mCol, $jCol): void {
             $results = $database->find($mCol, [
-                Query::join($jCol, '$id', 'mainId'),
+                Query::join($jCol, 'j0', [Query::on('$id', 'mainId')]),
             ]);
             $scores = $this->numericScores($results);
             $this->assertContains(999, $scores);
@@ -5102,7 +5102,7 @@ trait JoinTests
 
         $this->withAuthorizationRoles($database, [Role::guests()->toString()], function () use ($database, $mCol, $jCol): void {
             $results = $database->find($mCol, [
-                Query::join($jCol, '$id', 'mainId'),
+                Query::join($jCol, 'j0', [Query::on('$id', 'mainId')]),
             ]);
             $scores = $this->numericScores($results);
             $this->assertContains(20, $scores);
@@ -5156,7 +5156,7 @@ trait JoinTests
             $this->assertSame('m1', $withoutJoin[0]->getId());
 
             $inner = $database->find($mCol, [
-                Query::join($jCol, '$id', 'mainId'),
+                Query::join($jCol, 'j0', [Query::on('$id', 'mainId')]),
             ]);
             $this->assertContains(10, $this->numericScores($inner));
             $this->assertSame(false, \in_array(999, $this->numericScores($inner), true));
@@ -5165,7 +5165,7 @@ trait JoinTests
             }
 
             $left = $database->find($mCol, [
-                Query::leftJoin($jCol, '$id', 'mainId'),
+                Query::leftJoin($jCol, 'j0', [Query::on('$id', 'mainId')]),
             ]);
             $this->assertGreaterThanOrEqual(1, \count($left));
             foreach ($left as $document) {
@@ -5173,7 +5173,7 @@ trait JoinTests
             }
 
             $document = $database->getDocument($mCol, 'm1', [
-                Query::join($jCol, '$id', 'mainId'),
+                Query::join($jCol, 'j0', [Query::on('$id', 'mainId')]),
             ]);
             if (! $document->isEmpty()) {
                 $this->assertSame('m1', $document->getId());
@@ -5219,7 +5219,7 @@ trait JoinTests
         ]));
 
         $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $jCol): void {
-            $join = Query::join($jCol, '$id', 'mainId', '=', 'rev');
+            $join = Query::join($jCol, 'rev', [Query::on('$id', 'mainId')]);
             $baseline = $database->find($mCol, [$join]);
             $this->assertSame(1, \count($baseline));
             $this->assertContains(10, $this->numericScores($baseline));
@@ -5310,7 +5310,7 @@ trait JoinTests
 
         $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $jCol): void {
             $inner = $database->find($mCol, [
-                Query::join($jCol, '$id', 'mainId'),
+                Query::join($jCol, 'j0', [Query::on('$id', 'mainId')]),
             ]);
             $this->assertSame(1, \count($inner));
             $this->assertSame('m1', $inner[0]->getId());
@@ -5321,7 +5321,7 @@ trait JoinTests
             $this->assertSame(2, \count($publicMains));
 
             $left = $database->find($mCol, [
-                Query::leftJoin($jCol, '$id', 'mainId'),
+                Query::leftJoin($jCol, 'j0', [Query::on('$id', 'mainId')]),
             ]);
             $this->assertSame(\count($publicMains), \count($left));
             $this->assertSecretJoinPayloadHidden($left, 'j-secret', 999);
@@ -5371,7 +5371,7 @@ trait JoinTests
 
         $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $jCol): void {
             $inner = $database->find($mCol, [
-                Query::join($jCol, '$id', 'mainId'),
+                Query::join($jCol, 'j0', [Query::on('$id', 'mainId')]),
             ]);
             $this->assertSame(1, \count($inner));
             $this->assertSame('m1', $inner[0]->getId());
@@ -5379,14 +5379,14 @@ trait JoinTests
             $this->assertSecretJoinPayloadHidden($inner, 'j-secret', 999, 'user:other');
 
             $left = $database->find($mCol, [
-                Query::leftJoin($jCol, '$id', 'mainId'),
+                Query::leftJoin($jCol, 'j0', [Query::on('$id', 'mainId')]),
             ]);
             $this->assertSame(1, \count($left));
             $this->assertSame('m1', $left[0]->getId());
             $this->assertSecretJoinPayloadHidden($left, 'j-secret', 999, 'user:other');
 
             $document = $database->getDocument($mCol, 'm1', [
-                Query::leftJoin($jCol, '$id', 'mainId'),
+                Query::leftJoin($jCol, 'j0', [Query::on('$id', 'mainId')]),
             ]);
             $this->assertSame(false, $document->isEmpty());
             $this->assertSame('m1', $document->getId());
@@ -5441,8 +5441,8 @@ trait JoinTests
         $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $aCol, $bCol, $cCol): void {
             try {
                 $results = $database->find($aCol, [
-                    Query::join($bCol, '$id', 'aId', '=', 'b'),
-                    Query::join($cCol, 'b.$id', 'bId', '=', 'c'),
+                    Query::join($bCol, 'b', [Query::on('$id', 'aId')]),
+                    Query::join($cCol, 'c', [Query::on('b.$id', 'bId')]),
                 ]);
                 foreach ($results as $document) {
                     $encoded = \json_encode($document);
@@ -5491,7 +5491,7 @@ trait JoinTests
 
         $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $jCol): void {
             $document = $database->getDocument($mCol, 'm1', [
-                Query::leftJoin($jCol, '$id', 'mainId'),
+                Query::leftJoin($jCol, 'j0', [Query::on('$id', 'mainId')]),
             ]);
             $this->assertSame(false, $document->isEmpty());
             $this->assertSame('m1', $document->getId());
@@ -5780,16 +5780,16 @@ trait JoinTests
         [$main, $first, $second] = $this->createAliasCollections($database);
 
         $declaredFirst = $database->find($main, [
-            Query::join($first, '$id', 'mainId', '=', 'j1'),
-            Query::join($second, '$id', 'mainId'),
+            Query::join($first, 'j1', [Query::on('$id', 'mainId')]),
+            Query::join($second, 'j2', [Query::on('$id', 'mainId')]),
             Query::select(['name', 'j1.score']),
         ]);
         $this->assertCount(1, $declaredFirst);
         $this->assertSame(1, $this->scoreOf($declaredFirst[0], 'j1.score'));
 
         $declaredLater = $database->find($main, [
-            Query::join($first, '$id', 'mainId'),
-            Query::join($second, '$id', 'mainId', '=', 'j0'),
+            Query::join($first, 'j1', [Query::on('$id', 'mainId')]),
+            Query::join($second, 'j0', [Query::on('$id', 'mainId')]),
             Query::select(['name', 'j0.score']),
         ]);
         $this->assertCount(1, $declaredLater);
@@ -5797,11 +5797,11 @@ trait JoinTests
 
         foreach ([
             'the same alias twice' => [
-                Query::join($first, '$id', 'mainId', '=', 'x'),
-                Query::join($second, '$id', 'mainId', '=', 'x'),
+                Query::join($first, 'x', [Query::on('$id', 'mainId')]),
+                Query::join($second, 'x', [Query::on('$id', 'mainId')]),
             ],
             'the main collection alias' => [
-                Query::join($first, '$id', 'mainId', '=', Query::DEFAULT_ALIAS),
+                Query::join($first, Query::DEFAULT_ALIAS, [Query::on('$id', 'mainId')]),
             ],
         ] as $label => $joins) {
             $this->assertJoinQueryRejected(fn () => $database->find($main, $joins), "find with {$label}");
@@ -5826,8 +5826,8 @@ trait JoinTests
         \sort($expected);
 
         foreach ([
-            'find' => $database->find($main, [Query::join($first, '$id', 'mainId', '=', 'ord')]),
-            'getDocument' => [$database->getDocument($main, 'm1', [Query::leftJoin($first, '$id', 'mainId', '=', 'ord')])],
+            'find' => $database->find($main, [Query::join($first, 'ord', [Query::on('$id', 'mainId')])]),
+            'getDocument' => [$database->getDocument($main, 'm1', [Query::leftJoin($first, 'ord', [Query::on('$id', 'mainId')])])],
         ] as $label => $rows) {
             $this->assertCount(1, $rows, $label);
             $keys = \array_keys($rows[0]->getArrayCopy());
@@ -5902,7 +5902,7 @@ trait JoinTests
 
         $attributes = ['mainId', 'total', 'price', 'paid', 'placedAt', 'tags', 'meta', 'secret'];
         $direct = $database->getDocument($joined, 'jm1');
-        $join = Query::join($joined, '$id', 'mainId', '=', 'dec');
+        $join = Query::join($joined, 'dec', [Query::on('$id', 'mainId')]);
         $selected = Query::select(['name', ...\array_map(static fn (string $attribute): string => 'dec.'.$attribute, $attributes)]);
 
         foreach ([
@@ -5959,12 +5959,12 @@ trait JoinTests
 
         foreach ([
             'on the main collection' => [
-                Query::fullOuterJoin($first, '$id', 'mainId', '=', 'b'),
-                Query::rightJoin($second, '$id', 'mainId', '=', 'c'),
+                Query::fullOuterJoin($first, 'b', [Query::on('$id', 'mainId')]),
+                Query::rightJoin($second, 'c', [Query::on('$id', 'mainId')]),
             ],
             'on the full outer joined collection' => [
-                Query::fullOuterJoin($first, '$id', 'mainId', '=', 'b'),
-                Query::rightJoin($second, 'b.mainId', 'mainId', '=', 'c'),
+                Query::fullOuterJoin($first, 'b', [Query::on('$id', 'mainId')]),
+                Query::rightJoin($second, 'c', [Query::on('b.mainId', 'mainId')]),
             ],
         ] as $label => $joins) {
             $rows = $database->find($main, [...$joins, Query::select(['name', 'b.score', 'c.score'])]);
@@ -6012,8 +6012,8 @@ trait JoinTests
         }
 
         $joins = [
-            Query::fullOuterJoin($first, '$id', 'mainId', '=', 'b'),
-            Query::rightJoin($second, 'b.mainId', 'mainId', '=', 'c'),
+            Query::fullOuterJoin($first, 'b', [Query::on('$id', 'mainId')]),
+            Query::rightJoin($second, 'c', [Query::on('b.mainId', 'mainId')]),
         ];
         $rows = $database->find($main, [...$joins, Query::select(['$id', 'b.$id', 'c.$id'])]);
         $values = \array_map(
@@ -6043,8 +6043,8 @@ trait JoinTests
 
         [$main, $first, $second] = $this->createAliasCollections($database);
         $joins = [
-            Query::fullOuterJoin($first, '$id', 'mainId', '=', 'b'),
-            Query::fullOuterJoin($second, 'b.mainId', 'mainId', '=', 'c'),
+            Query::fullOuterJoin($first, 'b', [Query::on('$id', 'mainId')]),
+            Query::fullOuterJoin($second, 'c', [Query::on('b.mainId', 'mainId')]),
         ];
 
         if ($database->getAdapter() instanceof Postgres) {
@@ -6105,7 +6105,7 @@ trait JoinTests
 
         $queries = [
             Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),
-            Query::join($meta, '$id', 'mainId', '=', 'meta'),
+            Query::join($meta, 'meta', [Query::on('$id', 'mainId')]),
             Query::orderAsc('meta.score'),
             Query::limit(2),
         ];
@@ -6138,7 +6138,7 @@ trait JoinTests
         }
 
         [$main, $joined] = $this->createFullOuterJoinAggregateCollections($database);
-        $join = Query::fullOuterJoin($joined, 'link', 'link', '=', 'b');
+        $join = Query::fullOuterJoin($joined, 'b', [Query::on('link', 'link')]);
 
         $rows = $database->find($main, [
             $join,
@@ -6186,7 +6186,7 @@ trait JoinTests
 
         [$main, $joined] = $this->createFullOuterJoinAggregateCollections($database);
         $grouped = [
-            Query::fullOuterJoin($joined, 'link', 'link', '=', 'b'),
+            Query::fullOuterJoin($joined, 'b', [Query::on('link', 'link')]),
             Query::groupBy(['b.category']),
             Query::count('*', 'rows'),
             Query::sum('b.score', 'total'),
@@ -6219,7 +6219,7 @@ trait JoinTests
         }
 
         [$main, $joined] = $this->createFullOuterJoinAggregateCollections($database);
-        $join = Query::fullOuterJoin($joined, 'link', 'link', '=', 'b');
+        $join = Query::fullOuterJoin($joined, 'b', [Query::on('link', 'link')]);
 
         $all = $this->joinedCategories($database->find($main, [$join, Query::distinct(), Query::select(['b.category'])]));
         \sort($all);
@@ -6250,7 +6250,7 @@ trait JoinTests
         [$main, $joined] = $this->createFullOuterJoinAggregateCollections($database);
 
         $message = $this->assertJoinQueryRejected(fn () => $database->find($main, [
-            Query::fullOuterJoin($joined, 'link', 'link', '=', 'b'),
+            Query::fullOuterJoin($joined, 'b', [Query::on('link', 'link')]),
             Query::distinct(),
             Query::select(['b.category']),
             Query::orderAsc('score'),
@@ -6272,8 +6272,8 @@ trait JoinTests
         [$main, $joined] = $this->createFullOuterJoinAggregateCollections($database);
         $aggregates = [Query::count(), Query::sum('b.score'), Query::max('score')];
 
-        $left = $database->find($main, [Query::leftJoin($joined, 'link', 'link', '=', 'b'), ...$aggregates]);
-        $full = $database->find($main, [Query::fullOuterJoin($joined, 'link', 'link', '=', 'b'), ...$aggregates]);
+        $left = $database->find($main, [Query::leftJoin($joined, 'b', [Query::on('link', 'link')]), ...$aggregates]);
+        $full = $database->find($main, [Query::fullOuterJoin($joined, 'b', [Query::on('link', 'link')]), ...$aggregates]);
 
         $this->assertCount(1, $left);
         $this->assertCount(1, $full);
@@ -6429,8 +6429,8 @@ trait JoinTests
 
         [$customers, $orders, $refunds] = $collections = $this->seedJoinedAttributeCollections($database, 'jbaa');
         $joins = [
-            Query::join($orders, '$id', 'customerId', '=', 'alpha'),
-            Query::join($refunds, '$id', 'customerId', '=', 'beta'),
+            Query::join($orders, 'alpha', [Query::on('$id', 'customerId')]),
+            Query::join($refunds, 'beta', [Query::on('$id', 'customerId')]),
         ];
 
         foreach ([
@@ -6469,16 +6469,16 @@ trait JoinTests
         [$customers, $orders, , $notes] = $collections = $this->seedJoinedAttributeCollections($database, 'jbar');
 
         $results = $database->find($customers, [
-            Query::join($notes, '$id', 'customerId', '=', 'note'),
-            Query::join($orders, '$id', 'customerId', '=', 'purchase'),
+            Query::join($notes, 'note', [Query::on('$id', 'customerId')]),
+            Query::join($orders, 'purchase', [Query::on('$id', 'customerId')]),
             Query::sum('amount', 'total'),
         ]);
         $this->assertCount(1, $results);
         $this->assertSame(150, $this->intAttribute($results[0], 'total'));
 
         $results = $database->find($customers, [
-            Query::join($notes, '$id', 'customerId'),
-            Query::join($orders, '$id', 'customerId'),
+            Query::join($notes, 'j0', [Query::on('$id', 'customerId')]),
+            Query::join($orders, 'j1', [Query::on('$id', 'customerId')]),
             Query::sum('amount', 'total'),
             Query::groupBy(['status']),
         ]);
@@ -6492,7 +6492,7 @@ trait JoinTests
         $this->assertSame(['open' => 50, 'paid' => 100], $totals);
 
         $results = $database->find($customers, [
-            Query::leftJoin($notes, '$id', 'customerId', '=', 'note'),
+            Query::leftJoin($notes, 'note', [Query::on('$id', 'customerId')]),
             Query::count('$id', 'customers'),
         ]);
         $this->assertCount(1, $results);
@@ -6511,7 +6511,7 @@ trait JoinTests
 
         [$customers, $orders, , $notes] = $collections = $this->seedJoinedAttributeCollections($database, 'jsfi');
         $unindexed = [
-            Query::join($orders, '$id', 'customerId', '=', 'purchase'),
+            Query::join($orders, 'purchase', [Query::on('$id', 'customerId')]),
             Query::search('purchase.memo', 'gift'),
         ];
 
@@ -6528,7 +6528,7 @@ trait JoinTests
         }
 
         $results = $database->find($customers, [
-            Query::join($notes, '$id', 'customerId', '=', 'note'),
+            Query::join($notes, 'note', [Query::on('$id', 'customerId')]),
             Query::search('note.body', 'needle'),
             Query::select(['name']),
         ]);
@@ -6614,7 +6614,7 @@ trait JoinTests
         $database->createDocument($jCol, new Document(['$id' => 'open-profile', 'mainId' => 'open', 'bio' => 'Hello', '$permissions' => [Permission::read(Role::any())]]));
 
         $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $jCol): void {
-            $join = Query::leftJoin($jCol, '$id', 'mainId', '=', 'profile');
+            $join = Query::leftJoin($jCol, 'profile', [Query::on('$id', 'mainId')]);
 
             $this->assertSame(['bare', 'open'], $this->joinParityIds($database->find($mCol)));
             $this->assertSame(
@@ -6659,7 +6659,7 @@ trait JoinTests
         $database->createDocument($jCol, new Document(['$id' => 'secret-order', 'mainId' => 'customer', 'amount' => 9999, '$permissions' => [Permission::read(Role::user('other'))]]));
 
         $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $jCol): void {
-            $join = Query::join($jCol, '$id', 'mainId', '=', 'ord');
+            $join = Query::join($jCol, 'ord', [Query::on('$id', 'mainId')]);
 
             $this->assertSame([100, 9999], $this->joinParityIntegers($database->find($jCol), 'amount'));
             $this->assertSame(
@@ -6698,7 +6698,7 @@ trait JoinTests
         $database->createDocument($jCol, new Document(['$id' => 'bob-note', 'mainId' => 'customer', 'text' => 'theirs', '$permissions' => [Permission::read(Role::user('bob'))]]));
 
         $this->withAuthorizationRoles($database, [Role::any()->toString(), Role::user('alice')->toString()], function () use ($database, $mCol, $jCol): void {
-            $join = Query::join($jCol, '$id', 'mainId', '=', 'note');
+            $join = Query::join($jCol, 'note', [Query::on('$id', 'mainId')]);
 
             $this->assertSame(['mine'], $this->joinParityStrings($database->find($jCol), 'text'));
             $this->assertSame(
@@ -6740,7 +6740,7 @@ trait JoinTests
         $database->createDocument($jCol, new Document(['$id' => 'entry', 'mainId' => 'customer', '$permissions' => [Permission::read(Role::any())]]));
 
         $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $jCol): void {
-            $join = Query::join($jCol, '$id', 'mainId', '=', 'ledger');
+            $join = Query::join($jCol, 'ledger', [Query::on('$id', 'mainId')]);
             $reads = [
                 'direct find' => fn () => $database->find($jCol),
                 'find' => fn () => $database->find($mCol, [$join]),
@@ -7038,10 +7038,10 @@ trait JoinTests
     private function joinTenancyJoin(Method $method, string $collection, string $alias): Query
     {
         return match ($method) {
-            Method::Join => Query::join($collection, '$id', 'authorId', '=', $alias),
-            Method::LeftJoin => Query::leftJoin($collection, '$id', 'authorId', '=', $alias),
-            Method::RightJoin => Query::rightJoin($collection, '$id', 'authorId', '=', $alias),
-            Method::FullOuterJoin => Query::fullOuterJoin($collection, '$id', 'authorId', '=', $alias),
+            Method::Join => Query::join($collection, $alias, [Query::on('$id', 'authorId')]),
+            Method::LeftJoin => Query::leftJoin($collection, $alias, [Query::on('$id', 'authorId')]),
+            Method::RightJoin => Query::rightJoin($collection, $alias, [Query::on('$id', 'authorId')]),
+            Method::FullOuterJoin => Query::fullOuterJoin($collection, $alias, [Query::on('$id', 'authorId')]),
             Method::CrossJoin => Query::crossJoin($collection, $alias),
             default => throw new \InvalidArgumentException("{$method->value} is not a join"),
         };
@@ -7146,7 +7146,7 @@ trait JoinTests
 
         $rowsByChain = [
             'a cross join, then a right join' => [
-                'joins' => [Query::crossJoin($extras, 'extra'), Query::rightJoin($reviews, '$id', 'authorId', '=', 'review')],
+                'joins' => [Query::crossJoin($extras, 'extra'), Query::rightJoin($reviews, 'review', [Query::on('$id', 'authorId')])],
                 'numbers' => ['extra.weight', 'review.stars'],
                 'rows' => [
                     1 => [[null, null, 5], [null, null, 4], [null, null, 3], [null, null, 2]],
@@ -7154,7 +7154,7 @@ trait JoinTests
                 ],
             ],
             'a cross join, then a right join on it' => [
-                'joins' => [Query::crossJoin($extras, 'extra'), Query::rightJoin($reviews, 'extra.authorId', 'authorId', '=', 'review')],
+                'joins' => [Query::crossJoin($extras, 'extra'), Query::rightJoin($reviews, 'review', [Query::on('extra.authorId', 'authorId')])],
                 'numbers' => ['extra.weight', 'review.stars'],
                 'rows' => [
                     1 => [[null, null, 5], [null, null, 4], [null, null, 3], [null, null, 2]],
@@ -7162,7 +7162,7 @@ trait JoinTests
                 ],
             ],
             'a right join, then a right join on it' => [
-                'joins' => [Query::rightJoin($books, '$id', 'authorId', '=', 'book'), Query::rightJoin($reviews, 'book.authorId', 'authorId', '=', 'review')],
+                'joins' => [Query::rightJoin($books, 'book', [Query::on('$id', 'authorId')]), Query::rightJoin($reviews, 'review', [Query::on('book.authorId', 'authorId')])],
                 'numbers' => ['book.pages', 'review.stars'],
                 'rows' => [
                     1 => [['one-a1', 11, 5], [null, null, 4], [null, null, 3], [null, 12, 2]],
@@ -7170,7 +7170,7 @@ trait JoinTests
                 ],
             ],
             'a full outer join, then a right join' => [
-                'joins' => [Query::fullOuterJoin($books, '$id', 'authorId', '=', 'book'), Query::rightJoin($reviews, '$id', 'authorId', '=', 'review')],
+                'joins' => [Query::fullOuterJoin($books, 'book', [Query::on('$id', 'authorId')]), Query::rightJoin($reviews, 'review', [Query::on('$id', 'authorId')])],
                 'numbers' => ['book.pages', 'review.stars'],
                 'rows' => [
                     1 => [['one-a1', 11, 5], ['one-a2', null, 4], [null, null, 2], [null, null, 3]],
@@ -7178,7 +7178,7 @@ trait JoinTests
                 ],
             ],
             'a right join, then a full outer join on it' => [
-                'joins' => [Query::rightJoin($books, '$id', 'authorId', '=', 'book'), Query::fullOuterJoin($reviews, 'book.authorId', 'authorId', '=', 'review')],
+                'joins' => [Query::rightJoin($books, 'book', [Query::on('$id', 'authorId')]), Query::fullOuterJoin($reviews, 'review', [Query::on('book.authorId', 'authorId')])],
                 'numbers' => ['book.pages', 'review.stars'],
                 'rows' => [
                     1 => [['one-a1', 11, 5], [null, 12, 2], [null, 13, null], [null, null, 3], [null, null, 4]],
@@ -7295,10 +7295,10 @@ trait JoinTests
             [$alias, $number] = [1 => ['book', 'pages'], 2 => ['review', 'stars'], 3 => ['extra', 'weight']][$collection];
             $numbers[] = $alias.'.'.$number;
             $joins[] = match ($method) {
-                Method::Join => Query::join($collections[$collection], $on, 'authorId', '=', $alias),
-                Method::LeftJoin => Query::leftJoin($collections[$collection], $on, 'authorId', '=', $alias),
-                Method::RightJoin => Query::rightJoin($collections[$collection], $on, 'authorId', '=', $alias),
-                Method::FullOuterJoin => Query::fullOuterJoin($collections[$collection], $on, 'authorId', '=', $alias),
+                Method::Join => Query::join($collections[$collection], $alias, [Query::on($on, 'authorId')]),
+                Method::LeftJoin => Query::leftJoin($collections[$collection], $alias, [Query::on($on, 'authorId')]),
+                Method::RightJoin => Query::rightJoin($collections[$collection], $alias, [Query::on($on, 'authorId')]),
+                Method::FullOuterJoin => Query::fullOuterJoin($collections[$collection], $alias, [Query::on($on, 'authorId')]),
                 Method::CrossJoin => Query::crossJoin($collections[$collection], $alias),
                 default => throw new \InvalidArgumentException("{$method->value} is not a join"),
             };
@@ -7434,10 +7434,10 @@ trait JoinTests
             $numbers[] = $alias.'.'.[1 => 'pages', 2 => 'stars', 3 => 'weight'][$collection];
             $left = $on === null ? '$id' : $aliases[$on].'.authorId';
             $joins[] = match ($method) {
-                Method::Join => Query::join($collections[$collection], $left, 'authorId', '=', $alias),
-                Method::LeftJoin => Query::leftJoin($collections[$collection], $left, 'authorId', '=', $alias),
-                Method::RightJoin => Query::rightJoin($collections[$collection], $left, 'authorId', '=', $alias),
-                Method::FullOuterJoin => Query::fullOuterJoin($collections[$collection], $left, 'authorId', '=', $alias),
+                Method::Join => Query::join($collections[$collection], $alias, [Query::on($left, 'authorId')]),
+                Method::LeftJoin => Query::leftJoin($collections[$collection], $alias, [Query::on($left, 'authorId')]),
+                Method::RightJoin => Query::rightJoin($collections[$collection], $alias, [Query::on($left, 'authorId')]),
+                Method::FullOuterJoin => Query::fullOuterJoin($collections[$collection], $alias, [Query::on($left, 'authorId')]),
                 Method::CrossJoin => Query::crossJoin($collections[$collection], $alias),
                 default => throw new \InvalidArgumentException("{$method->value} is not a join"),
             };
@@ -7493,12 +7493,12 @@ trait JoinTests
 
         $this->assertSame(
             [['m1', 'first', 'j1', 1]],
-            $this->orderColumnSummaries($database->find($main, [Query::join($joined, 'link', 'link', '=', $alias)]), $alias),
+            $this->orderColumnSummaries($database->find($main, [Query::join($joined, $alias, [Query::on('link', 'link')])]), $alias),
             'find',
         );
         $this->assertSame(
             [['m1', 'first', 'j1', 1]],
-            $this->orderColumnSummaries([$database->getDocument($main, 'm1', [Query::leftJoin($joined, 'link', 'link', '=', $alias)])], $alias),
+            $this->orderColumnSummaries([$database->getDocument($main, 'm1', [Query::leftJoin($joined, $alias, [Query::on('link', 'link')])])], $alias),
             'getDocument',
         );
 
@@ -7518,12 +7518,12 @@ trait JoinTests
      */
     private function assertOrderColumnFullOuterJoin(Database $database, string $main, string $joined, string $alias, array $orders): void
     {
-        $leftJoined = $database->find($main, [Query::leftJoin($joined, 'link', 'link', '=', $alias)]);
+        $leftJoined = $database->find($main, [Query::leftJoin($joined, $alias, [Query::on('link', 'link')])]);
         $this->assertCount(2, $leftJoined);
         $columns = $this->orderColumnKeys($leftJoined[0]);
 
         foreach ($orders as $label => [$order, $key, $ordered]) {
-            $rows = $database->find($main, [Query::fullOuterJoin($joined, 'link', 'link', '=', $alias), $order]);
+            $rows = $database->find($main, [Query::fullOuterJoin($joined, $alias, [Query::on('link', 'link')]), $order]);
 
             $summaries = $this->orderColumnSummaries($rows, $alias);
             \usort($summaries, static fn (array $left, array $right): int => \strcmp((string) \json_encode($left), (string) \json_encode($right)));
@@ -7634,7 +7634,7 @@ trait JoinTests
         }
 
         [$customers, $orders] = $collections = $this->seedJoinedAttributeCollections($database, 'jcnd');
-        $join = Query::join($orders, '$id', 'customerId', '=', 'purchase');
+        $join = Query::join($orders, 'purchase', [Query::on('$id', 'customerId')]);
 
         $reads = [
             'filter' => fn () => $database->find($customers, [$join, Query::equal('purchase.nothing', ['x'])]),
@@ -7727,8 +7727,8 @@ trait JoinTests
 
         [$customers, $orders, , $notes] = $collections = $this->seedJoinedAttributeCollections($database, 'jnsa');
         $joins = [
-            Query::join($orders, '$id', 'customerId', '=', 'purchase'),
-            Query::join($notes, '$id', 'customerId', '=', 'note'),
+            Query::join($orders, 'purchase', [Query::on('$id', 'customerId')]),
+            Query::join($notes, 'note', [Query::on('$id', 'customerId')]),
         ];
 
         foreach ([
@@ -7764,9 +7764,9 @@ trait JoinTests
         [$customers, $orders] = $collections = $this->seedJoinedAttributeCollections($database, 'jiag');
 
         foreach ([
-            'inner join' => Query::join($orders, '$id', 'customerId', '=', 'purchase'),
-            'left join' => Query::leftJoin($orders, '$id', 'customerId', '=', 'purchase'),
-            'full outer join' => Query::fullOuterJoin($orders, '$id', 'customerId', '=', 'purchase'),
+            'inner join' => Query::join($orders, 'purchase', [Query::on('$id', 'customerId')]),
+            'left join' => Query::leftJoin($orders, 'purchase', [Query::on('$id', 'customerId')]),
+            'full outer join' => Query::fullOuterJoin($orders, 'purchase', [Query::on('$id', 'customerId')]),
         ] as $type => $join) {
             foreach ([Document::ID, Document::SEQUENCE, Document::CREATED_AT, Document::UPDATED_AT, Document::PERMISSIONS] as $attribute) {
                 $total = 0;
@@ -7779,7 +7779,7 @@ trait JoinTests
         }
 
         $groups = $database->find($customers, [
-            Query::join($orders, '$id', 'customerId', '=', 'purchase'),
+            Query::join($orders, 'purchase', [Query::on('$id', 'customerId')]),
             Query::sum('purchase.amount', 'total'),
             Query::groupBy(['purchase.$id']),
             Query::orderAsc('purchase.$id'),
@@ -7799,17 +7799,17 @@ trait JoinTests
         }
 
         [$customers, $orders, , $notes] = $collections = $this->seedJoinedAttributeCollections($database, 'jcnc');
-        $purchase = Query::join($orders, '$id', 'customerId', '=', 'purchase');
+        $purchase = Query::join($orders, 'purchase', [Query::on('$id', 'customerId')]);
         $notFound = 'Invalid query: Attribute not found in schema: ';
 
         foreach ([
-            'an unknown right column' => [[Query::join($orders, '$id', 'nothing', '=', 'purchase')], $notFound.'nothing'],
-            'an unknown left column' => [[Query::join($orders, 'nothing', 'customerId', '=', 'purchase')], $notFound.'nothing'],
+            'an unknown right column' => [[Query::join($orders, 'purchase', [Query::on('$id', 'nothing')])], $notFound.'nothing'],
+            'an unknown left column' => [[Query::join($orders, 'purchase', [Query::on('nothing', 'customerId')])], $notFound.'nothing'],
             'an unknown right column of an on condition' => [[Query::leftJoin($notes, 'note', [Query::on('$id', 'nothing')])], $notFound.'nothing'],
             'an unknown left column of an on condition' => [[Query::leftJoin($notes, 'note', [Query::on('nothing', 'customerId')])], $notFound.'nothing'],
-            'an unknown column of an earlier join' => [[$purchase, Query::join($notes, 'purchase.nothing', 'customerId', '=', 'note')], $notFound.'purchase.nothing'],
+            'an unknown column of an earlier join' => [[$purchase, Query::join($notes, 'note', [Query::on('purchase.nothing', 'customerId')])], $notFound.'purchase.nothing'],
             'a join declared after it' => [
-                [Query::join($notes, 'purchase.customerId', 'customerId', '=', 'note'), $purchase],
+                [Query::join($notes, 'note', [Query::on('purchase.customerId', 'customerId')]), $purchase],
                 'Invalid query: The left column of a join condition must belong to the main collection or to a join declared before it: purchase.customerId',
             ],
         ] as $shape => [$joins, $message]) {
@@ -7829,7 +7829,7 @@ trait JoinTests
         }
 
         $this->assertSame(3, $database->count($customers, [Query::leftJoin($orders, 'purchase', [Query::on('$id', 'purchase.customerId')])]));
-        $this->assertSame(2, $database->count($customers, [$purchase, Query::join($notes, 'purchase.customerId', 'customerId', '=', 'note')]), 'a join names the columns of the join before it');
+        $this->assertSame(2, $database->count($customers, [$purchase, Query::join($notes, 'note', [Query::on('purchase.customerId', 'customerId')])]), 'a join names the columns of the join before it');
 
         $this->cleanupAggCollections($database, $collections);
     }
@@ -7844,7 +7844,7 @@ trait JoinTests
 
         $joins = $database->getAdapter()->supports(Capability::Joins);
         [$customers, $orders] = $collections = $this->seedJoinedAttributeCollections($database, 'jsum');
-        $purchase = Query::join($orders, '$id', 'customerId', '=', 'purchase');
+        $purchase = Query::join($orders, 'purchase', [Query::on('$id', 'customerId')]);
         $notFound = 'Invalid query: Attribute not found in schema: ';
         $numeric = 'Invalid query: Aggregate sum requires a numeric attribute that is not an array: ';
 
@@ -7888,7 +7888,7 @@ trait JoinTests
         }
 
         [$customers, $orders] = $collections = $this->seedJoinedAttributeCollections($database, 'jten');
-        $purchase = Query::join($orders, '$id', 'customerId', '=', 'purchase');
+        $purchase = Query::join($orders, 'purchase', [Query::on('$id', 'customerId')]);
 
         foreach ([
             'count' => [Query::count('$collection', 'total')],
@@ -7989,7 +7989,7 @@ trait JoinTests
             for ($joins = 1; $joins <= 4; $joins++) {
                 $queries = [];
                 for ($join = 1; $join <= $joins; $join++) {
-                    $queries[] = Query::join($collection, '$id', '$id', '=', 'p'.$join);
+                    $queries[] = Query::join($collection, 'p'.$join, [Query::on('$id', '$id')]);
                 }
 
                 $profiler->reset();
@@ -8064,7 +8064,7 @@ trait JoinTests
             $database->createDocument($posts, new Document(['$id' => 'post_'.$author, 'authorId' => $author, 'body' => $body]));
         }
 
-        $join = Query::join($posts, '$id', 'authorId', '=', 'post');
+        $join = Query::join($posts, 'post', [Query::on('$id', 'authorId')]);
         $sorted = static function (array $ids): array {
             /** @var array<string> $ids */
             \sort($ids);
@@ -8164,7 +8164,7 @@ trait JoinTests
                 $ids($database->find($themes, [$direct])),
             ), $name.': the same filter on the joined collection');
 
-            $join = Query::join($themes, 'theme', '$id', '=', 'th');
+            $join = Query::join($themes, 'th', [Query::on('theme', '$id')]);
             $this->assertSame($expected, $ids($database->find($tickets, [$join, $joined])), $name.': find()');
             $this->assertSame(\count($expected), $database->count($tickets, [$join, $joined]), $name.': count()');
             $this->assertEquals(
@@ -8181,7 +8181,7 @@ trait JoinTests
         }
 
         $grouped = $database->find($tickets, [
-            Query::join($themes, 'theme', '$id', '=', 'th'),
+            Query::join($themes, 'th', [Query::on('theme', '$id')]),
             Query::count('*', 'total'),
             Query::groupBy(['th.when']),
             Query::having([Query::greaterThan('th.when', $later)]),
@@ -8218,7 +8218,7 @@ trait JoinTests
         }
 
         [$authors, $notes] = $this->seedJoinCursorFixture($database);
-        $joinQuery = new Query($join, $notes, ['$id', '=', 'author', 'n']);
+        $joinQuery = new Query($join, $notes, [Query::on('$id', 'author')], 'n');
 
         foreach ([
             'joined ascending' => [Query::orderAsc('n.score')],
@@ -8280,11 +8280,11 @@ trait JoinTests
         }
 
         [$authors, $notes] = $this->seedJoinCursorFixture($database);
-        $join = Query::join($notes, '$id', 'author', '=', 'n');
+        $join = Query::join($notes, 'n', [Query::on('$id', 'author')]);
 
         $withoutValue = $database->find($authors, [$join, Query::orderAsc('n.score'), Query::limit(1)])[0];
         $withoutValue->removeAttribute('n.score');
-        $otherShape = $database->find($authors, [Query::join($notes, '$id', 'author', '=', 'other'), Query::orderAsc('score'), Query::limit(1)])[0];
+        $otherShape = $database->find($authors, [Query::join($notes, 'other', [Query::on('$id', 'author')]), Query::orderAsc('score'), Query::limit(1)])[0];
 
         foreach ([
             'a cursor without its joined order value' => [$withoutValue, [$join, Query::orderAsc('n.score')], 'n.score'],
@@ -8316,7 +8316,7 @@ trait JoinTests
 
         foreach ([
             'distinct read' => [$notes, [Query::distinct(), Query::select(['label']), Query::orderAsc('label')], 'label', ['x', 'y', 'z']],
-            'distinct read over a join' => [$authors, [Query::join($notes, '$id', 'author', '=', 'n'), Query::distinct(), Query::select(['n.label']), Query::orderDesc('n.label')], 'n.label', ['y', 'x']],
+            'distinct read over a join' => [$authors, [Query::join($notes, 'n', [Query::on('$id', 'author')]), Query::distinct(), Query::select(['n.label']), Query::orderDesc('n.label')], 'n.label', ['y', 'x']],
         ] as $label => [$collection, $queries, $attribute, $values]) {
             $paged = [];
             $cursor = null;
@@ -8374,7 +8374,7 @@ trait JoinTests
         }
 
         foreach ([Method::Join, Method::LeftJoin, Method::RightJoin, Method::FullOuterJoin] as $join) {
-            $document = $database->getDocument($authors, 'a1', [new Query($join, $drafts, ['$id', '=', 'author', 'd'])]);
+            $document = $database->getDocument($authors, 'a1', [new Query($join, $drafts, [Query::on('$id', 'author')], 'd')]);
             $this->assertSame('d-first', $document->getAttribute('d.$id'), $join->value);
         }
 
@@ -8497,7 +8497,7 @@ trait JoinTests
         }
 
         [$authors, $notes] = $this->seedJoinCursorFixture($database);
-        $joinQuery = new Query($join, $notes, ['$id', '=', 'author', 'n']);
+        $joinQuery = new Query($join, $notes, [Query::on('$id', 'author')], 'n');
 
         foreach (['ascending' => true, 'descending' => false] as $label => $ascending) {
             $queries = [$joinQuery, $ascending ? Query::orderAsc('label') : Query::orderDesc('label')];
@@ -8542,7 +8542,7 @@ trait JoinTests
             $this->assertSame(\array_slice($keys, 0, -1), $backward, "{$label}: paging backward in pages of two from the last row");
         }
 
-        $twice = [Query::leftJoin($notes, '$id', 'author', '=', 'n'), Query::leftJoin($notes, '$id', 'author', '=', 'm')];
+        $twice = [Query::leftJoin($notes, 'n', [Query::on('$id', 'author')]), Query::leftJoin($notes, 'm', [Query::on('$id', 'author')])];
         $cursor = $database->find($authors, [...$twice, Query::orderAsc('n.label'), Query::limit(1)])[0];
         try {
             $database->find($authors, [...$twice, Query::orderAsc('label'), Query::cursorAfter($cursor)]);
@@ -8573,7 +8573,7 @@ trait JoinTests
         }
 
         [$authors, $notes] = $this->seedJoinCursorFixture($database);
-        $joinQuery = new Query($join, $notes, ['$id', '=', 'author', 'n']);
+        $joinQuery = new Query($join, $notes, [Query::on('$id', 'author')], 'n');
 
         $direct = [];
         foreach ($database->find($notes, [Query::limit(100)]) as $note) {
@@ -8648,7 +8648,7 @@ trait JoinTests
         }
 
         [$authors, $notes] = $this->seedJoinCursorFixture($database);
-        $joinQuery = new Query($join, $notes, ['$id', '=', 'author', 'n']);
+        $joinQuery = new Query($join, $notes, [Query::on('$id', 'author')], 'n');
         $expected = $rows;
         \sort($expected);
 
@@ -8741,7 +8741,7 @@ trait JoinTests
             $database->createDocument($notes, new Document(['$id' => $note, 'customerId' => $customer, 'body' => $note]));
         }
 
-        $join = Query::fullOuterJoin($notes, '$id', 'customerId', '=', 'note');
+        $join = Query::fullOuterJoin($notes, 'note', [Query::on('$id', 'customerId')]);
         $select = Query::select(['name', 'note.body']);
         /**
          * @param array<Document> $documents
@@ -8814,7 +8814,7 @@ trait JoinTests
             $database->createDocument($notes, new Document(['$id' => $id, 'author' => $author, 'score' => $score, '$permissions' => $visible ? $readable : $hidden]));
         }
 
-        $join = Query::leftJoin($notes, '$id', 'author', '=', 'n');
+        $join = Query::leftJoin($notes, 'n', [Query::on('$id', 'author')]);
 
         try {
             foreach ([
@@ -8929,8 +8929,8 @@ trait JoinTests
             $database->createDocument($notes, new Document(['$id' => $id, 'author' => $author, 'score' => $score, '$permissions' => $visible ? $readable : $hidden]));
         }
 
-        $inner = Query::join($notes, '$id', 'author', '=', 'n');
-        $left = Query::leftJoin($notes, '$id', 'author', '=', 'n');
+        $inner = Query::join($notes, 'n', [Query::on('$id', 'author')]);
+        $left = Query::leftJoin($notes, 'n', [Query::on('$id', 'author')]);
         $everyNote = ['a1/n1', 'a1/n2', 'a1/n3', 'a2/n4', 'a3/n5', 'a6/n10', 'a6/n9', 'a9/n11'];
         $reads = [
             'inner join' => [[$inner], $everyNote],

@@ -81,7 +81,7 @@ final class FullOuterJoinAggregateTest extends TestCase
         $database = $this->database(native: false, documentSecurity: false, sharedTables: false);
 
         $rows = $database->find('main', [
-            Query::fullOuterJoin('b', self::LINK, self::LINK, '=', 'b'),
+            Query::fullOuterJoin('b', 'b', [Query::on(self::LINK, self::LINK)]),
             Query::count('*', 'rows'),
             Query::sum('b.score', 'total'),
         ]);
@@ -94,7 +94,7 @@ final class FullOuterJoinAggregateTest extends TestCase
         $database = $this->database(native: false, documentSecurity: false, sharedTables: false);
 
         $rows = $database->find('main', [
-            Query::fullOuterJoin('b', self::LINK, self::LINK, '=', 'b'),
+            Query::fullOuterJoin('b', 'b', [Query::on(self::LINK, self::LINK)]),
             Query::distinct(),
             Query::select(['b.category']),
         ]);
@@ -134,7 +134,7 @@ final class FullOuterJoinAggregateTest extends TestCase
         $native = $this->database(native: true, documentSecurity: true, sharedTables: true);
 
         $totals = $emulated->find('main', [
-            Query::fullOuterJoin('b', self::LINK, self::LINK, '=', 'b'),
+            Query::fullOuterJoin('b', 'b', [Query::on(self::LINK, self::LINK)]),
             Query::count('*', 'rows'),
             Query::sum('b.score', 'total'),
         ]);
@@ -155,7 +155,7 @@ final class FullOuterJoinAggregateTest extends TestCase
         $emulated = $this->database(native: false, documentSecurity: false, sharedTables: false);
         $native = $this->database(native: true, documentSecurity: false, sharedTables: false);
         $queries = [
-            Query::fullOuterJoin('b', self::LINK, self::LINK, '=', 'b'),
+            Query::fullOuterJoin('b', 'b', [Query::on(self::LINK, self::LINK)]),
             Query::count(),
             Query::sum('b.score'),
             Query::max('score'),
@@ -175,7 +175,7 @@ final class FullOuterJoinAggregateTest extends TestCase
     public function testDistinctOrderedByAnUnselectedAttributeIsRejectedWhenEmulated(): void
     {
         $queries = [
-            Query::fullOuterJoin('b', self::LINK, self::LINK, '=', 'b'),
+            Query::fullOuterJoin('b', 'b', [Query::on(self::LINK, self::LINK)]),
             Query::distinct(),
             Query::select(['b.category']),
             Query::orderAsc(self::SCORE),
@@ -378,10 +378,10 @@ final class FullOuterJoinAggregateTest extends TestCase
 
         return match ($method) {
             Method::CrossJoin => Query::crossJoin($collection, $collection),
-            Method::Join => Query::join($collection, $left, self::LINK, '=', $collection),
-            Method::LeftJoin => Query::leftJoin($collection, $left, self::LINK, '=', $collection),
-            Method::RightJoin => Query::rightJoin($collection, $left, self::LINK, '=', $collection),
-            default => Query::fullOuterJoin($collection, $left, self::LINK, '=', $collection),
+            Method::Join => Query::join($collection, $collection, [Query::on($left, self::LINK)]),
+            Method::LeftJoin => Query::leftJoin($collection, $collection, [Query::on($left, self::LINK)]),
+            Method::RightJoin => Query::rightJoin($collection, $collection, [Query::on($left, self::LINK)]),
+            default => Query::fullOuterJoin($collection, $collection, [Query::on($left, self::LINK)]),
         };
     }
 

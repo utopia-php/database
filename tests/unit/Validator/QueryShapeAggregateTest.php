@@ -87,7 +87,7 @@ class QueryShapeAggregateTest extends TestCase
         $validator = $this->validator();
 
         $this->assertTrue($validator->isValid([
-            Query::leftJoin('reviews', '$id', 'product', '=', 'review'),
+            Query::leftJoin('reviews', 'review', [Query::on('$id', 'product')]),
             Query::sum('review.score', 'total'),
             Query::bitAnd('review.flags', 'bits'),
         ]), $validator->getDescription());

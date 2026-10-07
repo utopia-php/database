@@ -905,7 +905,7 @@ trait AggregationTests
         $this->createCustomers($database, 'ij_customers');
 
         $results = $database->find('ij_orders', [
-            Query::join('ij_customers', 'customer_uid', '$id'),
+            Query::join('ij_customers', 'j0', [Query::on('customer_uid', '$id')]),
             Query::count('*', 'total'),
         ]);
 
@@ -927,7 +927,7 @@ trait AggregationTests
         $this->createCustomers($database, 'ij_grp_c');
 
         $results = $database->find('ij_grp_o', [
-            Query::join('ij_grp_c', 'customer_uid', '$id'),
+            Query::join('ij_grp_c', 'j0', [Query::on('customer_uid', '$id')]),
             Query::sum('total', 'total_spent'),
             Query::count('*', 'order_count'),
             Query::groupBy(['customer_uid']),
@@ -960,7 +960,7 @@ trait AggregationTests
         $this->createCustomers($database, 'ij_filt_c');
 
         $results = $database->find('ij_filt_o', [
-            Query::join('ij_filt_c', 'customer_uid', '$id'),
+            Query::join('ij_filt_c', 'j0', [Query::on('customer_uid', '$id')]),
             Query::equal('status', ['completed']),
             Query::sum('total', 'revenue'),
             Query::groupBy(['customer_uid']),
@@ -992,7 +992,7 @@ trait AggregationTests
         $this->createCustomers($database, 'ij_hav_c');
 
         $results = $database->find('ij_hav_o', [
-            Query::join('ij_hav_c', 'customer_uid', '$id'),
+            Query::join('ij_hav_c', 'j0', [Query::on('customer_uid', '$id')]),
             Query::sum('total', 'total_spent'),
             Query::groupBy(['customer_uid']),
             Query::having([Query::greaterThan('total_spent', 1000)]),
@@ -1019,7 +1019,7 @@ trait AggregationTests
         $this->createReviews($database, 'ij_prs_r');
 
         $results = $database->find('ij_prs_p', [
-            Query::join('ij_prs_r', '$id', 'product_uid'),
+            Query::join('ij_prs_r', 'j0', [Query::on('$id', 'product_uid')]),
             Query::count('*', 'review_count'),
             Query::avg('score', 'avg_score'),
             Query::groupBy(['name']),
@@ -1052,7 +1052,7 @@ trait AggregationTests
         $this->createReviews($database, 'lj_basic_r');
 
         $results = $database->find('lj_basic_p', [
-            Query::leftJoin('lj_basic_r', '$id', 'product_uid'),
+            Query::leftJoin('lj_basic_r', 'j0', [Query::on('$id', 'product_uid')]),
             Query::count('*', 'review_count'),
             Query::groupBy(['name']),
         ]);
@@ -1086,7 +1086,7 @@ trait AggregationTests
         $this->createOrders($database, 'lj_filt_o');
 
         $results = $database->find('lj_filt_p', [
-            Query::leftJoin('lj_filt_o', '$id', 'product_uid'),
+            Query::leftJoin('lj_filt_o', 'j0', [Query::on('$id', 'product_uid')]),
             Query::equal('category', ['electronics']),
             Query::count('*', 'order_count'),
             Query::sum('quantity', 'total_qty'),
@@ -1119,7 +1119,7 @@ trait AggregationTests
         $this->createOrders($database, 'lj_cos_o');
 
         $results = $database->find('lj_cos_c', [
-            Query::leftJoin('lj_cos_o', '$id', 'customer_uid'),
+            Query::leftJoin('lj_cos_o', 'j0', [Query::on('$id', 'customer_uid')]),
             Query::count('*', 'order_count'),
             Query::groupBy(['name']),
         ]);
@@ -1187,7 +1187,7 @@ trait AggregationTests
         $database->getAuthorization()->addRole(Role::user('viewer')->toString());
 
         $results = $database->find('jp_apg_o', [
-            Query::join('jp_apg_c', 'customer_uid', '$id'),
+            Query::join('jp_apg_c', 'j0', [Query::on('customer_uid', '$id')]),
             Query::sum('amount', 'total'),
             Query::count('*', 'cnt'),
             Query::groupBy(['customer_uid']),
@@ -1248,7 +1248,7 @@ trait AggregationTests
         $database->getAuthorization()->addRole(Role::user('tester')->toString());
 
         $results = $database->find('jp_ljpf_p', [
-            Query::leftJoin('jp_ljpf_r', '$id', 'product_uid'),
+            Query::leftJoin('jp_ljpf_r', 'j0', [Query::on('$id', 'product_uid')]),
             Query::count('*', 'review_count'),
             Query::groupBy(['name']),
         ]);
@@ -2111,10 +2111,10 @@ trait AggregationTests
         }
 
         foreach ([
-            'inner join' => [Query::join($joined, 'link', 'link', '=', 'other'), 10, 1],
-            'left join' => [Query::leftJoin($joined, 'link', 'link', '=', 'other'), 30, 2],
-            'right join' => [Query::rightJoin($joined, 'link', 'link', '=', 'other'), 10, 2],
-            'full outer join' => [Query::fullOuterJoin($joined, 'link', 'link', '=', 'other'), 30, 3],
+            'inner join' => [Query::join($joined, 'other', [Query::on('link', 'link')]), 10, 1],
+            'left join' => [Query::leftJoin($joined, 'other', [Query::on('link', 'link')]), 30, 2],
+            'right join' => [Query::rightJoin($joined, 'other', [Query::on('link', 'link')]), 10, 2],
+            'full outer join' => [Query::fullOuterJoin($joined, 'other', [Query::on('link', 'link')]), 30, 3],
         ] as $type => [$join, $total, $rows]) {
             $own = $database->find($main, [$join, Query::sum('score', 'score')]);
             $this->assertCount(1, $own, $type);
@@ -2208,7 +2208,7 @@ trait AggregationTests
         if ($database->getAdapter()->supports(Capability::Joins)) {
             $orders = 'agg_select_ungrouped_orders';
             $this->createOrders($database, $orders);
-            $product = Query::join($collection, 'product_uid', '$id', '=', 'product');
+            $product = Query::join($collection, 'product', [Query::on('product_uid', '$id')]);
 
             foreach ([
                 ['product.name', [$product, Query::count('*', 'total'), Query::groupBy(['status']), Query::select(['product.name'])]],
@@ -2293,7 +2293,7 @@ trait AggregationTests
             $this->assertSame(['status', 'total'], $this->sortedAttributeNames($groups[0]));
 
             if ($adapter->supports(Capability::Joins)) {
-                $joined = $database->find($customers, [Query::fullOuterJoin($accounts, 'account', '$id', '=', 'owned'), Query::count('*', 'total'), Query::select($selects)]);
+                $joined = $database->find($customers, [Query::fullOuterJoin($accounts, 'owned', [Query::on('account', '$id')]), Query::count('*', 'total'), Query::select($selects)]);
                 $this->assertCount(1, $joined);
                 $this->assertSame(['total'], $this->sortedAttributeNames($joined[0]));
                 $this->assertSame(3, $this->intAttribute($joined[0], 'total'));
@@ -2335,8 +2335,8 @@ trait AggregationTests
             $this->createOrders($database, $orders);
 
             foreach ([
-                'inner join' => [Query::join($collection, 'product_uid', '$id', '=', 'product'), [2, 3, 5]],
-                'full outer join' => [Query::fullOuterJoin($collection, 'product_uid', '$id', '=', 'product'), [3, 3, 5]],
+                'inner join' => [Query::join($collection, 'product', [Query::on('product_uid', '$id')]), [2, 3, 5]],
+                'full outer join' => [Query::fullOuterJoin($collection, 'product', [Query::on('product_uid', '$id')]), [3, 3, 5]],
             ] as $type => [$product, $totals]) {
                 $groups = $database->find($orders, [$product, Query::count('*', 'total'), Query::groupBy(['product.category']), Query::select(['product.category']), Query::orderAsc('product.category')]);
                 $this->assertSame(['books', 'clothing', 'electronics'], \array_map(fn (Document $group): mixed => $group->getAttribute('category'), $groups), $type);

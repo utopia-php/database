@@ -30,6 +30,7 @@ use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Queries\Document as DocumentQueries;
 use Utopia\Database\Validator\Query\Aggregate;
 use Utopia\Database\Validator\Query\Join;
+use Utopia\Query\Exception\ValidationException;
 use Utopia\Query\Method;
 use Utopia\Query\Schema\ColumnType;
 
@@ -104,9 +105,9 @@ final class QueryValidationTest extends TestCase
         $message = 'Join alias "author" is the key of the relationship attribute "author": give the join another alias';
 
         foreach ([
-            'inline condition' => Query::join('users', 'owner', '$id', '=', 'author'),
+            'inline condition' => Query::join('users', 'author', [Query::on('owner', '$id')]),
             'on() condition' => Query::join('users', 'author', [Query::on('owner', '$id')]),
-            'left join' => Query::leftJoin('users', 'owner', '$id', '=', 'author'),
+            'left join' => Query::leftJoin('users', 'author', [Query::on('owner', '$id')]),
         ] as $shape => $join) {
             $queries = [$join, Query::equal('author.name', ['Bob'])];
 
@@ -118,13 +119,13 @@ final class QueryValidationTest extends TestCase
 
         $this->assertInvalidQuery(
             $message,
-            fn (): mixed => $this->database->find('posts', [Query::join('users', 'owner', '$id', '=', 'author'), Query::count('*', 'rows'), Query::select(['author.*'])]),
+            fn (): mixed => $this->database->find('posts', [Query::join('users', 'author', [Query::on('owner', '$id')]), Query::count('*', 'rows'), Query::select(['author.*'])]),
             'an aggregate next to the relationship wildcard',
         );
 
-        $joined = $this->database->find('posts', [Query::join('users', 'owner', '$id', '=', 'usr'), Query::equal('usr.name', ['Bob'])]);
+        $joined = $this->database->find('posts', [Query::join('users', 'usr', [Query::on('owner', '$id')]), Query::equal('usr.name', ['Bob'])]);
         $this->assertSame(['first'], $this->ids($joined), 'another alias filters the joined users');
-        $this->assertSame(1, $this->database->count('posts', [Query::join('users', 'owner', '$id', '=', 'usr'), Query::equal('usr.name', ['Bob'])]));
+        $this->assertSame(1, $this->database->count('posts', [Query::join('users', 'usr', [Query::on('owner', '$id')]), Query::equal('usr.name', ['Bob'])]));
         $this->assertSame(['second'], $this->ids($this->database->find('posts', [Query::equal('author.name', ['Bob'])])), 'without a join author.name filters the related authors');
     }
 
@@ -135,14 +136,14 @@ final class QueryValidationTest extends TestCase
             new Document(['$id' => 'author', 'key' => 'author', 'type' => ColumnType::Relationship->value, 'options' => ['relationType' => RelationshipType::ManyToOne->value, 'side' => 'parent', 'relatedCollection' => 'authors']]),
         ]);
 
-        $this->assertFalse($validator->isValid(Query::join('users', 'owner', '$id', '=', 'author')));
+        $this->assertFalse($validator->isValid(Query::join('users', 'author', [Query::on('owner', '$id')])));
         $this->assertSame('Join alias "author" is the key of the relationship attribute "author": give the join another alias', $validator->getDescription());
 
         $validator->resetJoinAliases();
-        $this->assertTrue($validator->isValid(Query::join('users', 'owner', '$id', '=', 'Author')), 'relationship keys are matched as the relationship hook matches them, by exact name');
+        $this->assertTrue($validator->isValid(Query::join('users', 'Author', [Query::on('owner', '$id')])), 'relationship keys are matched as the relationship hook matches them, by exact name');
 
         $validator->resetJoinAliases();
-        $this->assertTrue($validator->isValid(Query::join('users', 'owner', '$id', '=', 'owner')), 'an alias may still equal an attribute that is not a relationship');
+        $this->assertTrue($validator->isValid(Query::join('users', 'owner', [Query::on('owner', '$id')])), 'an alias may still equal an attribute that is not a relationship');
     }
 
     /**
@@ -156,7 +157,7 @@ final class QueryValidationTest extends TestCase
         yield 'order' => [Query::orderAsc('title'), 'orderAsc'];
         yield 'select' => [Query::select(['title']), 'select'];
         yield 'aggregate' => [Query::count('*', 'rows'), 'count'];
-        yield 'join' => [Query::join('owners', '$id', '$id', '=', 'nested'), 'join'];
+        yield 'join' => [Query::join('owners', 'nested', [Query::on('$id', '$id')]), 'join'];
         yield 'containsAll' => [Query::containsAll('it.labels', ['x']), 'containsAll'];
         yield 'search' => [Query::search('it.title', 'pen'), 'search'];
         yield 'regex' => [Query::regex('it.title', '^p'), 'regex'];
@@ -164,14 +165,23 @@ final class QueryValidationTest extends TestCase
     }
 
     /**
-     * The builder compiles a join's ON list from on() conditions and plain filters only, and refuses
-     * the rest while it builds the statement.
+     * The join factories accept on() conditions and plain filters only. A join built around them still
+     * has its ON list refused while the read builds the statement.
      */
     #[DataProvider('refusedJoinConditions')]
     public function testAJoinOnListAcceptsOnlyConditionsAndPlainFilters(Query $condition, string $method): void
     {
-        $queries = [Query::join('items', 'it', [Query::on('$id', 'ownerRef'), $condition])];
+        $on = [Query::on('$id', 'ownerRef'), $condition];
         $message = 'Unsupported join ON condition: '.$method;
+
+        try {
+            Query::join('items', 'it', $on);
+            $this->fail('Query::join(): the ON list was accepted');
+        } catch (ValidationException $error) {
+            $this->assertSame($message, $error->getMessage(), 'Query::join()');
+        }
+
+        $queries = [new Query(Method::Join, 'items', $on, 'it')];
 
         $this->assertInvalidQuery($message, fn (): mixed => $this->database->find('owners', $queries), 'find()');
         $this->assertInvalidQuery($message, fn (): mixed => $this->database->count('owners', $queries), 'count()');
@@ -227,7 +237,7 @@ final class QueryValidationTest extends TestCase
         $this->assertSame(2, $this->database->count('owners', [Query::exists(['tags'])]));
         $this->assertSame(['pen', 'cup'], $this->ids($this->database->find('items', [Query::exists(['owner'])])), 'the side of a relationship that holds a column');
 
-        $joined = [Query::join('items', '$id', 'ownerRef', '=', 'it'), Query::exists(['it.title'])];
+        $joined = [Query::join('items', 'it', [Query::on('$id', 'ownerRef')]), Query::exists(['it.title'])];
         $this->assertSame(['ann', 'bob'], $this->ids($this->database->find('owners', $joined)), 'a column under a join alias');
     }
 
@@ -262,7 +272,7 @@ final class QueryValidationTest extends TestCase
      */
     public static function extremaWithoutAnOrder(): iterable
     {
-        $join = Query::join('items', '$id', 'ownerRef', '=', 'it');
+        $join = Query::join('items', 'it', [Query::on('$id', 'ownerRef')]);
 
         yield 'max of a boolean' => [[Query::max('active', 'most')], 'max', 'active'];
         yield 'min of an array' => [[Query::min('tags', 'least')], 'min', 'tags'];
@@ -288,7 +298,7 @@ final class QueryValidationTest extends TestCase
 
     public function testMinAndMaxAcceptOrderedValues(): void
     {
-        $join = Query::join('items', '$id', 'ownerRef', '=', 'it');
+        $join = Query::join('items', 'it', [Query::on('$id', 'ownerRef')]);
 
         $rows = $this->database->find('owners', [
             $join,
@@ -346,7 +356,7 @@ final class QueryValidationTest extends TestCase
     public function testAJoinedRelationshipSideThatHoldsAColumnIsSelectableAndOrderable(): void
     {
         $rows = $this->database->find('owners', [
-            Query::join('items', '$id', 'ownerRef', '=', 'it'),
+            Query::join('items', 'it', [Query::on('$id', 'ownerRef')]),
             Query::select(['name', 'it.owner']),
             Query::orderDesc('it.owner'),
         ]);
@@ -354,9 +364,9 @@ final class QueryValidationTest extends TestCase
         $this->assertSame(['bob', 'ann'], \array_map(static fn (Document $row): mixed => $row->getAttribute('it.owner'), $rows));
         $this->assertSame(['Bob', 'Ann'], \array_map(static fn (Document $row): mixed => $row->getAttribute('name'), $rows));
 
-        $virtual = [Query::join('owners', 'ownerRef', '$id', '=', 'ow'), Query::select(['title', 'ow.items'])];
+        $virtual = [Query::join('owners', 'ow', [Query::on('ownerRef', '$id')]), Query::select(['title', 'ow.items'])];
         $this->assertInvalidQuery('Attribute not found in schema: ow.items', fn (): mixed => $this->database->find('items', $virtual), 'the side that holds no column');
-        $this->assertInvalidQuery('Attribute not found in schema: ow.items', fn (): mixed => $this->database->find('items', [Query::join('owners', 'ownerRef', '$id', '=', 'ow'), Query::orderAsc('ow.items')]), 'ordered by the side that holds no column');
+        $this->assertInvalidQuery('Attribute not found in schema: ow.items', fn (): mixed => $this->database->find('items', [Query::join('owners', 'ow', [Query::on('ownerRef', '$id')]), Query::orderAsc('ow.items')]), 'ordered by the side that holds no column');
     }
 
     /**
@@ -367,7 +377,7 @@ final class QueryValidationTest extends TestCase
     {
         $attributes = [new Document(['$id' => 'name', 'key' => 'name', 'type' => ColumnType::String->value, 'array' => false])];
         $joins = [
-            'inline condition' => Query::join('notes', '$id', 'customerId', '=', 'note'),
+            'inline condition' => Query::join('notes', 'note', [Query::on('$id', 'customerId')]),
             'on() list with a filter' => Query::join('notes', 'note', [Query::on('$id', 'customerId'), Query::equal('note.body', ['x'])]),
         ];
 
@@ -402,7 +412,7 @@ final class QueryValidationTest extends TestCase
         $database->createCollection(Collection::create(id: 'notes', attributes: [Attribute::string(key: 'customerId', size: 32)], permissions: $permissions, documentSecurity: false));
         $database->createDocument('customers', new Document(['$id' => 'c1', 'name' => 'Ann']));
 
-        $this->assertInvalidQuery('Invalid query method: join', fn (): mixed => $database->getDocument('customers', 'c1', [Query::join('notes', '$id', 'customerId', '=', 'note')]));
+        $this->assertInvalidQuery('Invalid query method: join', fn (): mixed => $database->getDocument('customers', 'c1', [Query::join('notes', 'note', [Query::on('$id', 'customerId')])]));
         $this->assertSame('Ann', $database->getDocument('customers', 'c1', [Query::select(['name'])])->getAttribute('name'));
     }
 

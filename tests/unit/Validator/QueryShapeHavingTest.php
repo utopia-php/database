@@ -35,7 +35,7 @@ class QueryShapeHavingTest extends TestCase
             'grouped attribute' => [[Query::sum('price', 'total'), Query::groupBy(['name']), Query::having([Query::equal('name', ['a', 'b'])])]],
             'grouped attributes in a logical group' => [[Query::sum('price', 'total'), Query::groupBy(['name', 'price']), Query::having([Query::or([Query::equal('name', ['a']), Query::greaterThan('price', 5)])])]],
             'several conditions' => [[Query::count('*', 'rows'), Query::sum('price', 'total'), Query::groupBy(['name']), Query::having([Query::greaterThanEqual('rows', 2), Query::lessThan('total', 500)])]],
-            'grouped attribute of a join' => [[Query::leftJoin('orders', '$id', 'customer', '=', 'ord'), Query::count('*', 'rows'), Query::groupBy(['ord.status']), Query::having([Query::equal('ord.status', ['paid'])])]],
+            'grouped attribute of a join' => [[Query::leftJoin('orders', 'ord', [Query::on('$id', 'customer')]), Query::count('*', 'rows'), Query::groupBy(['ord.status']), Query::having([Query::equal('ord.status', ['paid'])])]],
         ];
     }
 

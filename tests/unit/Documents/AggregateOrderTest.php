@@ -41,7 +41,7 @@ final class AggregateOrderTest extends TestCase
      */
     public static function ungroupedOrders(): iterable
     {
-        $note = Query::join('notes', '$id', 'customerId', '=', 'note');
+        $note = Query::join('notes', 'note', [Query::on('$id', 'customerId')]);
 
         yield 'an attribute next to a count' => [[Query::count('*', 'rows'), Query::orderAsc('balance')], 'balance'];
         yield 'an attribute next to a sum' => [[Query::sum('balance', 'total'), Query::orderDesc('name')], 'name'];
@@ -77,7 +77,7 @@ final class AggregateOrderTest extends TestCase
      */
     public static function groupedOrders(): iterable
     {
-        $note = Query::join('notes', '$id', 'customerId', '=', 'note');
+        $note = Query::join('notes', 'note', [Query::on('$id', 'customerId')]);
 
         yield 'a group' => [[Query::count('*', 'rows'), Query::groupBy(['status']), Query::orderDesc('status')], 'status', ['b', 'a']];
         yield 'an aggregate alias' => [[Query::count('*', 'rows'), Query::groupBy(['status']), Query::orderDesc('rows')], 'rows', [2, 1]];

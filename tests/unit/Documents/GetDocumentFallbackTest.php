@@ -44,7 +44,7 @@ final class GetDocumentFallbackTest extends TestCase
         $this->expectException(QueryException::class);
         $this->expectExceptionMessage('Invalid query method: join');
 
-        $database->getDocument(self::COLLECTION, 'session', [Query::join(self::COLLECTION, 'owner', 'owner', alias: 'twin')]);
+        $database->getDocument(self::COLLECTION, 'session', [Query::join(self::COLLECTION, 'twin', [Query::on('owner', 'owner')])]);
     }
 
     public function testACacheThatCannotBeReadOrWrittenFallsBackToTheDatabase(): void

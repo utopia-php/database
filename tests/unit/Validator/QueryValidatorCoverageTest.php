@@ -234,10 +234,10 @@ final class QueryValidatorCoverageTest extends TestCase
     {
         $validator = new Join();
 
-        $this->assertFalse($validator->isValid(Query::join($table, 'authorId', 'id', alias: 'author')));
+        $this->assertFalse($validator->isValid(Query::join($table, 'author', [Query::on('authorId', 'id')])));
         $this->assertSame('Join requires a table name', $validator->getDescription());
 
-        $this->assertTrue($validator->isValid(Query::join('authors', 'authorId', 'id', alias: 'author')), $validator->getDescription());
+        $this->assertTrue($validator->isValid(Query::join('authors', 'author', [Query::on('authorId', 'id')])), $validator->getDescription());
     }
 
     public function testTheLimitValidatorRefusesAnotherMethodAndANonNumericLimit(): void

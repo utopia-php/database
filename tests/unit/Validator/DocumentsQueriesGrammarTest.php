@@ -40,11 +40,11 @@ class DocumentsQueriesGrammarTest extends TestCase
     public static function joinQueries(): array
     {
         return [
-            'join' => [Query::join('orders', '$id', 'customerId', '=', 'o'), 'join'],
-            'left join' => [Query::leftJoin('orders', '$id', 'customerId', '=', 'o'), 'leftJoin'],
-            'right join' => [Query::rightJoin('orders', '$id', 'customerId', '=', 'o'), 'rightJoin'],
+            'join' => [Query::join('orders', 'o', [Query::on('$id', 'customerId')]), 'join'],
+            'left join' => [Query::leftJoin('orders', 'o', [Query::on('$id', 'customerId')]), 'leftJoin'],
+            'right join' => [Query::rightJoin('orders', 'o', [Query::on('$id', 'customerId')]), 'rightJoin'],
             'cross join' => [Query::crossJoin('orders', 'o'), 'crossJoin'],
-            'full outer join' => [Query::fullOuterJoin('orders', '$id', 'customerId', '=', 'o'), 'fullOuterJoin'],
+            'full outer join' => [Query::fullOuterJoin('orders', 'o', [Query::on('$id', 'customerId')]), 'fullOuterJoin'],
         ];
     }
 

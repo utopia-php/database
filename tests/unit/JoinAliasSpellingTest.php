@@ -305,10 +305,10 @@ final class JoinAliasSpellingTest extends TestCase
             $left = $on === null ? '$id' : $aliases[$on].'.authorId';
             $numbers[] = $alias.'.'.self::NUMBERS[$collection];
             $joins[] = match ($method) {
-                Method::Join => Query::join($collection, $left, 'authorId', '=', $alias),
-                Method::LeftJoin => Query::leftJoin($collection, $left, 'authorId', '=', $alias),
-                Method::RightJoin => Query::rightJoin($collection, $left, 'authorId', '=', $alias),
-                Method::FullOuterJoin => Query::fullOuterJoin($collection, $left, 'authorId', '=', $alias),
+                Method::Join => Query::join($collection, $alias, [Query::on($left, 'authorId')]),
+                Method::LeftJoin => Query::leftJoin($collection, $alias, [Query::on($left, 'authorId')]),
+                Method::RightJoin => Query::rightJoin($collection, $alias, [Query::on($left, 'authorId')]),
+                Method::FullOuterJoin => Query::fullOuterJoin($collection, $alias, [Query::on($left, 'authorId')]),
                 Method::CrossJoin => Query::crossJoin($collection, $alias),
                 default => throw new \InvalidArgumentException("{$method->value} is not a join"),
             };

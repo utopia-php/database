@@ -160,7 +160,7 @@ final class NarrowTest extends TestCase
             'spatial' => [[Query::intersects('location', [1, 2])]],
             'aggregate' => [[Query::count()]],
             'group by' => [[Query::groupBy(['title'])]],
-            'join' => [[Query::join('other', 'title', 'title')]],
+            'join' => [[Query::join('other', 'j0', [Query::on('title', 'title')])]],
             'a string' => [['equal("title", ["Dune"])']],
             'one other query among narrow ones' => [[Query::equal('title', ['Dune']), Query::select(['title']), Query::limit(1)]],
         ];
@@ -210,12 +210,12 @@ final class NarrowTest extends TestCase
     {
         $narrow = Narrow::of([Query::orderAsc('title'), Query::equal('title', ['Dune'])], $this->attributes(), $this->profile(true, true), self::MAX_VALUES);
 
-        $this->assertFalse($narrow?->isValid([Query::count('*', 'total'), Query::join('other', 'title', 'title', alias: 'o'), Query::orderAsc('total')]));
+        $this->assertFalse($narrow?->isValid([Query::count('*', 'total'), Query::join('other', 'o', [Query::on('title', 'title')]), Query::orderAsc('total')]));
         $this->assertFalse($narrow->isValid([Query::orderAsc('total')]));
         $this->assertSame('Invalid query: Attribute not found in schema: total', $narrow->getDescription());
 
         $narrow->setJoinedCollections([new Document([Document::ID => 'other', 'attributes' => [Attribute::string(key: 'nickname', size: 16)]])]);
-        $this->assertFalse($narrow->isValid([Query::join('other', 'title', 'nickname', alias: 'o'), Query::orderAsc('nickname')]));
+        $this->assertFalse($narrow->isValid([Query::join('other', 'o', [Query::on('title', 'nickname')]), Query::orderAsc('nickname')]));
         $this->assertFalse($narrow->isValid([Query::orderAsc('nickname')]));
         $this->assertSame('Invalid query: Attribute not found in schema: nickname', $narrow->getDescription());
     }

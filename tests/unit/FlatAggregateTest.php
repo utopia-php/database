@@ -20,6 +20,7 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Query\Method;
 
 /**
  * A filtered count() or sum() is one aggregate over the collection's table. Only a bound on the
@@ -149,7 +150,7 @@ final class FlatAggregateTest extends TestCase
 
     public function testJoinedCountKeepsTheDerivedTable(): void
     {
-        $join = Query::join('labels', 'category', 'category', '=', 'label');
+        $join = Query::join('labels', 'label', [Query::on('category', 'category')]);
 
         [$count, $statements] = $this->profile(fn (): int => $this->database->count('items', [$join]));
         $this->assertSame(2, $count);
@@ -162,9 +163,9 @@ final class FlatAggregateTest extends TestCase
 
     public function testBoundedJoinedCountKeepsItsLimit(): void
     {
-        $this->assertSame(1, $this->database->count('items', [Query::join('labels', 'category', 'category', '=', 'label')], 1));
-        $this->assertSame(3, $this->database->count('items', [Query::fullOuterJoin('labels', 'category', 'category', '=', 'label')]));
-        $this->assertSame(2, $this->database->count('items', [Query::fullOuterJoin('labels', 'category', 'category', '=', 'label')], 2));
+        $this->assertSame(1, $this->database->count('items', [Query::join('labels', 'label', [Query::on('category', 'category')])], 1));
+        $this->assertSame(3, $this->database->count('items', [Query::fullOuterJoin('labels', 'label', [Query::on('category', 'category')])]));
+        $this->assertSame(2, $this->database->count('items', [Query::fullOuterJoin('labels', 'label', [Query::on('category', 'category')])], 2));
     }
 
     public function testANonNumericAggregateCountsAsZero(): void
@@ -211,7 +212,7 @@ final class FlatAggregateTest extends TestCase
 
     public function testABuilderRefusalIsAQueryException(): void
     {
-        $join = Query::join('labels', 'label', [Query::on('category', 'category'), Query::limit(1)]);
+        $join = new Query(Method::Join, 'labels', [Query::on('category', 'category'), Query::limit(1)], 'label');
         $this->database->disableValidation();
 
         foreach ([

@@ -458,8 +458,8 @@ trait AttributeTests
         ));
         $database->createDocument($orders, new Document(['$id' => 'o1', 'personId' => 'a', 'total' => 7]));
 
-        $join = Query::join($orders, '$id', 'personId', '=', 'ord');
-        $leftJoin = Query::leftJoin($orders, '$id', 'personId', '=', 'ord');
+        $join = Query::join($orders, 'ord', [Query::on('$id', 'personId')]);
+        $leftJoin = Query::leftJoin($orders, 'ord', [Query::on('$id', 'personId')]);
 
         $this->assertSame(['a'], $this->sortedIds($database->find($collection, [$join, Query::equal('dots.name', ['v'])])));
         $this->assertSame(1, $database->count($collection, [$join, Query::equal('dots.name', ['v'])]));

@@ -11,6 +11,7 @@ use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationshipSide;
 use Utopia\Database\Validator\Queries\Documents;
+use Utopia\Query\Method;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 
@@ -67,7 +68,7 @@ class JoinedAttributesTest extends TestCase
         $validator = $this->validator([$this->profiles]);
 
         $this->assertTrue($validator->isValid([
-            Query::join('profiles', '$id', 'customerId', '=', 'profile'),
+            Query::join('profiles', 'profile', [Query::on('$id', 'customerId')]),
             Query::sum('visits', 'total'),
             Query::groupBy(['name', 'visits']),
         ]), $validator->getDescription());
@@ -78,15 +79,15 @@ class JoinedAttributesTest extends TestCase
         $validator = $this->validator([$this->notes, $this->orders]);
 
         $this->assertTrue($validator->isValid([
-            Query::join('notes', '$id', 'customerId', '=', 'note'),
-            Query::join('orders', '$id', 'customerId', '=', 'purchase'),
+            Query::join('notes', 'note', [Query::on('$id', 'customerId')]),
+            Query::join('orders', 'purchase', [Query::on('$id', 'customerId')]),
             Query::sum('amount', 'total'),
             Query::groupBy(['status']),
         ]), $validator->getDescription());
 
         $this->assertTrue($validator->isValid([
-            Query::join('notes', '$id', 'customerId'),
-            Query::join('orders', '$id', 'customerId'),
+            Query::join('notes', 'j0', [Query::on('$id', 'customerId')]),
+            Query::join('orders', 'j1', [Query::on('$id', 'customerId')]),
             Query::avg('amount', 'average'),
             Query::groupBy(['status']),
         ]), 'a join without an alias still declares its attributes: '.$validator->getDescription());
@@ -97,13 +98,13 @@ class JoinedAttributesTest extends TestCase
         $validator = $this->validator([$this->orders]);
 
         $this->assertFalse($validator->isValid([
-            Query::leftJoin('orders', '$id', 'customerId', '=', 'j'),
+            Query::leftJoin('orders', 'j', [Query::on('$id', 'customerId')]),
             Query::groupBy(['anything_at_all']),
         ]));
         $this->assertSame('Invalid query: Attribute not found in schema: anything_at_all', $validator->getDescription());
 
         $this->assertFalse($validator->isValid([
-            Query::leftJoin('orders', '$id', 'customerId', '=', 'j'),
+            Query::leftJoin('orders', 'j', [Query::on('$id', 'customerId')]),
             Query::sum('also_anything', 'total'),
         ]));
         $this->assertSame('Invalid query: Attribute not found in schema: also_anything', $validator->getDescription());
@@ -113,8 +114,8 @@ class JoinedAttributesTest extends TestCase
     {
         $validator = $this->validator([$this->orders, $this->refunds]);
         $joins = [
-            Query::join('orders', '$id', 'customerId', '=', 'alpha'),
-            Query::join('refunds', '$id', 'customerId', '=', 'beta'),
+            Query::join('orders', 'alpha', [Query::on('$id', 'customerId')]),
+            Query::join('refunds', 'beta', [Query::on('$id', 'customerId')]),
         ];
 
         $this->assertFalse($validator->isValid([...$joins, Query::sum('amount', 'total')]));
@@ -134,8 +135,8 @@ class JoinedAttributesTest extends TestCase
     {
         $validator = $this->validator([$this->orders]);
         $joins = [
-            Query::join('orders', '$id', 'customerId', '=', 'first'),
-            Query::leftJoin('orders', '$id', 'customerId', '=', 'second'),
+            Query::join('orders', 'first', [Query::on('$id', 'customerId')]),
+            Query::leftJoin('orders', 'second', [Query::on('$id', 'customerId')]),
         ];
 
         $this->assertFalse($validator->isValid([...$joins, Query::max('amount', 'largest')]));
@@ -153,13 +154,13 @@ class JoinedAttributesTest extends TestCase
         $validator = $this->validator();
 
         $this->assertFalse($validator->isValid([
-            Query::join('orders', '$id', 'customerId', '=', 'purchase'),
+            Query::join('orders', 'purchase', [Query::on('$id', 'customerId')]),
             Query::sum('amount', 'total'),
         ]));
         $this->assertSame('Invalid query: Attribute not found in schema: amount', $validator->getDescription());
 
         $this->assertTrue($validator->isValid([
-            Query::join('orders', '$id', 'customerId', '=', 'purchase'),
+            Query::join('orders', 'purchase', [Query::on('$id', 'customerId')]),
             Query::sum('purchase.amount', 'total'),
         ]), $validator->getDescription());
     }
@@ -169,7 +170,7 @@ class JoinedAttributesTest extends TestCase
         $validator = $this->validator([$this->orders]);
 
         $this->assertFalse($validator->isValid([
-            Query::join('orders', '$id', 'customerId', '=', 'purchase'),
+            Query::join('orders', 'purchase', [Query::on('$id', 'customerId')]),
             Query::groupBy(['customer']),
         ]));
         $this->assertSame('Invalid query: Attribute not found in schema: customer', $validator->getDescription());
@@ -180,7 +181,7 @@ class JoinedAttributesTest extends TestCase
         $validator = $this->validator([$this->orders]);
 
         $this->assertTrue($validator->isValid([
-            Query::leftJoin('orders', '$id', 'customerId', '=', 'purchase'),
+            Query::leftJoin('orders', 'purchase', [Query::on('$id', 'customerId')]),
             Query::count('$id', 'customers'),
             Query::groupBy(['$createdAt']),
         ]), $validator->getDescription());
@@ -191,19 +192,19 @@ class JoinedAttributesTest extends TestCase
         $validator = $this->validator([$this->orders, $this->notes]);
 
         $this->assertFalse($validator->isValid([
-            Query::leftJoin('orders', '$id', 'customerId', '=', 'purchase'),
+            Query::leftJoin('orders', 'purchase', [Query::on('$id', 'customerId')]),
             Query::search('purchase.memo', 'gift'),
         ]));
         $this->assertSame('Searching by attribute "purchase.memo" requires a fulltext index.', $validator->getDescription());
 
         $this->assertFalse($validator->isValid([
-            Query::leftJoin('orders', '$id', 'customerId', '=', 'purchase'),
+            Query::leftJoin('orders', 'purchase', [Query::on('$id', 'customerId')]),
             Query::notSearch('purchase.memo', 'gift'),
         ]));
         $this->assertSame('Searching by attribute "purchase.memo" requires a fulltext index.', $validator->getDescription());
 
         $this->assertTrue($validator->isValid([
-            Query::leftJoin('notes', '$id', 'customerId', '=', 'note'),
+            Query::leftJoin('notes', 'note', [Query::on('$id', 'customerId')]),
             Query::search('note.body', 'needle'),
         ]), $validator->getDescription());
     }
@@ -213,18 +214,18 @@ class JoinedAttributesTest extends TestCase
         $validator = $this->validator([$this->orders, $this->notes]);
 
         $this->assertFalse($validator->isValid([
-            Query::leftJoin('orders', 'purchase', [
+            new Query(Method::LeftJoin, 'orders', [
                 Query::on('$id', 'customerId'),
                 Query::search('purchase.memo', 'gift'),
-            ]),
+            ], 'purchase'),
         ]));
         $this->assertSame('Invalid query: Unsupported join ON condition: search', $validator->getDescription());
 
         $this->assertFalse($validator->isValid([
-            Query::leftJoin('notes', 'note', [
+            new Query(Method::LeftJoin, 'notes', [
                 Query::on('$id', 'customerId'),
                 Query::search('note.body', 'needle'),
-            ]),
+            ], 'note'),
         ]), 'the builder compiles no search into an ON list, fulltext index or not');
         $this->assertSame('Invalid query: Unsupported join ON condition: search', $validator->getDescription());
     }
@@ -234,7 +235,7 @@ class JoinedAttributesTest extends TestCase
         $validator = $this->validator();
 
         $this->assertFalse($validator->isValid([
-            Query::leftJoin('notes', '$id', 'customerId', '=', 'note'),
+            Query::leftJoin('notes', 'note', [Query::on('$id', 'customerId')]),
             Query::search('note.body', 'needle'),
         ]));
         $this->assertSame('Searching by attribute "note.body" requires a fulltext index.', $validator->getDescription());
@@ -245,7 +246,7 @@ class JoinedAttributesTest extends TestCase
         $validator = $this->validator([$this->orders]);
 
         $this->assertTrue($validator->isValid([
-            Query::join('orders', '$id', 'customerId', '=', 'purchase'),
+            Query::join('orders', 'purchase', [Query::on('$id', 'customerId')]),
             Query::sum('amount', 'total'),
         ]), $validator->getDescription());
 

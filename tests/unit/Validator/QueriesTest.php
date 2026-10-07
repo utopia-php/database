@@ -201,7 +201,7 @@ class QueriesTest extends TestCase
     {
         $validator = new Queries([new Join()]);
 
-        $this->assertTrue($validator->isValid([Query::join('orders', 'user_id', 'id')]));
+        $this->assertTrue($validator->isValid([Query::join('orders', 'j0', [Query::on('user_id', 'id')])]));
     }
 
     public function test_aggregate_and_group_by_accept_joined_attributes(): void
@@ -235,7 +235,7 @@ class QueriesTest extends TestCase
         ])]);
 
         $this->assertTrue($validator->isValid([
-            Query::leftJoin('reviews', 'productId', '$id', '=', 'rev'),
+            Query::leftJoin('reviews', 'rev', [Query::on('productId', '$id')]),
             Query::sum('rev.score'),
             Query::groupBy(['score']),
         ]));
@@ -280,17 +280,17 @@ class QueriesTest extends TestCase
         ]);
 
         $this->assertFalse($validator->isValid([
-            Query::leftJoin('reviews', 'productId', '$id', '=', 'rev'),
+            Query::leftJoin('reviews', 'rev', [Query::on('productId', '$id')]),
             Query::sum('revv.score'),
         ]), 'an aggregate qualified with an undeclared alias must not pass');
 
         $this->assertFalse($validator->isValid([
-            Query::leftJoin('reviews', 'productId', '$id', '=', 'rev'),
+            Query::leftJoin('reviews', 'rev', [Query::on('productId', '$id')]),
             Query::groupBy(['revv.score']),
         ]), 'a groupBy qualified with an undeclared alias must not pass');
 
         $this->assertFalse($validator->isValid([
-            Query::leftJoin('reviews', 'productId', '$id', '=', 'rev'),
+            Query::leftJoin('reviews', 'rev', [Query::on('productId', '$id')]),
             Query::sum('rev.score.nested'),
         ]), 'a multi-segment join column must not pass');
     }
@@ -313,12 +313,12 @@ class QueriesTest extends TestCase
         ]);
 
         $this->assertTrue($validator->isValid([
-            Query::leftJoin('reviews', 'productId', '$id', '=', 'rev'),
+            Query::leftJoin('reviews', 'rev', [Query::on('productId', '$id')]),
             Query::sum('rev.score'),
         ]));
 
         $this->assertFalse($validator->isValid([
-            Query::leftJoin('reviews', 'productId', '$id', '=', 'other'),
+            Query::leftJoin('reviews', 'other', [Query::on('productId', '$id')]),
             Query::sum('rev.score'),
         ]), 'an alias from the previous query set must not stay valid');
     }
@@ -354,7 +354,7 @@ class QueriesTest extends TestCase
         ])]);
 
         $this->assertTrue($validator->isValid([
-            Query::leftJoin('reviews', 'productId', '$id', '=', 'rev'),
+            Query::leftJoin('reviews', 'rev', [Query::on('productId', '$id')]),
             Query::sum('score'),
         ]));
 
@@ -379,7 +379,7 @@ class QueriesTest extends TestCase
 
         $this->assertTrue($validator->isValid([
             Query::select(['ord.amount']),
-            Query::join('orders', '$id', 'customer_uid', '=', 'ord'),
+            Query::join('orders', 'ord', [Query::on('$id', 'customer_uid')]),
         ]), $validator->getDescription());
     }
 
@@ -401,7 +401,7 @@ class QueriesTest extends TestCase
 
         $this->assertTrue($validator->isValid([
             Query::equal('sec.amount', [777]),
-            Query::join('orders', '$id', 'customer_uid', '=', 'sec'),
+            Query::join('orders', 'sec', [Query::on('$id', 'customer_uid')]),
         ]), $validator->getDescription());
     }
 
@@ -474,7 +474,7 @@ class QueriesTest extends TestCase
 
         $this->assertTrue($validator->isValid([
             Query::orderAsc('sec.amount'),
-            Query::join('orders', '$id', 'customer_uid', '=', 'sec'),
+            Query::join('orders', 'sec', [Query::on('$id', 'customer_uid')]),
         ]), $validator->getDescription());
     }
 
@@ -496,7 +496,7 @@ class QueriesTest extends TestCase
 
         $this->assertFalse($validator->isValid([
             Query::equal('other.amount', [777]),
-            Query::join('orders', '$id', 'customer_uid', '=', 'sec'),
+            Query::join('orders', 'sec', [Query::on('$id', 'customer_uid')]),
         ]));
         $this->assertSame('Invalid query: Attribute not found in schema: other', $validator->getDescription());
     }
@@ -524,7 +524,7 @@ class QueriesTest extends TestCase
         ]);
 
         $this->assertTrue($validator->isValid([
-            Query::join('meta', '$id', 'mainId', '=', 'meta'),
+            Query::join('meta', 'meta', [Query::on('$id', 'mainId')]),
             Query::and([
                 Query::equal('name', ['Main']),
                 Query::or([
@@ -558,7 +558,7 @@ class QueriesTest extends TestCase
         ]);
 
         $this->assertFalse($validator->isValid([
-            Query::join('meta', '$id', 'mainId', '=', 'meta'),
+            Query::join('meta', 'meta', [Query::on('$id', 'mainId')]),
             Query::and([
                 Query::equal('name', ['Main']),
                 Query::or([
@@ -593,7 +593,7 @@ class QueriesTest extends TestCase
         ]);
 
         $this->assertFalse($validator->isValid([
-            Query::join('meta', '$id', 'mainId', '=', 'meta'),
+            Query::join('meta', 'meta', [Query::on('$id', 'mainId')]),
             Query::and([
                 Query::equal('name', ['Main']),
                 Query::or([
@@ -628,12 +628,12 @@ class QueriesTest extends TestCase
         ]);
 
         $this->assertTrue($validator->isValid([
-            Query::join('meta', '$id', 'mainId', '=', 'meta'),
+            Query::join('meta', 'meta', [Query::on('$id', 'mainId')]),
             Query::equal('meta.score', [10]),
         ]), $validator->getDescription());
 
         $this->assertFalse($validator->isValid([
-            Query::join('peer', '$id', 'mainId', '=', 'peer'),
+            Query::join('peer', 'peer', [Query::on('$id', 'mainId')]),
             Query::equal('meta.score', [8686]),
         ]));
         $this->assertStringContainsString('Attribute not found', $validator->getDescription());

@@ -57,7 +57,7 @@ final class DistinctJoinedSelectTest extends TestCase
         }
 
         $rows = $this->database->find('main', [
-            new Query($join, 'side', ['code', '=', 'code', 's']),
+            new Query($join, 'side', [Query::on('code', 'code')], 's'),
             Query::distinct(),
             Query::select(['s.label']),
             Query::orderAsc('s.label'),
@@ -72,7 +72,7 @@ final class DistinctJoinedSelectTest extends TestCase
     public function testDistinctSelectOfAJoinedInternalAttributeIsProjectedUnderItsAlias(): void
     {
         $rows = $this->database->find('main', [
-            Query::join('side', 'code', 'code', '=', 's'),
+            Query::join('side', 's', [Query::on('code', 'code')]),
             Query::distinct(),
             Query::select(['s.$id']),
         ]);

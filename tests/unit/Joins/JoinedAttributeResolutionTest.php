@@ -56,7 +56,7 @@ final class JoinedAttributeResolutionTest extends TestCase
             $this->useDatabase(new NativeFullOuterJoinSQLite(new PDO('sqlite::memory:')));
         }
         $this->createDocument('orders', 'stray', ['customerId' => 'ghost', 'amount' => 9, 'status' => 'lost', 'memo' => 'no customer']);
-        $purchases = Query::fullOuterJoin('orders', '$id', 'customerId', '=', 'purchase');
+        $purchases = Query::fullOuterJoin('orders', 'purchase', [Query::on('$id', 'customerId')]);
 
         foreach ([true, false] as $validate) {
             $mode = $validate ? 'validated' : 'unvalidated';
@@ -79,8 +79,8 @@ final class JoinedAttributeResolutionTest extends TestCase
 
             foreach ([
                 'Attribute "amount" is ambiguous across joins; qualify it with a join alias' => [
-                    Query::fullOuterJoin('orders', '$id', 'customerId', '=', 'alpha'),
-                    Query::join('refunds', '$id', 'customerId', '=', 'beta'),
+                    Query::fullOuterJoin('orders', 'alpha', [Query::on('$id', 'customerId')]),
+                    Query::join('refunds', 'beta', [Query::on('$id', 'customerId')]),
                     Query::sum('amount', 'total'),
                 ],
                 'Attribute not found in schema: also_anything' => [
@@ -160,7 +160,7 @@ final class JoinedAttributeResolutionTest extends TestCase
         $this->expectExceptionMessage('Invalid query: Attribute not found in schema: anything_at_all');
 
         $this->database->find('customers', [
-            Query::leftJoin('orders', '$id', 'customerId', '=', 'j'),
+            Query::leftJoin('orders', 'j', [Query::on('$id', 'customerId')]),
             Query::groupBy(['anything_at_all']),
             Query::sum('also_anything', 'total'),
         ]);
@@ -172,8 +172,8 @@ final class JoinedAttributeResolutionTest extends TestCase
         $this->expectExceptionMessage('Invalid query: Attribute "amount" is ambiguous across joins; qualify it with a join alias');
 
         $this->database->find('customers', [
-            Query::join('orders', '$id', 'customerId', '=', 'alpha'),
-            Query::join('refunds', '$id', 'customerId', '=', 'beta'),
+            Query::join('orders', 'alpha', [Query::on('$id', 'customerId')]),
+            Query::join('refunds', 'beta', [Query::on('$id', 'customerId')]),
             Query::sum('amount', 'total'),
         ]);
     }
@@ -184,8 +184,8 @@ final class JoinedAttributeResolutionTest extends TestCase
         $this->expectExceptionMessage('Invalid query: Attribute "amount" is ambiguous across joins; qualify it with a join alias');
 
         $this->database->find('customers', [
-            Query::join('orders', '$id', 'customerId', '=', 'alpha'),
-            Query::join('refunds', '$id', 'customerId', '=', 'beta'),
+            Query::join('orders', 'alpha', [Query::on('$id', 'customerId')]),
+            Query::join('refunds', 'beta', [Query::on('$id', 'customerId')]),
             Query::count('*', 'rows'),
             Query::groupBy(['amount']),
         ]);
@@ -194,8 +194,8 @@ final class JoinedAttributeResolutionTest extends TestCase
     public function testQualifiedAttributesStillPickTheirJoin(): void
     {
         $results = $this->database->find('customers', [
-            Query::join('orders', '$id', 'customerId', '=', 'alpha'),
-            Query::join('refunds', '$id', 'customerId', '=', 'beta'),
+            Query::join('orders', 'alpha', [Query::on('$id', 'customerId')]),
+            Query::join('refunds', 'beta', [Query::on('$id', 'customerId')]),
             Query::sum('alpha.amount', 'ordered'),
             Query::sum('beta.amount', 'refunded'),
         ]);
@@ -208,8 +208,8 @@ final class JoinedAttributeResolutionTest extends TestCase
     public function testBareAggregateAttributeResolvesToTheOneJoinThatDeclaresIt(): void
     {
         $results = $this->database->find('customers', [
-            Query::join('notes', '$id', 'customerId', '=', 'note'),
-            Query::join('orders', '$id', 'customerId', '=', 'purchase'),
+            Query::join('notes', 'note', [Query::on('$id', 'customerId')]),
+            Query::join('orders', 'purchase', [Query::on('$id', 'customerId')]),
             Query::sum('amount', 'total'),
         ]);
 
@@ -220,8 +220,8 @@ final class JoinedAttributeResolutionTest extends TestCase
     public function testBareGroupByAttributeResolvesToTheOneJoinThatDeclaresIt(): void
     {
         $results = $this->database->find('customers', [
-            Query::join('notes', '$id', 'customerId', '=', 'note'),
-            Query::join('orders', '$id', 'customerId', '=', 'purchase'),
+            Query::join('notes', 'note', [Query::on('$id', 'customerId')]),
+            Query::join('orders', 'purchase', [Query::on('$id', 'customerId')]),
             Query::sum('amount', 'total'),
             Query::groupBy(['status']),
         ]);
@@ -240,8 +240,8 @@ final class JoinedAttributeResolutionTest extends TestCase
     public function testBareAttributeResolvesThroughJoinsWithoutAliases(): void
     {
         $results = $this->database->find('customers', [
-            Query::join('notes', '$id', 'customerId'),
-            Query::join('orders', '$id', 'customerId'),
+            Query::join('notes', 'j0', [Query::on('$id', 'customerId')]),
+            Query::join('orders', 'j1', [Query::on('$id', 'customerId')]),
             Query::sum('amount', 'total'),
         ]);
 
@@ -252,7 +252,7 @@ final class JoinedAttributeResolutionTest extends TestCase
     public function testBareAttributeOfTheMainCollectionIsNotReboundToAJoin(): void
     {
         $results = $this->database->find('customers', [
-            Query::join('profiles', '$id', 'customerId', '=', 'profile'),
+            Query::join('profiles', 'profile', [Query::on('$id', 'customerId')]),
             Query::sum('visits', 'total'),
         ]);
 
@@ -263,7 +263,7 @@ final class JoinedAttributeResolutionTest extends TestCase
     public function testBareInternalAttributeResolvesToTheMainCollection(): void
     {
         $results = $this->database->find('customers', [
-            Query::leftJoin('notes', '$id', 'customerId', '=', 'note'),
+            Query::leftJoin('notes', 'note', [Query::on('$id', 'customerId')]),
             Query::count('$id', 'customers'),
         ]);
 
@@ -274,20 +274,20 @@ final class JoinedAttributeResolutionTest extends TestCase
     public function testAdapterResolvesBareAttributesTheSameWayWithoutValidation(): void
     {
         $results = $this->database->skipValidation(fn () => $this->database->find('customers', [
-            Query::join('notes', '$id', 'customerId', '=', 'note'),
-            Query::join('orders', '$id', 'customerId', '=', 'purchase'),
+            Query::join('notes', 'note', [Query::on('$id', 'customerId')]),
+            Query::join('orders', 'purchase', [Query::on('$id', 'customerId')]),
             Query::sum('amount', 'total'),
         ]));
         $this->assertSame(150, $results[0]->getAttribute('total'));
 
         foreach ([
             'Attribute "amount" is ambiguous across joins; qualify it with a join alias' => [
-                Query::join('orders', '$id', 'customerId', '=', 'alpha'),
-                Query::join('refunds', '$id', 'customerId', '=', 'beta'),
+                Query::join('orders', 'alpha', [Query::on('$id', 'customerId')]),
+                Query::join('refunds', 'beta', [Query::on('$id', 'customerId')]),
                 Query::sum('amount', 'total'),
             ],
             'Attribute not found in schema: also_anything' => [
-                Query::leftJoin('orders', '$id', 'customerId', '=', 'j'),
+                Query::leftJoin('orders', 'j', [Query::on('$id', 'customerId')]),
                 Query::sum('also_anything', 'total'),
             ],
         ] as $message => $queries) {
@@ -303,7 +303,7 @@ final class JoinedAttributeResolutionTest extends TestCase
     public function testSearchOnAJoinedAttributeWithoutAFulltextIndexIsRejected(): void
     {
         $queries = [
-            Query::join('orders', '$id', 'customerId', '=', 'purchase'),
+            Query::join('orders', 'purchase', [Query::on('$id', 'customerId')]),
             Query::search('purchase.memo', 'gift'),
         ];
 
@@ -324,7 +324,7 @@ final class JoinedAttributeResolutionTest extends TestCase
     public function testSearchOnAJoinedAttributeWithAFulltextIndexIsAccepted(): void
     {
         $queries = [
-            Query::join('notes', '$id', 'customerId', '=', 'note'),
+            Query::join('notes', 'note', [Query::on('$id', 'customerId')]),
             Query::search('note.body', 'needle'),
         ];
 
@@ -340,7 +340,7 @@ final class JoinedAttributeResolutionTest extends TestCase
         $this->expectExceptionMessage("Joined collection 'missing' not found");
 
         $this->database->count('customers', [
-            Query::join('missing', '$id', 'customerId', '=', 'gone'),
+            Query::join('missing', 'gone', [Query::on('$id', 'customerId')]),
             Query::search('gone.body', 'needle'),
         ]);
     }
@@ -348,7 +348,7 @@ final class JoinedAttributeResolutionTest extends TestCase
     public function testJoinedResolutionDoesNotCarryOverToAFindWithoutJoins(): void
     {
         $joined = $this->database->find('customers', [
-            Query::join('orders', '$id', 'customerId', '=', 'purchase'),
+            Query::join('orders', 'purchase', [Query::on('$id', 'customerId')]),
             Query::sum('amount', 'total'),
         ]);
         $this->assertSame(157, $joined[0]->getAttribute('total'));

@@ -44,7 +44,7 @@ class BulkWriteJoinTest extends TestCase
 
         try {
             $database->updateDocuments('orders', new Document(['amount' => 0]), [
-                Query::join('customers', 'customerId', '$id'),
+                Query::join('customers', 'j0', [Query::on('customerId', '$id')]),
             ]);
             $this->fail('A join on a bulk update must be rejected');
         } catch (QueryException $exception) {
@@ -64,7 +64,7 @@ class BulkWriteJoinTest extends TestCase
 
         try {
             $database->deleteDocuments('orders', [
-                Query::leftJoin('customers', 'customerId', '$id'),
+                Query::leftJoin('customers', 'j0', [Query::on('customerId', '$id')]),
             ]);
             $this->fail('A join on a bulk delete must be rejected');
         } catch (QueryException $exception) {
@@ -85,7 +85,7 @@ class BulkWriteJoinTest extends TestCase
         $database->skipValidation(function () use ($database): void {
             try {
                 $database->updateDocuments('orders', new Document(['amount' => 0]), [
-                    Query::join('customers', 'customerId', '$id'),
+                    Query::join('customers', 'j0', [Query::on('customerId', '$id')]),
                 ]);
                 $this->fail('A join on a bulk update must be rejected');
             } catch (QueryException $exception) {
@@ -94,7 +94,7 @@ class BulkWriteJoinTest extends TestCase
 
             try {
                 $database->deleteDocuments('orders', [
-                    Query::join('customers', 'customerId', '$id'),
+                    Query::join('customers', 'j0', [Query::on('customerId', '$id')]),
                 ]);
                 $this->fail('A join on a bulk delete must be rejected');
             } catch (QueryException $exception) {
@@ -112,7 +112,7 @@ class BulkWriteJoinTest extends TestCase
 
         try {
             $mirror->updateDocuments('orders', new Document(['amount' => 0]), [
-                Query::join('customers', 'customerId', '$id'),
+                Query::join('customers', 'j0', [Query::on('customerId', '$id')]),
             ]);
             $this->fail('A join on a bulk update must be rejected');
         } catch (QueryException $exception) {
@@ -121,7 +121,7 @@ class BulkWriteJoinTest extends TestCase
 
         try {
             $mirror->deleteDocuments('orders', [
-                Query::join('customers', 'customerId', '$id'),
+                Query::join('customers', 'j0', [Query::on('customerId', '$id')]),
             ]);
             $this->fail('A join on a bulk delete must be rejected');
         } catch (QueryException $exception) {

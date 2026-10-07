@@ -232,7 +232,7 @@ final class SQLGetDocumentTest extends TestCase
         $adapter->getDocument(
             new Document([Document::ID => 'collection']),
             'document',
-            [Query::leftJoin('orders', '$id', 'customerId')]
+            [Query::leftJoin('orders', 'j0', [Query::on('$id', 'customerId')])]
         );
 
         $this->assertNotSame('', $sql);
@@ -247,7 +247,7 @@ final class SQLGetDocumentTest extends TestCase
     public function testJoinWithoutSelectLeavesJoinedInternalsOut(): void
     {
         $sql = $this->captureGetDocumentSql([
-            Query::leftJoin('orders', '$id', 'customerId'),
+            Query::leftJoin('orders', 'j0', [Query::on('$id', 'customerId')]),
         ]);
 
         $this->assertJoinProjection($sql);
@@ -257,7 +257,7 @@ final class SQLGetDocumentTest extends TestCase
     public function testJoinAliasWithoutSelectLeavesJoinedInternalsOut(): void
     {
         $sql = $this->captureGetDocumentSql([
-            Query::join('orders', '$id', 'customerId', '=', 'rev'),
+            Query::join('orders', 'rev', [Query::on('$id', 'customerId')]),
         ]);
 
         $this->assertJoinProjection($sql, joinAlias: 'rev');
@@ -266,7 +266,7 @@ final class SQLGetDocumentTest extends TestCase
     public function testGetDocumentFullOuterJoinUsesLeftJoinOnPostgres(): void
     {
         $sql = $this->captureGetDocumentSql(
-            [Query::fullOuterJoin('orders', '$id', 'customerId')],
+            [Query::fullOuterJoin('orders', 'j0', [Query::on('$id', 'customerId')])],
             postgres: true,
         );
 

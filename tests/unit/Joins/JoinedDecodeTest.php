@@ -52,7 +52,7 @@ final class JoinedDecodeTest extends TestCase
     {
         $database = $this->database();
 
-        $rows = $database->find('customers', [Query::join('orders', '$id', 'customerId', '=', 'ord')]);
+        $rows = $database->find('customers', [Query::join('orders', 'ord', [Query::on('$id', 'customerId')])]);
 
         $this->assertCount(1, $rows);
         $this->assertDecodedOrder($rows[0], 'ord');
@@ -64,7 +64,7 @@ final class JoinedDecodeTest extends TestCase
         $database = $this->database();
 
         $rows = $database->find('customers', [
-            Query::join('orders', '$id', 'customerId', '=', 'ord'),
+            Query::join('orders', 'ord', [Query::on('$id', 'customerId')]),
             Query::select(['name', ...\array_map(static fn (string $attribute): string => 'ord.'.$attribute, self::ORDER_ATTRIBUTES)]),
         ]);
 
@@ -78,7 +78,7 @@ final class JoinedDecodeTest extends TestCase
         $database = $this->database();
 
         $rows = $database->find('customers', [
-            Query::join('orders', '$id', 'customerId', '=', 'ord'),
+            Query::join('orders', 'ord', [Query::on('$id', 'customerId')]),
             Query::select(['name', 'ord.secret']),
         ]);
 
@@ -94,7 +94,7 @@ final class JoinedDecodeTest extends TestCase
     public function testGetDocumentDecodesLikeADirectRead(): void
     {
         $database = $this->database();
-        $join = Query::join('orders', '$id', 'customerId', '=', 'ord');
+        $join = Query::join('orders', 'ord', [Query::on('$id', 'customerId')]);
 
         $implicit = $database->getDocument('customers', 'c1', [$join]);
         $this->assertDecodedOrder($implicit, 'ord');
@@ -113,8 +113,8 @@ final class JoinedDecodeTest extends TestCase
         $database = $this->database();
 
         $rows = $database->find('customers', [
-            Query::join('orders', '$id', 'customerId', '=', 'ord'),
-            Query::join('refunds', '$id', 'customerId', '=', 'ref'),
+            Query::join('orders', 'ord', [Query::on('$id', 'customerId')]),
+            Query::join('refunds', 'ref', [Query::on('$id', 'customerId')]),
         ]);
 
         $this->assertCount(1, $rows);
@@ -128,14 +128,14 @@ final class JoinedDecodeTest extends TestCase
     {
         $database = $this->database();
 
-        $generated = $database->find('customers', [Query::join('orders', '$id', 'customerId')]);
+        $generated = $database->find('customers', [Query::join('orders', 'j0', [Query::on('$id', 'customerId')])]);
         $this->assertCount(1, $generated);
         $this->assertDecodedOrder($generated[0], 'j0');
         $this->assertLikeDirectRead($database, $generated[0], 'j0', 'orders', 'o1', ['$id', ...self::ORDER_ATTRIBUTES]);
 
         $skipping = $database->find('customers', [
-            Query::join('orders', '$id', 'customerId'),
-            Query::join('refunds', '$id', 'customerId', '=', 'j0'),
+            Query::join('orders', 'j1', [Query::on('$id', 'customerId')]),
+            Query::join('refunds', 'j0', [Query::on('$id', 'customerId')]),
         ]);
         $this->assertCount(1, $skipping);
         $this->assertDecodedOrder($skipping[0], 'j1');
@@ -148,7 +148,7 @@ final class JoinedDecodeTest extends TestCase
         $database = $this->database();
 
         $rows = $database->find('customers', [
-            Query::join('orders', '$id', 'customerId', '=', 'ord'),
+            Query::join('orders', 'ord', [Query::on('$id', 'customerId')]),
             Query::select(['name', 'ord.$id', 'ord.$sequence', 'ord.$createdAt', 'ord.$updatedAt', 'ord.$permissions']),
         ]);
 
@@ -159,7 +159,7 @@ final class JoinedDecodeTest extends TestCase
     public function testDecodeFiltersReceiveTheJoinedDocument(): void
     {
         $database = $this->database();
-        $join = Query::join('orders', '$id', 'customerId', '=', 'ord');
+        $join = Query::join('orders', 'ord', [Query::on('$id', 'customerId')]);
 
         $this->witnessed->exchangeArray([]);
         $database->find('customers', [$join]);
@@ -181,7 +181,7 @@ final class JoinedDecodeTest extends TestCase
 
         $this->witnessed->exchangeArray([]);
         $rows = $database->find('customers', [
-            Query::leftJoin('orders', '$id', 'customerId', '=', 'ord'),
+            Query::leftJoin('orders', 'ord', [Query::on('$id', 'customerId')]),
             Query::orderAsc('name'),
         ]);
 
@@ -204,7 +204,7 @@ final class JoinedDecodeTest extends TestCase
         }
 
         $queries = [
-            Query::join('orders', '$id', 'customerId', '=', 'ord'),
+            Query::join('orders', 'ord', [Query::on('$id', 'customerId')]),
             Query::orderAsc('ord.placedAt'),
             Query::limit(1),
         ];

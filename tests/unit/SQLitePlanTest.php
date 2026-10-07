@@ -378,7 +378,7 @@ final class SQLitePlanTest extends TestCase
         return \array_map(
             static fn (int $join): Query => $nested
                 ? Query::join(self::COLLECTION, 'p'.$join, [Query::on('$id', '$id')])
-                : Query::join(self::COLLECTION, '$id', '$id', '=', 'p'.$join),
+                : Query::join(self::COLLECTION, 'p'.$join, [Query::on('$id', '$id')]),
             \range(1, $joins),
         );
     }

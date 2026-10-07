@@ -169,7 +169,7 @@ class MySQL extends MariaDB
      * @param bool $required Whether the column is NOT NULL
      * @return string
      */
-    public function getSpatialSQLType(string $type, bool $required): string
+    protected function getSpatialSQLType(string $type, bool $required): string
     {
         switch ($type) {
             case ColumnType::Point->value:

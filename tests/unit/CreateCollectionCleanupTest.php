@@ -99,7 +99,7 @@ final class CreateCollectionCleanupTest extends TestCase
         $cache->failing = false;
 
         $this->assertNotNull($error, 'A failed invalidation after the commit must reach the caller');
-        $this->assertTrue($adapter->exists('cleanup', 'logs'), 'A collection whose definition committed must keep its table');
+        $this->assertTrue($adapter->collectionExists('cleanup', 'logs'), 'A collection whose definition committed must keep its table');
         $this->assertSame('logs', $database->getCollection('logs')->getId());
         $this->assertSame($failure, $error, 'The failure after the commit must reach the caller as it was raised');
 
@@ -144,7 +144,7 @@ final class CreateCollectionCleanupTest extends TestCase
         }
 
         $this->assertInstanceOf(DatabaseException::class, $error);
-        $this->assertFalse($adapter->exists('cleanup', 'logs'), 'A table without a stored definition must be dropped');
+        $this->assertFalse($adapter->collectionExists('cleanup', 'logs'), 'A table without a stored definition must be dropped');
         $this->assertNull($database->findCollection('logs'));
     }
 

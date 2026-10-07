@@ -90,7 +90,7 @@ final class MemoryWritePathsTest extends TestCase
 
         $adapter->setTenant(2);
         $adapter->updateDocument($this->collection(), 'home', new Document(['$id' => 'home', 'addr' => 'x', 'label' => 'kept']), true);
-        $this->assertTrue($adapter->deleteDocument(self::COLLECTION, 'home'));
+        $this->assertTrue($adapter->deleteDocument(new Document(['$id' => self::COLLECTION]), 'home'));
 
         $adapter->setTenant(1);
         $this->assertDuplicate(fn () => $this->storeAddress($adapter, 'second', 'x'), 'The first tenant\'s binding must survive the second tenant\'s update and delete');
@@ -128,7 +128,7 @@ final class MemoryWritePathsTest extends TestCase
         $before = $adapter->getDocument($this->collection(), 'home');
 
         $adapter->startTransaction();
-        $this->assertTrue($adapter->increaseDocumentAttribute(self::COLLECTION, 'home', 'visits', 5, self::UPDATED_AT));
+        $this->assertTrue($adapter->increaseDocumentAttribute(new Document(['$id' => self::COLLECTION]), 'home', 'visits', 5, self::UPDATED_AT));
         $this->assertSame(6, $adapter->getDocument($this->collection(), 'home')->getAttribute('visits'));
         $adapter->rollbackTransaction();
 
@@ -146,7 +146,7 @@ final class MemoryWritePathsTest extends TestCase
         $this->assertNull($before->getUpdatedAt());
 
         $adapter->startTransaction();
-        $this->assertTrue($adapter->increaseDocumentAttribute(self::COLLECTION, 'home', 'visits', 5, self::UPDATED_AT));
+        $this->assertTrue($adapter->increaseDocumentAttribute(new Document(['$id' => self::COLLECTION]), 'home', 'visits', 5, self::UPDATED_AT));
         $this->assertSame(5, $adapter->getDocument($this->collection(), 'home')->getAttribute('visits'));
         $adapter->rollbackTransaction();
 
@@ -194,8 +194,8 @@ final class MemoryWritePathsTest extends TestCase
         $this->storeAddress($adapter, 'fraction', 'y', 10.5);
 
         foreach (['whole' => 10, 'fraction' => 10.5] as $id => $stored) {
-            $this->assertTrue($adapter->increaseDocumentAttribute(self::COLLECTION, $id, 'visits', 1, self::UPDATED_AT, max: 5));
-            $this->assertTrue($adapter->increaseDocumentAttribute(self::COLLECTION, $id, 'visits', -1, self::UPDATED_AT, min: 20));
+            $this->assertTrue($adapter->increaseDocumentAttribute(new Document(['$id' => self::COLLECTION]), $id, 'visits', 1, self::UPDATED_AT, max: 5));
+            $this->assertTrue($adapter->increaseDocumentAttribute(new Document(['$id' => self::COLLECTION]), $id, 'visits', -1, self::UPDATED_AT, min: 20));
             $this->assertSame($stored, $adapter->getDocument($this->collection(), $id)->getAttribute('visits'), $id);
         }
     }

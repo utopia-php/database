@@ -10195,7 +10195,7 @@ trait DocumentTests
             $database->increaseDocumentAttribute($collection, 'unset', 'capped', 4, max: 10);
             $database->decreaseDocumentAttribute($collection, 'unset', 'balance', 1.5);
             $database->decreaseDocumentAttribute($collection, 'unset', 'floored', 2.5, min: -10);
-            $database->getAdapter()->increaseDocumentAttribute($collection, 'unset', 'excluded', 5, DateTime::now(), max: -1);
+            $database->getAdapter()->increaseDocumentAttribute($database->getCollection($collection), 'unset', 'excluded', 5, DateTime::now(), max: -1);
 
             $stored = $database->getDocument($collection, 'unset');
             $this->assertSame(3, $stored->getAttribute('visits'));

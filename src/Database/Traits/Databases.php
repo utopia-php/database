@@ -40,7 +40,7 @@ trait Databases
      */
     public function collectionExists(string $collection, ?string $database = null): bool
     {
-        return $this->adapter->exists($database ?? $this->adapter->getDatabase(), $collection);
+        return $this->adapter->collectionExists($database ?? $this->adapter->getDatabase(), $collection);
     }
 
     /**

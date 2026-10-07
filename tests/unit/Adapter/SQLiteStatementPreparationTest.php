@@ -41,7 +41,7 @@ final class SQLiteStatementPreparationTest extends TestCase
             $this->assertSame($refusal, $error);
         }
 
-        $this->assertFalse($adapter->exists('main', 'notes'));
+        $this->assertFalse($adapter->collectionExists('main', 'notes'));
     }
 
     public function testAStatementTheDriverCannotPrepareIsAnAdapterError(): void

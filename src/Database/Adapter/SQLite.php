@@ -434,20 +434,18 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         return true;
     }
 
+    #[Override]
+    public function exists(string $database): bool
+    {
+        return false;
+    }
+
     /**
-     * Check if Database exists
-     * Optionally check if collection exists in Database
-     *
      * @throws DatabaseException
      */
-    public function exists(string $database, ?string $collection = null): bool
+    #[Override]
+    public function collectionExists(string $database, string $collection): bool
     {
-        $database = $this->filter($database);
-
-        if (\is_null($collection)) {
-            return false;
-        }
-
         $collection = $this->filter($collection);
 
         $sql = "
@@ -652,14 +650,12 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
     }
 
     /**
-     * Delete Collection
-     *
      * @throws Exception
      * @throws PDOException
      */
-    public function deleteCollection(string $id): bool
+    public function deleteCollection(string $collection): bool
     {
-        $id = $this->filter($id);
+        $id = $this->filter($collection);
 
         // FTS5 shadow tables don't drop with the parent.
         foreach ($this->findFulltextTables($id) as $ftsTable) {
@@ -732,15 +728,13 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
     }
 
     /**
-     * Delete Attribute
-     *
      * @throws Exception
      * @throws PDOException
      */
-    public function deleteAttribute(string $collection, string $id): bool
+    public function deleteAttribute(string $collection, string $key): bool
     {
         $name = $this->filter($collection);
-        $id = $this->filter($id);
+        $id = $this->filter($key);
         $metadataCollection = new Document([Document::ID => Database::METADATA]);
         $collection = $this->getDocument($metadataCollection, $name);
 
@@ -981,15 +975,13 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
     }
 
     /**
-     * Delete Index
-     *
      * @throws Exception
      * @throws PDOException
      */
-    public function deleteIndex(string $collection, string $id, Event $event = Event::IndexDelete): bool
+    public function deleteIndex(string $collection, string $key, Event $event = Event::IndexDelete): bool
     {
         $name = $this->filter($collection);
-        $id = $this->filter($id);
+        $id = $this->filter($key);
 
         // If a regular SQLite index with this id exists, take the normal
         // DROP INDEX path. Otherwise the index is either an FTS5 virtual

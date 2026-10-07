@@ -743,7 +743,7 @@ final class MirrorReplicationTest extends TestCase
                 });
             }
 
-            public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float|string $value, string $updatedAt, int|float|string|null $min = null, int|float|string|null $max = null): bool
+            public function increaseDocumentAttribute(Document $collection, string $id, string $attribute, int|float|string $value, string $updatedAt, int|float|string|null $min = null, int|float|string|null $max = null): bool
             {
                 return $this->busy(function () use ($collection, $id, $attribute, $value, $updatedAt, $min, $max): bool {
                     $increased = parent::increaseDocumentAttribute($collection, $id, $attribute, $value, $updatedAt, $min, $max);
@@ -822,7 +822,7 @@ final class MirrorReplicationTest extends TestCase
                 });
             }
 
-            public function deleteDocument(string $collection, string $id): bool
+            public function deleteDocument(Document $collection, string $id): bool
             {
                 return $this->busy(function () use ($collection, $id): bool {
                     $this->wait(MirrorReplicationTest::DELETED);

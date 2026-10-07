@@ -45,6 +45,6 @@ final class SQLitePrepareTest extends TestCase
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('Failed to prepare collection existence query');
 
-        $adapter->exists('database', 'movies');
+        $adapter->collectionExists('database', 'movies');
     }
 }

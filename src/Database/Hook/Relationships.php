@@ -355,6 +355,7 @@ class Relationships implements Hook
         if ($this->isReferencedBack($collection, $document)) {
             $created[$collection->getId()][\strtolower($document->getId())] = $document->getId();
             $prepared->preparing[$collection->getId()][$document->getId()] = true;
+            $prepared->collections[$collection->getId()] ??= $collection;
         }
 
         return $this->relatePrepared($prepared, $coroutine, $created, [$document], $relate);
@@ -378,7 +379,7 @@ class Relationships implements Hook
      */
     private function relatePrepared(PreparedCreate $prepared, int $coroutine, array $created, array $documents, Closure $relate): mixed
     {
-        if ($this->anyStored($created)) {
+        if ($this->anyStored($prepared, $created)) {
             return $this->relateOneByOne($coroutine, $relate);
         }
 
@@ -441,6 +442,7 @@ class Relationships implements Hook
         }
 
         $prepared = $this->createPrepared();
+        $prepared->collections[$relatedCollection->getId()] = $relatedCollection;
         $created = [];
         $visited = [];
         if (! $this->collectRelated($prepared, $relatedCollection, $documents, $this->writeStacks[$coroutine] ?? [], $created, $visited)) {
@@ -622,7 +624,7 @@ class Relationships implements Hook
      *
      * @param  array<string, array<string, string>>  $ids  Ids by collection id
      */
-    private function anyStored(array $ids): bool
+    private function anyStored(PreparedCreate $prepared, array $ids): bool
     {
         $adapter = $this->db->getAdapter();
         $tenant = $adapter->getSharedTables() ? $adapter->getTenant() : null;
@@ -634,7 +636,7 @@ class Relationships implements Hook
                         static fn (string $id): Document => new Document([Document::ID => $id, Document::TENANT => $tenant]),
                         $chunk,
                     );
-                    foreach ($adapter->getSequences($collection, $documents) as $document) {
+                    foreach ($adapter->getSequences($this->collection($prepared, $collection), $documents) as $document) {
                         if ($document->getSequence() !== null) {
                             return true;
                         }

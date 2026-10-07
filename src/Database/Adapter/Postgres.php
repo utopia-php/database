@@ -149,34 +149,39 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         return $dbCreation;
     }
 
-    /**
-     * Override to use lowercase catalog names for Postgres case sensitivity.
-     */
     #[\Override]
-    public function exists(string $database, ?string $collection = null): bool
+    public function exists(string $database): bool
     {
-        $database = $this->filter($database);
+        $statement = $this->prepareStatement('SELECT "schema_name" FROM information_schema.schemata WHERE "schema_name" = ?', Event::DatabaseList);
+        $statement->bindValue(1, $this->filter($database));
 
-        if ($collection !== null) {
-            $sql = 'SELECT "table_name" FROM information_schema.tables WHERE "table_schema" = ? AND "table_name" = ?';
-            $stmt = $this->prepareStatement($sql, Event::CollectionRead);
-            $stmt->bindValue(1, $database);
-            $stmt->bindValue(2, $this->getPhysicalTableName($collection));
-        } else {
-            $sql = 'SELECT "schema_name" FROM information_schema.schemata WHERE "schema_name" = ?';
-            $stmt = $this->prepareStatement($sql, Event::DatabaseList);
-            $stmt->bindValue(1, $database);
-        }
+        return $this->returnsRows($statement);
+    }
 
+    #[\Override]
+    public function collectionExists(string $database, string $collection): bool
+    {
+        $statement = $this->prepareStatement('SELECT "table_name" FROM information_schema.tables WHERE "table_schema" = ? AND "table_name" = ?', Event::CollectionRead);
+        $statement->bindValue(1, $this->filter($database));
+        $statement->bindValue(2, $this->getPhysicalTableName($collection));
+
+        return $this->returnsRows($statement);
+    }
+
+    /**
+     * @throws DatabaseException
+     */
+    private function returnsRows(PDOStatement|DatabasePDOStatement|PDOStatementProxy $statement): bool
+    {
         try {
-            $this->execute($stmt);
-            $document = $stmt->fetchAll();
-            $stmt->closeCursor();
-        } catch (PDOException $e) {
-            throw $this->processException($e);
+            $this->execute($statement);
+            $rows = $statement->fetchAll();
+            $statement->closeCursor();
+        } catch (PDOException $error) {
+            throw $this->processException($error);
         }
 
-        return ! empty($document);
+        return ! empty($rows);
     }
 
     /**
@@ -601,16 +606,13 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
     }
 
     /**
-     * Delete Attribute
-     *
-     *
      * @throws DatabaseException
      */
-    public function deleteAttribute(string $collection, string $id): bool
+    public function deleteAttribute(string $collection, string $key): bool
     {
         $schema = $this->createSchemaBuilder();
         $table = $schema->table($this->getSQLTableRaw($collection));
-        $table->dropColumn($this->filter($id));
+        $table->dropColumn($this->filter($key));
         $result = $table->alter();
 
         $sql = $result->query;
@@ -624,6 +626,22 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
 
             throw $e;
         }
+    }
+
+    /**
+     * @return array<Document>
+     */
+    public function getSchemaAttributes(string $collection): array
+    {
+        return [];
+    }
+
+    /**
+     * @return array<Document>
+     */
+    public function getSchemaIndexes(string $collection): array
+    {
+        return [];
     }
 
     /**
@@ -765,15 +783,12 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
     }
 
     /**
-     * Delete Index
-     *
-     *
      * @throws Exception
      */
-    public function deleteIndex(string $collection, string $id): bool
+    public function deleteIndex(string $collection, string $key): bool
     {
         $collection = $this->filter($collection);
-        $id = $this->filter($id);
+        $id = $this->filter($key);
 
         $keyName = $this->getIndexName($collection, $id, $this->currentTenant());
         $schemaQualifiedName = $this->getDatabase().'.'.$keyName;

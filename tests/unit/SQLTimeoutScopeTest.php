@@ -118,8 +118,8 @@ final class SQLTimeoutScopeTest extends TestCase
         $this->assertContains(Event::DocumentsUpsert, $transform->events);
         $this->assertNotContains(Event::DocumentCreate, $transform->events);
         $transform->events = [];
-        $adapter->increaseDocumentAttribute('movies', 'batch', 'score', 1, '2026-08-13 00:00:00.000');
-        $adapter->increaseDocumentAttribute('movies', 'batch', 'score', -1, '2026-08-13 00:00:00.000');
+        $adapter->increaseDocumentAttribute($collection, 'batch', 'score', 1, '2026-08-13 00:00:00.000');
+        $adapter->increaseDocumentAttribute($collection, 'batch', 'score', -1, '2026-08-13 00:00:00.000');
         $this->assertContains(Event::DocumentIncrease, $transform->events);
         $this->assertContains(Event::DocumentDecrease, $transform->events);
 
@@ -130,7 +130,7 @@ final class SQLTimeoutScopeTest extends TestCase
         ]));
         $permissionDocument['$permissions'] = [Permission::read(Role::user('one'))];
         $adapter->updateDocument($collection, 'permissioned', $permissionDocument, false);
-        $adapter->deleteDocument('movies', 'permissioned');
+        $adapter->deleteDocument($collection, 'permissioned');
 
         foreach ([
             Event::PermissionsCreate,

@@ -28,7 +28,7 @@ use Utopia\Query\CursorDirection;
  * Pool is a proxy: optional Feature methods are forwarded to the borrowed adapter.
  * Feature support is reported by hasFeature(), not instanceof.
  */
-class Pool extends Adapter
+class Pool extends Adapter implements Feature\Timeouts
 {
     /**
      * @var UtopiaPool<covariant Adapter>
@@ -216,17 +216,14 @@ class Pool extends Adapter
      * DefinedAttributes: it reflects the schema mode a connection is in. Once this handle has set
      * that mode, every connection it borrows is put in it first, so the answer is kept per pool
      * and mode; before that, a connection keeps its own mode and is asked every time.
-     *
-     * @param Capability $feature The capability to check
-     * @return bool
      */
-    public function supports(Capability $feature): bool
+    public function supports(Capability $capability): bool
     {
-        if ($feature === Capability::DefinedAttributes) {
+        if ($capability === Capability::DefinedAttributes) {
             return $this->supportsDefinedAttributes();
         }
 
-        return \in_array($feature, $this->capabilities(), true);
+        return \in_array($capability, $this->capabilities(), true);
     }
 
     private function supportsDefinedAttributes(): bool
@@ -275,10 +272,17 @@ class Pool extends Adapter
     }
 
     /**
+     * A feature the pool serves itself, such as timeouts it holds as state, is answered without checking a
+     * connection out; any other is answered by the pooled adapter.
+     *
      * @param  class-string  $feature
      */
     public function hasFeature(string $feature): bool
     {
+        if ($this instanceof $feature) {
+            return true;
+        }
+
         $known = self::$features[$this->pool][$feature] ?? null;
         if ($known !== null) {
             return $known;
@@ -517,16 +521,9 @@ class Pool extends Adapter
         });
     }
 
-    protected function quote(string $string): string
-    {
-        /** @var string $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
-        return $result;
-    }
-
     protected function syncTimeouts(Adapter $adapter): void
     {
-        if (! ($adapter instanceof Feature\Timeouts)) {
+        if (! $adapter->hasFeature(Feature\Timeouts::class)) {
             // Setting a timeout no longer checks a connection out, so this is the
             // first moment the adapter's capabilities are known. Staying silent
             // here would drop a bound the caller asked for and run the statement
@@ -539,6 +536,7 @@ class Pool extends Adapter
             return;
         }
 
+        /** @var Adapter&Feature\Timeouts $adapter */
         if (empty($this->timeouts)) {
             $adapter->clearTimeout();
 
@@ -625,7 +623,14 @@ class Pool extends Adapter
     /**
      * {@inheritDoc}
      */
-    public function exists(string $database, ?string $collection = null): bool
+    public function exists(string $database): bool
+    {
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
+    }
+
+    public function collectionExists(string $database, string $collection): bool
     {
         /** @var bool $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());
@@ -666,7 +671,7 @@ class Pool extends Adapter
     /**
      * {@inheritDoc}
      */
-    public function deleteCollection(string $id): bool
+    public function deleteCollection(string $collection): bool
     {
         /** @var bool $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());
@@ -721,7 +726,7 @@ class Pool extends Adapter
     /**
      * {@inheritDoc}
      */
-    public function deleteAttribute(string $collection, string $id): bool
+    public function deleteAttribute(string $collection, string $key): bool
     {
         /** @var bool $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());
@@ -791,7 +796,7 @@ class Pool extends Adapter
     /**
      * {@inheritDoc}
      */
-    public function deleteIndex(string $collection, string $id): bool
+    public function deleteIndex(string $collection, string $key): bool
     {
         /** @var bool $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());
@@ -862,7 +867,7 @@ class Pool extends Adapter
     /**
      * {@inheritDoc}
      */
-    public function deleteDocument(string $collection, string $id): bool
+    public function deleteDocument(Document $collection, string $id): bool
     {
         /** @var bool $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());
@@ -872,7 +877,7 @@ class Pool extends Adapter
     /**
      * {@inheritDoc}
      */
-    public function deleteDocuments(string $collection, array $sequences, array $permissionIds): int
+    public function deleteDocuments(Document $collection, array $sequences, array $permissionIds): int
     {
         /** @var int $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());
@@ -1092,7 +1097,7 @@ class Pool extends Adapter
     /**
      * {@inheritDoc}
      */
-    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, float|int|string $value, string $updatedAt, float|int|string|null $min = null, float|int|string|null $max = null): bool
+    public function increaseDocumentAttribute(Document $collection, string $id, string $attribute, float|int|string $value, string $updatedAt, float|int|string|null $min = null, float|int|string|null $max = null): bool
     {
         /** @var bool $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());
@@ -1125,7 +1130,7 @@ class Pool extends Adapter
     public function getSchemaAttributes(string $collection): array
     {
         /** @var array<Document> $result */
-        $result = $this->delegateFeature(Feature\SchemaAttributes::class, __FUNCTION__, \func_get_args());
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
         return $result;
     }
 
@@ -1135,13 +1140,6 @@ class Pool extends Adapter
     public function getSchemaIndexes(string $collection): array
     {
         /** @var array<Document> $result */
-        $result = $this->delegateFeature(Feature\SchemaIndexes::class, __FUNCTION__, \func_get_args());
-        return $result;
-    }
-
-    protected function execute(mixed $statement): bool
-    {
-        /** @var bool $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());
         return $result;
     }
@@ -1159,7 +1157,7 @@ class Pool extends Adapter
     /**
      * {@inheritDoc}
      */
-    public function getSequences(string $collection, array $documents): array
+    public function getSequences(Document $collection, array $documents): array
     {
         /** @var array<Document> $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());

@@ -455,56 +455,56 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
-     * Check if Database exists
-     * Optionally check if collection exists in Database
-     *
      * @throws DatabaseException
      */
-    public function exists(string $database, ?string $collection = null): bool
+    public function exists(string $database): bool
     {
-        $database = $this->filter($database);
+        $result = $this->createBuilder()
+            ->from('INFORMATION_SCHEMA.SCHEMATA')
+            ->selectRaw('SCHEMA_NAME')
+            ->filter([BaseQuery::equal('SCHEMA_NAME', [$this->filter($database)])])
+            ->build();
 
-        if (! \is_null($collection)) {
-            $collection = $this->filter($collection);
-            $builder = $this->createBuilder();
-            $result = $builder
-                ->from('INFORMATION_SCHEMA.TABLES')
-                ->selectRaw('TABLE_NAME')
-                ->filter([
-                    BaseQuery::equal('TABLE_SCHEMA', [$database]),
-                    BaseQuery::equal('TABLE_NAME', ["{$this->getNamespace()}_{$collection}"]),
-                ])
-                ->build();
-            $stmt = $this->executeResult($result, Event::CollectionRead);
-        } else {
-            $builder = $this->createBuilder();
-            $result = $builder
-                ->from('INFORMATION_SCHEMA.SCHEMATA')
-                ->selectRaw('SCHEMA_NAME')
-                ->filter([BaseQuery::equal('SCHEMA_NAME', [$database])])
-                ->build();
-            $stmt = $this->executeResult($result, Event::DatabaseList);
-        }
+        return $this->returnsRows($this->executeResult($result, Event::DatabaseList));
+    }
 
+    /**
+     * @throws DatabaseException
+     */
+    public function collectionExists(string $database, string $collection): bool
+    {
+        $result = $this->createBuilder()
+            ->from('INFORMATION_SCHEMA.TABLES')
+            ->selectRaw('TABLE_NAME')
+            ->filter([
+                BaseQuery::equal('TABLE_SCHEMA', [$this->filter($database)]),
+                BaseQuery::equal('TABLE_NAME', ["{$this->getNamespace()}_{$this->filter($collection)}"]),
+            ])
+            ->build();
+
+        return $this->returnsRows($this->executeResult($result, Event::CollectionRead));
+    }
+
+    /**
+     * @throws DatabaseException
+     */
+    private function returnsRows(PDOStatement|DatabasePDOStatement|PDOStatementProxy $statement): bool
+    {
         try {
-            $this->execute($stmt);
-            $document = $stmt->fetchAll();
-            $stmt->closeCursor();
-        } catch (PDOException $e) {
-            $e = $this->processException($e);
+            $this->execute($statement);
+            $rows = $statement->fetchAll();
+            $statement->closeCursor();
+        } catch (PDOException $error) {
+            $error = $this->processException($error);
 
-            if ($e instanceof NotFoundException) {
+            if ($error instanceof NotFoundException) {
                 return false;
             }
 
-            throw $e;
+            throw $error;
         }
 
-        if (empty($document)) {
-            return false;
-        }
-
-        return true;
+        return ! empty($rows);
     }
 
     /**
@@ -578,16 +578,14 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
-     * Delete Attribute
-     *
      * @throws Exception
      * @throws PDOException
      */
-    public function deleteAttribute(string $collection, string $id): bool
+    public function deleteAttribute(string $collection, string $key): bool
     {
         $schema = $this->createSchemaBuilder();
         $table = $schema->table($this->getSQLTableRaw($collection));
-        $table->dropColumn($this->filter($id));
+        $table->dropColumn($this->filter($key));
         $result = $table->alter();
 
         $sql = $result->query;
@@ -1347,7 +1345,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      *
      * @throws DatabaseException
      */
-    public function deleteDocuments(string $collection, array $sequences, array $permissionIds): int
+    public function deleteDocuments(Document $collection, array $sequences, array $permissionIds): int
     {
         if (empty($sequences)) {
             return 0;
@@ -1356,7 +1354,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $this->syncWriteHooks();
 
         try {
-            $name = $this->filter($collection);
+            $name = $this->filter($collection->getId());
 
             // Delete documents
             $builder = $this->newBuilder($name);
@@ -1385,7 +1383,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      *
      * @throws DatabaseException
      */
-    public function getSequences(string $collection, array $documents): array
+    public function getSequences(Document $collection, array $documents): array
     {
         $documentIds = [];
         $tenants = [];
@@ -1408,7 +1406,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             return $documents;
         }
 
-        $builder = $this->newBuilder($collection, tenants: $tenants);
+        $builder = $this->newBuilder($collection->getId(), tenants: $tenants);
         $builder->select($keyedByTenant
             ? [Storage::UID, Storage::SEQUENCE, Storage::TENANT]
             : [Storage::UID, Storage::SEQUENCE]);
@@ -1443,7 +1441,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     public function increaseDocumentAttribute(
-        string $collection,
+        Document $collection,
         string $id,
         string $attribute,
         int|float|string $value,
@@ -1451,7 +1449,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         int|float|string|null $min = null,
         int|float|string|null $max = null
     ): bool {
-        $name = $this->filter($collection);
+        $name = $this->filter($collection->getId());
         $attribute = $this->filter($attribute);
 
         $builder = $this->newBuilder($name);
@@ -1482,12 +1480,12 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         return true;
     }
 
-    public function deleteDocument(string $collection, string $id): bool
+    public function deleteDocument(Document $collection, string $id): bool
     {
         try {
             $this->syncWriteHooks();
 
-            $name = $this->filter($collection);
+            $name = $this->filter($collection->getId());
 
             $builder = $this->newBuilder($name);
             $filters = [BaseQuery::equal(Storage::UID, [$id])];
@@ -3040,9 +3038,9 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      *
      * @throws DatabaseException
      */
-    public function deleteCollection(string $id): bool
+    public function deleteCollection(string $collection): bool
     {
-        $id = $this->filter($id);
+        $id = $this->filter($collection);
 
         $schema = $this->createSchemaBuilder();
         $main = $schema->table($this->getSQLTableRaw($id))->drop();

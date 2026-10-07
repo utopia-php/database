@@ -307,9 +307,9 @@ final class RedisAdapterPathsTest extends TestCase
         $this->createNotes($adapter);
         $stored = $adapter->createDocument($this->notes(), new Document(['$id' => 'stored', '$permissions' => [], 'title' => 'a']));
 
-        $this->assertSame([], $adapter->getSequences(self::NOTES, []));
+        $this->assertSame([], $adapter->getSequences(new Document(['$id' => self::NOTES]), []));
 
-        $documents = $adapter->getSequences(self::NOTES, [
+        $documents = $adapter->getSequences(new Document(['$id' => self::NOTES]), [
             new Document(['$id' => 'stored']),
             new Document(['$id' => 'missing']),
             new Document(['$id' => 'given', '$sequence' => '99']),
@@ -319,7 +319,7 @@ final class RedisAdapterPathsTest extends TestCase
         $this->assertEmpty($documents[1]->getSequence());
         $this->assertSame('99', $documents[2]->getSequence());
 
-        $complete = $adapter->getSequences(self::NOTES, [new Document(['$id' => 'given', '$sequence' => '99'])]);
+        $complete = $adapter->getSequences(new Document(['$id' => self::NOTES]), [new Document(['$id' => 'given', '$sequence' => '99'])]);
         $this->assertSame('99', $complete[0]->getSequence());
     }
 
@@ -332,7 +332,7 @@ final class RedisAdapterPathsTest extends TestCase
 
         $this->expectException(TransactionException::class);
         $this->expectExceptionMessage('Failed to load sequences: connection lost');
-        (new RedisAdapter($client))->getSequences(self::NOTES, [new Document(['$id' => 'first'])]);
+        (new RedisAdapter($client))->getSequences(new Document(['$id' => self::NOTES]), [new Document(['$id' => 'first'])]);
     }
 
     public function testIncrementGuardsOfTheAdapter(): void
@@ -343,14 +343,14 @@ final class RedisAdapterPathsTest extends TestCase
         $adapter->createDocument($this->notes(), new Document(['$id' => 'fraction', '$permissions' => [], 'count' => 10.5]));
 
         foreach (['whole' => 10, 'fraction' => 10.5] as $id => $stored) {
-            $this->assertTrue($adapter->increaseDocumentAttribute(self::NOTES, $id, 'count', 1, '2026-01-01 00:00:00.000', max: 5));
-            $this->assertTrue($adapter->increaseDocumentAttribute(self::NOTES, $id, 'count', -1, '2026-01-01 00:00:00.000', min: 20));
+            $this->assertTrue($adapter->increaseDocumentAttribute(new Document(['$id' => self::NOTES]), $id, 'count', 1, '2026-01-01 00:00:00.000', max: 5));
+            $this->assertTrue($adapter->increaseDocumentAttribute(new Document(['$id' => self::NOTES]), $id, 'count', -1, '2026-01-01 00:00:00.000', min: 20));
             $this->assertSame($stored, $adapter->getDocument($this->notes(), $id)->getAttribute('count'), $id);
         }
 
         $this->expectException(NotFoundException::class);
         $this->expectExceptionMessage('Document not found');
-        $adapter->increaseDocumentAttribute(self::NOTES, 'vanished', 'count', 1, '2026-01-01 00:00:00.000');
+        $adapter->increaseDocumentAttribute(new Document(['$id' => self::NOTES]), 'vanished', 'count', 1, '2026-01-01 00:00:00.000');
     }
 
     public function testRenamingAnAttributeOnAnEmptyCollectionOrToItsOwnName(): void

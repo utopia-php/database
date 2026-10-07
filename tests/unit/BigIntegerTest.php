@@ -254,7 +254,7 @@ final class BigIntegerTest extends TestCase
 
         $this->expectException(TypeException::class);
         $this->expectExceptionMessage('outside the signed 64-bit integer range');
-        $adapter->increaseDocumentAttribute('collection', 'document', 'value', BigInt::UNSIGNED_MAX, '2026-01-01T00:00:00.000+00:00');
+        $adapter->increaseDocumentAttribute(new Document(['$id' => 'collection']), 'document', 'value', BigInt::UNSIGNED_MAX, '2026-01-01T00:00:00.000+00:00');
     }
 
     public function testMemoryAndRedisHonourAFloatBoundOnTheExactBigIntegerPath(): void

@@ -126,7 +126,7 @@ final class SQLiteSchemaTest extends TestCase
             $this->assertSame($message, $error->getMessage());
         }
 
-        $this->assertFalse($this->adapter->exists(self::NAMESPACE, 'codes'));
+        $this->assertFalse($this->adapter->collectionExists(self::NAMESPACE, 'codes'));
     }
 
     public function testAVarcharColumnWithinItsSizesIsCreated(): void

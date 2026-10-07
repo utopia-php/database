@@ -5,7 +5,6 @@ namespace Utopia\Database;
 use DateTime;
 use Exception;
 use Throwable;
-use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Contention as ContentionException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
@@ -24,7 +23,7 @@ use Utopia\Query\Method;
 /**
  * Abstract base class for all database adapters, providing shared state management and a contract for database operations.
  */
-abstract class Adapter implements Feature\Attributes, Feature\Collections, Feature\Databases, Feature\Documents, Feature\Indexes, Feature\Transactions
+abstract class Adapter
 {
     protected string $database = '';
 
@@ -99,20 +98,16 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     /** @var array<string, true>|null */
     protected ?array $capabilitySet = null;
 
-    /**
-     * Check if this adapter supports a given capability.
-     *
-     * @param  Capability  $feature  Capability enum case
-     */
-    public function supports(Capability $feature): bool
+    public function supports(Capability $capability): bool
     {
         if ($this->capabilitySet === null) {
             $this->capabilitySet = [];
-            foreach ($this->capabilities() as $cap) {
-                $this->capabilitySet[$cap->name] = true;
+            foreach ($this->capabilities() as $declared) {
+                $this->capabilitySet[$declared->name] = true;
             }
         }
-        return isset($this->capabilitySet[$feature->name]);
+
+        return isset($this->capabilitySet[$capability->name]);
     }
 
     /**
@@ -812,30 +807,17 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
         return Connection::hasError($error);
     }
 
-    /**
-     * Create Database
-     */
     abstract public function create(string $name): bool;
 
-    /**
-     * Check if database exists
-     * Optionally check if collection exists in database
-     *
-     * @param  string  $database  database name
-     * @param  string|null  $collection  (optional) collection name
-     */
-    abstract public function exists(string $database, ?string $collection = null): bool;
+    abstract public function exists(string $database): bool;
+
+    abstract public function collectionExists(string $database, string $collection): bool;
 
     /**
-     * List Databases
-     *
      * @return array<Document>
      */
     abstract public function list(): array;
 
-    /**
-     * Delete Database
-     */
     abstract public function delete(string $name): bool;
 
     /**
@@ -844,10 +826,7 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
      */
     abstract public function createCollection(string $collection, array $attributes = [], array $indexes = []): bool;
 
-    /**
-     * Delete Collection
-     */
-    abstract public function deleteCollection(string $id): bool;
+    abstract public function deleteCollection(string $collection): bool;
 
     /**
      * Analyze a collection updating its metadata on the database engine
@@ -890,15 +869,23 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
         return true;
     }
 
-    /**
-     * Delete Attribute
-     */
-    abstract public function deleteAttribute(string $collection, string $id): bool;
+    abstract public function deleteAttribute(string $collection, string $key): bool;
+
+    abstract public function renameAttribute(string $collection, string $old, string $new): bool;
 
     /**
-     * Rename Attribute
+     * The columns the engine holds for a collection, empty where the engine cannot be introspected.
+     *
+     * @return array<Document>
      */
-    abstract public function renameAttribute(string $collection, string $old, string $new): bool;
+    abstract public function getSchemaAttributes(string $collection): array;
+
+    /**
+     * The indexes the engine holds for a collection, empty where the engine cannot be introspected.
+     *
+     * @return array<Document>
+     */
+    abstract public function getSchemaIndexes(string $collection): array;
 
     /**
      * @param  array<string, string>  $indexAttributeTypes
@@ -906,14 +893,8 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
      */
     abstract public function createIndex(string $collection, Index $index, array $indexAttributeTypes = [], array $collation = []): bool;
 
-    /**
-     * Delete Index
-     */
-    abstract public function deleteIndex(string $collection, string $id): bool;
+    abstract public function deleteIndex(string $collection, string $key): bool;
 
-    /**
-     * Rename Index
-     */
     abstract public function renameIndex(string $collection, string $old, string $new): bool;
 
     /**
@@ -960,7 +941,7 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
      * @throws Exception
      */
     abstract public function increaseDocumentAttribute(
-        string $collection,
+        Document $collection,
         string $id,
         string $attribute,
         int|float|string $value,
@@ -969,18 +950,13 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
         int|float|string|null $max = null
     ): bool;
 
-    /**
-     * Delete Document
-     */
-    abstract public function deleteDocument(string $collection, string $id): bool;
+    abstract public function deleteDocument(Document $collection, string $id): bool;
 
     /**
-     * Delete Documents
-     *
      * @param  array<string>  $sequences
      * @param  array<string>  $permissionIds
      */
-    abstract public function deleteDocuments(string $collection, array $sequences, array $permissionIds): int;
+    abstract public function deleteDocuments(Document $collection, array $sequences, array $permissionIds): int;
 
     /**
      * Find Documents
@@ -1013,7 +989,7 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
      * @param  array<Document>  $documents
      * @return array<Document>
      */
-    abstract public function getSequences(string $collection, array $documents): array;
+    abstract public function getSequences(Document $collection, array $documents): array;
 
     /**
      * Get max STRING limit
@@ -1168,18 +1144,25 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     abstract public function getCountOfDefaultIndexes(): int;
 
     /**
-     * Get list of keywords that cannot be used
+     * Reserved words no attribute or collection may be named after. Only SQL engines reserve any.
      *
      * @return array<string>
      */
-    abstract public function getKeywords(): array;
+    public function getKeywords(): array
+    {
+        return [];
+    }
 
     /**
-     * Get List of internal index keys names
+     * Keys of the indexes the adapter creates for itself, which no declared index may reuse. Only SQL engines
+     * create any.
      *
      * @return array<string>
      */
-    abstract public function getInternalIndexesKeys(): array;
+    public function getInternalIndexesKeys(): array
+    {
+        return [];
+    }
 
     protected function getInternalKeyForAttribute(string $attribute): string
     {
@@ -1315,13 +1298,6 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
 
         return $value;
     }
-
-    /**
-     * Quote a string
-     */
-    abstract protected function quote(string $string): string;
-
-    abstract protected function execute(mixed $statement): bool;
 
     /**
      * @return mixed

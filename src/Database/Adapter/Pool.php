@@ -26,6 +26,7 @@ use Utopia\Query\Builder;
 use Utopia\Query\CursorDirection;
 use Utopia\Query\Schema;
 use Utopia\Query\Schema\ColumnType;
+use Utopia\Query\Schema\IndexType;
 
 /**
  * Connection pool adapter that delegates database operations to pooled adapter instances.
@@ -1029,6 +1030,14 @@ class Pool extends Adapter implements Feature\Timeouts
     public function getSchemaIndexes(string $collection): array
     {
         /** @var list<SchemaIndex> $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
+    }
+
+    #[\Override]
+    public function getSchemaIndexType(IndexType $type): IndexType
+    {
+        /** @var IndexType $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());
         return $result;
     }

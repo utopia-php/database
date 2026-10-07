@@ -431,7 +431,7 @@ trait Indexes
     private function schemaIndexMatches(Schema\Index $schemaIndex, Index $index): bool
     {
         $columns = \array_map(\strtolower(...), $schemaIndex->columns);
-        $lengths = \array_map(static fn (?int $length): int => $length ?? 0, $schemaIndex->lengths);
+        $lengths = $schemaIndex->lengths;
 
         if ($this->getSharedTables() && ($columns[0] ?? '') === Storage::TENANT) {
             \array_shift($columns);
@@ -449,12 +449,13 @@ trait Indexes
             if ($columns[$position] !== \strtolower($this->adapter->filter(Storage::column($attribute)))) {
                 return false;
             }
-            if (($lengths[$position] ?? 0) !== ($index->lengths[$position] ?? 0)) {
+            $length = $lengths[$position] ?? null;
+            if ($length !== null && $length !== ($index->lengths[$position] ?? 0)) {
                 return false;
             }
         }
 
-        return $schemaIndex->type === $index->type;
+        return $schemaIndex->type === $this->adapter->getSchemaIndexType($index->type);
     }
 
     /**

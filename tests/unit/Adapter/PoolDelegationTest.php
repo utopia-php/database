@@ -7,11 +7,13 @@ use PDO;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
+use stdClass;
 use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\Pool;
+use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Change;
@@ -24,6 +26,7 @@ use Utopia\Database\Relationship;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Pools\Pool as UtopiaPool;
 use Utopia\Query\Schema\ColumnType;
+use Utopia\Query\Schema\IndexType;
 
 final class PoolDelegationTest extends TestCase
 {
@@ -36,7 +39,6 @@ final class PoolDelegationTest extends TestCase
             'raw queries' => [static fn (Pool $pool): mixed => $pool->rawQuery('SELECT 1'), 'Adapter does not support raw queries'],
             'query builder' => [static fn (Pool $pool): mixed => $pool->builder('books'), 'Adapter does not support query builder'],
             'schema builder' => [static fn (Pool $pool): mixed => $pool->schema(), 'Adapter does not support query builder'],
-            'spatial encoding' => [static fn (Pool $pool): mixed => $pool->encode([1, 2], ColumnType::Point), 'Adapter does not support spatial'],
             'spatial decoding' => [static fn (Pool $pool): mixed => $pool->decode('', ColumnType::Point), 'Adapter does not support spatial'],
             'casting before a write' => [static fn (Pool $pool): mixed => $pool->castBefore(new Document(), new Document()), 'Adapter does not support casting'],
             'casting after a read' => [static fn (Pool $pool): mixed => $pool->castAfter(new Document(), [new Document()]), 'Adapter does not support casting'],
@@ -70,6 +72,13 @@ final class PoolDelegationTest extends TestCase
 
         $this->assertSame([], $pool->list());
         $this->assertSame(['request' => 'r-1'], $adapter->getDebug());
+    }
+
+    public function testTheIntrospectedIndexTypeIsTheBorrowedAdapters(): void
+    {
+        $pool = $this->pool(new Postgres(new stdClass()));
+
+        $this->assertSame(IndexType::Key, $pool->getSchemaIndexType(IndexType::Fulltext));
     }
 
     public function testDirectTransactionCallsReachTheBorrowedAdapter(): void

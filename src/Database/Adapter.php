@@ -20,6 +20,7 @@ use Utopia\Database\State\Value;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\CursorDirection;
 use Utopia\Query\Method;
+use Utopia\Query\Schema\IndexType;
 
 /**
  * Abstract base class for all database adapters, providing shared state management and a contract for database operations.
@@ -818,6 +819,17 @@ abstract class Adapter
      * @return list<Schema\Index>
      */
     abstract public function getSchemaIndexes(string $collection): array;
+
+    /**
+     * The type getSchemaIndexes() reports for an index created as $type: an engine that stores an index of one
+     * type as another reports the type it stores.
+     *
+     * @internal
+     */
+    public function getSchemaIndexType(IndexType $type): IndexType
+    {
+        return $type;
+    }
 
     /**
      * The native column type the adapter creates for an attribute, in the spelling of Schema\Column::$type; null where

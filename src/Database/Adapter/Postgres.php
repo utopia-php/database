@@ -751,6 +751,15 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     /**
+     * A fulltext index is a plain btree index here, which the catalog reports as a key.
+     */
+    #[\Override]
+    public function getSchemaIndexType(IndexType $type): IndexType
+    {
+        return $type === IndexType::Fulltext ? IndexType::Key : $type;
+    }
+
+    /**
      * Under shared tables every tenant keeps its own copy of an index, named after it: the current tenant's are
      * reported under their keys, any other index under its physical name.
      *

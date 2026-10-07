@@ -11,7 +11,8 @@ final readonly class Index
 {
     /**
      * @param  list<string>  $columns  The indexed columns, in index order
-     * @param  list<int|null>  $lengths  The prefix length of each column, null where the whole value is indexed
+     * @param  list<int|null>  $lengths  The prefix length of each column; null where the whole value is indexed or the
+     *                                    engine reports no prefix lengths, so null is never compared
      */
     public function __construct(
         public string $name,

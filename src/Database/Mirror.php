@@ -1901,8 +1901,8 @@ class Mirror extends Database
         }
 
         if ($hook instanceof Relationships) {
-            $this->source->addHook(new Relationships($this->source));
-            $this->destination?->addHook(new Relationships($this->destination));
+            $this->source->addHook(new Relationships($this->source, $hook->shouldPrepare()));
+            $this->destination?->addHook(new Relationships($this->destination, $hook->shouldPrepare()));
         }
 
         if ($hook instanceof Write) {

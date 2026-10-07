@@ -265,10 +265,7 @@ final readonly class Index
             throw new IndexException('Index key must be a string');
         }
 
-        $type = $type instanceof IndexType ? $type : IndexType::tryFrom(\is_string($type) ? $type : '');
-        if ($type === null) {
-            throw new IndexException('Unknown index type for index "'.$key.'"');
-        }
+        $type = $type instanceof IndexType ? $type : IndexType::tryFrom(\is_string($type) ? $type : '') ?? IndexType::Key;
 
         return self::make(
             $key,

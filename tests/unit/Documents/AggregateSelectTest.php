@@ -389,7 +389,7 @@ final class AggregateSelectTest extends TestCase
             $database->setSharedTables(true)->setTenant(null);
         }
         $database->addHook(new Permissions());
-        $database->addHook(new Relationships($database));
+        $database->addHook(new Relationships());
         $database->create();
 
         $this->createCollection($database, 'customers', [

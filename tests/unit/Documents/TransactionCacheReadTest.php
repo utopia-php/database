@@ -188,7 +188,7 @@ final class TransactionCacheReadTest extends TestCase
     {
         $adapter = new CountingMemory();
         $database = $this->createDatabase($adapter, new RedisLeasableCache());
-        $database->addHook(new Relationships($database));
+        $database->addHook(new Relationships());
         $database->createCollection(Collection::create(id: 'libraries', attributes: [
             Attribute::string(key: 'name'),
         ], permissions: [

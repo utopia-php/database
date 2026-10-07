@@ -179,7 +179,7 @@ class RelationshipValidationTest extends TestCase
         $database->getAuthorization()->addRole(Role::any()->toString());
 
         if ($withRelationshipHook) {
-            $database->addHook(new Relationships($database));
+            $database->addHook(new Relationships());
         }
 
         return $database;

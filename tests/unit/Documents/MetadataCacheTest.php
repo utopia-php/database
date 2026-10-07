@@ -29,7 +29,7 @@ class MetadataCacheTest extends TestCase
         $this->database
             ->setDatabase('utopiaTests')
             ->setNamespace('metadata_cache_'.\uniqid());
-        $this->database->addHook(new Relationships($this->database));
+        $this->database->addHook(new Relationships());
 
         $this->database->create();
 

@@ -174,7 +174,7 @@ final class TwoWayOneToOneLinkTest extends TestCase
             ->setDatabase('two_way_one_to_one')
             ->setNamespace('two_way_one_to_one_'.\uniqid());
         $database->create();
-        $database->addHook(new Relationships($database));
+        $database->addHook(new Relationships());
         $database->addHook(new Permissions());
 
         $permissions = [

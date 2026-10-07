@@ -49,7 +49,7 @@ final class QueryValidationTest extends TestCase
             ->setNamespace('query_validation_'.\uniqid())
             ->setAuthorization(new Authorization());
         $this->database->addHook(new Permissions());
-        $this->database->addHook(new Relationships($this->database));
+        $this->database->addHook(new Relationships());
         $this->database->create();
 
         $this->createCollection('authors', [Attribute::string(key: 'name', size: 32)]);

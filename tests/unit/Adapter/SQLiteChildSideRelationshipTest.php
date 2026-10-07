@@ -34,7 +34,7 @@ final class SQLiteChildSideRelationshipTest extends TestCase
             ->setDatabase(self::NAMESPACE)
             ->setNamespace(self::NAMESPACE)
             ->setAuthorization(new Authorization());
-        $this->database->addHook(new Relationships($this->database));
+        $this->database->addHook(new Relationships());
         $this->database->create();
 
         foreach (['authors', 'books'] as $collection) {

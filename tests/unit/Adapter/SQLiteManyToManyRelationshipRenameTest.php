@@ -37,7 +37,7 @@ final class SQLiteManyToManyRelationshipRenameTest extends TestCase
             ->setNamespace(self::NAMESPACE)
             ->setAuthorization($authorization);
         $this->database->addHook(new Permissions());
-        $this->database->addHook(new Relationships($this->database));
+        $this->database->addHook(new Relationships());
         $this->database->create();
 
         foreach (['books', 'authors'] as $collection) {

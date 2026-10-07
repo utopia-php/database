@@ -327,7 +327,7 @@ final class ParallelPopulationTest extends TestCase
         $database->setDatabase('population')->setNamespace('population');
         $database->create();
         $database->addHook(new Permissions());
-        $database->addHook(new Relationships($database));
+        $database->addHook(new Relationships());
         $database->addHook(new class ($this->select(...)) implements Transform {
             public function __construct(private readonly Closure $select)
             {

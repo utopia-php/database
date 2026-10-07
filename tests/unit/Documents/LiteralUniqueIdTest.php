@@ -178,7 +178,7 @@ final class LiteralUniqueIdTest extends TestCase
         $database
             ->setDatabase('literal_unique_id')
             ->setNamespace('literal_unique_id_'.\uniqid())
-            ->addHook(new Relationships($database))
+            ->addHook(new Relationships())
             ->addHook(new Permissions());
         $database->create();
 

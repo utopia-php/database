@@ -753,7 +753,7 @@ final class RelationshipSchemaTest extends TestCase
             ->setDatabase('relationship_schema')
             ->setNamespace('relationship_schema_'.\uniqid());
         $database->create();
-        $database->addHook(new Relationships($database));
+        $database->addHook(new Relationships());
 
         $permissions = [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any()), Permission::delete(Role::any())];
         $database->createCollection(Collection::create(id: 'books', attributes: [Attribute::string(key: 'title', size: 64)], permissions: $permissions));

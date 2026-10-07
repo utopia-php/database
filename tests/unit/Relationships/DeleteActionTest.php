@@ -212,7 +212,7 @@ final class DeleteActionTest extends TestCase
             ->setDatabase('delete_action')
             ->setNamespace('delete_action_'.\uniqid());
         $database->create();
-        $database->addHook(new Relationships($database));
+        $database->addHook(new Relationships());
         $database->addHook(new Permissions());
 
         $permissions = [

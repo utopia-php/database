@@ -1118,9 +1118,7 @@ class Database
     }
 
     /**
-     * Get the current relationship hook.
-     *
-     * @return Relationships|null The relationship hook, or null if not set.
+     * @internal
      */
     public function getRelationshipHook(): ?Relationships
     {
@@ -1442,6 +1440,8 @@ class Database
      * - {@see Hook\Write} — row-level write interception (permissions, tenant)
      * - {@see Hook\Transform} — raw SQL transformation before execution
      *
+     * An {@see Hook\Attachable} hook is attached to this database first.
+     *
      * @throws DatabaseException When the hook is none of these
      */
     public function addHook(\Utopia\Query\Hook $hook): static
@@ -1454,6 +1454,10 @@ class Database
             && ! $hook instanceof Transform
         ) {
             throw new DatabaseException('Unknown hook: '.$hook::class);
+        }
+
+        if ($hook instanceof Hook\Attachable) {
+            $hook->attach($this);
         }
 
         if ($hook instanceof Lifecycle) {
@@ -1482,6 +1486,42 @@ class Database
 
         if ($hook instanceof Transform) {
             $this->adapter->addTransform($hook::class, $hook);
+        }
+
+        return $this;
+    }
+
+    /**
+     * Unregister a hook, or with a class-string every hook of that class, from wherever {@see self::addHook()}
+     * registered it.
+     *
+     * @param  \Utopia\Query\Hook|class-string<\Utopia\Query\Hook>  $hook
+     */
+    public function removeHook(\Utopia\Query\Hook|string $hook): static
+    {
+        $kept = \is_string($hook)
+            ? static fn (object $registered): bool => ! $registered instanceof $hook
+            : static fn (object $registered): bool => $registered !== $hook;
+
+        $this->lifecycleHooks = \array_values(\array_filter($this->lifecycleHooks, $kept));
+        $this->decorators = \array_values(\array_filter($this->decorators, $kept));
+
+        if ($this->invalidator !== null && ! $kept($this->invalidator)) {
+            $this->invalidator = null;
+        }
+
+        if ($this->relationshipHook !== null && ! $kept($this->relationshipHook)) {
+            $this->relationshipHook = null;
+        }
+
+        if (\is_string($hook) || $hook instanceof Hook\Write) {
+            $this->adapter->removeWriteHook($hook);
+        }
+
+        if (\is_string($hook)) {
+            $this->adapter->removeTransform($hook);
+        } elseif ($hook instanceof Transform) {
+            $this->adapter->removeTransform($hook::class);
         }
 
         return $this;

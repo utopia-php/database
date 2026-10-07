@@ -248,7 +248,7 @@ final class DatabaseUpdateTest extends TestCase
     {
         $database = new Database($adapter, new Cache(new HashAwareMemoryCache()));
         $database->setAuthorization($this->authorization)->setNamespace(self::NAMESPACE);
-        $database->addHook(new Relationships($database));
+        $database->addHook(new Relationships());
 
         return $database;
     }

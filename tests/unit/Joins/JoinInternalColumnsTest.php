@@ -399,7 +399,7 @@ final class JoinInternalColumnsTest extends TestCase
      */
     private function useRelationships(): void
     {
-        $this->database->addHook(new Relationships($this->database));
+        $this->database->addHook(new Relationships());
 
         $this->createCollection('libraries', [Attribute::string(key: 'name', size: 64)]);
         $this->createCollection('persons', [Attribute::string(key: 'name', size: 64)]);

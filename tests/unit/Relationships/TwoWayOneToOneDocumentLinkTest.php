@@ -212,7 +212,7 @@ final class TwoWayOneToOneDocumentLinkTest extends TestCase
             ->setDatabase('two_way_one_to_one_document')
             ->setNamespace('two_way_one_to_one_document_'.\uniqid());
         $database->create();
-        $database->addHook(new Relationships($database));
+        $database->addHook(new Relationships());
         $database->addHook(new Permissions());
 
         $permissions = [

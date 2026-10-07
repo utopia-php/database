@@ -186,7 +186,7 @@ final class CreateReturnsStoredTest extends TestCase
             ->setDatabase('create_returns_stored')
             ->setNamespace('create_returns_stored_'.\uniqid());
         $database->create();
-        $database->addHook(new Relationships($database));
+        $database->addHook(new Relationships());
 
         $permissions = [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any()), Permission::delete(Role::any())];
         $database->createCollection(Collection::create('artists', attributes: [Attribute::string('name', 64)], permissions: $permissions));

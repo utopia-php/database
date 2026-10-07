@@ -32,7 +32,7 @@ final class CoroutineStateTest extends TestCase
         }
 
         $this->database = HookFixture::memory();
-        $this->hook = new Relationships($this->database);
+        $this->hook = new Relationships();
         $this->database->addHook($this->hook);
     }
 
@@ -146,7 +146,7 @@ final class CoroutineStateTest extends TestCase
     {
         $destination = HookFixture::memory();
         $destination->setAuthorization(new Authorization());
-        $destinationHook = new Relationships($destination);
+        $destinationHook = new Relationships();
         $destination->addHook($destinationHook);
 
         $snapshot = $this->database->getAuthorization()->skip(

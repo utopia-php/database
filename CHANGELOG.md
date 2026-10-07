@@ -65,8 +65,9 @@ have to make, with the 7.x and 8.0 forms side by side.
   adapter (was `Unique index violation`). On MariaDB and MySQL an unknown column throws `Exception\NotFound`.
   `Database::sum()` throws `Exception\Query` for an attribute that is not a single number. See
   [Errors](UPGRADE.md#errors).
-- `Query::DEFAULT_ALIAS` is `table_main` (was `main`), `Query::groupByType()` returns a `ParsedQuery` object, and
-  `Query::TYPE_ELEM_MATCH` is removed.
+- `Query::DEFAULT_ALIAS` is `table_main` (was `main`), `Query::groupByType()` returns a `Utopia\Database\ParsedQuery`
+  object (with `orderAttributes` and `orderTypes`, throwing `Exception\Query` for a cursor that is not a document),
+  and `Query::TYPE_ELEM_MATCH` is removed.
 - `new Document()` and `Document::setAttribute('$permissions', ...)` reject non-string permissions with
   `Exception\Structure`.
 - Hook failures follow 7.x event by event, with three differences: an `\Error` always reaches the caller, an isolated
@@ -247,7 +248,8 @@ have to make, with the 7.x and 8.0 forms side by side.
   `Database` constructor takes a list of codecs, and `setFilters(Filter\Registry)` gives a handle a registry several
   handles can share. A codec applies only to those handles and takes precedence over a global filter of the same
   name (`Database::addFilter()`); the constructor's codecs take precedence over both. A codec named after a built-in
-  filter throws `Exception\Duplicate`. Document and query cache keys include each registered codec.
+  filter throws `Exception\Duplicate`. Document and query cache keys include each registered codec, by class, or by
+  `signature()` for a `Filter\Signed` codec such as `Filter\Callback`.
 - **`Adapter\ReadWritePool`.** Sends reads to a read pool and writes to a write pool. Reads stay on the primary for a
   sticky window after a write or a transaction commits (`setStickyDuration()`, default 5000 ms; `setSticky()`), and
   `getDocument(..., forUpdate: true)` and `rawQuery()` always use the write pool. Metadata and configuration calls
@@ -280,7 +282,8 @@ have to make, with the 7.x and 8.0 forms side by side.
 - `Database::setCacheWriterTimeout()` bounds how long an unfinished invalidation keeps a collection's document and
   query cache off.
 - `Mirror::awaitReplications(?int $timeout = null)` waits until every replication queued through the mirror has
-  reached the destination or has been reported to `onError()`, for example before a worker stops.
+  reached the destination or has been reported to `onError()`, for example before a worker stops. A timeout of 0
+  returns at once; a negative one throws.
   `Mirror\Failure` describes a failed replication.
 - `Exception\Schema`, the parent of every schema violation, `Exception::$state` (a string code such as a SQLSTATE),
   `Exception\Unique::MESSAGE`, `Exception\Mismatch` (a `Duplicate` for a shared-table column of another type),
@@ -477,7 +480,8 @@ have to make, with the 7.x and 8.0 forms side by side.
   are either stored or refused with `Exception\Structure`, never dropped.
 - A `Mirror` honours the `Hook\Relationships` it is given (for example `prepare: false`) on its source and its
   destination; it rebuilt the hook with the default settings.
-- In `deleteDocuments()`'s `onNext`, the second argument is the stored document; it was a clone of the first.
+- In `deleteDocuments()`'s `onNext`, the second argument is a separate copy of the stored document, so a callback
+  that changes the first argument no longer changes what it is told the previous state was.
 - `findOne()` fires nothing when no document matches (it fired `document_find` with `false`), and `aggregate()`
   fires `document_aggregate` instead of `document_find`.
 - `addHook()` throws for a hook it does not recognise instead of registering nothing.
@@ -491,6 +495,12 @@ have to make, with the 7.x and 8.0 forms side by side.
 - Deleting a many-to-many relationship on Redis and Memory drops its junction collection, as the SQL and MongoDB
   adapters do; recreating the relationship hit the leftover junction.
 - The point, linestring and polygon filters no longer swallow an encoder failure and write the value as given.
+- `aggregate()` throws `Exception\Query` for two aggregates that would come back under the same default alias,
+  instead of collapsing their values into one key when validation is off.
+- A `Hook\Relationships` added to a second database throws instead of rebinding to it, and a query cache shared by
+  several databases uses each caller's cache name and writer timeout instead of the last one it was set on.
+- `Mirror\Failure` names `DocumentUpsert` for a failed `upsertDocument()` (it was `null`) and `IndexesCreate` for a
+  failed `createIndexes()`.
 
 - With validation skipped, the SQL adapters filter the attribute of `sum()` and the grouped columns they qualify
   with a join alias, and every identifier they quote escapes the quote character.

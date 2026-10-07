@@ -57,7 +57,8 @@ $database->addHook(new Relationships());
 `addHook()` throws `Utopia\Database\Exception` for a hook it does not recognise. A hook that implements
 `Hook\Attachable` is given the database it is added to through `attach(Database $database)`, so hooks are configured
 in their constructor and never take the database there: `new Relationships(bool $prepare = true)`,
-`new Tenancy(string $column = Storage::TENANT)`. `removeHook($hook)` unregisters a hook instance, or every hook of a
+`new Tenancy(string $column = Storage::TENANT)`. A `Relationships` hook belongs to one database: adding it to a second
+one throws, so give each database its own instance (or a `clone`). `removeHook($hook)` unregisters a hook instance, or every hook of a
 class when given its class name.
 
 - `Hook\Permissions` writes, moves and deletes the rows of each collection's permissions table (`_perms`) when a
@@ -188,8 +189,9 @@ $permissions = [Permission::read(Role::user(Id::unique()))];
   an `OperatorType` case. Compare with cases: `$query->getMethod() === Method::Equal`. A comparison with a string is
   always `false` and raises no error (see [Before you start](#before-you-start)). `setMethod()`, `isMethod()` and the
   constructor accept a `Method` case or its string value.
-- `Query::groupByType()` returns a `Utopia\Query\Builder\ParsedQuery` object instead of an array, and it no longer
-  carries the order attributes and order types. Read the groups from its properties.
+- `Query::groupByType()` returns a `Utopia\Database\ParsedQuery` object instead of an array. It extends the query
+  library's `ParsedQuery` with `orderAttributes` and `orderTypes` (`OrderDirection` cases); read the groups from its
+  properties. A cursor that is not a document throws `Exception\Query`. `Query::groupForDatabase()` is removed.
 - `Query::cursorAfter()` and `Query::cursorBefore()` take `array|object` instead of `Document`. Pass the cursor
   document, as before. `Validator\Query\Cursor` accepts a `Document` or a document id and refuses an array.
 - Aggregates and joins carry their alias in a property: read it with `getAlias()`. `toArray()` writes it as
@@ -782,12 +784,13 @@ method as a no-op, so a hook overrides only what it needs:
   the document is stored under.
 - `Hook\WriteContext` is an interface the SQL adapters implement: `builder(string $table)`, `rawBuilder()`,
   `rawTable(string $table)`, `run(Statement $statement, Event $event): bool`, `fetch(Statement $statement, Event
-  $event): array`, `decorateRow(array $row, Document $document)`, `skipPermissions()` and `ignoreDuplicates()`.
+  $event): array`, `decorateRow(array $row, Document $document)`, `skipPermissions(Document $document): bool` (the
+  update keeps that document's permissions) and `ignoreDuplicates()`.
 
 ### Subclasses of `Database`
 
-- The protected `trigger(string $event, mixed $args = null)` is replaced by `listens(Event $event): bool` and
-  `dispatch(Event\Domain $event): void`: build the event object only when `listens()` is `true`.
+- The protected `trigger(string $event, mixed $args = null)` is removed. Event dispatch (`listens()`, `dispatch()`)
+  is internal: register a `Hook\Lifecycle` to act on events.
 - The protected `createDocumentInstance()` is `newDocument()`.
 - `casting()` and `applySelectFiltersToDocuments()` are internal, and so are `getRelationshipHook()` and the public
   helpers of `Hook\Relationships` that `Database` calls.
@@ -926,8 +929,8 @@ foreach ($database->cursor('sessions', batchSize: 25) as $session) {
 ```
 
 - **`$onNext`** has one shape everywhere: `callable(Document $document, ?Document $previous): void`. `$previous` is
-  `null` on create, the stored document an update or upsert replaced, and on delete the stored document itself (7.x
-  passed a clone of the first argument). `$onError` is removed: an exception from `$onNext` aborts the call, like any
+  `null` on create, the stored document an update or upsert replaced, and on delete a separate copy of the deleted
+  document, so changing the first argument does not change it. `$onError` is removed: an exception from `$onNext` aborts the call, like any
   other callback.
 - **Batch size.** `Database::BATCH_SIZE` (1000) replaces `INSERT_BATCH_SIZE` and `DELETE_BATCH_SIZE`. A batch size
   above it throws `Exception\Limit` instead of being reduced to it; one below 1 still writes one document at a time.
@@ -938,8 +941,9 @@ foreach ($database->cursor('sessions', batchSize: 25) as $session) {
   page size, and without one they read pages of 25: move the limit to `batchSize`, or pass `batchSize: 25`, to keep
   the page size.
 - **`aggregate()`** returns `list<array<string, mixed>>`. An unaliased aggregate comes back under
-  `<method>_<attribute>`, or `<method>` for `count('*')`; give it an alias to choose the name. It fires
-  `document_aggregate`. `find()` refuses aggregate and `groupBy()` queries with `Exception\Query`.
+  `<method>_<attribute>`, or `<method>` for `count('*')`; give it an alias to choose the name. Two aggregates that
+  would come back under one name (two identical unaliased ones, or a default that equals another's alias) throw
+  `Exception\Query`. It fires `document_aggregate`. `find()` refuses aggregate and `groupBy()` queries with `Exception\Query`.
 - **`sum()` and `count()`** throw `Exception\Query` for a `$max` of 0 or less; they returned 0.
 - **`increaseDocumentAttribute()` and `decreaseDocumentAttribute()`** throw `Exception\Type` for a change value of 0
   or less; they threw `InvalidArgumentException`.
@@ -1230,8 +1234,8 @@ coroutine that opened it and the coroutines it starts; see [Pools and profiling]
   without fields (Memory, Filesystem) a collection scope holds one result at a time.
 - **Abandoned writes.** A write that blocks a collection's cache and never finishes its invalidation (a worker killed
   mid-transaction) no longer keeps that cache off until a flush. For the document cache the limit is
-  `$database->setCacheWriterTimeout($seconds)`, 3600 seconds by default. The query cache takes the writer timeout
-  and the cache name from the `Database` it is set on with `setQueryCache()`. Reads resume once the unfinished write is older than the
+  `$database->setCacheWriterTimeout($seconds)`, 3600 seconds by default. The query cache uses the writer timeout
+  and the cache name of the `Database` that calls it, so one query cache can be shared by several handles. Reads resume once the unfinished write is older than the
   timeout, and the next write re-enables the cache once every other unfinished write is older than the timeout. A
   transaction that runs longer than the timeout is treated as abandoned: raise it above your longest transaction,
   and use the same value in every process (the shortest one applies).
@@ -1290,6 +1294,8 @@ $database = new Database($adapter, $cache, [
 - A codec named after a built-in filter (`Utopia\Database\Filter`: `json`, `datetime`, `point`, `linestring`,
   `polygon`, `vector`, `object`) throws `Exception\Duplicate`. A codec that needs the document or the database is a
   global filter: register it with `addFilter()`.
+- Cache keys tell codecs apart by class. A codec class whose instances encode differently implements
+  `Filter\Signed` (`signature(): string`) so each instance gets its own key; `Filter\Callback` does.
 - List a filter in an attribute's `filters`, by name or as a `Filter` case.
 
 ## Adapters
@@ -1456,6 +1462,7 @@ mode.
   | `updateRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, string $side, ?string $newKey = null, ?string $newTwoWayKey = null)` | `Feature\Relationships::updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, RelationshipUpdate $update)` |
   | `deleteRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, string $side)` | `Feature\Relationships::deleteRelationship(string $collection, Relationship $relationship, RelationshipSide $side)` |
   | `deleteDocument(string $collection, string $id)`, `deleteDocuments(string $collection, ...)`, `increaseDocumentAttribute(string $collection, ...)`, `getSequences(string $collection, ...)` | Take the collection `Document`, like every other document method |
+  | `updateDocuments(Document $collection, Document $updates, array $documents)` | `updateDocuments(Document $collection, Document $updates, array $documents, array $skipPermissions = [])`: the ids whose permissions the update keeps |
   | `upsertDocuments(Document $collection, string $attribute, array $changes)` | `Feature\Upserts::upsertDocuments(Document $collection, array $changes, ?string $increase = null)`, plus `upsertDocument(Document $collection, Change $change)` |
   | `getSchemaAttributes(string $collection): array`, `getSchemaIndexes(string $collection): array` | Abstract, returning `list<Schema\Column>` and `list<Schema\Index>` |
   | `getColumnType(string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string` | `getColumnType(Attribute $attribute): ?string` (abstract; `null` on non-SQL adapters) |
@@ -1513,7 +1520,7 @@ mode.
   calls it after every failed attempt, once the transaction counter no longer counts the attempt's transaction; an
   adapter whose connection can still hold part of it (a transaction lost with the connection, or one a failed
   rollback left open) ends it there. The SQL adapters roll back whatever the connection still reports.
-- `Adapter::skippingDuplicates(): bool` and `Database::skippingDuplicates(): bool` (protected) report whether the
+- `Adapter::isIgnoringDuplicates(): bool` and `Database::isIgnoringDuplicates(): bool` (protected) report whether the
   calling coroutine runs under `ignoreDuplicates()`.
 - `Utopia\Database\PDOStatement::getQueryString(): string` returns the wrapped statement's `queryString` without
   going through the magic `__get()`.
@@ -1785,8 +1792,9 @@ in 7.x, ahead of the registered `Transform` hooks.
 ## Mirror
 
 - **`onError()`.** `onError(callable $callback): static` callbacks receive one `Mirror\Failure`, with the `method`
-  that failed on the destination, its `event` (`?Event`) and the `error`. 7.x passed `(string $action, \Throwable
-  $error)`.
+  that failed on the destination, its `event` (`?Event`: for example `upsertDocument` reports `DocumentUpsert`,
+  `createIndexes` `IndexesCreate`, `renameAttribute` `AttributeRename` and `update` `DatabaseUpdate`) and the
+  `error`. 7.x passed `(string $action, \Throwable $error)`.
 
   ```php
   // 7.x
@@ -1845,7 +1853,7 @@ in 7.x, ahead of the registered `Transform` hooks.
     coroutine.
   - `$mirror->awaitReplications(?int $timeout = null)` returns once every replication queued so far has reached
     the destination or has been reported to `onError()`, or once `$timeout` milliseconds have passed, without an
-    error. Call it before a worker stops, or queued replications are lost. `delete()` waits for them before it
+    error. `awaitReplications(0)` returns at once, and a negative timeout throws. Call it before a worker stops, or queued replications are lost. `delete()` waits for them before it
     deletes the destination database.
 - **Authorization.** `new Mirror($source, $destination)` leaves the source's and the destination's `Authorization` in
   place, and the mirror uses the source's, so roles and `skip()` scopes set on it apply to reads and writes through
@@ -1903,10 +1911,10 @@ $validator = new IndexDefinition($attributes, $indexes, $database->profile());
 - `Validator\Query\Cursor` accepts a `Document` or a document id, and refuses an array.
 - The protected `Database::getDocumentsValidator(Document $collection, array $joinedCollections = [])` is new in 8.0.
 - Changed validator signatures: `AttributeDefinition`'s `check*()` methods take an `Attribute`,
-  `IndexDefinition`'s take an `Index` (its TTL check is `checkTtlIndexes()`), `getRequiredFilters()` and
+  `IndexDefinition`'s take an `Index` (`checkTTLIndexes()` is `checkTtlIndexes()`), `getRequiredFilters()` and
   `validateDefaultTypes()` take a `ColumnType`, `Structure::addFormat()`, `getFormat()` and `hasFormat()` (and those
   of `PartialStructure`) take a `ColumnType`, `Query\Filter::isValidAttributeAndValues()` takes a `Method` case, and
-  `Validator\Spatial::isWktString()` is the WKT check. `Validator\Operator` takes a trailing
+  `Validator\Spatial::isWKTString()` is `isWktString()`. `Validator\Operator` takes a trailing
   `bool $supportUnsignedBigInt = true`. Every `isValid()` takes `mixed $value`.
 - `Validator\Permissions` and `Permission::aggregate()` take their allowed permission types as `PermissionType`
   cases; a list of strings throws a `TypeError`. `Validator\Authorization\Input` takes a `PermissionType` case.
@@ -1968,7 +1976,7 @@ from those builds changed before 8.0.0; none of them exists in 7.x.
 | `Database::execute()` | `query()` for reads (a list of `Document`), `mutate()` for writes (the affected row count) |
 | `Database::enableProfiling()`, `disableProfiling()`, `Profiler\QueryProfiler`, `Profiler\QueryLog` | `setProfiling(bool)`, `Utopia\Database\Profiler`, `Profiler\Log` |
 | `Database::setTypeRegistry()`, `Type\Custom`, `Type\TypeRegistry`, an associative constructor `$filters` | `setFilters()`, `Filter\Codec`, `Filter\Registry`, a list of `Filter\Codec` |
-| `Cache\QueryCache` with `$cacheName` and `writerTimeout` arguments | `Cache\Query`, which takes both from the `Database` it is set on |
+| `Cache\QueryCache` with `$cacheName` and `writerTimeout` arguments | `Cache\Query`, which uses those of the `Database` calling it |
 | `Authorization::withStatus()` | `skip()`, or `setStatus()` inside `withSnapshot()` |
 | `Hook\Lifecycle::handle(Event $event, mixed $data)` | `handle(Event\Domain $event)` |
 | `Event\Documents\Created`, `Updated`, `Deleted` | `Event\Document\BatchCreated`, `BatchUpdated`, `BatchDeleted` |
@@ -1986,6 +1994,8 @@ from those builds changed before 8.0.0; none of them exists in 7.x.
 | `Query::join($collection, $left, $right, $operator, $alias)` and the other column-form joins, `getJoinAlias()`, `Storage::joinAlias()` | `Query::join($collection, $alias, [Query::on(...)])`, `getAlias()`; every join names its alias |
 | `Query::groupForDatabase()` | `Query::groupByType()`, which returns a `ParsedQuery` |
 | `Document::INTERNAL_ID` | `Document::SEQUENCE` |
+| `Hook\Permissions::UNCHANGED`, `WriteContext::skipPermissions()` without arguments | `WriteContext::skipPermissions(Document $document)`, fed by `Adapter::updateDocuments(..., $skipPermissions)` |
+| `Snapshot::$skipDuplicates`, `skippingDuplicates()` | `Snapshot::$ignoreDuplicates`, `isIgnoringDuplicates()` |
 | `Mirror::onError(callable(string $action, \Throwable $error))`, `awaitReplications()` without a timeout | `onError(callable(Mirror\Failure $failure))`, `awaitReplications(?int $timeout = null)` |
 | `Adapter::setDebug()`, `getDebug()`, `resetDebug()` | `setMetadata()`, `getMetadata()`, `resetMetadata()` |
 | `Exception::__construct(string $message, ...)` with a string code cast to 0 | Every argument optional; a string code kept in `$state` |

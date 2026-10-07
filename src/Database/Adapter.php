@@ -1124,6 +1124,20 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     }
 
     /**
+     * The attributes a collection definition declares followed by every internal attribute, `$tenant` included.
+     *
+     * @internal
+     *
+     * @return list<Attribute>
+     *
+     * @throws StructureException
+     */
+    protected static function collectionAttributesWithInternal(Document $collection): array
+    {
+        return Collection::fromDocument($collection)->attributesWith(Database::internalAttributesFor(true));
+    }
+
+    /**
      * The indexes a collection definition declares, also when it is a metadata row read straight from storage
      * that still holds them as JSON.
      *

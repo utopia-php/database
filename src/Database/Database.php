@@ -1812,7 +1812,7 @@ class Database
     {
         $known = [];
 
-        foreach ([...Collection::fromDocument($collection)->attributes(), ...$this->internalAttributes()] as $attribute) {
+        foreach (Collection::fromDocument($collection)->attributesWith($this->internalAttributes()) as $attribute) {
             $key = $attribute->key;
             $array = $attribute->array;
             $default = $attribute->default;
@@ -2184,7 +2184,7 @@ class Database
             return $document;
         }
 
-        foreach ([...Collection::fromDocument($collection)->attributes(), ...$this->internalAttributes()] as $attribute) {
+        foreach (Collection::fromDocument($collection)->attributesWith($this->internalAttributes()) as $attribute) {
             $key = $attribute->key;
             $type = $attribute->type;
             $array = $attribute->array;

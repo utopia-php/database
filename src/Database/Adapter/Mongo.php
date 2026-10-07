@@ -3014,7 +3014,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             return $document;
         }
 
-        foreach ([...self::collectionAttributes($collection), ...Database::internalAttributesFor(true)] as $attribute) {
+        foreach (self::collectionAttributesWithInternal($collection) as $attribute) {
             $key = $attribute->key;
             $type = $attribute->type;
             $array = $attribute->array;
@@ -3139,7 +3139,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     private function getReadCasts(Document $collection): array
     {
         $casts = [];
-        foreach ([...self::collectionAttributes($collection), ...Database::internalAttributesFor(true)] as $attribute) {
+        foreach (self::collectionAttributesWithInternal($collection) as $attribute) {
             $casts[] = [$attribute->key, $attribute->type, $attribute->array];
         }
 

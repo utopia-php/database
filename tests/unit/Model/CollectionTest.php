@@ -564,6 +564,29 @@ final class CollectionTest extends TestCase
         $collection->indexes();
     }
 
+    public function testAttributesWithInternalAreBuiltOncePerSchemaState(): void
+    {
+        $collection = $this->collection();
+        $internal = [Attribute::string('$id', required: true)];
+
+        $combined = $collection->attributesWith($internal);
+
+        $this->assertSame(['title', '$id'], \array_map(static fn (Attribute $attribute): string => $attribute->key, $combined));
+        $this->assertSame($combined, $collection->attributesWith($internal));
+
+        $collection->setAttribute('attributes', Attribute::integer('pages')->toDocument(), SetType::Append);
+        $this->assertSame(
+            ['title', 'pages', '$id'],
+            \array_map(static fn (Attribute $attribute): string => $attribute->key, $collection->attributesWith($internal)),
+        );
+
+        $other = [Attribute::string('$collection', required: true)];
+        $this->assertSame(
+            ['title', 'pages', '$collection'],
+            \array_map(static fn (Attribute $attribute): string => $attribute->key, $collection->attributesWith($other)),
+        );
+    }
+
     public function testTheFingerprintIsStableUntilTheSchemaChanges(): void
     {
         $collection = $this->collection();

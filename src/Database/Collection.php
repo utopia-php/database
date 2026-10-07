@@ -22,6 +22,12 @@ class Collection extends Document
 
     private mixed $attributeSource = null;
 
+    /** @var list<Attribute>|null */
+    private ?array $attributesWithInternal = null;
+
+    /** @var list<Attribute>|null */
+    private ?array $internalSource = null;
+
     /** @var list<Index>|null */
     private ?array $indexModels = null;
 
@@ -149,9 +155,33 @@ class Collection extends Document
         }
 
         $this->fingerprint = null;
+        $this->attributesWithInternal = null;
         $this->attributeSource = $source;
 
         return $this->attributeModels = $models;
+    }
+
+    /**
+     * The declared attributes followed by $internal, built at most once per schema state so per-document passes
+     * over the whole schema do not rebuild the list.
+     *
+     * @internal
+     *
+     * @param  list<Attribute>  $internal
+     * @return list<Attribute>
+     *
+     * @throws StructureException
+     */
+    public function attributesWith(array $internal): array
+    {
+        $attributes = $this->attributes();
+        if ($this->attributesWithInternal !== null && $internal === $this->internalSource) {
+            return $this->attributesWithInternal;
+        }
+
+        $this->internalSource = $internal;
+
+        return $this->attributesWithInternal = [...$attributes, ...$internal];
     }
 
     /**

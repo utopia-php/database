@@ -43,7 +43,7 @@ final class WriteContextTestRecorder extends Interceptor
 
     public function afterDocumentUpdate(string $collection, string $id, Document $document, WriteContext $context): void
     {
-        $this->skipPermissions[] = $context->skipPermissions();
+        $this->skipPermissions[] = $context->skipPermissions($document);
         $this->updates[] = [$id, $document->getId()];
     }
 

@@ -13,6 +13,7 @@ use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Query as QueryException;
@@ -101,10 +102,12 @@ class Relationships implements Attachable, Hook
     }
 
     /**
-     * A copy configured like this hook, with none of its state, for another database to attach.
+     * A copy configured like this hook, with none of its state and attached to no database, for another database to
+     * attach.
      */
     public function __clone()
     {
+        unset($this->database);
         $this->enabled = new Value(true);
         $this->checkExist = new Value(true);
         $this->inBatchPopulation = new Value(false);
@@ -115,8 +118,18 @@ class Relationships implements Attachable, Hook
         $this->replays = [];
     }
 
+    /**
+     * Attaching again to the same database does nothing; a hook is bound to one database for its lifetime, so attach
+     * a clone to another.
+     *
+     * @throws DatabaseException When the hook is already attached to another database
+     */
     public function attach(Database $database): void
     {
+        if (isset($this->database) && $this->database !== $database) {
+            throw new DatabaseException('This relationships hook is already attached to another database; attach a clone of it instead');
+        }
+
         $this->database = $database;
     }
 

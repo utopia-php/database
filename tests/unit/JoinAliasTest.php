@@ -17,10 +17,11 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Query\Method;
 
 final class JoinAliasTest extends TestCase
 {
-    public function testGeneratedAliasSkipsAnAliasDeclaredBeforeIt(): void
+    public function testEachJoinIsReadUnderTheAliasItDeclares(): void
     {
         $database = $this->database();
 
@@ -35,7 +36,7 @@ final class JoinAliasTest extends TestCase
         $this->assertSame(1, $rows[0]->getAttribute('j1.score'));
     }
 
-    public function testGeneratedAliasSkipsAnAliasDeclaredAfterIt(): void
+    public function testAnAliasSortingBeforeAnEarlierOneStillReadsItsOwnJoin(): void
     {
         $database = $this->database();
 
@@ -50,6 +51,18 @@ final class JoinAliasTest extends TestCase
         $this->assertSame(1, $database->count('main', [
             Query::join('b', 'j1', [Query::on('$id', 'mainId')]),
             Query::join('c', 'j0', [Query::on('$id', 'mainId')]),
+        ]));
+    }
+
+    public function testAJoinWithoutAnAliasIsRejectedWithoutQueryValidation(): void
+    {
+        $database = $this->database();
+
+        $this->expectException(QueryException::class);
+        $this->expectExceptionMessage('Join alias is required');
+
+        $database->skipValidation(fn (): array => $database->find('main', [
+            new Query(Method::Join, 'b', [Query::on('$id', 'mainId')], ''),
         ]));
     }
 

@@ -25,7 +25,7 @@ final readonly class Snapshot
      * @param  bool  $validation  Whether documents and queries are validated
      * @param  bool  $preserveDates  Whether writes keep the dates they are given
      * @param  bool  $preserveSequence  Whether writes keep the sequences they are given
-     * @param  bool  $skipDuplicates  Whether creating a document that exists is skipped instead of failing
+     * @param  bool  $ignoreDuplicates  Whether creating a document that exists is skipped instead of failing
      * @param  DateTime|null  $requestTimestamp  The time an update conflicts after
      */
     public function __construct(
@@ -42,7 +42,7 @@ final readonly class Snapshot
         public bool $validation,
         public bool $preserveDates,
         public bool $preserveSequence,
-        public bool $skipDuplicates,
+        public bool $ignoreDuplicates,
         public ?DateTime $requestTimestamp,
     ) {
     }

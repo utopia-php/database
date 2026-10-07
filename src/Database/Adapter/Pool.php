@@ -140,7 +140,7 @@ class Pool extends Adapter implements Feature\Timeouts
             throw new DatabaseException($this->unsupportedFeatureMessage($feature));
         }
 
-        if ($this->skippingDuplicates()) {
+        if ($this->isIgnoringDuplicates()) {
             return $adapter->ignoreDuplicates(
                 fn () => $adapter->{$method}(...$arguments)
             );
@@ -526,7 +526,7 @@ class Pool extends Adapter implements Feature\Timeouts
                 $this->syncBorrowed($adapter);
 
                 return $this->pinned()->with($adapter, function () use ($adapter, $callback): mixed {
-                    if ($this->skippingDuplicates()) {
+                    if ($this->isIgnoringDuplicates()) {
                         return $adapter->ignoreDuplicates(
                             fn () => $adapter->withTransaction($callback)
                         );
@@ -891,7 +891,7 @@ class Pool extends Adapter implements Feature\Timeouts
      * {@inheritDoc}
      */
     #[\Override]
-    public function updateDocuments(Document $collection, Document $updates, array $documents): int
+    public function updateDocuments(Document $collection, Document $updates, array $documents, array $skipPermissions = []): int
     {
         /** @var int $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());

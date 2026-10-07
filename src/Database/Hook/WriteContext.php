@@ -52,7 +52,7 @@ interface WriteContext
     /**
      * Whether the update keeps the document's permissions, so its permission rows need no change.
      */
-    public function skipPermissions(): bool;
+    public function skipPermissions(Document $document): bool;
 
     /**
      * Whether the write skips the documents already stored, so a row it repeats is ignored rather than rejected.

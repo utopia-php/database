@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Documents;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Tests\Unit\Event\HookFixture;
 use Utopia\Database\Database;
@@ -39,6 +40,46 @@ final class AggregateTest extends TestCase
         $rows = $this->database->aggregate(HookFixture::COLLECTION, [Query::count('*', 'total'), Query::sum('views')]);
 
         $this->assertSame([['total' => 3, 'sum_views' => 6]], $rows);
+    }
+
+    /**
+     * @return iterable<string, array{list<Query>, string}>
+     */
+    public static function duplicateDefaultAliases(): iterable
+    {
+        yield 'the same aggregate twice' => [[Query::sum('views'), Query::sum('views')], 'sum_views'];
+        yield 'an explicit alias equal to a default one' => [[Query::count('*', 'sum_views'), Query::sum('views')], 'sum_views'];
+    }
+
+    /**
+     * @param  list<Query>  $queries
+     */
+    #[DataProvider('duplicateDefaultAliases')]
+    public function testADefaultAliasTakenTwiceIsRefused(array $queries, string $alias): void
+    {
+        try {
+            $this->database->aggregate(HookFixture::COLLECTION, $queries);
+            $this->fail('Two aggregates came back under one alias');
+        } catch (QueryException $error) {
+            $this->assertSame("The default aggregate alias '{$alias}' is used by more than one aggregate; give each of them an explicit alias", $error->getMessage());
+        }
+    }
+
+    public function testADefaultAliasTakenTwiceIsRefusedWithValidationOff(): void
+    {
+        try {
+            $this->database->skipValidation(fn (): array => $this->database->aggregate(HookFixture::COLLECTION, [Query::max('views'), Query::max('views')]));
+            $this->fail('Two aggregates came back under one alias');
+        } catch (QueryException $error) {
+            $this->assertSame("The default aggregate alias 'max_views' is used by more than one aggregate; give each of them an explicit alias", $error->getMessage());
+        }
+    }
+
+    public function testExplicitAliasesSeparateTheSameAggregate(): void
+    {
+        $rows = $this->database->aggregate(HookFixture::COLLECTION, [Query::sum('views', 'first'), Query::sum('views', 'second')]);
+
+        $this->assertSame([['first' => 6, 'second' => 6]], $rows);
     }
 
     public function testEachGroupIsOneRow(): void

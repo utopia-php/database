@@ -30,7 +30,7 @@ class Invalidator implements Hook
     {
         $tokens = $this->tokens($event, $data, $scope);
         $this->block($tokens);
-        $this->activate($tokens);
+        $this->activate($tokens, $scope->writerTimeout);
     }
 
     /**
@@ -55,12 +55,7 @@ class Invalidator implements Hook
         foreach (\is_array($data) ? $data : [$data] as $target) {
             $tenant = $target instanceof Document ? $target->getTenant() ?? $scope->tenant : $scope->tenant;
             $key = \serialize($tenant);
-            $scopes[$key] ??= new Scope(
-                hostname: $scope->hostname,
-                database: $scope->database,
-                namespace: $scope->namespace,
-                tenant: $tenant,
-            );
+            $scopes[$key] ??= $scope->withTenant($tenant);
             $targets[$key][] = $target;
         }
 
@@ -84,13 +79,14 @@ class Invalidator implements Hook
 
     /**
      * @param  array<string, string>  $tokens
+     * @param  int  $writerTimeout  The writer timeout of the database the tokens were created through
      */
-    public function activate(array $tokens): void
+    public function activate(array $tokens, int $writerTimeout): void
     {
         $failure = null;
         foreach ($tokens as $key => $token) {
             try {
-                $this->queryCache->activateCollection($key, $token);
+                $this->queryCache->activateCollection($key, $token, $writerTimeout);
             } catch (Throwable $error) {
                 $failure ??= $error;
             }

@@ -30,25 +30,25 @@ final class PoolTest extends TestCase
     public function testDelegateReplacesStatefulWriteHookOnReusedAdapter(): void
     {
         $adapter = new Memory();
-        $adapter->addWriteHook(new Tenancy('old'));
+        $adapter->addWriteHook(new Tenancy(column: 'old_tenant_column'));
         $pool = $this->createPool($adapter);
 
-        $hook = new Tenancy('new');
+        $hook = new Tenancy(column: 'new_tenant_column');
         $pool->addWriteHook($hook);
 
         $this->assertSame([], $pool->list());
         $this->assertSame([$hook], $adapter->getWriteHooks());
-        $this->assertSame(['new' => 1], $adapter->getTenantHook()?->decorateRow([], new RowMetadata(1)));
+        $this->assertSame(['new_tenant_column' => 1], $adapter->getTenantHook()?->decorateRow([], new RowMetadata(1)));
     }
 
     public function testTransactionReplacesStatefulWriteHookOnReusedAdapter(): void
     {
         $adapter = new Memory();
         $adapter->addWriteHook(new Permissions());
-        $adapter->addWriteHook(new Tenancy('old'));
+        $adapter->addWriteHook(new Tenancy(column: 'old_tenant_column'));
         $pool = $this->createPool($adapter);
 
-        $hook = new Tenancy('new');
+        $hook = new Tenancy(column: 'new_tenant_column');
         $pool->addWriteHook($hook);
 
         $pool->withTransaction(static fn (): string => 'committed');

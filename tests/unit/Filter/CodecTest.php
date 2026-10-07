@@ -114,6 +114,16 @@ final class CodecTest extends TestCase
         $this->assertSame($this->documentHash($reversed), $this->documentHash($sameClass));
     }
 
+    public function testCacheKeysFollowTheSignatureOfASignedCodec(): void
+    {
+        $first = $this->database()->setFilters($this->registry(new Prefixed('a:')));
+        $second = $this->database()->setFilters($this->registry(new Prefixed('b:')));
+        $sameSignature = $this->database()->setFilters($this->registry(new Prefixed('a:')));
+
+        $this->assertNotSame($this->documentHash($first), $this->documentHash($second));
+        $this->assertSame($this->documentHash($first), $this->documentHash($sameSignature));
+    }
+
     public function testConstructorFiltersEncodeAndDecodeOnTheirHandle(): void
     {
         $adapter = new Memory();

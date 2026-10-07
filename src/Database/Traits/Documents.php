@@ -15,6 +15,7 @@ use Utopia\Database\Adapter\ReadWritePool;
 use Utopia\Database\Attribute;
 use Utopia\Database\Cache\Epoch;
 use Utopia\Database\Cache\Owners;
+use Utopia\Database\Cache\Scope;
 use Utopia\Database\Capability;
 use Utopia\Database\Change;
 use Utopia\Database\Collection;
@@ -36,7 +37,7 @@ use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\ID;
-use Utopia\Database\Hook\Permissions as PermissionsHook;
+use Utopia\Database\Hook\Lifecycle;
 use Utopia\Database\Operator;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
@@ -93,7 +94,7 @@ trait Documents
 
     private const string DOCUMENT_CACHE_CHECKED_AT = 'checkedAt';
 
-    private int $cacheWriterTimeout = 3600;
+    private int $cacheWriterTimeout = Scope::WRITER_TIMEOUT;
 
     /** @var array<int, array<string, string>> Definition keys of the collections the open invalidation scope wrote, by coroutine id and collection key. */
     private array $documentCacheDefinitions = [];
@@ -490,9 +491,9 @@ trait Documents
 
         $relationships = self::relationshipAttributes($collection);
 
-        $grouped = Query::groupForDatabase($queries);
-        $selects = $grouped['selections'];
-        $joins = $grouped['joins'];
+        $parsed = Query::groupByType($queries);
+        $selects = $parsed->selections;
+        $joins = $parsed->joins;
 
         if (! empty($joins) && ! $this->adapter->supports(Capability::Joins)) {
             throw new QueryException('Join queries are not supported by this adapter');
@@ -583,8 +584,9 @@ trait Documents
 
             $document = $this->decorateDocument(Event::DocumentRead, $collection, $document);
 
-            if ($this->listens(Event::DocumentRead)) {
-                $this->dispatch(new Event\Document\Read($collection->getId(), $document));
+            $listeners = $this->listens(Event::DocumentRead);
+            if ($listeners !== []) {
+                $this->dispatch(new Event\Document\Read($collection->getId(), $document), $listeners);
             }
 
             if ($this->isTtlExpired($collection, $document)) {
@@ -613,8 +615,9 @@ trait Documents
         if ($readInTransaction !== null) {
             $collectionState = $this->loadDocumentCacheState($this->getCacheBaseKeys($id)[0]);
             $document = $this->decorateDocument(Event::DocumentRead, $collection, clone $readInTransaction);
-            if ($this->listens(Event::DocumentRead)) {
-                $this->dispatch(new Event\Document\Read($collection->getId(), $document));
+            $listeners = $this->listens(Event::DocumentRead);
+            if ($listeners !== []) {
+                $this->dispatch(new Event\Document\Read($collection->getId(), $document), $listeners);
             }
             $this->attachCollectionCacheEpoch($document, $collectionState->value);
 
@@ -729,8 +732,9 @@ trait Documents
 
         $document = $this->decorateDocument(Event::DocumentRead, $collection, $document);
 
-        if ($this->listens(Event::DocumentRead)) {
-            $this->dispatch(new Event\Document\Read($collection->getId(), $document));
+        $listeners = $this->listens(Event::DocumentRead);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Document\Read($collection->getId(), $document), $listeners);
         }
 
         $this->attachCollectionCacheEpoch($document, $collectionState->value);
@@ -1059,8 +1063,9 @@ trait Documents
 
         $document = $this->decorateDocument(Event::DocumentCreate, $collection, $document);
 
-        if ($this->listens(Event::DocumentCreate)) {
-            $this->dispatch(new Event\Document\Created($collection->getId(), $document));
+        $listeners = $this->listens(Event::DocumentCreate);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Document\Created($collection->getId(), $document), $listeners);
         }
 
         return $document;
@@ -1323,7 +1328,7 @@ trait Documents
                     return $batch;
                 }
             );
-            $batch = $this->duplicateSkipping()->get()
+            $batch = $this->ignoringDuplicates()->get()
                 ? $this->adapter->ignoreDuplicates($insert)
                 : $insert();
 
@@ -1353,8 +1358,9 @@ trait Documents
             }
         }
 
-        if ($this->listens(Event::DocumentsCreate)) {
-            $this->dispatch(new Event\Document\BatchCreated($collection->getId(), $modified));
+        $listeners = $this->listens(Event::DocumentsCreate);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Document\BatchCreated($collection->getId(), $modified), $listeners);
         }
 
         return $modified;
@@ -1658,8 +1664,9 @@ trait Documents
 
         $document = $this->decorateDocument(Event::DocumentUpdate, $collection, $document);
 
-        if ($this->listens(Event::DocumentUpdate)) {
-            $this->dispatch(new Event\Document\Updated($collection->getId(), $document));
+        $listeners = $this->listens(Event::DocumentUpdate);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Document\Updated($collection->getId(), $document), $listeners);
         }
 
         return $document;
@@ -1724,9 +1731,9 @@ trait Documents
             }
         }
 
-        $grouped = Query::groupForDatabase($queries);
-        $limit = $grouped['limit'];
-        $cursor = $grouped['cursor'];
+        $parsed = Query::groupByType($queries);
+        $limit = $parsed->limit;
+        $cursor = $parsed->cursor;
 
         if (! empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
             throw new DatabaseException('Cursor document must be from the same Collection.');
@@ -1775,7 +1782,7 @@ trait Documents
             }
             $adapterData[$key] = $value;
         }
-        $selections = $this->validateSelections($collection, $grouped['selections']);
+        $selections = $this->validateSelections($collection, $parsed->selections);
         $decodedKeys = $selections === []
             ? []
             : \array_values(\array_unique([...$selections, ...\array_map(\strval(...), \array_keys($adapterData))]));
@@ -1817,6 +1824,7 @@ trait Documents
             $cacheTarget = $collection->getId() === self::METADATA ? $batch : $collection->getId();
             $found = $batch;
             $this->withMutation(Event::DocumentsUpdate, $cacheTarget, function () use ($collection, $updates, $decodedUpdates, $adapterUpdates, &$batch, $found, $currentPermissions) {
+                $keepsPermissions = [];
                 foreach ($found as $index => $document) {
                     $skipPermissionsUpdate = true;
 
@@ -1832,7 +1840,9 @@ trait Documents
                         $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
                     }
 
-                    $document->setAttribute(PermissionsHook::UNCHANGED, $skipPermissionsUpdate);
+                    // An id repeats across tenants in a tenant-per-document batch: one that changes its permissions
+                    // keeps the permission rows of every document under that id rewritten.
+                    $keepsPermissions[$document->getId()] = $skipPermissionsUpdate && ($keepsPermissions[$document->getId()] ?? true);
 
                     $updateData = [];
                     foreach ($decodedUpdates->getArrayCopy() as $key => $value) {
@@ -1865,7 +1875,8 @@ trait Documents
                 $this->adapter->updateDocuments(
                     $collection,
                     $adapterUpdates,
-                    $batch
+                    $batch,
+                    \array_filter($keepsPermissions),
                 );
 
                 foreach ($batch as $document) {
@@ -1879,7 +1890,7 @@ trait Documents
             });
 
             if ($hasOperators) {
-                $batch = $this->refetchDocuments($collection, $batch, $grouped['selections']);
+                $batch = $this->refetchDocuments($collection, $batch, $parsed->selections);
             }
 
             // The operator refetch goes through find(), which already decoded every document;
@@ -1896,7 +1907,6 @@ trait Documents
             $batch = $this->decorateDocuments(Event::DocumentsUpdate, $collection, $batch);
 
             foreach ($batch as $index => $doc) {
-                $doc->removeAttribute(PermissionsHook::UNCHANGED);
                 if ($onNext !== null) {
                     $onNext($doc, $old[$index]);
                 }
@@ -1913,8 +1923,9 @@ trait Documents
             $last = \end($batch);
         }
 
-        if ($this->listens(Event::DocumentsUpdate)) {
-            $this->dispatch(new Event\Document\BatchUpdated($collection->getId(), $modified));
+        $listeners = $this->listens(Event::DocumentsUpdate);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Document\BatchUpdated($collection->getId(), $modified), $listeners);
         }
 
         return $modified;
@@ -1952,8 +1963,9 @@ trait Documents
             return $this->getDocument($collection, $document->getId());
         }
 
-        if ($this->listens(Event::DocumentUpsert)) {
-            $this->dispatch(new Event\Document\Upserted($collection, $result, $created));
+        $listeners = $this->listens(Event::DocumentUpsert);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Document\Upserted($collection, $result, $created), $listeners);
         }
 
         return $result;
@@ -1987,8 +1999,9 @@ trait Documents
     ): int {
         [$created, $updated] = $this->upsert($collection, $documents, self::batchSize($batchSize), $onNext, $increase);
 
-        if ($documents !== [] && $this->listens(Event::DocumentsUpsert)) {
-            $this->dispatch(new Event\Document\BatchUpserted($collection, $created, $updated));
+        $listeners = $documents === [] ? [] : $this->listens(Event::DocumentsUpsert);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Document\BatchUpserted($collection, $created, $updated), $listeners);
         }
 
         return $created + $updated;
@@ -2487,8 +2500,9 @@ trait Documents
             return $document->setAttribute($attribute, $result);
         });
 
-        if ($this->listens(Event::DocumentIncrease)) {
-            $this->dispatch(new Event\Document\Increased($collection->getId(), $document, $attribute));
+        $listeners = $this->listens(Event::DocumentIncrease);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Document\Increased($collection->getId(), $document, $attribute), $listeners);
         }
 
         return $document;
@@ -2610,8 +2624,9 @@ trait Documents
             return $document->setAttribute($attribute, $result);
         });
 
-        if ($this->listens(Event::DocumentDecrease)) {
-            $this->dispatch(new Event\Document\Decreased($collection->getId(), $document, $attribute));
+        $listeners = $this->listens(Event::DocumentDecrease);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Document\Decreased($collection->getId(), $document, $attribute), $listeners);
         }
 
         return $document;
@@ -2641,7 +2656,8 @@ trait Documents
         $cacheTarget = $collection->getId() === self::METADATA
             ? new Document([Document::ID => $id, Document::COLLECTION => self::METADATA])
             : $collection->getId();
-        $report = $this->listens(Event::DocumentUpdate);
+        $updateListeners = $this->listens(Event::DocumentUpdate);
+        $report = $updateListeners !== [];
         $changed = [];
         $deleted = $this->withMutation(Event::DocumentDelete, $cacheTarget, function () use ($collection, $id, $report, &$changed): ?Document {
             $changed = [];
@@ -2694,7 +2710,7 @@ trait Documents
             return false;
         }
 
-        $this->dispatchDeleted($collection->getId(), $deleted, $changed);
+        $this->dispatchDeleted($collection->getId(), $deleted, $changed, $updateListeners);
 
         return true;
     }
@@ -2704,22 +2720,24 @@ trait Documents
      * fires, and the first failure reaches the caller once they have.
      *
      * @param  list<Document>  $changed
+     * @param  list<Lifecycle>  $updateListeners  The hooks the related documents' updates are dispatched to
      */
-    private function dispatchDeleted(string $collection, Document $document, array $changed): void
+    private function dispatchDeleted(string $collection, Document $document, array $changed, array $updateListeners): void
     {
         $failure = null;
 
         try {
-            if ($this->listens(Event::DocumentDelete)) {
-                $this->dispatch(new Event\Document\Deleted($collection, $document));
+            $listeners = $this->listens(Event::DocumentDelete);
+            if ($listeners !== []) {
+                $this->dispatch(new Event\Document\Deleted($collection, $document), $listeners);
             }
         } catch (Throwable $error) {
             $failure = $error;
         }
 
-        foreach ($changed as $related) {
+        foreach ($updateListeners === [] ? [] : $changed as $related) {
             try {
-                $this->dispatch(new Event\Document\Updated($related->getCollection(), $related));
+                $this->dispatch(new Event\Document\Updated($related->getCollection(), $related), $updateListeners);
             } catch (Throwable $error) {
                 $failure ??= $error;
             }
@@ -2739,9 +2757,9 @@ trait Documents
      * @param  array<Query>  $queries  Queries to filter documents for deletion
      * @param  int  $batchSize  Number of documents per batch deletion, at most BATCH_SIZE
      * @param  (callable(Document $document, ?Document $previous): void)|null  $onNext  Given each deleted document once its
-     *                                                                                  batch is deleted, as both arguments: the
-     *                                                                                  stored document; an exception it throws
-     *                                                                                  aborts the call
+     *                                                                                  batch is deleted: the stored document,
+     *                                                                                  and as $previous a copy of it; an
+     *                                                                                  exception it throws aborts the call
      * @return int The number of documents deleted
      *
      * @throws AuthorizationException
@@ -2784,9 +2802,9 @@ trait Documents
             }
         }
 
-        $grouped = Query::groupForDatabase($queries);
-        $limit = $grouped['limit'];
-        $cursor = $grouped['cursor'];
+        $parsed = Query::groupByType($queries);
+        $limit = $parsed->limit;
+        $cursor = $parsed->cursor;
 
         if (! empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
             throw new DatabaseException('Cursor document must be from the same Collection.');
@@ -2876,7 +2894,7 @@ trait Documents
 
             foreach ($batch as $document) {
                 if ($onNext !== null) {
-                    $onNext($document, $document);
+                    $onNext($document, clone $document);
                 }
                 $modified++;
             }
@@ -2890,8 +2908,9 @@ trait Documents
             $last = \end($batch);
         }
 
-        if ($this->listens(Event::DocumentsDelete)) {
-            $this->dispatch(new Event\Document\BatchDeleted($collection->getId(), $modified));
+        $listeners = $this->listens(Event::DocumentsDelete);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Document\BatchDeleted($collection->getId(), $modified), $listeners);
         }
 
         return $modified;
@@ -3341,8 +3360,9 @@ trait Documents
             Document::COLLECTION => $collection,
         ]));
 
-        if ($this->listens(Event::DocumentPurge)) {
-            $this->dispatchPropagating(new Event\Document\Purged($collection, $id));
+        $listeners = $this->listens(Event::DocumentPurge);
+        if ($listeners !== []) {
+            $this->dispatchPropagating(new Event\Document\Purged($collection, $id), $listeners);
         }
     }
 
@@ -3354,14 +3374,15 @@ trait Documents
      */
     private function queueDocumentPurge(string $collectionId, string $id): void
     {
-        if (! $this->listens(Event::DocumentPurge)) {
+        $listeners = $this->listens(Event::DocumentPurge);
+        if ($listeners === []) {
             return;
         }
 
         $purged = new Event\Document\Purged($collectionId, $id);
 
         if (! $this->adapter->inTransaction()) {
-            $this->dispatchPropagating($purged);
+            $this->dispatchPropagating($purged, $listeners);
 
             return;
         }
@@ -3369,7 +3390,7 @@ trait Documents
         $context = $this->getEventContext();
         $tenant = $this->getTenant();
         $silenced = \array_keys($this->silencedListeners()->get());
-        $announce = fn () => $this->dispatchPropagating($purged);
+        $announce = fn () => $this->dispatchPropagating($purged, $this->listens(Event::DocumentPurge));
 
         $this->documentPurgeEvents[$context][] = function () use ($tenant, $silenced, $announce): void {
             $this->withTenant(
@@ -3702,23 +3723,23 @@ trait Documents
 
         $relationships = self::relationshipAttributes($collection);
 
-        $grouped = Query::groupForDatabase($queries);
-        $filters = $grouped['filters'];
-        $selects = $grouped['selections'];
-        $aggregations = $grouped['aggregations'];
-        $groupByAttrs = $grouped['groupBy'];
-        $having = $grouped['having'];
-        $joins = $grouped['joins'];
+        $parsed = Query::groupByType($queries);
+        $filters = $parsed->filters;
+        $selects = $parsed->selections;
+        $aggregations = $parsed->aggregations;
+        $groupByAttrs = $parsed->groupBy;
+        $having = $parsed->having;
+        $joins = $parsed->joins;
         // Skipping authorization would also skip the joined collections' permission filters,
         // so with joins the main collection's grant travels to the adapter instead.
         $skipAuth = $collectionGranted && empty($joins);
-        $distinct = $grouped['distinct'];
-        $limit = $grouped['limit'];
-        $offset = $grouped['offset'];
-        $orderAttributes = $grouped['orderAttributes'];
-        $orderTypes = $grouped['orderTypes'];
-        $cursor = $grouped['cursor'];
-        $cursorDirection = $grouped['cursorDirection'] ?? CursorDirection::After;
+        $distinct = $parsed->distinct;
+        $limit = $parsed->limit;
+        $offset = $parsed->offset;
+        $orderAttributes = $parsed->orderAttributes;
+        $orderTypes = $parsed->orderTypes;
+        $cursor = $parsed->cursor;
+        $cursorDirection = $parsed->cursorDirection ?? CursorDirection::After;
 
         $isAggregation = ! empty($aggregations) || ! empty($groupByAttrs);
 
@@ -3970,8 +3991,9 @@ trait Documents
             }
         }
 
-        if ($this->listens(Event::DocumentFind)) {
-            $this->dispatch(new Event\Document\Found($collection->getId(), \array_values($results)));
+        $listeners = $this->listens(Event::DocumentFind);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Document\Found($collection->getId(), \array_values($results)), $listeners);
         }
 
         return $results;
@@ -4021,8 +4043,9 @@ trait Documents
             return new Document();
         }
 
-        if ($this->listens(Event::DocumentFind)) {
-            $this->dispatch(new Event\Document\Found($found->getCollection(), [$found]));
+        $listeners = $this->listens(Event::DocumentFind);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Document\Found($found->getCollection(), [$found]), $listeners);
         }
 
         return $found;
@@ -4075,8 +4098,9 @@ trait Documents
         $getCount = fn () => $this->adapter->count($collection, $queries, $max);
         $count = $skipAuth ? $this->authorization->skip($getCount) : $getCount();
 
-        if ($this->listens(Event::DocumentCount)) {
-            $this->dispatch(new Event\Document\Counted($collection->getId(), $count));
+        $listeners = $this->listens(Event::DocumentCount);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Document\Counted($collection->getId(), $count), $listeners);
         }
 
         return $count;
@@ -4138,8 +4162,9 @@ trait Documents
         $getSum = fn () => $this->adapter->sum($collection, $attribute, $queries, $max);
         $sum = $skipAuth ? $this->authorization->skip($getSum) : $getSum();
 
-        if ($this->listens(Event::DocumentSum)) {
-            $this->dispatch(new Event\Document\Summed($collection->getId(), $attribute, $sum));
+        $listeners = $this->listens(Event::DocumentSum);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Document\Summed($collection->getId(), $attribute, $sum), $listeners);
         }
 
         return $sum;
@@ -4330,9 +4355,9 @@ trait Documents
         PermissionType $forPermission = PermissionType::Read,
     ): Generator {
         $batchSize = self::batchSize($batchSize);
-        $grouped = Query::groupForDatabase($queries);
+        $parsed = Query::groupByType($queries);
 
-        if ($grouped['cursor'] !== null && $grouped['cursorDirection'] === CursorDirection::Before) {
+        if ($parsed->cursor !== null && $parsed->cursorDirection === CursorDirection::Before) {
             throw new DatabaseException('Cursor '.CursorDirection::Before->value.' not supported in this method.');
         }
 
@@ -4341,7 +4366,7 @@ trait Documents
             static fn (Query $query): bool => ! \in_array($query->getMethod(), [Method::Limit, Method::Offset, Method::CursorAfter, Method::CursorBefore], true),
         ));
 
-        return $this->pages($collection, $filters, $batchSize, $forPermission, $grouped['limit'], $grouped['offset'], $grouped['cursor']);
+        return $this->pages($collection, $filters, $batchSize, $forPermission, $parsed->limit, $parsed->offset, $parsed->cursor);
     }
 
     /**
@@ -4413,8 +4438,9 @@ trait Documents
             $rows[] = $row->getArrayCopy();
         }
 
-        if ($this->listens(Event::DocumentAggregate)) {
-            $this->dispatch(new Event\Document\Aggregated($collection, $rows));
+        $listeners = $this->listens(Event::DocumentAggregate);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Document\Aggregated($collection, $rows), $listeners);
         }
 
         return $rows;
@@ -4423,9 +4449,18 @@ trait Documents
     /**
      * @param  array<Query>  $queries
      * @return array<Query>
+     *
+     * @throws QueryException When an aggregate's default alias is already taken by another aggregate
      */
     private static function aliasAggregates(array $queries): array
     {
+        $taken = [];
+        foreach ($queries as $query) {
+            if ($query->getMethod()->isAggregate() && $query->getAlias() !== '') {
+                $taken[$query->getAlias()] = true;
+            }
+        }
+
         foreach ($queries as $index => $query) {
             $method = $query->getMethod();
             if (! $method->isAggregate() || $query->getAlias() !== '') {
@@ -4435,6 +4470,11 @@ trait Documents
             $attribute = $query->getAttribute();
             $alias = $attribute === '*' || $attribute === '' ? $method->value : $method->value.'_'.$attribute;
             $alias = \substr((string) \preg_replace('/[^A-Za-z0-9_]/', '_', $alias), 0, Aggregate::MAX_ALIAS_LENGTH);
+
+            if (isset($taken[$alias])) {
+                throw new QueryException("The default aggregate alias '{$alias}' is used by more than one aggregate; give each of them an explicit alias");
+            }
+            $taken[$alias] = true;
 
             $queries[$index] = new Query($method, $attribute, $query->getValues(), $alias);
         }
@@ -4516,20 +4556,20 @@ trait Documents
      */
     private function nextPageCheck(string $collection, array $queries): Closure
     {
-        $grouped = Query::groupForDatabase($queries);
-        $joins = $grouped['joins'];
-        $distinct = $grouped['distinct'];
-        if (($joins === [] && ! $distinct) || $grouped['aggregations'] !== [] || $grouped['groupBy'] !== []) {
+        $parsed = Query::groupByType($queries);
+        $joins = $parsed->joins;
+        $distinct = $parsed->distinct;
+        if (($joins === [] && ! $distinct) || $parsed->aggregations !== [] || $parsed->groupBy !== []) {
             return static function (Document $cursor): void {
             };
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $joinedCollections = $this->joinedCollectionsByAlias($joins, $this->resolveJoinedCollections($joins));
-        $selects = $grouped['selections'];
-        $filters = $grouped['filters'];
-        $orderAttributes = $grouped['orderAttributes'];
-        $orderTypes = $grouped['orderTypes'];
+        $selects = $parsed->selections;
+        $filters = $parsed->filters;
+        $orderAttributes = $parsed->orderAttributes;
+        $orderTypes = $parsed->orderTypes;
 
         return function (Document $cursor) use ($collection, $joins, $distinct, $joinedCollections, $selects, $filters, $orderAttributes, $orderTypes): void {
             $orders = $orderAttributes;
@@ -4754,9 +4794,9 @@ trait Documents
         bool $collectionGranted,
         ?array $joinedCollections = null,
     ): ?array {
-        $grouped = Query::groupForDatabase($queries);
-        $filters = $grouped['filters'];
-        $joins = $grouped['joins'];
+        $parsed = Query::groupByType($queries);
+        $filters = $parsed->filters;
+        $joins = $parsed->joins;
 
         if (! empty($joins)) {
             if (! $this->adapter->supports(Capability::Joins)) {

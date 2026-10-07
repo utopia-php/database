@@ -100,13 +100,13 @@ final class InvalidationRestoreFailureTest extends TestCase
              * @param  array<string, string>  $tokens
              */
             #[\Override]
-            public function activate(array $tokens): void
+            public function activate(array $tokens, int $writerTimeout): void
             {
                 if (($this->failing)()) {
                     throw new RuntimeException('the query cache refused the activation');
                 }
 
-                parent::activate($tokens);
+                parent::activate($tokens, $writerTimeout);
             }
         };
     }

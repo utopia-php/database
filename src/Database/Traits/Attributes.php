@@ -90,8 +90,9 @@ trait Attributes
 
         $this->purgeCollectionCaches($definition->getId());
 
-        if ($this->listens(Event::AttributeCreate)) {
-            $this->dispatch(new Event\Attribute\Created($definition->getId(), $attribute));
+        $listeners = $this->listens(Event::AttributeCreate);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Attribute\Created($definition->getId(), $attribute), $listeners);
         }
 
         return $attribute;
@@ -182,14 +183,16 @@ trait Attributes
 
         $this->purgeCollectionCaches($definition->getId());
 
-        if ($this->listens(Event::AttributeCreate)) {
+        $listeners = $this->listens(Event::AttributeCreate);
+        if ($listeners !== []) {
             foreach ($stored as $attribute) {
-                $this->dispatch(new Event\Attribute\Created($definition->getId(), $attribute));
+                $this->dispatch(new Event\Attribute\Created($definition->getId(), $attribute), $listeners);
             }
         }
 
-        if ($this->listens(Event::AttributesCreate)) {
-            $this->dispatch(new Event\Attribute\BatchCreated($definition->getId(), $stored));
+        $listeners = $this->listens(Event::AttributesCreate);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Attribute\BatchCreated($definition->getId(), $stored), $listeners);
         }
 
         return $stored;
@@ -329,12 +332,14 @@ trait Attributes
         }
         $this->withRetries(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $definition->getId()));
 
-        if ($this->listens(Event::DocumentPurge)) {
-            $this->dispatch(new Event\Document\Purged(self::METADATA, $definition->getId()));
+        $listeners = $this->listens(Event::DocumentPurge);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Document\Purged(self::METADATA, $definition->getId()), $listeners);
         }
 
-        if ($this->listens(Event::AttributeUpdate)) {
-            $this->dispatch(new Event\Attribute\Updated($definition->getId(), $updated));
+        $listeners = $this->listens(Event::AttributeUpdate);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Attribute\Updated($definition->getId(), $updated), $listeners);
         }
 
         return $updated;
@@ -428,8 +433,9 @@ trait Attributes
 
         $this->purgeCollectionCaches($definition->getId());
 
-        if ($this->listens(Event::AttributeDelete)) {
-            $this->dispatch(new Event\Attribute\Deleted($definition->getId(), $attribute));
+        $listeners = $this->listens(Event::AttributeDelete);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Attribute\Deleted($definition->getId(), $attribute), $listeners);
         }
     }
 
@@ -494,8 +500,9 @@ trait Attributes
 
         $this->withRetries(fn () => $this->purgeCachedCollection($definition->getId()));
 
-        if ($this->listens(Event::AttributeRename)) {
-            $this->dispatch(new Event\Attribute\Renamed($definition->getId(), $old, $renamed));
+        $listeners = $this->listens(Event::AttributeRename);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Attribute\Renamed($definition->getId(), $old, $renamed), $listeners);
         }
     }
 
@@ -903,8 +910,9 @@ trait Attributes
         $this->withRetries(fn () => $this->purgeCachedCollection($collection));
         $this->withRetries(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $collection));
 
-        if ($this->listens(Event::DocumentPurge)) {
-            $this->dispatch(new Event\Document\Purged(self::METADATA, $collection));
+        $listeners = $this->listens(Event::DocumentPurge);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Document\Purged(self::METADATA, $collection), $listeners);
         }
     }
 

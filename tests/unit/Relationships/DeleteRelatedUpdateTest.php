@@ -64,9 +64,9 @@ final class DeleteRelatedUpdateTest extends TestCase
             }
 
             #[\Override]
-            public function updateDocuments(Document $collection, Document $updates, array $documents): int
+            public function updateDocuments(Document $collection, Document $updates, array $documents, array $skipPermissions = []): int
             {
-                return ($this->watch)($collection, $documents, fn (): int => parent::updateDocuments($collection, $updates, $documents));
+                return ($this->watch)($collection, $documents, fn (): int => parent::updateDocuments($collection, $updates, $documents, $skipPermissions));
             }
         }];
         yield 'sqlite' => [static fn (Closure $watch): Adapter => new class (new PDO('sqlite::memory:'), $watch) extends SQLite {
@@ -79,9 +79,9 @@ final class DeleteRelatedUpdateTest extends TestCase
             }
 
             #[\Override]
-            public function updateDocuments(Document $collection, Document $updates, array $documents): int
+            public function updateDocuments(Document $collection, Document $updates, array $documents, array $skipPermissions = []): int
             {
-                return ($this->watch)($collection, $documents, fn (): int => parent::updateDocuments($collection, $updates, $documents));
+                return ($this->watch)($collection, $documents, fn (): int => parent::updateDocuments($collection, $updates, $documents, $skipPermissions));
             }
         }];
     }

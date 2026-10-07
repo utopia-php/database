@@ -169,15 +169,22 @@ class Mirror extends Database
      * reported to onError(), or until the timeout has passed. Outside a coroutine, and inside a replication, there is
      * nothing to wait for.
      *
-     * @param  int|null  $timeout  Milliseconds to wait at most; null waits for as long as the replications take
+     * @param  int|null  $timeout  Milliseconds to wait at most: null waits for as long as the replications take, and 0
+     *                             does not wait
+     *
+     * @throws Exception When the timeout is negative
      */
     public function awaitReplications(?int $timeout = null): void
     {
-        if ($this->appliesInline()) {
+        if ($timeout !== null && $timeout < 0) {
+            throw new Exception("A replication timeout cannot be negative, {$timeout} given");
+        }
+
+        if ($timeout === 0 || $this->appliesInline()) {
             return;
         }
 
-        $this->latestReplication?->pop($timeout === null ? -1 : \max($timeout, 1) / 1000);
+        $this->latestReplication?->pop($timeout === null ? -1 : $timeout / 1000);
     }
 
     /**
@@ -626,7 +633,7 @@ class Mirror extends Database
     /**
      * Lifecycle hooks are registered on the source (see addLifecycleHook()).
      */
-    protected function listens(Event $event): bool
+    protected function listens(Event $event): array
     {
         return $this->source->listens($event);
     }
@@ -634,9 +641,9 @@ class Mirror extends Database
     /**
      * Lifecycle hooks are registered on the source (see addLifecycleHook()).
      */
-    protected function dispatch(Domain $event): void
+    protected function dispatch(Domain $event, array $listeners): void
     {
-        $this->source->dispatch($event);
+        $this->source->dispatch($event, $listeners);
     }
 
     /**
@@ -654,9 +661,9 @@ class Mirror extends Database
     /**
      * Lifecycle hooks are registered on the source (see addLifecycleHook()).
      */
-    protected function dispatchPropagating(Domain $event): void
+    protected function dispatchPropagating(Domain $event, array $listeners): void
     {
-        $this->source->dispatchPropagating($event);
+        $this->source->dispatchPropagating($event, $listeners);
     }
 
     /**
@@ -759,8 +766,9 @@ class Mirror extends Database
             $collections[] = Collection::fromDocument($doc);
         }
 
-        if ($this->listens(Event::CollectionList)) {
-            $this->dispatch(new Event\Collection\Listed($collections));
+        $listeners = $this->listens(Event::CollectionList);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Collection\Listed($collections), $listeners);
         }
 
         return $collections;
@@ -1217,7 +1225,7 @@ class Mirror extends Database
         ?callable $onNext = null,
     ): int {
         $onNext = $this->decorating(Event::DocumentsCreate, $collection, $onNext);
-        $modified = $this->skippingDuplicates()
+        $modified = $this->isIgnoringDuplicates()
             ? $this->source->ignoreDuplicates(
                 fn () => $this->source->createDocuments($collection, $documents, $batchSize, $onNext)
             )
@@ -1237,7 +1245,7 @@ class Mirror extends Database
         }
 
         $clones = \array_map(static fn (Document $document): Document => clone $document, $documents);
-        $ignoreDuplicates = $this->skippingDuplicates();
+        $ignoreDuplicates = $this->isIgnoringDuplicates();
 
         $this->replicate('createDocuments', function () use ($destination, $collection, $clones, $batchSize, $ignoreDuplicates): void {
             foreach ($clones as $index => $clone) {
@@ -1873,13 +1881,15 @@ class Mirror extends Database
             'createAttributes' => Event::AttributesCreate,
             'updateAttribute' => Event::AttributeUpdate,
             'deleteAttribute' => Event::AttributeDelete,
-            'createIndex', 'createIndexes' => Event::IndexCreate,
+            'createIndex' => Event::IndexCreate,
+            'createIndexes' => Event::IndexesCreate,
             'renameIndex' => Event::IndexRename,
             'deleteIndex' => Event::IndexDelete,
             'createDocument' => Event::DocumentCreate,
             'createDocuments' => Event::DocumentsCreate,
             'updateDocument' => Event::DocumentUpdate,
             'updateDocuments' => Event::DocumentsUpdate,
+            'upsertDocument' => Event::DocumentUpsert,
             'upsertDocuments' => Event::DocumentsUpsert,
             'deleteDocument' => Event::DocumentDelete,
             'deleteDocuments' => Event::DocumentsDelete,

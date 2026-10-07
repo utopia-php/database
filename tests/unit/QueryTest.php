@@ -7,6 +7,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Query;
 use Utopia\Query\Method;
+use Utopia\Query\OrderDirection;
 
 class QueryTest extends TestCase
 {
@@ -573,12 +574,12 @@ class QueryTest extends TestCase
         $this->assertNotSame(Query::fingerprint([$andOne]), Query::fingerprint([$andTwo]));
 
         // elemMatch attribute matters: same inner shape on different fields must NOT collide
-        $elemTags = new Query(Query::TYPE_ELEM_MATCH, 'tags', [Query::equal('name', ['php'])]);
-        $elemCategories = new Query(Query::TYPE_ELEM_MATCH, 'categories', [Query::equal('name', ['php'])]);
+        $elemTags = new Query(Method::ElemMatch, 'tags', [Query::equal('name', ['php'])]);
+        $elemCategories = new Query(Method::ElemMatch, 'categories', [Query::equal('name', ['php'])]);
         $this->assertNotSame(Query::fingerprint([$elemTags]), Query::fingerprint([$elemCategories]));
 
         // elemMatch values-only change (same field, same child shape) still collides — as expected
-        $elemTagsOther = new Query(Query::TYPE_ELEM_MATCH, 'tags', [Query::equal('name', ['js'])]);
+        $elemTagsOther = new Query(Method::ElemMatch, 'tags', [Query::equal('name', ['js'])]);
         $this->assertSame(Query::fingerprint([$elemTags]), Query::fingerprint([$elemTagsOther]));
     }
 
@@ -599,7 +600,7 @@ class QueryTest extends TestCase
         $this->assertSame('and:(equal:name|greaterThan:age)', $and->shape());
 
         // elemMatch preserves the attribute (the field being matched)
-        $elem = new Query(Query::TYPE_ELEM_MATCH, 'tags', [Query::equal('name', ['php'])]);
+        $elem = new Query(Method::ElemMatch, 'tags', [Query::equal('name', ['php'])]);
         $this->assertSame('elemMatch:tags(equal:name)', $elem->shape());
 
         // Deeply nested — iterative traversal must match recursive result
@@ -646,4 +647,30 @@ class QueryTest extends TestCase
 
         $node->shape();
     }
+    public function testGroupByTypeKeepsTheOrdersInTheOrderGiven(): void
+    {
+        $cursor = new Document([Document::ID => 'first']);
+        $parsed = Query::groupByType([
+            Query::orderDesc('views'),
+            Query::equal('title', ['first']),
+            Query::orderAsc('title'),
+            Query::limit(5),
+            Query::cursorAfter($cursor),
+        ]);
+
+        $this->assertSame(['views', 'title'], $parsed->orderAttributes);
+        $this->assertSame([OrderDirection::Desc, OrderDirection::Asc], $parsed->orderTypes);
+        $this->assertCount(1, $parsed->filters);
+        $this->assertSame(5, $parsed->limit);
+        $this->assertSame($cursor, $parsed->cursor);
+    }
+
+    public function testGroupByTypeRefusesACursorThatIsNotADocument(): void
+    {
+        $this->expectException(QueryException::class);
+        $this->expectExceptionMessage('Invalid query: Invalid cursor: a cursor must be a document, array given');
+
+        Query::groupByType([Query::cursorAfter([Document::ID => 'first'])]);
+    }
+
 }

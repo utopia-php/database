@@ -34,8 +34,6 @@ class Query extends BaseQuery
      */
     public const array LOGICAL_TYPES = [Method::And, Method::Or, Method::ElemMatch];
 
-    public const TYPE_ELEM_MATCH = 'elemMatch';
-
     /**
      * Ceiling on the nodes shape() will walk.
      *
@@ -335,51 +333,29 @@ class Query extends BaseQuery
     }
 
     /**
-     * Iterates through queries and groups them by type,
-     * returning the result in the Database-specific array format
-     * with string order types and cursor directions.
+     * Group the queries by kind, with their orders in the order the queries give them.
      *
-     * @param  array<Query>  $queries
-     * @return array{
-     *     filters: array<Query>,
-     *     selections: array<Query>,
-     *     aggregations: array<Query>,
-     *     groupBy: array<string>,
-     *     having: array<Query>,
-     *     joins: array<Query>,
-     *     distinct: bool,
-     *     limit: int|null,
-     *     offset: int|null,
-     *     orderAttributes: array<string>,
-     *     orderTypes: array<OrderDirection>,
-     *     cursor: Document|null,
-     *     cursorDirection: CursorDirection|null
-     * }
+     * @param  array<mixed>  $queries  Database queries
+     *
+     * @throws QueryException When a cursor is not a document
      */
-    public static function groupForDatabase(array $queries): array
+    #[\Override]
+    public static function groupByType(array $queries): ParsedQuery
     {
         $grouped = parent::groupByType($queries);
 
-        /** @var array<Query> $filters */
-        $filters = $grouped->filters;
-        /** @var array<Query> $selections */
-        $selections = $grouped->selections;
-        /** @var array<Query> $aggregations */
-        $aggregations = $grouped->aggregations;
-        /** @var array<Query> $having */
-        $having = $grouped->having;
-        /** @var array<Query> $joins */
-        $joins = $grouped->joins;
-        /** @var Document|null $cursor */
         $cursor = $grouped->cursor;
+        if ($cursor !== null && ! $cursor instanceof Document) {
+            throw new QueryException('Invalid query: Invalid cursor: a cursor must be a document, '.\get_debug_type($cursor).' given');
+        }
 
-        // The base library's groupByType no longer tracks order attributes on
-        // ParsedQuery — order clauses are consumed directly by the compiler.
-        // Database adapters still take orderAttributes/orderTypes, so rebuild
-        // them here from the pending query list.
         $orderAttributes = [];
         $orderTypes = [];
         foreach ($queries as $query) {
+            if (! $query instanceof BaseQuery) {
+                continue;
+            }
+
             $direction = match ($query->getMethod()) {
                 Method::OrderAsc => OrderDirection::Asc,
                 Method::OrderDesc => OrderDirection::Desc,
@@ -394,24 +370,37 @@ class Query extends BaseQuery
             $orderAttributes[] = $query->getAttribute();
             $orderTypes[] = $direction;
         }
-        /** @var list<string> $groupBy */
-        $groupBy = $grouped->groupBy;
 
-        return [
-            'filters' => $filters,
-            'selections' => $selections,
-            'aggregations' => $aggregations,
-            'groupBy' => $groupBy,
-            'having' => $having,
-            'joins' => $joins,
-            'distinct' => $grouped->distinct,
-            'limit' => $grouped->limit,
-            'offset' => $grouped->offset,
-            'orderAttributes' => $orderAttributes,
-            'orderTypes' => $orderTypes,
-            'cursor' => $cursor,
-            'cursorDirection' => $grouped->cursorDirection,
-        ];
+        /** @var list<Query> $filters */
+        $filters = $grouped->filters;
+        /** @var list<Query> $selections */
+        $selections = $grouped->selections;
+        /** @var list<Query> $aggregations */
+        $aggregations = $grouped->aggregations;
+        /** @var list<Query> $having */
+        $having = $grouped->having;
+        /** @var list<Query> $joins */
+        $joins = $grouped->joins;
+        /** @var list<Query> $unions */
+        $unions = $grouped->unions;
+
+        return new ParsedQuery(
+            filters: $filters,
+            selections: $selections,
+            aggregations: $aggregations,
+            groupBy: $grouped->groupBy,
+            having: $having,
+            distinct: $grouped->distinct,
+            joins: $joins,
+            unions: $unions,
+            limit: $grouped->limit,
+            offset: $grouped->offset,
+            cursor: $cursor,
+            cursorDirection: $grouped->cursorDirection,
+            timeBuckets: $grouped->timeBuckets,
+            orderAttributes: $orderAttributes,
+            orderTypes: $orderTypes,
+        );
     }
 
     /**

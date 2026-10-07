@@ -255,7 +255,7 @@ final class CoroutineStateTest extends TestCase
             validation: true,
             preserveDates: false,
             preserveSequence: false,
-            skipDuplicates: false,
+            ignoreDuplicates: false,
             requestTimestamp: null,
         );
     }

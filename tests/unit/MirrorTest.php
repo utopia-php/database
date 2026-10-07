@@ -253,8 +253,9 @@ class MirrorTest extends TestCase
             public function fire(Document $document): void
             {
                 $this->invalidate(Event::DocumentUpdate, $document);
-                if ($this->listens(Event::DocumentUpdate)) {
-                    $this->dispatch(new Event\Document\Updated($document->getCollection(), $document));
+                $listeners = $this->listens(Event::DocumentUpdate);
+                if ($listeners !== []) {
+                    $this->dispatch(new Event\Document\Updated($document->getCollection(), $document), $listeners);
                 }
             }
         };
@@ -1726,11 +1727,11 @@ class MirrorTest extends TestCase
                 return parent::updateDocument($collection, $id, $document, $skipPermissions);
             }
 
-            public function updateDocuments(Document $collection, Document $updates, array $documents): int
+            public function updateDocuments(Document $collection, Document $updates, array $documents, array $skipPermissions = []): int
             {
                 $this->reach();
 
-                return parent::updateDocuments($collection, $updates, $documents);
+                return parent::updateDocuments($collection, $updates, $documents, $skipPermissions);
             }
 
             /**

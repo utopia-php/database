@@ -11,7 +11,7 @@ use Utopia\Database\Query;
 
 /**
  * Every bulk write hands $onNext the written document and the stored document it replaced: null on create, the
- * document as read before the write on update and upsert, and the stored document itself on delete.
+ * document as read before the write on update and upsert, and a copy of the stored document on delete.
  */
 final class OnNextTest extends TestCase
 {
@@ -54,7 +54,7 @@ final class OnNextTest extends TestCase
         $this->assertSame([['renamed', 'first'], ['third', null]], $calls);
     }
 
-    public function testDeletePassesTheStoredDocumentAsThePreviousOne(): void
+    public function testDeletePassesACopyOfTheStoredDocumentAsThePreviousOne(): void
     {
         $pairs = [];
         $deleted = $this->database->deleteDocuments(
@@ -69,7 +69,9 @@ final class OnNextTest extends TestCase
         $this->assertCount(1, $pairs);
         [$document, $previous] = $pairs[0];
         $this->assertSame('second', $document->getId());
-        $this->assertSame($document, $previous, 'The previous document is the stored one, not a copy of it');
+        $this->assertNotNull($previous);
+        $this->assertNotSame($document, $previous, 'The previous document is a copy, so changing one leaves the other');
+        $this->assertSame($document->getArrayCopy(), $previous->getArrayCopy());
         $this->assertSame(2, $previous->getAttribute('views'));
     }
 

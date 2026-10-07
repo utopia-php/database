@@ -5,12 +5,12 @@ namespace Utopia\Database\Cache;
 use InvalidArgumentException;
 use RuntimeException;
 use Utopia\Cache\Cache;
-use Utopia\Database\Database;
 use Utopia\Database\Document;
 
 /**
- * Caches find() results per collection. It takes its cache name and its writer timeout, the seconds after which a
- * write that has not activated is treated as abandoned, from the Database it is attached to.
+ * Caches find() results per collection. It holds no database: each call takes the cache name and the writer timeout
+ * of the database it runs for from the {@see Scope} it is handed (or, for the key-based calls, its writer timeout
+ * argument), so one query cache can be shared by databases named and configured differently.
  */
 class QueryCache
 {
@@ -32,18 +32,12 @@ class QueryCache
 
     private const int VERSION = 2;
 
-    private const int WRITER_TIMEOUT = 3600;
-
-    private const string NAME = 'default';
-
     private const int SLOTS = 1024;
 
     private const string BLOCK_FIELD = 'block';
 
     /** @var array<string, Region> */
     private array $regions = [];
-
-    private ?Database $database = null;
 
     /**
      * @param  int  $slots  Results a collection scope keeps at most; queries sharing a slot evict each other
@@ -55,14 +49,6 @@ class QueryCache
         if ($slots < 1) {
             throw new InvalidArgumentException('A query cache needs at least one slot');
         }
-    }
-
-    /**
-     * @internal Database::setQueryCache() attaches the cache to the database it is set on.
-     */
-    public function attach(Database $database): void
-    {
-        $this->database = $database;
     }
 
     public function setRegion(string $collection, Region $region): static
@@ -87,9 +73,7 @@ class QueryCache
             'collection' => $collection,
         ]));
 
-        $name = $this->database?->getCacheName() ?? self::NAME;
-
-        return "{$name}:qcache:{$collection}:{$scopeHash}";
+        return "{$scope->name}:qcache:{$collection}:{$scopeHash}";
     }
 
     /**
@@ -107,7 +91,7 @@ class QueryCache
         }
 
         $key = $this->getCollectionKey($scope, $collection);
-        $epoch = $this->getEpoch($key, $collection);
+        $epoch = $this->getEpoch($key, $collection, $scope->writerTimeout);
         if ($epoch === null) {
             return null;
         }
@@ -207,7 +191,7 @@ class QueryCache
         $key = $this->getCollectionKey($scope, $collection);
         $token = $this->createToken();
         $this->blockCollection($key, $token);
-        $this->activateCollection($key, $token);
+        $this->activateCollection($key, $token, $scope->writerTimeout);
     }
 
     /**
@@ -239,8 +223,10 @@ class QueryCache
     /**
      * Replace this mutation's shared tombstone with a fresh usable epoch once no
      * other mutation of the collection is in progress.
+     *
+     * @param  int  $writerTimeout  Seconds after which another writer's registration is treated as abandoned
      */
-    public function activateCollection(string $key, string $token): void
+    public function activateCollection(string $key, string $token, int $writerTimeout = Scope::WRITER_TIMEOUT): void
     {
         $registration = (new Owners($this->cache))->find($key, $token);
         $owner = $this->cache->load($registration->key, self::PERMANENT, $registration->field);
@@ -294,7 +280,7 @@ class QueryCache
             throw new RuntimeException("Failed to finish query cache invalidation for '{$key}'");
         }
 
-        if ($registration->field !== '' && $this->releaseAbandonedOwners($registration->key)) {
+        if ($registration->field !== '' && $this->releaseAbandonedOwners($registration->key, $writerTimeout)) {
             $this->publish($key, $nextStarted);
         }
     }
@@ -313,7 +299,7 @@ class QueryCache
      * begun since, so a reader needs one generation read. The initial epoch needs a
      * results hash no write has purged, since results filled under it outlive the block.
      */
-    private function getEpoch(string $key, string $collection): ?string
+    private function getEpoch(string $key, string $collection, int $writerTimeout): ?string
     {
         $value = $this->cache->load($this->getEpochKey($key), self::PERMANENT);
 
@@ -335,7 +321,7 @@ class QueryCache
         $stamp = \substr($value, $separator + 1);
 
         if (\str_starts_with($value, self::BLOCKED_PREFIX)) {
-            return $this->getLapsedEpoch($key, $collection, $value, (int) $stamp);
+            return $this->getLapsedEpoch($key, $collection, $value, (int) $stamp, $writerTimeout);
         }
 
         if (! \str_starts_with($value, self::ACTIVE_PREFIX)) {
@@ -356,11 +342,10 @@ class QueryCache
      * to this tombstone and the finished generation, so nothing filled before the block, or before a
      * later activation, is served under it.
      */
-    private function getLapsedEpoch(string $key, string $collection, string $tombstone, int $stamp): ?string
+    private function getLapsedEpoch(string $key, string $collection, string $tombstone, int $stamp, int $writerTimeout): ?string
     {
         $now = \time();
         $ttl = $this->getRegion($collection)->ttl;
-        $writerTimeout = $this->getWriterTimeout();
         if ($stamp + \min($ttl, $writerTimeout) > $now) {
             return null;
         }
@@ -378,10 +363,9 @@ class QueryCache
      * Release every other writer still registered when all of them are older than the writer timeout.
      * A token without a creation time counts as live.
      */
-    private function releaseAbandonedOwners(string $owners): bool
+    private function releaseAbandonedOwners(string $owners, int $writerTimeout): bool
     {
         $now = \time();
-        $writerTimeout = $this->getWriterTimeout();
         $abandoned = [];
         foreach ($this->cache->list($owners) as $token) {
             $created = $this->getTokenTime($token);
@@ -397,11 +381,6 @@ class QueryCache
         }
 
         return true;
-    }
-
-    private function getWriterTimeout(): int
-    {
-        return $this->database?->getCacheWriterTimeout() ?? self::WRITER_TIMEOUT;
     }
 
     private function getTokenTime(string $token): ?int

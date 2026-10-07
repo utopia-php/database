@@ -70,8 +70,9 @@ trait Indexes
 
         $stored = $this->storeIndexes($collection, $indexes);
 
-        if ($this->listens(Event::IndexesCreate)) {
-            $this->dispatch(new Event\Index\BatchCreated($collection, $stored));
+        $listeners = $this->listens(Event::IndexesCreate);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Index\BatchCreated($collection, $stored), $listeners);
         }
 
         return $stored;
@@ -122,8 +123,9 @@ trait Indexes
 
         $this->withRetries(fn () => $this->purgeCachedCollection($definition->getId()));
 
-        if ($this->listens(Event::IndexRename)) {
-            $this->dispatch(new Event\Index\Renamed($definition->getId(), $old, $renamed));
+        $listeners = $this->listens(Event::IndexRename);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Index\Renamed($definition->getId(), $old, $renamed), $listeners);
         }
     }
 
@@ -171,8 +173,9 @@ trait Indexes
 
         $this->withRetries(fn () => $this->purgeCachedCollection($definition->getId()));
 
-        if ($this->listens(Event::IndexDelete)) {
-            $this->dispatch(new Event\Index\Deleted($definition->getId(), $deleted));
+        $listeners = $this->listens(Event::IndexDelete);
+        if ($listeners !== []) {
+            $this->dispatch(new Event\Index\Deleted($definition->getId(), $deleted), $listeners);
         }
     }
 
@@ -224,9 +227,10 @@ trait Indexes
 
         $this->withRetries(fn () => $this->purgeCachedCollection($definition->getId()));
 
-        if ($this->listens(Event::IndexCreate)) {
+        $listeners = $this->listens(Event::IndexCreate);
+        if ($listeners !== []) {
             foreach ($prepared as $index) {
-                $this->dispatch(new Event\Index\Created($definition->getId(), $index));
+                $this->dispatch(new Event\Index\Created($definition->getId(), $index), $listeners);
             }
         }
 

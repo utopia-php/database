@@ -550,7 +550,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         }
 
         // An upsert with $setOnInsert hits WriteConflict (112) under the transaction's snapshot isolation.
-        if ($this->skippingDuplicates()) {
+        if ($this->isIgnoringDuplicates()) {
             return $callback();
         }
 
@@ -1584,7 +1584,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         }
 
         // insertMany aborts the txn on any duplicate; upsert + $setOnInsert no-ops instead.
-        if ($this->skippingDuplicates()) {
+        if ($this->isIgnoringDuplicates()) {
             if (empty($records)) {
                 return [];
             }
@@ -1699,10 +1699,11 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      * Updates all documents which match the given query.
      *
      * @param  array<Document>  $documents
+     * @param  array<string, true>  $skipPermissions
      *
      * @throws DatabaseException
      */
-    public function updateDocuments(Document $collection, Document $updates, array $documents): int
+    public function updateDocuments(Document $collection, Document $updates, array $documents, array $skipPermissions = []): int
     {
         $name = $this->getNamespace().'_'.$this->filter($collection->getId());
 
@@ -3429,7 +3430,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     protected function buildFilters(array $queries, string $separator = '$and'): array
     {
         $filters = [];
-        $queries = Query::groupForDatabase($queries)['filters'];
+        $queries = Query::groupByType($queries)->filters;
 
         foreach ($queries as $query) {
             /* @var $query Query */

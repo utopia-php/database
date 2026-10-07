@@ -60,14 +60,14 @@ final class UpdateDocumentsCastingTest extends TestCase
             }
 
             #[\Override]
-            public function updateDocuments(Document $collection, Document $updates, array $documents): int
+            public function updateDocuments(Document $collection, Document $updates, array $documents, array $skipPermissions = []): int
             {
                 $this->receivedCastedUpdates[] = isset($this->casted[\spl_object_id($updates)]);
                 $this->receivedUpdatedAtTypes[] = \get_debug_type($updates->getUpdatedAt());
                 $this->receivedUpdatedAtValues[] = $updates->getUpdatedAt();
                 $this->receivedUpdateIds[] = \spl_object_id($updates);
 
-                return parent::updateDocuments($collection, $updates, $documents);
+                return parent::updateDocuments($collection, $updates, $documents, $skipPermissions);
             }
         };
         $database = new Database($adapter, new Cache(new None()));

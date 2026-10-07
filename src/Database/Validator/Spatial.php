@@ -154,7 +154,7 @@ class Spatial extends Validator
      * @param string $value The string to check
      * @return bool
      */
-    public static function isWKTString(string $value): bool
+    public static function isWktString(string $value): bool
     {
         $value = trim($value);
 
@@ -214,7 +214,7 @@ class Spatial extends Validator
         }
 
         if (is_string($value)) {
-            return self::isWKTString($value);
+            return self::isWktString($value);
         }
 
         if (is_array($value)) {

@@ -212,7 +212,7 @@ class Database
 
     protected Cache $cache;
 
-    protected string $cacheName = 'default';
+    protected string $cacheName = Scope::NAME;
 
     /**
      * @var array<string, array{encode: callable, decode: callable, signature: string}>
@@ -271,7 +271,7 @@ class Database
     private ?Value $sequencePreservation = null;
 
     /** @var Value<bool>|null */
-    private ?Value $duplicateSkipping = null;
+    private ?Value $ignoringDuplicates = null;
 
     protected ?Relationships $relationshipHook = null;
 
@@ -900,8 +900,8 @@ class Database
     }
 
     /**
-     * Cache find() results in the query cache, which takes its name and writer timeout from this database; null stops
-     * caching them.
+     * Cache find() results in the query cache, keyed by this database's cache name and timed by its writer timeout
+     * on each call, so the query cache may be shared with other databases; null stops caching them.
      */
     public function setQueryCache(?QueryCache $queryCache): static
     {
@@ -909,7 +909,6 @@ class Database
         $this->queryCache = $queryCache;
 
         if ($queryCache !== null) {
-            $queryCache->attach($this);
             $this->invalidator = new Invalidator($queryCache);
         }
 
@@ -1183,7 +1182,7 @@ class Database
      */
     public function ignoreDuplicates(callable $callback): mixed
     {
-        return $this->duplicateSkipping()->with(true, $callback);
+        return $this->ignoringDuplicates()->with(true, $callback);
     }
 
     /**
@@ -1473,6 +1472,9 @@ class Database
      * Unregister a hook, or with a class-string every hook of that class, from wherever {@see self::addHook()}
      * registered it.
      *
+     * A SQL adapter owns its {@see Hook\Tenancy} write hook while shared tables are on and registers it again before
+     * its next write, so removing Hook\Tenancy::class lasts only until then.
+     *
      * @param  \Utopia\Query\Hook|class-string<\Utopia\Query\Hook>  $hook
      */
     public function removeHook(\Utopia\Query\Hook|string $hook): static
@@ -1647,7 +1649,7 @@ class Database
             validation: $this->validation()->get(),
             preserveDates: $this->datePreservation()->get(),
             preserveSequence: $this->sequencePreservation()->get(),
-            skipDuplicates: $this->duplicateSkipping()->get(),
+            ignoreDuplicates: $this->ignoringDuplicates()->get(),
             requestTimestamp: $this->requestTimestamp()->get(),
         );
     }
@@ -1688,7 +1690,7 @@ class Database
     private function withToggles(Snapshot $snapshot, callable $callback): mixed
     {
         $timestamped = fn (): mixed => $this->requestTimestamp()->with($snapshot->requestTimestamp, $callback);
-        $deduplicated = fn (): mixed => $this->duplicateSkipping()->with($snapshot->skipDuplicates, $timestamped);
+        $deduplicated = fn (): mixed => $this->ignoringDuplicates()->with($snapshot->ignoreDuplicates, $timestamped);
         $sequenced = fn (): mixed => $this->sequencePreservation()->with($snapshot->preserveSequence, $deduplicated);
         $dated = fn (): mixed => $this->datePreservation()->with($snapshot->preserveDates, $sequenced);
         $validated = fn (): mixed => $this->validation()->with($snapshot->validation, $dated);
@@ -1761,14 +1763,14 @@ class Database
     /**
      * @return Value<bool>
      */
-    private function duplicateSkipping(): Value
+    private function ignoringDuplicates(): Value
     {
-        return $this->duplicateSkipping ??= new Value(false);
+        return $this->ignoringDuplicates ??= new Value(false);
     }
 
-    protected function skippingDuplicates(): bool
+    protected function isIgnoringDuplicates(): bool
     {
-        return $this->duplicateSkipping()->get();
+        return $this->ignoringDuplicates()->get();
     }
 
     private function getEventContext(): int
@@ -2815,6 +2817,8 @@ class Database
             database: $this->adapter->getDatabase(),
             namespace: $namespace ?? $this->adapter->getNamespace(),
             tenant: $this->adapter->getTenant(),
+            name: $this->cacheName,
+            writerTimeout: $this->cacheWriterTimeout,
         );
     }
 
@@ -2960,7 +2964,7 @@ class Database
 
         $tokens = $this->getInvalidationTokens($event, $data);
         $invalidator->block($tokens);
-        $invalidator->activate($tokens);
+        $invalidator->activate($tokens, $this->cacheWriterTimeout);
     }
 
     /**
@@ -2989,28 +2993,50 @@ class Database
      */
     protected function activateInvalidation(array $tokens): void
     {
-        $this->invalidator?->activate($tokens);
+        $this->invalidator?->activate($tokens, $this->cacheWriterTimeout);
     }
 
     /**
-     * Whether a registered lifecycle hook handles the event, so a trigger site builds the typed event only then.
+     * The registered lifecycle hooks that handle the event now; a trigger site builds the typed event only when there
+     * is one, and hands them to {@see self::dispatch()}.
+     *
+     * @return list<Lifecycle>
      */
-    protected function listens(Event $event): bool
+    protected function listens(Event $event): array
     {
-        return $this->getActiveLifecycleHooks($event) !== [];
+        if ($this->lifecycleHooks === [] || $this->areEventsSilenced()) {
+            return [];
+        }
+
+        $silenced = $this->silencedListeners()->get();
+        $active = [];
+        foreach ($this->lifecycleHooks as $hook) {
+            if ($hook instanceof Named && isset($silenced[$hook->getName()])) {
+                continue;
+            }
+            if ($hook instanceof Selective && ! $hook->handles($event)) {
+                continue;
+            }
+            $active[] = $hook;
+        }
+
+        return $active;
     }
 
     /**
-     * Hand a typed event to the lifecycle hooks that handle it, after mandatory invalidation succeeded.
+     * Hand a typed event to the lifecycle hooks {@see self::listens()} returned for it, after mandatory invalidation
+     * succeeded.
      *
      * Whether a hook's exception reaches the caller depends on the event
      * ({@see propagatesHookFailures()}); an \Error always does.
+     *
+     * @param  list<Lifecycle>  $listeners
      */
-    protected function dispatch(Domain $event): void
+    protected function dispatch(Domain $event, array $listeners): void
     {
         $propagates = $this->propagatesHookFailures($event->event);
 
-        foreach ($this->getActiveLifecycleHooks($event->event) as $hook) {
+        foreach ($listeners as $hook) {
             try {
                 $hook->handle($event);
             } catch (Exception $exception) {
@@ -3025,10 +3051,12 @@ class Database
      * Hand a typed event to the lifecycle hooks that handle it and let the first hook exception reach the caller
      * whatever the event's default. Document writes and purgeCachedDocument() dispatch Event::DocumentPurge through
      * it; the schema changes that purge a collection dispatch it through dispatch(), isolated.
+     *
+     * @param  list<Lifecycle>  $listeners
      */
-    protected function dispatchPropagating(Domain $event): void
+    protected function dispatchPropagating(Domain $event, array $listeners): void
     {
-        foreach ($this->getActiveLifecycleHooks($event->event) as $hook) {
+        foreach ($listeners as $hook) {
             $hook->handle($event);
         }
     }
@@ -3079,30 +3107,6 @@ class Database
             Event::IndexRename,
             Event::IndexDelete => false,
         };
-    }
-
-    /**
-     * @return array<Lifecycle>
-     */
-    private function getActiveLifecycleHooks(Event $event): array
-    {
-        if ($this->lifecycleHooks === [] || $this->areEventsSilenced()) {
-            return [];
-        }
-
-        $silenced = $this->silencedListeners()->get();
-        $active = [];
-        foreach ($this->lifecycleHooks as $hook) {
-            if ($hook instanceof Named && isset($silenced[$hook->getName()])) {
-                continue;
-            }
-            if ($hook instanceof Selective && ! $hook->handles($event)) {
-                continue;
-            }
-            $active[] = $hook;
-        }
-
-        return $active;
     }
 
     /**

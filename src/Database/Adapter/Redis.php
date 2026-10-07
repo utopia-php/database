@@ -908,7 +908,7 @@ class Redis extends Adapter implements
 
         return $this->transaction(function (RedisClient $redis) use ($col, $id, $document, $docKey, $idxKey, $seqKey, $permDocKey): ?Document {
             if ((bool) $redis->exists($docKey)) {
-                if ($this->skippingDuplicates()) {
+                if ($this->isIgnoringDuplicates()) {
                     $existingPayload = $redis->get($docKey);
                     if (\is_string($existingPayload) && $existingPayload !== '') {
                         $existing = $this->decode($existingPayload);
@@ -923,7 +923,7 @@ class Redis extends Adapter implements
             try {
                 $this->enforceUniqueIndexes($redis, $col, $document);
             } catch (DuplicateException $e) {
-                if ($this->skippingDuplicates()) {
+                if ($this->isIgnoringDuplicates()) {
                     return null;
                 }
                 throw $e;
@@ -1041,7 +1041,7 @@ class Redis extends Adapter implements
         });
     }
 
-    public function updateDocuments(Document $collection, Document $updates, array $documents): int
+    public function updateDocuments(Document $collection, Document $updates, array $documents, array $skipPermissions = []): int
     {
         if (empty($documents)) {
             return 0;

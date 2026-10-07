@@ -737,7 +737,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             $name = $this->filter($collection);
             $hasSequence = $this->batchHasSequence($documents);
 
-            if ($this->skippingDuplicates()) {
+            if ($this->isIgnoringDuplicates()) {
                 $documents = $this->firstCopies($documents);
                 $documents = $this->supportsInsertReturning()
                     ? $this->insertReturning($name, $documents, $spatialAttributes, $hasSequence)
@@ -1056,10 +1056,11 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * Updates all documents which match the given query.
      *
      * @param  array<Document>  $documents
+     * @param  array<string, true>  $skipPermissions
      *
      * @throws DatabaseException
      */
-    public function updateDocuments(Document $collection, Document $updates, array $documents): int
+    public function updateDocuments(Document $collection, Document $updates, array $documents, array $skipPermissions = []): int
     {
         if (empty($documents)) {
             return 0;
@@ -1160,7 +1161,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
         $affected = $statement->rowCount();
 
-        $context = $this->writeContext();
+        $context = $this->writeContext($skipPermissions);
         $this->runWriteHooks(fn ($hook) => $hook->afterDocumentBatchUpdate($name, $updates, $documents, $context));
 
         return $affected;
@@ -3480,8 +3481,10 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
     /**
      * The context this adapter's write hooks write their own rows through.
+     *
+     * @param  array<string, true>  $skipPermissions  Ids of the documents whose permissions the write keeps
      */
-    protected function writeContext(bool $skipPermissions = false): WriteContext
+    protected function writeContext(array $skipPermissions = []): WriteContext
     {
         return new WriteContext(
             builder: fn (string $table): SQLBuilder => $this->newBuilder($table),
@@ -3490,7 +3493,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             prepare: fn (Statement $statement, Event $event): PDOStatement|DatabasePDOStatement|PDOStatementProxy => $this->executeResult($statement, $event),
             execute: fn (PDOStatement|DatabasePDOStatement|PDOStatementProxy $statement): bool => $this->execute($statement),
             decorateRow: $this->decorateRow(...),
-            ignoreDuplicates: $this->skippingDuplicates(),
+            ignoreDuplicates: $this->isIgnoringDuplicates(),
             skipPermissions: $skipPermissions,
         );
     }

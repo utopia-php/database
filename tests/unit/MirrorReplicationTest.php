@@ -23,6 +23,7 @@ use Utopia\Database\CollectionUpdate;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Relationships;
@@ -308,6 +309,31 @@ final class MirrorReplicationTest extends TestCase
 
         $this->assertSame([], $seen['timedOut']);
         $this->assertSame([['first', 'slow']], $seen['awaited']);
+    }
+
+    public function testAwaitReplicationsWithAZeroTimeoutDoesNotWait(): void
+    {
+        $this->delays = ['slow' => 0.05];
+        $seen = [];
+
+        $this->inCoroutine(function () use (&$seen): void {
+            $this->mirror->createDocuments(self::NOTES, [new Document([Document::ID => 'first', 'title' => 'slow'])]);
+            $this->mirror->awaitReplications(0);
+            $seen['notWaited'] = $this->titlesWritten();
+            $this->mirror->awaitReplications();
+            $seen['awaited'] = $this->titlesWritten();
+        });
+
+        $this->assertSame([], $seen['notWaited']);
+        $this->assertSame([['first', 'slow']], $seen['awaited']);
+    }
+
+    public function testAwaitReplicationsRefusesANegativeTimeout(): void
+    {
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('A replication timeout cannot be negative, -1 given');
+
+        $this->mirror->awaitReplications(-1);
     }
 
     public function testAQueuedReplicationFailureCarriesItsEvent(): void
@@ -826,11 +852,11 @@ final class MirrorReplicationTest extends TestCase
                 });
             }
 
-            public function updateDocuments(Document $collection, Document $updates, array $documents): int
+            public function updateDocuments(Document $collection, Document $updates, array $documents, array $skipPermissions = []): int
             {
-                return $this->busy(function () use ($collection, $updates, $documents): int {
+                return $this->busy(function () use ($collection, $updates, $documents, $skipPermissions): int {
                     $this->wait($updates->getAttribute('title', ''));
-                    $modified = parent::updateDocuments($collection, $updates, $documents);
+                    $modified = parent::updateDocuments($collection, $updates, $documents, $skipPermissions);
                     foreach ($documents as $document) {
                         $this->written($document->getId(), $updates->getAttribute('title', ''));
                     }

@@ -121,6 +121,8 @@ final class DeleteActionTest extends TestCase
 
         $this->assertInstanceOf(RelationshipException::class, $thrown, 'Deleting a parent whose relationship stores onDelete "'.$action->value.'" must throw');
 
+        $this->storeDeleteAction($database, 'artists', 'albums', RelationshipDeleteAction::Cascade->value);
+
         $artist = $database->skipRelationships(fn (): Document => $database->getDocument('artists', 'a1'));
         $album = $database->skipRelationships(fn (): Document => $database->getDocument('albums', 'b1'));
 

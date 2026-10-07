@@ -6,6 +6,7 @@ use Exception;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Swoole\Coroutine;
 use Swoole\Runtime;
+use Tests\E2E\Adapter\Scopes\Relationships\ChildSideTests;
 use Tests\E2E\Adapter\Scopes\Relationships\ManyToManyTests;
 use Tests\E2E\Adapter\Scopes\Relationships\ManyToOneTests;
 use Tests\E2E\Adapter\Scopes\Relationships\OneToManyTests;
@@ -36,6 +37,7 @@ use function Swoole\Coroutine\run;
 
 trait RelationshipTests
 {
+    use ChildSideTests;
     use ManyToManyTests;
     use ManyToOneTests;
     use OneToManyTests;

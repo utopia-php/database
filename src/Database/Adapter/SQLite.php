@@ -748,7 +748,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             throw new NotFoundException('Collection not found');
         }
 
-        foreach (self::storedCollection($collection)->indexes() as $index) {
+        foreach (self::collectionIndexes($collection) as $index) {
             if ($index->attributes === [$id]) {
                 $this->deleteIndex($name, $index->key, Event::AttributeDelete);
             } elseif (\in_array($id, $index->attributes, true)) {
@@ -1043,7 +1043,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         $old = $this->filter($old);
         $new = $this->filter($new);
         $index = null;
-        foreach (self::storedCollection($collection)->indexes() as $stored) {
+        foreach (self::collectionIndexes($collection) as $stored) {
             if ($stored->key === $old) {
                 $index = $stored;
                 break;
@@ -1145,7 +1145,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         }
 
         $tables = [];
-        foreach (self::storedCollection($metadata)->indexes() as $index) {
+        foreach (self::collectionIndexes($metadata) as $index) {
             if ($index->type !== IndexType::Fulltext) {
                 continue;
             }

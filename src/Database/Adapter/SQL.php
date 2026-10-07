@@ -16,7 +16,6 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Builder\Filtering;
 use Utopia\Database\Capability;
 use Utopia\Database\Change;
-use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
@@ -1270,7 +1269,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
             /** @var array<string, mixed> $attributeDefaults */
             $attributeDefaults = [];
-            foreach (Collection::fromDocument($collection)->attributes() as $declared) {
+            foreach (self::collectionAttributes($collection) as $declared) {
                 $attributeDefaults[$declared->key] = $declared->default;
             }
 
@@ -2189,7 +2188,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $aliasSet = \array_fill_keys(\array_column($joinTablePrefixes, 'alias'), true);
         $aliasSet[Query::DEFAULT_ALIAS] = true;
         $mainAttributes = [];
-        foreach (Collection::fromDocument($collection)->attributes() as $declared) {
+        foreach (self::collectionAttributes($collection) as $declared) {
             $mainAttributes[$declared->key] = true;
         }
 
@@ -4059,7 +4058,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $aliasSet = \array_fill_keys(\array_column($joinTablePrefixes, 'alias'), true);
         $aliasSet[Query::DEFAULT_ALIAS] = true;
         $mainAttributes = [];
-        foreach (Collection::fromDocument($collection)->attributes() as $attribute) {
+        foreach (self::collectionAttributes($collection) as $attribute) {
             $mainAttributes[$attribute->key] = true;
         }
 
@@ -4865,7 +4864,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         if ($hasAggregation && ! empty($joinTablePrefixes)) {
             $mainAttributes = [];
-            foreach ([...Database::internalAttributesFor(true), ...Collection::fromDocument($collection)->attributes()] as $attribute) {
+            foreach ([...Database::internalAttributesFor(true), ...self::collectionAttributes($collection)] as $attribute) {
                 $mainAttributes[$attribute->key] = true;
             }
 
@@ -6166,7 +6165,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     private function qualifyJoinedOrders(array $orderAttributes, array $cursor, Document $collection, array $joinTablePrefixes): array
     {
         $main = [];
-        foreach ([...Database::internalAttributesFor(true), ...Collection::fromDocument($collection)->attributes()] as $attribute) {
+        foreach ([...Database::internalAttributesFor(true), ...self::collectionAttributes($collection)] as $attribute) {
             $main[$attribute->key] = true;
         }
 
@@ -6336,7 +6335,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     protected function getSpatialAttributes(Document $collection): array
     {
         $spatialAttributes = [];
-        foreach (Collection::fromDocument($collection)->attributes() as $attribute) {
+        foreach (self::collectionAttributes($collection) as $attribute) {
             if ($attribute->isSpatial()) {
                 $spatialAttributes[] = $attribute->key;
             }

@@ -20,8 +20,9 @@ use Utopia\Database\OperatorType;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
-use Utopia\Database\RelationSide;
-use Utopia\Database\RelationType;
+use Utopia\Database\RelationshipSide;
+use Utopia\Database\RelationshipType;
+use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Query\CursorDirection;
@@ -721,7 +722,7 @@ class Memory extends Adapter implements Feature\Relationships
     }
 
     #[\Override]
-    public function createRelationship(Relationship $relationship): bool
+    public function createRelationship(string $collection, Relationship $relationship): bool
     {
         // Memory stores documents as flexible maps, so the relationship "column"
         // is registered on the attribute list rather than added as a physical
@@ -730,28 +731,24 @@ class Memory extends Adapter implements Feature\Relationships
         // which selects the column even when no rows have a value.
         // The M2M junction collection itself is created by the wrapper through
         // the standard createCollection path.
-        $collection = $relationship->getSourceCollection();
-        $relatedCollection = $relationship->getRelatedCollection();
-        $id = $relationship->getKey();
-        $twoWayKey = $relationship->getTwoWayKey();
-        $twoWay = $relationship->isTwoWay();
+        $relatedCollection = $relationship->relatedCollection;
+        $key = $relationship->key ?? '';
+        $twoWayKey = $relationship->twoWayKey ?? '';
 
-        switch ($relationship->getType()) {
-            case RelationType::OneToOne:
-                $this->registerRelationshipField($collection, $id);
-                if ($twoWay) {
+        switch ($relationship->type) {
+            case RelationshipType::OneToOne:
+                $this->registerRelationshipField($collection, $key);
+                if ($relationship->twoWay) {
                     $this->registerRelationshipField($relatedCollection, $twoWayKey);
                 }
                 break;
-            case RelationType::OneToMany:
+            case RelationshipType::OneToMany:
                 $this->registerRelationshipField($relatedCollection, $twoWayKey);
                 break;
-            case RelationType::ManyToOne:
-                $this->registerRelationshipField($collection, $id);
+            case RelationshipType::ManyToOne:
+                $this->registerRelationshipField($collection, $key);
                 break;
-            case RelationType::ManyToMany:
-                // Junction columns live on the junction collection, which is
-                // created with explicit attributes by the wrapper.
+            case RelationshipType::ManyToMany:
                 break;
         }
 
@@ -759,19 +756,17 @@ class Memory extends Adapter implements Feature\Relationships
     }
 
     #[\Override]
-    public function updateRelationship(Relationship $relationship, ?string $newKey = null, ?string $newTwoWayKey = null): bool
+    public function updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, RelationshipUpdate $update): bool
     {
-        $collection = $relationship->getSourceCollection();
-        $relatedCollection = $relationship->getRelatedCollection();
-        $key = $this->filter($relationship->getKey());
-        $twoWayKey = $this->filter($relationship->getTwoWayKey());
-        $newKey = $newKey !== null ? $this->filter($newKey) : null;
-        $newTwoWayKey = $newTwoWayKey !== null ? $this->filter($newTwoWayKey) : null;
-        $side = $relationship->getSide();
-        $twoWay = $relationship->isTwoWay();
+        $relatedCollection = $relationship->relatedCollection;
+        $key = $this->filter($relationship->key ?? '');
+        $twoWayKey = $this->filter($relationship->twoWayKey ?? '');
+        $newKey = $update->key === null ? null : $this->filter($update->key);
+        $newTwoWayKey = $update->twoWayKey === null ? null : $this->filter($update->twoWayKey);
+        $twoWay = $update->twoWay ?? $relationship->twoWay;
 
-        switch ($relationship->getType()) {
-            case RelationType::OneToOne:
+        switch ($relationship->type) {
+            case RelationshipType::OneToOne:
                 if ($newKey !== null && $newKey !== $key) {
                     $this->renameDocumentField($collection, $key, $newKey);
                 }
@@ -779,29 +774,25 @@ class Memory extends Adapter implements Feature\Relationships
                     $this->renameDocumentField($relatedCollection, $twoWayKey, $newTwoWayKey);
                 }
                 break;
-            case RelationType::OneToMany:
-                if ($side === RelationSide::Parent) {
+            case RelationshipType::OneToMany:
+                if ($side === RelationshipSide::Parent) {
                     if ($newTwoWayKey !== null && $newTwoWayKey !== $twoWayKey) {
                         $this->renameDocumentField($relatedCollection, $twoWayKey, $newTwoWayKey);
                     }
-                } else {
-                    if ($newKey !== null && $newKey !== $key) {
-                        $this->renameDocumentField($collection, $key, $newKey);
-                    }
+                } elseif ($newKey !== null && $newKey !== $key) {
+                    $this->renameDocumentField($collection, $key, $newKey);
                 }
                 break;
-            case RelationType::ManyToOne:
-                if ($side === RelationSide::Child) {
+            case RelationshipType::ManyToOne:
+                if ($side === RelationshipSide::Child) {
                     if ($newTwoWayKey !== null && $newTwoWayKey !== $twoWayKey) {
                         $this->renameDocumentField($relatedCollection, $twoWayKey, $newTwoWayKey);
                     }
-                } else {
-                    if ($newKey !== null && $newKey !== $key) {
-                        $this->renameDocumentField($collection, $key, $newKey);
-                    }
+                } elseif ($newKey !== null && $newKey !== $key) {
+                    $this->renameDocumentField($collection, $key, $newKey);
                 }
                 break;
-            case RelationType::ManyToMany:
+            case RelationshipType::ManyToMany:
                 $junction = $this->resolveJunctionCollection($collection, $relatedCollection, $side);
                 if ($junction !== null) {
                     if ($newKey !== null && $newKey !== $key) {
@@ -818,18 +809,16 @@ class Memory extends Adapter implements Feature\Relationships
     }
 
     #[\Override]
-    public function deleteRelationship(Relationship $relationship): bool
+    public function deleteRelationship(string $collection, Relationship $relationship, RelationshipSide $side): bool
     {
-        $collection = $relationship->getSourceCollection();
-        $relatedCollection = $relationship->getRelatedCollection();
-        $key = $this->filter($relationship->getKey());
-        $twoWayKey = $this->filter($relationship->getTwoWayKey());
-        $twoWay = $relationship->isTwoWay();
-        $side = $relationship->getSide();
+        $relatedCollection = $relationship->relatedCollection;
+        $key = $this->filter($relationship->key ?? '');
+        $twoWayKey = $this->filter($relationship->twoWayKey ?? '');
+        $twoWay = $relationship->twoWay;
 
-        switch ($relationship->getType()) {
-            case RelationType::OneToOne:
-                if ($side === RelationSide::Parent) {
+        switch ($relationship->type) {
+            case RelationshipType::OneToOne:
+                if ($side === RelationshipSide::Parent) {
                     $this->dropDocumentField($collection, $key);
                     if ($twoWay) {
                         $this->dropDocumentField($relatedCollection, $twoWayKey);
@@ -841,22 +830,21 @@ class Memory extends Adapter implements Feature\Relationships
                     }
                 }
                 break;
-            case RelationType::OneToMany:
-                if ($side === RelationSide::Parent) {
+            case RelationshipType::OneToMany:
+                if ($side === RelationshipSide::Parent) {
                     $this->dropDocumentField($relatedCollection, $twoWayKey);
                 } else {
                     $this->dropDocumentField($collection, $key);
                 }
                 break;
-            case RelationType::ManyToOne:
-                if ($side === RelationSide::Parent) {
+            case RelationshipType::ManyToOne:
+                if ($side === RelationshipSide::Parent) {
                     $this->dropDocumentField($collection, $key);
                 } else {
                     $this->dropDocumentField($relatedCollection, $twoWayKey);
                 }
                 break;
-            case RelationType::ManyToMany:
-                // Junction collection is dropped by the wrapper via cleanupCollection.
+            case RelationshipType::ManyToMany:
                 break;
         }
 
@@ -971,7 +959,7 @@ class Memory extends Adapter implements Feature\Relationships
      * Mirrors Database::getJunctionCollection — the junction is named after
      * the parent/child sequence pair.
      */
-    protected function resolveJunctionCollection(string $collection, string $relatedCollection, RelationSide $side): ?string
+    protected function resolveJunctionCollection(string $collection, string $relatedCollection, RelationshipSide $side): ?string
     {
         $metadataKey = $this->key(Database::METADATA);
         if (! isset($this->data[$metadataKey])) {
@@ -990,7 +978,7 @@ class Memory extends Adapter implements Feature\Relationships
             return null;
         }
 
-        return $side === RelationSide::Parent
+        return $side === RelationshipSide::Parent
             ? '_'.$collectionSequence.'_'.$relatedSequence
             : '_'.$relatedSequence.'_'.$collectionSequence;
     }

@@ -27,8 +27,9 @@ use Utopia\Database\OperatorType;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
-use Utopia\Database\RelationSide;
-use Utopia\Database\RelationType;
+use Utopia\Database\RelationshipSide;
+use Utopia\Database\RelationshipType;
+use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Query\CursorDirection;
 use Utopia\Query\Method;
@@ -451,50 +452,44 @@ class Redis extends Adapter implements
     }
 
     #[\Override]
-    public function createRelationship(Relationship $relationship): bool
+    public function createRelationship(string $collection, Relationship $relationship): bool
     {
-        $collection = $relationship->getSourceCollection();
-        $relatedCollection = $relationship->getRelatedCollection();
-        $id = $relationship->getKey();
-        $twoWayKey = $relationship->getTwoWayKey();
-        $twoWay = $relationship->isTwoWay();
+        $relatedCollection = $relationship->relatedCollection;
+        $key = $relationship->key ?? '';
+        $twoWayKey = $relationship->twoWayKey ?? '';
 
-        switch ($relationship->getType()) {
-            case RelationType::OneToOne:
-                $this->registerRelationshipField($collection, $id);
-                if ($twoWay) {
+        switch ($relationship->type) {
+            case RelationshipType::OneToOne:
+                $this->registerRelationshipField($collection, $key);
+                if ($relationship->twoWay) {
                     $this->registerRelationshipField($relatedCollection, $twoWayKey);
                 }
                 break;
-            case RelationType::OneToMany:
+            case RelationshipType::OneToMany:
                 $this->registerRelationshipField($relatedCollection, $twoWayKey);
                 break;
-            case RelationType::ManyToOne:
-                $this->registerRelationshipField($collection, $id);
+            case RelationshipType::ManyToOne:
+                $this->registerRelationshipField($collection, $key);
                 break;
-            case RelationType::ManyToMany:
+            case RelationshipType::ManyToMany:
                 break;
-            default:
-                throw new DatabaseException('Invalid relationship type');
         }
 
         return true;
     }
 
     #[\Override]
-    public function updateRelationship(Relationship $relationship, ?string $newKey = null, ?string $newTwoWayKey = null): bool
+    public function updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, RelationshipUpdate $update): bool
     {
-        $collection = $relationship->getSourceCollection();
-        $relatedCollection = $relationship->getRelatedCollection();
-        $key = $this->filter($relationship->getKey());
-        $twoWayKey = $this->filter($relationship->getTwoWayKey());
-        $newKey = $newKey !== null ? $this->filter($newKey) : null;
-        $newTwoWayKey = $newTwoWayKey !== null ? $this->filter($newTwoWayKey) : null;
-        $side = $relationship->getSide();
-        $twoWay = $relationship->isTwoWay();
+        $relatedCollection = $relationship->relatedCollection;
+        $key = $this->filter($relationship->key ?? '');
+        $twoWayKey = $this->filter($relationship->twoWayKey ?? '');
+        $newKey = $update->key === null ? null : $this->filter($update->key);
+        $newTwoWayKey = $update->twoWayKey === null ? null : $this->filter($update->twoWayKey);
+        $twoWay = $update->twoWay ?? $relationship->twoWay;
 
-        switch ($relationship->getType()) {
-            case RelationType::OneToOne:
+        switch ($relationship->type) {
+            case RelationshipType::OneToOne:
                 if ($newKey !== null && $newKey !== $key) {
                     $this->renameAttribute($collection, $key, $newKey);
                 }
@@ -502,29 +497,25 @@ class Redis extends Adapter implements
                     $this->renameAttribute($relatedCollection, $twoWayKey, $newTwoWayKey);
                 }
                 break;
-            case RelationType::OneToMany:
-                if ($side === RelationSide::Parent) {
+            case RelationshipType::OneToMany:
+                if ($side === RelationshipSide::Parent) {
                     if ($newTwoWayKey !== null && $newTwoWayKey !== $twoWayKey) {
                         $this->renameAttribute($relatedCollection, $twoWayKey, $newTwoWayKey);
                     }
-                } else {
-                    if ($newKey !== null && $newKey !== $key) {
-                        $this->renameAttribute($collection, $key, $newKey);
-                    }
+                } elseif ($newKey !== null && $newKey !== $key) {
+                    $this->renameAttribute($collection, $key, $newKey);
                 }
                 break;
-            case RelationType::ManyToOne:
-                if ($side === RelationSide::Child) {
+            case RelationshipType::ManyToOne:
+                if ($side === RelationshipSide::Child) {
                     if ($newTwoWayKey !== null && $newTwoWayKey !== $twoWayKey) {
                         $this->renameAttribute($relatedCollection, $twoWayKey, $newTwoWayKey);
                     }
-                } else {
-                    if ($newKey !== null && $newKey !== $key) {
-                        $this->renameAttribute($collection, $key, $newKey);
-                    }
+                } elseif ($newKey !== null && $newKey !== $key) {
+                    $this->renameAttribute($collection, $key, $newKey);
                 }
                 break;
-            case RelationType::ManyToMany:
+            case RelationshipType::ManyToMany:
                 $junction = $this->resolveJunctionCollection($collection, $relatedCollection, $side);
                 if ($junction !== null) {
                     if ($newKey !== null && $newKey !== $key) {
@@ -535,26 +526,22 @@ class Redis extends Adapter implements
                     }
                 }
                 break;
-            default:
-                throw new DatabaseException('Invalid relationship type');
         }
 
         return true;
     }
 
     #[\Override]
-    public function deleteRelationship(Relationship $relationship): bool
+    public function deleteRelationship(string $collection, Relationship $relationship, RelationshipSide $side): bool
     {
-        $collection = $relationship->getSourceCollection();
-        $relatedCollection = $relationship->getRelatedCollection();
-        $key = $this->filter($relationship->getKey());
-        $twoWayKey = $this->filter($relationship->getTwoWayKey());
-        $twoWay = $relationship->isTwoWay();
-        $side = $relationship->getSide();
+        $relatedCollection = $relationship->relatedCollection;
+        $key = $this->filter($relationship->key ?? '');
+        $twoWayKey = $this->filter($relationship->twoWayKey ?? '');
+        $twoWay = $relationship->twoWay;
 
-        switch ($relationship->getType()) {
-            case RelationType::OneToOne:
-                if ($side === RelationSide::Parent) {
+        switch ($relationship->type) {
+            case RelationshipType::OneToOne:
+                if ($side === RelationshipSide::Parent) {
                     $this->deleteAttribute($collection, $key);
                     if ($twoWay) {
                         $this->deleteAttribute($relatedCollection, $twoWayKey);
@@ -566,24 +553,22 @@ class Redis extends Adapter implements
                     }
                 }
                 break;
-            case RelationType::OneToMany:
-                if ($side === RelationSide::Parent) {
+            case RelationshipType::OneToMany:
+                if ($side === RelationshipSide::Parent) {
                     $this->deleteAttribute($relatedCollection, $twoWayKey);
                 } else {
                     $this->deleteAttribute($collection, $key);
                 }
                 break;
-            case RelationType::ManyToOne:
-                if ($side === RelationSide::Parent) {
+            case RelationshipType::ManyToOne:
+                if ($side === RelationshipSide::Parent) {
                     $this->deleteAttribute($collection, $key);
                 } else {
                     $this->deleteAttribute($relatedCollection, $twoWayKey);
                 }
                 break;
-            case RelationType::ManyToMany:
+            case RelationshipType::ManyToMany:
                 break;
-            default:
-                throw new DatabaseException('Invalid relationship type');
         }
 
         return true;
@@ -2590,7 +2575,7 @@ class Redis extends Adapter implements
         });
     }
 
-    private function resolveJunctionCollection(string $collection, string $relatedCollection, RelationSide $side): ?string
+    private function resolveJunctionCollection(string $collection, string $relatedCollection, RelationshipSide $side): ?string
     {
         $collectionDoc = $this->loadMetadataDocument($collection);
         $relatedDoc = $this->loadMetadataDocument($relatedCollection);
@@ -2604,7 +2589,7 @@ class Redis extends Adapter implements
             return null;
         }
 
-        return $side === RelationSide::Parent
+        return $side === RelationshipSide::Parent
             ? '_'.$collectionSequence.'_'.$relatedSequence
             : '_'.$relatedSequence.'_'.$collectionSequence;
     }

@@ -46,8 +46,9 @@ use Utopia\Database\PDOStatement as DatabasePDOStatement;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
-use Utopia\Database\RelationSide;
-use Utopia\Database\RelationType;
+use Utopia\Database\RelationshipSide;
+use Utopia\Database\RelationshipType;
+use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Database\Validator\Query\Join as JoinValidator;
@@ -3136,14 +3137,12 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      *
      * @throws DatabaseException
      */
-    public function createRelationship(Relationship $relationship): bool
+    public function createRelationship(string $collection, Relationship $relationship): bool
     {
-        $name = $this->filter($relationship->getSourceCollection());
-        $relatedName = $this->filter($relationship->getRelatedCollection());
-        $id = $this->filter($relationship->getKey());
-        $twoWayKey = $this->filter($relationship->getTwoWayKey());
-        $type = $relationship->getType();
-        $twoWay = $relationship->isTwoWay();
+        $name = $this->filter($collection);
+        $relatedName = $this->filter($relationship->relatedCollection);
+        $key = $this->filter($relationship->key ?? '');
+        $twoWayKey = $this->filter($relationship->twoWayKey ?? '');
 
         $schema = $this->createSchemaBuilder();
         $addColumn = function (string $tableName, string $columnId) use ($schema): string {
@@ -3154,11 +3153,11 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             return $result->query;
         };
 
-        $sql = match ($type) {
-            RelationType::OneToOne => $addColumn($name, $id) . ';' . ($twoWay ? $addColumn($relatedName, $twoWayKey) . ';' : ''),
-            RelationType::OneToMany => $addColumn($relatedName, $twoWayKey) . ';',
-            RelationType::ManyToOne => $addColumn($name, $id) . ';',
-            RelationType::ManyToMany => null,
+        $sql = match ($relationship->type) {
+            RelationshipType::OneToOne => $addColumn($name, $key) . ';' . ($relationship->twoWay ? $addColumn($relatedName, $twoWayKey) . ';' : ''),
+            RelationshipType::OneToMany => $addColumn($relatedName, $twoWayKey) . ';',
+            RelationshipType::ManyToOne => $addColumn($name, $key) . ';',
+            RelationshipType::ManyToMany => null,
         };
 
         if ($sql === null) {
@@ -3169,31 +3168,19 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
-     * Update a relationship, optionally renaming its keys.
+     * Rename the foreign key columns of a relationship.
      *
      * @throws DatabaseException
      */
-    public function updateRelationship(
-        Relationship $relationship,
-        ?string $newKey = null,
-        ?string $newTwoWayKey = null,
-    ): bool {
-        $collection = $relationship->getSourceCollection();
-        $relatedCollection = $relationship->getRelatedCollection();
+    public function updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, RelationshipUpdate $update): bool
+    {
         $name = $this->filter($collection);
-        $relatedName = $this->filter($relatedCollection);
-        $key = $this->filter($relationship->getKey());
-        $twoWayKey = $this->filter($relationship->getTwoWayKey());
-        $type = $relationship->getType();
-        $twoWay = $relationship->isTwoWay();
-        $side = $relationship->getSide();
-
-        if ($newKey !== null) {
-            $newKey = $this->filter($newKey);
-        }
-        if ($newTwoWayKey !== null) {
-            $newTwoWayKey = $this->filter($newTwoWayKey);
-        }
+        $relatedName = $this->filter($relationship->relatedCollection);
+        $key = $this->filter($relationship->key ?? '');
+        $twoWayKey = $this->filter($relationship->twoWayKey ?? '');
+        $twoWay = $update->twoWay ?? $relationship->twoWay;
+        $newKey = $update->key === null ? null : $this->filter($update->key);
+        $newTwoWayKey = $update->twoWayKey === null ? null : $this->filter($update->twoWayKey);
 
         $schema = $this->createSchemaBuilder();
         $renameColumn = function (string $tableName, string $from, string $to) use ($schema): string {
@@ -3206,45 +3193,35 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         $sql = '';
 
-        switch ($type) {
-            case RelationType::OneToOne:
-                if ($key !== $newKey && \is_string($newKey)) {
+        switch ($relationship->type) {
+            case RelationshipType::OneToOne:
+                if ($newKey !== null && $key !== $newKey) {
                     $sql = $renameColumn($name, $key, $newKey) . ';';
                 }
-                if ($twoWay && $twoWayKey !== $newTwoWayKey && \is_string($newTwoWayKey)) {
+                if ($twoWay && $newTwoWayKey !== null && $twoWayKey !== $newTwoWayKey) {
                     $sql .= $renameColumn($relatedName, $twoWayKey, $newTwoWayKey) . ';';
                 }
                 break;
-            case RelationType::OneToMany:
-                if ($side === RelationSide::Parent) {
-                    if ($twoWayKey !== $newTwoWayKey && \is_string($newTwoWayKey)) {
+            case RelationshipType::OneToMany:
+                if ($side === RelationshipSide::Parent) {
+                    if ($newTwoWayKey !== null && $twoWayKey !== $newTwoWayKey) {
                         $sql = $renameColumn($relatedName, $twoWayKey, $newTwoWayKey) . ';';
                     }
-                } else {
-                    if ($key !== $newKey && \is_string($newKey)) {
-                        $sql = $renameColumn($name, $key, $newKey) . ';';
-                    }
+                } elseif ($newKey !== null && $key !== $newKey) {
+                    $sql = $renameColumn($name, $key, $newKey) . ';';
                 }
                 break;
-            case RelationType::ManyToOne:
-                if ($side === RelationSide::Child) {
-                    if ($twoWayKey !== $newTwoWayKey && \is_string($newTwoWayKey)) {
+            case RelationshipType::ManyToOne:
+                if ($side === RelationshipSide::Child) {
+                    if ($newTwoWayKey !== null && $twoWayKey !== $newTwoWayKey) {
                         $sql = $renameColumn($relatedName, $twoWayKey, $newTwoWayKey) . ';';
                     }
-                } else {
-                    if ($key !== $newKey && \is_string($newKey)) {
-                        $sql = $renameColumn($name, $key, $newKey) . ';';
-                    }
+                } elseif ($newKey !== null && $key !== $newKey) {
+                    $sql = $renameColumn($name, $key, $newKey) . ';';
                 }
                 break;
-            case RelationType::ManyToMany:
-                $metadataCollection = new Document([Document::ID => Database::METADATA]);
-                $collection = $this->getDocument($metadataCollection, $collection);
-                $relatedCollection = $this->getDocument($metadataCollection, $relatedCollection);
-
-                $junctionName = $side === RelationSide::Parent
-                    ? '_' . $collection->getSequence() . '_' . $relatedCollection->getSequence()
-                    : '_' . $relatedCollection->getSequence() . '_' . $collection->getSequence();
+            case RelationshipType::ManyToMany:
+                $junctionName = $this->getJunctionName($collection, $relationship->relatedCollection, $side);
 
                 if ($newKey !== null && $key !== $newKey) {
                     $sql = $renameColumn($junctionName, $key, $newKey) . ';';
@@ -3253,8 +3230,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     $sql .= $renameColumn($junctionName, $twoWayKey, $newTwoWayKey) . ';';
                 }
                 break;
-            default:
-                throw new DatabaseException('Invalid relationship type');
         }
 
         if ($sql === '') {
@@ -3265,21 +3240,17 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
-     * Delete a relationship between collections.
+     * Drop the foreign key columns of a relationship, or its junction tables.
      *
      * @throws DatabaseException
      */
-    public function deleteRelationship(Relationship $relationship): bool
+    public function deleteRelationship(string $collection, Relationship $relationship, RelationshipSide $side): bool
     {
-        $collection = $relationship->getSourceCollection();
-        $relatedCollection = $relationship->getRelatedCollection();
         $name = $this->filter($collection);
-        $relatedName = $this->filter($relatedCollection);
-        $key = $this->filter($relationship->getKey());
-        $twoWayKey = $this->filter($relationship->getTwoWayKey());
-        $type = $relationship->getType();
-        $twoWay = $relationship->isTwoWay();
-        $side = $relationship->getSide();
+        $relatedName = $this->filter($relationship->relatedCollection);
+        $key = $this->filter($relationship->key ?? '');
+        $twoWayKey = $this->filter($relationship->twoWayKey ?? '');
+        $twoWay = $relationship->twoWay;
 
         $schema = $this->createSchemaBuilder();
         $dropColumn = function (string $tableName, string $columnId) use ($schema): string {
@@ -3292,53 +3263,55 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         $sql = '';
 
-        switch ($type) {
-            case RelationType::OneToOne:
-                if ($side === RelationSide::Parent) {
+        switch ($relationship->type) {
+            case RelationshipType::OneToOne:
+                if ($side === RelationshipSide::Parent) {
                     $sql = $dropColumn($name, $key) . ';';
                     if ($twoWay) {
                         $sql .= $dropColumn($relatedName, $twoWayKey) . ';';
                     }
-                } elseif ($side === RelationSide::Child) {
+                } else {
                     $sql = $dropColumn($relatedName, $twoWayKey) . ';';
                     if ($twoWay) {
                         $sql .= $dropColumn($name, $key) . ';';
                     }
                 }
                 break;
-            case RelationType::OneToMany:
-                if ($side === RelationSide::Parent) {
-                    $sql = $dropColumn($relatedName, $twoWayKey) . ';';
-                } else {
-                    $sql = $dropColumn($name, $key) . ';';
-                }
+            case RelationshipType::OneToMany:
+                $sql = $side === RelationshipSide::Parent
+                    ? $dropColumn($relatedName, $twoWayKey) . ';'
+                    : $dropColumn($name, $key) . ';';
                 break;
-            case RelationType::ManyToOne:
-                if ($side === RelationSide::Parent) {
-                    $sql = $dropColumn($name, $key) . ';';
-                } else {
-                    $sql = $dropColumn($relatedName, $twoWayKey) . ';';
-                }
+            case RelationshipType::ManyToOne:
+                $sql = $side === RelationshipSide::Parent
+                    ? $dropColumn($name, $key) . ';'
+                    : $dropColumn($relatedName, $twoWayKey) . ';';
                 break;
-            case RelationType::ManyToMany:
-                $metadataCollection = new Document([Document::ID => Database::METADATA]);
-                $collection = $this->getDocument($metadataCollection, $collection);
-                $relatedCollection = $this->getDocument($metadataCollection, $relatedCollection);
-
-                $junctionName = $side === RelationSide::Parent
-                    ? '_' . $collection->getSequence() . '_' . $relatedCollection->getSequence()
-                    : '_' . $relatedCollection->getSequence() . '_' . $collection->getSequence();
+            case RelationshipType::ManyToMany:
+                $junctionName = $this->getJunctionName($collection, $relationship->relatedCollection, $side);
 
                 $junctionResult = $schema->table($this->getSQLTableRaw($junctionName))->drop();
                 $permissionsResult = $schema->table($this->getSQLTableRaw(Storage::permissionsTable($junctionName)))->drop();
 
                 $sql = $junctionResult->query . '; ' . $permissionsResult->query;
                 break;
-            default:
-                throw new DatabaseException('Invalid relationship type');
         }
 
         return $this->executeStatement($sql, Event::AttributeDelete);
+    }
+
+    /**
+     * The junction collection of a many-to-many relationship, named after the parent's sequence first.
+     */
+    protected function getJunctionName(string $collection, string $relatedCollection, RelationshipSide $side): string
+    {
+        $metadataCollection = new Document([Document::ID => Database::METADATA]);
+        $collectionDocument = $this->getDocument($metadataCollection, $collection);
+        $relatedCollectionDocument = $this->getDocument($metadataCollection, $relatedCollection);
+
+        return $side === RelationshipSide::Parent
+            ? '_' . $collectionDocument->getSequence() . '_' . $relatedCollectionDocument->getSequence()
+            : '_' . $relatedCollectionDocument->getSequence() . '_' . $collectionDocument->getSequence();
     }
 
     /**

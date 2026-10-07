@@ -257,6 +257,8 @@ class Relationships implements Hook
 
     /**
      * Whether a create whose related documents are all new prepares them instead of creating each one by one.
+     *
+     * @internal
      */
     public function shouldPrepare(): bool
     {

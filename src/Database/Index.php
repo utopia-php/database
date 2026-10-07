@@ -8,6 +8,18 @@ use Utopia\Query\Schema\IndexType;
 
 final readonly class Index
 {
+    private const string KEY = 'key';
+
+    private const string TYPE = 'type';
+
+    private const string ATTRIBUTES = 'attributes';
+
+    private const string LENGTHS = 'lengths';
+
+    private const string ORDERS = 'orders';
+
+    private const string TTL = 'ttl';
+
     /**
      * @param  list<string>  $attributes
      * @param  list<?int>  $lengths
@@ -121,12 +133,12 @@ final readonly class Index
     public static function fromDocument(Document $document): self
     {
         return self::hydrate(
-            $document->getAttribute('key', $document->getId()),
-            $document->getAttribute('type', IndexType::Key->value),
-            $document->getAttribute('attributes', []),
-            $document->getAttribute('lengths', []),
-            $document->getAttribute('orders', []),
-            $document->getAttribute('ttl'),
+            $document->getAttribute(self::KEY, $document->getId()),
+            $document->getAttribute(self::TYPE, IndexType::Key->value),
+            $document->getAttribute(self::ATTRIBUTES, []),
+            $document->getAttribute(self::LENGTHS, []),
+            $document->getAttribute(self::ORDERS, []),
+            $document->getAttribute(self::TTL),
         );
     }
 
@@ -138,12 +150,12 @@ final readonly class Index
     public static function fromArray(array $data): self
     {
         return self::hydrate(
-            $data['key'] ?? $data[Document::ID] ?? '',
-            $data['type'] ?? IndexType::Key->value,
-            $data['attributes'] ?? [],
-            $data['lengths'] ?? [],
-            $data['orders'] ?? [],
-            $data['ttl'] ?? null,
+            $data[self::KEY] ?? $data[Document::ID] ?? '',
+            $data[self::TYPE] ?? IndexType::Key->value,
+            $data[self::ATTRIBUTES] ?? [],
+            $data[self::LENGTHS] ?? [],
+            $data[self::ORDERS] ?? [],
+            $data[self::TTL] ?? null,
         );
     }
 
@@ -151,24 +163,24 @@ final readonly class Index
     {
         $data = [
             Document::ID => $this->key,
-            'key' => $this->key,
-            'type' => $this->type->value,
-            'attributes' => $this->attributes,
+            self::KEY => $this->key,
+            self::TYPE => $this->type->value,
+            self::ATTRIBUTES => $this->attributes,
         ];
 
-        if ($this->type !== IndexType::Fulltext) {
-            $data['lengths'] = $this->lengths;
+        if (self::storesLengths($this->type)) {
+            $data[self::LENGTHS] = $this->lengths;
         }
 
-        if ($this->type !== IndexType::Fulltext && $this->type !== IndexType::Ttl) {
-            $data['orders'] = \array_map(
+        if (self::storesOrders($this->type)) {
+            $data[self::ORDERS] = \array_map(
                 static fn (?OrderDirection $order): ?string => $order?->value,
                 $this->orders,
             );
         }
 
         if ($this->type === IndexType::Ttl) {
-            $data['ttl'] = $this->ttl;
+            $data[self::TTL] = $this->ttl;
         }
 
         return new Document($data);
@@ -186,6 +198,10 @@ final readonly class Index
      */
     public function withLengths(array $lengths): self
     {
+        if ($lengths !== [] && ! self::storesLengths($this->type)) {
+            throw new IndexException('A '.$this->type->value.' index does not take lengths');
+        }
+
         return clone($this, ['lengths' => self::lengths($lengths)]);
     }
 
@@ -196,7 +212,21 @@ final readonly class Index
      */
     public function withOrders(array $orders): self
     {
+        if ($orders !== [] && ! self::storesOrders($this->type)) {
+            throw new IndexException('A '.$this->type->value.' index does not take orders');
+        }
+
         return clone($this, ['orders' => self::orders($orders)]);
+    }
+
+    private static function storesLengths(IndexType $type): bool
+    {
+        return $type !== IndexType::Fulltext;
+    }
+
+    private static function storesOrders(IndexType $type): bool
+    {
+        return $type !== IndexType::Fulltext && $type !== IndexType::Ttl;
     }
 
     /**

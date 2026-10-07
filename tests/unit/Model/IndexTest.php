@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Model;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Index as IndexException;
@@ -223,5 +224,49 @@ final class IndexTest extends TestCase
         $this->expectExceptionMessage('Index orders cannot be random');
 
         Index::key('by_age', ['age'])->withOrders([OrderDirection::Random]);
+    }
+
+    /**
+     * @return array<string, array{Index}>
+     */
+    public static function orderlessIndexes(): array
+    {
+        return [
+            'fulltext' => [Index::fulltext('search', ['title'])],
+            'ttl' => [Index::ttl('expiry', 'expiresAt', 60)],
+        ];
+    }
+
+    #[DataProvider('orderlessIndexes')]
+    public function testWithOrdersRejectsOrdersTheIndexCannotStore(Index $index): void
+    {
+        $this->expectException(IndexException::class);
+
+        $index->withOrders([OrderDirection::Asc]);
+    }
+
+    #[DataProvider('orderlessIndexes')]
+    public function testWithOrdersAcceptsNoOrdersOnAnOrderlessIndex(Index $index): void
+    {
+        $this->assertSame([], $index->withOrders([])->orders);
+    }
+
+    public function testWithLengthsRejectsLengthsOnAFulltextIndex(): void
+    {
+        $this->expectException(IndexException::class);
+
+        Index::fulltext('search', ['title'])->withLengths([16]);
+    }
+
+    public function testWithLengthsAcceptsNoLengthsOnAFulltextIndex(): void
+    {
+        $this->assertSame([], Index::fulltext('search', ['title'])->withLengths([])->lengths);
+    }
+
+    public function testWithLengthsOnATtlIndexArePersisted(): void
+    {
+        $index = Index::ttl('expiry', 'expiresAt', 60)->withLengths([8]);
+
+        $this->assertSame([8], $index->toDocument()->getAttribute('lengths'));
     }
 }

@@ -234,23 +234,15 @@ final class MongoResultDecodingTest extends TestCase
         $this->assertSame($expected, $this->castingAdapter()->castAfter($collection, [clone $document])[0]->getArrayCopy());
     }
 
-    public function testCastingAfterRefusesAStoredAttributeOfAnUnknownType(): void
+    public function testCastAfterRefusesAStoredAttributeOfAnUnknownType(): void
     {
         $collection = $this->castingCollection();
         $collection->setAttribute('attributes', ['$id' => 'unknown', 'type' => 'no such type', 'array' => false], SetType::Append);
-        $document = new Document(['$id' => 'm1', 'unknown' => 'value']);
 
-        foreach ([
-            'castingAfter' => fn (): mixed => $this->castingAdapter()->castingAfter($collection, clone $document),
-            'castingAfterDocuments' => fn (): mixed => $this->castingAdapter()->castingAfterDocuments($collection, [clone $document]),
-        ] as $method => $cast) {
-            try {
-                $cast();
-                $this->fail($method.' must refuse an attribute of an unknown type');
-            } catch (StructureException $error) {
-                $this->assertSame('Unknown attribute type: no such type', $error->getMessage(), $method);
-            }
-        }
+        $this->expectException(StructureException::class);
+        $this->expectExceptionMessage('Unknown attribute type: no such type');
+
+        $this->castingAdapter()->castAfter($collection, [new Document(['$id' => 'm1', 'unknown' => 'value'])]);
     }
 
     private function castingCollection(): Document

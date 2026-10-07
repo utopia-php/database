@@ -42,7 +42,6 @@ final class ReadWritePoolMetadataTest extends TestCase
         $calls = [
             'supports' => [Capability::IndexKey],
             'capabilities' => [],
-            'hasFeature' => [Feature\Spatial::class],
             'getAttributeWidth' => [new Document()],
             'getCountOfAttributes' => [new Document()],
             'getCountOfIndexes' => [new Document()],

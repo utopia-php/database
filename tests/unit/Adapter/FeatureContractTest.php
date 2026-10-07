@@ -36,6 +36,7 @@ final class FeatureContractTest extends TestCase
      */
     private const array MANDATORY = [
         'create',
+        'update',
         'exists',
         'collectionExists',
         'list',
@@ -50,6 +51,7 @@ final class FeatureContractTest extends TestCase
         'renameAttribute',
         'getSchemaAttributes',
         'getSchemaIndexes',
+        'getColumnType',
         'createIndex',
         'deleteIndex',
         'renameIndex',
@@ -68,17 +70,8 @@ final class FeatureContractTest extends TestCase
         'startTransaction',
         'commitTransaction',
         'rollbackTransaction',
-        'getDriver',
-    ];
-
-    /**
-     * Mandatory members that land with other wave-4 subtasks: update (W4-5), getColumnType (W4-2), limits (W4-3).
-     * Abstract once declared.
-     */
-    private const array MANDATORY_LANDING = [
-        'update',
-        'getColumnType',
         'limits',
+        'getDriver',
     ];
 
     /**
@@ -92,41 +85,28 @@ final class FeatureContractTest extends TestCase
     private const array REMOVED_FEATURES = [
         'Attributes',
         'Collections',
+        'ColumnTypes',
+        'ConnectionId',
         'Databases',
         'Documents',
         'Indexes',
-        'Transactions',
-    ];
-
-    private const array OPTIONAL_FEATURES = [
-        'QueryBuilder',
-        'RawQuery',
-        'Relationships',
-        'Spatial',
-        'Timeouts',
-        'Upserts',
-    ];
-
-    /**
-     * Optional features other wave-4 subtasks add: Casting (W4-2), Connection (W4-4), Schemaless (W4-3).
-     */
-    private const array OPTIONAL_FEATURES_LANDING = [
-        'Casting',
-        'Connection',
-        'Schemaless',
-    ];
-
-    /**
-     * Features other wave-4 subtasks fold away: ColumnTypes, InternalCasting, SchemaAttributes, SchemaIndexes and
-     * UTCCasting (W4-2), ConnectionId (W4-4).
-     */
-    private const array FEATURES_LEAVING = [
-        'ColumnTypes',
-        'ConnectionId',
         'InternalCasting',
         'SchemaAttributes',
         'SchemaIndexes',
+        'Transactions',
         'UTCCasting',
+    ];
+
+    private const array OPTIONAL_FEATURES = [
+        'Casting',
+        'Connection',
+        'QueryBuilder',
+        'RawQuery',
+        'Relationships',
+        'Schemaless',
+        'Spatial',
+        'Timeouts',
+        'Upserts',
     ];
 
     public function testEveryMandatoryMemberIsAbstractOnTheAdapter(): void
@@ -147,12 +127,6 @@ final class FeatureContractTest extends TestCase
             }
         }
 
-        foreach (self::MANDATORY_LANDING as $name) {
-            if ($adapter->hasMethod($name) && ! $adapter->getMethod($name)->isAbstract()) {
-                $concrete[] = "{$name}() is declared but not abstract";
-            }
-        }
-
         $this->assertSame([], $concrete, 'The mandatory contract is declared once, abstract on Adapter');
     }
 
@@ -165,13 +139,11 @@ final class FeatureContractTest extends TestCase
         }
 
         foreach (['getKeywords', 'getInternalIndexesKeys'] as $name) {
-            if ($adapter->hasMethod($name)) {
-                $this->assertFalse($adapter->getMethod($name)->isAbstract(), "{$name}() must not be required of an adapter without SQL");
-            }
+            $this->assertFalse($adapter->hasMethod($name), "{$name}() is read through limits()");
         }
 
-        $this->assertSame([], (new Memory())->getKeywords());
-        $this->assertSame([], (new Memory())->getInternalIndexesKeys());
+        $this->assertSame([], (new Memory())->limits()->keywords);
+        $this->assertSame([], (new Memory())->limits()->internalIndexKeys);
     }
 
     public function testTheAdapterImplementsNoFeatureInterface(): void
@@ -179,25 +151,23 @@ final class FeatureContractTest extends TestCase
         $this->assertSame([], \class_implements(Adapter::class));
 
         foreach (self::REMOVED_FEATURES as $name) {
-            $this->assertFalse(\interface_exists(self::FEATURE_NAMESPACE.$name), "Feature\\{$name} must be gone: its methods are abstract on Adapter");
+            $this->assertFalse(\interface_exists(self::FEATURE_NAMESPACE.$name), "Feature\\{$name} must be gone");
         }
     }
 
     public function testFeatureHoldsOnlyOptionalInterfaces(): void
     {
         $present = self::features();
-        $known = [...self::OPTIONAL_FEATURES, ...self::OPTIONAL_FEATURES_LANDING, ...self::FEATURES_LEAVING];
-
-        $this->assertSame([], \array_values(\array_diff($present, $known)), 'Unexpected Feature interfaces');
+        $this->assertSame([], \array_values(\array_diff($present, self::OPTIONAL_FEATURES)), 'Unexpected Feature interfaces');
         $this->assertSame([], \array_values(\array_diff(self::OPTIONAL_FEATURES, $present)), 'Missing optional Feature interfaces');
     }
 
     public function testNoOptionalFeatureRedeclaresAMandatoryMember(): void
     {
-        $mandatory = \array_flip([...self::MANDATORY, ...self::MANDATORY_LANDING]);
+        $mandatory = \array_flip(self::MANDATORY);
         $overlaps = [];
 
-        foreach (\array_diff(self::features(), self::FEATURES_LEAVING) as $name) {
+        foreach (self::features() as $name) {
             /** @var class-string $feature */
             $feature = self::FEATURE_NAMESPACE.$name;
             foreach ((new ReflectionClass($feature))->getMethods() as $method) {

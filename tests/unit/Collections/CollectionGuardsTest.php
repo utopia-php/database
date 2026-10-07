@@ -13,6 +13,7 @@ use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
+use Utopia\Database\CollectionUpdate;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -34,7 +35,7 @@ final class CollectionGuardsTest extends TestCase
         $database = $this->database($adapter);
 
         $this->assertTrue($adapter->exists('guards', Database::METADATA));
-        $this->assertTrue($database->deleteCollection(Database::METADATA));
+        $database->deleteCollection(Database::METADATA);
         $this->assertFalse($adapter->exists('guards', Database::METADATA));
     }
 
@@ -43,7 +44,7 @@ final class CollectionGuardsTest extends TestCase
         $adapter = new SQLite(new PDO('sqlite::memory:'));
         $database = $this->database($adapter);
 
-        $this->assertTrue($database->deleteCollection(Database::METADATA));
+        $database->deleteCollection(Database::METADATA);
         $this->assertFalse($adapter->exists('guards', Database::METADATA));
     }
 
@@ -84,7 +85,7 @@ final class CollectionGuardsTest extends TestCase
         $error = null;
         $log = StderrCapture::during(function () use ($database, &$error): void {
             try {
-                $database->createCollection(new Collection(id: 'failing'));
+                $database->createCollection(Collection::create(id: 'failing'));
             } catch (DatabaseException $caught) {
                 $error = $caught;
             }
@@ -103,7 +104,7 @@ final class CollectionGuardsTest extends TestCase
 
         $database->setTenant(self::TENANT);
         try {
-            $database->updateCollection(self::COLLECTION, [Permission::read(Role::user('intruder'))], true);
+            $database->updateCollection(self::COLLECTION, new CollectionUpdate(permissions: [Permission::read(Role::user('intruder'))], documentSecurity: true));
             $this->fail('a tenant must not change a collection it does not own');
         } catch (NotFoundException $error) {
             $this->assertSame('Collection not found', $error->getMessage());
@@ -126,7 +127,7 @@ final class CollectionGuardsTest extends TestCase
         }
 
         $database->setTenant(null);
-        $this->assertFalse($database->getCollection(self::COLLECTION)->isEmpty());
+        $this->assertNotNull($database->findCollection(self::COLLECTION));
     }
 
     public function testADefinitionThatCannotBeDeletedRestoresTheTable(): void
@@ -160,7 +161,7 @@ final class CollectionGuardsTest extends TestCase
         }
 
         $this->assertTrue($adapter->exists('guards', self::COLLECTION), 'the table is created again');
-        $this->assertFalse($database->getCollection(self::COLLECTION)->isEmpty());
+        $this->assertNotNull($database->findCollection(self::COLLECTION));
         $this->assertSame([], $database->find(self::COLLECTION), 'the restored table is empty: only its definition survives');
     }
 
@@ -244,7 +245,7 @@ final class CollectionGuardsTest extends TestCase
         $error = null;
         $log = StderrCapture::during(function () use ($database, &$error): void {
             try {
-                $database->createCollection(new Collection(id: 'raced'));
+                $database->createCollection(Collection::create(id: 'raced'));
             } catch (DuplicateException $caught) {
                 $error = $caught;
             }
@@ -299,7 +300,7 @@ final class CollectionGuardsTest extends TestCase
         }
 
         $this->assertFalse($adapter->exists('guards', self::COLLECTION), 'the table stays dropped');
-        $this->assertFalse($database->getCollection(self::COLLECTION)->isEmpty(), 'the definition stays');
+        $this->assertNotNull($database->findCollection(self::COLLECTION), 'the definition stays');
     }
 
     private function database(Adapter $adapter): Database
@@ -311,7 +312,7 @@ final class CollectionGuardsTest extends TestCase
     {
         $database->setDatabase('guards')->setNamespace('guards_'.\uniqid());
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [Attribute::string(key: 'name', size: 32)],
             permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
@@ -330,7 +331,7 @@ final class CollectionGuardsTest extends TestCase
             ->setSharedTables(true)
             ->setTenant(null);
         $database->create();
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [Attribute::string(key: 'name', size: 32)],
             permissions: [Permission::create(Role::any()), Permission::read(Role::any())],

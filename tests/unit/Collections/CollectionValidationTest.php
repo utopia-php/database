@@ -12,14 +12,18 @@ use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
+use Utopia\Database\CollectionUpdate;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Filter;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Index;
+use Utopia\Query\Schema\ColumnType;
 
 class CollectionValidationTest extends TestCase
 {
@@ -145,7 +149,7 @@ class CollectionValidationTest extends TestCase
         $this->setupExistingCollection('existing');
         $this->expectException(DuplicateException::class);
         $this->expectExceptionMessage('already exists');
-        $this->database->createCollection(new Collection(id: 'existing'));
+        $this->database->createCollection(Collection::create(id: 'existing'));
     }
 
     public function testCreateCollectionValidatesPermissionsFormat(): void
@@ -154,7 +158,7 @@ class CollectionValidationTest extends TestCase
         $this->database->enableValidation();
 
         $this->expectException(DatabaseException::class);
-        $this->database->createCollection(new Collection(id: 'newCol', permissions: ['bad-format']));
+        $this->database->createCollection(Collection::create(id: 'newCol', permissions: ['bad-format']));
     }
 
     public function testCreateCollectionWithAttributeLimits(): void
@@ -195,16 +199,15 @@ class CollectionValidationTest extends TestCase
         $db = new Database($adapter, new Cache(new None()));
         $db->getAuthorization()->addRole(Role::any()->toString());
 
-        $attr = new \Utopia\Database\Attribute(
+        $attr = Attribute::string(
             key: 'name',
-            type: \Utopia\Query\Schema\ColumnType::String,
             size: 128,
             required: false,
         );
 
         $this->expectException(LimitException::class);
         $this->expectExceptionMessage('Attribute limit');
-        $db->createCollection(new Collection(id: 'newCol', attributes: [$attr]));
+        $db->createCollection(Collection::create(id: 'newCol', attributes: [$attr]));
     }
 
     public function testCreateCollectionRejectsPointAttributeOnMemoryWhenValidateIsOn(): void
@@ -219,7 +222,7 @@ class CollectionValidationTest extends TestCase
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('Spatial attributes are not supported');
 
-        $database->createCollection(new Collection(id: 'places', attributes: [
+        $database->createCollection(Collection::create(id: 'places', attributes: [
             Attribute::point(key: 'location'),
         ]));
     }
@@ -233,8 +236,8 @@ class CollectionValidationTest extends TestCase
             ->enableValidation();
         $database->create();
 
-        $collection = $database->createCollection(new Collection(id: 'users', attributes: [
-            Attribute::string(key: 'prefs', size: 65535, default: new \stdClass(), filters: ['json']),
+        $collection = $database->createCollection(Collection::create(id: 'users', attributes: [
+            Attribute::string(key: 'prefs', size: 65535, default: new \stdClass(), filters: [Filter::Json]),
             Attribute::string(key: 'status', size: 32, required: true, default: 'active'),
         ]));
 
@@ -250,7 +253,7 @@ class CollectionValidationTest extends TestCase
             ->enableValidation();
         $database->create();
 
-        $collection = $database->createCollection(new Collection(
+        $collection = $database->createCollection(Collection::create(
             id: 'users',
             name: 'Users',
             attributes: [Attribute::string(key: 'name', required: true)],
@@ -259,11 +262,10 @@ class CollectionValidationTest extends TestCase
         $this->assertSame('users', $collection->getId());
         $this->assertSame('Users', $collection->getAttribute('name'));
 
-        /** @var array<int, Document> $attributes */
-        $attributes = $collection->attributes;
+        $attributes = $collection->attributes();
         $this->assertSame(1, \count($attributes));
-        $this->assertSame('name', $attributes[0]->getAttribute('key'));
-        $this->assertSame('string', $attributes[0]->getAttribute('type'));
+        $this->assertSame('name', $attributes[0]->key);
+        $this->assertSame(ColumnType::String, $attributes[0]->type);
     }
 
     public function testCreateCollectionEmptyPermissionsUsesDefault(): void
@@ -275,9 +277,9 @@ class CollectionValidationTest extends TestCase
             ->enableValidation();
         $database->create();
 
-        $anon = $database->createCollection(new Collection(id: 'anon'));
-        $control = $database->createCollection(new Collection(id: 'control'));
-        $locked = $database->createCollection(new Collection(id: 'locked', permissions: []));
+        $anon = $database->createCollection(Collection::create(id: 'anon'));
+        $control = $database->createCollection(Collection::create(id: 'control'));
+        $locked = $database->createCollection(Collection::create(id: 'locked', permissions: []));
 
         $this->assertSame($control->getPermissions(), $anon->getPermissions());
         $this->assertSame([Permission::create(Role::any())], $anon->getPermissions());
@@ -322,21 +324,19 @@ class CollectionValidationTest extends TestCase
         $db = new Database($adapter, new Cache(new None()));
         $db->getAuthorization()->addRole(Role::any()->toString());
 
-        $attr = new \Utopia\Database\Attribute(
+        $attr = Attribute::string(
             key: 'name',
-            type: \Utopia\Query\Schema\ColumnType::String,
             size: 128,
             required: false,
         );
-        $index = new \Utopia\Database\Index(
+        $index = Index::key(
             key: 'idx_name',
-            type: \Utopia\Query\Schema\IndexType::Key,
             attributes: ['name'],
         );
 
         $this->expectException(LimitException::class);
         $this->expectExceptionMessage('Index limit');
-        $db->createCollection(new Collection(id: 'newCol', attributes: [$attr], indexes: [$index]));
+        $db->createCollection(Collection::create(id: 'newCol', attributes: [$attr], indexes: [$index]));
     }
 
     public function testDeleteCollectionThrowsOnNotFound(): void
@@ -393,7 +393,7 @@ class CollectionValidationTest extends TestCase
         $this->adapter->method('updateDocument')->willReturnArgument(2);
 
         $newPermissions = [Permission::read(Role::any()), Permission::create(Role::user('admin'))];
-        $result = $this->database->updateCollection('testCol', $newPermissions, true);
+        $result = $this->database->updateCollection('testCol', new CollectionUpdate(permissions: $newPermissions, documentSecurity: true));
         $this->assertTrue($result->getAttribute('documentSecurity'));
     }
 
@@ -441,7 +441,7 @@ class CollectionValidationTest extends TestCase
         );
         $this->adapter->method('updateDocument')->willReturnArgument(2);
 
-        $result = $this->database->updateCollection('testCol', [Permission::read(Role::any())], true);
+        $result = $this->database->updateCollection('testCol', new CollectionUpdate(permissions: [Permission::read(Role::any())], documentSecurity: true));
         $this->assertTrue($result->getAttribute('documentSecurity'));
     }
 
@@ -449,7 +449,7 @@ class CollectionValidationTest extends TestCase
     {
         $this->adapter->method('getDocument')->willReturn(new Document());
         $this->expectException(NotFoundException::class);
-        $this->database->updateCollection('nonexistent', [Permission::read(Role::any())], true);
+        $this->database->updateCollection('nonexistent', new CollectionUpdate(permissions: [Permission::read(Role::any())], documentSecurity: true));
     }
 
     public function testListCollectionsReturnsCollectionDocuments(): void
@@ -501,17 +501,17 @@ class CollectionValidationTest extends TestCase
     {
         $this->setupExistingCollection('myCol');
 
-        $result = $this->database->getCollection('myCol');
-        $this->assertFalse($result->isEmpty());
+        $result = $this->database->findCollection('myCol');
+        $this->assertNotNull($result);
         $this->assertSame('myCol', $result->getId());
     }
 
-    public function testExistsDelegatesToAdapter(): void
+    public function testCollectionExistsDelegatesToAdapter(): void
     {
         $this->adapter->method('getDatabase')->willReturn('testdb');
         $this->adapter->method('exists')->willReturn(true);
 
-        $result = $this->database->exists('testdb', 'testCol');
+        $result = $this->database->collectionExists('testCol', 'testdb');
         $this->assertTrue($result);
     }
 }

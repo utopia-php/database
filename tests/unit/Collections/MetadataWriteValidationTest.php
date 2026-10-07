@@ -19,8 +19,6 @@ use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\Relationship;
-use Utopia\Database\RelationType;
-use Utopia\Query\Schema\IndexType;
 
 final class MetadataWriteValidationTest extends TestCase
 {
@@ -64,10 +62,10 @@ final class MetadataWriteValidationTest extends TestCase
     {
         $database = $this->database($adapter());
         $this->createUnvalidatedCollection($database);
-        $database->createCollection(new Collection(id: 'related'));
+        $database->createCollection(Collection::create(id: 'related'));
 
         try {
-            $database->createRelationship($this->relationship());
+            $database->createRelationship('unvalidated', $this->relationship());
             $this->fail('createRelationship() must not re-persist metadata that createCollection() rejects');
         } catch (DatabaseException $exception) {
             $this->assertStringStartsWith('Failed to create relationship: Invalid document structure', $exception->getMessage());
@@ -85,8 +83,8 @@ final class MetadataWriteValidationTest extends TestCase
     {
         $database = $this->database($adapter());
         $this->createUnvalidatedCollection($database);
-        $database->createCollection(new Collection(id: 'related'));
-        $database->skipValidation(fn (): bool => $database->createRelationship($this->relationship()));
+        $database->createCollection(Collection::create(id: 'related'));
+        $database->skipValidation(fn (): Relationship => $database->createRelationship('unvalidated', $this->relationship()));
 
         try {
             $database->deleteRelationship('unvalidated', 'owner');
@@ -108,16 +106,14 @@ final class MetadataWriteValidationTest extends TestCase
     {
         $database = new MetadataWriteRecorder($adapter(), new Cache(new None()));
         $this->configure($database);
-        $database->createCollection(new Collection(id: 'posts', attributes: [Attribute::string(key: 'owner', size: 64)]));
-        $database->createCollection(new Collection(id: 'users'));
-        $database->createIndex('posts', new Index(key: '_index_author', type: IndexType::Key, attributes: ['owner']));
+        $database->createCollection(Collection::create(id: 'posts', attributes: [Attribute::string(key: 'owner', size: 64)]));
+        $database->createCollection(Collection::create(id: 'users'));
+        $database->createIndex('posts', Index::key(key: '_index_author', attributes: ['owner']));
         $setupWrites = \count($database->getValidations());
 
         try {
-            $database->createRelationship(new Relationship(
-                collection: 'posts',
+            $database->createRelationship('posts', Relationship::manyToOne(
                 relatedCollection: 'users',
-                type: RelationType::ManyToOne,
                 key: 'author',
             ));
             $this->fail('createRelationship() must fail when the index it creates already exists');
@@ -152,16 +148,14 @@ final class MetadataWriteValidationTest extends TestCase
 
     private function createUnvalidatedCollection(Database $database): void
     {
-        $collection = new Collection(id: 'unvalidated', name: \str_repeat('n', self::OVERSIZED_NAME_LENGTH));
+        $collection = Collection::create(id: 'unvalidated', name: \str_repeat('n', self::OVERSIZED_NAME_LENGTH));
         $database->skipValidation(fn (): Collection => $database->createCollection($collection));
     }
 
     private function relationship(): Relationship
     {
-        return new Relationship(
-            collection: 'unvalidated',
+        return Relationship::oneToMany(
             relatedCollection: 'related',
-            type: RelationType::OneToMany,
             twoWay: true,
             key: 'owner',
             twoWayKey: 'owned',
@@ -175,7 +169,7 @@ final class MetadataWriteValidationTest extends TestCase
     {
         return \array_map(
             static fn (Attribute $attribute): string => $attribute->key,
-            \array_values($database->getCollection($collection)->attributes),
+            \array_values($database->getCollection($collection)->attributes()),
         );
     }
 }

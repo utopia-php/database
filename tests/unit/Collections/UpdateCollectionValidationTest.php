@@ -13,6 +13,7 @@ use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
+use Utopia\Database\CollectionUpdate;
 use Utopia\Database\Database;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Structure as StructureException;
@@ -20,8 +21,6 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\Relationship;
-use Utopia\Database\RelationType;
-use Utopia\Query\Schema\IndexType;
 
 final class UpdateCollectionValidationTest extends TestCase
 {
@@ -46,17 +45,17 @@ final class UpdateCollectionValidationTest extends TestCase
         $name = \str_repeat('n', 257);
 
         try {
-            $database->createCollection(new Collection(id: 'validated', name: $name));
+            $database->createCollection(Collection::create(id: 'validated', name: $name));
             $this->fail('createCollection() must reject metadata that fails structure validation');
         } catch (DatabaseException $exception) {
             $this->assertInstanceOf(StructureException::class, $exception->getPrevious());
         }
 
-        $database->skipValidation(fn (): Collection => $database->createCollection(new Collection(id: 'unvalidated', name: $name)));
+        $database->skipValidation(fn (): Collection => $database->createCollection(Collection::create(id: 'unvalidated', name: $name)));
 
         $this->expectException(StructureException::class);
 
-        $database->updateCollection('unvalidated', [Permission::read(Role::any())], true);
+        $database->updateCollection('unvalidated', new CollectionUpdate(permissions: [Permission::read(Role::any())], documentSecurity: true));
     }
 
     /**
@@ -66,34 +65,32 @@ final class UpdateCollectionValidationTest extends TestCase
     public function testUpdateCollectionPersistsHydratedAttributesIndexesAndRelationships(Closure $adapter): void
     {
         $database = $this->database($adapter());
-        $database->createCollection(new Collection(
+        $database->createCollection(Collection::create(
             id: 'books',
             attributes: [
                 Attribute::string('title', size: 64, required: true),
                 Attribute::integer('pages', required: false),
                 Attribute::string('tags', size: 16, required: false, array: true),
             ],
-            indexes: [new Index(key: 'title_index', type: IndexType::Key, attributes: ['title'])],
+            indexes: [Index::key(key: 'title_index', attributes: ['title'])],
             permissions: [Permission::create(Role::any())],
         ));
-        $database->createCollection(new Collection(id: 'authors', attributes: [Attribute::string('name', size: 64, required: false)]));
-        $database->createRelationship(new Relationship(
-            collection: 'books',
+        $database->createCollection(Collection::create(id: 'authors', attributes: [Attribute::string('name', size: 64, required: false)]));
+        $database->createRelationship('books', Relationship::manyToOne(
             relatedCollection: 'authors',
-            type: RelationType::ManyToOne,
             twoWay: true,
             key: 'author',
             twoWayKey: 'books',
         ));
 
         $permissions = [Permission::read(Role::any()), Permission::update(Role::any())];
-        $database->updateCollection('books', $permissions, false);
+        $database->updateCollection('books', new CollectionUpdate(permissions: $permissions, documentSecurity: false));
 
         $books = $database->getCollection('books');
         $this->assertSame($permissions, $books->getPermissions());
         $this->assertFalse($books->getAttribute('documentSecurity'));
-        $this->assertSame(['title', 'pages', 'tags', 'author'], \array_map(static fn (Attribute $attribute): string => $attribute->key, $books->attributes));
-        $this->assertSame(['title_index', '_index_author'], \array_map(static fn (Index $index): string => $index->key, $books->indexes));
+        $this->assertSame(['title', 'pages', 'tags', 'author'], \array_map(static fn (Attribute $attribute): string => $attribute->key, $books->attributes()));
+        $this->assertSame(['title_index', '_index_author'], \array_map(static fn (Index $index): string => $index->key, $books->indexes()));
     }
 
     private function database(Adapter $adapter): Database

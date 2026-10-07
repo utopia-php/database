@@ -40,9 +40,8 @@ use Utopia\Database\Index as IndexModel;
 use Utopia\Database\Operator;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
-use Utopia\Database\Relationship;
-use Utopia\Database\RelationSide;
-use Utopia\Database\RelationType;
+use Utopia\Database\RelationshipSide;
+use Utopia\Database\RelationshipType;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\Authorization\Input;
 use Utopia\Database\Validator\BigInt;
@@ -1484,19 +1483,17 @@ trait Documents
             // for a write that leaves the stored document identical.
             $document = $this->removeUnknownAttributes($collection, $document);
 
-            /** @var array<Document> $updateAttrs */
-            $updateAttrs = $collection->getAttribute('attributes', []);
-            $relationships = \array_filter($updateAttrs, function (Attribute|Document $attribute) {
-                return Attribute::isRelationship($attribute);
-            });
-
             $shouldUpdate = false;
 
             if ($collection->getId() !== self::METADATA) {
                 $documentSecurity = $collection->getAttribute('documentSecurity', false);
 
-                foreach ($relationships as $relationship) {
-                    $relationships[$relationship->getId()] = $relationship;
+                /** @var array<string, Attribute> $relationships */
+                $relationships = [];
+                foreach ($collection->attributes() as $attribute) {
+                    if ($attribute->relationship !== null) {
+                        $relationships[$attribute->key] = $attribute;
+                    }
                 }
 
                 foreach ($document as $key => $value) {
@@ -1514,20 +1511,20 @@ trait Documents
                         continue;
                     }
 
-                    if (\array_key_exists($key, $relationships)) {
-                        $rel = Relationship::fromArray(['collection' => $collection->getId()] + $relationships[$key]->getArrayCopy());
-                        $relationType = $rel->getType();
-                        $side = $rel->getSide();
-                        $storesKey = $relationType === RelationType::OneToOne
-                            || ($relationType === RelationType::ManyToOne && $side === RelationSide::Parent)
-                            || ($relationType === RelationType::OneToMany && $side === RelationSide::Child);
+                    $relationship = isset($relationships[$key]) ? $relationships[$key]->relationship : null;
+                    if ($relationship !== null) {
+                        $relationType = $relationship->type;
+                        $side = $relationships[$key]->side;
+                        $storesKey = $relationType === RelationshipType::OneToOne
+                            || ($relationType === RelationshipType::ManyToOne && $side === RelationshipSide::Parent)
+                            || ($relationType === RelationshipType::OneToMany && $side === RelationshipSide::Child);
 
                         if (! $storesKey && $this->relationshipHook !== null && $this->relationshipHook->getWriteStackCount() >= Database::RELATION_MAX_DEPTH - 1) {
                             continue;
                         }
 
                         switch ($relationType) {
-                            case RelationType::OneToOne:
+                            case RelationshipType::OneToOne:
                                 $oldValue = $old->getAttribute($key) instanceof Document
                                     ? $old->getAttribute($key)->getId()
                                     : $old->getAttribute($key);
@@ -1539,12 +1536,12 @@ trait Documents
                                     $shouldUpdate = true;
                                 }
                                 break;
-                            case RelationType::OneToMany:
-                            case RelationType::ManyToOne:
-                            case RelationType::ManyToMany:
+                            case RelationshipType::OneToMany:
+                            case RelationshipType::ManyToOne:
+                            case RelationshipType::ManyToMany:
                                 if (
-                                    ($relationType === RelationType::ManyToOne && $side === RelationSide::Parent) ||
-                                    ($relationType === RelationType::OneToMany && $side === RelationSide::Child)
+                                    ($relationType === RelationshipType::ManyToOne && $side === RelationshipSide::Parent) ||
+                                    ($relationType === RelationshipType::OneToMany && $side === RelationshipSide::Child)
                                 ) {
                                     $oldValue = $old->getAttribute($key) instanceof Document
                                         ? $old->getAttribute($key)->getId()

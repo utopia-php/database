@@ -10,6 +10,7 @@ use Utopia\Async\Promise;
 use Utopia\Database\Adapter\Pool;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
@@ -24,16 +25,15 @@ use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
-use Utopia\Database\Relationship as RelationshipVO;
-use Utopia\Database\RelationSide;
-use Utopia\Database\RelationType;
+use Utopia\Database\Relationship;
+use Utopia\Database\RelationshipDeleteAction;
+use Utopia\Database\RelationshipSide;
+use Utopia\Database\RelationshipType;
 use Utopia\Database\State\Snapshot;
 use Utopia\Database\State\Value;
 use Utopia\Database\Validator\Authorization\Input;
 use Utopia\Query\Hook;
 use Utopia\Query\Method;
-use Utopia\Query\Schema\ColumnType;
-use Utopia\Query\Schema\ForeignKeyAction;
 
 /**
  * Handles relationship side effects for document CRUD, populates nested relationships
@@ -70,8 +70,8 @@ class Relationships implements Hook
     private array $writeStacks = [];
 
     /**
-     * @var array<int, list<Document>> The relationships of each coroutine's cascading deletes in progress,
-     *                                 innermost last, by coroutine id
+     * @var array<int, list<Cascade>> The relationships of each coroutine's cascading deletes in progress,
+     *                                innermost last, by coroutine id
      */
     private array $deleteStacks = [];
 
@@ -493,10 +493,12 @@ class Relationships implements Hook
 
     private function hasRelatedDocuments(Document $collection, Document $document): bool
     {
-        foreach ($this->relationships($collection) as $relationship) {
-            /** @var string $key */
-            $key = $relationship->getAttribute('key', $relationship->getId());
-            $value = $document->getAttribute($key);
+        foreach (self::attributes($collection) as $attribute) {
+            if ($attribute->relationship === null) {
+                continue;
+            }
+
+            $value = $document->getAttribute($attribute->key);
             if ($value instanceof Document) {
                 return true;
             }
@@ -526,9 +528,13 @@ class Relationships implements Hook
     {
         $depth = \count($writeStack);
 
-        foreach ($this->relationships($collection) as $relationship) {
-            /** @var string $key */
-            $key = $relationship->getAttribute('key', $relationship->getId());
+        foreach (self::attributes($collection) as $attribute) {
+            $relationship = $attribute->relationship;
+            if ($relationship === null) {
+                continue;
+            }
+
+            $key = $attribute->key;
             try {
                 $value = $this->coerceToDocument($document, $key, $document->getAttribute($key));
             } catch (RelationshipException) {
@@ -542,10 +548,7 @@ class Relationships implements Hook
                 continue;
             }
 
-            $relatedCollection = $this->collection(
-                $prepared,
-                RelationshipVO::fromArray(['collection' => $collection->getId()] + $relationship->getArrayCopy())->getRelatedCollection(),
-            );
+            $relatedCollection = $this->collection($prepared, $relationship->relatedCollection);
 
             if ($depth >= Database::RELATION_MAX_DEPTH - 1 && $writeStack[$depth - 1] !== $relatedCollection->getId()) {
                 continue;
@@ -599,16 +602,14 @@ class Relationships implements Hook
      */
     private function isReferencedBack(Document $collection, Document $document): bool
     {
-        foreach ($this->relationships($collection) as $relationship) {
-            /** @var string $key */
-            $key = $relationship->getAttribute('key', $relationship->getId());
-            $value = $document->getAttribute($key);
-            if (! $value instanceof Document && ! \is_array($value)) {
+        foreach (self::attributes($collection) as $attribute) {
+            $relationship = $attribute->relationship;
+            if ($relationship === null || $relationship->type !== RelationshipType::OneToOne || ! $relationship->twoWay) {
                 continue;
             }
 
-            $rel = RelationshipVO::fromArray(['collection' => $collection->getId()] + $relationship->getArrayCopy());
-            if ($rel->getType() === RelationType::OneToOne && $rel->isTwoWay()) {
+            $value = $document->getAttribute($attribute->key);
+            if ($value instanceof Document || \is_array($value)) {
                 return true;
             }
         }
@@ -657,14 +658,32 @@ class Relationships implements Hook
     }
 
     /**
-     * @return array<Document>
+     * The attributes $collection declares, hydrated at most once per collection instance.
+     *
+     * @return list<Attribute>
      */
-    private function relationships(Document $collection): array
+    private static function attributes(Document $collection): array
     {
-        /** @var array<Document> $attributes */
-        $attributes = $collection->getAttribute('attributes', []);
+        return $collection instanceof Collection
+            ? $collection->attributes()
+            : Collection::fromArray($collection->getArrayCopy())->attributes();
+    }
 
-        return \array_filter($attributes, Attribute::isRelationship(...));
+    /**
+     * The relationship attributes $collection declares.
+     *
+     * @return list<Attribute>
+     */
+    private static function relationships(Document $collection): array
+    {
+        $relationships = [];
+        foreach (self::attributes($collection) as $attribute) {
+            if ($attribute->relationship !== null) {
+                $relationships[] = $attribute;
+            }
+        }
+
+        return $relationships;
     }
 
     /**
@@ -754,25 +773,27 @@ class Relationships implements Hook
      */
     private function relate(Document $collection, Document $document, int $coroutine, ?PreparedCreate $prepared, ?array &$copies = null): Document
     {
-        $relationships = $this->relationships($collection);
         $writeStack = $this->writeStacks[$coroutine] ?? [];
         $stackCount = \count($writeStack);
 
-        foreach ($relationships as $relationship) {
-            /** @var string $key */
-            $key = $relationship->getAttribute('key', $relationship->getId());
+        foreach (self::attributes($collection) as $attribute) {
+            $relationship = $attribute->relationship;
+            $side = $attribute->side;
+            if ($relationship === null || $side === null) {
+                continue;
+            }
+
+            $key = $attribute->key;
             $value = $document->getAttribute($key);
             if ($copies !== null && $stackCount === 0 && (\is_array($value) || $value instanceof Document)) {
                 $this->copy($document, $copies);
             }
-            $rel = RelationshipVO::fromArray(['collection' => $collection->getId()] + $relationship->getArrayCopy());
             $relatedCollection = $prepared === null
-                ? $this->db->getCollection($rel->getRelatedCollection())
-                : $this->collection($prepared, $rel->getRelatedCollection());
-            $relationType = $rel->getType();
-            $twoWay = $rel->isTwoWay();
-            $twoWayKey = $rel->getTwoWayKey();
-            $side = $rel->getSide();
+                ? $this->db->getCollection($relationship->relatedCollection)
+                : $this->collection($prepared, $relationship->relatedCollection);
+            $relationType = $relationship->type;
+            $twoWay = $relationship->twoWay;
+            $twoWayKey = $relationship->twoWayKey ?? '';
 
             if ($stackCount >= Database::RELATION_MAX_DEPTH - 1 && $writeStack[$stackCount - 1] !== $relatedCollection->getId()) {
                 $document->removeAttribute($key);
@@ -786,14 +807,14 @@ class Relationships implements Hook
                 $value = $this->coerceToDocument($document, $key, $value);
 
                 if (\is_array($value)) {
-                    if ($relationType === RelationType::OneToOne && ! $twoWay && $side === RelationSide::Child) {
+                    if ($relationType === RelationshipType::OneToOne && ! $twoWay && $side === RelationshipSide::Child) {
                         throw new RelationshipException('Invalid relationship value. Cannot set a value from the child side of a oneToOne relationship when twoWay is false.');
                     }
 
                     if (
-                        ($relationType === RelationType::ManyToOne && $side === RelationSide::Parent) ||
-                        ($relationType === RelationType::OneToMany && $side === RelationSide::Child) ||
-                        ($relationType === RelationType::OneToOne)
+                        ($relationType === RelationshipType::ManyToOne && $side === RelationshipSide::Parent) ||
+                        ($relationType === RelationshipType::OneToMany && $side === RelationshipSide::Child) ||
+                        ($relationType === RelationshipType::OneToOne)
                     ) {
                         throw new RelationshipException('Invalid relationship value. Must be either a document ID or a document, array given.');
                     }
@@ -832,14 +853,14 @@ class Relationships implements Hook
                     }
                     $document->removeAttribute($key);
                 } elseif ($value instanceof Document) {
-                    if ($relationType === RelationType::OneToOne && ! $twoWay && $side === RelationSide::Child) {
+                    if ($relationType === RelationshipType::OneToOne && ! $twoWay && $side === RelationshipSide::Child) {
                         throw new RelationshipException('Invalid relationship value. Cannot set a value from the child side of a oneToOne relationship when twoWay is false.');
                     }
 
                     if (
-                        ($relationType === RelationType::OneToMany && $side === RelationSide::Parent) ||
-                        ($relationType === RelationType::ManyToOne && $side === RelationSide::Child) ||
-                        ($relationType === RelationType::ManyToMany)
+                        ($relationType === RelationshipType::OneToMany && $side === RelationshipSide::Parent) ||
+                        ($relationType === RelationshipType::ManyToOne && $side === RelationshipSide::Child) ||
+                        ($relationType === RelationshipType::ManyToMany)
                     ) {
                         throw new RelationshipException('Invalid relationship value. Must be either an array of documents or document IDs, document given.');
                     }
@@ -859,14 +880,14 @@ class Relationships implements Hook
                     );
                     $document->setAttribute($key, $relatedId);
                 } elseif (\is_string($value)) {
-                    if ($relationType === RelationType::OneToOne && $twoWay === false && $side === RelationSide::Child) {
+                    if ($relationType === RelationshipType::OneToOne && $twoWay === false && $side === RelationshipSide::Child) {
                         throw new RelationshipException('Invalid relationship value. Cannot set a value from the child side of a oneToOne relationship when twoWay is false.');
                     }
 
                     if (
-                        ($relationType === RelationType::OneToMany && $side === RelationSide::Parent) ||
-                        ($relationType === RelationType::ManyToOne && $side === RelationSide::Child) ||
-                        ($relationType === RelationType::ManyToMany)
+                        ($relationType === RelationshipType::OneToMany && $side === RelationshipSide::Parent) ||
+                        ($relationType === RelationshipType::ManyToOne && $side === RelationshipSide::Child) ||
+                        ($relationType === RelationshipType::ManyToMany)
                     ) {
                         throw new RelationshipException('Invalid relationship value. Must be either an array of documents or document IDs, document ID given.');
                     }
@@ -885,10 +906,10 @@ class Relationships implements Hook
                     );
                 } elseif ($value === null) {
                     if (
-                        !(($relationType === RelationType::OneToMany && $side === RelationSide::Child) ||
-                        ($relationType === RelationType::ManyToOne && $side === RelationSide::Parent) ||
-                        ($relationType === RelationType::OneToOne && $side === RelationSide::Parent) ||
-                        ($relationType === RelationType::OneToOne && $twoWay === true))
+                        !(($relationType === RelationshipType::OneToMany && $side === RelationshipSide::Child) ||
+                        ($relationType === RelationshipType::ManyToOne && $side === RelationshipSide::Parent) ||
+                        ($relationType === RelationshipType::OneToOne && $side === RelationshipSide::Parent) ||
+                        ($relationType === RelationshipType::OneToOne && $twoWay === true))
                     ) {
                         $document->removeAttribute($key);
                     }
@@ -912,33 +933,27 @@ class Relationships implements Hook
      */
     public function afterDocumentUpdate(Document $collection, Document $old, Document $document): Document
     {
-        /** @var array<Document> $attributes */
-        $attributes = $collection->getAttribute('attributes', []);
-
-        /** @var array<Document> $relationships */
-        $relationships = \array_filter(
-            $attributes,
-            Attribute::isRelationship(...)
-        );
-
         $coroutine = $this->coroutine();
         $writeStack = $this->writeStacks[$coroutine] ?? [];
         $stackCount = \count($writeStack);
 
-        foreach ($relationships as $index => $relationship) {
-            /** @var string $key */
-            $key = $relationship->getAttribute('key', $relationship->getId());
+        foreach (self::attributes($collection) as $attribute) {
+            $relationship = $attribute->relationship;
+            $side = $attribute->side;
+            if ($relationship === null || $side === null) {
+                continue;
+            }
+
+            $key = $attribute->key;
             $value = $document->getAttribute($key);
 
             $value = $this->coerceToDocument($document, $key, $value);
 
             $oldValue = $old->getAttribute($key);
-            $rel = RelationshipVO::fromArray(['collection' => $collection->getId()] + $relationship->getArrayCopy());
-            $relatedCollection = $this->db->getCollection($rel->getRelatedCollection());
-            $relationType = $rel->getType();
-            $twoWay = $rel->isTwoWay();
-            $twoWayKey = $rel->getTwoWayKey();
-            $side = $rel->getSide();
+            $relatedCollection = $this->db->getCollection($relationship->relatedCollection);
+            $relationType = $relationship->type;
+            $twoWay = $relationship->twoWay;
+            $twoWayKey = $relationship->twoWayKey ?? '';
 
             if (Operator::isOperator($value)) {
                 /** @var Operator $operator */
@@ -957,8 +972,8 @@ class Relationships implements Hook
 
             if ($oldValue == $value) {
                 if (
-                    ($relationType === RelationType::OneToOne
-                        || ($relationType === RelationType::ManyToOne && $side === RelationSide::Parent)) &&
+                    ($relationType === RelationshipType::OneToOne
+                        || ($relationType === RelationshipType::ManyToOne && $side === RelationshipSide::Parent)) &&
                     $value instanceof Document
                 ) {
                     $document->setAttribute($key, $value->getId());
@@ -980,9 +995,9 @@ class Relationships implements Hook
 
             try {
                 switch ($relationType) {
-                    case RelationType::OneToOne:
+                    case RelationshipType::OneToOne:
                         if (! $twoWay) {
-                            if ($side === RelationSide::Child) {
+                            if ($side === RelationshipSide::Child) {
                                 throw new RelationshipException('Invalid relationship value. Cannot set a value from the child side of a oneToOne relationship when twoWay is false.');
                             }
 
@@ -1082,11 +1097,11 @@ class Relationships implements Hook
                             throw new RelationshipException('Invalid relationship value. Must be either a document, document ID or null.');
                         }
                         break;
-                    case RelationType::OneToMany:
-                    case RelationType::ManyToOne:
+                    case RelationshipType::OneToMany:
+                    case RelationshipType::ManyToOne:
                         if (
-                            ($relationType === RelationType::OneToMany && $side === RelationSide::Parent) ||
-                            ($relationType === RelationType::ManyToOne && $side === RelationSide::Child)
+                            ($relationType === RelationshipType::OneToMany && $side === RelationshipSide::Parent) ||
+                            ($relationType === RelationshipType::ManyToOne && $side === RelationshipSide::Child)
                         ) {
                             if (! \is_array($value) || ! \array_is_list($value)) {
                                 throw new RelationshipException('Invalid relationship value. Must be either an array of documents or document IDs, '.\gettype($value).' given.');
@@ -1236,7 +1251,7 @@ class Relationships implements Hook
                         }
 
                         break;
-                    case RelationType::ManyToMany:
+                    case RelationshipType::ManyToMany:
                         if ($value === null) {
                             break;
                         }
@@ -1403,61 +1418,51 @@ class Relationships implements Hook
         $changed = [];
         $cascaded = false;
 
-        /** @var array<Document> $attributes */
-        $attributes = $collection->getAttribute('attributes', []);
+        foreach (self::attributes($collection) as $attribute) {
+            $relationship = $attribute->relationship;
+            $side = $attribute->side;
+            if ($relationship === null || $side === null) {
+                continue;
+            }
 
-        /** @var array<Document> $relationships */
-        $relationships = \array_filter(
-            $attributes,
-            Attribute::isRelationship(...)
-        );
-
-        foreach ($relationships as $relationship) {
-            $key = $relationship->getId();
+            $key = $attribute->key;
             $value = $document->getAttribute($key);
-            $rel = RelationshipVO::fromArray(['collection' => $collection->getId()] + $relationship->getArrayCopy());
-            $relatedCollection = $this->db->getCollection($rel->getRelatedCollection());
-            $relationType = $rel->getType();
-            $twoWay = $rel->isTwoWay();
-            $twoWayKey = $rel->getTwoWayKey();
-            $onDelete = $rel->getOnDelete();
-            $side = $rel->getSide();
+            $relatedCollection = $this->db->getCollection($relationship->relatedCollection);
+            $relationType = $relationship->type;
+            $twoWay = $relationship->twoWay;
+            $twoWayKey = $relationship->twoWayKey ?? '';
+            $onDelete = $relationship->onDelete;
 
-            $relationship->setAttribute('collection', $collection->getId());
-            $relationship->setAttribute('document', $document->getId());
-
-            $holdsKey = ($relationType === RelationType::OneToMany && $side === RelationSide::Child)
-                || ($relationType === RelationType::ManyToOne && $side === RelationSide::Parent);
+            $holdsKey = ($relationType === RelationshipType::OneToMany && $side === RelationshipSide::Child)
+                || ($relationType === RelationshipType::ManyToOne && $side === RelationshipSide::Parent);
             $unwritten = false;
 
             switch ($onDelete) {
-                case ForeignKeyAction::Restrict:
+                case RelationshipDeleteAction::Restrict:
                     $this->deleteRestrict($collection, $relatedCollection, $document, $key, $relationType, $twoWay, $twoWayKey, $side);
                     $unwritten = true;
                     break;
-                case ForeignKeyAction::SetNull:
+                case RelationshipDeleteAction::SetNull:
                     $written = $this->deleteSetNull($collection, $relatedCollection, $document, $relationType, $twoWay, $twoWayKey, $side, $report && $twoWay);
 
                     foreach ($written as $related) {
                         $changed[$relatedCollection->getId()][$related->getId()] = $related;
                     }
 
-                    $unwritten = $holdsKey || $relationType === RelationType::ManyToMany;
+                    $unwritten = $holdsKey || $relationType === RelationshipType::ManyToMany;
                     break;
-                case ForeignKeyAction::Cascade:
-                    $unwritten = $holdsKey || ($relationType === RelationType::ManyToMany && $side === RelationSide::Child);
+                case RelationshipDeleteAction::Cascade:
+                    $unwritten = $holdsKey || ($relationType === RelationshipType::ManyToMany && $side === RelationshipSide::Child);
+                    $cascade = new Cascade($collection->getId(), $document->getId(), $attribute);
 
-                    foreach ($this->deleteStacks[$this->coroutine()] ?? [] as $processedRelationship) {
-                        /** @var string $existingKey */
-                        $existingKey = $processedRelationship['key'];
-                        /** @var string $existingCollection */
-                        $existingCollection = $processedRelationship['collection'];
-                        $existingRel = RelationshipVO::fromArray(['collection' => $existingCollection] + $processedRelationship->getArrayCopy());
-                        $existingRelatedCollection = $existingRel->getRelatedCollection();
-                        $existingTwoWayKey = $existingRel->getTwoWayKey();
-                        $existingSide = $existingRel->getSide();
+                    foreach ($this->deleteStacks[$this->coroutine()] ?? [] as $processed) {
+                        $existingKey = $processed->attribute->key;
+                        $existingCollection = $processed->collection;
+                        $existingRelatedCollection = $processed->attribute->relationship?->relatedCollection;
+                        $existingTwoWayKey = $processed->attribute->relationship->twoWayKey ?? '';
+                        $existingSide = $processed->attribute->side;
 
-                        $reflexive = $processedRelationship == $relationship;
+                        $reflexive = $processed == $cascade;
 
                         $symmetric = $existingKey === $twoWayKey
                             && $existingTwoWayKey === $key
@@ -1484,7 +1489,7 @@ class Relationships implements Hook
                             break 2;
                         }
                     }
-                    $this->deleteCascade($collection, $relatedCollection, $document, $key, $relationType, $twoWay, $twoWayKey, $side, $relationship);
+                    $this->deleteCascade($collection, $relatedCollection, $document, $key, $relationType, $twoWay, $twoWayKey, $side, $cascade);
                     break;
             }
 
@@ -1493,7 +1498,7 @@ class Relationships implements Hook
                     continue;
                 }
 
-                if ($onDelete === ForeignKeyAction::Cascade && ! $unwritten) {
+                if ($onDelete === RelationshipDeleteAction::Cascade && ! $unwritten) {
                     $cascaded = true;
                 } elseif ($twoWay && $unwritten) {
                     $changed[$relatedCollection->getId()][$related->getId()] = $related;
@@ -1583,36 +1588,20 @@ class Relationships implements Hook
                         continue;
                     }
 
-                    /** @var array<Document> $popAttributes */
-                    $popAttributes = $coll->getAttribute('attributes', []);
-                    /** @var array<Document> $relationships */
-                    $relationships = [];
-
-                    foreach ($popAttributes as $attribute) {
-                        // Avoid the Attribute::fromDocument allocation —
-                        // we only need the type and key here, both of
-                        // which are plain Document attributes.
-                        if (! Attribute::isRelationship($attribute)) {
+                    foreach (self::attributes($coll) as $attribute) {
+                        $relationship = $attribute->relationship;
+                        $side = $attribute->side;
+                        $key = $attribute->key;
+                        if (
+                            $relationship === null
+                            || $side === null
+                            || $key === $skipKey
+                            || ($parentHasExplicitSelects && ! \array_key_exists($key, $sels))
+                        ) {
                             continue;
                         }
 
-                        /** @var string $popKey */
-                        $popKey = $attribute->getAttribute('key', $attribute->getId());
-
-                        if ($popKey === $skipKey) {
-                            continue;
-                        }
-
-                        if (! $parentHasExplicitSelects || \array_key_exists($popKey, $sels)) {
-                            $relationships[] = $attribute;
-                        }
-                    }
-
-                    foreach ($relationships as $relationship) {
-                        /** @var string $key */
-                        $key = $relationship->getAttribute('key', $relationship->getId());
                         $queries = $sels[$key] ?? [];
-                        $relationship->setAttribute('collection', $coll->getId());
                         $isAtMaxDepth = ($currentDepth + 1) >= Database::RELATION_MAX_DEPTH;
 
                         if ($isAtMaxDepth) {
@@ -1623,37 +1612,30 @@ class Relationships implements Hook
                             continue;
                         }
 
-                        $relVO = RelationshipVO::fromArray(['collection' => $coll->getId()] + $relationship->getArrayCopy());
-
                         $relatedDocs = $this->populateSingleRelationshipBatch(
                             $docs,
-                            $relVO,
+                            $coll,
+                            $key,
+                            $relationship,
+                            $side,
                             $queries
                         );
 
-                        $twoWay = $relVO->isTwoWay();
-                        $twoWayKey = $relVO->getTwoWayKey();
+                        $twoWay = $relationship->twoWay;
+                        $twoWayKey = $relationship->twoWayKey ?? '';
 
                         $hasNestedSelectsForThisRel = isset($sels[$key]);
                         $shouldQueue = ! empty($relatedDocs) &&
                             ($hasNestedSelectsForThisRel || ! $parentHasExplicitSelects);
 
                         if ($shouldQueue) {
-                            $relatedCollectionId = $relVO->getRelatedCollection();
-                            $relatedCollection = $this->db->silent(fn () => $this->db->getCollection($relatedCollectionId));
+                            $relatedCollectionId = $relationship->relatedCollection;
+                            $relatedCollection = $this->db->silent(fn () => $this->db->findCollection($relatedCollectionId));
 
-                            if (! $relatedCollection->isEmpty()) {
+                            if ($relatedCollection !== null) {
                                 $relationshipQueries = $hasNestedSelectsForThisRel ? $sels[$key] : [];
 
-                                /** @var array<Document> $relatedCollectionRelationships */
-                                $relatedCollectionRelationships = $relatedCollection->getAttribute('attributes', []);
-                                /** @var array<Document> $relatedCollectionRelationships */
-                                $relatedCollectionRelationships = \array_filter(
-                                    $relatedCollectionRelationships,
-                                    Attribute::isRelationship(...)
-                                );
-
-                                $nextSelects = $this->processQueries($relatedCollectionRelationships, $relationshipQueries);
+                                $nextSelects = $this->processQueries(self::relationships($relatedCollection), $relationshipQueries);
 
                                 $childHasExplicitSelects = $parentHasExplicitSelects;
 
@@ -1685,7 +1667,7 @@ class Relationships implements Hook
     }
 
     /**
-     * @param  array<Document>  $relationships
+     * @param  array<Attribute>  $relationships  The relationship attributes of the collection the queries read
      * @param  array<Query>  $queries
      * @return array<string, array<Query>>
      */
@@ -1701,13 +1683,10 @@ class Relationships implements Hook
 
         // Pre-index relationships by key once so per-value lookups are O(1)
         // instead of O(relationships) with a fresh array_filter each iteration.
-        /** @var array<string, Document> $relationshipsByKey */
+        /** @var array<string, Attribute> $relationshipsByKey */
         $relationshipsByKey = [];
-        /** @var Document $relationship */
         foreach ($relationships as $relationship) {
-            /** @var string $relKey */
-            $relKey = $relationship->getAttribute('key', $relationship->getId());
-            $relationshipsByKey[$relKey] = $relationship;
+            $relationshipsByKey[$relationship->key] = $relationship;
         }
 
         foreach ($queries as $query) {
@@ -1728,9 +1707,10 @@ class Relationships implements Hook
                 $nesting = \explode('.', $value);
                 $selectedKey = \array_shift($nesting);
 
-                $relationship = $relationshipsByKey[$selectedKey] ?? null;
+                $attribute = $relationshipsByKey[$selectedKey] ?? null;
+                $relationship = $attribute?->relationship;
 
-                if (! $relationship) {
+                if ($relationship === null) {
                     continue;
                 }
 
@@ -1742,27 +1722,25 @@ class Relationships implements Hook
                     $nestedSelections[$selectedKey][] = Query::select([$nestingPath]);
                 }
 
-                $relVO = RelationshipVO::fromArray(['collection' => ''] + $relationship->getArrayCopy());
-
-                switch ($relVO->getType()) {
-                    case RelationType::ManyToMany:
+                switch ($relationship->type) {
+                    case RelationshipType::ManyToMany:
                         unset($values[$valueIndex]);
                         break;
-                    case RelationType::OneToMany:
-                        if ($relVO->getSide() === RelationSide::Parent) {
+                    case RelationshipType::OneToMany:
+                        if ($attribute->side === RelationshipSide::Parent) {
                             unset($values[$valueIndex]);
                         } else {
                             $values[$valueIndex] = $selectedKey;
                         }
                         break;
-                    case RelationType::ManyToOne:
-                        if ($relVO->getSide() === RelationSide::Parent) {
+                    case RelationshipType::ManyToOne:
+                        if ($attribute->side === RelationshipSide::Parent) {
                             $values[$valueIndex] = $selectedKey;
                         } else {
                             unset($values[$valueIndex]);
                         }
                         break;
-                    case RelationType::OneToOne:
+                    case RelationshipType::OneToOne:
                         $values[$valueIndex] = $selectedKey;
                         break;
                 }
@@ -1779,7 +1757,7 @@ class Relationships implements Hook
     }
 
     /**
-     * @param  array<Document>  $relationships
+     * @param  array<Attribute>  $relationships  The relationship attributes of $collection
      * @param  array<Query>  $queries
      * @return array<Query>|null
      *
@@ -1806,13 +1784,10 @@ class Relationships implements Hook
             return $queries;
         }
 
-        $collectionId = $collection?->getId() ?? '';
-
-        /** @var array<string, RelationshipVO> $relationshipsByKey */
+        /** @var array<string, Attribute> $relationshipsByKey */
         $relationshipsByKey = [];
         foreach ($relationships as $relationship) {
-            $relVO = RelationshipVO::fromArray(['collection' => $collectionId] + $relationship->getArrayCopy());
-            $relationshipsByKey[$relVO->getKey()] = $relVO;
+            $relationshipsByKey[$relationship->key] = $relationship;
         }
 
         $additionalQueries = [];
@@ -1958,26 +1933,26 @@ class Relationships implements Hook
         string $key,
         Document $document,
         Document $relation,
-        RelationType $relationType,
+        RelationshipType $relationType,
         bool $twoWay,
         string $twoWayKey,
-        RelationSide $side,
+        RelationshipSide $side,
         int $coroutine,
         ?PreparedCreate $prepared,
     ): string {
         switch ($relationType) {
-            case RelationType::OneToOne:
+            case RelationshipType::OneToOne:
                 if ($twoWay) {
                     $relation->setAttribute($twoWayKey, $document->getId());
                 }
                 break;
-            case RelationType::OneToMany:
-                if ($side === RelationSide::Parent) {
+            case RelationshipType::OneToMany:
+                if ($side === RelationshipSide::Parent) {
                     $relation->setAttribute($twoWayKey, $document->getId());
                 }
                 break;
-            case RelationType::ManyToOne:
-                if ($side === RelationSide::Child) {
+            case RelationshipType::ManyToOne:
+                if ($side === RelationshipSide::Child) {
                     $relation->setAttribute($twoWayKey, $document->getId());
                 }
                 break;
@@ -1989,7 +1964,7 @@ class Relationships implements Hook
 
         $related = $this->db->getDocument($relatedCollection->getId(), $relation->getId());
 
-        if ($relationType === RelationType::ManyToMany && ! $related->isEmpty()) {
+        if ($relationType === RelationshipType::ManyToMany && ! $related->isEmpty()) {
             $this->authorizeLink($relatedCollection, $related);
         }
 
@@ -2007,7 +1982,7 @@ class Relationships implements Hook
             $related = $this->db->updateDocument($relatedCollection->getId(), $related->getId(), $related);
         }
 
-        if ($relationType === RelationType::ManyToMany) {
+        if ($relationType === RelationshipType::ManyToMany) {
             $this->db->createDocument(
                 $this->getJunctionCollection($collection, $relatedCollection, $side),
                 $this->junctionDocument($key, $related->getId(), $twoWayKey, $document->getId()),
@@ -2028,9 +2003,9 @@ class Relationships implements Hook
         string $key,
         Document $document,
         Document $relation,
-        RelationType $relationType,
+        RelationshipType $relationType,
         string $twoWayKey,
-        RelationSide $side,
+        RelationshipSide $side,
         int $coroutine,
     ): string {
         if (! isset($relation[Document::PERMISSIONS])) {
@@ -2039,7 +2014,7 @@ class Relationships implements Hook
 
         $relatedId = $this->prepare($prepared, $relatedCollection, $relation, $coroutine);
 
-        if ($relationType === RelationType::ManyToMany) {
+        if ($relationType === RelationshipType::ManyToMany) {
             $this->prepare(
                 $prepared,
                 $this->collection($prepared, $this->getJunctionCollection($collection, $relatedCollection, $side)),
@@ -2070,10 +2045,10 @@ class Relationships implements Hook
         string $key,
         string $documentId,
         string $relationId,
-        RelationType $relationType,
+        RelationshipType $relationType,
         bool $twoWay,
         string $twoWayKey,
-        RelationSide $side,
+        RelationshipSide $side,
         ?PreparedCreate $prepared,
     ): void {
         if ($prepared !== null) {
@@ -2096,25 +2071,25 @@ class Relationships implements Hook
         }
 
         switch ($relationType) {
-            case RelationType::OneToOne:
+            case RelationshipType::OneToOne:
                 if ($twoWay) {
                     $related->setAttribute($twoWayKey, $documentId);
                     $this->db->skipRelationships(fn () => $this->db->updateDocument($relatedCollection->getId(), $relationId, $related));
                 }
                 break;
-            case RelationType::OneToMany:
-                if ($side === RelationSide::Parent) {
+            case RelationshipType::OneToMany:
+                if ($side === RelationshipSide::Parent) {
                     $related->setAttribute($twoWayKey, $documentId);
                     $this->db->skipRelationships(fn () => $this->db->updateDocument($relatedCollection->getId(), $relationId, $related));
                 }
                 break;
-            case RelationType::ManyToOne:
-                if ($side === RelationSide::Child) {
+            case RelationshipType::ManyToOne:
+                if ($side === RelationshipSide::Child) {
                     $related->setAttribute($twoWayKey, $documentId);
                     $this->db->skipRelationships(fn () => $this->db->updateDocument($relatedCollection->getId(), $relationId, $related));
                 }
                 break;
-            case RelationType::ManyToMany:
+            case RelationshipType::ManyToMany:
                 if (! $related->isEmpty()) {
                     $this->authorizeLink($relatedCollection, $related);
                 }
@@ -2134,19 +2109,19 @@ class Relationships implements Hook
     /**
      * Whether relating a document by id writes anything; otherwise it only reads the related document.
      */
-    private function writesById(RelationType $relationType, bool $twoWay, RelationSide $side): bool
+    private function writesById(RelationshipType $relationType, bool $twoWay, RelationshipSide $side): bool
     {
         return match ($relationType) {
-            RelationType::OneToOne => $twoWay,
-            RelationType::OneToMany => $side === RelationSide::Parent,
-            RelationType::ManyToOne => $side === RelationSide::Child,
-            RelationType::ManyToMany => true,
+            RelationshipType::OneToOne => $twoWay,
+            RelationshipType::OneToMany => $side === RelationshipSide::Parent,
+            RelationshipType::ManyToOne => $side === RelationshipSide::Child,
+            RelationshipType::ManyToMany => true,
         };
     }
 
-    private function getJunctionCollection(Document $collection, Document $relatedCollection, RelationSide $side): string
+    private function getJunctionCollection(Document $collection, Document $relatedCollection, RelationshipSide $side): string
     {
-        return $side === RelationSide::Parent
+        return $side === RelationshipSide::Parent
             ? '_'.$collection->getSequence().'_'.$relatedCollection->getSequence()
             : '_'.$relatedCollection->getSequence().'_'.$collection->getSequence();
     }
@@ -2218,17 +2193,18 @@ class Relationships implements Hook
     }
 
     /**
-     * @param  array<Document>  $documents
+     * @param  array<Document>  $documents  Documents of $collection
+     * @param  string  $key  The key $relationship is stored under on $collection
      * @param  array<Query>  $queries
      * @return array<Document>
      */
-    private function populateSingleRelationshipBatch(array $documents, RelationshipVO $relationship, array $queries): array
+    private function populateSingleRelationshipBatch(array $documents, Document $collection, string $key, Relationship $relationship, RelationshipSide $side, array $queries): array
     {
-        return match ($relationship->getType()) {
-            RelationType::OneToOne => $this->populateOneToOneRelationshipsBatch($documents, $relationship, $queries),
-            RelationType::OneToMany => $this->populateOneToManyRelationshipsBatch($documents, $relationship, $queries),
-            RelationType::ManyToOne => $this->populateManyToOneRelationshipsBatch($documents, $relationship, $queries),
-            RelationType::ManyToMany => $this->populateManyToManyRelationshipsBatch($documents, $relationship, $queries),
+        return match ($relationship->type) {
+            RelationshipType::OneToOne => $this->populateOneToOneRelationshipsBatch($documents, $key, $relationship, $queries),
+            RelationshipType::OneToMany => $this->populateOneToManyRelationshipsBatch($documents, $key, $relationship, $side, $queries),
+            RelationshipType::ManyToOne => $this->populateManyToOneRelationshipsBatch($documents, $key, $relationship, $side, $queries),
+            RelationshipType::ManyToMany => $this->populateManyToManyRelationshipsBatch($documents, $collection, $key, $relationship, $side, $queries),
         };
     }
 
@@ -2237,10 +2213,9 @@ class Relationships implements Hook
      * @param  array<Query>  $queries
      * @return array<Document>
      */
-    private function populateOneToOneRelationshipsBatch(array $documents, RelationshipVO $relationship, array $queries): array
+    private function populateOneToOneRelationshipsBatch(array $documents, string $key, Relationship $relationship, array $queries): array
     {
-        $key = $relationship->getKey();
-        $relatedCollection = $this->db->getCollection($relationship->getRelatedCollection());
+        $relatedCollection = $this->db->getCollection($relationship->relatedCollection);
 
         $relatedIds = [];
         $documentsByRelatedId = [];
@@ -2315,16 +2290,13 @@ class Relationships implements Hook
      * @param  array<Query>  $queries
      * @return array<Document>
      */
-    private function populateOneToManyRelationshipsBatch(array $documents, RelationshipVO $relationship, array $queries): array
+    private function populateOneToManyRelationshipsBatch(array $documents, string $key, Relationship $relationship, RelationshipSide $side, array $queries): array
     {
-        $key = $relationship->getKey();
-        $twoWay = $relationship->isTwoWay();
-        $twoWayKey = $relationship->getTwoWayKey();
-        $side = $relationship->getSide();
-        $relatedCollection = $this->db->getCollection($relationship->getRelatedCollection());
+        $twoWayKey = $relationship->twoWayKey ?? '';
+        $relatedCollection = $this->db->getCollection($relationship->relatedCollection);
 
-        if ($side === RelationSide::Child) {
-            if (! $twoWay) {
+        if ($side === RelationshipSide::Child) {
+            if (! $relationship->twoWay) {
                 foreach ($documents as $document) {
                     $document->removeAttribute($key);
                 }
@@ -2332,7 +2304,7 @@ class Relationships implements Hook
                 return [];
             }
 
-            return $this->populateOneToOneRelationshipsBatch($documents, $relationship, $queries);
+            return $this->populateOneToOneRelationshipsBatch($documents, $key, $relationship, $queries);
         }
 
         $parentIds = [];
@@ -2400,19 +2372,16 @@ class Relationships implements Hook
      * @param  array<Query>  $queries
      * @return array<Document>
      */
-    private function populateManyToOneRelationshipsBatch(array $documents, RelationshipVO $relationship, array $queries): array
+    private function populateManyToOneRelationshipsBatch(array $documents, string $key, Relationship $relationship, RelationshipSide $side, array $queries): array
     {
-        $key = $relationship->getKey();
-        $twoWay = $relationship->isTwoWay();
-        $twoWayKey = $relationship->getTwoWayKey();
-        $side = $relationship->getSide();
-        $relatedCollection = $this->db->getCollection($relationship->getRelatedCollection());
+        $twoWayKey = $relationship->twoWayKey ?? '';
+        $relatedCollection = $this->db->getCollection($relationship->relatedCollection);
 
-        if ($side === RelationSide::Parent) {
-            return $this->populateOneToOneRelationshipsBatch($documents, $relationship, $queries);
+        if ($side === RelationshipSide::Parent) {
+            return $this->populateOneToOneRelationshipsBatch($documents, $key, $relationship, $queries);
         }
 
-        if (! $twoWay) {
+        if (! $relationship->twoWay) {
             foreach ($documents as $document) {
                 $document->removeAttribute($key);
             }
@@ -2484,16 +2453,12 @@ class Relationships implements Hook
      * @param  array<Query>  $queries
      * @return array<Document>
      */
-    private function populateManyToManyRelationshipsBatch(array $documents, RelationshipVO $relationship, array $queries): array
+    private function populateManyToManyRelationshipsBatch(array $documents, Document $collection, string $key, Relationship $relationship, RelationshipSide $side, array $queries): array
     {
-        $key = $relationship->getKey();
-        $twoWay = $relationship->isTwoWay();
-        $twoWayKey = $relationship->getTwoWayKey();
-        $side = $relationship->getSide();
-        $relatedCollection = $this->db->getCollection($relationship->getRelatedCollection());
-        $collection = $this->db->getCollection($relationship->getSourceCollection());
+        $twoWayKey = $relationship->twoWayKey ?? '';
+        $relatedCollection = $this->db->getCollection($relationship->relatedCollection);
 
-        if (! $twoWay && $side === RelationSide::Child) {
+        if (! $relationship->twoWay && $side === RelationshipSide::Child) {
             return [];
         }
 
@@ -2599,22 +2564,22 @@ class Relationships implements Hook
         Document $relatedCollection,
         Document $document,
         string $key,
-        RelationType $relationType,
+        RelationshipType $relationType,
         bool $twoWay,
         string $twoWayKey,
-        RelationSide $side
+        RelationshipSide $side
     ): void {
         if (
-            $relationType !== RelationType::ManyToOne
-            && $side === RelationSide::Parent
+            $relationType !== RelationshipType::ManyToOne
+            && $side === RelationshipSide::Parent
             && $this->hasRelatedDocument($collection, $relatedCollection, $document, $key, $relationType, $twoWay, $twoWayKey, $side)
         ) {
             throw new RestrictedException('Cannot delete document because it has at least one related document.');
         }
 
         if (
-            $relationType === RelationType::OneToOne
-            && $side === RelationSide::Child
+            $relationType === RelationshipType::OneToOne
+            && $side === RelationshipSide::Child
             && ! $twoWay
         ) {
             $this->db->getAuthorization()->skip(function () use ($document, $relatedCollection, $twoWayKey) {
@@ -2638,8 +2603,8 @@ class Relationships implements Hook
         }
 
         if (
-            $relationType === RelationType::ManyToOne
-            && $side === RelationSide::Child
+            $relationType === RelationshipType::ManyToOne
+            && $side === RelationshipSide::Child
         ) {
             $related = $this->db->getAuthorization()->skip(fn () => $this->db->findOne($relatedCollection->getId(), [
                 Query::select([Document::ID]),
@@ -2652,11 +2617,11 @@ class Relationships implements Hook
         }
     }
 
-    private function hasRelatedDocument(Document $collection, Document $relatedCollection, Document $document, string $key, RelationType $relationType, bool $twoWay, string $twoWayKey, RelationSide $side): bool
+    private function hasRelatedDocument(Document $collection, Document $relatedCollection, Document $document, string $key, RelationshipType $relationType, bool $twoWay, string $twoWayKey, RelationshipSide $side): bool
     {
         $authorization = $this->db->getAuthorization();
 
-        if ($relationType === RelationType::OneToMany) {
+        if ($relationType === RelationshipType::OneToMany) {
             return ! $authorization->skip(fn () => $this->db->findOne($relatedCollection->getId(), [
                 Query::select([Document::ID]),
                 Query::equal($twoWayKey, [$document->getId()]),
@@ -2690,19 +2655,19 @@ class Relationships implements Hook
      *
      * @return list<string>
      */
-    private function findRelatedIds(Document $collection, Document $relatedCollection, Document $document, string $key, RelationType $relationType, bool $twoWay, string $twoWayKey, RelationSide $side): array
+    private function findRelatedIds(Document $collection, Document $relatedCollection, Document $document, string $key, RelationshipType $relationType, bool $twoWay, string $twoWayKey, RelationshipSide $side): array
     {
         return match ($relationType) {
-            RelationType::OneToOne => $side === RelationSide::Parent || $twoWay
+            RelationshipType::OneToOne => $side === RelationshipSide::Parent || $twoWay
                 ? $this->findStoredRelatedIds($collection, $document, $key)
                 : [],
-            RelationType::OneToMany => $side === RelationSide::Parent
+            RelationshipType::OneToMany => $side === RelationshipSide::Parent
                 ? $this->findReferencingIds($relatedCollection, $document, $twoWayKey)
                 : [],
-            RelationType::ManyToOne => $side === RelationSide::Child
+            RelationshipType::ManyToOne => $side === RelationshipSide::Child
                 ? $this->findReferencingIds($relatedCollection, $document, $twoWayKey)
                 : [],
-            RelationType::ManyToMany => $this->findJunctionRelatedIds($collection, $relatedCollection, $document, $key, $twoWayKey, $side),
+            RelationshipType::ManyToMany => $this->findJunctionRelatedIds($collection, $relatedCollection, $document, $key, $twoWayKey, $side),
         };
     }
 
@@ -2733,7 +2698,7 @@ class Relationships implements Hook
     /**
      * @return list<string>
      */
-    private function findJunctionRelatedIds(Document $collection, Document $relatedCollection, Document $document, string $key, string $twoWayKey, RelationSide $side): array
+    private function findJunctionRelatedIds(Document $collection, Document $relatedCollection, Document $document, string $key, string $twoWayKey, RelationshipSide $side): array
     {
         $junctions = $this->db->getAuthorization()->skip(fn () => $this->db->skipRelationships(fn () => $this->db->find(
             $this->getJunctionCollection($collection, $relatedCollection, $side),
@@ -2813,11 +2778,11 @@ class Relationships implements Hook
     /**
      * @return list<Document> The documents the delete wrote, as the write left them, or none unless $report is set
      */
-    private function deleteSetNull(Document $collection, Document $relatedCollection, Document $document, RelationType $relationType, bool $twoWay, string $twoWayKey, RelationSide $side, bool $report): array
+    private function deleteSetNull(Document $collection, Document $relatedCollection, Document $document, RelationshipType $relationType, bool $twoWay, string $twoWayKey, RelationshipSide $side, bool $report): array
     {
         switch ($relationType) {
-            case RelationType::OneToOne:
-                if (! $twoWay && $side === RelationSide::Parent) {
+            case RelationshipType::OneToOne:
+                if (! $twoWay && $side === RelationshipSide::Parent) {
                     return [];
                 }
 
@@ -2842,21 +2807,21 @@ class Relationships implements Hook
 
                 return ! $report || $written === null || $written->isEmpty() ? [] : [$written];
 
-            case RelationType::OneToMany:
-                if ($side === RelationSide::Child) {
+            case RelationshipType::OneToMany:
+                if ($side === RelationshipSide::Child) {
                     return [];
                 }
 
                 return $this->clearReferences($relatedCollection, $document, $twoWayKey, $report);
 
-            case RelationType::ManyToOne:
-                if ($side === RelationSide::Parent) {
+            case RelationshipType::ManyToOne:
+                if ($side === RelationshipSide::Parent) {
                     return [];
                 }
 
                 return $this->clearReferences($relatedCollection, $document, $twoWayKey, $report);
 
-            case RelationType::ManyToMany:
+            case RelationshipType::ManyToMany:
                 $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
                 $junctions = $this->db->find($junction, [
@@ -2873,20 +2838,20 @@ class Relationships implements Hook
         return [];
     }
 
-    private function deleteCascade(Document $collection, Document $relatedCollection, Document $document, string $key, RelationType $relationType, bool $twoWay, string $twoWayKey, RelationSide $side, Document $relationship): void
+    private function deleteCascade(Document $collection, Document $relatedCollection, Document $document, string $key, RelationshipType $relationType, bool $twoWay, string $twoWayKey, RelationshipSide $side, Cascade $cascade): void
     {
         switch ($relationType) {
-            case RelationType::OneToOne:
-            case RelationType::OneToMany:
-            case RelationType::ManyToOne:
+            case RelationshipType::OneToOne:
+            case RelationshipType::OneToMany:
+            case RelationshipType::ManyToOne:
                 $relatedIds = $this->findRelatedIds($collection, $relatedCollection, $document, $key, $relationType, $twoWay, $twoWayKey, $side);
 
                 if ($relatedIds !== []) {
-                    $this->cascade($relationship, fn () => $this->deleteRelatedDocuments($relatedCollection->getId(), $relatedIds));
+                    $this->cascade($cascade, fn () => $this->deleteRelatedDocuments($relatedCollection->getId(), $relatedIds));
                 }
 
                 break;
-            case RelationType::ManyToMany:
+            case RelationshipType::ManyToMany:
                 $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
                 $junctions = $this->db->skipRelationships(fn () => $this->db->find($junction, [
@@ -2899,7 +2864,7 @@ class Relationships implements Hook
                 $relatedIds = [];
                 foreach ($junctions as $junctionDocument) {
                     $junctionIds[] = $junctionDocument->getId();
-                    if ($side === RelationSide::Parent) {
+                    if ($side === RelationshipSide::Parent) {
                         $relatedAttribute = $junctionDocument->getAttribute($key);
                         $relatedId = $relatedAttribute instanceof Document ? $relatedAttribute->getId() : (\is_string($relatedAttribute) ? $relatedAttribute : null);
                         if ($relatedId !== null) {
@@ -2908,7 +2873,7 @@ class Relationships implements Hook
                     }
                 }
 
-                $this->cascade($relationship, function () use ($relatedCollection, $relatedIds, $junction, $junctionIds): void {
+                $this->cascade($cascade, function () use ($relatedCollection, $relatedIds, $junction, $junctionIds): void {
                     $this->deleteRelatedDocuments($relatedCollection->getId(), $relatedIds);
                     $this->deleteRelatedDocuments($junction, $junctionIds);
                 });
@@ -2919,10 +2884,10 @@ class Relationships implements Hook
     /**
      * @param  callable(): mixed  $callback
      */
-    private function cascade(Document $relationship, callable $callback): void
+    private function cascade(Cascade $cascade, callable $callback): void
     {
         $coroutine = $this->coroutine();
-        $this->deleteStacks[$coroutine][] = $relationship;
+        $this->deleteStacks[$coroutine][] = $cascade;
 
         try {
             $callback();
@@ -3087,51 +3052,29 @@ class Relationships implements Hook
         foreach ($pathGroups as $path => $queryGroup) {
             $pathParts = \explode('.', $path);
             $currentCollection = $startCollection;
-            /** @var list<array{key: string, fromCollection: string, toCollection: string, relationType: RelationType, side: RelationSide, twoWayKey: string}> $relationshipChain */
+            /** @var list<array{string, string, Relationship, RelationshipSide}> $relationshipChain Each link's key, the collection it starts from, its relationship and side */
             $relationshipChain = [];
 
             foreach ($pathParts as $relationshipKey) {
-                $collectionDoc = $this->db->silent(fn () => $this->db->getCollection($currentCollection));
-                /** @var array<Document|array<string, mixed>> $attributes */
-                $attributes = $collectionDoc->getAttribute('attributes', []);
-                $relationships = \array_filter(
-                    $attributes,
-                    function (mixed $attr): bool {
-                        if ($attr instanceof Document) {
-                            $type = $attr->getAttribute('type', '');
-                        } else {
-                            $type = $attr['type'] ?? '';
-                        }
-                        return \is_string($type) && ColumnType::tryFrom($type) === ColumnType::Relationship;
-                    }
-                );
+                $definition = $this->db->silent(fn () => $this->db->findCollection($currentCollection));
+                if ($definition === null) {
+                    return null;
+                }
 
-                /** @var array<string, mixed>|null $relationship */
-                $relationship = null;
-                foreach ($relationships as $rel) {
-                    /** @var array<string, mixed> $rel */
-                    if ($rel['key'] === $relationshipKey) {
-                        $relationship = $rel;
+                $link = null;
+                foreach (self::attributes($definition) as $attribute) {
+                    if ($attribute->key === $relationshipKey && $attribute->relationship !== null && $attribute->side !== null) {
+                        $link = [$relationshipKey, $currentCollection, $attribute->relationship, $attribute->side];
                         break;
                     }
                 }
 
-                if (! $relationship) {
+                if ($link === null) {
                     return null;
                 }
 
-                /** @var Document $relationship */
-                $nestedRel = RelationshipVO::fromArray(['collection' => $currentCollection] + $relationship->getArrayCopy());
-                $relationshipChain[] = [
-                    'key' => $relationshipKey,
-                    'fromCollection' => $currentCollection,
-                    'toCollection' => $nestedRel->getRelatedCollection(),
-                    'relationType' => $nestedRel->getType(),
-                    'side' => $nestedRel->getSide(),
-                    'twoWayKey' => $nestedRel->getTwoWayKey(),
-                ];
-
-                $currentCollection = $nestedRel->getRelatedCollection();
+                $relationshipChain[] = $link;
+                $currentCollection = $link[2]->relatedCollection;
             }
 
             $leafQueries = [];
@@ -3156,22 +3099,19 @@ class Relationships implements Hook
             }
 
             for ($i = \count($relationshipChain) - 1; $i >= 0; $i--) {
-                $link = $relationshipChain[$i];
-                $relationType = $link['relationType'];
-                $side = $link['side'];
-                $linkKey = $link['key'];
-                $linkFromCollection = $link['fromCollection'];
-                $linkToCollection = $link['toCollection'];
-                $linkTwoWayKey = $link['twoWayKey'];
+                [$linkKey, $linkFromCollection, $linkRelationship, $side] = $relationshipChain[$i];
+                $relationType = $linkRelationship->type;
+                $linkToCollection = $linkRelationship->relatedCollection;
+                $linkTwoWayKey = $linkRelationship->twoWayKey ?? '';
 
                 $needsReverseLookup = (
-                    ($relationType === RelationType::OneToMany && $side === RelationSide::Parent) ||
-                    ($relationType === RelationType::ManyToOne && $side === RelationSide::Child) ||
-                    ($relationType === RelationType::ManyToMany)
+                    ($relationType === RelationshipType::OneToMany && $side === RelationshipSide::Parent) ||
+                    ($relationType === RelationshipType::ManyToOne && $side === RelationshipSide::Child) ||
+                    ($relationType === RelationshipType::ManyToMany)
                 );
 
                 if ($needsReverseLookup) {
-                    if ($relationType === RelationType::ManyToMany) {
+                    if ($relationType === RelationshipType::ManyToMany) {
                         $fromCollectionDoc = $this->db->silent(fn () => $this->db->getCollection($linkFromCollection));
                         $toCollectionDoc = $this->db->silent(fn () => $this->db->getCollection($linkToCollection));
                         $junction = $this->getJunctionCollection($fromCollectionDoc, $toCollectionDoc, $side);
@@ -3251,15 +3191,20 @@ class Relationships implements Hook
      * @return array{attribute: string, ids: string[]}|null
      */
     private function resolveRelationshipGroupToIds(
-        RelationshipVO $relationship,
+        Attribute $attribute,
         array $relatedQueries,
         ?Document $collection = null,
     ): ?array {
-        $relatedCollection = $relationship->getRelatedCollection();
-        $relationType = $relationship->getType();
-        $side = $relationship->getSide();
-        $twoWayKey = $relationship->getTwoWayKey();
-        $relationshipKey = $relationship->getKey();
+        $relationship = $attribute->relationship;
+        $side = $attribute->side;
+        if ($relationship === null || $side === null) {
+            return null;
+        }
+
+        $relatedCollection = $relationship->relatedCollection;
+        $relationType = $relationship->type;
+        $twoWayKey = $relationship->twoWayKey ?? '';
+        $relationshipKey = $attribute->key;
 
         $hasNestedPaths = false;
         foreach ($relatedQueries as $relatedQuery) {
@@ -3285,12 +3230,12 @@ class Relationships implements Hook
         }
 
         $needsParentResolution = (
-            ($relationType === RelationType::OneToMany && $side === RelationSide::Parent) ||
-            ($relationType === RelationType::ManyToOne && $side === RelationSide::Child) ||
-            ($relationType === RelationType::ManyToMany)
+            ($relationType === RelationshipType::OneToMany && $side === RelationshipSide::Parent) ||
+            ($relationType === RelationshipType::ManyToOne && $side === RelationshipSide::Child) ||
+            ($relationType === RelationshipType::ManyToMany)
         );
 
-        if ($relationType === RelationType::ManyToMany && $needsParentResolution && $collection !== null) {
+        if ($relationType === RelationshipType::ManyToMany && $needsParentResolution && $collection !== null) {
             $matchingDocs = $this->findRelated($relatedCollection, $relatedQueries, $pathIds, [
                 Query::select([Document::ID]),
                 Query::limit(PHP_INT_MAX),

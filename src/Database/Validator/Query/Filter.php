@@ -6,8 +6,6 @@ use DateTime;
 use Utopia\Database\Attribute;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
-use Utopia\Database\RelationSide;
-use Utopia\Database\RelationType;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
 use Utopia\Database\Validator\ObjectPath;
@@ -358,52 +356,10 @@ class Filter extends Base
             }
         }
 
-        if ($attributeType === ColumnType::Relationship) {
-            /**
-             * We can not disable relationship query since we have logic that use it,
-             * so instead we validate against the relation type
-             */
-            $options = $attributeSchema['options'] ?? [];
+        if ($attributeType === ColumnType::Relationship && \in_array(false, JoinedCollection::columns([new Document($attributeSchema)]), true)) {
+            $this->message = 'Cannot query on virtual relationship attribute';
 
-            if ($options instanceof Document) {
-                $options = $options->getArrayCopy();
-            }
-
-            /** @var array<string, mixed> $options */
-
-            /** @var string $relationTypeStr */
-            $relationTypeStr = $options['relationType'] ?? '';
-            /** @var bool $twoWay */
-            $twoWay = $options['twoWay'] ?? false;
-            /** @var string $sideStr */
-            $sideStr = $options['side'] ?? '';
-
-            $relationType = $relationTypeStr !== '' ? RelationType::from($relationTypeStr) : null;
-            $side = $sideStr !== '' ? RelationSide::from($sideStr) : null;
-
-            if ($relationType === RelationType::OneToOne && $twoWay === false && $side === RelationSide::Child) {
-                $this->message = 'Cannot query on virtual relationship attribute';
-
-                return false;
-            }
-
-            if ($relationType === RelationType::OneToMany && $side === RelationSide::Parent) {
-                $this->message = 'Cannot query on virtual relationship attribute';
-
-                return false;
-            }
-
-            if ($relationType === RelationType::ManyToOne && $side === RelationSide::Child) {
-                $this->message = 'Cannot query on virtual relationship attribute';
-
-                return false;
-            }
-
-            if ($relationType === RelationType::ManyToMany) {
-                $this->message = 'Cannot query on virtual relationship attribute';
-
-                return false;
-            }
+            return false;
         }
 
         /** @var bool $array */

@@ -3,10 +3,10 @@
 namespace Utopia\Database\Validator\Query;
 
 use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
 use Utopia\Database\Document;
-use Utopia\Database\Relationship;
-use Utopia\Database\RelationSide;
-use Utopia\Database\RelationType;
+use Utopia\Database\RelationshipSide;
+use Utopia\Database\RelationshipType;
 use Utopia\Query\Schema\ColumnType;
 
 /**
@@ -15,6 +15,8 @@ use Utopia\Query\Schema\ColumnType;
  */
 final readonly class JoinedCollection
 {
+    private const string ENCRYPT = 'encrypt';
+
     /**
      * @param  string  $alias  The alias the join declares, empty when it declares none
      * @param  array<string, true>  $attributes  The attributes the collection declares, relationships left out
@@ -40,30 +42,43 @@ final readonly class JoinedCollection
      */
     public static function of(string $alias, Document $collection): self
     {
-        /** @var array<Attribute|Document> $definitions */
-        $definitions = $collection->getAttribute('attributes', []);
+        $definitions = $collection instanceof Collection
+            ? $collection->attributes()
+            : Collection::fromArray($collection->getArrayCopy())->attributes();
 
         $attributes = [];
+        $numeric = [];
         $encrypted = [];
+        $columns = [];
         $schema = [];
         foreach ($definitions as $definition) {
-            if (! Attribute::isRelationship($definition)) {
-                $attributes[$definition->getId()] = true;
-                $schema[$definition->getId()] = self::definition($definition);
+            $key = $definition->key;
+            if ($key === '') {
+                continue;
             }
 
-            $filters = $definition->getAttribute('filters', []);
-            if (\is_array($filters) && \in_array('encrypt', $filters, true)) {
-                $encrypted[$definition->getId()] = true;
+            $columns[$key] = self::storesColumn($definition);
+
+            if ($definition->relationship === null) {
+                $attributes[$key] = true;
+                $schema[$key] = ['type' => $definition->type] + $definition->toDocument()->getArrayCopy();
+            }
+
+            if (! $definition->array && $definition->isNumeric()) {
+                $numeric[$key] = $definition->type;
+            }
+
+            if (\in_array(self::ENCRYPT, $definition->filters, true)) {
+                $encrypted[$key] = true;
             }
         }
 
         return new self(
             $alias,
             $attributes,
-            Aggregate::numericTypes($definitions),
+            $numeric,
             $encrypted,
-            self::columns($definitions),
+            $columns,
             $collection->getId(),
             $schema,
         );
@@ -79,19 +94,6 @@ final readonly class JoinedCollection
     }
 
     /**
-     * @return array<string, mixed>
-     */
-    private static function definition(Document $attribute): array
-    {
-        $copy = $attribute->getArrayCopy();
-        if (isset($copy['type']) && \is_string($copy['type'])) {
-            $copy['type'] = Attribute::tryNormalizeType($copy['type']) ?? $copy['type'];
-        }
-
-        return $copy;
-    }
-
-    /**
      * Every attribute of a collection, and whether its table holds a column for it: every attribute
      * but a relationship does, and a relationship does on the side that stores the related
      * document's id.
@@ -103,24 +105,39 @@ final readonly class JoinedCollection
     {
         $columns = [];
         foreach ($attributes as $attribute) {
-            $key = $attribute->getAttribute('key', $attribute->getId());
-            if (! \is_string($key) || $key === '') {
+            if ($attribute instanceof Document) {
+                $key = $attribute->getAttribute('key', $attribute->getId());
+                if (! \is_string($key) || $key === '') {
+                    continue;
+                }
+
+                $columns[$key] = ! Attribute::isRelationship($attribute) || self::storesColumn(Attribute::fromDocument($attribute));
+
                 continue;
             }
 
-            $columns[$key] = ! Attribute::isRelationship($attribute) || self::storesRelatedId(Relationship::fromDocument('', $attribute));
+            if ($attribute->key !== '') {
+                $columns[$attribute->key] = self::storesColumn($attribute);
+            }
         }
 
         return $columns;
     }
 
-    private static function storesRelatedId(Relationship $relationship): bool
+    private static function storesColumn(Attribute $attribute): bool
     {
-        return match ($relationship->getType()) {
-            RelationType::OneToOne => $relationship->getSide() === RelationSide::Parent || $relationship->isTwoWay(),
-            RelationType::OneToMany => $relationship->getSide() === RelationSide::Child,
-            RelationType::ManyToOne => $relationship->getSide() === RelationSide::Parent,
-            RelationType::ManyToMany => false,
+        $relationship = $attribute->relationship;
+        if ($relationship === null) {
+            return true;
+        }
+
+        $parent = $attribute->side === RelationshipSide::Parent;
+
+        return match ($relationship->type) {
+            RelationshipType::OneToOne => $parent || $relationship->twoWay,
+            RelationshipType::OneToMany => ! $parent,
+            RelationshipType::ManyToOne => $parent,
+            RelationshipType::ManyToMany => false,
         };
     }
 }

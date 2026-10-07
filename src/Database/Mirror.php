@@ -960,8 +960,7 @@ class Mirror extends Database
 
         try {
             $this->inOrder(function () use ($destination, $collection, $key, $update, $result): void {
-                $document = $result->toDocument();
-                $filtered = $document;
+                $filtered = $result->toDocument();
                 foreach ($this->writeFilters as $filter) {
                     $filtered = $filter->beforeUpdateAttribute(
                         source: $this->source,
@@ -978,7 +977,7 @@ class Mirror extends Database
                 $destination->updateAttribute(
                     $collection,
                     $key,
-                    $filtered->getArrayCopy() === $document->getArrayCopy() ? $update : self::fullUpdate(Attribute::fromDocument($filtered)),
+                    self::filteredUpdate($update, $result, Attribute::fromDocument($filtered)),
                 );
             });
         } catch (Throwable $error) {
@@ -1150,20 +1149,24 @@ class Mirror extends Database
     }
 
     /**
-     * An update that sets every field to the attribute's, for a destination whose write filters changed it.
+     * The update the destination applies: every field the source update set or a write filter changed, at the
+     * filtered value, and nothing else, so an unchanged column is not rewritten.
      */
-    private static function fullUpdate(Attribute $attribute): AttributeUpdate
+    private static function filteredUpdate(AttributeUpdate $update, Attribute $source, Attribute $filtered): AttributeUpdate
     {
+        $formatChanged = $filtered->format?->name !== $source->format?->name
+            || $filtered->format?->options !== $source->format?->options;
+
         return new AttributeUpdate(
-            type: $attribute->type,
-            size: $attribute->size,
-            required: $attribute->required,
-            default: $attribute->default,
-            signed: $attribute->signed,
-            array: $attribute->array,
-            format: $attribute->format,
-            filters: $attribute->filters,
-            key: $attribute->key,
+            type: $update->type !== null || $filtered->type !== $source->type ? $filtered->type : null,
+            size: $update->size !== null || $filtered->size !== $source->size ? $filtered->size : null,
+            required: $update->required !== null || $filtered->required !== $source->required ? $filtered->required : null,
+            default: $update->changesDefault() || $filtered->default !== $source->default ? $filtered->default : Unchanged::Value,
+            signed: $update->signed !== null || $filtered->signed !== $source->signed ? $filtered->signed : null,
+            array: $update->array !== null || $filtered->array !== $source->array ? $filtered->array : null,
+            format: $update->changesFormat() || $formatChanged ? $filtered->format : Unchanged::Value,
+            filters: $update->filters !== null || $filtered->filters !== $source->filters ? $filtered->filters : null,
+            key: $update->key !== null || $filtered->key !== $source->key ? $filtered->key : null,
         );
     }
 

@@ -94,7 +94,7 @@ trait Indexes
         }
 
         $renamed = $indexes[$position]->withKey($new);
-        $indexes[$position] = $renamed;
+        \array_splice($indexes, $position, 1, [$renamed]);
         $this->writeIndexList($definition, $indexes);
 
         $renamedInSchema = false;

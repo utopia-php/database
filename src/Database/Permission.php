@@ -16,7 +16,7 @@ class Permission
      * @var array<string, array<string>>
      */
     private static array $aggregates = [
-        'write' => [
+        PermissionType::Write->value => [
             PermissionType::Create->value,
             PermissionType::Update->value,
             PermissionType::Delete->value,
@@ -214,7 +214,7 @@ class Permission
     public static function read(Role $role): string
     {
         $permission = new self(
-            'read',
+            PermissionType::Read->value,
             $role->getRole(),
             $role->getIdentifier(),
             $role->getDimension()
@@ -232,7 +232,7 @@ class Permission
     public static function create(Role $role): string
     {
         $permission = new self(
-            'create',
+            PermissionType::Create->value,
             $role->getRole(),
             $role->getIdentifier(),
             $role->getDimension()
@@ -250,7 +250,7 @@ class Permission
     public static function update(Role $role): string
     {
         $permission = new self(
-            'update',
+            PermissionType::Update->value,
             $role->getRole(),
             $role->getIdentifier(),
             $role->getDimension()
@@ -268,7 +268,7 @@ class Permission
     public static function delete(Role $role): string
     {
         $permission = new self(
-            'delete',
+            PermissionType::Delete->value,
             $role->getRole(),
             $role->getIdentifier(),
             $role->getDimension()
@@ -286,7 +286,7 @@ class Permission
     public static function write(Role $role): string
     {
         $permission = new self(
-            'write',
+            PermissionType::Write->value,
             $role->getRole(),
             $role->getIdentifier(),
             $role->getDimension()

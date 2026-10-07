@@ -13,7 +13,7 @@ class PartialStructure extends Structure
     /**
      * @param  mixed  $document
      */
-    public function isValid($document): bool
+    public function isValid(mixed $document): bool
     {
         if (! $document instanceof Document) {
             $this->message = 'Value must be an instance of Document';

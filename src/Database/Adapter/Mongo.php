@@ -3098,9 +3098,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         return $document;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     public function castAfter(Document $collection, array $documents): array
     {
         $casts = $this->getReadCasts($collection);

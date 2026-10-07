@@ -49,7 +49,7 @@ class Permissions extends Roles
      *
      * @param  mixed  $permissions
      */
-    public function isValid($permissions): bool
+    public function isValid(mixed $permissions): bool
     {
         if (! \is_array($permissions)) {
             $this->message = 'Permissions must be an array of strings.';

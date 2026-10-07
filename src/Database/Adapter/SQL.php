@@ -2,6 +2,8 @@
 
 namespace Utopia\Database\Adapter;
 
+use Utopia\Database\Adapter\SQL\JoinAlias;
+use Utopia\Database\Adapter\SQL\Expression;
 use Exception;
 use PDO;
 use PDOException;
@@ -248,9 +250,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         $this->inTransaction = 0;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     public function startTransaction(): bool
     {
         try {
@@ -288,9 +287,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         return true;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     public function commitTransaction(): bool
     {
         if ($this->inTransaction === 0) {
@@ -323,9 +319,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         return $result;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     public function rollbackTransaction(): bool
     {
         if ($this->inTransaction === 0) {
@@ -1135,8 +1128,8 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         foreach ($operators as $attribute => $operator) {
             $column = $this->filter($attribute);
             /** @var Operator $operator */
-            $opResult = $this->getOperatorBuilderExpression($column, $operator);
-            $builder->setRaw($column, $opResult['expression'], $opResult['bindings']);
+            $expression = $this->getOperatorBuilderExpression($column, $operator);
+            $builder->setRaw($column, $expression->sql, $expression->bindings);
         }
 
         // WHERE _id IN (sequence values)
@@ -1739,7 +1732,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                     $resolveInternalKey,
                     nullable: $hasJoins,
                 );
-                $builder->whereRaw($vectorCursor['expression'], $vectorCursor['bindings']);
+                $builder->whereRaw($vectorCursor->sql, $vectorCursor->bindings);
             }
 
             if ($vectorDistance === null || $hasDistinct) {
@@ -1756,18 +1749,18 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
             // Vector ordering (comes first for similarity search)
             if ($vectorDistance !== null && ! $hasAggregation && ! $hasDistinct) {
-                $vectorOrder = $vectorDistance['expression'];
+                $vectorOrder = $vectorDistance->sql;
                 if (! empty($cursor) && $cursorDirection === CursorDirection::Before) {
                     $vectorOrder .= ' DESC';
                 }
-                $builder->orderByRaw($vectorOrder, $vectorDistance['bindings']);
+                $builder->orderByRaw($vectorOrder, $vectorDistance->bindings);
 
                 if (! $hasSelectionProjection) {
                     $builder->select(['*']);
                 }
                 $builder->selectRaw(
-                    $this->getSqlReadableDistance($vectorDistance['expression']).' AS '.$this->quote(Storage::DISTANCE),
-                    $vectorDistance['bindings']
+                    $this->getSqlReadableDistance($vectorDistance->sql).' AS '.$this->quote(Storage::DISTANCE),
+                    $vectorDistance->bindings
                 );
             }
 
@@ -2099,7 +2092,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
-     * @param  list<array{table: string, alias: string}>  $joinTablePrefixes
+     * @param  list<JoinAlias>  $joinTablePrefixes
      */
     private function qualifySumSelect(string $attribute, array $joinTablePrefixes, Document $collection): string
     {
@@ -3796,7 +3789,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 if (isset($operators[$column])) {
                     $filteredColumn = $this->filter($column);
                     $expression = $this->getOperatorUpsertExpression($filteredColumn, $operators[$column]);
-                    $builder->conflictSetRaw($column, $expression['expression'], $expression['bindings']);
+                    $builder->conflictSetRaw($column, $expression->sql, $expression->bindings);
                 } elseif ($this->sharedTables) {
                     $builder->conflictSetRaw($column, $this->getConflictTenantExpression($column));
                 }
@@ -3862,7 +3855,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
     /**
      * @param  array<BaseQuery>  $queries
-     * @param  list<array{table: string, alias: string}>  $joinTablePrefixes
+     * @param  list<JoinAlias>  $joinTablePrefixes
      */
     private function remapDottedQueryAttributes(array $queries, array $joinTablePrefixes, Document $collection): void
     {
@@ -4022,7 +4015,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * joined table's internal columns are returned only when a select names them or when the read orders by
      * them, so that every row it returns can be passed back as its cursor.
      *
-     * @param  list<array{table: string, alias: string}>  $joinTablePrefixes
+     * @param  list<JoinAlias>  $joinTablePrefixes
      * @param  array<string>  $additions  Selections next to `*` and order attributes; those under a join alias are projected too
      */
     private function applyJoinProjection(SQLBuilder $builder, Document $collection, array $joinTablePrefixes, string $alias, array $additions = []): void
@@ -4052,7 +4045,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * What a read without a select returns under each join alias: the joined collection's `$id` and
      * the attributes the Database layer handed over for it.
      *
-     * @param  list<array{table: string, alias: string}>  $joinTablePrefixes
+     * @param  list<JoinAlias>  $joinTablePrefixes
      * @return array<string, list<string>>
      */
     private function joinSelections(Document $collection, array $joinTablePrefixes): array
@@ -4060,13 +4053,13 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         $joinAttributes = $collection->getAttribute(Database::JOIN_ATTRIBUTES, []);
         $selections = [];
         foreach ($joinTablePrefixes as $join) {
-            $selections[$join['alias']] ??= [];
-            $selections[$join['alias']][] = $join['alias'].'.'.Document::ID;
+            $selections[$join->alias] ??= [];
+            $selections[$join->alias][] = $join->alias.'.'.Document::ID;
 
-            $attributes = \is_array($joinAttributes) ? ($joinAttributes[$join['table']] ?? []) : [];
+            $attributes = \is_array($joinAttributes) ? ($joinAttributes[$join->table] ?? []) : [];
             foreach (\is_array($attributes) ? $attributes : [] as $attribute) {
                 if (\is_string($attribute) && $attribute !== '') {
-                    $selections[$join['alias']][] = $join['alias'].'.'.$attribute;
+                    $selections[$join->alias][] = $join->alias.'.'.$attribute;
                 }
             }
         }
@@ -4078,7 +4071,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * What `alias.*` selects under each join alias: what a read without a select returns there, and the joined
      * collection's internal attributes a direct read of it returns.
      *
-     * @param  list<array{table: string, alias: string}>  $joinTablePrefixes
+     * @param  list<JoinAlias>  $joinTablePrefixes
      * @return array<string, list<string>>
      */
     private function joinWildcardSelections(Document $collection, array $joinTablePrefixes): array
@@ -4265,7 +4258,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
     /**
      * @param  array<BaseQuery>  $queries
-     * @return list<array{table: string, alias: string}>
+     * @return list<JoinAlias>
      *
      * @throws QueryException
      */
@@ -4287,7 +4280,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 $query->setValues($this->remapJoinOnQueries($query, Query::DEFAULT_ALIAS, $joinAlias));
             }
 
-            $joinTablePrefixes[] = ['table' => $joinTable, 'alias' => $joinAlias];
+            $joinTablePrefixes[] = new JoinAlias($joinTable, $joinAlias);
         }
 
         return $joinTablePrefixes;
@@ -4578,7 +4571,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
     /**
      * @param  array<BaseQuery>  $queries
-     * @param  list<array{table: string, alias: string}>  $joinTablePrefixes
+     * @param  list<JoinAlias>  $joinTablePrefixes
      * @param  array<Query>  $adapterFilterQueries
      * @param  array<string>  $roles
      * @param  array<string>  $orderAttributes  The attributes the read orders by
@@ -4642,8 +4635,8 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             $joinAttributes = $collection->getAttribute(Database::JOIN_ATTRIBUTES, []);
             $declared = [];
             foreach ($joinTablePrefixes as $join) {
-                $keys = \is_array($joinAttributes) ? ($joinAttributes[$join['table']] ?? null) : null;
-                $declared[$join['alias']] = \is_array($keys) ? \array_flip(\array_filter($keys, \is_string(...))) : null;
+                $keys = \is_array($joinAttributes) ? ($joinAttributes[$join->table] ?? null) : null;
+                $declared[$join->alias] = \is_array($keys) ? \array_flip(\array_filter($keys, \is_string(...))) : null;
             }
 
             $qualify = function (string $attribute) use ($mainAttributes, $declared): string {
@@ -4757,14 +4750,14 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
         foreach ($adapterFilters as $filter) {
             if ($filter !== null) {
-                $builder->whereRaw($filter['expression'], $filter['bindings']);
+                $builder->whereRaw($filter->sql, $filter->bindings);
             }
         }
     }
 
     /**
      * @param  array<BaseQuery>  $queries
-     * @param  list<array{table: string, alias: string}>  $joinTablePrefixes
+     * @param  list<JoinAlias>  $joinTablePrefixes
      * @param  array<Query>  $adapterFilterQueries
      * @param  array<string>  $roles
      */
@@ -4787,7 +4780,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         foreach ($adapterFilterQueries as $query) {
             $compiled = $this->compileAdapterFilter($query, $name, $alias, $joinTablePrefixes);
             if ($compiled !== null) {
-                $builder->whereRaw($compiled['expression'], $compiled['bindings']);
+                $builder->whereRaw($compiled->sql, $compiled->bindings);
             }
         }
 
@@ -4798,7 +4791,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             $tenantFilter = new Tenant\Filter($this->currentTenant(), quoteCharacter: $this->getIdentifierQuote());
             $tenantConditions = [];
             foreach ($joinTablePrefixes as $join) {
-                $tenantConditions[$join['alias']] = $tenantFilter->joined($join['alias']);
+                $tenantConditions[$join->alias] = $tenantFilter->joined($join->alias);
             }
             $builder->addHook(new Join\OuterChain($chain, $tenantConditions, $this->getIdentifierQuote()));
         }
@@ -4826,24 +4819,24 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             $joinDocumentSecurity = \is_array($joinDocumentSecurity) ? $joinDocumentSecurity : [];
 
             foreach ($joinTablePrefixes as $join) {
-                if ($this->joinDocumentSecurityEnabled($joinDocumentSecurity, $join['table']) === false) {
+                if ($this->joinDocumentSecurityEnabled($joinDocumentSecurity, $join->table) === false) {
                     continue;
                 }
 
                 $permissionHook = $this->newJoinPermissionHook(
-                    $this->filter($join['table']),
+                    $this->filter($join->table),
                     $roles,
                     $forPermission->value,
-                    $join['alias'].'.'.Storage::UID,
+                    $join->alias.'.'.Storage::UID,
                     \count($joinTablePrefixes),
-                    $chain->type($join['alias']),
+                    $chain->type($join->alias),
                 );
                 if ($preserving) {
-                    $permissionConditions[$join['alias']] = $permissionHook->filter($join['alias']);
+                    $permissionConditions[$join->alias] = $permissionHook->filter($join->alias);
                 }
                 $builder->addHook(new Permission\Join(
                     $permissionHook,
-                    $join['alias'],
+                    $join->alias,
                     $this->getIdentifierQuote(),
                     $preserving,
                 ));
@@ -4976,7 +4969,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     /**
      * @param  array<string>  $orderAttributes
      * @param  array<OrderDirection>  $orderTypes
-     * @param  list<array{table: string, alias: string}>  $joinTablePrefixes
+     * @param  list<JoinAlias>  $joinTablePrefixes
      */
     private function applyFullOuterJoinOrderProjection(
         SQLBuilder $builder,
@@ -5041,7 +5034,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * and page run over it through the projection and fetch a native full outer join goes through.
      *
      * @param  array<BaseQuery>  $queries  With the join columns remapJoinQueries() qualified
-     * @param  list<array{table: string, alias: string}>  $joinTablePrefixes
+     * @param  list<JoinAlias>  $joinTablePrefixes
      * @param  array<Query>  $adapterFilterQueries
      * @param  array<string>  $roles
      * @param  array<string>  $orderAttributes
@@ -5504,7 +5497,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      *
      * @param  array<BaseQuery>  $queries
      * @param  array<Query>  $adapterFilterQueries
-     * @param  list<array{table: string, alias: string}>  $joinTablePrefixes
+     * @param  list<JoinAlias>  $joinTablePrefixes
      * @param  array<string>  $orderAttributes
      * @param  array<OrderDirection>  $orderTypes
      * @param  array<string, mixed>  $cursor
@@ -5927,7 +5920,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      *
      * @param  array<string>  $orderAttributes
      * @param  array<string, mixed>  $cursor
-     * @param  list<array{table: string, alias: string}>  $joinTablePrefixes
+     * @param  list<JoinAlias>  $joinTablePrefixes
      * @return array{array<string>, array<string, mixed>}
      *
      * @throws QueryException
@@ -5942,10 +5935,10 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         $joinAttributes = $collection->getAttribute(Database::JOIN_ATTRIBUTES, []);
         $declared = [];
         foreach ($joinTablePrefixes as $join) {
-            $keys = \is_array($joinAttributes) ? ($joinAttributes[$join['table']] ?? []) : [];
+            $keys = \is_array($joinAttributes) ? ($joinAttributes[$join->table] ?? []) : [];
             foreach (\is_array($keys) ? $keys : [] as $key) {
                 if (\is_string($key)) {
-                    $declared[$key][] = $join['alias'];
+                    $declared[$key][] = $join->alias;
                 }
             }
         }
@@ -6259,11 +6252,10 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      *
      * @param  string  $column  The unquoted column name
      * @param  Operator  $operator  The operator to convert
-     * @return array{expression: string, bindings: list<mixed>} The expression and binding values
      *
      * @throws DatabaseException
      */
-    protected function getOperatorBuilderExpression(string $column, Operator $operator): array
+    protected function getOperatorBuilderExpression(string $column, Operator $operator): Expression
     {
         $bindIndex = 0;
         $fullExpression = $this->getOperatorSql($column, $operator, $bindIndex);
@@ -6411,7 +6403,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             $positionalBindings[] = $namedBindings[$r['key']];
         }
 
-        return ['expression' => $result, 'bindings' => $positionalBindings];
+        return new Expression($result, $positionalBindings);
     }
 
     /**
@@ -6423,9 +6415,8 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      *
      * @param  string  $column  The unquoted, filtered column name
      * @param  Operator  $operator  The operator to convert
-     * @return array{expression: string, bindings: list<mixed>}
      */
-    protected function getOperatorUpsertExpression(string $column, Operator $operator): array
+    protected function getOperatorUpsertExpression(string $column, Operator $operator): Expression
     {
         return $this->getOperatorBuilderExpression($column, $operator);
     }
@@ -6677,23 +6668,20 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * should override this to return the expression string with `?` placeholders
      * and the matching binding values.
      *
-     * @return array{expression: string, bindings: list<mixed>}|null
      */
-    protected function getVectorOrderRaw(Query $query, string $alias): ?array
+    protected function getVectorOrderRaw(Query $query, string $alias): ?Expression
     {
         return null;
     }
 
     /**
-     * @param array{expression: string, bindings: list<mixed>} $vector
      * @param list<string> $orderAttributes
      * @param list<OrderDirection> $orderTypes
      * @param array<string, mixed> $cursor
      * @param callable(string): string $resolveInternalKey
-     * @return array{expression: string, bindings: list<mixed>}
      */
     private function getVectorCursorCondition(
-        array $vector,
+        Expression $vector,
         float $distance,
         array $orderAttributes,
         array $orderTypes,
@@ -6702,12 +6690,12 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         string $alias,
         callable $resolveInternalKey,
         bool $nullable = false,
-    ): array {
+    ): Expression {
         $distance = \json_encode($distance, JSON_THROW_ON_ERROR);
         $distanceOperator = $cursorDirection === CursorDirection::Before ? '<' : '>';
-        $clauses = ["({$vector['expression']}) {$distanceOperator} ?"];
+        $clauses = ["({$vector->sql}) {$distanceOperator} ?"];
         $bindings = [];
-        \array_push($bindings, ...$vector['bindings']);
+        \array_push($bindings, ...$vector->bindings);
         $bindings[] = $distance;
 
         foreach ($orderAttributes as $index => $attribute) {
@@ -6715,9 +6703,9 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 throw new QueryException("Vector cursor is missing order attribute '{$attribute}'");
             }
 
-            $parts = ["({$vector['expression']}) = ?"];
+            $parts = ["({$vector->sql}) = ?"];
             $clauseBindings = [];
-            \array_push($clauseBindings, ...$vector['bindings']);
+            \array_push($clauseBindings, ...$vector->bindings);
             $clauseBindings[] = $distance;
 
             for ($previous = 0; $previous < $index; $previous++) {
@@ -6760,10 +6748,10 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             \array_push($bindings, ...$clauseBindings);
         }
 
-        return [
-            'expression' => '('.\implode(' OR ', $clauses).')',
-            'bindings' => $bindings,
-        ];
+        return new Expression(
+            '('.\implode(' OR ', $clauses).')',
+            $bindings,
+        );
     }
 
     /**
@@ -6849,10 +6837,9 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * positional bindings. Called for queries flagged by
      * {@see isAdapterFilterQuery()}. Returning null skips emission.
      *
-     * @param  list<array{table: string, alias: string}>  $joins
-     * @return array{expression: string, bindings: list<mixed>}|null
+     * @param  list<JoinAlias>  $joins
      */
-    protected function compileAdapterFilter(Query $query, string $collection, string $alias, array $joins = []): ?array
+    protected function compileAdapterFilter(Query $query, string $collection, string $alias, array $joins = []): ?Expression
     {
         return null;
     }

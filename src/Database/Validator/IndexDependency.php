@@ -46,7 +46,7 @@ class IndexDependency extends Validator
      *
      * @param  Attribute|Document  $value
      */
-    public function isValid($value): bool
+    public function isValid(mixed $value): bool
     {
         if (! $this->castIndexSupport) {
             return true;

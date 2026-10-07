@@ -485,7 +485,7 @@ class Filter extends Base
      *
      * @param  Query  $value
      */
-    public function isValid($value): bool
+    public function isValid(mixed $value): bool
     {
         $method = $value->getMethod();
         $attribute = $value->getAttribute();

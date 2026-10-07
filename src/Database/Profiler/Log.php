@@ -2,7 +2,7 @@
 
 namespace Utopia\Database\Profiler;
 
-readonly class Log
+final readonly class Log
 {
     /**
      * @param  array<mixed>  $bindings

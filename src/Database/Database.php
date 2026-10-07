@@ -61,7 +61,6 @@ class Database
     use Trait\Relationships;
     use Trait\Transactions;
 
-    // Max limits
     public const MAX_INT = 2147483647;
 
     public const MAX_BIG_INT = PHP_INT_MAX;
@@ -76,12 +75,12 @@ class Database
 
     public const MAX_UID_DEFAULT_LENGTH = 36;
 
-    // Maximum byte capacity for TEXT
     public const MAX_TEXT_BYTES = 65535;
+
     public const MAX_MEDIUMTEXT_BYTES = 16777215;
+
     public const MAX_LONGTEXT_BYTES = 4294967295;
 
-    // Min limits
     public const MIN_INT = -2147483648;
 
     // Global SRID for geographic coordinates (WGS84)
@@ -95,11 +94,9 @@ class Database
 
     public const string METADATA = '_metadata';
 
-    // Lengths
     public const LENGTH_KEY = 255;
 
-    // Cache
-    public const TTL = 60 * 60 * 24; // 24 hours
+    public const TTL = 60 * 60 * 24;
 
     private const CACHE_EMPTY_MARKER = '$empty';
 
@@ -139,8 +136,8 @@ class Database
      * @var list<string>
      */
     public const array DEFAULT_FILTERS = [
-        'json',
-        'datetime',
+        Filter::Json->value,
+        Filter::Datetime->value,
         ColumnType::Point->value,
         ColumnType::Linestring->value,
         ColumnType::Polygon->value,
@@ -336,7 +333,7 @@ class Database
         self::$defaultFiltersRegistered = true;
 
         self::addFilter(
-            'json',
+            Filter::Json->value,
             /**
              * @return mixed
              */
@@ -383,7 +380,7 @@ class Database
         );
 
         self::addFilter(
-            'datetime',
+            Filter::Datetime->value,
             /**
              * @return mixed
              */

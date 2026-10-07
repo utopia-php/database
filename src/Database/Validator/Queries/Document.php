@@ -61,7 +61,7 @@ class Document extends Base
      *
      * @param  mixed  $value
      */
-    public function isValid($value): bool
+    public function isValid(mixed $value): bool
     {
         if (! parent::isValid($value)) {
             return false;

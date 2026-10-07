@@ -2,6 +2,7 @@
 
 namespace Utopia\Database\Adapter;
 
+use Utopia\Database\Adapter\SQL\Expression;
 use Exception;
 use PDO;
 use PDOException;
@@ -1154,8 +1155,8 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
                 if (isset($operators[$attribute])) {
                     $operation = $operators[$attribute];
                     if ($operation instanceof Operator) {
-                        $opResult = $this->getOperatorBuilderExpression($column, $operation);
-                        $builder->setRaw($column, $opResult['expression'], $opResult['bindings']);
+                        $expression = $this->getOperatorBuilderExpression($column, $operation);
+                        $builder->setRaw($column, $expression->sql, $expression->bindings);
                     }
                 } elseif (isset($spatialMap[$attribute])) {
                     $builder->setRaw($column, $this->getSpatialGeometryFromText('?'), [$this->encodeSpatialWriteValue($value)]);
@@ -1576,17 +1577,11 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         $this->localTimeout = $milliseconds;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     protected function insertRequiresAlias(): bool
     {
         return true;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     protected function getConflictTenantExpression(string $column): string
     {
         $quoted = $this->quote($this->filter($column));
@@ -1594,9 +1589,6 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         return 'CASE WHEN target.'.Storage::TENANT.' = EXCLUDED.'.Storage::TENANT." THEN EXCLUDED.{$quoted} ELSE target.{$quoted} END";
     }
 
-    /**
-     * {@inheritDoc}
-     */
     protected function getConflictIncrementExpression(string $column): string
     {
         $quoted = $this->quote($this->filter($column));
@@ -1604,9 +1596,6 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         return "target.{$quoted} + EXCLUDED.{$quoted}";
     }
 
-    /**
-     * {@inheritDoc}
-     */
     protected function getConflictTenantIncrementExpression(string $column): string
     {
         $quoted = $this->quote($this->filter($column));
@@ -1623,9 +1612,8 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
      *
      * @param  string  $column  The unquoted, filtered column name
      * @param  Operator  $operator  The operator to convert
-     * @return array{expression: string, bindings: list<mixed>}
      */
-    protected function getOperatorUpsertExpression(string $column, Operator $operator): array
+    protected function getOperatorUpsertExpression(string $column, Operator $operator): Expression
     {
         $bindIndex = 0;
         $fullExpression = $this->getOperatorSql($column, $operator, $bindIndex, useTargetPrefix: true);
@@ -1768,7 +1756,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
             $positionalBindings[] = $namedBindings[$r['key']];
         }
 
-        return ['expression' => $result, 'bindings' => $positionalBindings];
+        return new Expression($result, $positionalBindings);
     }
 
     /**
@@ -1835,10 +1823,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         return OrderDirection::Desc;
     }
 
-    /**
-     * {@inheritDoc}
-     */
-    protected function getVectorOrderRaw(Query $query, string $alias): ?array
+    protected function getVectorOrderRaw(Query $query, string $alias): ?Expression
     {
         $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
 
@@ -1862,7 +1847,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
             return null;
         }
 
-        return ['expression' => $expression, 'bindings' => [$vector]];
+        return new Expression($expression, [$vector]);
     }
 
     #[\Override]
@@ -1881,7 +1866,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     #[\Override]
     protected function newPermissionHook(string $collection, array $roles, string $type = PermissionType::Read->value, string $documentColumn = Storage::UID): Permission\Filter
     {
-        return new class (\array_values($roles), $type, $documentColumn) extends Permission\Filter {
+        return new readonly class (\array_values($roles), $type, $documentColumn) extends Permission\Filter {
             /**
              * @param  list<string>  $roles
              */
@@ -2350,14 +2335,14 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         }
     }
 
-    protected function getOperatorBuilderExpression(string $column, Operator $operator): array
+    protected function getOperatorBuilderExpression(string $column, Operator $operator): Expression
     {
         if ($operator->getMethod() === OperatorType::ArrayRemove) {
             $result = parent::getOperatorBuilderExpression($column, $operator);
             $values = $operator->getValues();
             $value = $values[0] ?? null;
             if (! is_array($value)) {
-                $result['bindings'] = [json_encode($value)];
+                return new Expression($result->sql, [json_encode($value)]);
             }
 
             return $result;

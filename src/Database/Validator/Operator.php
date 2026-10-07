@@ -205,7 +205,7 @@ class Operator extends Validator
      *
      * Returns true if valid or false if not.
      */
-    public function isValid($value): bool
+    public function isValid(mixed $value): bool
     {
         if (! $value instanceof DatabaseOperator) {
             try {

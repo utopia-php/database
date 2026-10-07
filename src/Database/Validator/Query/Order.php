@@ -110,7 +110,7 @@ class Order extends Base
      *
      * @param  mixed  $value
      */
-    public function isValid($value): bool
+    public function isValid(mixed $value): bool
     {
         if (! $value instanceof Query) {
             return false;

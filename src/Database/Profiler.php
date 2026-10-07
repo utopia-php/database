@@ -2,6 +2,7 @@
 
 namespace Utopia\Database;
 
+use Closure;
 use InvalidArgumentException;
 use Utopia\Database\Profiler\Log;
 
@@ -26,8 +27,8 @@ class Profiler
 
     private bool $captureBacktrace = false;
 
-    /** @var callable|null */
-    private $onSlowQuery = null;
+    /** @var (Closure(Log): mixed)|null */
+    private ?Closure $onSlowQuery = null;
 
     public function enable(): static
     {
@@ -87,7 +88,7 @@ class Profiler
 
     public function onSlowQuery(callable $callback): static
     {
-        $this->onSlowQuery = $callback;
+        $this->onSlowQuery = $callback(...);
 
         return $this;
     }

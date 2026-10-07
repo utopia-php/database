@@ -61,7 +61,7 @@ class Sequence extends Validator
      * @param mixed $value The value to validate
      * @return bool
      */
-    public function isValid($value): bool
+    public function isValid(mixed $value): bool
     {
         if ($this->primary && empty($value)) {
             return false;

@@ -2,6 +2,7 @@
 
 namespace Utopia\Database\Adapter;
 
+use Utopia\Database\Adapter\SQL\Expression;
 use Exception;
 use PDO;
 use PDOException;
@@ -746,8 +747,8 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
                 if (isset($operators[$attribute])) {
                     $operation = $operators[$attribute];
                     if ($operation instanceof Operator) {
-                        $opResult = $this->getOperatorBuilderExpression($column, $operation);
-                        $builder->setRaw($column, $opResult['expression'], $opResult['bindings']);
+                        $expression = $this->getOperatorBuilderExpression($column, $operation);
+                        $builder->setRaw($column, $expression->sql, $expression->bindings);
                     }
                 } elseif (isset($spatialMap[$attribute])) {
                     $value = $this->encodeSpatialWriteValue($value);
@@ -1134,9 +1135,6 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
         return $driver instanceof PDOProxy ? $driver->getRound() : 0;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     protected function getConflictTenantExpression(string $column): string
     {
         $quoted = $this->quote($this->filter($column));
@@ -1145,9 +1143,6 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
         return "IF({$tenant} = VALUES({$tenant}), VALUES({$quoted}), {$quoted})";
     }
 
-    /**
-     * {@inheritDoc}
-     */
     protected function getConflictIncrementExpression(string $column): string
     {
         $quoted = $this->quote($this->filter($column));
@@ -1155,9 +1150,6 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
         return "{$quoted} + VALUES({$quoted})";
     }
 
-    /**
-     * {@inheritDoc}
-     */
     protected function getConflictTenantIncrementExpression(string $column): string
     {
         $quoted = $this->quote($this->filter($column));

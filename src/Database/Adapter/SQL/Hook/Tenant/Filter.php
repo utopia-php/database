@@ -14,7 +14,7 @@ use Utopia\Query\Hook\Join\Placement;
 /**
  * SQL read hook that generates tenant isolation conditions for shared-table configurations.
  */
-class Filter implements FilterHook, JoinFilter
+final readonly class Filter implements FilterHook, JoinFilter
 {
     /**
      * @var list<int|string|null>
@@ -94,7 +94,7 @@ class Filter implements FilterHook, JoinFilter
      * through $allowNullColumn - a table filtered in WHERE may be missing from a row, and only a
      * missing row may pass, never a stored row without a tenant: `_uid` is NOT NULL.
      */
-    public function filterJoin(string $table, JoinType $joinType): ?JoinCondition
+    public function filterJoin(string $table, JoinType $joinType): JoinCondition
     {
         $placement = match ($joinType) {
             JoinType::Left, JoinType::Inner => Placement::On,

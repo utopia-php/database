@@ -118,7 +118,7 @@ class Indexed extends Base
      *
      * @throws Exception
      */
-    public function isValid($value): bool
+    public function isValid(mixed $value): bool
     {
         /** @var array<Query|string> $value */
         if (! parent::isValid($value)) {

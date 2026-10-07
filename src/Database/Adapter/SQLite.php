@@ -2,6 +2,8 @@
 
 namespace Utopia\Database\Adapter;
 
+use Utopia\Database\Adapter\SQL\JoinAlias;
+use Utopia\Database\Adapter\SQL\Expression;
 use Exception;
 use Override;
 use PDO;
@@ -302,8 +304,6 @@ class SQLite extends SQL
     }
 
     /**
-     * {@inheritDoc}
-     *
      * SQLite serialises writers through a single file lock. PDO's default
      * `BEGIN` is `DEFERRED`, which acquires the writer lock lazily on the
      * first write — if two transactions both started as readers and try to
@@ -344,8 +344,6 @@ class SQLite extends SQL
     }
 
     /**
-     * @inheritDoc
-     *
      * Overrides the inherited PDO-driven commit because startTransaction
      * issues a raw `BEGIN IMMEDIATE` (rather than PDO::beginTransaction),
      * so PDO's internal in-transaction flag is never set and PDO::commit()
@@ -379,8 +377,6 @@ class SQLite extends SQL
     }
 
     /**
-     * @inheritDoc
-     *
      * Counterpart to commitTransaction — uses a raw ROLLBACK for the same
      * reason (raw BEGIN IMMEDIATE bypasses PDO's transaction tracking).
      */
@@ -1279,8 +1275,8 @@ class SQLite extends SQL
                 if (isset($operators[$attribute])) {
                     $operation = $operators[$attribute];
                     if ($operation instanceof Operator) {
-                        $opResult = $this->getOperatorBuilderExpression($column, $operation);
-                        $builder->setRaw($column, $opResult['expression'], $opResult['bindings']);
+                        $expression = $this->getOperatorBuilderExpression($column, $operation);
+                        $builder->setRaw($column, $expression->sql, $expression->bindings);
                     }
                 } elseif ($this instanceof Feature\Spatial && \in_array($attribute, $spatialAttributes, true)) {
                     if (\is_array($value)) {
@@ -1655,11 +1651,10 @@ class SQLite extends SQL
      * Compile a Search/NotSearch query into FTS5 SQL with positional bindings.
      * Falls back to a LIKE expression when no FTS5 table covers the attribute.
      *
-     * @param  list<array{table: string, alias: string}>  $joins
-     * @return array{expression: string, bindings: list<mixed>}|null
+     * @param  list<JoinAlias>  $joins
      */
     #[\Override]
-    protected function compileAdapterFilter(Query $query, string $collection, string $alias, array $joins = []): ?array
+    protected function compileAdapterFilter(Query $query, string $collection, string $alias, array $joins = []): ?Expression
     {
         $method = $query->getMethod();
         if ($method !== Method::Search && $method !== Method::NotSearch) {
@@ -1677,10 +1672,10 @@ class SQLite extends SQL
         $ftsValue = $this->getFts5Value($rawValue);
 
         if ($ftsValue === '') {
-            return [
-                'expression' => $method === Method::Search ? '1 = 0' : '1 = 1',
-                'bindings' => [],
-            ];
+            return new Expression(
+                $method === Method::Search ? '1 = 0' : '1 = 1',
+                [],
+            );
         }
 
         $ftsTable = $this->findSearchFulltextTable($rawAttribute, $collection, $joins);
@@ -1689,18 +1684,18 @@ class SQLite extends SQL
             $likeExpr = "{$quotedAlias}.{$quotedAttribute} LIKE ? ESCAPE '\\'";
             $likeBinding = '%' . $this->escapeWildcards($rawValue) . '%';
 
-            return [
-                'expression' => $method === Method::Search ? $likeExpr : "NOT ({$likeExpr})",
-                'bindings' => [$likeBinding],
-            ];
+            return new Expression(
+                $method === Method::Search ? $likeExpr : "NOT ({$likeExpr})",
+                [$likeBinding],
+            );
         }
 
         $subquery = "{$quotedAlias}.{$this->quote(Storage::SEQUENCE)} IN (SELECT rowid FROM `{$ftsTable}` WHERE `{$ftsTable}` MATCH ?)";
 
-        return [
-            'expression' => $method === Method::Search ? $subquery : "NOT ({$subquery})",
-            'bindings' => [$ftsValue],
-        ];
+        return new Expression(
+            $method === Method::Search ? $subquery : "NOT ({$subquery})",
+            [$ftsValue],
+        );
     }
 
     protected function processException(PDOException $e): Exception
@@ -1816,10 +1811,7 @@ class SQLite extends SQL
         parent::bindOperatorParameters($statement, $operator, $bindIndex);
     }
 
-    /**
-     * {@inheritDoc}
-     */
-    protected function getOperatorBuilderExpression(string $column, Operator $operator): array
+    protected function getOperatorBuilderExpression(string $column, Operator $operator): Expression
     {
         if ($operator->getMethod() === OperatorType::ArrayFilter) {
             $bindIndex = 0;
@@ -1868,7 +1860,7 @@ class SQLite extends SQL
                 $positionalBindings[] = $namedBindings[$r['key']] ?? null;
             }
 
-            return ['expression' => $result, 'bindings' => $positionalBindings];
+            return new Expression($result, $positionalBindings);
         }
 
         return parent::getOperatorBuilderExpression($column, $operator);
@@ -2226,9 +2218,6 @@ class SQLite extends SQL
         }
     }
 
-    /**
-     * {@inheritDoc}
-     */
     protected function getConflictTenantExpression(string $column): string
     {
         $quoted = $this->quote($this->filter($column));
@@ -2236,9 +2225,6 @@ class SQLite extends SQL
         return 'CASE WHEN '.Storage::TENANT.' = excluded.'.Storage::TENANT." THEN excluded.{$quoted} ELSE {$quoted} END";
     }
 
-    /**
-     * {@inheritDoc}
-     */
     protected function getConflictIncrementExpression(string $column): string
     {
         $quoted = $this->quote($this->filter($column));
@@ -2246,9 +2232,6 @@ class SQLite extends SQL
         return "{$quoted} + excluded.{$quoted}";
     }
 
-    /**
-     * {@inheritDoc}
-     */
     protected function getConflictTenantIncrementExpression(string $column): string
     {
         $quoted = $this->quote($this->filter($column));
@@ -2798,7 +2781,7 @@ class SQLite extends SQL
     }
 
     /**
-     * @param  list<array{table: string, alias: string}>  $joins
+     * @param  list<JoinAlias>  $joins
      */
     private function findSearchFulltextTable(string $attribute, string $collection, array $joins): ?string
     {
@@ -2809,8 +2792,8 @@ class SQLite extends SQL
 
         $prefix = \substr($attribute, 0, $dot);
         foreach ($joins as $join) {
-            if ($join['alias'] === $prefix) {
-                return $this->findFulltextTableForAttribute($join['table'], \substr($attribute, $dot + 1));
+            if ($join->alias === $prefix) {
+                return $this->findFulltextTableForAttribute($join->table, \substr($attribute, $dot + 1));
             }
         }
 

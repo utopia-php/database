@@ -116,7 +116,7 @@ class AttributeDefinition extends Validator
      * @throws DuplicateException
      * @throws LimitException
      */
-    public function isValid($value): bool
+    public function isValid(mixed $value): bool
     {
         if ($value instanceof Document) {
             try {

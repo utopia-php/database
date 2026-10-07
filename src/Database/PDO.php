@@ -37,6 +37,8 @@ class PDO
 
     private const string ROLLBACK = 'ROLLBACK';
 
+    private const string SQLITE = 'sqlite';
+
     private ?string $hostname = null;
 
     /**
@@ -310,8 +312,7 @@ class PDO
 
         $parsed = ['driver' => \trim($driver)];
 
-        // Handle “path only” DSNs like sqlite:/path/to.db
-        if (\in_array($driver, ['sqlite'], true) && $parameterString !== '') {
+        if ($driver === self::SQLITE && $parameterString !== '') {
             $parsed['path'] = \ltrim($parameterString, '/');
 
             return $parsed;

@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use Utopia\Database\Adapter\SQL\Expression;
 use Closure;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
@@ -223,9 +224,8 @@ final class BigIntegerTest extends TestCase
     {
         $adapter = new class (new \stdClass()) extends MariaDB {
             /**
-             * @return array{expression: string, bindings: list<mixed>}
              */
-            public function expression(Operator $operator): array
+            public function expression(Operator $operator): Expression
             {
                 return $this->getOperatorBuilderExpression('value', $operator);
             }
@@ -233,8 +233,8 @@ final class BigIntegerTest extends TestCase
 
         $result = $adapter->expression(Operator::increment(1, BigInt::UNSIGNED_MAX));
 
-        $this->assertStringContainsString('CASE', $result['expression']);
-        $this->assertSame([BigInt::UNSIGNED_MAX, 1, 1], $result['bindings']);
+        $this->assertStringContainsString('CASE', $result->sql);
+        $this->assertSame([BigInt::UNSIGNED_MAX, 1, 1], $result->bindings);
     }
 
     public function testMongoRejectsUnsignedArithmeticBeforeBsonCoercion(): void

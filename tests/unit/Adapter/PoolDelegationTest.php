@@ -106,7 +106,7 @@ final class PoolDelegationTest extends TestCase
             ->setNamespace('library')
             ->setAuthorization(new Authorization());
 
-        $rows = $database->getAuthorization()->skip(static function () use ($database): array|int {
+        $rows = $database->getAuthorization()->skip(static function () use ($database): array {
             $database->create();
             $database->createCollection(Collection::create(
                 id: 'books',
@@ -119,7 +119,6 @@ final class PoolDelegationTest extends TestCase
             return $database->query($database->from('books')->select(['title'])->filter([Query::equal('$id', ['emma'])]));
         });
 
-        $this->assertIsArray($rows);
         $this->assertSame(['Emma'], \array_map(static fn (Document $row): mixed => $row->getAttribute('title'), $rows));
     }
 

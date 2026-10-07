@@ -559,7 +559,8 @@ class MirrorTest extends TestCase
         $createdAt = '2001-02-03T04:05:06.000+00:00';
 
         self::inCoroutine(static fn (): mixed => $mirror->withPreserveDates(
-            true, static fn (): mixed => $mirror->upsertDocument(self::COLLECTION, new Document([
+            true,
+            static fn (): mixed => $mirror->upsertDocument(self::COLLECTION, new Document([
                 Document::ID => 'dated',
                 '$createdAt' => $createdAt,
                 '$updatedAt' => $createdAt,

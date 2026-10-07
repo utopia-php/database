@@ -48,6 +48,9 @@ final class MongoDatabaseRenameClient extends Client
         return $listed;
     }
 
+    /**
+     * @param  array<string, mixed>  $options
+     */
     #[\Override]
     public function createCollection(string $name, array $options = []): bool
     {
@@ -56,6 +59,9 @@ final class MongoDatabaseRenameClient extends Client
         return true;
     }
 
+    /**
+     * @param  array<string, mixed>  $options
+     */
     #[\Override]
     public function dropDatabase(array $options = [], ?string $db = null): bool
     {
@@ -68,7 +74,7 @@ final class MongoDatabaseRenameClient extends Client
      * @param  array<string, mixed>  $command
      */
     #[\Override]
-    public function query(array $command, ?string $db = null): stdClass|array|int
+    public function query(array $command, ?string $db = null): stdClass
     {
         $db ??= 'default';
 

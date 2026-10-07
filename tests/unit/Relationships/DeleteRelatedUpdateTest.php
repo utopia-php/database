@@ -101,7 +101,6 @@ final class DeleteRelatedUpdateTest extends TestCase
 
         $this->assertSame(['child1', 'child2'], $this->reported($recorder));
         foreach ($this->updated($recorder) as $related) {
-            $this->assertInstanceOf(Document::class, $related);
             $this->assertSame('child', $related->getCollection());
             $this->assertTrue(\array_key_exists('parent', $related->getArrayCopy()));
             $this->assertNull($related->getAttribute('parent'));
@@ -124,7 +123,6 @@ final class DeleteRelatedUpdateTest extends TestCase
 
         $this->assertSame(['parent1'], $this->reported($recorder));
         $related = $this->updated($recorder)[0];
-        $this->assertInstanceOf(Document::class, $related);
         $this->assertSame('parent', $related->getCollection());
     }
 
@@ -487,7 +485,6 @@ final class DeleteRelatedUpdateTest extends TestCase
         $this->assertSame(3, $peers->written, 'Every child must be cleared');
         $this->assertSame(['child1', 'child2', 'child3'], $this->reported($recorder));
         foreach ($this->updated($recorder) as $related) {
-            $this->assertInstanceOf(Document::class, $related);
             $this->assertNull($related->getAttribute('parent'));
         }
     }
@@ -598,7 +595,6 @@ final class DeleteRelatedUpdateTest extends TestCase
     {
         $ids = [];
         foreach ($this->updated($recorder) as $related) {
-            $this->assertInstanceOf(Document::class, $related);
             $ids[] = $related->getId();
         }
         \sort($ids);

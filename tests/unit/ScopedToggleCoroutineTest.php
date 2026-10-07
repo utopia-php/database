@@ -506,8 +506,10 @@ final class ScopedToggleCoroutineTest extends TestCase
     {
         return $database->skipValidation(
             fn (): mixed => $database->withPreserveDates(
-                true, fn (): mixed => $database->withPreserveSequence(
-                    true, fn (): mixed => $database->withTenant(
+                true,
+                fn (): mixed => $database->withPreserveSequence(
+                    true,
+                    fn (): mixed => $database->withTenant(
                         self::SCOPED_TENANT,
                         fn (): mixed => $database->withRequestTimestamp(
                             new DateTime(self::PAST),

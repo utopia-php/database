@@ -106,7 +106,8 @@ final class BulkWriteGuardsTest extends TestCase
 
         $this->assertRefused(DatabaseException::class, null, fn (): mixed => $database->skipValidation(
             fn (): mixed => $database->withPreserveDates(
-                true, fn (): int => $database->updateDocuments(self::COLLECTION, new Document(['rank' => 2, Document::UPDATED_AT => 'not-a-date'])),
+                true,
+                fn (): int => $database->updateDocuments(self::COLLECTION, new Document(['rank' => 2, Document::UPDATED_AT => 'not-a-date'])),
             ),
         ));
         $this->assertSame(1, $database->getDocument(self::COLLECTION, 'a')->getAttribute('rank'));

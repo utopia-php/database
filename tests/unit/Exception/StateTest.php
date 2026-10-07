@@ -49,8 +49,12 @@ final class StateTest extends TestCase
 
     public function testAMappedDriverErrorKeepsItsSqlstate(): void
     {
-        $driver = new class ('SQLSTATE[HY000]: General error: 2006 MySQL server has gone away') extends PDOException {
-            protected $code = 'HY000';
+        $driver = new class () extends PDOException {
+            public function __construct()
+            {
+                parent::__construct('SQLSTATE[HY000]: General error: 2006 MySQL server has gone away');
+                $this->code = 'HY000';
+            }
         };
 
         $exception = new Duplicate('Document already exists', $driver->getCode(), $driver);

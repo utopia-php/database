@@ -4452,9 +4452,18 @@ trait Documents
     /**
      * @param  array<Query>  $queries
      * @return array<Query>
+     *
+     * @throws QueryException When an aggregate's default alias is already taken by another aggregate
      */
     private static function aliasAggregates(array $queries): array
     {
+        $taken = [];
+        foreach ($queries as $query) {
+            if ($query->getMethod()->isAggregate() && $query->getAlias() !== '') {
+                $taken[$query->getAlias()] = true;
+            }
+        }
+
         foreach ($queries as $index => $query) {
             $method = $query->getMethod();
             if (! $method->isAggregate() || $query->getAlias() !== '') {
@@ -4464,6 +4473,11 @@ trait Documents
             $attribute = $query->getAttribute();
             $alias = $attribute === '*' || $attribute === '' ? $method->value : $method->value.'_'.$attribute;
             $alias = \substr((string) \preg_replace('/[^A-Za-z0-9_]/', '_', $alias), 0, Aggregate::MAX_ALIAS_LENGTH);
+
+            if (isset($taken[$alias])) {
+                throw new QueryException("The default aggregate alias '{$alias}' is used by more than one aggregate; give each of them an explicit alias");
+            }
+            $taken[$alias] = true;
 
             $queries[$index] = new Query($method, $attribute, $query->getValues(), $alias);
         }

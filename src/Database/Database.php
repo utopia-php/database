@@ -1467,9 +1467,21 @@ class Database
      * - {@see Hook\Relationships} — relationship resolution and mutation
      * - {@see Hook\Write} — row-level write interception (permissions, tenant)
      * - {@see Hook\Transform} — raw SQL transformation before execution
+     *
+     * @throws DatabaseException When the hook is none of these
      */
     public function addHook(\Utopia\Query\Hook $hook): static
     {
+        if (
+            ! $hook instanceof Lifecycle
+            && ! $hook instanceof Hook\Decorator
+            && ! $hook instanceof Relationships
+            && ! $hook instanceof Hook\Write
+            && ! $hook instanceof Transform
+        ) {
+            throw new DatabaseException('Unknown hook: '.$hook::class);
+        }
+
         if ($hook instanceof Lifecycle) {
             if ($hook instanceof Invalidator) {
                 $this->lifecycleHooks = \array_values(\array_filter(

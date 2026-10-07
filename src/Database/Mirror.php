@@ -1921,9 +1921,8 @@ class Mirror extends Database
     public function setDocumentType(string $collection, string $className): static
     {
         $this->delegate(__FUNCTION__, \func_get_args());
-        $this->documentTypes[$collection] = $className;
 
-        return $this;
+        return parent::setDocumentType($collection, $className);
     }
 
     /**
@@ -1934,9 +1933,8 @@ class Mirror extends Database
     public function clearDocumentType(string $collection): static
     {
         $this->delegate(__FUNCTION__, \func_get_args());
-        unset($this->documentTypes[$collection]);
 
-        return $this;
+        return parent::clearDocumentType($collection);
     }
 
     /**
@@ -1945,8 +1943,7 @@ class Mirror extends Database
     public function clearAllDocumentTypes(): static
     {
         $this->delegate(__FUNCTION__);
-        $this->documentTypes = [];
 
-        return $this;
+        return parent::clearAllDocumentTypes();
     }
 }

@@ -3,7 +3,6 @@
 namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
-use stdClass;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Mongo\Exception as MongoException;

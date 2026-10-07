@@ -115,9 +115,9 @@ final class BatchSizeTest extends TestCase
      */
     private function stored(Database $database): array
     {
-        return \array_map(
+        return \array_values(\array_map(
             static fn (Document $document): array => [$document->getId(), $document->getAttribute('views')],
             $database->find(HookFixture::COLLECTION),
-        );
+        ));
     }
 }

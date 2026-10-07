@@ -51,7 +51,7 @@ trait JoinTests
             ]));
         }
 
-        $results = $database->find($pCol, [
+        $results = $database->aggregate($pCol, [
             Query::leftJoin($rCol, 'j0', [Query::on('$id', 'prod_uid')]),
             Query::count('*', 'cnt'),
             Query::groupBy(['name']),
@@ -59,7 +59,7 @@ trait JoinTests
 
         $this->assertCount(3, $results);
         foreach ($results as $doc) {
-            $this->assertEquals(1, $doc->getAttribute('cnt'));
+            $this->assertEquals(1, $doc['cnt']);
         }
 
         $this->cleanupAggCollections($database, $cols);
@@ -106,7 +106,7 @@ trait JoinTests
             ])));
         }
 
-        $results = $database->find($pCol, [
+        $results = $database->aggregate($pCol, [
             Query::leftJoin($rCol, 'j0', [Query::on('$id', 'prod_uid')]),
             Query::count('*', 'cnt'),
             Query::avg('score', 'avg_score'),
@@ -116,15 +116,15 @@ trait JoinTests
         $this->assertCount(3, $results);
         $mapped = [];
         foreach ($results as $doc) {
-            $name = $doc->getAttribute('name');
+            $name = $doc['name'];
             $this->assertIsString($name);
             $mapped[$name] = $doc;
         }
-        $this->assertEquals(3, $mapped['Product p1']->getAttribute('cnt'));
+        $this->assertEquals(3, $mapped['Product p1']['cnt']);
         $this->assertEqualsWithDelta(4.0, $this->numericAttribute($mapped['Product p1'], 'avg_score'), 0.1);
-        $this->assertEquals(2, $mapped['Product p2']->getAttribute('cnt'));
+        $this->assertEquals(2, $mapped['Product p2']['cnt']);
         $this->assertEqualsWithDelta(3.0, $this->numericAttribute($mapped['Product p2'], 'avg_score'), 0.1);
-        $this->assertEquals(1, $mapped['Product p3']->getAttribute('cnt'));
+        $this->assertEquals(1, $mapped['Product p3']['cnt']);
 
         $this->cleanupAggCollections($database, $cols);
     }
@@ -161,7 +161,7 @@ trait JoinTests
             ]));
         }
 
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::count('*', 'order_count'),
             Query::sum('amount', 'total_amount'),
@@ -171,11 +171,11 @@ trait JoinTests
         ]);
 
         $this->assertCount(1, $results);
-        $this->assertEquals(5, $results[0]->getAttribute('order_count'));
-        $this->assertEquals(1500, $results[0]->getAttribute('total_amount'));
+        $this->assertEquals(5, $results[0]['order_count']);
+        $this->assertEquals(1500, $results[0]['total_amount']);
         $this->assertEqualsWithDelta(300.0, $this->numericAttribute($results[0], 'avg_amount'), 0.1);
-        $this->assertEquals(100, $results[0]->getAttribute('min_amount'));
-        $this->assertEquals(500, $results[0]->getAttribute('max_amount'));
+        $this->assertEquals(100, $results[0]['min_amount']);
+        $this->assertEquals(500, $results[0]['max_amount']);
 
         $this->cleanupAggCollections($database, $cols);
     }
@@ -222,7 +222,7 @@ trait JoinTests
             ])));
         }
 
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::count('*', 'cnt'),
             Query::sum('amount', 'total'),
@@ -232,21 +232,21 @@ trait JoinTests
         $this->assertCount(4, $results);
         $mapped = [];
         foreach ($results as $doc) {
-            $custUid = $doc->getAttribute('cust_uid');
-            $status = $doc->getAttribute('status');
+            $custUid = $doc['cust_uid'];
+            $status = $doc['status'];
             $this->assertIsString($custUid);
             $this->assertIsString($status);
             $key = $custUid . '_' . $status;
             $mapped[$key] = $doc;
         }
-        $this->assertEquals(2, $mapped['c1_done']->getAttribute('cnt'));
-        $this->assertEquals(300, $mapped['c1_done']->getAttribute('total'));
-        $this->assertEquals(1, $mapped['c1_pending']->getAttribute('cnt'));
-        $this->assertEquals(50, $mapped['c1_pending']->getAttribute('total'));
-        $this->assertEquals(1, $mapped['c2_done']->getAttribute('cnt'));
-        $this->assertEquals(300, $mapped['c2_done']->getAttribute('total'));
-        $this->assertEquals(2, $mapped['c2_pending']->getAttribute('cnt'));
-        $this->assertEquals(100, $mapped['c2_pending']->getAttribute('total'));
+        $this->assertEquals(2, $mapped['c1_done']['cnt']);
+        $this->assertEquals(300, $mapped['c1_done']['total']);
+        $this->assertEquals(1, $mapped['c1_pending']['cnt']);
+        $this->assertEquals(50, $mapped['c1_pending']['total']);
+        $this->assertEquals(1, $mapped['c2_done']['cnt']);
+        $this->assertEquals(300, $mapped['c2_done']['total']);
+        $this->assertEquals(2, $mapped['c2_pending']['cnt']);
+        $this->assertEquals(100, $mapped['c2_pending']['total']);
 
         $this->cleanupAggCollections($database, $cols);
     }
@@ -292,7 +292,7 @@ trait JoinTests
             ])));
         }
 
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::count('*', 'cnt'),
             Query::groupBy(['cust_uid']),
@@ -300,7 +300,7 @@ trait JoinTests
         ]);
 
         $this->assertCount(2, $results);
-        $ids = array_map(fn ($d) => $d->getAttribute('cust_uid'), $results);
+        $ids = array_map(fn ($d) => $d['cust_uid'], $results);
         $this->assertContains('c2', $ids);
         $this->assertContains('c3', $ids);
         $this->assertNotContains('c1', $ids);
@@ -347,7 +347,7 @@ trait JoinTests
             ])));
         }
 
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::avg('amount', 'avg_amt'),
             Query::groupBy(['cust_uid']),
@@ -355,8 +355,8 @@ trait JoinTests
         ]);
 
         $this->assertCount(1, $results);
-        $this->assertEquals('c2', $results[0]->getAttribute('cust_uid'));
-        $avgAmt = $results[0]->getAttribute('avg_amt');
+        $this->assertEquals('c2', $results[0]['cust_uid']);
+        $avgAmt = $results[0]['avg_amt'];
         $this->assertIsNumeric($avgAmt);
         $this->assertEqualsWithDelta(550.0, (float) $avgAmt, 0.1);
 
@@ -403,7 +403,7 @@ trait JoinTests
             ])));
         }
 
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::sum('amount', 'total'),
             Query::groupBy(['cust_uid']),
@@ -411,8 +411,8 @@ trait JoinTests
         ]);
 
         $this->assertCount(1, $results);
-        $this->assertEquals('c2', $results[0]->getAttribute('cust_uid'));
-        $this->assertEquals(700, $results[0]->getAttribute('total'));
+        $this->assertEquals('c2', $results[0]['cust_uid']);
+        $this->assertEquals(700, $results[0]['total']);
 
         $this->cleanupAggCollections($database, $cols);
     }
@@ -457,7 +457,7 @@ trait JoinTests
             ])));
         }
 
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::sum('amount', 'total'),
             Query::groupBy(['cust_uid']),
@@ -465,8 +465,8 @@ trait JoinTests
         ]);
 
         $this->assertCount(1, $results);
-        $this->assertEquals('c2', $results[0]->getAttribute('cust_uid'));
-        $this->assertEquals(300, $results[0]->getAttribute('total'));
+        $this->assertEquals('c2', $results[0]['cust_uid']);
+        $this->assertEquals(300, $results[0]['total']);
 
         $this->cleanupAggCollections($database, $cols);
     }
@@ -510,13 +510,13 @@ trait JoinTests
             ])));
         }
 
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::countDistinct('product', 'uniq_prod'),
         ]);
 
         $this->assertCount(1, $results);
-        $this->assertEquals(3, $results[0]->getAttribute('uniq_prod'));
+        $this->assertEquals(3, $results[0]['uniq_prod']);
 
         $this->cleanupAggCollections($database, $cols);
     }
@@ -561,7 +561,7 @@ trait JoinTests
             ])));
         }
 
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::min('amount', 'min_amt'),
             Query::max('amount', 'max_amt'),
@@ -571,14 +571,14 @@ trait JoinTests
         $this->assertCount(2, $results);
         $mapped = [];
         foreach ($results as $doc) {
-            $cust_uid = $doc->getAttribute('cust_uid');
+            $cust_uid = $doc['cust_uid'];
             $this->assertIsString($cust_uid);
             $mapped[$cust_uid] = $doc;
         }
-        $this->assertEquals(10, $mapped['c1']->getAttribute('min_amt'));
-        $this->assertEquals(50, $mapped['c1']->getAttribute('max_amt'));
-        $this->assertEquals(100, $mapped['c2']->getAttribute('min_amt'));
-        $this->assertEquals(200, $mapped['c2']->getAttribute('max_amt'));
+        $this->assertEquals(10, $mapped['c1']['min_amt']);
+        $this->assertEquals(50, $mapped['c1']['max_amt']);
+        $this->assertEquals(100, $mapped['c2']['min_amt']);
+        $this->assertEquals(200, $mapped['c2']['max_amt']);
 
         $this->cleanupAggCollections($database, $cols);
     }
@@ -623,7 +623,7 @@ trait JoinTests
             ])));
         }
 
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::equal('status', ['done']),
             Query::count('*', 'cnt'),
@@ -634,14 +634,14 @@ trait JoinTests
         $this->assertCount(2, $results);
         $mapped = [];
         foreach ($results as $doc) {
-            $cust_uid = $doc->getAttribute('cust_uid');
+            $cust_uid = $doc['cust_uid'];
             $this->assertIsString($cust_uid);
             $mapped[$cust_uid] = $doc;
         }
-        $this->assertEquals(1, $mapped['c1']->getAttribute('cnt'));
-        $this->assertEquals(100, $mapped['c1']->getAttribute('total'));
-        $this->assertEquals(2, $mapped['c2']->getAttribute('cnt'));
-        $this->assertEquals(700, $mapped['c2']->getAttribute('total'));
+        $this->assertEquals(1, $mapped['c1']['cnt']);
+        $this->assertEquals(100, $mapped['c1']['total']);
+        $this->assertEquals(2, $mapped['c2']['cnt']);
+        $this->assertEquals(700, $mapped['c2']['total']);
 
         $this->cleanupAggCollections($database, $cols);
     }
@@ -678,7 +678,7 @@ trait JoinTests
             ]));
         }
 
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::between('amount', 100, 300),
             Query::count('*', 'cnt'),
@@ -686,8 +686,8 @@ trait JoinTests
         ]);
 
         $this->assertCount(1, $results);
-        $this->assertEquals(2, $results[0]->getAttribute('cnt'));
-        $this->assertEquals(400, $results[0]->getAttribute('total'));
+        $this->assertEquals(2, $results[0]['cnt']);
+        $this->assertEquals(400, $results[0]['total']);
 
         $this->cleanupAggCollections($database, $cols);
     }
@@ -724,7 +724,7 @@ trait JoinTests
             ]));
         }
 
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::greaterThan('amount', 15),
             Query::lessThanEqual('amount', 40),
@@ -732,7 +732,7 @@ trait JoinTests
         ]);
 
         $this->assertCount(1, $results);
-        $this->assertEquals(3, $results[0]->getAttribute('cnt'));
+        $this->assertEquals(3, $results[0]['cnt']);
 
         $this->cleanupAggCollections($database, $cols);
     }
@@ -767,13 +767,13 @@ trait JoinTests
             '$permissions' => [Permission::read(Role::any())],
         ]));
 
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::count('*', 'cnt'),
         ]);
 
         $this->assertCount(1, $results);
-        $this->assertEquals(0, $results[0]->getAttribute('cnt'));
+        $this->assertEquals(0, $results[0]['cnt']);
 
         $this->cleanupAggCollections($database, $cols);
     }
@@ -808,14 +808,14 @@ trait JoinTests
             '$permissions' => [Permission::read(Role::any())],
         ]));
 
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::equal('status', ['ghost']),
             Query::count('*', 'cnt'),
         ]);
 
         $this->assertCount(1, $results);
-        $this->assertEquals(0, $results[0]->getAttribute('cnt'));
+        $this->assertEquals(0, $results[0]['cnt']);
 
         $this->cleanupAggCollections($database, $cols);
     }
@@ -858,7 +858,7 @@ trait JoinTests
             '$permissions' => [Permission::read(Role::any())],
         ]));
 
-        $results = $database->find($pCol, [
+        $results = $database->aggregate($pCol, [
             Query::leftJoin($oCol, 'j0', [Query::on('$id', 'prod_uid')]),
             Query::sum('amount', 'total'),
             Query::groupBy(['name']),
@@ -867,12 +867,12 @@ trait JoinTests
         $this->assertCount(2, $results);
         $mapped = [];
         foreach ($results as $doc) {
-            $name = $doc->getAttribute('name');
+            $name = $doc['name'];
             $this->assertIsString($name);
             $mapped[$name] = $doc;
         }
-        $this->assertEquals(300, $mapped['WithOrders']->getAttribute('total'));
-        $noOrderTotal = $mapped['NoOrders']->getAttribute('total');
+        $this->assertEquals(300, $mapped['WithOrders']['total']);
+        $noOrderTotal = $mapped['NoOrders']['total'];
         $this->assertTrue($noOrderTotal === null || $noOrderTotal === 0 || $noOrderTotal === 0.0);
 
         $this->cleanupAggCollections($database, $cols);
@@ -920,7 +920,7 @@ trait JoinTests
             ])));
         }
 
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::equal('status', ['done']),
             Query::greaterThan('amount', 100),
@@ -931,7 +931,7 @@ trait JoinTests
         ]);
 
         $this->assertCount(2, $results);
-        $ids = array_map(fn ($d) => $d->getAttribute('cust_uid'), $results);
+        $ids = array_map(fn ($d) => $d['cust_uid'], $results);
         $this->assertContains('c1', $ids);
         $this->assertContains('c3', $ids);
         $this->assertNotContains('c2', $ids);
@@ -974,7 +974,7 @@ trait JoinTests
             }
         }
 
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::count('*', 'cnt'),
             Query::sum('amount', 'total'),
@@ -983,8 +983,8 @@ trait JoinTests
 
         $this->assertCount(10, $results);
         foreach ($results as $doc) {
-            $this->assertEquals(10, $doc->getAttribute('cnt'));
-            $this->assertEquals(550, $doc->getAttribute('total'));
+            $this->assertEquals(10, $doc['cnt']);
+            $this->assertEquals(550, $doc['total']);
         }
 
         $this->cleanupAggCollections($database, $cols);
@@ -1027,7 +1027,7 @@ trait JoinTests
             ])));
         }
 
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::notEqual('status', 'cancel'),
             Query::count('*', 'cnt'),
@@ -1035,8 +1035,8 @@ trait JoinTests
         ]);
 
         $this->assertCount(1, $results);
-        $this->assertEquals(2, $results[0]->getAttribute('cnt'));
-        $this->assertEquals(300, $results[0]->getAttribute('total'));
+        $this->assertEquals(2, $results[0]['cnt']);
+        $this->assertEquals(300, $results[0]['total']);
 
         $this->cleanupAggCollections($database, $cols);
     }
@@ -1078,7 +1078,7 @@ trait JoinTests
             ])));
         }
 
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::startsWith('tag', 'promo'),
             Query::count('*', 'cnt'),
@@ -1086,8 +1086,8 @@ trait JoinTests
         ]);
 
         $this->assertCount(1, $results);
-        $this->assertEquals(2, $results[0]->getAttribute('cnt'));
-        $this->assertEquals(300, $results[0]->getAttribute('total'));
+        $this->assertEquals(2, $results[0]['cnt']);
+        $this->assertEquals(300, $results[0]['total']);
 
         $this->cleanupAggCollections($database, $cols);
     }
@@ -1133,7 +1133,7 @@ trait JoinTests
             ])));
         }
 
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::equal('status', ['done', 'open']),
             Query::count('*', 'cnt'),
@@ -1144,14 +1144,14 @@ trait JoinTests
         $this->assertCount(2, $results);
         $mapped = [];
         foreach ($results as $doc) {
-            $cust_uid = $doc->getAttribute('cust_uid');
+            $cust_uid = $doc['cust_uid'];
             $this->assertIsString($cust_uid);
             $mapped[$cust_uid] = $doc;
         }
-        $this->assertEquals(2, $mapped['c1']->getAttribute('cnt'));
-        $this->assertEquals(300, $mapped['c1']->getAttribute('total'));
-        $this->assertEquals(1, $mapped['c2']->getAttribute('cnt'));
-        $this->assertEquals(300, $mapped['c2']->getAttribute('total'));
+        $this->assertEquals(2, $mapped['c1']['cnt']);
+        $this->assertEquals(300, $mapped['c1']['total']);
+        $this->assertEquals(1, $mapped['c2']['cnt']);
+        $this->assertEquals(300, $mapped['c2']['total']);
 
         $this->cleanupAggCollections($database, $cols);
     }
@@ -1196,7 +1196,7 @@ trait JoinTests
             ])));
         }
 
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::sum('amount', 'total'),
             Query::groupBy(['cust_uid']),
@@ -1204,7 +1204,7 @@ trait JoinTests
         ]);
 
         $this->assertCount(2, $results);
-        $ids = array_map(fn ($d) => $d->getAttribute('cust_uid'), $results);
+        $ids = array_map(fn ($d) => $d['cust_uid'], $results);
         $this->assertContains('c1', $ids);
         $this->assertContains('c3', $ids);
         $this->assertNotContains('c2', $ids);
@@ -1248,7 +1248,7 @@ trait JoinTests
             '$permissions' => [Permission::read(Role::any())],
         ]));
 
-        $results = $database->find($pCol, [
+        $results = $database->aggregate($pCol, [
             Query::leftJoin($oCol, 'j0', [Query::on('$id', 'prod_uid')]),
             Query::count('*', 'cnt'),
             Query::groupBy(['name']),
@@ -1256,7 +1256,7 @@ trait JoinTests
         ]);
 
         $this->assertCount(1, $results);
-        $this->assertEquals('Product p1', $results[0]->getAttribute('name'));
+        $this->assertEquals('Product p1', $results[0]['name']);
 
         $this->cleanupAggCollections($database, $cols);
     }
@@ -1301,7 +1301,7 @@ trait JoinTests
             ])));
         }
 
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::count('*', 'cnt'),
             Query::sum('amount', 'total'),
@@ -1314,26 +1314,26 @@ trait JoinTests
         $this->assertCount(2, $results);
         $mapped = [];
         foreach ($results as $doc) {
-            $cust_uid = $doc->getAttribute('cust_uid');
+            $cust_uid = $doc['cust_uid'];
             $this->assertIsString($cust_uid);
             $mapped[$cust_uid] = $doc;
         }
 
-        $this->assertEquals(3, $mapped['c1']->getAttribute('cnt'));
-        $this->assertEquals(600, $mapped['c1']->getAttribute('total'));
-        $c1Avg = $mapped['c1']->getAttribute('avg_amt');
+        $this->assertEquals(3, $mapped['c1']['cnt']);
+        $this->assertEquals(600, $mapped['c1']['total']);
+        $c1Avg = $mapped['c1']['avg_amt'];
         $this->assertIsNumeric($c1Avg);
         $this->assertEqualsWithDelta(200.0, (float) $c1Avg, 0.1);
-        $this->assertEquals(100, $mapped['c1']->getAttribute('min_amt'));
-        $this->assertEquals(300, $mapped['c1']->getAttribute('max_amt'));
+        $this->assertEquals(100, $mapped['c1']['min_amt']);
+        $this->assertEquals(300, $mapped['c1']['max_amt']);
 
-        $this->assertEquals(2, $mapped['c2']->getAttribute('cnt'));
-        $this->assertEquals(200, $mapped['c2']->getAttribute('total'));
-        $c2Avg = $mapped['c2']->getAttribute('avg_amt');
+        $this->assertEquals(2, $mapped['c2']['cnt']);
+        $this->assertEquals(200, $mapped['c2']['total']);
+        $c2Avg = $mapped['c2']['avg_amt'];
         $this->assertIsNumeric($c2Avg);
         $this->assertEqualsWithDelta(100.0, (float) $c2Avg, 0.1);
-        $this->assertEquals(50, $mapped['c2']->getAttribute('min_amt'));
-        $this->assertEquals(150, $mapped['c2']->getAttribute('max_amt'));
+        $this->assertEquals(50, $mapped['c2']['min_amt']);
+        $this->assertEquals(150, $mapped['c2']['max_amt']);
 
         $this->cleanupAggCollections($database, $cols);
     }
@@ -1372,7 +1372,7 @@ trait JoinTests
             ]));
         }
 
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::count('*', 'cnt'),
             Query::sum('amount', 'total'),
@@ -1381,18 +1381,18 @@ trait JoinTests
 
         $this->assertCount(3, $results);
         foreach ($results as $doc) {
-            $this->assertEquals(1, $doc->getAttribute('cnt'));
+            $this->assertEquals(1, $doc['cnt']);
         }
 
         $mapped = [];
         foreach ($results as $doc) {
-            $cust_uid = $doc->getAttribute('cust_uid');
+            $cust_uid = $doc['cust_uid'];
             $this->assertIsString($cust_uid);
             $mapped[$cust_uid] = $doc;
         }
-        $this->assertEquals(100, $mapped['c1']->getAttribute('total'));
-        $this->assertEquals(200, $mapped['c2']->getAttribute('total'));
-        $this->assertEquals(300, $mapped['c3']->getAttribute('total'));
+        $this->assertEquals(100, $mapped['c1']['total']);
+        $this->assertEquals(200, $mapped['c2']['total']);
+        $this->assertEquals(300, $mapped['c3']['total']);
 
         $this->cleanupAggCollections($database, $cols);
     }
@@ -1451,7 +1451,7 @@ trait JoinTests
             default => throw new \InvalidArgumentException('Unknown join method: '.$joinMethod),
         };
 
-        $results = $database->find($pCol, [
+        $results = $database->aggregate($pCol, [
             $joinQuery,
             Query::count('*', 'cnt'),
             Query::groupBy(['name']),
@@ -1518,18 +1518,18 @@ trait JoinTests
             default => throw new \InvalidArgumentException('Unknown aggregation method: '.$aggMethod),
         };
 
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             $aggQuery,
         ]);
 
         $this->assertCount(1, $results);
         if ($aggMethod === 'avg') {
-            $result = $results[0]->getAttribute('result');
+            $result = $results[0]['result'];
             $this->assertIsNumeric($result);
             $this->assertEqualsWithDelta($expected, (float) $result, 0.1);
         } else {
-            $this->assertEquals($expected, $results[0]->getAttribute('result'));
+            $this->assertEquals($expected, $results[0]['result']);
         }
 
         $this->cleanupAggCollections($database, $cols);
@@ -1603,7 +1603,7 @@ trait JoinTests
             default => throw new \InvalidArgumentException('Unknown operator: '.$operator),
         };
 
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::count('*', $alias),
             Query::groupBy(['cust_uid']),
@@ -1656,7 +1656,7 @@ trait JoinTests
             ])));
         }
 
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::sum('amount', 'total'),
             Query::groupBy(['cust_uid']),
@@ -1664,7 +1664,7 @@ trait JoinTests
         ]);
 
         $this->assertCount(3, $results);
-        $totals = array_map(fn (Document $d) => $this->intAttribute($d, 'total'), $results);
+        $totals = array_map(fn (array $d) => $this->intAttribute($d, 'total'), $results);
         $this->assertEquals([110, 90, 10], $totals);
 
         $this->cleanupAggCollections($database, $cols);
@@ -1702,7 +1702,7 @@ trait JoinTests
             ]));
         }
 
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::sum('amount', 'total'),
             Query::groupBy(['cust_uid']),
@@ -1749,7 +1749,7 @@ trait JoinTests
             ]));
         }
 
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::sum('amount', 'total'),
             Query::groupBy(['cust_uid']),
@@ -1812,7 +1812,7 @@ trait JoinTests
 
         // HAVING count >= 2 AND sum > 200 → c2 (cnt=2, sum=300) and c4 (cnt=4, sum=2600)
         // c1 excluded (cnt=1), c3 excluded (cnt=3, sum=150 < 200)
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::count('*', 'cnt'),
             Query::sum('amount', 'total'),
@@ -1824,7 +1824,7 @@ trait JoinTests
         ]);
 
         $this->assertCount(2, $results);
-        $ids = array_map(fn ($d) => $d->getAttribute('cust_uid'), $results);
+        $ids = array_map(fn ($d) => $d['cust_uid'], $results);
         $this->assertContains('c2', $ids);
         $this->assertContains('c4', $ids);
 
@@ -1871,7 +1871,7 @@ trait JoinTests
             ])));
         }
 
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::count('*', 'cnt'),
             Query::groupBy(['cust_uid']),
@@ -1879,7 +1879,7 @@ trait JoinTests
         ]);
 
         $this->assertCount(2, $results);
-        $ids = array_map(fn ($d) => $d->getAttribute('cust_uid'), $results);
+        $ids = array_map(fn ($d) => $d['cust_uid'], $results);
         $this->assertContains('c2', $ids);
         $this->assertContains('c3', $ids);
 
@@ -1912,13 +1912,13 @@ trait JoinTests
         ]));
 
         // Main table (orders) is empty
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::count('*', 'cnt'),
         ]);
 
         $this->assertCount(1, $results);
-        $this->assertEquals(0, $results[0]->getAttribute('cnt'));
+        $this->assertEquals(0, $results[0]['cnt']);
 
         $this->cleanupAggCollections($database, $cols);
     }
@@ -1954,7 +1954,7 @@ trait JoinTests
             ]));
         }
 
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::count('*', 'cnt'),
             Query::groupBy(['cust_uid']),
@@ -1962,7 +1962,7 @@ trait JoinTests
         ]);
 
         $this->assertCount(3, $results);
-        $custIds = array_map(fn ($d) => $d->getAttribute('cust_uid'), $results);
+        $custIds = array_map(fn ($d) => $d['cust_uid'], $results);
         $this->assertEquals(['gamma', 'beta', 'alpha'], $custIds);
 
         $this->cleanupAggCollections($database, $cols);
@@ -2026,7 +2026,7 @@ trait JoinTests
         }
 
         // Join both customers and products from orders
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::join($pCol, 'j1', [Query::on('prod_uid', '$id')]),
             Query::count('*', 'order_cnt'),
@@ -2037,13 +2037,13 @@ trait JoinTests
         $this->assertCount(2, $results);
         $mapped = [];
         foreach ($results as $doc) {
-            $cust_uid = $doc->getAttribute('cust_uid');
+            $cust_uid = $doc['cust_uid'];
             $this->assertIsString($cust_uid);
             $mapped[$cust_uid] = $doc;
         }
-        $this->assertEquals(3, $mapped['c1']->getAttribute('order_cnt'));
+        $this->assertEquals(3, $mapped['c1']['order_cnt']);
         $this->assertEquals(600, $this->intAttribute($mapped['c1'], 'total'));
-        $this->assertEquals(2, $mapped['c2']->getAttribute('order_cnt'));
+        $this->assertEquals(2, $mapped['c2']['order_cnt']);
         $this->assertEquals(400, $this->intAttribute($mapped['c2'], 'total'));
 
         $this->cleanupAggCollections($database, $cols);
@@ -2091,7 +2091,7 @@ trait JoinTests
 
         // Sums: c1=10, c2=300, c3=1100
         // NOT BETWEEN 50 AND 500 → c1 (10) and c3 (1100)
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::sum('amount', 'total'),
             Query::groupBy(['cust_uid']),
@@ -2099,7 +2099,7 @@ trait JoinTests
         ]);
 
         $this->assertCount(2, $results);
-        $ids = array_map(fn ($d) => $d->getAttribute('cust_uid'), $results);
+        $ids = array_map(fn ($d) => $d['cust_uid'], $results);
         $this->assertContains('c1', $ids);
         $this->assertContains('c3', $ids);
 
@@ -2149,7 +2149,7 @@ trait JoinTests
         }
 
         // Filter done only, group by customer, order by total ascending
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::equal('status', ['done']),
             Query::sum('amount', 'total'),
@@ -2158,7 +2158,7 @@ trait JoinTests
         ]);
 
         $this->assertCount(3, $results);
-        $totals = array_map(fn (Document $d) => $this->intAttribute($d, 'total'), $results);
+        $totals = array_map(fn (array $d) => $this->intAttribute($d, 'total'), $results);
         $this->assertEquals([500, 600, 900], $totals);
 
         $this->cleanupAggCollections($database, $cols);
@@ -2205,7 +2205,7 @@ trait JoinTests
         }
 
         // Counts: c1=1, c2=2, c3=2. HAVING count != 2 → c1 only
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::count('*', 'cnt'),
             Query::groupBy(['cust_uid']),
@@ -2213,8 +2213,8 @@ trait JoinTests
         ]);
 
         $this->assertCount(1, $results);
-        $this->assertEquals('c1', $results[0]->getAttribute('cust_uid'));
-        $this->assertEquals(1, $results[0]->getAttribute('cnt'));
+        $this->assertEquals('c1', $results[0]['cust_uid']);
+        $this->assertEquals(1, $results[0]['cnt']);
 
         $this->cleanupAggCollections($database, $cols);
     }
@@ -2252,7 +2252,7 @@ trait JoinTests
             '$permissions' => [Permission::read(Role::any())],
         ]));
 
-        $results = $database->find($pCol, [
+        $results = $database->aggregate($pCol, [
             Query::leftJoin($oCol, 'j0', [Query::on('$id', 'prod_uid')]),
             Query::count('*', 'cnt'),
             Query::groupBy(['name']),
@@ -2260,7 +2260,7 @@ trait JoinTests
 
         $this->assertCount(2, $results);
         foreach ($results as $doc) {
-            $this->assertEquals(1, $doc->getAttribute('cnt'));
+            $this->assertEquals(1, $doc['cnt']);
         }
 
         $this->cleanupAggCollections($database, $cols);
@@ -2308,7 +2308,7 @@ trait JoinTests
         }
 
         // Filter electronics only, group by customer
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::equal('category', ['electronics']),
             Query::count('*', 'cnt'),
@@ -2318,13 +2318,13 @@ trait JoinTests
         ]);
 
         $this->assertCount(2, $results);
-        $this->assertEquals('c2', $results[0]->getAttribute('cust_uid'));
+        $this->assertEquals('c2', $results[0]['cust_uid']);
         $this->assertEquals(1200, $this->intAttribute($results[0], 'total'));
-        $this->assertEquals('c1', $results[1]->getAttribute('cust_uid'));
+        $this->assertEquals('c1', $results[1]['cust_uid']);
         $this->assertEquals(500, $this->intAttribute($results[1], 'total'));
 
         // Now books only
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::equal('category', ['books']),
             Query::count('*', 'cnt'),
@@ -2333,7 +2333,7 @@ trait JoinTests
         ]);
 
         $this->assertCount(1, $results);
-        $this->assertEquals('c1', $results[0]->getAttribute('cust_uid'));
+        $this->assertEquals('c1', $results[0]['cust_uid']);
         $this->assertEquals(50, $this->intAttribute($results[0], 'total'));
 
         $this->cleanupAggCollections($database, $cols);
@@ -2385,7 +2385,7 @@ trait JoinTests
         // GROUP BY cust_uid, status with HAVING count >= 2
         // c1/done (3), c1/open (1), c2/done (1), c2/open (2)
         // Should return c1/done and c2/open
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::count('*', 'cnt'),
             Query::sum('amount', 'total'),
@@ -2394,9 +2394,9 @@ trait JoinTests
         ]);
 
         $this->assertCount(2, $results);
-        $keys = array_map(function (Document $document): string {
-            $custUid = $document->getAttribute('cust_uid');
-            $status = $document->getAttribute('status');
+        $keys = array_map(function (array $document): string {
+            $custUid = $document['cust_uid'];
+            $status = $document['status'];
             $this->assertIsString($custUid);
             $this->assertIsString($status);
 
@@ -2449,7 +2449,7 @@ trait JoinTests
             ])));
         }
 
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::countDistinct('product', 'unique_products'),
             Query::groupBy(['cust_uid']),
@@ -2458,12 +2458,12 @@ trait JoinTests
         $this->assertCount(2, $results);
         $mapped = [];
         foreach ($results as $doc) {
-            $cust_uid = $doc->getAttribute('cust_uid');
+            $cust_uid = $doc['cust_uid'];
             $this->assertIsString($cust_uid);
             $mapped[$cust_uid] = $doc;
         }
-        $this->assertEquals(3, $mapped['c1']->getAttribute('unique_products'));
-        $this->assertEquals(1, $mapped['c2']->getAttribute('unique_products'));
+        $this->assertEquals(3, $mapped['c1']['unique_products']);
+        $this->assertEquals(1, $mapped['c2']['unique_products']);
 
         $this->cleanupAggCollections($database, $cols);
     }
@@ -2513,7 +2513,7 @@ trait JoinTests
         // Filter to 'done' only, then HAVING sum > 200
         // c1 done sum=300, c2 done sum=50, c3 done sum=900
         // → c1 and c3 match
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::equal('status', ['done']),
             Query::sum('amount', 'total'),
@@ -2523,9 +2523,9 @@ trait JoinTests
         ]);
 
         $this->assertCount(2, $results);
-        $this->assertEquals('c1', $results[0]->getAttribute('cust_uid'));
+        $this->assertEquals('c1', $results[0]['cust_uid']);
         $this->assertEquals(300, $this->intAttribute($results[0], 'total'));
-        $this->assertEquals('c3', $results[1]->getAttribute('cust_uid'));
+        $this->assertEquals('c3', $results[1]['cust_uid']);
         $this->assertEquals(900, $this->intAttribute($results[1], 'total'));
 
         $this->cleanupAggCollections($database, $cols);
@@ -2566,7 +2566,7 @@ trait JoinTests
         }
 
         // Get top 3 products by order count, descending
-        $results = $database->find($pCol, [
+        $results = $database->aggregate($pCol, [
             Query::leftJoin($oCol, 'j0', [Query::on('$id', 'prod_uid')]),
             Query::count('*', 'order_cnt'),
             Query::groupBy(['name']),
@@ -2577,7 +2577,7 @@ trait JoinTests
         $this->assertCount(3, $results);
         $counts = [];
         foreach ($results as $document) {
-            $count = $document->getAttribute('order_cnt');
+            $count = $document['order_cnt'];
             $this->assertIsNumeric($count);
             $counts[] = (int) $count;
         }
@@ -2623,7 +2623,7 @@ trait JoinTests
             ])));
         }
 
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::endsWith('tag', 'express'),
             Query::count('*', 'cnt'),
@@ -2631,8 +2631,8 @@ trait JoinTests
         ]);
 
         $this->assertCount(1, $results);
-        $this->assertEquals(2, $results[0]->getAttribute('cnt'));
-        $this->assertEquals(300, $results[0]->getAttribute('total'));
+        $this->assertEquals(2, $results[0]['cnt']);
+        $this->assertEquals(300, $results[0]['total']);
 
         $this->cleanupAggCollections($database, $cols);
     }
@@ -2675,7 +2675,7 @@ trait JoinTests
         }
 
         // HAVING sum <= 200 → c1 (100) and c2 (200)
-        $results = $database->find($oCol, [
+        $results = $database->aggregate($oCol, [
             Query::join($cCol, 'j0', [Query::on('cust_uid', '$id')]),
             Query::sum('amount', 'total'),
             Query::groupBy(['cust_uid']),
@@ -2684,12 +2684,12 @@ trait JoinTests
         ]);
 
         $this->assertCount(2, $results);
-        $this->assertEquals('c1', $results[0]->getAttribute('cust_uid'));
-        $c1Total = $results[0]->getAttribute('total');
+        $this->assertEquals('c1', $results[0]['cust_uid']);
+        $c1Total = $results[0]['total'];
         $this->assertIsNumeric($c1Total);
         $this->assertEquals(100, (int) $c1Total);
-        $this->assertEquals('c2', $results[1]->getAttribute('cust_uid'));
-        $c2Total = $results[1]->getAttribute('total');
+        $this->assertEquals('c2', $results[1]['cust_uid']);
+        $c2Total = $results[1]['total'];
         $this->assertIsNumeric($c2Total);
         $this->assertEquals(200, (int) $c2Total);
 
@@ -5243,23 +5243,23 @@ trait JoinTests
                 return;
             }
 
-            $aggregated = $database->find($mCol, [
+            $aggregated = $database->aggregate($mCol, [
                 $join,
                 Query::max('rev.score', 'max_score'),
                 Query::groupBy(['name']),
                 Query::having([Query::greaterThanEqual('max_score', 999)]),
             ]);
             $this->assertLessThanOrEqual(\count($baseline), \count($aggregated));
-            $this->assertSecretJoinPayloadHidden($aggregated, 'j-secret', 999);
+            $this->assertSecretJoinPayloadHidden(self::rowDocuments($aggregated), 'j-secret', 999);
 
-            $maxOnly = $database->find($mCol, [
+            $maxOnly = $database->aggregate($mCol, [
                 $join,
                 Query::max('rev.score', 'max_score'),
                 Query::groupBy(['name']),
             ]);
-            $this->assertSecretJoinPayloadHidden($maxOnly, 'j-secret', 999);
+            $this->assertSecretJoinPayloadHidden(self::rowDocuments($maxOnly), 'j-secret', 999);
             foreach ($maxOnly as $document) {
-                $maxScore = $document->getAttribute('max_score');
+                $maxScore = $document['max_score'];
                 if (\is_numeric($maxScore)) {
                     $this->assertNotSame(999, (int) $maxScore);
                 }
@@ -6138,7 +6138,7 @@ trait JoinTests
         [$main, $joined] = $this->createFullOuterJoinAggregateCollections($database);
         $join = Query::fullOuterJoin($joined, 'b', [Query::on('link', 'link')]);
 
-        $rows = $database->find($main, [
+        $rows = $database->aggregate($main, [
             $join,
             Query::count('*', 'rows'),
             Query::count('b.$id', 'joined'),
@@ -6157,7 +6157,7 @@ trait JoinTests
         }
         $this->assertEqualsWithDelta(5.5, $this->numericAttribute($rows[0], 'mean'), 0.001);
 
-        $empty = $database->find($main, [
+        $empty = $database->aggregate($main, [
             $join,
             Query::equal('category', ['none']),
             Query::count('*', 'rows'),
@@ -6167,8 +6167,8 @@ trait JoinTests
 
         $this->assertCount(1, $empty);
         $this->assertSame(0, $this->intAttribute($empty[0], 'rows'));
-        $this->assertNull($empty[0]->getAttribute('total'));
-        $this->assertNull($empty[0]->getAttribute('high'));
+        $this->assertNull($empty[0]['total']);
+        $this->assertNull($empty[0]['high']);
 
         $this->cleanupAggCollections($database, $this->fullOuterJoinAggregateCollections());
     }
@@ -6193,15 +6193,15 @@ trait JoinTests
         ];
         $this->assertSame(
             [[null, 3, 6, 50], ['p', 2, 9, 10], ['q', 1, 7, 10]],
-            $this->fullOuterJoinGroups($database->find($main, $grouped)),
+            $this->fullOuterJoinGroups($database->aggregate($main, $grouped)),
         );
         $this->assertSame(
             [[null, 3, 6, 50], ['p', 2, 9, 10]],
-            $this->fullOuterJoinGroups($database->find($main, [...$grouped, Query::having([Query::greaterThan('rows', 1)])])),
+            $this->fullOuterJoinGroups($database->aggregate($main, [...$grouped, Query::having([Query::greaterThan('rows', 1)])])),
         );
         $this->assertSame(
             [['p', 2, 9, 10], ['q', 1, 7, 10]],
-            $this->fullOuterJoinGroups($database->find($main, [...$grouped, Query::limit(2), Query::offset(1)])),
+            $this->fullOuterJoinGroups($database->aggregate($main, [...$grouped, Query::limit(2), Query::offset(1)])),
         );
 
         $this->cleanupAggCollections($database, $this->fullOuterJoinAggregateCollections());
@@ -6258,7 +6258,7 @@ trait JoinTests
         $this->cleanupAggCollections($database, $this->fullOuterJoinAggregateCollections());
     }
 
-    public function testFullOuterJoinUnaliasedAggregatesKeepTheNamesTheEngineGivesThem(): void
+    public function testFullOuterJoinUnaliasedAggregatesComeBackUnderTheirDefaultNames(): void
     {
         $database = static::getDatabase();
         if (! $database->getAdapter()->supports(Capability::Joins)) {
@@ -6270,35 +6270,36 @@ trait JoinTests
         [$main, $joined] = $this->createFullOuterJoinAggregateCollections($database);
         $aggregates = [Query::count(), Query::sum('b.score'), Query::max('score')];
 
-        $left = $database->find($main, [Query::leftJoin($joined, 'b', [Query::on('link', 'link')]), ...$aggregates]);
-        $full = $database->find($main, [Query::fullOuterJoin($joined, 'b', [Query::on('link', 'link')]), ...$aggregates]);
+        $left = $database->aggregate($main, [Query::leftJoin($joined, 'b', [Query::on('link', 'link')]), ...$aggregates]);
+        $full = $database->aggregate($main, [Query::fullOuterJoin($joined, 'b', [Query::on('link', 'link')]), ...$aggregates]);
 
         $this->assertCount(1, $left);
         $this->assertCount(1, $full);
-        $this->assertSame(\array_keys($left[0]->getArrayCopy()), \array_keys($full[0]->getArrayCopy()));
+        $this->assertSame(['count', 'sum_b_score', 'max_score'], \array_keys($left[0]));
+        $this->assertSame(\array_keys($left[0]), \array_keys($full[0]));
         $this->assertSame(
             [6, 22, 30],
-            \array_map(static fn (mixed $value): int => \is_numeric($value) ? (int) $value : -1, \array_values($full[0]->getArrayCopy())),
+            \array_map(static fn (mixed $value): int => \is_numeric($value) ? (int) $value : -1, \array_values($full[0])),
         );
 
         $this->cleanupAggCollections($database, $this->fullOuterJoinAggregateCollections());
     }
 
     /**
-     * @param  array<Document>  $rows
+     * @param  list<array<string, mixed>>  $rows
      * @return list<array{mixed, int, int, int}>
      */
     private function fullOuterJoinGroups(array $rows): array
     {
-        return \array_values(\array_map(
-            fn (Document $row): array => [
-                $row->getAttribute('category'),
+        return \array_map(
+            fn (array $row): array => [
+                $row['category'] ?? null,
                 $this->intAttribute($row, 'rows'),
                 $this->intAttribute($row, 'total'),
                 $this->intAttribute($row, 'mainTotal'),
             ],
             $rows,
-        ));
+        );
     }
 
     /**
@@ -6436,14 +6437,14 @@ trait JoinTests
             [Query::count('*', 'rows'), Query::groupBy(['amount'])],
         ] as $aggregation) {
             try {
-                $database->find($customers, [...$joins, ...$aggregation]);
+                $database->aggregate($customers, [...$joins, ...$aggregation]);
                 $this->fail('A bare attribute two joins declare was bound to one of them');
             } catch (QueryException $error) {
                 $this->assertSame('Invalid query: Attribute "amount" is ambiguous across joins; qualify it with a join alias', $error->getMessage());
             }
         }
 
-        $results = $database->find($customers, [
+        $results = $database->aggregate($customers, [
             ...$joins,
             Query::sum('alpha.amount', 'ordered'),
             Query::sum('beta.amount', 'refunded'),
@@ -6466,7 +6467,7 @@ trait JoinTests
 
         [$customers, $orders, , $notes] = $collections = $this->seedJoinedAttributeCollections($database, 'jbar');
 
-        $results = $database->find($customers, [
+        $results = $database->aggregate($customers, [
             Query::join($notes, 'note', [Query::on('$id', 'customerId')]),
             Query::join($orders, 'purchase', [Query::on('$id', 'customerId')]),
             Query::sum('amount', 'total'),
@@ -6474,7 +6475,7 @@ trait JoinTests
         $this->assertCount(1, $results);
         $this->assertSame(150, $this->intAttribute($results[0], 'total'));
 
-        $results = $database->find($customers, [
+        $results = $database->aggregate($customers, [
             Query::join($notes, 'j0', [Query::on('$id', 'customerId')]),
             Query::join($orders, 'j1', [Query::on('$id', 'customerId')]),
             Query::sum('amount', 'total'),
@@ -6482,14 +6483,14 @@ trait JoinTests
         ]);
         $totals = [];
         foreach ($results as $result) {
-            $status = $result->getAttribute('status');
+            $status = $result['status'];
             $this->assertIsString($status);
             $totals[$status] = $this->intAttribute($result, 'total');
         }
         \ksort($totals);
         $this->assertSame(['open' => 50, 'paid' => 100], $totals);
 
-        $results = $database->find($customers, [
+        $results = $database->aggregate($customers, [
             Query::leftJoin($notes, 'note', [Query::on('$id', 'customerId')]),
             Query::count('$id', 'customers'),
         ]);
@@ -7642,8 +7643,8 @@ trait JoinTests
             'sum()' => fn () => $database->sum($customers, 'purchase.amount', [$join, Query::equal('purchase.nothing', ['x'])]),
         ];
         if ($database->getAdapter()->supports(Capability::Aggregations)) {
-            $reads['aggregate'] = fn () => $database->find($customers, [$join, Query::countDistinct('purchase.nothing', 'total')]);
-            $reads['groupBy'] = fn () => $database->find($customers, [$join, Query::count('*', 'rows'), Query::groupBy(['purchase.nothing'])]);
+            $reads['aggregate'] = fn () => $database->aggregate($customers, [$join, Query::countDistinct('purchase.nothing', 'total')]);
+            $reads['groupBy'] = fn () => $database->aggregate($customers, [$join, Query::count('*', 'rows'), Query::groupBy(['purchase.nothing'])]);
         }
 
         foreach ($reads as $type => $read) {
@@ -7737,14 +7738,14 @@ trait JoinTests
             'Aggregate bitAnd requires a numeric attribute that is not an array: purchase.$createdAt' => Query::bitAnd('purchase.$createdAt', 'bits'),
         ] as $message => $aggregate) {
             try {
-                $database->find($customers, [...$joins, $aggregate]);
+                $database->aggregate($customers, [...$joins, $aggregate]);
                 $this->fail('An aggregate over a joined attribute that holds no number reached the engine: '.$message);
             } catch (QueryException $error) {
                 $this->assertSame('Invalid query: '.$message, $error->getMessage());
             }
         }
 
-        $results = $database->find($customers, [...$joins, Query::sum('purchase.amount', 'total')]);
+        $results = $database->aggregate($customers, [...$joins, Query::sum('purchase.amount', 'total')]);
         $this->assertCount(1, $results);
         $this->assertSame(150, $this->intAttribute($results[0], 'total'));
 
@@ -7768,22 +7769,22 @@ trait JoinTests
         ] as $type => $join) {
             foreach ([Document::ID, Document::SEQUENCE, Document::CREATED_AT, Document::UPDATED_AT, Document::PERMISSIONS] as $attribute) {
                 $total = 0;
-                foreach ($database->find($customers, [$join, Query::count('*', 'rows'), Query::groupBy(['purchase.'.$attribute])]) as $group) {
-                    $this->assertArrayHasKey(Storage::column($attribute), $group->getArrayCopy(), $type.' grouped by purchase.'.$attribute);
+                foreach ($database->aggregate($customers, [$join, Query::count('*', 'rows'), Query::groupBy(['purchase.'.$attribute])]) as $group) {
+                    $this->assertArrayHasKey(Storage::column($attribute), $group, $type.' grouped by purchase.'.$attribute);
                     $total += $this->intAttribute($group, 'rows');
                 }
                 $this->assertSame(3, $total, $type.' grouped by purchase.'.$attribute);
             }
         }
 
-        $groups = $database->find($customers, [
+        $groups = $database->aggregate($customers, [
             Query::join($orders, 'purchase', [Query::on('$id', 'customerId')]),
             Query::sum('purchase.amount', 'total'),
             Query::groupBy(['purchase.$id']),
             Query::orderAsc('purchase.$id'),
         ]);
-        $this->assertSame(['open', 'other', 'paid'], \array_map(static fn (Document $group): mixed => $group->getAttribute(Storage::UID), $groups));
-        $this->assertSame([50, 7, 100], \array_map(fn (Document $group): int => $this->intAttribute($group, 'total'), $groups));
+        $this->assertSame(['open', 'other', 'paid'], \array_map(static fn (array $group): mixed => $group[Storage::UID], $groups));
+        $this->assertSame([50, 7, 100], \array_map(fn (array $group): int => $this->intAttribute($group, 'total'), $groups));
 
         $this->cleanupAggCollections($database, $collections);
     }
@@ -7893,7 +7894,7 @@ trait JoinTests
             'groupBy' => [Query::count('*', 'rows'), Query::groupBy(['$collection'])],
         ] as $shape => $queries) {
             try {
-                $database->find($customers, $queries);
+                $database->aggregate($customers, $queries);
                 $this->fail('a '.$shape.' of $collection, which no table holds, reached the engine');
             } catch (QueryException $error) {
                 $this->assertSame('Invalid query: Attribute not found in schema: $collection', $error->getMessage(), $shape);
@@ -7902,12 +7903,12 @@ trait JoinTests
 
         $reads = [
             '$tenant' => [
-                'count' => fn (): array => $database->find($customers, [Query::count('$tenant', 'total')]),
-                'groupBy' => fn (): array => $database->find($customers, [Query::count('*', 'total'), Query::groupBy(['$tenant'])]),
+                'count' => fn (): array => $database->aggregate($customers, [Query::count('$tenant', 'total')]),
+                'groupBy' => fn (): array => $database->aggregate($customers, [Query::count('*', 'total'), Query::groupBy(['$tenant'])]),
             ],
             'purchase.$tenant' => [
-                'count' => fn (): array => $database->find($customers, [$purchase, Query::count('purchase.$tenant', 'total')]),
-                'groupBy' => fn (): array => $database->find($customers, [$purchase, Query::count('*', 'total'), Query::groupBy(['purchase.$tenant'])]),
+                'count' => fn (): array => $database->aggregate($customers, [$purchase, Query::count('purchase.$tenant', 'total')]),
+                'groupBy' => fn (): array => $database->aggregate($customers, [$purchase, Query::count('*', 'total'), Query::groupBy(['purchase.$tenant'])]),
             ],
         ];
 
@@ -7944,7 +7945,7 @@ trait JoinTests
             $grouped = $reads[$attribute]['groupBy']();
             $this->assertCount(1, $grouped, $attribute);
             $this->assertSame($rows, $this->intAttribute($grouped[0], 'total'), $attribute);
-            $value = $grouped[0]->getAttribute(Storage::TENANT);
+            $value = $grouped[0][Storage::TENANT];
             $this->assertIsScalar($value, $attribute);
             $this->assertSame($tenant, (string) $value, $attribute);
         }
@@ -8178,7 +8179,7 @@ trait JoinTests
             }
         }
 
-        $grouped = $database->find($tickets, [
+        $grouped = $database->aggregate($tickets, [
             Query::join($themes, 'th', [Query::on('theme', '$id')]),
             Query::count('*', 'total'),
             Query::groupBy(['th.when']),

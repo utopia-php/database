@@ -314,6 +314,7 @@ final class ParallelPopulationTest extends TestCase
         $this->connections++;
 
         return new class (new PDO('sqlite:' . $this->file)) extends SQLite {
+            #[\Override]
             public function withTransaction(callable $callback): mixed
             {
                 return $callback();

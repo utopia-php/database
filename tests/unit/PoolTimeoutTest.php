@@ -218,6 +218,7 @@ class TimeoutRecordingMemory extends Memory implements Feature\Timeouts
 
     private int $timeout = 0;
 
+    #[\Override]
     public function getTimeout(Event $event = Event::All): int
     {
         return $this->timeouts[$event->value]
@@ -225,12 +226,14 @@ class TimeoutRecordingMemory extends Memory implements Feature\Timeouts
             ?? $this->timeout;
     }
 
+    #[\Override]
     public function setTimeout(int $milliseconds, Event $event = Event::All): void
     {
         $this->timeouts[$event->value] = $milliseconds;
         $this->timeout = $milliseconds;
     }
 
+    #[\Override]
     public function clearTimeout(Event $event = Event::All): void
     {
         if ($event === Event::All) {

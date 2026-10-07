@@ -31,6 +31,7 @@ final class DocumentsValidatorDatabase extends Database
     /**
      * @param  array<Document>  $joinedCollections
      */
+    #[\Override]
     protected function getDocumentsValidator(Document $collection, array $joinedCollections = []): DocumentsValidator
     {
         $this->documentsValidators++;

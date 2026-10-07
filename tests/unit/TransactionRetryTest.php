@@ -371,6 +371,7 @@ class TransactionRetryTest extends TestCase
     public function testNonRetriableActionAbortsWhenRollbackFails(): void
     {
         $adapter = new class () extends DatabaseMemory {
+            #[\Override]
             public function rollbackTransaction(): bool
             {
                 throw new \RuntimeException('rollback failed');
@@ -396,6 +397,7 @@ class TransactionRetryTest extends TestCase
     public function testTransientActionRunsAgainWhenRollbackFails(): void
     {
         $adapter = new class () extends DatabaseMemory {
+            #[\Override]
             public function rollbackTransaction(): bool
             {
                 parent::rollbackTransaction();
@@ -429,6 +431,7 @@ class TransactionRetryTest extends TestCase
         $adapter = new class (new \Redis()) extends RedisAdapter {
             public bool $failReplay = true;
 
+            #[\Override]
             protected function rollbackJournal(): void
             {
                 if ($this->failReplay) {

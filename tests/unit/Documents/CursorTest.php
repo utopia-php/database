@@ -40,7 +40,6 @@ final class CursorTest extends TestCase
         HookFixture::seed($database, \array_map(static fn (int $index): string => 'doc'.$index, \range(1, 150)));
 
         $this->assertCount(150, \iterator_to_array($database->cursor(HookFixture::COLLECTION), false));
-        $this->assertSame(100, Database::CURSOR_BATCH_SIZE);
         $this->assertSame([100, 100], $limits);
     }
 
@@ -137,6 +136,7 @@ final class CursorTest extends TestCase
                 parent::__construct($adapter, $cache);
             }
 
+            #[\Override]
             public function find(string $collection, array $queries = [], PermissionType $forPermission = PermissionType::Read): array
             {
                 if ($collection === HookFixture::COLLECTION) {

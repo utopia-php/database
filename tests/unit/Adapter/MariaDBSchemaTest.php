@@ -197,6 +197,7 @@ final class MariaDBSchemaTest extends TestCase
                     parent::__construct($pdo);
                 }
 
+                #[\Override]
                 public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
                 {
                     return $collection->getId() === Database::METADATA && $id === $this->collection->getId() ? $this->collection : new Document();
@@ -209,6 +210,7 @@ final class MariaDBSchemaTest extends TestCase
                     parent::__construct($pdo);
                 }
 
+                #[\Override]
                 public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
                 {
                     return $collection->getId() === Database::METADATA && $id === $this->collection->getId() ? $this->collection : new Document();

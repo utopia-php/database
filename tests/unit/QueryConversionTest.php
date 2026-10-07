@@ -92,6 +92,7 @@ final class QueryConversionTest extends TestCase
     public function testOnlyMapValuesOfAnUndeclaredAttributeAreObjectQueries(Query $query, string $type): void
     {
         $database = $this->database(new class () extends Memory {
+            #[\Override]
             public function capabilities(): array
             {
                 return \array_values(\array_filter(

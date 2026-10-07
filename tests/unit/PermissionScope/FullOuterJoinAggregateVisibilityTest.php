@@ -326,7 +326,7 @@ final class FullOuterJoinAggregateVisibilityTest extends TestCase
             $database->aggregate(self::AUTHORS, [$this->join(), Query::groupBy([$attribute]), Query::count('*', 'rows')]),
         );
 
-        return $this->sorted(\array_values($counts));
+        return $this->sorted($counts);
     }
 
     /**

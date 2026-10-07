@@ -14,6 +14,7 @@ final class ElsewherePinnedPool extends Pool
         $this->elsewhere = $adapter;
     }
 
+    #[\Override]
     protected function pin(): ?Adapter
     {
         return $this->elsewhere;

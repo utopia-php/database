@@ -242,6 +242,7 @@ final class SQLitePlanTest extends TestCase
                 parent::__construct($pdo);
             }
 
+            #[\Override]
             protected function prepareStatement(string $sql, ?Event $event = null): DatabasePDOStatement|PDOStatementProxy|PDOStatement
             {
                 $this->statements->append([$sql, []]);
@@ -249,6 +250,7 @@ final class SQLitePlanTest extends TestCase
                 return parent::prepareStatement($sql, $event);
             }
 
+            #[\Override]
             protected function executeResult(Statement $result, ?Event $event = null, string $collection = ''): PDOStatement|DatabasePDOStatement|PDOStatementProxy
             {
                 $statement = parent::executeResult($result, $event, $collection);

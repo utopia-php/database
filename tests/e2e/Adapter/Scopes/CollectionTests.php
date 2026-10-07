@@ -444,7 +444,9 @@ trait CollectionTests
             return;
         }
 
-        $this->assertNotSame('', $database->getConnectionId());
+        $id = $database->getConnectionId();
+        $this->assertIsString($id);
+        $this->assertNotSame('', $id);
     }
 
     public function testKeywords(): void

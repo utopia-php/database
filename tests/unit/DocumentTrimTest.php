@@ -89,8 +89,11 @@ final class DocumentTrimTest extends TestCase
         $document = $this->document();
 
         $only = $document->only(['child']);
+        $this->assertIsArray($only['child']);
         $only['child']['name'] = 'changed';
         $except = $document->except(['name']);
+        $this->assertIsArray($except['children']);
+        $this->assertIsArray($except['children'][0]);
         $except['children'][0]['secret'] = 'changed';
 
         $this->assertSame('Parent', $document->getAttribute('name'));

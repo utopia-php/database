@@ -395,6 +395,7 @@ final class RelationshipSchemaTest extends TestCase
     public function testARenameTheSchemaAlreadyAppliedIsCompleted(): void
     {
         $adapter = new class (new PDO('sqlite::memory:')) extends SQLite {
+            #[\Override]
             public function updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, RelationshipUpdate $update): bool
             {
                 parent::updateRelationship($collection, $relationship, $side, $update);
@@ -560,6 +561,7 @@ final class RelationshipSchemaTest extends TestCase
                 parent::__construct($adapter, $cache);
             }
 
+            #[\Override]
             public function purgeCachedCollection(string $collection): void
             {
                 if ($this->armed && \str_starts_with($collection, '_') && \in_array(++$this->junctionPurges, [3, 4, 5], true)) {
@@ -569,6 +571,7 @@ final class RelationshipSchemaTest extends TestCase
                 parent::purgeCachedCollection($collection);
             }
 
+            #[\Override]
             public function updateDocument(string $collection, string $id, Document $document): Document
             {
                 if ($this->armed && $collection === self::METADATA && $id === 'books' && RelationshipSchemaTest::replacedAttribute($this, $id, $document) === 'authors_of') {
@@ -614,6 +617,7 @@ final class RelationshipSchemaTest extends TestCase
             /** @var list<string> */
             public array $rollbacks = [];
 
+            #[\Override]
             public function renameIndex(string $collection, string $old, string $new): void
             {
                 if ($this->armed && $new === '_index_writers') {
@@ -625,6 +629,7 @@ final class RelationshipSchemaTest extends TestCase
                 parent::renameIndex($collection, $old, $new);
             }
 
+            #[\Override]
             public function updateDocument(string $collection, string $id, Document $document): Document
             {
                 $replaced = $this->armed && $collection === self::METADATA ? RelationshipSchemaTest::replacedAttribute($this, $id, $document) : null;
@@ -776,21 +781,25 @@ final class RelationshipSchemaTest extends TestCase
                 parent::__construct();
             }
 
+            #[\Override]
             public function createRelationship(string $collection, Relationship $relationship): bool
             {
                 return $this->intercept(__FUNCTION__, [$relationship]) ?? parent::createRelationship($collection, $relationship);
             }
 
+            #[\Override]
             public function updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, RelationshipUpdate $update): bool
             {
                 return $this->intercept(__FUNCTION__, [$relationship, $update->key, $update->twoWayKey]) ?? parent::updateRelationship($collection, $relationship, $side, $update);
             }
 
+            #[\Override]
             public function deleteRelationship(string $collection, Relationship $relationship, RelationshipSide $side): bool
             {
                 return $this->intercept(__FUNCTION__, [$relationship]) ?? parent::deleteRelationship($collection, $relationship, $side);
             }
 
+            #[\Override]
             public function deleteCollection(string $id): bool
             {
                 if (! \str_starts_with($id, '_')) {
@@ -800,11 +809,13 @@ final class RelationshipSchemaTest extends TestCase
                 return $this->intercept(__FUNCTION__, [$id]) ?? parent::deleteCollection($id);
             }
 
+            #[\Override]
             public function createIndex(string $collection, Index $index, array $indexAttributeTypes = [], array $collation = []): bool
             {
                 return $this->intercept(__FUNCTION__, [$collection, $index]) ?? parent::createIndex($collection, $index, $indexAttributeTypes, $collation);
             }
 
+            #[\Override]
             public function deleteIndex(string $collection, string $id): bool
             {
                 return $this->intercept(__FUNCTION__, [$collection, $id]) ?? parent::deleteIndex($collection, $id);
@@ -841,6 +852,7 @@ final class RelationshipSchemaTest extends TestCase
                 parent::__construct($adapter, $cache);
             }
 
+            #[\Override]
             public function updateDocument(string $collection, string $id, Document $document): Document
             {
                 if ($this->update !== null) {
@@ -856,6 +868,7 @@ final class RelationshipSchemaTest extends TestCase
                 return parent::updateDocument($collection, $id, $document);
             }
 
+            #[\Override]
             public function createDocument(string $collection, Document $document): Document
             {
                 if ($this->create !== null) {
@@ -924,6 +937,7 @@ final class RelationshipSchemaTest extends TestCase
     {
         if ($adapter instanceof SQLite) {
             return new class (new PDO('sqlite::memory:')) extends SQLite {
+                #[\Override]
                 public function updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, RelationshipUpdate $update): bool
                 {
                     return false;
@@ -938,6 +952,7 @@ final class RelationshipSchemaTest extends TestCase
     {
         if ($adapter instanceof SQLite) {
             return new class (new PDO('sqlite::memory:')) extends SQLite {
+                #[\Override]
                 public function deleteRelationship(string $collection, Relationship $relationship, RelationshipSide $side): bool
                 {
                     throw new NotFoundException('Relationship not found in the schema');

@@ -91,6 +91,7 @@ final class FailureTest extends TestCase
             /**
              * @return array<Capability>
              */
+            #[\Override]
             public function capabilities(): array
             {
                 return [...parent::capabilities(), Capability::AlterLock];

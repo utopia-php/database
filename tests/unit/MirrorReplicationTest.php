@@ -792,6 +792,7 @@ final class MirrorReplicationTest extends TestCase
                 parent::__construct($pdo);
             }
 
+            #[\Override]
             public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
             {
                 return $this->busy(function () use ($collection, $id, $queries, $forUpdate): Document {
@@ -807,6 +808,7 @@ final class MirrorReplicationTest extends TestCase
                 });
             }
 
+            #[\Override]
             public function increaseDocumentAttribute(Document $collection, string $id, string $attribute, int|float|string $value, string $updatedAt, int|float|string|null $min = null, int|float|string|null $max = null): bool
             {
                 return $this->busy(function () use ($collection, $id, $attribute, $value, $updatedAt, $min, $max): bool {
@@ -817,6 +819,7 @@ final class MirrorReplicationTest extends TestCase
                 });
             }
 
+            #[\Override]
             public function createDocuments(Document $collection, array $documents): array
             {
                 return $this->busy(function () use ($collection, $documents): array {
@@ -830,6 +833,7 @@ final class MirrorReplicationTest extends TestCase
                 });
             }
 
+            #[\Override]
             public function createDocument(Document $collection, Document $document): Document
             {
                 return $this->busy(function () use ($collection, $document): Document {
@@ -841,6 +845,7 @@ final class MirrorReplicationTest extends TestCase
                 });
             }
 
+            #[\Override]
             public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
             {
                 return $this->busy(function () use ($collection, $id, $document, $skipPermissions): Document {
@@ -852,6 +857,7 @@ final class MirrorReplicationTest extends TestCase
                 });
             }
 
+            #[\Override]
             public function updateDocuments(Document $collection, Document $updates, array $documents, array $skipPermissions = []): int
             {
                 return $this->busy(function () use ($collection, $updates, $documents, $skipPermissions): int {
@@ -869,6 +875,7 @@ final class MirrorReplicationTest extends TestCase
              * @param  array<Change>  $changes
              * @return array<Document>
              */
+            #[\Override]
             public function upsertDocuments(Document $collection, array $changes, ?string $increase = null): array
             {
                 return $this->busy(function () use ($collection, $increase, $changes): array {
@@ -886,6 +893,7 @@ final class MirrorReplicationTest extends TestCase
                 });
             }
 
+            #[\Override]
             public function deleteDocument(Document $collection, string $id): bool
             {
                 return $this->busy(function () use ($collection, $id): bool {

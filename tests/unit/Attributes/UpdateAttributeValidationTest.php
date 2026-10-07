@@ -443,6 +443,7 @@ final class UpdateAttributeValidationTest extends TestCase
                 );
             }
 
+            #[\Override]
             public function getAttributeWidth(Document $collection): int
             {
                 return 1_000;
@@ -463,6 +464,7 @@ final class UpdateAttributeValidationTest extends TestCase
     public function testAnAdapterThatDoesNotUpdateTheColumnFailsTheUpdate(): void
     {
         $database = $this->database(new class () extends Memory {
+            #[\Override]
             public function updateAttribute(string $collection, string $key, Attribute $attribute): bool
             {
                 return false;
@@ -477,6 +479,7 @@ final class UpdateAttributeValidationTest extends TestCase
     public function testARenameTheAdapterDoesNotApplyIsReportedWithBothNames(): void
     {
         $database = $this->database(new class () extends Memory {
+            #[\Override]
             public function renameAttribute(string $collection, string $old, string $new): bool
             {
                 return false;
@@ -500,6 +503,7 @@ final class UpdateAttributeValidationTest extends TestCase
                 parent::__construct($pdo);
             }
 
+            #[\Override]
             public function renameAttribute(string $collection, string $old, string $new): bool
             {
                 throw $this->cause;
@@ -533,6 +537,7 @@ final class UpdateAttributeValidationTest extends TestCase
     private function vectorMemory(): Memory
     {
         return new class () extends Memory {
+            #[\Override]
             public function capabilities(): array
             {
                 return [...parent::capabilities(), Capability::Vectors];

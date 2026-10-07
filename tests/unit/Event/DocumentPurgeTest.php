@@ -54,7 +54,11 @@ final class DocumentPurgeTest extends TestCase
         yield 'decreaseDocumentAttribute' => [static fn (Database $database): mixed => $database->decreaseDocumentAttribute(HookFixture::COLLECTION, 'first', 'views')];
         yield 'deleteDocument' => [static fn (Database $database): mixed => $database->deleteDocument(HookFixture::COLLECTION, 'first')];
         yield 'deleteDocuments' => [static fn (Database $database): mixed => $database->deleteDocuments(HookFixture::COLLECTION)];
-        yield 'purgeCachedDocument' => [static fn (Database $database): mixed => $database->purgeCachedDocument(HookFixture::COLLECTION, 'first')];
+        yield 'purgeCachedDocument' => [static function (Database $database): mixed {
+            $database->purgeCachedDocument(HookFixture::COLLECTION, 'first');
+
+            return null;
+        }];
     }
 
     /**
@@ -234,6 +238,7 @@ final class DocumentPurgeTest extends TestCase
         $adapter = new class () extends Memory {
             public int $commitFailures = 0;
 
+            #[\Override]
             public function commitTransaction(): bool
             {
                 if ($this->commitFailures > 0) {

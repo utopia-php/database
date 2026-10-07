@@ -166,6 +166,7 @@ final class FilteredAggregateStatementTest extends TestCase
         $adapter = new class ($pdo) extends MariaDB {
             public int $built = 0;
 
+            #[\Override]
             protected function createBuilder(): SQLBuilder
             {
                 return parent::createBuilder()->beforeBuild(function (): void {

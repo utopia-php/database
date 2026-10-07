@@ -15,9 +15,9 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 
 /**
- * The statements skipDuplicates() sends on the engines the host cannot run.
+ * The statements ignoreDuplicates() sends on the engines the host cannot run.
  */
-final class SkipDuplicatesStatementTest extends TestCase
+final class IgnoreDuplicatesStatementTest extends TestCase
 {
     private const string STORED = 'stored';
 

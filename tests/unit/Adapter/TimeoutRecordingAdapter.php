@@ -11,11 +11,13 @@ final class TimeoutRecordingAdapter extends Memory implements Feature\Timeouts
 {
     use Timeout;
 
+    #[\Override]
     public function setTimeout(int $milliseconds, Event $event = Event::All): void
     {
         $this->setTimeoutState($milliseconds, $event);
     }
 
+    #[\Override]
     public function clearTimeout(Event $event = Event::All): void
     {
         $this->clearTimeoutState($event);

@@ -10,9 +10,7 @@ use Utopia\Cache\Adapter\None as NoneCacheAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\Mongo;
-use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\SQL;
-use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
@@ -2670,7 +2668,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($this->engineIs(Mongo::class)) {
+        if (! $this->supportsBulkWrites()) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2849,7 +2847,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($this->engineIs(Mongo::class)) {
+        if (! $this->supportsBulkWrites()) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -3891,8 +3889,8 @@ trait DocumentTests
         $database = static::getDatabase();
 
         // Determine regex support type
-        $supportsPCRE = ! $this->engineIs(Postgres::class);
-        $supportsPOSIX = $this->engineIs(Postgres::class);
+        $supportsPCRE = ! $this->usesPosixRegex();
+        $supportsPOSIX = $this->usesPosixRegex();
 
         // Determine word boundary pattern based on support
         $wordBoundaryPattern = null;
@@ -7799,7 +7797,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($this->engineIs(Mongo::class)) {
+        if (! $this->supportsBulkWrites()) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -7925,7 +7923,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($this->engineIs(Mongo::class)) {
+        if (! $this->supportsBulkWrites()) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -7975,7 +7973,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($this->engineIs(Mongo::class)) {
+        if (! $this->supportsBulkWrites()) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -8076,7 +8074,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($this->engineIs(Mongo::class)) {
+        if (! $this->supportsBulkWrites()) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -8633,7 +8631,7 @@ trait DocumentTests
         }
 
         // 3) updateDocuments setting required to null should fail when validation enabled, pass when disabled
-        if (! $this->engineIs(Mongo::class)) {
+        if ($this->supportsBulkWrites()) {
             try {
                 $database->updateDocuments($collection, new Document([
                     'name' => null,
@@ -10266,7 +10264,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $this->engineIs(SQL::class) || $this->engineIs(SQLite::class)) {
+        if (! $this->supportsBitwiseAggregates()) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -10298,18 +10296,18 @@ trait DocumentTests
                 'bitXor' => static fn (string $alias = ''): Query => Query::bitXor('flags', $alias),
             ];
             foreach ($aggregates as $method => $aggregate) {
-                $empty = $database->find($collection, [Query::equal('category', ['none']), $aggregate()]);
+                $empty = $database->aggregate($collection, [Query::equal('category', ['none']), $aggregate()]);
                 $this->assertCount(1, $empty, $method);
-                $values = $empty[0]->getArrayCopy();
+                $values = $empty[0];
                 $this->assertNotSame([], $values, $method);
                 foreach ($values as $name => $value) {
                     $this->assertStringStartsNotWith('$inputs:', (string) $name, $method);
                     $this->assertNull($value, $method.': '.$name);
                 }
 
-                $filled = $database->find($collection, [Query::equal('category', ['a']), $aggregate(), $aggregate('named')]);
+                $filled = $database->aggregate($collection, [Query::equal('category', ['a']), $aggregate(), $aggregate('named')]);
                 $this->assertCount(1, $filled, $method);
-                $values = $filled[0]->getArrayCopy();
+                $values = $filled[0];
                 $named = $values['named'] ?? null;
                 unset($values['named']);
                 $this->assertNotNull($named, $method);
@@ -10562,13 +10560,13 @@ trait DocumentTests
             );
 
             foreach ([
-                'Invalid query: Attribute "price" is ambiguous across joins; qualify it with a join alias' => [$item, $extra, Query::orderAsc('price')],
-                'Invalid query: Attribute not found in schema: weight' => [$item, Query::orderAsc('weight')],
-                'Invalid query: Cannot select "it.*": an aggregation query can only select the attributes it groups by' => [$item, Query::count('*', 'orders'), Query::groupBy(['it.name']), Query::select(['it.*'])],
-                'Invalid query: Attribute not found in schema: zz' => [$item, Query::select(['name', 'zz.*'])],
-            ] as $message => $queries) {
+                'Invalid query: Attribute "price" is ambiguous across joins; qualify it with a join alias' => fn (): array => $database->find($orders, [$item, $extra, Query::orderAsc('price')]),
+                'Invalid query: Attribute not found in schema: weight' => fn (): array => $database->find($orders, [$item, Query::orderAsc('weight')]),
+                'Invalid query: Cannot select "it.*": an aggregation query can only select the attributes it groups by' => fn (): array => $database->aggregate($orders, [$item, Query::count('*', 'orders'), Query::groupBy(['it.name']), Query::select(['it.*'])]),
+                'Invalid query: Attribute not found in schema: zz' => fn (): array => $database->find($orders, [$item, Query::select(['name', 'zz.*'])]),
+            ] as $message => $read) {
                 try {
-                    $database->find($orders, $queries);
+                    $read();
                     $this->fail('accepted: '.$message);
                 } catch (QueryException $error) {
                     $this->assertSame($message, $error->getMessage());

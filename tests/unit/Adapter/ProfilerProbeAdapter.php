@@ -10,6 +10,7 @@ final class ProfilerProbeAdapter extends Memory implements Feature\Connection
 {
     public ?QueryProfiler $profiled = null;
 
+    #[\Override]
     public function ping(): bool
     {
         $this->profiled = $this->getProfiler();
@@ -17,6 +18,7 @@ final class ProfilerProbeAdapter extends Memory implements Feature\Connection
         return true;
     }
 
+    #[\Override]
     public function reconnect(): void
     {
     }

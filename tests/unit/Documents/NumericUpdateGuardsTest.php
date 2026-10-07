@@ -31,6 +31,7 @@ final class NumericUpdateGuardsTest extends TestCase
         $adapter = new class () extends Memory {
             public bool $unsigned = true;
 
+            #[\Override]
             public function supports(Capability $feature): bool
             {
                 return $feature === Capability::UnsignedBigInt ? $this->unsigned : parent::supports($feature);
@@ -206,6 +207,7 @@ final class NumericUpdateGuardsTest extends TestCase
                 parent::__construct();
             }
 
+            #[\Override]
             public function capabilities(): array
             {
                 return \array_values(\array_filter(

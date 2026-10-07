@@ -26,9 +26,11 @@ use Tests\E2E\Adapter\Scopes\VectorTests;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\Memory;
+use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\Pool;
 use Utopia\Database\Adapter\Postgres;
+use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Database;
 use Utopia\Database\Hook\Permissions;
@@ -91,11 +93,9 @@ abstract class Base extends TestCase
 
         self::$authorization->addRole('any');
 
-        $db = $this->getDatabase();
-        if ($db->getRelationshipHook() === null) {
-            $db->addHook(new Relationships());
-        }
-        $db->removeHook(Permissions::class)->addHook(new Permissions());
+        $this->getDatabase()
+            ->removeHook(Relationships::class)->addHook(new Relationships())
+            ->removeHook(Permissions::class)->addHook(new Permissions());
     }
 
     protected function tearDown(): void
@@ -134,8 +134,48 @@ abstract class Base extends TestCase
         return false;
     }
 
-    private function includesBoundaries(): bool
+    /**
+     * Engine properties the 7.x capabilities BoundaryInclusive, BatchOperations, AtomicTransactions,
+     * CacheSkipOnFailure, BitwiseAggregates, MultiDimensionDistance, OptionalSpatial and POSIX declared; 8.0 deleted
+     * them (DEC-15), so each reads the engine with the truth table those declarations had.
+     */
+    private function spatialIncludesBoundaries(): bool
     {
         return $this->engineIs(MariaDB::class, Postgres::class, SQLite::class, Memory::class) && ! $this->engineIs(MySQL::class);
+    }
+
+    private function supportsBulkWrites(): bool
+    {
+        return ! $this->engineIs(Mongo::class);
+    }
+
+    private function supportsAtomicTransactions(): bool
+    {
+        return $this->engineIs(SQL::class, Memory::class);
+    }
+
+    private function skipsCacheOnFailure(): bool
+    {
+        return $this->engineIs(SQL::class);
+    }
+
+    private function supportsBitwiseAggregates(): bool
+    {
+        return $this->engineIs(SQL::class) && ! $this->engineIs(SQLite::class);
+    }
+
+    private function supportsMultiDimensionDistance(): bool
+    {
+        return $this->engineIs(MySQL::class, Postgres::class);
+    }
+
+    private function supportsOptionalSpatial(): bool
+    {
+        return $this->engineIs(MariaDB::class) && ! $this->engineIs(MySQL::class);
+    }
+
+    private function usesPosixRegex(): bool
+    {
+        return $this->engineIs(Postgres::class);
     }
 }

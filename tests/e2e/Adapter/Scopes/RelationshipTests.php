@@ -14,7 +14,6 @@ use Tests\E2E\Adapter\Scopes\Relationships\OneToOneTests;
 use Tests\E2E\Adapter\Support\EventRecorder;
 use Throwable;
 use Utopia\Database\Adapter\Feature;
-use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
@@ -1895,7 +1894,7 @@ trait RelationshipTests
 
     public function testUpdateDocumentsRelationships(): void
     {
-        if ($this->engineIs(Mongo::class) || ! ($this->getDatabase()->getAdapter()->hasFeature(Feature\Relationships::class))) {
+        if (! $this->supportsBulkWrites() || ! ($this->getDatabase()->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
 
             return;

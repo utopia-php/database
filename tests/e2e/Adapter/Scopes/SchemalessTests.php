@@ -424,7 +424,7 @@ trait SchemalessTests
             return;
         }
 
-        if ($this->engineIs(Mongo::class)) {
+        if (! $this->supportsBulkWrites()) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -521,7 +521,7 @@ trait SchemalessTests
             return;
         }
 
-        if ($this->engineIs(Mongo::class)) {
+        if (! $this->supportsBulkWrites()) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -605,7 +605,7 @@ trait SchemalessTests
             return;
         }
 
-        if ($this->engineIs(Mongo::class)) {
+        if (! $this->supportsBulkWrites()) {
             $this->expectNotToPerformAssertions();
 
             return;

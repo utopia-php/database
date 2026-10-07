@@ -234,6 +234,7 @@ final class OrphanColumnTypeTest extends TestCase
     public function testCreateAttributesRollbackCollectsCleanupErrors(): void
     {
         $adapter = new class (new PDO('sqlite::memory:')) extends SQLite {
+            #[\Override]
             public function deleteAttribute(string $collection, string $id): bool
             {
                 if ($id === 'nick') {

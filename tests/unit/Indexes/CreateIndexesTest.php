@@ -103,6 +103,7 @@ final class CreateIndexesTest extends TestCase
     public function testAnEngineFailurePartWayDropsTheIndexesAlreadyCreated(): void
     {
         $adapter = new class () extends Memory {
+            #[\Override]
             public function createIndex(string $collection, Index $index, array $indexAttributeTypes = [], array $collation = []): bool
             {
                 if ($index->key === 'broken') {

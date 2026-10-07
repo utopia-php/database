@@ -25,11 +25,13 @@ final class ConvertQueriesCapabilityTest extends TestCase
         $adapter = new class () extends Memory {
             public int $definedAttributesAsked = 0;
 
+            #[\Override]
             public function capabilities(): array
             {
                 return \array_values(\array_filter(parent::capabilities(), static fn (Capability $capability): bool => $capability !== Capability::Objects));
             }
 
+            #[\Override]
             public function supports(Capability $feature): bool
             {
                 if ($feature === Capability::DefinedAttributes) {

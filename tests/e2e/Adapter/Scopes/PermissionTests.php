@@ -1008,7 +1008,7 @@ trait PermissionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($this->engineIs(Mongo::class)) {
+        if (! $this->supportsBulkWrites()) {
             $this->expectNotToPerformAssertions();
             return;
         }

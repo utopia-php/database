@@ -37,6 +37,7 @@ final class DocumentWriteMinorsTest extends TestCase
             /**
              * @param  Query[]  $queries
              */
+            #[\Override]
             public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
             {
                 return parent::getDocument($collection, \strtolower($id), $queries, $forUpdate);
@@ -138,6 +139,7 @@ final class DocumentWriteMinorsTest extends TestCase
         $adapter = new class (new PDO('sqlite::memory:')) extends SQLite {
             public int $commitFailures = 0;
 
+            #[\Override]
             public function commitTransaction(): bool
             {
                 if ($this->commitFailures > 0) {

@@ -106,7 +106,7 @@ final class RedisDatabaseRenameTest extends TestCase
     private function client(): Redis
     {
         $client = self::createStub(Redis::class);
-        $client->method('sIsMember')->willReturnCallback(fn (string $key, mixed $member): bool => \is_array($this->keys[$key] ?? null) && isset($this->keys[$key][(string) $member]));
+        $client->method('sIsMember')->willReturnCallback(fn (string $key, string $member): bool => \is_array($this->keys[$key] ?? null) && isset($this->keys[$key][$member]));
         $client->method('scan')->willReturnCallback(fn (mixed $iterator, ?string $pattern = null): array => \array_values(\array_filter(
             \array_keys($this->keys),
             static fn (string $key): bool => \fnmatch($pattern ?? '*', $key),
@@ -130,19 +130,19 @@ final class RedisDatabaseRenameTest extends TestCase
 
             return (int) $existed;
         });
-        $client->method('sAdd')->willReturnCallback(function (string $key, mixed ...$members): int {
+        $client->method('sAdd')->willReturnCallback(function (string $key, string ...$members): int {
             $set = \is_array($this->keys[$key] ?? null) ? $this->keys[$key] : [];
             foreach ($members as $member) {
-                $set[(string) $member] = true;
+                $set[$member] = true;
             }
             $this->keys[$key] = $set;
 
             return \count($members);
         });
-        $client->method('sRem')->willReturnCallback(function (string $key, mixed ...$members): int {
+        $client->method('sRem')->willReturnCallback(function (string $key, string ...$members): int {
             $set = \is_array($this->keys[$key] ?? null) ? $this->keys[$key] : [];
             foreach ($members as $member) {
-                unset($set[(string) $member]);
+                unset($set[$member]);
             }
             $this->keys[$key] = $set;
 

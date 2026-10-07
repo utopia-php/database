@@ -574,12 +574,12 @@ class QueryTest extends TestCase
         $this->assertNotSame(Query::fingerprint([$andOne]), Query::fingerprint([$andTwo]));
 
         // elemMatch attribute matters: same inner shape on different fields must NOT collide
-        $elemTags = new Query(Method::ElemMatch, 'tags', [Query::equal('name', ['php'])]);
-        $elemCategories = new Query(Method::ElemMatch, 'categories', [Query::equal('name', ['php'])]);
+        $elemTags = Query::elemMatch('tags', [Query::equal('name', ['php'])]);
+        $elemCategories = Query::elemMatch('categories', [Query::equal('name', ['php'])]);
         $this->assertNotSame(Query::fingerprint([$elemTags]), Query::fingerprint([$elemCategories]));
 
         // elemMatch values-only change (same field, same child shape) still collides — as expected
-        $elemTagsOther = new Query(Method::ElemMatch, 'tags', [Query::equal('name', ['js'])]);
+        $elemTagsOther = Query::elemMatch('tags', [Query::equal('name', ['js'])]);
         $this->assertSame(Query::fingerprint([$elemTags]), Query::fingerprint([$elemTagsOther]));
     }
 
@@ -600,7 +600,7 @@ class QueryTest extends TestCase
         $this->assertSame('and:(equal:name|greaterThan:age)', $and->shape());
 
         // elemMatch preserves the attribute (the field being matched)
-        $elem = new Query(Method::ElemMatch, 'tags', [Query::equal('name', ['php'])]);
+        $elem = Query::elemMatch('tags', [Query::equal('name', ['php'])]);
         $this->assertSame('elemMatch:tags(equal:name)', $elem->shape());
 
         // Deeply nested — iterative traversal must match recursive result

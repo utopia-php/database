@@ -24,6 +24,7 @@ final class IndexSchemaReconciliationTest extends TestCase
     public function testAnAdapterThatDoesNotRenameTheIndexFailsTheRename(): void
     {
         $database = $this->database(new class () extends Memory {
+            #[\Override]
             public function renameIndex(string $collection, string $old, string $new): bool
             {
                 return false;
@@ -43,6 +44,7 @@ final class IndexSchemaReconciliationTest extends TestCase
     public function testAnAdapterThatDoesNotCreateTheIndexFailsTheCreate(): void
     {
         $database = $this->database(new class () extends Memory {
+            #[\Override]
             public function createIndex(string $collection, Index $index, array $indexAttributeTypes = [], array $collation = []): bool
             {
                 return $index->key === 'byName' ? false : parent::createIndex($collection, $index, $indexAttributeTypes, $collation);
@@ -56,6 +58,7 @@ final class IndexSchemaReconciliationTest extends TestCase
     public function testAnIndexOnlyInTheSchemaIsAdopted(): void
     {
         $database = $this->database(new class () extends Memory {
+            #[\Override]
             public function createIndex(string $collection, Index $index, array $indexAttributeTypes = [], array $collation = []): bool
             {
                 if ($index->key === 'byName') {
@@ -120,6 +123,7 @@ final class IndexSchemaReconciliationTest extends TestCase
              */
             public array $renames = [];
 
+            #[\Override]
             public function renameIndex(string $collection, string $old, string $new): bool
             {
                 $this->renames[] = "{$old}->{$new}";
@@ -146,6 +150,7 @@ final class IndexSchemaReconciliationTest extends TestCase
                 parent::__construct();
             }
 
+            #[\Override]
             public function renameIndex(string $collection, string $old, string $new): bool
             {
                 throw $this->cause;
@@ -171,6 +176,7 @@ final class IndexSchemaReconciliationTest extends TestCase
              */
             public array $renames = [];
 
+            #[\Override]
             public function renameIndex(string $collection, string $old, string $new): bool
             {
                 $this->renames[] = "{$old}->{$new}";
@@ -194,6 +200,7 @@ final class IndexSchemaReconciliationTest extends TestCase
     public function testDeletingAnIndexTheSchemaNoLongerHasSucceeds(): void
     {
         $database = $this->database(new class () extends Memory {
+            #[\Override]
             public function deleteIndex(string $collection, string $id): bool
             {
                 throw new NotFoundException('Index not found in the schema');
@@ -207,6 +214,7 @@ final class IndexSchemaReconciliationTest extends TestCase
     public function testAnAdapterThatDoesNotDeleteTheIndexFailsTheDelete(): void
     {
         $database = $this->database(new class () extends Memory {
+            #[\Override]
             public function deleteIndex(string $collection, string $id): bool
             {
                 return false;

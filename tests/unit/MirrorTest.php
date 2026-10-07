@@ -214,6 +214,7 @@ class MirrorTest extends TestCase
     {
         $source = new Database(new Memory(), new Cache(new None()));
         $destination = new Database(new class () extends Memory {
+            #[\Override]
             public function create(string $name): bool
             {
                 throw new RuntimeException('destination create failed');
@@ -559,7 +560,8 @@ class MirrorTest extends TestCase
         $createdAt = '2001-02-03T04:05:06.000+00:00';
 
         self::inCoroutine(static fn (): mixed => $mirror->withPreserveDates(
-            true, static fn (): mixed => $mirror->upsertDocument(self::COLLECTION, new Document([
+            true,
+            static fn (): mixed => $mirror->upsertDocument(self::COLLECTION, new Document([
                 Document::ID => 'dated',
                 '$createdAt' => $createdAt,
                 '$updatedAt' => $createdAt,
@@ -626,11 +628,13 @@ class MirrorTest extends TestCase
         $destination = new Database(new class () extends Memory implements Feature\Timeouts {
             use Timeout;
 
+            #[\Override]
             public function setTimeout(int $milliseconds, Event $event = Event::All): void
             {
                 throw new RuntimeException('destination unreachable');
             }
 
+            #[\Override]
             public function clearTimeout(Event $event = Event::All): void
             {
                 throw new RuntimeException('destination unreachable');
@@ -751,6 +755,7 @@ class MirrorTest extends TestCase
              * @param  array<Change>  $changes
              * @return array<Document>
              */
+            #[\Override]
             public function upsertDocuments(Document $collection, array $changes, ?string $increase = null): array
             {
                 throw new RuntimeException('destination unreachable');
@@ -890,16 +895,19 @@ class MirrorTest extends TestCase
             /**
              * @return array<Capability>
              */
+            #[\Override]
             public function capabilities(): array
             {
                 return [...parent::capabilities(), Capability::AlterLock];
             }
 
+            #[\Override]
             public function setTimeout(int $milliseconds, Event $event = Event::All): void
             {
                 $this->setTimeoutState($milliseconds, $event);
             }
 
+            #[\Override]
             public function clearTimeout(Event $event = Event::All): void
             {
                 $this->clearTimeoutState($event);
@@ -948,6 +956,7 @@ class MirrorTest extends TestCase
             /**
              * @return array<Capability>
              */
+            #[\Override]
             public function capabilities(): array
             {
                 return [...parent::capabilities(), Capability::AlterLock];
@@ -1283,101 +1292,121 @@ class MirrorTest extends TestCase
             ) {
             }
 
+            #[\Override]
             public function beforeCreateCollection(Database $source, Database $destination, string $collectionId, ?Document $collection = null): ?Document
             {
                 return $this->run(__FUNCTION__, $collectionId, $collection?->getId(), $collection);
             }
 
+            #[\Override]
             public function beforeUpdateCollection(Database $source, Database $destination, string $collectionId, ?Document $collection = null): ?Document
             {
                 return $this->run(__FUNCTION__, $collectionId, $collection?->getId(), $collection);
             }
 
+            #[\Override]
             public function beforeDeleteCollection(Database $source, Database $destination, string $collectionId): void
             {
                 $this->run(__FUNCTION__, $collectionId, $collectionId);
             }
 
+            #[\Override]
             public function beforeCreateAttribute(Database $source, Database $destination, string $collectionId, string $attributeId, ?Document $attribute = null): ?Document
             {
                 return $this->run(__FUNCTION__, $collectionId, $attributeId, $attribute);
             }
 
+            #[\Override]
             public function beforeUpdateAttribute(Database $source, Database $destination, string $collectionId, string $attributeId, ?Document $attribute = null): ?Document
             {
                 return $this->run(__FUNCTION__, $collectionId, $attributeId, $attribute);
             }
 
+            #[\Override]
             public function beforeDeleteAttribute(Database $source, Database $destination, string $collectionId, string $attributeId): void
             {
                 $this->run(__FUNCTION__, $collectionId, $attributeId);
             }
 
+            #[\Override]
             public function beforeCreateIndex(Database $source, Database $destination, string $collectionId, string $indexId, ?Document $index = null): ?Document
             {
                 return $this->run(__FUNCTION__, $collectionId, $indexId, $index);
             }
 
+            #[\Override]
             public function beforeDeleteIndex(Database $source, Database $destination, string $collectionId, string $indexId): void
             {
                 $this->run(__FUNCTION__, $collectionId, $indexId);
             }
 
+            #[\Override]
             public function beforeCreateDocument(Database $source, Database $destination, string $collectionId, Document $document): Document
             {
                 return $this->run(__FUNCTION__, $collectionId, $document->getId(), $document) ?? $document;
             }
 
+            #[\Override]
             public function afterCreateDocument(Database $source, Database $destination, string $collectionId, Document $document): Document
             {
                 return $this->run(__FUNCTION__, $collectionId, $document->getId(), $document) ?? $document;
             }
 
+            #[\Override]
             public function beforeUpdateDocument(Database $source, Database $destination, string $collectionId, Document $document): Document
             {
                 return $this->run(__FUNCTION__, $collectionId, $document->getId(), $document) ?? $document;
             }
 
+            #[\Override]
             public function afterUpdateDocument(Database $source, Database $destination, string $collectionId, Document $document): Document
             {
                 return $this->run(__FUNCTION__, $collectionId, $document->getId(), $document) ?? $document;
             }
 
+            #[\Override]
             public function beforeUpdateDocuments(Database $source, Database $destination, string $collectionId, Document $updates, array $queries): Document
             {
                 return $this->run(__FUNCTION__, $collectionId, $updates->getAttribute('title'), $updates) ?? $updates;
             }
 
+            #[\Override]
             public function afterUpdateDocuments(Database $source, Database $destination, string $collectionId, Document $updates, array $queries): void
             {
                 $this->run(__FUNCTION__, $collectionId, $updates->getAttribute('title'));
             }
 
+            #[\Override]
             public function beforeDeleteDocument(Database $source, Database $destination, string $collectionId, string $documentId): void
             {
                 $this->run(__FUNCTION__, $collectionId, $documentId);
             }
 
+            #[\Override]
             public function afterDeleteDocument(Database $source, Database $destination, string $collectionId, string $documentId): void
             {
                 $this->run(__FUNCTION__, $collectionId, $documentId);
             }
 
+            #[\Override]
             public function beforeDeleteDocuments(Database $source, Database $destination, string $collectionId, array $queries): void
             {
                 $this->run(__FUNCTION__, $collectionId, \count($queries));
             }
 
+            #[\Override]
             public function afterDeleteDocuments(Database $source, Database $destination, string $collectionId, array $queries): void
             {
                 $this->run(__FUNCTION__, $collectionId, \count($queries));
             }
 
+            #[\Override]
             public function beforeCreateOrUpdateDocument(Database $source, Database $destination, string $collectionId, Document $document): Document
             {
                 return $this->run(__FUNCTION__, $collectionId, $document->getId(), $document) ?? $document;
             }
 
+            #[\Override]
             public function afterCreateOrUpdateDocument(Database $source, Database $destination, string $collectionId, Document $document): Document
             {
                 return $this->run(__FUNCTION__, $collectionId, $document->getId(), $document) ?? $document;
@@ -1706,6 +1735,7 @@ class MirrorTest extends TestCase
         $adapter = new class (new PDO('sqlite::memory:')) extends SQLite {
             public bool $unreachable = false;
 
+            #[\Override]
             public function createDocument(Document $collection, Document $document): Document
             {
                 $this->reach();
@@ -1713,6 +1743,7 @@ class MirrorTest extends TestCase
                 return parent::createDocument($collection, $document);
             }
 
+            #[\Override]
             public function createDocuments(Document $collection, array $documents): array
             {
                 $this->reach();
@@ -1720,6 +1751,7 @@ class MirrorTest extends TestCase
                 return parent::createDocuments($collection, $documents);
             }
 
+            #[\Override]
             public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
             {
                 $this->reach();
@@ -1727,6 +1759,7 @@ class MirrorTest extends TestCase
                 return parent::updateDocument($collection, $id, $document, $skipPermissions);
             }
 
+            #[\Override]
             public function updateDocuments(Document $collection, Document $updates, array $documents, array $skipPermissions = []): int
             {
                 $this->reach();
@@ -1738,6 +1771,7 @@ class MirrorTest extends TestCase
              * @param  array<Change>  $changes
              * @return array<Document>
              */
+            #[\Override]
             public function upsertDocuments(Document $collection, array $changes, ?string $increase = null): array
             {
                 $this->reach();
@@ -1745,6 +1779,7 @@ class MirrorTest extends TestCase
                 return parent::upsertDocuments($collection, $changes, $increase);
             }
 
+            #[\Override]
             public function deleteDocument(Document $collection, string $id): bool
             {
                 $this->reach();
@@ -1752,6 +1787,7 @@ class MirrorTest extends TestCase
                 return parent::deleteDocument($collection, $id);
             }
 
+            #[\Override]
             public function deleteDocuments(Document $collection, array $sequences, array $permissionIds): int
             {
                 $this->reach();

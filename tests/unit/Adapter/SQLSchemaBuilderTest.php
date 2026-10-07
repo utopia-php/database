@@ -24,7 +24,7 @@ final class SQLSchemaBuilderTest extends TestCase
         $database->setDatabase(self::NAMESPACE)->setNamespace(self::NAMESPACE)->setAuthorization(new Authorization());
         $database->create();
 
-        $rows = $database->getAuthorization()->skip(function () use ($database): mixed {
+        $rows = $database->getAuthorization()->skip(function () use ($database): array {
             $table = $database->schema()->table(self::NAMESPACE . '_raw_items');
             $table->integer('value');
             $table->string('label', 16);
@@ -36,7 +36,6 @@ final class SQLSchemaBuilderTest extends TestCase
             return $database->query($database->from('raw_items')->select(['value', 'label'])->filter([BaseQuery::equal('value', [7])]));
         });
 
-        $this->assertIsArray($rows);
         $this->assertCount(1, $rows);
         $this->assertSame(['value' => 7, 'label' => 'seven'], $rows[0]->getArrayCopy());
 

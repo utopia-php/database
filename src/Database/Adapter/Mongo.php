@@ -22,6 +22,7 @@ use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
@@ -635,6 +636,80 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     public function create(string $name): bool
     {
         return true;
+    }
+
+    /**
+     * Moves every collection into the new database with `renameCollection`, then drops the emptied one.
+     * A sharded cluster cannot move a collection between databases, so it refuses the rename.
+     * The client stays bound to the database it was built for: address the renamed one with a client built for it.
+     *
+     * @throws DatabaseException
+     */
+    public function update(string $name, string $new): bool
+    {
+        $name = $this->filter($name);
+        $new = $this->filter($new);
+        $client = $this->getClient();
+
+        /** @var stdClass $hello */
+        $hello = $client->query(['hello' => 1], 'admin');
+        if (($hello->msg ?? null) === 'isdbgrid') {
+            throw new DatabaseException('Renaming a database is not supported on a sharded MongoDB cluster');
+        }
+
+        $databases = $this->getDatabaseNames();
+
+        if (! \in_array($name, $databases, true)) {
+            throw new NotFoundException('Database not found');
+        }
+
+        if (\in_array($new, $databases, true)) {
+            throw new DuplicateException('Database already exists');
+        }
+
+        /** @var stdClass $listed */
+        $listed = $client->query(['listCollections' => 1, 'nameOnly' => true], $name);
+        /** @var stdClass $cursor */
+        $cursor = $listed->cursor;
+        /** @var array<stdClass> $collections */
+        $collections = $cursor->firstBatch ?? [];
+
+        foreach ($collections as $collection) {
+            $collectionName = $collection->name ?? null;
+            if (! \is_string($collectionName) || \str_starts_with($collectionName, 'system.')) {
+                continue;
+            }
+
+            $client->query([
+                'renameCollection' => "{$name}.{$collectionName}",
+                'to' => "{$new}.{$collectionName}",
+            ], 'admin');
+        }
+
+        $client->dropDatabase([], $name);
+
+        return true;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function getDatabaseNames(): array
+    {
+        /** @var stdClass $listed */
+        $listed = $this->getClient()->listDatabaseNames();
+        /** @var array<stdClass> $databases */
+        $databases = $listed->databases ?? [];
+
+        $names = [];
+        foreach ($databases as $database) {
+            $databaseName = $database->name ?? null;
+            if (\is_string($databaseName)) {
+                $names[] = $databaseName;
+            }
+        }
+
+        return $names;
     }
 
     /**

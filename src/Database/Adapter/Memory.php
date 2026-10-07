@@ -289,6 +289,68 @@ class Memory extends Adapter implements Feature\Relationships
         return true;
     }
 
+    public function update(string $name, string $new): bool
+    {
+        if (! isset($this->databases[$name])) {
+            throw new NotFoundException('Database not found');
+        }
+
+        if (isset($this->databases[$new])) {
+            throw new DuplicateException('Database already exists');
+        }
+
+        $previous = $this->databases[$name];
+        $prefix = $name.'.';
+        $moved = [];
+        foreach ($previous as $slot => $collectionKey) {
+            $moved[$slot] = \str_starts_with($collectionKey, $prefix)
+                ? $new.'.'.\substr($collectionKey, \strlen($prefix))
+                : $collectionKey;
+            $this->moveCollection($collectionKey, $moved[$slot]);
+        }
+
+        unset($this->databases[$name]);
+        $this->databases[$new] = $moved;
+
+        $this->journal(function () use ($name, $new, $previous, $moved): void {
+            foreach ($previous as $slot => $collectionKey) {
+                $this->moveCollection($moved[$slot], $collectionKey);
+            }
+            unset($this->databases[$new]);
+            $this->databases[$name] = $previous;
+        });
+
+        return true;
+    }
+
+    private function moveCollection(string $from, string $to): void
+    {
+        if ($from === $to) {
+            return;
+        }
+
+        self::moveEntry($this->data, $from, $to);
+        self::moveEntry($this->permissions, $from, $to);
+        self::moveEntry($this->permissionsByDocument, $from, $to);
+        self::moveEntry($this->permissionsByPermission, $from, $to);
+        self::moveEntry($this->uniqueIndexHashes, $from, $to);
+    }
+
+    /**
+     * @template T
+     *
+     * @param  array<string, T>  $store
+     */
+    private static function moveEntry(array &$store, string $from, string $to): void
+    {
+        if (! \array_key_exists($from, $store)) {
+            return;
+        }
+
+        $store[$to] = $store[$from];
+        unset($store[$from]);
+    }
+
     public function exists(string $database, ?string $collection = null): bool
     {
         if ($collection === null) {

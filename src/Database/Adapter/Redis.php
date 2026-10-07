@@ -168,6 +168,85 @@ class Redis extends Adapter implements
         return true;
     }
 
+    /**
+     * Renames every key of the database within the current namespace. A permission grant set records the
+     * keys it guards, so its members are moved to the new key space too.
+     */
+    public function update(string $name, string $new): bool
+    {
+        $name = $this->filter($name);
+        $new = $this->filter($new);
+        $namespace = $this->getNamespace();
+        $dbsKey = $this->key($this->nsBase(), 'dbs');
+
+        if ((bool) $this->client->sIsMember($dbsKey, $name) === false) {
+            throw new NotFoundException('Database not found');
+        }
+
+        if ((bool) $this->client->sIsMember($dbsKey, $new)) {
+            throw new DuplicateException('Database already exists');
+        }
+
+        $from = $this->nsFor($namespace, $name).self::SEP;
+        $to = $this->nsFor($namespace, $new).self::SEP;
+        $grants = $to.'grants'.self::SEP;
+
+        $this->tx(function (RedisClient $client) use ($dbsKey, $name, $new, $from, $to, $grants): void {
+            foreach ($this->scanKeys($client, $from.'*') as $key) {
+                if (! \str_starts_with($key, $from)) {
+                    continue;
+                }
+
+                $target = $to.\substr($key, \strlen($from));
+                $client->rename($key, $target);
+
+                if (\str_starts_with($target, $grants)) {
+                    $this->moveGrantMembers($client, $target, $from, $to);
+                }
+            }
+
+            $client->sRem($dbsKey, $name);
+            $client->sAdd($dbsKey, $new);
+        });
+
+        return true;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function scanKeys(RedisClient $client, string $pattern): array
+    {
+        $keys = [];
+        $cursor = null;
+        do {
+            /** @var array<int, string>|false $batch */
+            $batch = $client->scan($cursor, $pattern, self::SCAN_BATCH_SIZE);
+            foreach (\is_array($batch) ? $batch : [] as $key) {
+                $keys[$key] = true;
+            }
+        } while ($cursor !== 0 && $cursor !== null);
+
+        return \array_map(\strval(...), \array_keys($keys));
+    }
+
+    private function moveGrantMembers(RedisClient $client, string $grantsKey, string $from, string $to): void
+    {
+        /** @var array<int, string>|false $members */
+        $members = $client->sMembers($grantsKey);
+        if (! \is_array($members) || $members === []) {
+            return;
+        }
+
+        $moved = \array_map(
+            static fn (string $member): string => \str_starts_with($member, $from) ? $to.\substr($member, \strlen($from)) : $member,
+            $members,
+        );
+
+        $client->del($grantsKey);
+        $client->sAdd($grantsKey, ...$moved);
+    }
+
     public function exists(string $database, ?string $collection = null): bool
     {
         $database = $this->filter($database);

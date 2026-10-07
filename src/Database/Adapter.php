@@ -10,6 +10,7 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Contention as ContentionException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Index as IndexException;
+use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
@@ -816,6 +817,15 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
      * Create Database
      */
     abstract public function create(string $name): bool;
+
+    /**
+     * Rename a database, moving every collection, document, index and permission it holds.
+     *
+     * @throws NotFoundException when no database is named $name
+     * @throws DuplicateException when a database is already named $new
+     * @throws DatabaseException when the engine cannot move the database
+     */
+    abstract public function update(string $name, string $new): bool;
 
     /**
      * Check if database exists

@@ -435,6 +435,14 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
     }
 
     /**
+     * SQLite keeps no database name in storage: every name addresses the same tables, so a rename moves nothing.
+     */
+    public function update(string $name, string $new): bool
+    {
+        return true;
+    }
+
+    /**
      * Check if Database exists
      * Optionally check if collection exists in Database
      *

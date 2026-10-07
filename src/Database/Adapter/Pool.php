@@ -176,7 +176,8 @@ class Pool extends Adapter implements Feature\Timeouts
         $adapter->setAuthorization($this->authorization);
         $adapter->setLocks($this->locks);
 
-        if ($this->schemaless !== null && $adapter instanceof Feature\Schemaless) {
+        if ($this->schemaless !== null && $adapter->hasFeature(Feature\Schemaless::class)) {
+            /** @var Adapter&Feature\Schemaless $adapter */
             $adapter->setSchemaless($this->schemaless);
         }
 

@@ -19,6 +19,7 @@ use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
+use Utopia\Query\Schema\IndexType;
 
 class IndexValidationTest extends TestCase
 {
@@ -187,7 +188,7 @@ class IndexValidationTest extends TestCase
                     return $collection;
                 }
                 if ($col->getId() === Database::METADATA && $docId === Database::METADATA) {
-                    return new Document(Database::collectionDefinition());
+                    return Database::collectionDefinition();
                 }
 
                 return new Document();
@@ -223,7 +224,7 @@ class IndexValidationTest extends TestCase
         $this->setupCollection('testCol');
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('Missing attributes');
-        $this->database->createIndex('testCol', Index::key(key: 'idx_empty'));
+        $this->database->createIndex('testCol', Index::fromArray(['key' => 'idx_empty', 'type' => IndexType::Key]));
     }
 
     public function testCreateIndexSucceedsWithValidConfig(): void
@@ -233,8 +234,10 @@ class IndexValidationTest extends TestCase
         ];
         $this->setupCollection('testCol', $attributes);
 
-        $result = $this->database->createIndex('testCol', Index::key(key: 'idx_name', attributes: ['name']));
-        $this->assertTrue($result);
+        $created = $this->database->createIndex('testCol', Index::key(key: 'idx_name', attributes: ['name']));
+
+        $this->assertSame('idx_name', $created->key);
+        $this->assertSame(['name'], $created->attributes);
     }
 
     public function testDeleteIndexThrowsOnNotFound(): void
@@ -280,7 +283,7 @@ class IndexValidationTest extends TestCase
         ];
         $this->setupCollection('testCol', $attributes, $indexes);
 
-        $result = $this->database->renameIndex('testCol', 'idx_name', 'idx_new_name');
-        $this->assertTrue($result);
+        $this->expectNotToPerformAssertions();
+        $this->database->renameIndex('testCol', 'idx_name', 'idx_new_name');
     }
 }

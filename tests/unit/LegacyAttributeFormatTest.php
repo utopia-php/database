@@ -44,7 +44,7 @@ final class LegacyAttributeFormatTest extends TestCase
             ->setNamespace('legacy_'.\uniqid())
             ->setAuthorization(new Authorization());
         $database->create();
-        $database->createCollection(new Collection(id: 'migrations', attributes: [$definition]));
+        $database->createCollection(Collection::create(id: 'migrations', attributes: [$definition]));
 
         $legacy = $definition->toDocument()->getArrayCopy();
         $legacy['format'] = '';
@@ -54,10 +54,10 @@ final class LegacyAttributeFormatTest extends TestCase
             new Document(['attributes' => [$legacy]]),
         ));
 
-        $stored = $database->getCollection('migrations')->attributes[0];
+        $stored = $database->getCollection('migrations')->attributes()[0]->toDocument();
         $expected = $definition->toDocument();
 
-        $this->assertSame($definition->type, $stored->type);
+        $this->assertSame($expected->getAttribute('type'), $stored->getAttribute('type'));
         foreach (['size', 'required', 'default', 'signed', 'array', 'format', 'formatOptions', 'filters'] as $key) {
             $this->assertSame($expected->getAttribute($key), $stored->getAttribute($key), "Stored '{$key}' differs from the definition");
         }

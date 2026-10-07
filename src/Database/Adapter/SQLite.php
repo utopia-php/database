@@ -422,6 +422,10 @@ class SQLite extends SQL
         return true;
     }
 
+    /**
+     * SQLite keeps no database name in storage, so no database is reported to exist, unlike every other adapter:
+     * the tables of the file are reached under any name. Ask collectionExists() for what a database holds.
+     */
     #[Override]
     public function exists(string $database): bool
     {
@@ -429,7 +433,9 @@ class SQLite extends SQL
     }
 
     /**
-     * SQLite keeps no database name in storage: every name addresses the same tables, so a rename moves nothing.
+     * SQLite keeps no database name in storage: every name addresses the same tables, so a rename moves nothing
+     * and succeeds without checking either name, unlike every other adapter, which refuses a missing source or an
+     * existing target.
      */
     public function update(string $name, string $new): bool
     {

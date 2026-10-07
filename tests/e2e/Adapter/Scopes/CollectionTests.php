@@ -129,8 +129,7 @@ trait CollectionTests
             return;
         }
 
-        $adapter = $database->getAdapter();
-        if ($adapter->hasFeature(SQLite::class) || $adapter->hasFeature(Redis::class)) {
+        if ($this->engineIs(SQLite::class, Redis::class)) {
             $this->assertSame('', $host, 'An engine reached without a network host names none');
             return;
         }
@@ -259,7 +258,7 @@ trait CollectionTests
 
         $size3 = $this->getDatabase()->getSizeOfCollection('sizeTest2');
 
-        if ($database->getAdapter()->hasFeature(Postgres::class)) {
+        if ($this->engineIs(Postgres::class)) {
             $this->assertLessThanOrEqual($size2, $size3);
 
             return;
@@ -1904,7 +1903,7 @@ trait CollectionTests
         $database = $this->getDatabase();
         $adapter = $database->getAdapter();
 
-        if (! $adapter->hasFeature(Feature\RawQuery::class) || $adapter->hasFeature(SQLite::class)) {
+        if (! $adapter->hasFeature(Feature\RawQuery::class) || $this->engineIs(SQLite::class)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1933,7 +1932,7 @@ trait CollectionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->hasFeature(Postgres::class)) {
+        if (! $this->engineIs(Postgres::class)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1965,7 +1964,7 @@ trait CollectionTests
         $database = $this->getDatabase();
         $adapter = $database->getAdapter();
 
-        if (! $adapter->hasFeature(Mongo::class)) {
+        if (! $this->engineIs(Mongo::class)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2008,7 +2007,7 @@ trait CollectionTests
         $database = $this->getDatabase();
         $adapter = $database->getAdapter();
 
-        if (! $adapter->hasFeature(SQL::class)) {
+        if (! $this->engineIs(SQL::class)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2125,7 +2124,7 @@ trait CollectionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->hasFeature(MariaDB::class)) {
+        if (! $this->engineIs(MariaDB::class)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2148,7 +2147,7 @@ trait CollectionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getSharedTables() || ! $database->getAdapter()->hasFeature(Postgres::class)) {
+        if (! $database->getSharedTables() || ! $this->engineIs(Postgres::class)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2212,7 +2211,7 @@ trait CollectionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getSharedTables() || ! $database->getAdapter()->hasFeature(Postgres::class)) {
+        if (! $database->getSharedTables() || ! $this->engineIs(Postgres::class)) {
             $this->expectNotToPerformAssertions();
 
             return;

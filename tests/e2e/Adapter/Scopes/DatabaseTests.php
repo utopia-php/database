@@ -3,6 +3,7 @@
 namespace Tests\E2E\Adapter\Scopes;
 
 use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
@@ -18,8 +19,9 @@ use Utopia\Database\Index;
 use Utopia\Database\Relationship;
 
 /**
- * Database::update() renames a database. Adapters without separate databases (Capability::Schemas) have nothing
- * to move and are covered by unit tests; Mongo binds its client to one database and is covered in MongoDBTest.
+ * Database::update() renames a database. Adapters without separate databases (Capability::Schemas) and SQLite, which
+ * keeps no database name, have nothing to move and are covered by unit tests; Mongo binds its client to one database
+ * and is covered in MongoDBTest.
  */
 trait DatabaseTests
 {
@@ -221,9 +223,15 @@ trait DatabaseTests
         return $ids;
     }
 
+    /**
+     * SQLite keeps no database name, so its rename moves nothing and its exists() is always false: it is skipped by
+     * name, not only through the Schemas capability it does not declare, and covered by unit tests.
+     */
     private function renamesDatabases(Database $database): bool
     {
-        return ! $database->getSharedTables() && $database->getAdapter()->supports(Capability::Schemas);
+        return ! $database->getSharedTables()
+            && $database->getAdapter()->supports(Capability::Schemas)
+            && ! $this->engineIs(SQLite::class);
     }
 
     /**

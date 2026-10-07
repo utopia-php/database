@@ -172,6 +172,8 @@ final class PoolTest extends TestCase
         $pool->setSchemaless(true);
 
         $this->assertFalse($pool->supports(Capability::DefinedAttributes));
+        $this->assertTrue($pool->isSchemaless());
+        $this->assertFalse($first->supports(Capability::DefinedAttributes));
         $this->assertFalse($second->supports(Capability::DefinedAttributes));
     }
 

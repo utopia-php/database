@@ -14,7 +14,6 @@ enum Capability
     case AlterLock;
     case AttributeResizing;
     case Caching;
-    case Casting;
     case DefinedAttributes;
     case Hostname;
     case IndexArray;

@@ -15,6 +15,7 @@ use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\RelationshipSide;
 use Utopia\Database\RelationshipType;
+use Utopia\Database\Schema\Column;
 use Utopia\Database\Validator\AttributeDefinition;
 use Utopia\Database\Validator\Structure;
 use Utopia\Query\Schema\ColumnType;
@@ -1161,12 +1162,7 @@ class AttributeTest extends TestCase
             attributes: [],
             profile: Profiles::of(capabilities: [Capability::SchemaIntrospection], string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
             schemaAttributes: [
-                new Document([
-                    '$id' => ID::custom('existing_column'),
-                    'key' => 'existing_column',
-                    'type' => ColumnType::String->value,
-                    'size' => 255,
-                ]),
+                new Column(name: 'existing_column', type: 'VARCHAR(255)', length: 255, nullable: true),
             ],
         );
 
@@ -1193,12 +1189,7 @@ class AttributeTest extends TestCase
             attributes: [],
             profile: Profiles::of(capabilities: [Capability::SchemaIntrospection], sharedTables: true, migrating: true, string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
             schemaAttributes: [
-                new Document([
-                    '$id' => ID::custom('existing_column'),
-                    'key' => 'existing_column',
-                    'type' => ColumnType::String->value,
-                    'size' => 255,
-                ]),
+                new Column(name: 'existing_column', type: 'VARCHAR(255)', length: 255, nullable: true),
             ],
         );
 
@@ -1770,12 +1761,7 @@ class AttributeTest extends TestCase
             attributes: [],
             profile: Profiles::of(capabilities: [Capability::SchemaIntrospection], string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
             schemaAttributes: [
-                new Document([
-                    '$id' => ID::custom('existing_column'),
-                    'key' => 'existing_column',
-                    'type' => ColumnType::String->value,
-                    'size' => 255,
-                ]),
+                new Column(name: 'existing_column', type: 'VARCHAR(255)', length: 255, nullable: true),
             ],
         );
 
@@ -1941,12 +1927,7 @@ class AttributeTest extends TestCase
             attributes: [],
             profile: Profiles::of(capabilities: [Capability::SchemaIntrospection], string: 16777216, varchar: 65535, integer: PHP_INT_MAX),
             schemaAttributes: [
-                new Document([
-                    '$id' => ID::custom('_prefix_column'),
-                    'key' => '_prefix_column',
-                    'type' => ColumnType::String->value,
-                    'size' => 255,
-                ]),
+                new Column(name: '_prefix_column', type: 'VARCHAR(255)', length: 255, nullable: true),
             ],
             filter: fn (string $key) => str_replace('_prefix_', '', $key),
         );

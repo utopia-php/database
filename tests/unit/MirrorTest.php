@@ -654,8 +654,8 @@ class MirrorTest extends TestCase
         yield 'upsertDocuments' => [
             static fn (Mirror $mirror, Document $document): mixed => $mirror->upsertDocuments(self::COLLECTION, [$document]),
         ];
-        yield 'upsertDocumentsWithIncrease' => [
-            static fn (Mirror $mirror, Document $document): mixed => $mirror->upsertDocumentsWithIncrease(self::COLLECTION, 'views', [$document]),
+        yield 'upsertDocuments with an increase' => [
+            static fn (Mirror $mirror, Document $document): mixed => $mirror->upsertDocuments(self::COLLECTION, [$document], increase: 'views'),
         ];
     }
 
@@ -713,9 +713,9 @@ class MirrorTest extends TestCase
             static fn (Mirror $mirror, Document $document): mixed => $mirror->upsertDocuments(self::COLLECTION, [$document]),
             'upsertDocuments',
         ];
-        yield 'upsertDocumentsWithIncrease' => [
-            static fn (Mirror $mirror, Document $document): mixed => $mirror->upsertDocumentsWithIncrease(self::COLLECTION, 'views', [$document]),
-            'upsertDocumentsWithIncrease',
+        yield 'upsertDocuments with an increase' => [
+            static fn (Mirror $mirror, Document $document): mixed => $mirror->upsertDocuments(self::COLLECTION, [$document], increase: 'views'),
+            'upsertDocuments',
         ];
     }
 
@@ -730,7 +730,7 @@ class MirrorTest extends TestCase
              * @param  array<Change>  $changes
              * @return array<Document>
              */
-            public function upsertDocuments(Document $collection, string $attribute, array $changes): array
+            public function upsertDocuments(Document $collection, array $changes, ?string $increase = null): array
             {
                 throw new RuntimeException('destination unreachable');
             }
@@ -1573,9 +1573,9 @@ class MirrorTest extends TestCase
             'filtered',
             'first',
         ];
-        yield 'upsertDocumentsWithIncrease' => [
-            static fn (Mirror $mirror): mixed => $mirror->upsertDocumentsWithIncrease(self::COLLECTION, 'views', [new Document([Document::ID => 'second', 'title' => 'upserted', 'views' => 1])]),
-            'upsertDocumentsWithIncrease',
+        yield 'upsertDocuments with an increase' => [
+            static fn (Mirror $mirror): mixed => $mirror->upsertDocuments(self::COLLECTION, [new Document([Document::ID => 'second', 'title' => 'upserted', 'views' => 1])], increase: 'views'),
+            'upsertDocuments',
             'second',
             [['beforeCreateOrUpdateDocument', self::COLLECTION, 'second'], ['afterCreateOrUpdateDocument', self::COLLECTION, 'second']],
             'upserted',
@@ -1692,11 +1692,11 @@ class MirrorTest extends TestCase
              * @param  array<Change>  $changes
              * @return array<Document>
              */
-            public function upsertDocuments(Document $collection, string $attribute, array $changes): array
+            public function upsertDocuments(Document $collection, array $changes, ?string $increase = null): array
             {
                 $this->reach();
 
-                return parent::upsertDocuments($collection, $attribute, $changes);
+                return parent::upsertDocuments($collection, $changes, $increase);
             }
 
             public function deleteDocument(Document $collection, string $id): bool
@@ -1826,9 +1826,9 @@ class MirrorTest extends TestCase
             ],
             ['titles', ['title']],
         ];
-        yield 'upsertDocumentsWithIncrease' => [
+        yield 'upsertDocuments without an increase' => [
             static fn (Mirror $mirror, Database $source): array => [
-                $mirror->upsertDocumentsWithIncrease(self::COLLECTION, '', [new Document([Document::ID => 'first', 'title' => 'upserted', 'views' => 1])]),
+                $mirror->upsertDocuments(self::COLLECTION, [new Document([Document::ID => 'first', 'title' => 'upserted', 'views' => 1])]),
                 self::storedTitle($source, 'first'),
             ],
             [1, 'upserted'],

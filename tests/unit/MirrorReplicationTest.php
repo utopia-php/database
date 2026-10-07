@@ -805,17 +805,17 @@ final class MirrorReplicationTest extends TestCase
              * @param  array<Change>  $changes
              * @return array<Document>
              */
-            public function upsertDocuments(Document $collection, string $attribute, array $changes): array
+            public function upsertDocuments(Document $collection, array $changes, ?string $increase = null): array
             {
-                return $this->busy(function () use ($collection, $attribute, $changes): array {
-                    $title = $changes[0]->getNew()->getAttribute('title', '');
+                return $this->busy(function () use ($collection, $increase, $changes): array {
+                    $title = $changes[0]->new->getAttribute('title', '');
                     $this->wait($title);
                     if ($title === 'broken') {
                         throw new RuntimeException('destination rejected broken');
                     }
-                    $upserted = parent::upsertDocuments($collection, $attribute, $changes);
+                    $upserted = parent::upsertDocuments($collection, $changes, $increase);
                     foreach ($changes as $change) {
-                        $this->written($change->getNew()->getId(), $change->getNew()->getAttribute('title', ''));
+                        $this->written($change->new->getId(), $change->new->getAttribute('title', ''));
                     }
 
                     return $upserted;

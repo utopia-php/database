@@ -7,24 +7,19 @@ use Utopia\Database\Adapter\Memory;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 
-final class CastingMemory extends Memory implements Feature\InternalCasting, Feature\UTCCasting
+final class CastingMemory extends Memory implements Feature\Casting
 {
-    public function castingBefore(Document $collection, Document $document): Document
+    public function castBefore(Document $collection, Document $document): Document
     {
         return $document;
     }
 
-    public function castingAfter(Document $collection, Document $document): Document
-    {
-        return $document;
-    }
-
-    public function castingAfterDocuments(Document $collection, array $documents): array
+    public function castAfter(Document $collection, array $documents): array
     {
         return $documents;
     }
 
-    public function setUTCDatetime(string $value): mixed
+    public function castDatetime(string $value): mixed
     {
         return DateTime::setTimezone($value);
     }

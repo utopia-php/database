@@ -18,6 +18,7 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Query\Schema\IndexType;
 
 final class SQLiteSchemaIndexesTest extends TestCase
 {
@@ -40,15 +41,15 @@ final class SQLiteSchemaIndexesTest extends TestCase
         $database->createIndex(self::COLLECTION, Index::fulltext(key: 'body_search', attributes: ['body']));
 
         $this->assertSame([
-            'body_search' => ['FULLTEXT', ['body']],
-            'title_search' => ['FULLTEXT', ['title']],
+            'body_search' => [IndexType::Fulltext, ['body']],
+            'title_search' => [IndexType::Fulltext, ['title']],
         ], $this->fulltextIndexes($database));
 
         $database->renameIndex(self::COLLECTION, 'title_search', 'title_lookup');
 
         $this->assertSame([
-            'body_search' => ['FULLTEXT', ['body']],
-            'title_lookup' => ['FULLTEXT', ['title']],
+            'body_search' => [IndexType::Fulltext, ['body']],
+            'title_lookup' => [IndexType::Fulltext, ['title']],
         ], $this->fulltextIndexes($database));
     }
 
@@ -61,7 +62,7 @@ final class SQLiteSchemaIndexesTest extends TestCase
 
         $database->deleteIndex(self::COLLECTION, 'title_search');
 
-        $this->assertSame(['body_search' => ['FULLTEXT', ['body']]], $this->fulltextIndexes($database));
+        $this->assertSame(['body_search' => [IndexType::Fulltext, ['body']]], $this->fulltextIndexes($database));
         $this->assertSame(['fox'], $this->search($database, 'body', 'lazy'));
 
         try {
@@ -85,8 +86,8 @@ final class SQLiteSchemaIndexesTest extends TestCase
 
         $indexes = $this->indexes($database);
 
-        $this->assertSame([1, [...$tenant, 'title']], $indexes['by_title'] ?? null);
-        $this->assertSame([0, [...$tenant, 'body']], $indexes['by_body'] ?? null);
+        $this->assertSame([IndexType::Key, [...$tenant, 'title']], $indexes['by_title'] ?? null);
+        $this->assertSame([IndexType::Unique, [...$tenant, 'body']], $indexes['by_body'] ?? null);
         $this->assertArrayHasKey('_index1', $indexes);
         $namespace = $database->getNamespace();
         $this->assertNotSame('', $namespace);
@@ -115,10 +116,10 @@ final class SQLiteSchemaIndexesTest extends TestCase
         $second = $database->withTenant(2, fn (): array => $this->indexes($database));
 
         $this->assertSame(\array_keys($first), \array_keys($second));
-        $this->assertSame([1, ['_tenant', 'title']], $first['by_title'] ?? null);
-        $this->assertSame([1, ['_tenant', 'title']], $second['by_title'] ?? null);
-        $this->assertSame([1, ['_tenant', 'title']], $first['lookup'] ?? null);
-        $this->assertSame([0, ['_tenant', 'body']], $second['lookup'] ?? null);
+        $this->assertSame([IndexType::Key, ['_tenant', 'title']], $first['by_title'] ?? null);
+        $this->assertSame([IndexType::Key, ['_tenant', 'title']], $second['by_title'] ?? null);
+        $this->assertSame([IndexType::Key, ['_tenant', 'title']], $first['lookup'] ?? null);
+        $this->assertSame([IndexType::Unique, ['_tenant', 'body']], $second['lookup'] ?? null);
     }
 
     public function testAnOrphanIndexIsListedForReconciliation(): void
@@ -127,13 +128,13 @@ final class SQLiteSchemaIndexesTest extends TestCase
         $adapter = $database->getAdapter();
         $adapter->createIndex(self::COLLECTION, Index::key(key: 'lookup', attributes: ['title']));
 
-        $this->assertSame([1, ['title']], $this->indexes($database)['lookup'] ?? null);
+        $this->assertSame([IndexType::Key, ['title']], $this->indexes($database)['lookup'] ?? null);
 
         $this->assertTrue($adapter->deleteIndex(self::COLLECTION, 'lookup'));
         $this->assertArrayNotHasKey('lookup', $this->indexes($database));
 
         $this->assertTrue($adapter->createIndex(self::COLLECTION, Index::unique(key: 'lookup', attributes: ['body'])));
-        $this->assertSame([0, ['body']], $this->indexes($database)['lookup'] ?? null);
+        $this->assertSame([IndexType::Unique, ['body']], $this->indexes($database)['lookup'] ?? null);
     }
 
     #[DataProvider('tables')]
@@ -148,7 +149,7 @@ final class SQLiteSchemaIndexesTest extends TestCase
 
         $indexes = $this->indexes($database);
         $this->assertArrayNotHasKey('by_title', $indexes);
-        $this->assertSame([1, [...($shared ? ['_tenant'] : []), 'title']], $indexes['by_heading'] ?? null, 'the metadata names an index the schema has');
+        $this->assertSame([IndexType::Key, [...($shared ? ['_tenant'] : []), 'title']], $indexes['by_heading'] ?? null, 'the metadata names an index the schema has');
         $this->assertSame(['by_heading'], \array_map(
             static fn (Index $index): string => $index->key,
             $database->getCollection(self::COLLECTION)->indexes(),
@@ -156,19 +157,14 @@ final class SQLiteSchemaIndexesTest extends TestCase
     }
 
     /**
-     * @return array<string, array{int, list<string>}>
+     * @return array<string, array{IndexType, list<string>}>
      */
     private function indexes(Database $database): array
     {
         $indexes = [];
         foreach ($database->getSchemaIndexes(self::COLLECTION) as $index) {
-            $nonUnique = $index->getAttribute('nonUnique');
-            $columns = $index->getAttribute('columns');
-            $this->assertIsInt($nonUnique);
-            $this->assertIsArray($columns);
-            $this->assertArrayNotHasKey($index->getId(), $indexes, 'Each index is listed once');
-            /** @var list<string> $columns */
-            $indexes[$index->getId()] = [$nonUnique, $columns];
+            $this->assertArrayNotHasKey($index->name, $indexes, 'Each index is listed once');
+            $indexes[$index->name] = [$index->type, $index->columns];
         }
         \ksort($indexes);
 
@@ -187,21 +183,15 @@ final class SQLiteSchemaIndexesTest extends TestCase
     }
 
     /**
-     * @return array<string, array{string, list<string>}>
+     * @return array<string, array{IndexType, list<string>}>
      */
     private function fulltextIndexes(Database $database): array
     {
         $indexes = [];
         foreach ($database->getSchemaIndexes(self::COLLECTION) as $index) {
-            $type = $index->getAttribute('indexType');
-            $columns = $index->getAttribute('columns');
-            $this->assertIsString($type);
-            $this->assertIsArray($columns);
-            if ($type !== 'FULLTEXT') {
-                continue;
+            if ($index->type === IndexType::Fulltext) {
+                $indexes[$index->name] = [$index->type, $index->columns];
             }
-            /** @var list<string> $columns */
-            $indexes[$index->getId()] = [$type, $columns];
         }
         \ksort($indexes);
 

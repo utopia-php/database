@@ -7,7 +7,6 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use Throwable;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\Memory;
-use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\Redis;
 use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Adapter\SQLite;
@@ -2904,7 +2903,7 @@ trait AttributeTests
             $database->createCollection($definition);
 
             $adapter = $database->getAdapter();
-            if ($adapter->hasFeature(Feature\SchemaAttributes::class) || $adapter instanceof Postgres) {
+            if ($adapter->supports(Capability::SchemaIntrospection)) {
                 try {
                     $database->createAttribute($collection, Attribute::string(key: 'age', size: 64));
                     $this->fail('A column another tenant stores with another type must be refused');
@@ -2938,7 +2937,7 @@ trait AttributeTests
     {
         $database = $this->getDatabase();
         $adapter = $database->getAdapter();
-        $schemaAttributes = $adapter->hasFeature(Feature\SchemaAttributes::class);
+        $schemaAttributes = $adapter->supports(Capability::SchemaIntrospection);
 
         if (! $schemaAttributes && ! $adapter instanceof SQL) {
             $this->expectNotToPerformAssertions();

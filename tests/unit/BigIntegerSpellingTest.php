@@ -206,13 +206,14 @@ final class BigIntegerSpellingTest extends TestCase
             return;
         }
 
-        $this->assertSame('BIGINT', $sqlite->getColumnType($spelling, 0));
+        $stored = $database->getCollection('ledger')->attributes()[0];
+        $this->assertSame('BIGINT', $sqlite->getColumnType($stored));
 
         $columnTypes = [];
         foreach ($database->getSchemaAttributes('ledger') as $column) {
-            $columnTypes[$column->getId()] = $column->getAttribute('columnType');
+            $columnTypes[$column->name] = $column->type;
         }
-        $this->assertSame(\strtolower($sqlite->getColumnType($spelling, 0)), $columnTypes['total'] ?? null);
+        $this->assertSame($sqlite->getColumnType($stored), $columnTypes['total'] ?? null);
     }
 
     public function testRedisSchemaRecordsPersistTheBigintSpelling(): void

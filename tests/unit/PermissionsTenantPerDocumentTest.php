@@ -102,10 +102,10 @@ final class PermissionsTenantPerDocumentTest extends TestCase
 
     public function testAnUpsertWithIncreaseWithNoTenantSelectedRevokesTheGrantUnderTheDocumentsTenant(): void
     {
-        $this->database->upsertDocumentsWithIncrease(
+        $this->database->upsertDocuments(
             self::COLLECTION,
-            self::COUNTER,
             [$this->note(self::TENANT, [self::ALICE])->setAttribute(self::COUNTER, 1)],
+            increase: self::COUNTER,
         );
 
         $this->assertBobRevokedOnlyUnderTheTenant();
@@ -158,7 +158,7 @@ final class PermissionsTenantPerDocumentTest extends TestCase
             fn (): Document => $this->database->getDocument(self::COLLECTION, self::DOCUMENT),
         ));
 
-        $this->database->withTenant(self::TENANT, fn (): array => $this->adapter->upsertDocuments($collection, '', [
+        $this->database->withTenant(self::TENANT, fn (): array => $this->adapter->upsertDocuments($collection, [
             new Change($stored, new Document([
                 '$id' => self::DOCUMENT,
                 '$createdAt' => $stored->getCreatedAt(),

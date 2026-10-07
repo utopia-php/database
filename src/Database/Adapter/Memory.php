@@ -123,7 +123,6 @@ class Memory extends Adapter implements Feature\Relationships
         return array_merge(parent::capabilities(), [
             Capability::Schemas,
             Capability::IndexFulltext,
-            Capability::Casting,
             Capability::AttributeResizing,
             Capability::Objects,
             Capability::IndexObject,
@@ -641,6 +640,21 @@ class Memory extends Adapter implements Feature\Relationships
         });
 
         return true;
+    }
+
+    public function getSchemaAttributes(string $collection): array
+    {
+        return [];
+    }
+
+    public function getSchemaIndexes(string $collection): array
+    {
+        return [];
+    }
+
+    public function getColumnType(Attribute $attribute): ?string
+    {
+        return null;
     }
 
     public function renameAttribute(string $collection, string $old, string $new): bool
@@ -1889,22 +1903,6 @@ class Memory extends Adapter implements Feature\Relationships
     public function getAttributeWidth(Document $collection): int
     {
         return 0;
-    }
-
-    /**
-     * @return array<Document>
-     */
-    public function getSchemaAttributes(string $collection): array
-    {
-        return [];
-    }
-
-    /**
-     * @return array<Document>
-     */
-    public function getSchemaIndexes(string $collection): array
-    {
-        return [];
     }
 
     /**

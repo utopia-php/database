@@ -201,8 +201,8 @@ class Permissions extends Interceptor
         $hasAdditions = false;
 
         foreach ($changes as $change) {
-            $old = $change->getOld();
-            $document = $change->getNew();
+            $old = $change->old;
+            $document = $change->new;
             $metadata = $this->documentMetadata($document);
             $tenantScope = $this->tenantScope($metadata, $context);
 

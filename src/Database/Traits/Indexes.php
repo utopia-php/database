@@ -5,8 +5,8 @@ namespace Utopia\Database\Traits;
 use Exception;
 use Throwable;
 use Utopia\Console;
-use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
@@ -19,8 +19,8 @@ use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Index;
+use Utopia\Database\Schema;
 use Utopia\Database\Storage;
-use Utopia\Query\Schema\IndexType;
 
 /**
  * Provides CRUD operations for collection indexes including creation, renaming, and deletion.
@@ -391,7 +391,7 @@ trait Indexes
      */
     private function reconcileSchemaOnlyIndex(string $collection, Index $index): bool
     {
-        if (! $this->adapter->hasFeature(Feature\SchemaIndexes::class)
+        if (! $this->adapter->supports(Capability::SchemaIntrospection)
             || ($this->getSharedTables() && $this->isMigrating())) {
             return false;
         }
@@ -404,7 +404,7 @@ trait Indexes
         }
 
         foreach ($this->getSchemaIndexes($collection) as $schemaIndex) {
-            if (\strtolower($schemaIndex->getId()) !== $id) {
+            if (\strtolower($schemaIndex->name) !== $id) {
                 continue;
             }
 
@@ -428,19 +428,10 @@ trait Indexes
         return false;
     }
 
-    private function schemaIndexMatches(Document $schemaIndex, Index $index): bool
+    private function schemaIndexMatches(Schema\Index $schemaIndex, Index $index): bool
     {
-        $rawColumns = $schemaIndex->getAttribute('columns', []);
-        $rawLengths = $schemaIndex->getAttribute('lengths', []);
-        $schemaLengths = \is_array($rawLengths) ? \array_values($rawLengths) : [];
-
-        $columns = [];
-        $lengths = [];
-        foreach (\is_array($rawColumns) ? \array_values($rawColumns) : [] as $position => $column) {
-            $length = $schemaLengths[$position] ?? null;
-            $columns[] = \is_string($column) ? \strtolower($column) : '';
-            $lengths[] = \is_numeric($length) ? (int) $length : 0;
-        }
+        $columns = \array_map(\strtolower(...), $schemaIndex->columns);
+        $lengths = \array_map(static fn (?int $length): int => $length ?? 0, $schemaIndex->lengths);
 
         if ($this->getSharedTables() && ($columns[0] ?? '') === Storage::TENANT) {
             \array_shift($columns);
@@ -458,20 +449,12 @@ trait Indexes
             if ($columns[$position] !== \strtolower($this->adapter->filter(Storage::column($attribute)))) {
                 return false;
             }
-            if ($lengths[$position] !== ($index->lengths[$position] ?? 0)) {
+            if (($lengths[$position] ?? 0) !== ($index->lengths[$position] ?? 0)) {
                 return false;
             }
         }
 
-        $indexType = $schemaIndex->getAttribute('indexType', '');
-        $nonUnique = $schemaIndex->getAttribute('nonUnique', 1);
-        $schemaType = match (\is_string($indexType) ? \strtoupper($indexType) : '') {
-            'FULLTEXT' => IndexType::Fulltext,
-            'SPATIAL' => IndexType::Spatial,
-            default => \is_numeric($nonUnique) && (int) $nonUnique === 0 ? IndexType::Unique : IndexType::Key,
-        };
-
-        return $schemaType === $index->type;
+        return $schemaIndex->type === $index->type;
     }
 
     /**

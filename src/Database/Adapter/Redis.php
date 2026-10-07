@@ -9,6 +9,7 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\Redis\Write;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
+use Utopia\Database\Change;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
@@ -91,7 +92,6 @@ class Redis extends Adapter implements
         return array_merge(parent::capabilities(), [
             Capability::Schemas,
             Capability::IndexFulltext,
-            Capability::Casting,
             Capability::AttributeResizing,
             Capability::Objects,
             Capability::Operators,
@@ -412,6 +412,21 @@ class Redis extends Adapter implements
         $this->dropDocumentField($collection, $id);
 
         return true;
+    }
+
+    public function getSchemaAttributes(string $collection): array
+    {
+        return [];
+    }
+
+    public function getSchemaIndexes(string $collection): array
+    {
+        return [];
+    }
+
+    public function getColumnType(Attribute $attribute): ?string
+    {
+        return null;
     }
 
     public function renameAttribute(string $collection, string $old, string $new): bool
@@ -1008,20 +1023,27 @@ class Redis extends Adapter implements
     }
 
     #[\Override]
-    public function upsertDocuments(Document $collection, string $attribute, array $changes): array
+    public function upsertDocument(Document $collection, Change $change): Document
     {
-        if (empty($changes)) {
-            return $changes;
+        return $this->upsertDocuments($collection, [$change])[0];
+    }
+
+    #[\Override]
+    public function upsertDocuments(Document $collection, array $changes, ?string $increase = null): array
+    {
+        if ($changes === []) {
+            return [];
         }
 
         $col = $this->filter($collection->getId());
+        $attribute = $increase ?? '';
 
         return $this->tx(function (RedisClient $redis) use ($col, $attribute, $changes): array {
             $results = [];
 
             $redis->multi(\Redis::PIPELINE);
             foreach ($changes as $change) {
-                $document = $change->getNew();
+                $document = $change->new;
                 $redis->get($this->docKey($col, $document->getId(), $document->getTenant()));
             }
             $existingPayloads = $redis->exec();
@@ -1038,7 +1060,7 @@ class Redis extends Adapter implements
 
             $writes = [];
             foreach ($changes as $i => $change) {
-                $document = $change->getNew();
+                $document = $change->new;
                 $id = $document->getId();
                 $existingPayload = $existingPayloads[$i] ?? false;
 
@@ -1484,22 +1506,6 @@ class Redis extends Adapter implements
     public function getAttributeWidth(Document $collection): int
     {
         return 0;
-    }
-
-    /**
-     * @return array<Document>
-     */
-    public function getSchemaAttributes(string $collection): array
-    {
-        return [];
-    }
-
-    /**
-     * @return array<Document>
-     */
-    public function getSchemaIndexes(string $collection): array
-    {
-        return [];
     }
 
     #[\Override]

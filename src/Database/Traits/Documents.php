@@ -665,7 +665,7 @@ trait Documents
             ? $this->loadDocumentCacheState($this->getCacheBaseKeys($id)[0])
             : new Epoch();
 
-        $document = $this->castingAfter($collection, $document);
+        $document = $this->castAfterDocument($collection, $document);
 
         // Convert to custom document type if mapped
         if (isset($this->documentTypes[$collection->getId()])) {
@@ -1043,7 +1043,7 @@ trait Documents
             $document = $documents[0];
         }
 
-        $document = $this->castingAfter($collection, $document);
+        $document = $this->castAfterDocument($collection, $document);
         $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document);
 
@@ -1193,7 +1193,7 @@ trait Documents
             }
         }
 
-        return $this->castingBefore($collection, $document);
+        return $this->castBefore($collection, $document);
     }
 
     /**
@@ -1294,7 +1294,7 @@ trait Documents
                 $document = $this->silent(fn () => $this->relationshipHook->afterDocumentCreate($collection, $document));
             }
 
-            $document = $this->castingBefore($collection, $document);
+            $document = $this->castBefore($collection, $document);
         }
 
         foreach (\array_chunk($documents, $batchSize) as $chunk) {
@@ -1330,7 +1330,7 @@ trait Documents
             /** @var array<Document> $batch */
             $batch = \array_map(
                 fn (Document $document) => $this->decode($collection, $this->casting($collection, $document)),
-                $this->castingAfterDocuments($collection, $batch)
+                $this->castAfter($collection, $batch)
             );
 
             $batch = $this->decorateDocuments(Event::DocumentsCreate, $collection, $batch);
@@ -1607,11 +1607,11 @@ trait Documents
                 }
             }
 
-            $document = $this->castingBefore($collection, $document);
+            $document = $this->castBefore($collection, $document);
 
             $this->authorization->skip(fn () => $this->adapter->updateDocument($collection, $old->getId(), $document, $skipPermissionsUpdate));
 
-            $document = $this->castingAfter($collection, $document);
+            $document = $this->castAfterDocument($collection, $document);
 
             $purgedIds = \array_values(\array_unique([$id, $old->getId(), $document->getId()]));
 
@@ -1769,7 +1769,7 @@ trait Documents
         $decodedKeys = $selections === []
             ? []
             : \array_values(\array_unique([...$selections, ...\array_map(\strval(...), \array_keys($adapterData))]));
-        $adapterUpdates = $this->castingBefore($collection, new Document($adapterData));
+        $adapterUpdates = $this->castBefore($collection, new Document($adapterData));
 
         $originalLimit = $limit;
         $last = $cursor;
@@ -1849,7 +1849,7 @@ trait Documents
                     $document = $new;
 
                     $encoded = $this->encode($collection, $document);
-                    $batch[$index] = $this->castingBefore($collection, $encoded);
+                    $batch[$index] = $this->castBefore($collection, $encoded);
                 }
 
                 $this->adapter->updateDocuments(
@@ -1875,7 +1875,7 @@ trait Documents
             // The operator refetch goes through find(), which already decoded every document;
             // decoding again would run each decode filter twice.
             /** @var array<Document> $batch */
-            $batch = $this->castingAfterDocuments($collection, $batch);
+            $batch = $this->castAfter($collection, $batch);
             if (! $hasOperators) {
                 $batch = \array_map(
                     fn (Document $doc) => $this->decode($collection, $doc, $decodedKeys),
@@ -1929,13 +1929,12 @@ trait Documents
     ): Document {
         $result = null;
 
-        $this->upsertDocumentsWithIncrease(
+        $this->upsertDocuments(
             $collection,
-            '',
             [$document],
-            function (Document $doc, ?Document $_old = null) use (&$result) {
-                $result = $doc;
-            }
+            onNext: function (Document $upserted) use (&$result): void {
+                $result = $upserted;
+            },
         );
 
         if ($result === null) {
@@ -1947,7 +1946,8 @@ trait Documents
     }
 
     /**
-     * Create or update documents.
+     * Create or update documents. With $increase, an update adds the given document's value of that attribute to
+     * the stored one instead of replacing it.
      *
      * @param  string  $collection  The collection identifier
      * @param  array<Document>  $documents  The documents to create or update
@@ -1955,51 +1955,20 @@ trait Documents
      * @param  (callable(Document $upserted, ?Document $old): void)|null  $onNext  Callback given each upserted document once its batch is written, with the stored document it updated, or null when it was created
      * @param  (callable(Throwable): void)|null  $onError  Given an error $onNext throws; the write continues. Without it the
      *                                                    error is rethrown. Write errors are always thrown.
-     * @return int The number of documents created or updated
-     *
-     * @throws StructureException
-     * @throws Throwable
-     */
-    public function upsertDocuments(
-        string $collection,
-        array $documents,
-        int $batchSize = self::INSERT_BATCH_SIZE,
-        ?callable $onNext = null,
-        ?callable $onError = null
-    ): int {
-        return $this->upsertDocumentsWithIncrease(
-            $collection,
-            '',
-            $documents,
-            $onNext,
-            $onError,
-            $batchSize
-        );
-    }
-
-    /**
-     * Create or update documents, increasing the value of the given attribute by the value in each document.
-     *
-     * @param  string  $collection  The collection identifier
-     * @param  string  $attribute  The attribute to increment on update
-     * @param  array<Document>  $documents  The documents to create or update
-     * @param  (callable(Document $upserted, ?Document $old): void)|null  $onNext  Callback given each upserted document once its batch is written, with the stored document it updated, or null when it was created
-     * @param  (callable(Throwable): void)|null  $onError  Given an error $onNext throws; the write continues. Without it the
-     *                                                    error is rethrown. Write errors are always thrown.
-     * @param  int  $batchSize  Number of documents per batch
+     * @param  string|null  $increase  The attribute an update increases by the document's value
      * @return int The number of documents created or updated
      *
      * @throws StructureException
      * @throws Throwable
      * @throws Exception
      */
-    public function upsertDocumentsWithIncrease(
+    public function upsertDocuments(
         string $collection,
-        string $attribute,
         array $documents,
+        int $batchSize = self::INSERT_BATCH_SIZE,
         ?callable $onNext = null,
         ?callable $onError = null,
-        int $batchSize = self::INSERT_BATCH_SIZE
+        ?string $increase = null,
     ): int {
         if (! $this->adapterHasFeature(Feature\Upserts::class)) {
             throw new DatabaseException('Adapter does not support upserts');
@@ -2066,7 +2035,7 @@ trait Documents
             $hasChanges = false;
             if (! empty($operators)) {
                 $hasChanges = true;
-            } elseif (! empty($attribute)) {
+            } elseif (($increase ?? '') !== '') {
                 $hasChanges = true;
             } elseif (! $skipPermissionsUpdate) {
                 $hasChanges = true;
@@ -2201,8 +2170,8 @@ trait Documents
             if (! empty($operators)) {
                 $operatorIds[$identity] = true;
             }
-            $old = $this->castingBefore($collection, $old);
-            $document = $this->castingBefore($collection, $document);
+            $old = $this->castBefore($collection, $old);
+            $document = $this->castBefore($collection, $document);
 
             $documents[$key] = new Change(
                 old: $old,
@@ -2221,7 +2190,7 @@ trait Documents
              */
             $hasOperators = false;
             foreach ($chunk as $change) {
-                if (isset($operatorIds[$this->getDocumentIdentity($change->getNew())])) {
+                if (isset($operatorIds[$this->getDocumentIdentity($change->new)])) {
                     $hasOperators = true;
                     break;
                 }
@@ -2229,8 +2198,8 @@ trait Documents
 
             $batch = $this->withMutation(
                 Event::DocumentsUpsert,
-                \array_map(static fn (Change $change): Document => $change->getNew(), $chunk),
-                function () use ($collection, $attribute, $chunk): array {
+                \array_map(static fn (Change $change): Document => $change->new, $chunk),
+                function () use ($collection, $increase, $chunk): array {
                     if (! $this->adapterHasFeature(Feature\Upserts::class)) {
                         throw new DatabaseException('Adapter does not support upserts');
                     }
@@ -2238,8 +2207,8 @@ trait Documents
                     $adapter = $this->adapter;
                     $batch = $this->authorization->skip(fn () => $adapter->upsertDocuments(
                         $collection,
-                        $attribute,
-                        $chunk
+                        $chunk,
+                        $increase,
                     ));
 
                     foreach ($batch as $document) {
@@ -2256,8 +2225,8 @@ trait Documents
             );
 
             foreach ($batch as $index => $document) {
-                if (empty($document->getSequence()) && ! empty($chunk[$index]->getOld()->getSequence())) {
-                    $document->setAttribute(Document::SEQUENCE, $chunk[$index]->getOld()->getSequence());
+                if (empty($document->getSequence()) && ! empty($chunk[$index]->old->getSequence())) {
+                    $document->setAttribute(Document::SEQUENCE, $chunk[$index]->old->getSequence());
                 }
             }
 
@@ -2266,7 +2235,7 @@ trait Documents
             }
 
             foreach ($chunk as $change) {
-                if ($change->getOld()->isEmpty()) {
+                if ($change->old->isEmpty()) {
                     $created++;
                 } else {
                     $updated++;
@@ -2283,7 +2252,7 @@ trait Documents
             }
 
             /** @var array<Document> $batch */
-            $batch = $this->castingAfterDocuments($collection, $batch);
+            $batch = $this->castAfter($collection, $batch);
             if (! $hasOperators) {
                 $batch = \array_map(
                     fn (Document $doc) => $this->decode($collection, $doc),
@@ -2294,10 +2263,10 @@ trait Documents
             $batch = $this->decorateDocuments(Event::DocumentsUpsert, $collection, $batch);
 
             foreach ($batch as $index => $doc) {
-                $old = $chunk[$index]->getOld();
+                $old = $chunk[$index]->old;
 
                 if (! $old->isEmpty()) {
-                    $old = $this->castingAfter($collection, $old);
+                    $old = $this->castAfterDocument($collection, $old);
                 }
 
                 try {
@@ -3785,7 +3754,7 @@ trait Documents
 
         if (! empty($cursor)) {
             $cursor = $this->encode($collection, clone $cursor);
-            $cursor = $this->castingBefore($collection, $cursor);
+            $cursor = $this->castBefore($collection, $cursor);
             $cursor = $this->encodeJoins($cursor, $joinedCollections);
             $cursor = $cursor->getArrayCopy();
         } else {
@@ -3934,7 +3903,7 @@ trait Documents
         $collectionId = $collection->getId();
         $hasCustomType = isset($this->documentTypes[$collectionId]);
 
-        foreach ($this->castingAfterDocuments($collection, $results) as $index => $node) {
+        foreach ($this->castAfter($collection, $results) as $index => $node) {
             $node = $this->casting($collection, $node);
             $node = $this->decode($collection, $node, $selections);
             if ($joinedCollections !== []) {
@@ -5098,43 +5067,34 @@ trait Documents
         }
     }
 
-    private function castingBefore(Document $collection, Document $document): Document
+    private function castBefore(Document $collection, Document $document): Document
     {
-        if ($this->adapter->hasFeature(Feature\InternalCasting::class)) {
-            /** @var Adapter&Feature\InternalCasting $adapter */
-            $adapter = $this->adapter;
-
-            return $adapter->castingBefore($collection, $document);
+        if (! $this->adapterHasFeature(Feature\Casting::class)) {
+            return $document;
         }
 
-        return $document;
+        return $this->adapter->castBefore($collection, $document);
     }
 
-    private function castingAfter(Document $collection, Document $document): Document
+    private function castAfterDocument(Document $collection, Document $document): Document
     {
-        if ($this->adapter->hasFeature(Feature\InternalCasting::class)) {
-            /** @var Adapter&Feature\InternalCasting $adapter */
-            $adapter = $this->adapter;
-
-            return $adapter->castingAfter($collection, $document);
+        if (! $this->adapterHasFeature(Feature\Casting::class)) {
+            return $document;
         }
 
-        return $document;
+        return $this->adapter->castAfter($collection, [$document])[0];
     }
 
     /**
      * @param  array<Document>  $documents
      * @return array<Document>
      */
-    private function castingAfterDocuments(Document $collection, array $documents): array
+    private function castAfter(Document $collection, array $documents): array
     {
-        if ($documents !== [] && $this->adapter->hasFeature(Feature\InternalCasting::class)) {
-            /** @var Adapter&Feature\InternalCasting $adapter */
-            $adapter = $this->adapter;
-
-            return $adapter->castingAfterDocuments($collection, $documents);
+        if ($documents === [] || ! $this->adapterHasFeature(Feature\Casting::class)) {
+            return $documents;
         }
 
-        return $documents;
+        return $this->adapter->castAfter($collection, $documents);
     }
 }

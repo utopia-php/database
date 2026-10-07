@@ -20,6 +20,7 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Schema\Column;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\Schema\ColumnType;
 
@@ -94,7 +95,7 @@ final class OrphanColumnTypeTest extends TestCase
     #[DataProvider('sqlAdaptersAndUnstorableTypes')]
     public function testNoSqlAdapterMapsAnUnstorableTypeToAColumn(SQL $adapter, ColumnType $type): void
     {
-        $this->assertRefused(fn () => $adapter->getColumnType($type->value, 0));
+        $this->assertRefused(fn () => $adapter->getColumnType(Attribute::fromArray(['key' => self::KEY, 'type' => $type])), StructureException::class);
     }
 
     #[DataProvider('unstorableTypes')]
@@ -155,7 +156,7 @@ final class OrphanColumnTypeTest extends TestCase
         $this->assertSame(self::KEY, $database->createAttribute(self::COLLECTION, Attribute::string(key: self::KEY, size: 64))->key);
 
         $this->assertNotSame($orphan, $this->schemaColumnType($database));
-        $this->assertSame(\strtolower($adapter->getColumnType(ColumnType::String->value, 64)), $this->schemaColumnType($database));
+        $this->assertSame($adapter->getColumnType(Attribute::string(key: self::KEY, size: 64)), $this->schemaColumnType($database));
         $this->assertSame([self::KEY], $this->keys($database));
         $document = $database->getDocument(self::COLLECTION, self::DOCUMENT);
         $this->assertSame(self::DOCUMENT, $document->getId());
@@ -192,7 +193,7 @@ final class OrphanColumnTypeTest extends TestCase
         $this->assertSame([self::KEY, 'count'], \array_map(static fn (Attribute $attribute): string => $attribute->key, $created));
 
         $this->assertNotSame($orphan, $this->schemaColumnType($database));
-        $this->assertSame(\strtolower($adapter->getColumnType(ColumnType::String->value, 64)), $this->schemaColumnType($database));
+        $this->assertSame($adapter->getColumnType(Attribute::string(key: self::KEY, size: 64)), $this->schemaColumnType($database));
         $this->assertSame([self::KEY, 'count'], $this->keys($database));
         $document = $database->getDocument(self::COLLECTION, self::DOCUMENT);
         $this->assertSame(self::DOCUMENT, $document->getId());
@@ -281,7 +282,7 @@ final class OrphanColumnTypeTest extends TestCase
     private function columns(Database $database, string $collection): array
     {
         return \array_map(
-            static fn (Document $column): string => $column->getId(),
+            static fn (Column $column): string => $column->name,
             $database->getSchemaAttributes($collection),
         );
     }
@@ -335,11 +336,8 @@ final class OrphanColumnTypeTest extends TestCase
     private function schemaColumnType(Database $database): string
     {
         foreach ($database->getSchemaAttributes(self::COLLECTION) as $column) {
-            if ($column->getId() === self::KEY) {
-                $columnType = $column->getAttribute('columnType');
-                $this->assertIsString($columnType);
-
-                return $columnType;
+            if ($column->name === self::KEY) {
+                return $column->type;
             }
         }
 

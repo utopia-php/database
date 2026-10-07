@@ -339,7 +339,7 @@ final class FeatureContractTest extends TestCase
 
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('Adapter does not support upserts');
-        $pool->upsertDocuments(new Document(['$id' => 'any']), '', []);
+        $pool->upsertDocuments(new Document(['$id' => 'any']), []);
     }
 
     public function testRedisOffersUpsertsAndRelationships(): void
@@ -360,17 +360,19 @@ final class FeatureContractTest extends TestCase
         $this->assertTrue($sqlite->hasFeature(Feature\Relationships::class));
         $this->assertTrue($sqlite->hasFeature(Feature\RawQuery::class));
         $this->assertTrue($sqlite->hasFeature(Feature\QueryBuilder::class));
+        $this->assertTrue($sqlite->supports(Capability::SchemaIntrospection));
         $this->assertFalse($sqlite->hasFeature(Feature\Spatial::class));
         $this->assertFalse($sqlite->hasFeature(Feature\Timeouts::class));
     }
 
-    public function testMariaDBAndPostgresOfferSpatialAndTimeouts(): void
+    public function testMariaDBAndPostgresOfferSpatialAndTimeoutsAndIntrospectTheirSchema(): void
     {
         foreach (['MariaDB', 'MySQL', 'Postgres'] as $name) {
             $adapter = $this->adapters()[$name];
 
             $this->assertTrue($adapter->hasFeature(Feature\Spatial::class), $name);
             $this->assertTrue($adapter->hasFeature(Feature\Timeouts::class), $name);
+            $this->assertTrue($adapter->supports(Capability::SchemaIntrospection), $name);
         }
     }
 

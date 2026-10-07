@@ -40,6 +40,8 @@ use Utopia\Database\Relationship;
 use Utopia\Database\RelationshipSide;
 use Utopia\Database\RelationshipType;
 use Utopia\Database\RelationshipUpdate;
+use Utopia\Database\Schema\Column as SchemaColumn;
+use Utopia\Database\Schema\Index as SchemaIndex;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Query\Builder\SQL as SQLBuilder;
@@ -63,7 +65,7 @@ use Utopia\Query\Schema\IndexType;
  * 9. MODIFY COLUMN is not supported
  * 10. Can't rename an index directly
  */
-class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaIndexes
+class SQLite extends SQL
 {
     /** Suffix appended to every FTS5 virtual table name created by this adapter. */
     private const FTS_TABLE_SUFFIX = '_fts';
@@ -500,11 +502,8 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             $attributeStrings[$key] = '`'.$this->filter($attribute->key).'` '.$this->getAttributeSqlType($attribute).', ';
         }
 
-        // SQLite stores integers regardless of declared type, but
-        // testSchemaAttributes asserts the columnType reads back as
-        // `int(11) unsigned` to match MariaDB. Quote the declaration so
-        // PRAGMA table_info echoes the exact string under emulation;
-        // otherwise use INTEGER, the affinity-correct vanilla form.
+        // Under MySQL emulation the tenant column reads back with the type MariaDB reports: SQLite keeps a quoted
+        // declaration verbatim, where INTEGER is the affinity-correct form otherwise.
         $tenantType = $this->emulateMySQL ? '"INT(11) UNSIGNED"' : 'INTEGER';
         $tenantQuery = $this->sharedTables ? "{$this->quote(Storage::TENANT)} {$tenantType} DEFAULT NULL," : '';
 
@@ -2292,14 +2291,14 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         $documentsData = [];
 
         foreach ($changes as $change) {
-            $document = $change->getNew();
+            $document = $change->new;
 
             if ($hasOperators) {
                 $extracted = Operator::extractOperators($document->getAttributes());
                 $currentRegularAttributes = $extracted['updates'];
                 $extractedOperators = $extracted['operators'];
 
-                if ($change->getOld()->isEmpty() && ! empty($extractedOperators)) {
+                if ($change->old->isEmpty() && ! empty($extractedOperators)) {
                     foreach ($extractedOperators as $operatorKey => $operator) {
                         $default = $attributeDefaults[$operatorKey] ?? null;
                         $value = $this->applyOperatorToValue($operator, $default);
@@ -2629,48 +2628,33 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
     }
 
     /**
-     * Introspect a collection's columns via PRAGMA table_info instead of
-     * MariaDB's INFORMATION_SCHEMA.COLUMNS, which doesn't exist in SQLite.
-     * Returned shape matches the MariaDB result enough that
-     * Database::analyzeCollection() doesn't have to special-case the
-     * adapter.
-     *
-     * @return array<Document>
+     * @return list<SchemaColumn>
      */
     public function getSchemaAttributes(string $collection): array
     {
         $table = "{$this->getNamespace()}_{$this->filter($collection)}";
 
-        $stmt = $this->prepare("PRAGMA table_info(`{$table}`)", event: Event::CollectionRead);
-        $this->execute($stmt);
-        $rows = $stmt->fetchAll();
-        $stmt->closeCursor();
+        $statement = $this->prepare("PRAGMA table_info(`{$table}`)", event: Event::CollectionRead);
+        $this->execute($statement);
+        $rows = $statement->fetchAll();
+        $statement->closeCursor();
 
-        $results = [];
+        $columns = [];
         foreach ($rows as $row) {
-            if (! \is_array($row)) {
+            if (! \is_array($row) || ! \is_scalar($row['name'] ?? null)) {
                 continue;
             }
-            $rawType = \is_scalar($row['type'] ?? null) ? (string) $row['type'] : '';
-            $parsed = $this->parseSqliteColumnType($rawType);
-            $name = \is_scalar($row['name'] ?? null) ? (string) $row['name'] : '';
 
-            $results[] = new Document([
-                Document::ID => $name,
-                'columnDefault' => $row['dflt_value'] ?? null,
-                'isNullable' => empty($row['notnull']) ? 'YES' : 'NO',
-                'dataType' => $parsed['dataType'],
-                'characterMaximumLength' => $parsed['characterMaximumLength'],
-                'numericPrecision' => $parsed['numericPrecision'],
-                'numericScale' => $parsed['numericScale'],
-                'datetimePrecision' => $parsed['datetimePrecision'],
-                'columnType' => \strtolower($rawType),
-                'columnKey' => ! empty($row['pk']) ? 'PRI' : '',
-                'extra' => '',
-            ]);
+            $type = \is_scalar($row['type'] ?? null) ? (string) $row['type'] : '';
+            $columns[] = new SchemaColumn(
+                name: (string) $row['name'],
+                type: $this->canonicalColumnType($type),
+                length: $this->getCharacterLength($type),
+                nullable: empty($row['notnull']),
+            );
         }
 
-        return $results;
+        return $columns;
     }
 
     /**
@@ -2679,19 +2663,17 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
     protected function getColumnNames(string $collection): array
     {
         return \array_map(
-            static fn (Document $column): string => $column->getId(),
+            static fn (SchemaColumn $column): string => $column->name,
             $this->getSchemaAttributes($collection),
         );
     }
 
     /**
-     * Introspect a collection's indexes via PRAGMA index_list +
-     * PRAGMA index_info. Returns one Document per index with a `columns`
-     * array, matching the grouped shape MariaDB::getSchemaIndexes returns
-     * so Database::createIndex can compare `columns` against the requested
-     * attributes without special-casing the adapter.
+     * Index names are global in SQLite, so each carries the namespace, tenant and collection; an index is reported
+     * under its key, the current tenant's copy before another's. PRAGMA index_list misses the FTS5 tables fulltext
+     * indexes are kept in, so those are added.
      *
-     * @return array<Document>
+     * @return list<SchemaIndex>
      */
     public function getSchemaIndexes(string $collection): array
     {
@@ -2700,85 +2682,67 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         $own = "{$this->getNamespace()}_{$this->getTenantSegment()}_{$filtered}_";
         $anyTenant = '/^'.\preg_quote($this->getNamespace(), '/').'_[A-Za-z0-9_-]*?_'.\preg_quote($filtered, '/').'_(.+)$/';
 
-        $stmt = $this->prepare("PRAGMA index_list(`{$table}`)", event: Event::CollectionRead);
-        $this->execute($stmt);
-        $indexes = $stmt->fetchAll();
-        $stmt->closeCursor();
+        $statement = $this->prepare("PRAGMA index_list(`{$table}`)", event: Event::CollectionRead);
+        $this->execute($statement);
+        $rows = $statement->fetchAll();
+        $statement->closeCursor();
 
-        $results = [];
-        foreach ($indexes as $index) {
-            if (! \is_array($index)) {
+        $indexes = [];
+        foreach ($rows as $row) {
+            if (! \is_array($row)) {
                 continue;
             }
-            $name = \is_scalar($index['name'] ?? null) ? (string) $index['name'] : '';
-            $unique = ! empty($index['unique']);
+            $name = \is_scalar($row['name'] ?? null) ? (string) $row['name'] : '';
 
             $owned = \str_starts_with($name, $own);
-            $id = match (true) {
+            $key = match (true) {
                 $owned => \substr($name, \strlen($own)),
                 \preg_match($anyTenant, $name, $matches) === 1 => $matches[1],
                 default => $name,
             };
-            if (! $owned && isset($results[$id])) {
+            if (! $owned && isset($indexes[$key])) {
                 continue;
             }
 
-            $colStmt = $this->prepare("PRAGMA index_info(`{$name}`)", event: Event::CollectionRead);
-            $this->execute($colStmt);
-            $cols = $colStmt->fetchAll();
-            $colStmt->closeCursor();
-
-            \usort(
-                $cols,
-                fn (mixed $a, mixed $b) => (
-                    \is_array($a) && \is_scalar($a['seqno'] ?? null) ? (int) $a['seqno'] : 0
-                ) <=> (
-                    \is_array($b) && \is_scalar($b['seqno'] ?? null) ? (int) $b['seqno'] : 0
-                )
+            $columns = $this->getIndexColumns($name);
+            $indexes[$key] = new SchemaIndex(
+                name: $key,
+                type: empty($row['unique']) ? IndexType::Key : IndexType::Unique,
+                columns: $columns,
+                lengths: \array_fill(0, \count($columns), null),
             );
-
-            $columns = [];
-            $lengths = [];
-            foreach ($cols as $col) {
-                if (! \is_array($col)) {
-                    continue;
-                }
-                $columns[] = \is_scalar($col['name'] ?? null) ? (string) $col['name'] : '';
-                $lengths[] = null;
-            }
-
-            $results[$id] = new Document([
-                Document::ID => $id,
-                'indexName' => $id,
-                'indexType' => 'BTREE',
-                'nonUnique' => $unique ? 0 : 1,
-                'columns' => $columns,
-                'lengths' => $lengths,
-            ]);
-        }
-        $results = \array_values($results);
-
-        // PRAGMA index_list misses FTS5 vtables.
-        foreach ($this->getFulltextSchemaIndexes($collection) as $entry) {
-            $results[] = new Document($entry);
         }
 
-        return $results;
+        return [...\array_values($indexes), ...$this->getFulltextSchemaIndexes($collection)];
     }
 
     /**
-     * Schema-index entries for FTS5 fulltext tables on `$collection`.
-     * Maps each back to a metadata index id when possible.
+     * @return list<string>
+     */
+    private function getIndexColumns(string $index): array
+    {
+        $statement = $this->prepare("PRAGMA index_info(`{$index}`)", event: Event::CollectionRead);
+        $this->execute($statement);
+        $rows = $statement->fetchAll();
+        $statement->closeCursor();
+
+        $columns = [];
+        foreach ($rows as $row) {
+            if (! \is_array($row)) {
+                continue;
+            }
+            $position = \is_scalar($row['seqno'] ?? null) ? (int) $row['seqno'] : \count($columns);
+            $columns[$position] = \is_scalar($row['name'] ?? null) ? (string) $row['name'] : '';
+        }
+        \ksort($columns);
+
+        return \array_values($columns);
+    }
+
+    /**
+     * The FTS5 tables of $collection's fulltext indexes, each under the key of the index it serves when known.
      *
-     * Each entry has keys:
-     * - `$id`: string
-     * - `indexName`: string
-     * - `indexType`: string
-     * - `nonUnique`: int
-     * - `columns`: array<string>
-     * - `lengths`: array<null>
-     *
-     * @return array<array<string, mixed>>
+     * @return list<SchemaIndex>
      */
     protected function getFulltextSchemaIndexes(string $collection): array
     {
@@ -2788,186 +2752,54 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             return [];
         }
 
-        $hashToId = \array_flip($this->getFulltextTablesByIndexId($collection));
+        $keys = \array_flip($this->getFulltextTablesByIndexId($collection));
 
-        $entries = [];
-        foreach ($tables as $ftsTable) {
-            $info = $this->prepare("PRAGMA table_info(`{$ftsTable}`)");
-            $info->execute();
-            $cols = $info->fetchAll(PDO::FETCH_ASSOC);
-            $info->closeCursor();
+        $indexes = [];
+        foreach ($tables as $fulltextTable) {
+            $statement = $this->prepare("PRAGMA table_info(`{$fulltextTable}`)");
+            $statement->execute();
+            $rows = $statement->fetchAll(PDO::FETCH_ASSOC);
+            $statement->closeCursor();
 
             $columns = [];
-            foreach ($cols as $col) {
-                if (! \is_array($col)) {
+            foreach ($rows as $row) {
+                if (! \is_array($row) || ! \is_scalar($row['name'] ?? null) || $row['name'] === '') {
                     continue;
                 }
-                $name = \is_scalar($col['name'] ?? null) ? (string) $col['name'] : '';
-                if ($name === '') {
-                    continue;
-                }
-                $columns[] = $name;
+                $columns[] = (string) $row['name'];
             }
 
-            $id = $hashToId[$ftsTable] ?? $ftsTable;
-
-            $entries[] = [
-                Document::ID => $id,
-                'indexName' => $id,
-                'indexType' => 'FULLTEXT',
-                'nonUnique' => 1,
-                'columns' => $columns,
-                'lengths' => \array_fill(0, \count($columns), null),
-            ];
+            $indexes[] = new SchemaIndex(
+                name: (string) ($keys[$fulltextTable] ?? $fulltextTable),
+                type: IndexType::Fulltext,
+                columns: $columns,
+                lengths: \array_fill(0, \count($columns), null),
+            );
         }
 
-        return $entries;
+        return $indexes;
     }
 
     /**
-     * Parse a SQLite type declaration like `VARCHAR(36)` into the column-info
-     * shape exposed by getSchemaAttributes. Mirrors what MariaDB returns from
-     * INFORMATION_SCHEMA.COLUMNS so callers don't have to special-case the
-     * adapter — TEXT family types report their MariaDB byte ceilings,
-     * VARCHAR/CHAR thread the parenthesised size into characterMaximumLength,
-     * DATETIME's parenthesised value routes to datetimePrecision, and
-     * integer types fall back to MariaDB's default precision values.
-     *
-     * @return array{
-     *     dataType: string,
-     *     characterMaximumLength: ?string,
-     *     numericPrecision: ?string,
-     *     numericScale: ?string,
-     *     datetimePrecision: ?string,
-     * }
+     * The character length of a declared type: the size of a VARCHAR or CHAR, and under MySQL emulation the byte
+     * ceilings MariaDB reports for the TEXT family.
      */
-    private function parseSqliteColumnType(string $declaration): array
+    private function getCharacterLength(string $declaration): ?int
     {
-        $declaration = \trim(\preg_replace('/\s+/', ' ', $declaration) ?? '');
-
-        $base = $declaration;
-        $argument = null;
-        $secondArgument = null;
-        if (\preg_match('/^([A-Za-z]+)\s*\((\d+)(?:\s*,\s*(\d+))?\s*\)/', $declaration, $matches) === 1) {
-            $base = $matches[1];
-            $argument = (int) $matches[2];
-            if (isset($matches[3])) {
-                $secondArgument = (int) $matches[3];
-            }
+        if (\preg_match('/^\s*(VARCHAR|CHAR)\s*\(\s*(\d+)\s*\)/i', $declaration, $matches) === 1) {
+            return (int) $matches[2];
         }
 
-        $dataType = \strtolower($base);
-        // SQLite spells INT and INTEGER interchangeably for declared types.
-        // Under emulation, canonicalise to MariaDB's reported `int` so
-        // getSchemaAttributes matches that adapter's contract; otherwise
-        // keep the verbatim form the user declared.
-        if ($this->emulateMySQL && $dataType === 'integer') {
-            $dataType = 'int';
+        if (! $this->emulateMySQL) {
+            return null;
         }
 
-        $result = [
-            'dataType' => $dataType,
-            'characterMaximumLength' => null,
-            'numericPrecision' => null,
-            'numericScale' => null,
-            'datetimePrecision' => null,
-        ];
-
-        // VARCHAR / CHAR / DATETIME(n) / DECIMAL(p,s) length+precision
-        // come straight from the declaration — that's true for vanilla
-        // SQLite too. The MariaDB byte ceilings (TEXT/MEDIUMTEXT/etc.)
-        // and the integer/float precision defaults are MariaDB-specific
-        // INFORMATION_SCHEMA conventions, so report them only under
-        // emulation.
-        switch ($dataType) {
-            case 'varchar':
-            case 'char':
-                if ($argument !== null) {
-                    $result['characterMaximumLength'] = (string) $argument;
-                }
-                break;
-
-            case 'datetime':
-            case 'timestamp':
-            case 'time':
-                if ($argument !== null) {
-                    $result['datetimePrecision'] = (string) $argument;
-                }
-                break;
-
-            case 'decimal':
-            case 'numeric':
-                if ($argument !== null) {
-                    $result['numericPrecision'] = (string) $argument;
-                }
-                if ($secondArgument !== null) {
-                    $result['numericScale'] = (string) $secondArgument;
-                } elseif ($this->emulateMySQL && $argument !== null) {
-                    $result['numericScale'] = '0';
-                }
-                break;
-        }
-
-        /**
-         * MariaDB byte ceilings for TEXT-family types, mirrored so PRAGMA-based
-         * introspection produces the same characterMaximumLength values that
-         * INFORMATION_SCHEMA.COLUMNS would on MariaDB.
-         */
-
-        if ($this->emulateMySQL) {
-            switch ($dataType) {
-                case 'text':
-                    $result['characterMaximumLength'] = '' .  Database::MAX_TEXT_BYTES;
-                    break;
-
-                case 'mediumtext':
-                    $result['characterMaximumLength'] = '' . Database::MAX_MEDIUMTEXT_BYTES;
-                    break;
-
-                case 'longtext':
-                case 'json':
-                    $result['characterMaximumLength'] = '' .  Database::MAX_LONGTEXT_BYTES;
-                    break;
-
-                case 'tinyint':
-                    $result['numericPrecision'] = '3';
-                    break;
-
-                case 'smallint':
-                    $result['numericPrecision'] = '5';
-                    break;
-
-                case 'mediumint':
-                    $result['numericPrecision'] = '7';
-                    break;
-
-                case 'int':
-                case 'integer':
-                    $result['numericPrecision'] = '10';
-                    break;
-
-                case 'bigint':
-                    $result['numericPrecision'] = '19';
-                    break;
-
-                case 'decimal':
-                case 'numeric':
-                    if ($result['numericPrecision'] === null) {
-                        $result['numericPrecision'] = '10';
-                    }
-                    break;
-
-                case 'float':
-                    $result['numericPrecision'] = '12';
-                    break;
-
-                case 'double':
-                    $result['numericPrecision'] = '22';
-                    break;
-            }
-        }
-
-        return $result;
+        return match (\strtolower(\trim($declaration))) {
+            'text' => Database::MAX_TEXT_BYTES,
+            'mediumtext' => Database::MAX_MEDIUMTEXT_BYTES,
+            'longtext', 'json' => Database::MAX_LONGTEXT_BYTES,
+            default => null,
+        };
     }
 
     /**

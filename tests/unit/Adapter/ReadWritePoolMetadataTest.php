@@ -24,6 +24,7 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Pools\Pool as UtopiaPool;
+use Utopia\Query\Schema\ColumnType;
 
 final class ReadWritePoolMetadataTest extends TestCase
 {
@@ -45,16 +46,14 @@ final class ReadWritePoolMetadataTest extends TestCase
             'getAttributeWidth' => [new Document()],
             'getCountOfAttributes' => [new Document()],
             'getCountOfIndexes' => [new Document()],
-            'getBuilder' => ['posts'],
-            'getSchema' => [],
-            'getColumnType' => ['string', 255, true, false, false],
-            'decodePoint' => ['POINT(1 2)'],
-            'decodeLinestring' => ['LINESTRING(1 2, 3 4)'],
-            'decodePolygon' => ['POLYGON((1 2, 3 4, 5 6, 1 2))'],
-            'castingBefore' => [new Document(), new Document()],
-            'castingAfter' => [new Document(), new Document()],
-            'castingAfterDocuments' => [new Document(), [new Document()]],
-            'setUTCDatetime' => ['2026-09-23 00:00:00'],
+            'builder' => ['posts'],
+            'schema' => [],
+            'getColumnType' => [Attribute::string(key: 'title', size: 255)],
+            'encode' => [[1, 2], ColumnType::Point],
+            'decode' => ['POINT(1 2)', ColumnType::Point],
+            'castBefore' => [new Document(), new Document()],
+            'castAfter' => [new Document(), [new Document()]],
+            'castDatetime' => ['2026-09-23 00:00:00'],
         ];
 
         foreach ($calls as $method => $args) {
@@ -274,22 +273,22 @@ final class ReadWritePoolMetadataTest extends TestCase
         };
     }
 
-    public function testInternalCastingKeepsReadsOnTheReplica(): void
+    public function testCastingKeepsReadsOnTheReplica(): void
     {
         $database = $this->createReplicatedDatabase(new CastingMemory(), new CastingMemory());
 
         $post = $database->getDocument('posts', 'post');
 
-        $this->assertSame('replica', $post->getAttribute('server'), 'castingAfter() sent the read to the primary');
+        $this->assertSame('replica', $post->getAttribute('server'), 'castAfter() sent the read to the primary');
         $this->assertSame(
             ['replica', 'replica'],
             $this->servers($database->find('posts', [Query::greaterThan('$createdAt', '2000-01-01T00:00:00.000+00:00')])),
-            'setUTCDatetime() sent the read to the primary',
+            'castDatetime() sent the read to the primary',
         );
         $this->assertSame(
             ['replica'],
             $this->servers($database->find('posts', [Query::cursorAfter($post)])),
-            'castingBefore() sent the read to the primary',
+            'castBefore() sent the read to the primary',
         );
     }
 

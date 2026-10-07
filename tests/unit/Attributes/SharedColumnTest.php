@@ -17,6 +17,7 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Schema\Column;
 use Utopia\Database\Validator\Authorization;
 
 final class SharedColumnTest extends TestCase
@@ -249,8 +250,8 @@ final class SharedColumnTest extends TestCase
             public function getSchemaAttributes(string $collection): array
             {
                 return \array_map(
-                    fn (Document $column): Document => $column->getId() === SharedColumnTest::KEY
-                        ? $column->setAttribute('columnType', $this->columnType)
+                    fn (Column $column): Column => $column->name === SharedColumnTest::KEY
+                        ? new Column($column->name, $this->canonicalColumnType($this->columnType), $column->length, $column->nullable)
                         : $column,
                     parent::getSchemaAttributes($collection),
                 );
@@ -275,7 +276,7 @@ final class SharedColumnTest extends TestCase
     private function columns(Database $database): array
     {
         return \array_map(
-            static fn (Document $column): string => $column->getId(),
+            static fn (Column $column): string => $column->name,
             $database->getSchemaAttributes(self::COLLECTION),
         );
     }

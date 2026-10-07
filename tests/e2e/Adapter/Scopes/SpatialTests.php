@@ -2944,16 +2944,16 @@ trait SpatialTests
                 $database->createDocument($collection, new Document(['$id' => 'complete', '$permissions' => [Permission::read(Role::any())], ...$shapes]));
                 $this->assertSame($shapes['area'], $database->getDocument($collection, 'complete')->getAttribute('area'));
 
-                if ($adapter->supports(Capability::IndexSpatialNull) || ! $adapter->hasFeature(Feature\SchemaAttributes::class)) {
+                if ($adapter->supports(Capability::IndexSpatialNull) || ! $adapter->supports(Capability::SchemaIntrospection)) {
                     continue;
                 }
 
                 $nullable = [];
                 foreach ($database->getSchemaAttributes($collection) as $column) {
-                    $nullable[$column->getId()] = $column->getAttribute('isNullable');
+                    $nullable[$column->name] = $column->nullable;
                 }
                 foreach (\array_keys($shapes) as $key) {
-                    $this->assertSame('NO', $nullable[$key] ?? null, 'The required '.$key.' column of '.$collection.' must be NOT NULL');
+                    $this->assertFalse($nullable[$key] ?? true, 'The required '.$key.' column of '.$collection.' must be NOT NULL');
                 }
             }
         } finally {

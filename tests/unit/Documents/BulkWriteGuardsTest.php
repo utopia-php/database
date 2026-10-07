@@ -130,7 +130,7 @@ final class BulkWriteGuardsTest extends TestCase
         $database = $this->database(new SQLite(new PDO('sqlite::memory:')));
 
         $this->assertSame(0, $database->upsertDocuments(self::COLLECTION, []));
-        $this->assertSame(0, $database->upsertDocumentsWithIncrease(self::COLLECTION, 'rank', []));
+        $this->assertSame(0, $database->upsertDocuments(self::COLLECTION, [], increase: 'rank'));
         $this->assertSame(0, $database->upsertDocuments('missing', []), 'an empty upsert reads nothing, not even the collection');
     }
 

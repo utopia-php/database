@@ -17,6 +17,7 @@ use Tests\E2E\Adapter\Scopes\ObjectAttributeTests;
 use Tests\E2E\Adapter\Scopes\OperatorTests;
 use Tests\E2E\Adapter\Scopes\PermissionTests;
 use Tests\E2E\Adapter\Scopes\RelationshipTests;
+use Tests\E2E\Adapter\Scopes\SchemaReconciliationTests;
 use Tests\E2E\Adapter\Scopes\SchemalessTests;
 use Tests\E2E\Adapter\Scopes\SpatialTests;
 use Tests\E2E\Adapter\Scopes\VectorTests;
@@ -43,6 +44,7 @@ abstract class Base extends TestCase
     use OperatorTests;
     use PermissionTests;
     use RelationshipTests;
+    use SchemaReconciliationTests;
     use SchemalessTests;
     use SpatialTests;
     use VectorTests;

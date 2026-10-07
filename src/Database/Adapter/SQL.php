@@ -53,6 +53,7 @@ use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Database\Validator\Query\Join as JoinValidator;
+use Utopia\Database\Validator\Spatial as SpatialValidator;
 use Utopia\Query\Builder\Condition;
 use Utopia\Query\Builder\Feature\FullOuterJoins as FullOuterJoinsFeature;
 use Utopia\Query\Builder\Feature\InsertOrIgnore as InsertOrIgnoreFeature;
@@ -79,7 +80,7 @@ use Utopia\Query\Schema\Table\PostgreSQL as PostgreSQLTable;
 /**
  * Abstract base adapter for SQL-based database engines (MariaDB, MySQL, PostgreSQL, SQLite).
  */
-abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBuilder, Feature\ColumnTypes, Feature\Relationships, Feature\Upserts
+abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBuilder, Feature\Relationships, Feature\Upserts
 {
     /**
      * remapRow() drops every column with this prefix from every row it reads. filter() strips `$` from
@@ -184,7 +185,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             Capability::Caching,
             Capability::IndexFulltext,
             Capability::IndexFulltextMultiple,
-            Capability::Casting,
             Capability::UpdateLock,
             Capability::TransactionRetries,
             Capability::TransactionNested,
@@ -501,7 +501,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
     protected function createAttributeWithEvent(string $collection, Attribute $attribute, Event $event): bool
     {
-        $schema = $this->createSchemaBuilder();
+        $schema = $this->schema();
         $table = $schema->table($this->getSQLTableRaw($collection));
         $this->addAttributeColumn($table, $attribute);
         $result = $table->alter();
@@ -528,7 +528,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      */
     public function createAttributes(string $collection, array $attributes): bool
     {
-        $schema = $this->createSchemaBuilder();
+        $schema = $this->schema();
         $table = $schema->table($this->getSQLTableRaw($collection));
         foreach ($attributes as $attribute) {
             $this->addAttributeColumn($table, $attribute);
@@ -554,7 +554,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      */
     public function deleteAttribute(string $collection, string $key): bool
     {
-        $schema = $this->createSchemaBuilder();
+        $schema = $this->schema();
         $table = $schema->table($this->getSQLTableRaw($collection));
         $table->dropColumn($this->filter($key));
         $result = $table->alter();
@@ -580,7 +580,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             return true;
         }
 
-        $schema = $this->createSchemaBuilder();
+        $schema = $this->schema();
         $table = $schema->table($this->getSQLTableRaw($collection));
         $table->renameColumn($this->filter($old), $this->filter($new));
         $result = $table->alter();
@@ -1217,18 +1217,23 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
+     * @throws DatabaseException
+     */
+    public function upsertDocument(Document $collection, Change $change): Document
+    {
+        return $this->upsertDocuments($collection, [$change])[0];
+    }
+
+    /**
      * @param  array<Change>  $changes
      * @return array<Document>
      *
      * @throws DatabaseException
      */
-    public function upsertDocuments(
-        Document $collection,
-        string $attribute,
-        array $changes
-    ): array {
-        if (empty($changes)) {
-            return $changes;
+    public function upsertDocuments(Document $collection, array $changes, ?string $increase = null): array
+    {
+        if ($changes === []) {
+            return [];
         }
 
         $this->syncWriteHooks();
@@ -1247,14 +1252,14 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
             $hasOperators = false;
             $firstChange = $changes[0];
-            $firstDoc = $firstChange->getNew();
+            $firstDoc = $firstChange->new;
             $firstExtracted = Operator::extractOperators($firstDoc->getAttributes());
 
             if (! empty($firstExtracted['operators'])) {
                 $hasOperators = true;
             } else {
                 foreach ($changes as $change) {
-                    $doc = $change->getNew();
+                    $doc = $change->new;
                     $extracted = Operator::extractOperators($doc->getAttributes());
                     if (! empty($extracted['operators'])) {
                         $hasOperators = true;
@@ -1264,12 +1269,12 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             }
 
             if (! $hasOperators) {
-                $this->executeUpsertBatch($name, $changes, $spatialAttributes, $attribute, [], $attributeDefaults, false);
+                $this->executeUpsertBatch($name, $changes, $spatialAttributes, $increase ?? '', [], $attributeDefaults, false);
             } else {
                 $groups = [];
 
                 foreach ($changes as $change) {
-                    $document = $change->getNew();
+                    $document = $change->new;
                     $extracted = Operator::extractOperators($document->getAttributes());
                     $operators = $extracted['operators'];
 
@@ -1305,7 +1310,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             throw $this->processException($e);
         }
 
-        return \array_map(fn ($change) => $change->getNew(), $changes);
+        return \array_map(static fn (Change $change): Document => $change->new, $changes);
     }
 
     /**
@@ -2902,7 +2907,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     {
         $name = $this->filter($name);
 
-        $result = $this->createSchemaBuilder()->dropDatabase($name);
+        $result = $this->schema()->dropDatabase($name);
         $sql = $result->query;
 
         return $this->executeStatement($sql, Event::DatabaseDelete);
@@ -2917,7 +2922,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     {
         $id = $this->filter($collection);
 
-        $schema = $this->createSchemaBuilder();
+        $schema = $this->schema();
         $main = $schema->table($this->getSQLTableRaw($id))->drop();
         $permissions = $schema->table($this->getSQLTableRaw(Storage::permissionsTable($id)))->dropIfExists();
 
@@ -2948,7 +2953,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
     protected function dropCreatedCollection(string $id): void
     {
-        $schema = $this->createSchemaBuilder();
+        $schema = $this->schema();
         $main = $schema->table($this->getSQLTableRaw($id))->dropIfExists();
         $permissions = $schema->table($this->getSQLTableRaw(Storage::permissionsTable($id)))->dropIfExists();
 
@@ -2967,7 +2972,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $key = $this->filter($relationship->key ?? '');
         $twoWayKey = $this->filter($relationship->twoWayKey ?? '');
 
-        $schema = $this->createSchemaBuilder();
+        $schema = $this->schema();
         $addColumn = function (string $tableName, string $columnId) use ($schema): string {
             $table = $schema->table($this->getSQLTableRaw($tableName));
             $table->string($columnId, 255)->nullable()->default(null);
@@ -3005,7 +3010,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $newKey = $update->key === null ? null : $this->filter($update->key);
         $newTwoWayKey = $update->twoWayKey === null ? null : $this->filter($update->twoWayKey);
 
-        $schema = $this->createSchemaBuilder();
+        $schema = $this->schema();
         $renameColumn = function (string $tableName, string $from, string $to) use ($schema): string {
             $table = $schema->table($this->getSQLTableRaw($tableName));
             $table->renameColumn($from, $to);
@@ -3075,7 +3080,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $twoWayKey = $this->filter($relationship->twoWayKey ?? '');
         $twoWay = $relationship->twoWay;
 
-        $schema = $this->createSchemaBuilder();
+        $schema = $this->schema();
         $dropColumn = function (string $tableName, string $columnId) use ($schema): string {
             $table = $schema->table($this->getSQLTableRaw($tableName));
             $table->dropColumn($columnId);
@@ -3138,26 +3143,36 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
-     * Convert a type string and size to the corresponding SQL column type definition.
-     *
-     * @param string $type The column type value
-     * @param int $size The column size
-     * @param bool $signed Whether the column is signed
-     * @param bool $array Whether the column stores an array
-     * @param bool $required Whether the column is required
-     * @return string
-     *
-     * @throws DatabaseException For unknown type values.
+     * @var array<string, string>
      */
-    public function getColumnType(string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
-    {
-        try {
-            $columnType = Attribute::typeFromStored($type);
-        } catch (StructureException) {
-            throw new DatabaseException('Unknown column type: '.$type);
-        }
+    private const array COLUMN_TYPE_SPELLINGS = [
+        '/\s+/' => ' ',
+        '/ (NOT )?NULL$/' => '',
+        '/^(POINT|LINESTRING|POLYGON)\b.*$/' => '$1',
+        '/\b(TINYINT|SMALLINT|MEDIUMINT|INT|INTEGER|BIGINT)\(\d+\)/' => '$1',
+    ];
 
-        return $this->getSQLType($columnType, $size, $signed, $array, $required);
+    public function getColumnType(Attribute $attribute): ?string
+    {
+        $type = $this->getAttributeSqlType($attribute);
+
+        return $type === '' ? null : $this->canonicalColumnType($type);
+    }
+
+    /**
+     * One spelling for a native type, whether the adapter wrote it or the engine's catalog reports it: engines report
+     * integer display widths (int(11)), spatial types without their SRID or nullability, and MariaDB's JSON as
+     * LONGTEXT.
+     */
+    protected function canonicalColumnType(string $type): string
+    {
+        $canonical = \preg_replace(
+            \array_keys(self::COLUMN_TYPE_SPELLINGS),
+            \array_values(self::COLUMN_TYPE_SPELLINGS),
+            \strtoupper(\trim($type)),
+        ) ?? $type;
+
+        return $canonical === 'JSON' ? 'LONGTEXT' : $canonical;
     }
 
     protected function getSQLType(ColumnType $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
@@ -3266,6 +3281,62 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
+     * The well-known text of a spatial value, for the adapters that implement Feature\Spatial. A polygon may be
+     * given as one ring.
+     *
+     * @throws StructureException When the value is not a valid geometry of the type
+     * @throws DatabaseException When the type is not spatial
+     */
+    protected function encodeSpatial(mixed $value, ColumnType $type): string
+    {
+        $validator = new SpatialValidator($type->value);
+        if (! $validator->isValid($value)) {
+            throw new StructureException($validator->getDescription());
+        }
+
+        /** @var array<int, mixed> $value */
+        switch ($type) {
+            case ColumnType::Point:
+                /** @var array{0: float|int, 1: float|int} $value */
+                return "POINT({$value[0]} {$value[1]})";
+
+            case ColumnType::Linestring:
+                $points = [];
+                /** @var array<int, array{0: float|int, 1: float|int}> $value */
+                foreach ($value as $point) {
+                    $points[] = "{$point[0]} {$point[1]}";
+                }
+
+                return 'LINESTRING('.\implode(', ', $points).')';
+
+            case ColumnType::Polygon:
+                $singleRing = \is_array($value[0] ?? null)
+                    && \count($value[0]) === 2
+                    && \is_numeric($value[0][0] ?? null)
+                    && \is_numeric($value[0][1] ?? null);
+
+                if ($singleRing) {
+                    $value = [$value];
+                }
+
+                $rings = [];
+                /** @var array<int, array<int, array{0: float|int, 1: float|int}>> $value */
+                foreach ($value as $ring) {
+                    $points = [];
+                    foreach ($ring as $point) {
+                        $points[] = "{$point[0]} {$point[1]}";
+                    }
+                    $rings[] = '('.\implode(', ', $points).')';
+                }
+
+                return 'POLYGON('.\implode(', ', $rings).')';
+
+            default:
+                throw new DatabaseException('Unknown spatial type: '.$type->value);
+        }
+    }
+
+    /**
      * @param  array<mixed>  $geometry
      *
      * @throws DatabaseException
@@ -3343,9 +3414,9 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     abstract protected function createBuilder(): SQLBuilder;
 
     /**
-     * Create a new schema builder instance for this adapter's SQL dialect.
+     * A schema builder in this adapter's SQL dialect.
      */
-    protected function createSchemaBuilder(): MySQLSchema|PostgreSQLSchema
+    public function schema(): MySQLSchema|PostgreSQLSchema
     {
         return new MySQLSchema();
     }
@@ -3417,7 +3488,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      * Not kept to the tenant: SQL the caller writes, builders that did not come from Database::from()
      * (subqueries, unions, lateral joins) and a dialect's multi-table updates and deletes.
      */
-    public function getBuilder(string $collection): SQLBuilder
+    public function builder(string $collection): SQLBuilder
     {
         $name = $this->filter($collection);
         if (! $this->sharedTables) {
@@ -3439,11 +3510,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             ->addHook($tenants)
             ->addHook(new RawOuterJoinTenantFilter($tenants))
             ->beforeBuild($tenants->reset(...));
-    }
-
-    public function getSchema(): Schema
-    {
-        return $this->createSchemaBuilder();
     }
 
     protected function getIdentifierQuoteChar(): string
@@ -3746,7 +3812,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $documentsData = [];
 
         foreach ($changes as $change) {
-            $document = $change->getNew();
+            $document = $change->new;
 
             if ($hasOperators) {
                 $extracted = Operator::extractOperators($document->getAttributes());
@@ -3754,7 +3820,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $extractedOperators = $extracted['operators'];
 
                 // For new documents, apply operators to attribute defaults
-                if ($change->getOld()->isEmpty() && ! empty($extractedOperators)) {
+                if ($change->old->isEmpty() && ! empty($extractedOperators)) {
                     foreach ($extractedOperators as $operatorKey => $operator) {
                         $default = $attributeDefaults[$operatorKey] ?? null;
                         $currentRegularAttributes[$operatorKey] = $this->applyOperatorToValue($operator, $default);

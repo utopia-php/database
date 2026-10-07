@@ -32,16 +32,19 @@ use Utopia\Database\OperatorType;
 use Utopia\Database\PDO as DatabasePDO;
 use Utopia\Database\PDOStatement as DatabasePDOStatement;
 use Utopia\Database\Query;
+use Utopia\Database\Schema\Column as SchemaColumn;
+use Utopia\Database\Schema\Index as SchemaIndex;
 use Utopia\Database\Storage;
 use Utopia\Query\Builder\SQL as SQLBuilder;
 use Utopia\Query\Query as BaseQuery;
+use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 use Utopia\Query\Schema\MySQL as MySQLSchema;
 
 /**
  * Database adapter for MariaDB, extending the base SQL adapter with MariaDB-specific features.
  */
-class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttributes, Feature\SchemaIndexes, Feature\Spatial, Feature\Timeouts
+class MariaDB extends SQL implements Feature\ConnectionId, Feature\Spatial, Feature\Timeouts
 {
     /**
      * Get the list of capabilities supported by the MariaDB adapter.
@@ -59,6 +62,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
             Capability::SchemaIntrospection,
             Capability::UpsertOnUniqueIndex,
             Capability::UnsignedBigInt,
+            Capability::SchemaIntrospection,
         ]);
     }
 
@@ -95,7 +99,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
             return true;
         }
 
-        $result = $this->createSchemaBuilder()->createDatabase($name);
+        $result = $this->schema()->createDatabase($name);
         $sql = $result->query;
 
         return $this->executeStatement($sql, Event::DatabaseCreate);
@@ -113,7 +117,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
     public function createCollection(string $collection, array $attributes = [], array $indexes = []): bool
     {
         $id = $this->filter($collection);
-        $schema = $this->createSchemaBuilder();
+        $schema = $this->schema();
         $sharedTables = $this->sharedTables;
 
         $hash = [];
@@ -225,7 +229,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
     {
         $id = $this->filter($collection);
 
-        $schema = $this->createSchemaBuilder();
+        $schema = $this->schema();
         $main = $schema->table($this->getSQLTableRaw($id))->drop();
         $permissions = $schema->table($this->getSQLTableRaw(Storage::permissionsTable($id)))->dropIfExists();
 
@@ -250,7 +254,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
     {
         $name = $this->filter($collection);
 
-        $result = $this->createSchemaBuilder()->analyzeTable($this->getSQLTableRaw($name));
+        $result = $this->schema()->analyzeTable($this->getSQLTableRaw($name));
         $sql = $result->query;
 
         return $this->executeStatement($sql, Event::CollectionUpdate);
@@ -368,7 +372,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         $id = $this->filter($key);
         $newKey = $attribute->key === $key ? null : $this->filter($attribute->key);
         $sqlType = $this->getAttributeSqlType($attribute);
-        $schema = $this->createSchemaBuilder();
+        $schema = $this->schema();
         $tableRaw = $this->getSQLTableRaw($name);
 
         if (! empty($newKey) && $this->isRenamed($collection, $id, $newKey)) {
@@ -412,7 +416,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         $id = $this->filter($index->key);
         $type = $index->type;
 
-        $schema = $this->createSchemaBuilder();
+        $schema = $this->schema();
         $tableName = $this->getSQLTableRaw($collection->getId());
 
         $columns = [];
@@ -492,7 +496,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         $name = $this->filter($collection);
         $id = $this->filter($key);
 
-        $schema = $this->createSchemaBuilder();
+        $schema = $this->schema();
         $result = $schema->dropIndex($this->getSQLTableRaw($name), $id);
 
         $sql = $result->query;
@@ -519,7 +523,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         $old = $this->filter($old);
         $new = $this->filter($new);
 
-        $result = $this->createSchemaBuilder()->renameIndex($this->getSQLTableRaw($collection), $old, $new);
+        $result = $this->schema()->renameIndex($this->getSQLTableRaw($collection), $old, $new);
         $sql = $result->query;
 
         return $this->executeStatement($sql, Event::IndexRename);
@@ -728,6 +732,24 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         return 25;
     }
 
+    public function encode(mixed $value, ColumnType $type): string
+    {
+        return $this->encodeSpatial($value, $type);
+    }
+
+    /**
+     * @return array<mixed>
+     */
+    public function decode(string $value, ColumnType $type): array
+    {
+        return match ($type) {
+            ColumnType::Point => $this->decodePoint($value),
+            ColumnType::Linestring => $this->decodeLinestring($value),
+            ColumnType::Polygon => $this->decodePolygon($value),
+            default => throw new DatabaseException('Unknown spatial type: '.$type->value),
+        };
+    }
+
     /**
      * Decode a WKB or WKT POINT into a coordinate array [x, y].
      *
@@ -736,8 +758,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
      *
      * @throws DatabaseException If the input is invalid.
      */
-    #[\Override]
-    public function decodePoint(string $wkb): array
+    protected function decodePoint(string $wkb): array
     {
         if (str_starts_with(strtoupper($wkb), 'POINT(')) {
             $start = strpos($wkb, '(') + 1;
@@ -789,8 +810,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
      *
      * @throws DatabaseException If the input is invalid.
      */
-    #[\Override]
-    public function decodeLinestring(string $wkb): array
+    protected function decodeLinestring(string $wkb): array
     {
         if (str_starts_with(strtoupper($wkb), 'LINESTRING(')) {
             $start = strpos($wkb, '(') + 1;
@@ -842,8 +862,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
      *
      * @throws DatabaseException If the input is invalid.
      */
-    #[\Override]
-    public function decodePolygon(string $wkb): array
+    protected function decodePolygon(string $wkb): array
     {
         // POLYGON((x1,y1),(x2,y2))
         if (str_starts_with($wkb, 'POLYGON((')) {
@@ -851,7 +870,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
             $end = strrpos($wkb, '))');
             $inside = substr($wkb, $start, $end - $start);
 
-            $rings = explode('),(', $inside);
+            $rings = \preg_split('/\)\s*,\s*\(/', $inside) ?: [$inside];
 
             return array_map(function ($ring) {
                 $points = explode(',', $ring);
@@ -1076,61 +1095,58 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
     }
 
     #[\Override]
-    protected function createSchemaBuilder(): MySQLSchema
+    public function schema(): MySQLSchema
     {
         return new MySQLSchema();
     }
 
     /**
-     * Get Schema Attributes
-     *
-     * @return array<Document>
+     * @return list<SchemaColumn>
      *
      * @throws DatabaseException
      */
     public function getSchemaAttributes(string $collection): array
     {
         $schema = $this->getDatabase();
-        $collection = $this->getNamespace().'_'.$this->filter($collection);
+        $table = $this->getNamespace().'_'.$this->filter($collection);
 
         try {
-            $stmt = $this->prepareStatement('
+            $statement = $this->prepareStatement('
                 SELECT
-                COLUMN_NAME as '.Storage::SEQUENCE.',
-                COLUMN_DEFAULT as columnDefault,
-                IS_NULLABLE as isNullable,
-                DATA_TYPE as dataType,
-                CHARACTER_MAXIMUM_LENGTH as characterMaximumLength,
-                NUMERIC_PRECISION as numericPrecision,
-                NUMERIC_SCALE as numericScale,
-                DATETIME_PRECISION as datetimePrecision,
-                COLUMN_TYPE as columnType,
-                COLUMN_KEY as columnKey,
-                EXTRA as extra
+                    COLUMN_NAME AS name,
+                    COLUMN_TYPE AS type,
+                    CHARACTER_MAXIMUM_LENGTH AS length,
+                    IS_NULLABLE AS nullable
                 FROM INFORMATION_SCHEMA.COLUMNS
                 WHERE TABLE_SCHEMA = :schema AND TABLE_NAME = :table
+                ORDER BY ORDINAL_POSITION
             ', Event::CollectionRead);
-            $stmt->bindParam(':schema', $schema);
-            $stmt->bindParam(':table', $collection);
-            $this->execute($stmt);
-            $results = $stmt->fetchAll();
-            $stmt->closeCursor();
-
-            $docs = [];
-            foreach ($results as $document) {
-                /** @var array<string, mixed> $document */
-                $document[Document::ID] = $document[Storage::SEQUENCE];
-                unset($document[Storage::SEQUENCE]);
-
-                $docs[] = new Document($document);
-            }
-            $results = $docs;
-
-            return $results;
-
+            $statement->bindParam(':schema', $schema);
+            $statement->bindParam(':table', $table);
+            $this->execute($statement);
+            $rows = $statement->fetchAll(PDO::FETCH_ASSOC);
+            $statement->closeCursor();
         } catch (PDOException $e) {
             throw new DatabaseException('Failed to get schema attributes', $e->getCode(), $e);
         }
+
+        $columns = [];
+        foreach ($rows as $row) {
+            if (! \is_array($row) || ! \is_string($row['name'] ?? null)) {
+                continue;
+            }
+
+            $type = $row['type'] ?? '';
+            $length = $row['length'] ?? null;
+            $columns[] = new SchemaColumn(
+                name: $row['name'],
+                type: $this->canonicalColumnType(\is_string($type) ? $type : ''),
+                length: \is_numeric($length) ? (int) $length : null,
+                nullable: ($row['nullable'] ?? '') === 'YES',
+            );
+        }
+
+        return $columns;
     }
 
     /**
@@ -1141,7 +1157,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
     protected function getColumnNames(string $collection): array
     {
         return \array_map(
-            static fn (Document $column): string => $column->getId(),
+            static fn (SchemaColumn $column): string => $column->name,
             $this->getSchemaAttributes($collection),
         );
     }
@@ -1388,60 +1404,70 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         }
     }
 
+    /**
+     * @return list<SchemaIndex>
+     *
+     * @throws DatabaseException
+     */
     public function getSchemaIndexes(string $collection): array
     {
         $schema = $this->getDatabase();
-        $collection = $this->getNamespace() . '_' . $this->filter($collection);
+        $table = $this->getNamespace().'_'.$this->filter($collection);
 
         try {
-            $stmt = $this->prepareStatement('
+            $statement = $this->prepareStatement('
                 SELECT
-                    INDEX_NAME as indexName,
-                    COLUMN_NAME as columnName,
-                    NON_UNIQUE as nonUnique,
-                    SEQ_IN_INDEX as seqInIndex,
-                    INDEX_TYPE as indexType,
-                    SUB_PART as subPart
+                    INDEX_NAME AS name,
+                    COLUMN_NAME AS columnName,
+                    NON_UNIQUE AS nonUnique,
+                    INDEX_TYPE AS indexType,
+                    SUB_PART AS subPart
                 FROM INFORMATION_SCHEMA.STATISTICS
                 WHERE TABLE_SCHEMA = :schema AND TABLE_NAME = :table
                 ORDER BY INDEX_NAME, SEQ_IN_INDEX
             ', Event::CollectionRead);
-            $stmt->bindParam(':schema', $schema);
-            $stmt->bindParam(':table', $collection);
-            $this->execute($stmt);
-            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            $stmt->closeCursor();
-
-            $grouped = [];
-            foreach ($rows as $row) {
-                if (! \is_array($row)) {
-                    continue;
-                }
-                $name = \is_string($row['indexName'] ?? null) ? $row['indexName'] : '';
-                if ($name === '') {
-                    continue;
-                }
-                if (!isset($grouped[$name])) {
-                    $indexType = \is_string($row['indexType'] ?? null) ? $row['indexType'] : '';
-                    $nonUnique = \is_numeric($row['nonUnique'] ?? null) ? (int) $row['nonUnique'] : 0;
-                    $grouped[$name] = [
-                        Document::ID => $name,
-                        'indexName' => $name,
-                        'indexType' => $indexType,
-                        'nonUnique' => $nonUnique,
-                        'columns' => [],
-                        'lengths' => [],
-                    ];
-                }
-                $grouped[$name]['columns'][] = \is_string($row['columnName'] ?? null) ? $row['columnName'] : '';
-                $subPart = $row['subPart'] ?? null;
-                $grouped[$name]['lengths'][] = \is_numeric($subPart) ? (int) $subPart : null;
-            }
-
-            return \array_map(fn ($idx) => new Document($idx), \array_values($grouped));
+            $statement->bindParam(':schema', $schema);
+            $statement->bindParam(':table', $table);
+            $this->execute($statement);
+            $rows = $statement->fetchAll(PDO::FETCH_ASSOC);
+            $statement->closeCursor();
         } catch (PDOException $e) {
             throw new DatabaseException('Failed to get schema indexes', $e->getCode(), $e);
         }
+
+        $grouped = [];
+        foreach ($rows as $row) {
+            if (! \is_array($row) || ! \is_string($row['name'] ?? null) || $row['name'] === '') {
+                continue;
+            }
+
+            $name = $row['name'];
+            if (! isset($grouped[$name])) {
+                $indexType = \is_string($row['indexType'] ?? null) ? \strtoupper($row['indexType']) : '';
+                $nonUnique = \is_numeric($row['nonUnique'] ?? null) ? (int) $row['nonUnique'] : 1;
+                $grouped[$name] = [
+                    'type' => match (true) {
+                        $indexType === 'FULLTEXT' => IndexType::Fulltext,
+                        $indexType === 'SPATIAL' => IndexType::Spatial,
+                        $nonUnique === 0 => IndexType::Unique,
+                        default => IndexType::Key,
+                    },
+                    'columns' => [],
+                    'lengths' => [],
+                ];
+            }
+
+            $subPart = $row['subPart'] ?? null;
+            $grouped[$name]['columns'][] = \is_string($row['columnName'] ?? null) ? $row['columnName'] : '';
+            $grouped[$name]['lengths'][] = \is_numeric($subPart) ? (int) $subPart : null;
+        }
+
+        $indexes = [];
+        foreach ($grouped as $name => $index) {
+            $indexes[] = new SchemaIndex((string) $name, $index['type'], $index['columns'], $index['lengths']);
+        }
+
+        return $indexes;
     }
 
     protected function processException(PDOException $e): Exception

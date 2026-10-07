@@ -26,7 +26,7 @@ class SpatialFilterTest extends TestCase
         $adapter->method('getNamespace')->willReturn('test');
         $adapter->method('getSharedTables')->willReturn(false);
         $adapter->method('filter')->willReturnArgument(0);
-        $adapter->method('decodePoint')->willReturn($point);
+        $adapter->method('decode')->willReturn($point);
 
         return new Database($adapter, new Cache(new None()));
     }

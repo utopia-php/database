@@ -16,10 +16,15 @@ use Utopia\Database\PermissionType;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationshipSide;
 use Utopia\Database\RelationshipUpdate;
+use Utopia\Database\Schema\Column as SchemaColumn;
+use Utopia\Database\Schema\Index as SchemaIndex;
 use Utopia\Database\State\Value;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Pools\Pool as UtopiaPool;
+use Utopia\Query\Builder;
 use Utopia\Query\CursorDirection;
+use Utopia\Query\Schema;
+use Utopia\Query\Schema\ColumnType;
 
 /**
  * Connection pool adapter that delegates database operations to pooled adapter instances.
@@ -149,12 +154,8 @@ class Pool extends Adapter implements Feature\Timeouts
             Feature\Upserts::class => 'Adapter does not support upserts',
             Feature\RawQuery::class => 'Adapter does not support raw queries',
             Feature\QueryBuilder::class => 'Adapter does not support query builder',
-            Feature\SchemaAttributes::class => 'Adapter does not support schema attributes',
-            Feature\SchemaIndexes::class => 'Adapter does not support schema indexes',
-            Feature\ColumnTypes::class => 'Adapter does not support column types',
             Feature\Spatial::class => 'Adapter does not support spatial',
-            Feature\InternalCasting::class => 'Adapter does not support internal casting',
-            Feature\UTCCasting::class => 'Adapter does not support UTC casting',
+            Feature\Casting::class => 'Adapter does not support casting',
             Feature\ConnectionId::class => 'Adapter does not support connection id',
             Feature\Relationships::class => 'Adapter does not support relationships',
             Feature\Timeouts::class => 'Adapter does not support timeouts',
@@ -853,11 +854,18 @@ class Pool extends Adapter implements Feature\Timeouts
         return $result;
     }
 
+    public function upsertDocument(Document $collection, Change $change): Document
+    {
+        /** @var Document $result */
+        $result = $this->delegateFeature(Feature\Upserts::class, __FUNCTION__, \func_get_args());
+        return $result;
+    }
+
     /**
      * @param  array<Change>  $changes
      * @return array<Document>
      */
-    public function upsertDocuments(Document $collection, string $attribute, array $changes): array
+    public function upsertDocuments(Document $collection, array $changes, ?string $increase = null): array
     {
         /** @var array<Document> $result */
         $result = $this->delegateFeature(Feature\Upserts::class, __FUNCTION__, \func_get_args());
@@ -997,21 +1005,28 @@ class Pool extends Adapter implements Feature\Timeouts
     }
 
     /**
-     * @return array<Document>
+     * @return list<SchemaColumn>
      */
     public function getSchemaAttributes(string $collection): array
     {
-        /** @var array<Document> $result */
+        /** @var list<SchemaColumn> $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());
         return $result;
     }
 
     /**
-     * @return array<Document>
+     * @return list<SchemaIndex>
      */
     public function getSchemaIndexes(string $collection): array
     {
-        /** @var array<Document> $result */
+        /** @var list<SchemaIndex> $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
+    }
+
+    public function getColumnType(Attribute $attribute): ?string
+    {
+        /** @var string|null $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());
         return $result;
     }
@@ -1026,75 +1041,44 @@ class Pool extends Adapter implements Feature\Timeouts
         return $result;
     }
 
-    /**
-     * @return array<float>
-     */
-    public function decodePoint(string $wkb): array
+    public function encode(mixed $value, ColumnType $type): string
     {
-        /** @var array<float> $result */
+        /** @var string $result */
         $result = $this->delegateFeature(Feature\Spatial::class, __FUNCTION__, \func_get_args());
         return $result;
     }
 
     /**
-     * @return array<array<float>>
+     * @return array<mixed>
      */
-    public function decodeLinestring(string $wkb): array
+    public function decode(string $value, ColumnType $type): array
     {
-        /** @var array<array<float>> $result */
+        /** @var array<mixed> $result */
         $result = $this->delegateFeature(Feature\Spatial::class, __FUNCTION__, \func_get_args());
         return $result;
     }
 
-    /**
-     * @return array<array<array<float>>>
-     */
-    public function decodePolygon(string $wkb): array
-    {
-        /** @var array<array<array<float>>> $result */
-        $result = $this->delegateFeature(Feature\Spatial::class, __FUNCTION__, \func_get_args());
-        return $result;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function castingBefore(Document $collection, Document $document): Document
+    public function castBefore(Document $collection, Document $document): Document
     {
         /** @var Document $result */
-        $result = $this->delegateFeature(Feature\InternalCasting::class, __FUNCTION__, \func_get_args());
+        $result = $this->delegateFeature(Feature\Casting::class, __FUNCTION__, \func_get_args());
         return $result;
     }
 
     /**
-     * {@inheritDoc}
-     */
-    public function castingAfter(Document $collection, Document $document): Document
-    {
-        /** @var Document $result */
-        $result = $this->delegateFeature(Feature\InternalCasting::class, __FUNCTION__, \func_get_args());
-        return $result;
-    }
-
-    /**
-     * {@inheritDoc}
-     *
      * @param  array<Document>  $documents
      * @return array<Document>
      */
-    public function castingAfterDocuments(Document $collection, array $documents): array
+    public function castAfter(Document $collection, array $documents): array
     {
         /** @var array<Document> $result */
-        $result = $this->delegateFeature(Feature\InternalCasting::class, __FUNCTION__, \func_get_args());
+        $result = $this->delegateFeature(Feature\Casting::class, __FUNCTION__, \func_get_args());
         return $result;
     }
 
-    /**
-     * {@inheritDoc}
-     */
-    public function setUTCDatetime(string $value): mixed
+    public function castDatetime(string $value): mixed
     {
-        return $this->delegateFeature(Feature\UTCCasting::class, __FUNCTION__, \func_get_args());
+        return $this->delegateFeature(Feature\Casting::class, __FUNCTION__, \func_get_args());
     }
 
     /**
@@ -1154,25 +1138,17 @@ class Pool extends Adapter implements Feature\Timeouts
         return $result;
     }
 
-    public function getBuilder(string $collection): \Utopia\Query\Builder
+    public function builder(string $collection): Builder
     {
-        /** @var \Utopia\Query\Builder $result */
+        /** @var Builder $result */
         $result = $this->delegateFeature(Feature\QueryBuilder::class, __FUNCTION__, \func_get_args());
         return $result;
     }
 
-    public function getSchema(): \Utopia\Query\Schema
+    public function schema(): Schema
     {
-        /** @var \Utopia\Query\Schema $result */
+        /** @var Schema $result */
         $result = $this->delegateFeature(Feature\QueryBuilder::class, __FUNCTION__, \func_get_args());
         return $result;
     }
-
-    public function getColumnType(string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
-    {
-        /** @var string $result */
-        $result = $this->delegateFeature(Feature\ColumnTypes::class, __FUNCTION__, \func_get_args());
-        return $result;
-    }
-
 }

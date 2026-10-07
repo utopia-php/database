@@ -6,9 +6,10 @@ use DateTime;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
+use Tests\Unit\Adapter\CastingAdapterStub;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
-use Utopia\Database\Adapter;
+use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\Limits;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
@@ -25,13 +26,18 @@ class IncreaseDecreaseTest extends TestCase
 {
     private bool $definedAttributes = true;
 
-    private Adapter&Stub $adapter;
+    private CastingAdapterStub&Stub $adapter;
 
     private Database $database;
 
     protected function setUp(): void
     {
-        $this->adapter = self::createStub(Adapter::class);
+        $this->adapter = self::createStub(CastingAdapterStub::class);
+        $this->adapter->method('hasFeature')->willReturnCallback(
+            static fn (string $feature): bool => $feature === Feature\Casting::class,
+        );
+        $this->adapter->method('castBefore')->willReturnArgument(1);
+        $this->adapter->method('castAfter')->willReturnArgument(1);
         $this->adapter->method('getSharedTables')->willReturn(false);
         $this->adapter->method('getTenant')->willReturn(null);
         $this->adapter->method('getTenantPerDocument')->willReturn(false);

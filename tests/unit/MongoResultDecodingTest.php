@@ -95,7 +95,7 @@ final class MongoResultDecodingTest extends TestCase
         ], $stored);
     }
 
-    public function testCastingAfterCastsCollectionAndInternalAttributes(): void
+    public function testCastAfterCastsCollectionAndInternalAttributes(): void
     {
         $adapter = new class () extends Mongo {
             public function __construct()
@@ -114,7 +114,7 @@ final class MongoResultDecodingTest extends TestCase
         ]);
 
         foreach ([['42', 42], ['7', 7]] as [$stored, $expected]) {
-            $document = $adapter->castingAfter($collection, new Document([
+            $document = $adapter->castAfter($collection, [new Document([
                 '$id' => 'movie1',
                 '$sequence' => 5,
                 '$permissions' => ['read("any")'],
@@ -122,7 +122,7 @@ final class MongoResultDecodingTest extends TestCase
                 'price' => 3,
                 'active' => 1,
                 'tags' => ['a', 'b'],
-            ]));
+            ])])[0];
 
             $this->assertSame([
                 '$id' => 'movie1',
@@ -136,10 +136,10 @@ final class MongoResultDecodingTest extends TestCase
         }
     }
 
-    public function testCastingAfterRewritesOnlyTheValuesItChanges(): void
+    public function testCastAfterRewritesOnlyTheValuesItChanges(): void
     {
         $adapter = $this->castingAdapter();
-        $typed = $adapter->castingAfter($this->castingCollection(), new SetRecordingDocument([
+        $typed = $adapter->castAfter($this->castingCollection(), [new SetRecordingDocument([
             '$id' => 'movie1',
             '$sequence' => '5',
             '$permissions' => ['read("any")'],
@@ -148,31 +148,31 @@ final class MongoResultDecodingTest extends TestCase
             'active' => false,
             'tags' => ['a'],
             'name' => 'n',
-        ]));
+        ])])[0];
 
         $this->assertInstanceOf(SetRecordingDocument::class, $typed);
         $this->assertSame(['$permissions'], $typed->sets);
 
-        $stored = $adapter->castingAfter($this->castingCollection(), new SetRecordingDocument([
+        $stored = $adapter->castAfter($this->castingCollection(), [new SetRecordingDocument([
             '$id' => 'movie2',
             '$sequence' => 6,
             'score' => '42',
             'price' => 1.5,
             'tags' => 5,
             'name' => 12,
-        ]));
+        ])])[0];
 
         $this->assertInstanceOf(SetRecordingDocument::class, $stored);
         $this->assertSame(['$sequence', 'name', 'score', 'tags'], $this->sorted($stored->sets));
         $this->assertSame(['$id' => 'movie2', '$sequence' => '6', 'score' => 42, 'price' => 1.5, 'tags' => ['5'], 'name' => '12'], $stored->getArrayCopy());
     }
 
-    public function testCastingAfterNormalisesPermissionsWrittenPastSetAttribute(): void
+    public function testCastAfterNormalisesPermissionsWrittenPastSetAttribute(): void
     {
         $document = new Document(['$id' => 'movie1']);
         $document->offsetSet('$permissions', ['read("any")', 'read("any")', 'update("any")']);
 
-        $cast = $this->castingAdapter()->castingAfter($this->castingCollection(), $document);
+        $cast = $this->castingAdapter()->castAfter($this->castingCollection(), [$document])[0];
 
         $this->assertSame(['read("any")', 'update("any")'], $cast->getArrayCopy()['$permissions']);
     }
@@ -210,29 +210,28 @@ final class MongoResultDecodingTest extends TestCase
     }
 
     #[DataProvider('castingDocuments')]
-    public function testCastingAfterDocumentsCastsEachDocumentAsCastingAfterDoes(Document $document): void
+    public function testCastAfterCastsABatchAsItCastsOneDocument(Document $document): void
     {
         $collection = $this->castingCollection();
         $one = $this->castingAdapter(defined: false);
         $many = $this->castingAdapter(defined: false);
-        $expected = $one->castingAfter($collection, clone $document)->getArrayCopy();
+        $expected = $one->castAfter($collection, [clone $document])[0]->getArrayCopy();
 
-        $documents = $many->castingAfterDocuments($collection, ['first' => clone $document, 7 => clone $document]);
+        $documents = $many->castAfter($collection, ['first' => clone $document, 7 => clone $document]);
 
         $this->assertSame(['first', 7], \array_keys($documents));
         $this->assertSame($expected, $documents['first']->getArrayCopy());
         $this->assertSame($expected, $documents[7]->getArrayCopy());
-        $this->assertSame([], $many->castingAfterDocuments($collection, []));
+        $this->assertSame([], $many->castAfter($collection, []));
     }
 
     #[DataProvider('castingDocuments')]
-    public function testCastingAfterIsUnchangedForDefinedAttributes(Document $document): void
+    public function testCastAfterIsUnchangedForDefinedAttributes(Document $document): void
     {
         $collection = $this->castingCollection();
-        $expected = $this->referenceCastingAfter($collection, clone $document)->getArrayCopy();
+        $expected = $this->referenceCastAfter($collection, clone $document)->getArrayCopy();
 
-        $this->assertSame($expected, $this->castingAdapter()->castingAfter($collection, clone $document)->getArrayCopy());
-        $this->assertSame($expected, $this->castingAdapter()->castingAfterDocuments($collection, [clone $document])[0]->getArrayCopy());
+        $this->assertSame($expected, $this->castingAdapter()->castAfter($collection, [clone $document])[0]->getArrayCopy());
     }
 
     public function testCastingAfterRefusesAStoredAttributeOfAnUnknownType(): void
@@ -287,9 +286,9 @@ final class MongoResultDecodingTest extends TestCase
     }
 
     /**
-     * castingAfter() as it was before it skipped unchanged values and cast many documents at once.
+     * castAfter() as it was before it skipped unchanged values and cast many documents at once.
      */
-    private function referenceCastingAfter(Document $collection, Document $document): Document
+    private function referenceCastAfter(Document $collection, Document $document): Document
     {
         if ($document->isEmpty()) {
             return $document;

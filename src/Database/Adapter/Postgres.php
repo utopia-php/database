@@ -33,6 +33,8 @@ use Utopia\Database\OperatorType;
 use Utopia\Database\PDOStatement as DatabasePDOStatement;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
+use Utopia\Database\Schema\Column as SchemaColumn;
+use Utopia\Database\Schema\Index as SchemaIndex;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\ObjectPath;
 use Utopia\Query\Builder\Condition;
@@ -122,7 +124,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             return true;
         }
 
-        $schema = $this->createSchemaBuilder();
+        $schema = $this->schema();
         $sql = $schema->createDatabase($name)->query;
 
         $dbCreation = $this->executeStatement($sql, Event::DatabaseCreate);
@@ -199,7 +201,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         $tableRaw = $this->getSQLTableRaw($id);
         $permissionsTableRaw = $this->getSQLTableRaw(Storage::permissionsTable($id));
 
-        $schema = $this->createSchemaBuilder();
+        $schema = $this->schema();
 
         $table = $schema->table($tableRaw);
         $table->id(Storage::SEQUENCE);
@@ -322,7 +324,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
     public function analyzeCollection(string $collection): bool
     {
         $name = $this->filter($collection);
-        $schema = $this->createSchemaBuilder();
+        $schema = $this->schema();
 
         $main = $schema->analyzeTable($this->getSQLTableRaw($name));
         $permissions = $schema->analyzeTable($this->getSQLTableRaw(Storage::permissionsTable($name)));
@@ -424,7 +426,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
 
         $this->refuseSharedColumnsOfAnotherType($collection, [$attribute]);
 
-        $schema = $this->createSchemaBuilder();
+        $schema = $this->schema();
         $table = $schema->table($this->getSQLTableRaw($collection));
         $this->addAttributeColumn($table, $attribute);
         $result = $table->alter();
@@ -486,15 +488,10 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             }
 
             $requested = $this->getAttributeSqlType($attribute);
-            if (self::canonicalColumnType($existing) !== self::canonicalColumnType($requested)) {
+            if ($this->canonicalColumnType($existing) !== $this->canonicalColumnType($requested)) {
                 throw new MismatchException('Attribute exists in the shared table with another type');
             }
         }
-    }
-
-    private static function canonicalColumnType(string $type): string
-    {
-        return \strtr(\strtoupper($type), self::CATALOG_TYPE_SPELLINGS);
     }
 
     /**
@@ -511,7 +508,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
 
         self::assertVectorDimensions($attribute);
 
-        $schema = $this->createSchemaBuilder();
+        $schema = $this->schema();
 
         if (! empty($newKey) && $this->isRenamed($collection, $id, $newKey)) {
             $id = $newKey;
@@ -591,7 +588,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
 
     public function relaxAttributeRequired(string $collection, string $id): bool
     {
-        $schema = $this->createSchemaBuilder();
+        $schema = $this->schema();
         $statement = $schema->alterColumnNullable(
             $this->getSQLTableRaw($this->filter($collection)),
             $this->filter($id),
@@ -610,7 +607,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
      */
     public function deleteAttribute(string $collection, string $key): bool
     {
-        $schema = $this->createSchemaBuilder();
+        $schema = $this->schema();
         $table = $schema->table($this->getSQLTableRaw($collection));
         $table->dropColumn($this->filter($key));
         $result = $table->alter();
@@ -629,22 +626,6 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
     }
 
     /**
-     * @return array<Document>
-     */
-    public function getSchemaAttributes(string $collection): array
-    {
-        return [];
-    }
-
-    /**
-     * @return array<Document>
-     */
-    public function getSchemaIndexes(string $collection): array
-    {
-        return [];
-    }
-
-    /**
      * Rename Attribute
      *
      * @throws Exception
@@ -656,7 +637,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             return true;
         }
 
-        $schema = $this->createSchemaBuilder();
+        $schema = $this->schema();
         $table = $schema->table($this->getSQLTableRaw($collection));
         $table->renameColumn($this->filter($old), $this->filter($new));
         $result = $table->alter();
@@ -696,6 +677,144 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
     }
 
     /**
+     * @return list<SchemaColumn>
+     *
+     * @throws DatabaseException
+     */
+    public function getSchemaAttributes(string $collection): array
+    {
+        $statement = $this->prepareStatement(
+            'SELECT a.attname AS name,
+                pg_catalog.format_type(a.atttypid, a.atttypmod) AS type,
+                CASE WHEN a.atttypid IN (1042, 1043) AND a.atttypmod > 4 THEN a.atttypmod - 4 END AS length,
+                NOT a.attnotnull AS nullable
+            FROM pg_catalog.pg_attribute a
+            WHERE a.attrelid = to_regclass(?) AND a.attnum > 0 AND NOT a.attisdropped
+            ORDER BY a.attnum',
+            Event::CollectionRead,
+        );
+        $statement->bindValue(1, $this->getSQLTable($collection));
+
+        try {
+            $this->execute($statement);
+            $rows = $statement->fetchAll(PDO::FETCH_ASSOC);
+            $statement->closeCursor();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+
+        $columns = [];
+        foreach ($rows as $row) {
+            if (! \is_array($row) || ! \is_string($row['name'] ?? null)) {
+                continue;
+            }
+
+            $type = $row['type'] ?? '';
+            $length = $row['length'] ?? null;
+            $columns[] = new SchemaColumn(
+                name: $row['name'],
+                type: $this->canonicalColumnType(\is_string($type) ? $type : ''),
+                length: \is_numeric($length) ? (int) $length : null,
+                nullable: self::isTrue($row['nullable'] ?? false),
+            );
+        }
+
+        return $columns;
+    }
+
+    /**
+     * Under shared tables every tenant keeps its own copy of an index, named after it: the current tenant's are
+     * reported under their keys, any other index under its physical name.
+     *
+     * @return list<SchemaIndex>
+     *
+     * @throws DatabaseException
+     */
+    public function getSchemaIndexes(string $collection): array
+    {
+        $statement = $this->prepareStatement(
+            'SELECT i.relname AS name,
+                x.indisunique AS "unique",
+                am.amname AS method,
+                (SELECT o.opcname FROM pg_catalog.pg_opclass o WHERE o.oid = x.indclass[k.position - 1]) AS operator,
+                pg_catalog.pg_get_indexdef(x.indexrelid, k.position, true) AS "column"
+            FROM pg_catalog.pg_index x
+            JOIN pg_catalog.pg_class i ON i.oid = x.indexrelid
+            JOIN pg_catalog.pg_am am ON am.oid = i.relam
+            CROSS JOIN LATERAL pg_catalog.generate_series(1, x.indnkeyatts) AS k(position)
+            WHERE x.indrelid = to_regclass(?)
+            ORDER BY i.relname, k.position',
+            Event::CollectionRead,
+        );
+        $statement->bindValue(1, $this->getSQLTable($collection));
+
+        try {
+            $this->execute($statement);
+            $rows = $statement->fetchAll(PDO::FETCH_ASSOC);
+            $statement->closeCursor();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+
+        $prefix = "{$this->getNamespace()}_{$this->currentTenant()}_{$this->filter($collection)}_";
+
+        $grouped = [];
+        foreach ($rows as $row) {
+            if (! \is_array($row) || ! \is_string($row['name'] ?? null)) {
+                continue;
+            }
+
+            $name = $row['name'];
+            if (! isset($grouped[$name])) {
+                $operator = $row['operator'] ?? '';
+                $grouped[$name] = [
+                    'type' => match (true) {
+                        self::isTrue($row['unique'] ?? false) => IndexType::Unique,
+                        $operator === 'gin_trgm_ops' => IndexType::Trigram,
+                        $operator === 'vector_l2_ops' => IndexType::HnswEuclidean,
+                        $operator === 'vector_cosine_ops' => IndexType::HnswCosine,
+                        $operator === 'vector_ip_ops' => IndexType::HnswDot,
+                        ($row['method'] ?? '') === 'gin' => IndexType::Object,
+                        ($row['method'] ?? '') === 'gist' => IndexType::Spatial,
+                        default => IndexType::Key,
+                    },
+                    'columns' => [],
+                ];
+            }
+
+            $column = \is_string($row['column'] ?? null) ? $row['column'] : '';
+            if (\preg_match('/^"(.*)"$/s', $column, $matches) === 1) {
+                $column = \str_replace('""', '"', $matches[1]);
+            }
+            $grouped[$name]['columns'][] = $column;
+        }
+
+        $indexes = [];
+        foreach ($grouped as $name => $index) {
+            $name = (string) $name;
+            $indexes[] = new SchemaIndex(
+                name: \str_starts_with($name, $prefix) ? \substr($name, \strlen($prefix)) : $name,
+                type: $index['type'],
+                columns: $index['columns'],
+                lengths: \array_fill(0, \count($index['columns']), null),
+            );
+        }
+
+        return $indexes;
+    }
+
+    #[\Override]
+    protected function canonicalColumnType(string $type): string
+    {
+        return \strtr(\strtoupper(\trim($type)), self::CATALOG_TYPE_SPELLINGS);
+    }
+
+    private static function isTrue(mixed $value): bool
+    {
+        return $value === true || $value === 't' || $value === 1 || $value === '1';
+    }
+
+    /**
      * Create Index
      *
      * @param  array<string,string>  $indexAttributeTypes
@@ -727,7 +846,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
 
         $keyName = $this->getIndexName($collection, $id, $this->currentTenant());
         $tableRaw = $this->getSQLTableRaw($collection);
-        $schema = $this->createSchemaBuilder();
+        $schema = $this->schema();
 
         $operatorClass = match ($type) {
             IndexType::HnswEuclidean => 'vector_l2_ops',
@@ -793,7 +912,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         $keyName = $this->getIndexName($collection, $id, $this->currentTenant());
         $schemaQualifiedName = $this->getDatabase().'.'.$keyName;
 
-        $schema = $this->createSchemaBuilder();
+        $schema = $this->schema();
         $sql = $schema->dropIndex($this->getSQLTableRaw($collection), $schemaQualifiedName)->query;
         // Add IF EXISTS since the schema builder's dropIndex does not include it
         $sql = str_replace('DROP INDEX', 'DROP INDEX IF EXISTS', $sql);
@@ -819,7 +938,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         $oldIndexName = $this->getIndexName($name, $old, $this->currentTenant());
         $newIndexName = $this->getIndexName($name, $new, $this->currentTenant());
 
-        $schemaBuilder = $this->createSchemaBuilder();
+        $schemaBuilder = $this->schema();
         $sql = $schemaBuilder->renameIndex($this->getSQLTableRaw($name), $this->getDatabase().'.'.$oldIndexName, $newIndexName)->query;
         $sql = \str_replace('ALTER INDEX', 'ALTER INDEX IF EXISTS', $sql);
 
@@ -1048,6 +1167,24 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
     }
 
     /**
+     * @return array<mixed>
+     */
+    public function decode(string $value, ColumnType $type): array
+    {
+        return match ($type) {
+            ColumnType::Point => $this->decodePoint($value),
+            ColumnType::Linestring => $this->decodeLinestring($value),
+            ColumnType::Polygon => $this->decodePolygon($value),
+            default => throw new DatabaseException('Unknown spatial type: '.$type->value),
+        };
+    }
+
+    public function encode(mixed $value, ColumnType $type): string
+    {
+        return $this->encodeSpatial($value, $type);
+    }
+
+    /**
      * Decode a WKB or WKT POINT into a coordinate array [x, y].
      *
      * @param string $wkb The WKB hex or WKT string
@@ -1055,8 +1192,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
      *
      * @throws DatabaseException If the input is invalid.
      */
-    #[\Override]
-    public function decodePoint(string $wkb): array
+    protected function decodePoint(string $wkb): array
     {
         if (str_starts_with(strtoupper($wkb), 'POINT(')) {
             $start = strpos($wkb, '(') + 1;
@@ -1125,8 +1261,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
      *
      * @throws DatabaseException If the input is invalid.
      */
-    #[\Override]
-    public function decodeLinestring(mixed $wkb): array
+    protected function decodeLinestring(mixed $wkb): array
     {
         $wkb = \is_string($wkb) ? $wkb : '';
         if (str_starts_with(strtoupper($wkb), 'LINESTRING(')) {
@@ -1221,8 +1356,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
      *
      * @throws DatabaseException If the input is invalid.
      */
-    #[\Override]
-    public function decodePolygon(string $wkb): array
+    protected function decodePolygon(string $wkb): array
     {
         // POLYGON((x1,y1),(x2,y2))
         if (str_starts_with($wkb, 'POLYGON((')) {
@@ -1230,7 +1364,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             $end = strrpos($wkb, '))');
             $inside = substr($wkb, $start, $end - $start);
 
-            $rings = explode('),(', $inside);
+            $rings = \preg_split('/\)\s*,\s*\(/', $inside) ?: [$inside];
 
             return array_map(function ($ring) {
                 $points = explode(',', $ring);
@@ -1609,7 +1743,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
     }
 
     #[\Override]
-    protected function createSchemaBuilder(): PostgreSQLSchema
+    public function schema(): PostgreSQLSchema
     {
         return new PostgreSQLSchema();
     }

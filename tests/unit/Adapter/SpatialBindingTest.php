@@ -120,7 +120,6 @@ final class SpatialBindingTest extends TestCase
             ),
             'upsertDocuments' => $adapter->upsertDocuments(
                 $collection,
-                '',
                 \array_map(static fn (Document $document): Change => new Change(new Document(), $document), $documents),
             ),
             default => throw new LogicException('Unknown write operation: '.$operation),

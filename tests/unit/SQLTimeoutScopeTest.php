@@ -114,7 +114,7 @@ final class SQLTimeoutScopeTest extends TestCase
             '$permissions' => [],
         ]);
         $transform->events = [];
-        $adapter->upsertDocuments($collection, '', [new Change($created, $updated)]);
+        $adapter->upsertDocuments($collection, [new Change($created, $updated)]);
         $this->assertContains(Event::DocumentsUpsert, $transform->events);
         $this->assertNotContains(Event::DocumentCreate, $transform->events);
         $transform->events = [];

@@ -10,6 +10,7 @@ use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
+use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Operator;
 
@@ -17,7 +18,7 @@ final class UpdateDocumentsCastingTest extends TestCase
 {
     public function testCastsUpdatesBeforeEveryBatchWrite(): void
     {
-        $adapter = new class () extends Memory implements Feature\InternalCasting {
+        $adapter = new class () extends Memory implements Feature\Casting {
             /** @var array<int, true> */
             private array $casted = [];
 
@@ -33,7 +34,7 @@ final class UpdateDocumentsCastingTest extends TestCase
             /** @var array<int, int> */
             public array $receivedUpdateIds = [];
 
-            public function castingBefore(Document $collection, Document $document): Document
+            public function castBefore(Document $collection, Document $document): Document
             {
                 $this->casted[\spl_object_id($document)] = true;
 
@@ -48,14 +49,14 @@ final class UpdateDocumentsCastingTest extends TestCase
                 return $document;
             }
 
-            public function castingAfter(Document $collection, Document $document): Document
-            {
-                return $document;
-            }
-
-            public function castingAfterDocuments(Document $collection, array $documents): array
+            public function castAfter(Document $collection, array $documents): array
             {
                 return $documents;
+            }
+
+            public function castDatetime(string $value): mixed
+            {
+                return DateTime::setTimezone($value);
             }
 
             #[\Override]

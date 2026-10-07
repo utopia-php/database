@@ -118,11 +118,11 @@ class PoolTest extends Base
         self::$pool->use(function (Adapter $adapter) use ($sql, $binds) {
             $pdo = $adapter->getDriver();
             assert($pdo instanceof PDO);
-            $stmt = $pdo->prepare($sql);
+            $statement = $pdo->prepare($sql);
             foreach ($binds as $key => $value) {
-                $stmt->bindValue($key, $value);
+                $statement->bindValue($key, $value);
             }
-            $stmt->execute();
+            $statement->execute();
         });
     }
 

@@ -449,7 +449,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         $this->refuseSharedColumnsOfAnotherType($collection, [$attribute]);
 
         $schema = $this->schema();
-        $table = $schema->table($this->getSQLTableRaw($collection));
+        $table = $schema->table($this->getTableRaw($collection));
         $this->addAttributeColumn($table, $attribute);
         $result = $table->alter();
 
@@ -630,7 +630,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     public function deleteAttribute(string $collection, string $key): bool
     {
         $schema = $this->schema();
-        $table = $schema->table($this->getSQLTableRaw($collection));
+        $table = $schema->table($this->getTableRaw($collection));
         $table->dropColumn($this->filter($key));
         $result = $table->alter();
 
@@ -660,7 +660,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         }
 
         $schema = $this->schema();
-        $table = $schema->table($this->getSQLTableRaw($collection));
+        $table = $schema->table($this->getTableRaw($collection));
         $table->renameColumn($this->filter($old), $this->filter($new));
         $result = $table->alter();
 
@@ -715,7 +715,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
             ORDER BY a.attnum',
             Event::CollectionRead,
         );
-        $statement->bindValue(1, $this->getSQLTable($collection));
+        $statement->bindValue(1, $this->getTable($collection));
 
         try {
             $this->execute($statement);
@@ -768,7 +768,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
             ORDER BY i.relname, k.position',
             Event::CollectionRead,
         );
-        $statement->bindValue(1, $this->getSQLTable($collection));
+        $statement->bindValue(1, $this->getTable($collection));
 
         try {
             $this->execute($statement);
@@ -867,7 +867,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         };
 
         $keyName = $this->getIndexName($collection, $id, $this->currentTenant());
-        $tableRaw = $this->getSQLTableRaw($collection);
+        $tableRaw = $this->getTableRaw($collection);
         $schema = $this->schema();
 
         $operatorClass = match ($type) {
@@ -935,7 +935,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         $schemaQualifiedName = $this->getDatabase().'.'.$keyName;
 
         $schema = $this->schema();
-        $sql = $schema->dropIndex($this->getSQLTableRaw($collection), $schemaQualifiedName)->query;
+        $sql = $schema->dropIndex($this->getTableRaw($collection), $schemaQualifiedName)->query;
         // Add IF EXISTS since the schema builder's dropIndex does not include it
         $sql = str_replace('DROP INDEX', 'DROP INDEX IF EXISTS', $sql);
 
@@ -961,7 +961,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         $newIndexName = $this->getIndexName($name, $new, $this->currentTenant());
 
         $schemaBuilder = $this->schema();
-        $sql = $schemaBuilder->renameIndex($this->getSQLTableRaw($name), $this->getDatabase().'.'.$oldIndexName, $newIndexName)->query;
+        $sql = $schemaBuilder->renameIndex($this->getTableRaw($name), $this->getDatabase().'.'.$oldIndexName, $newIndexName)->query;
         $sql = \str_replace('ALTER INDEX', 'ALTER INDEX IF EXISTS', $sql);
 
         $this->executeStatement($sql, Event::IndexRename);

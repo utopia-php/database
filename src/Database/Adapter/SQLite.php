@@ -283,7 +283,7 @@ class SQLite extends SQL
         };
 
         try {
-            $pdo = $this->getPDO();
+            $pdo = $this->getDriver();
 
             if ($pdo instanceof DatabasePDO) {
                 $pdo->__call('createFunction', ['REGEXP', $pcre, 2]);

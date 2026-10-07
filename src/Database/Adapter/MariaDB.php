@@ -303,8 +303,8 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
         $id = $this->filter($collection);
 
         $schema = $this->schema();
-        $main = $schema->table($this->getSQLTableRaw($id))->drop();
-        $permissions = $schema->table($this->getSQLTableRaw(Storage::permissionsTable($id)))->dropIfExists();
+        $main = $schema->table($this->getTableRaw($id))->drop();
+        $permissions = $schema->table($this->getTableRaw(Storage::permissionsTable($id)))->dropIfExists();
 
         try {
             return $this->executeStatement($main->query.'; '.$permissions->query, Event::CollectionDelete);
@@ -327,7 +327,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
     {
         $name = $this->filter($collection);
 
-        $result = $this->schema()->analyzeTable($this->getSQLTableRaw($name));
+        $result = $this->schema()->analyzeTable($this->getTableRaw($name));
         $sql = $result->query;
 
         return $this->executeStatement($sql, Event::CollectionUpdate);
@@ -446,7 +446,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
         $newKey = $attribute->key === $key ? null : $this->filter($attribute->key);
         $sqlType = $this->getAttributeSqlType($attribute);
         $schema = $this->schema();
-        $tableRaw = $this->getSQLTableRaw($name);
+        $tableRaw = $this->getTableRaw($name);
 
         if (! empty($newKey) && $this->isRenamed($collection, $id, $newKey)) {
             $id = $newKey;
@@ -490,7 +490,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
         $type = $index->type;
 
         $schema = $this->schema();
-        $tableName = $this->getSQLTableRaw($collection->getId());
+        $tableName = $this->getTableRaw($collection->getId());
 
         $columns = [];
         foreach ($index->attributes as $position => $key) {
@@ -570,7 +570,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
         $id = $this->filter($key);
 
         $schema = $this->schema();
-        $result = $schema->dropIndex($this->getSQLTableRaw($name), $id);
+        $result = $schema->dropIndex($this->getTableRaw($name), $id);
 
         $sql = $result->query;
 
@@ -596,7 +596,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
         $old = $this->filter($old);
         $new = $this->filter($new);
 
-        $result = $this->schema()->renameIndex($this->getSQLTableRaw($collection), $old, $new);
+        $result = $this->schema()->renameIndex($this->getTableRaw($collection), $old, $new);
         $sql = $result->query;
 
         return $this->executeStatement($sql, Event::IndexRename);

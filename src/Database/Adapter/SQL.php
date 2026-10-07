@@ -454,7 +454,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     protected function createAttributeWithEvent(string $collection, Attribute $attribute, Event $event): bool
     {
         $schema = $this->schema();
-        $table = $schema->table($this->getSQLTableRaw($collection));
+        $table = $schema->table($this->getTableRaw($collection));
         $this->addAttributeColumn($table, $attribute);
         $result = $table->alter();
 
@@ -481,7 +481,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     public function createAttributes(string $collection, array $attributes): bool
     {
         $schema = $this->schema();
-        $table = $schema->table($this->getSQLTableRaw($collection));
+        $table = $schema->table($this->getTableRaw($collection));
         foreach ($attributes as $attribute) {
             $this->addAttributeColumn($table, $attribute);
         }
@@ -507,7 +507,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     public function deleteAttribute(string $collection, string $key): bool
     {
         $schema = $this->schema();
-        $table = $schema->table($this->getSQLTableRaw($collection));
+        $table = $schema->table($this->getTableRaw($collection));
         $table->dropColumn($this->filter($key));
         $result = $table->alter();
 
@@ -533,7 +533,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         }
 
         $schema = $this->schema();
-        $table = $schema->table($this->getSQLTableRaw($collection));
+        $table = $schema->table($this->getTableRaw($collection));
         $table->renameColumn($this->filter($old), $this->filter($new));
         $result = $table->alter();
 
@@ -2875,8 +2875,8 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         $id = $this->filter($collection);
 
         $schema = $this->schema();
-        $main = $schema->table($this->getSQLTableRaw($id))->drop();
-        $permissions = $schema->table($this->getSQLTableRaw(Storage::permissionsTable($id)))->dropIfExists();
+        $main = $schema->table($this->getTableRaw($id))->drop();
+        $permissions = $schema->table($this->getTableRaw(Storage::permissionsTable($id)))->dropIfExists();
 
         try {
             return $this->executeStatement($main->query.'; '.$permissions->query, Event::CollectionDelete);
@@ -2906,8 +2906,8 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     protected function dropCreatedCollection(string $id): void
     {
         $schema = $this->schema();
-        $main = $schema->table($this->getSQLTableRaw($id))->dropIfExists();
-        $permissions = $schema->table($this->getSQLTableRaw(Storage::permissionsTable($id)))->dropIfExists();
+        $main = $schema->table($this->getTableRaw($id))->dropIfExists();
+        $permissions = $schema->table($this->getTableRaw(Storage::permissionsTable($id)))->dropIfExists();
 
         $this->executeStatement($main->query.'; '.$permissions->query, Event::CollectionCreate);
     }
@@ -3464,7 +3464,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             ->beforeBuild($tenants->reset(...));
     }
 
-    protected function getIdentifierQuoteChar(): string
+    protected function getIdentifierQuote(): string
     {
         return '`';
     }

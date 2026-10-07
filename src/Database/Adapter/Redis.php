@@ -191,7 +191,7 @@ class Redis extends Adapter implements
         $to = $this->nsFor($namespace, $new).self::SEP;
         $grants = $to.'grants'.self::SEP;
 
-        $this->tx(function (RedisClient $client) use ($dbsKey, $name, $new, $from, $to, $grants): void {
+        $this->transaction(function (RedisClient $client) use ($dbsKey, $name, $new, $from, $to, $grants): void {
             foreach ($this->scanKeys($client, $from.'*') as $key) {
                 if (! \str_starts_with($key, $from)) {
                     continue;
@@ -1300,7 +1300,7 @@ class Redis extends Adapter implements
         $docKey = $this->docKey($collectionId, $id);
         $idxKey = $this->idxKey($collectionId);
 
-        return $this->tx(function (RedisClient $redis) use ($collectionId, $id, $docKey, $idxKey): bool {
+        return $this->transaction(function (RedisClient $redis) use ($collectionId, $id, $docKey, $idxKey): bool {
             $payload = $redis->get($docKey);
             if (! \is_string($payload) || $payload === '') {
                 return false;
@@ -1331,7 +1331,7 @@ class Redis extends Adapter implements
         $collectionId = $this->filter($collection->getId());
         $idxKey = $this->idxKey($collectionId);
 
-        return $this->tx(function (RedisClient $redis) use ($collectionId, $sequences, $permissionIds, $idxKey): int {
+        return $this->transaction(function (RedisClient $redis) use ($collectionId, $sequences, $permissionIds, $idxKey): int {
             $sequenceSet = [];
             foreach ($sequences as $sequence) {
                 $sequenceSet[(string) $sequence] = true;
@@ -1506,7 +1506,7 @@ class Redis extends Adapter implements
         $collectionId = $this->filter($collection->getId());
         $docKey = $this->docKey($collectionId, $id);
 
-        return $this->tx(function (RedisClient $redis) use ($collectionId, $id, $attribute, $value, $updatedAt, $min, $max, $docKey): bool {
+        return $this->transaction(function (RedisClient $redis) use ($collectionId, $id, $attribute, $value, $updatedAt, $min, $max, $docKey): bool {
             $payload = $redis->get($docKey);
             if (! \is_string($payload) || $payload === '') {
                 throw new NotFoundException('Document not found');

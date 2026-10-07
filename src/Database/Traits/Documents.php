@@ -6,7 +6,6 @@ use Closure;
 use DateTime as PhpDateTime;
 use Exception;
 use Generator;
-use InvalidArgumentException;
 use RuntimeException;
 use Throwable;
 use Utopia\Console;
@@ -2482,7 +2481,7 @@ trait Documents
      * @param  string  $collection  The collection ID
      * @param  string  $id  The document ID
      * @param  string  $attribute  The attribute to increase
-     * @param  int|float|string  $value  The value to increase the attribute by, can be a float
+     * @param  int|float|string  $value  The value to increase the attribute by, a number greater than 0
      * @param  int|float|string|null  $max  The maximum value the attribute can reach after the increase, null means no limit
      *
      * @throws AuthorizationException
@@ -2499,11 +2498,7 @@ trait Documents
         int|float|string $value = 1,
         int|float|string|null $max = null
     ): Document {
-        if (! \is_numeric($value) || (\is_string($value) && BigInt::isIntegerString($value)
-            ? BigInt::compare($value, 0) <= 0
-            : (float) $value <= 0)) {
-            throw new InvalidArgumentException('Value must be numeric and greater than 0');
-        }
+        $this->assertPositiveChange($value);
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $numericAttribute = null;
@@ -2609,17 +2604,30 @@ trait Documents
     }
 
     /**
+     * @throws TypeException
+     */
+    private function assertPositiveChange(int|float|string $value): void
+    {
+        if (! \is_numeric($value) || (\is_string($value) && BigInt::isIntegerString($value)
+            ? BigInt::compare($value, 0) <= 0
+            : (float) $value <= 0)) {
+            throw new TypeException('Value must be numeric and greater than 0');
+        }
+    }
+
+    /**
      * Decrease a document attribute by a value.
      *
      * @param  string  $collection  The collection identifier
      * @param  string  $id  The document identifier
      * @param  string  $attribute  The attribute to decrease
-     * @param  int|float|string  $value  The value to decrease the attribute by, must be positive
+     * @param  int|float|string  $value  The value to decrease the attribute by, a number greater than 0
      * @param  int|float|string|null  $min  The minimum value the attribute can reach, null means no limit
      * @return Document The updated document
      *
      * @throws AuthorizationException
      * @throws DatabaseException
+     * @throws TypeException When $value is not a number greater than 0
      */
     public function decreaseDocumentAttribute(
         string $collection,
@@ -2628,11 +2636,7 @@ trait Documents
         int|float|string $value = 1,
         int|float|string|null $min = null
     ): Document {
-        if (! \is_numeric($value) || (\is_string($value) && BigInt::isIntegerString($value)
-            ? BigInt::compare($value, 0) <= 0
-            : (float) $value <= 0)) {
-            throw new InvalidArgumentException('Value must be numeric and greater than 0');
-        }
+        $this->assertPositiveChange($value);
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 

@@ -2683,7 +2683,7 @@ trait AttributeTests
         $init = $adapter->getAttributeWidth($collection);
         $this->assertSame(1067, $init);
 
-        $width = fn (Attribute $attribute): int => $adapter->getAttributeWidth($collection->setAttribute('attributes', [$attribute])) - $init;
+        $width = fn (Attribute $attribute): int => $adapter->getAttributeWidth(Collection::create(id: 'width_limit', attributes: [$attribute])) - $init;
 
         $this->assertSame(401, $width(Attribute::string(key: 'varchar_100', size: 100)), 'VARCHAR(100) is 100 * 4 bytes plus a 1 byte length');
         $this->assertSame(20, $width(Attribute::string(key: 'json', size: 100, array: true)), 'An array is stored externally, only the pointer counts');

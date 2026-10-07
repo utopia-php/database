@@ -13,6 +13,7 @@ use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\Postgres;
+use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Cache\QueryCache;
 use Utopia\Database\Capability;
@@ -1271,13 +1272,13 @@ trait GeneralTests
         $database->setTimeout(1000);
 
         try {
-            $connection = $adapter->getConnectionId();
+            $connection = $adapter->id();
             $this->assertMatchesRegularExpression('/^\d+$/', $connection);
             $driver->exec('SET SESSION wait_timeout = 1');
             \sleep(3);
 
             $interrupted = ['statement that reconnects' => $interruptedByTimeout()];
-            $this->assertNotSame($connection, $adapter->getConnectionId(), 'The server closing the idle session must have forced a reconnect');
+            $this->assertNotSame($connection, $adapter->id(), 'The server closing the idle session must have forced a reconnect');
 
             $database->setTimeout(1000);
             $interrupted['same timeout set again'] = $interruptedByTimeout();
@@ -1606,7 +1607,7 @@ trait GeneralTests
         $database = $this->getDatabase();
         $adapter = $database->getAdapter();
 
-        if (! $adapter->hasFeature(Feature\ConnectionId::class) || ! $adapter->hasFeature(Feature\RawQuery::class)) {
+        if (! $adapter->hasFeature(Feature\Connection::class) || ! $adapter->hasFeature(Feature\RawQuery::class) || $adapter->hasFeature(SQLite::class)) {
             $this->expectNotToPerformAssertions();
 
             return;

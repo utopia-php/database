@@ -20,7 +20,7 @@ final class SQLRawStatementTest extends TestCase
     {
         $adapter = new SQLite(new DatabasePDO('sqlite::memory:', null, null));
 
-        $this->assertSame('', $adapter->getHostname());
+        $this->assertSame('', $adapter->hostname());
     }
 
     public function testTheHostnameIsTheOneTheConnectionNames(): void
@@ -32,7 +32,7 @@ final class SQLRawStatementTest extends TestCase
             }
         });
 
-        $this->assertSame('db.internal', $adapter->getHostname());
+        $this->assertSame('db.internal', $adapter->hostname());
     }
 
     public function testARawReadOnAMissingTableIsNotFound(): void

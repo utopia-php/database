@@ -12,9 +12,9 @@ final readonly class PermissionAllowNullUid implements Filter
     public function __construct(
         Filter $filter,
         string $documentColumn,
-        string $quoteChar = '`',
+        string $quoteCharacter = '`',
     ) {
-        $this->inner = new AllowNullColumn($filter, $documentColumn, $quoteChar);
+        $this->inner = new AllowNullColumn($filter, $documentColumn, $quoteCharacter);
     }
 
     public function filter(string $table): Condition

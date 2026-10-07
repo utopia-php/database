@@ -16,7 +16,6 @@ use Utopia\Database\Attribute;
 use Utopia\Database\AttributeUpdate;
 use Utopia\Database\Cache\QueryCache;
 use Utopia\Database\Cache\Scope;
-use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\CollectionUpdate;
 use Utopia\Database\Database;
@@ -730,8 +729,13 @@ final class DatabaseQueryCacheTest extends TestCase
             throw new \RuntimeException('Failed to create SQLite test database');
         }
 
-        $attributes = SQLite::getPDOAttributes();
-        $attributes[\PDO::ATTR_PERSISTENT] = false;
+        $attributes = [
+            \PDO::ATTR_PERSISTENT => false,
+            \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
+            \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
+            \PDO::ATTR_EMULATE_PREPARES => true,
+            \PDO::ATTR_STRINGIFY_FETCHES => true,
+        ];
         $writerConnection = new \PDO('sqlite:'.$path, null, null, $attributes);
         $readerConnection = new \PDO('sqlite:'.$path, null, null, $attributes);
         $writerConnection->exec('PRAGMA journal_mode = WAL');
@@ -781,7 +785,7 @@ final class DatabaseQueryCacheTest extends TestCase
         $adapter = $database->getAdapter();
 
         return new Scope(
-            hostname: $adapter->supports(Capability::Hostname) ? $adapter->getHostname() : '',
+            hostname: $database->getHostname() ?? '',
             database: $adapter->getDatabase(),
             namespace: $adapter->getNamespace(),
             tenant: $adapter->getTenant(),

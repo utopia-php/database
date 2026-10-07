@@ -61,10 +61,10 @@ final class ColumnNameTest extends TestCase
         $permissionsTable = static fn (string $table): string => $table.'_perms';
         $constructors = [
             'documentColumn' => static fn (string $column): PermissionFilter => new PermissionFilter(['any'], $permissionsTable, documentColumn: $column),
-            'permDocumentColumn' => static fn (string $column): PermissionFilter => new PermissionFilter(['any'], $permissionsTable, permDocumentColumn: $column),
-            'permRoleColumn' => static fn (string $column): PermissionFilter => new PermissionFilter(['any'], $permissionsTable, permRoleColumn: $column),
-            'permTypeColumn' => static fn (string $column): PermissionFilter => new PermissionFilter(['any'], $permissionsTable, permTypeColumn: $column),
-            'permColumnColumn' => static fn (string $column): PermissionFilter => new PermissionFilter(['any'], $permissionsTable, permColumnColumn: $column),
+            'permissionDocumentColumn' => static fn (string $column): PermissionFilter => new PermissionFilter(['any'], $permissionsTable, permissionDocumentColumn: $column),
+            'permissionRoleColumn' => static fn (string $column): PermissionFilter => new PermissionFilter(['any'], $permissionsTable, permissionRoleColumn: $column),
+            'permissionTypeColumn' => static fn (string $column): PermissionFilter => new PermissionFilter(['any'], $permissionsTable, permissionTypeColumn: $column),
+            'scopeColumn' => static fn (string $column): PermissionFilter => new PermissionFilter(['any'], $permissionsTable, scopeColumn: $column),
         ];
         foreach ($constructors as $parameter => $construct) {
             foreach (self::invalidColumns() as $label => [$column]) {
@@ -134,6 +134,6 @@ final class ColumnNameTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage('Invalid column name: 1role');
 
-        new PermissionFilter(['any'], static fn (string $table): string => $table.'_perms', permRoleColumn: '1role');
+        new PermissionFilter(['any'], static fn (string $table): string => $table.'_perms', permissionRoleColumn: '1role');
     }
 }

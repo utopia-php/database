@@ -342,17 +342,18 @@ final class FeatureContractTest extends TestCase
         $pool->upsertDocuments(new Document(['$id' => 'any']), []);
     }
 
-    public function testRedisOffersUpsertsAndRelationships(): void
+    public function testRedisOffersUpsertsConnectionAndRelationships(): void
     {
         $redis = $this->adapters()['Redis'];
 
         $this->assertTrue($redis->hasFeature(Feature\Upserts::class));
+        $this->assertTrue($redis->hasFeature(Feature\Connection::class));
         $this->assertTrue($redis->hasFeature(Feature\Relationships::class));
         $this->assertFalse($redis->hasFeature(Feature\Spatial::class));
         $this->assertFalse($redis->hasFeature(Feature\RawQuery::class));
     }
 
-    public function testSQLiteOffersTheSqlFeaturesButNotSpatialOrTimeouts(): void
+    public function testSQLiteOffersTheSqlFeaturesAndConnectionButNotSpatialOrTimeouts(): void
     {
         $sqlite = $this->adapters()['SQLite'];
 
@@ -360,18 +361,20 @@ final class FeatureContractTest extends TestCase
         $this->assertTrue($sqlite->hasFeature(Feature\Relationships::class));
         $this->assertTrue($sqlite->hasFeature(Feature\RawQuery::class));
         $this->assertTrue($sqlite->hasFeature(Feature\QueryBuilder::class));
+        $this->assertTrue($sqlite->hasFeature(Feature\Connection::class));
         $this->assertTrue($sqlite->supports(Capability::SchemaIntrospection));
         $this->assertFalse($sqlite->hasFeature(Feature\Spatial::class));
         $this->assertFalse($sqlite->hasFeature(Feature\Timeouts::class));
     }
 
-    public function testMariaDBAndPostgresOfferSpatialAndTimeoutsAndIntrospectTheirSchema(): void
+    public function testMariaDBAndPostgresOfferSpatialTimeoutsAndConnectionAndIntrospectTheirSchema(): void
     {
         foreach (['MariaDB', 'MySQL', 'Postgres'] as $name) {
             $adapter = $this->adapters()[$name];
 
             $this->assertTrue($adapter->hasFeature(Feature\Spatial::class), $name);
             $this->assertTrue($adapter->hasFeature(Feature\Timeouts::class), $name);
+            $this->assertTrue($adapter->hasFeature(Feature\Connection::class), $name);
             $this->assertTrue($adapter->supports(Capability::SchemaIntrospection), $name);
         }
     }

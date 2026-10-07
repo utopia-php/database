@@ -57,7 +57,7 @@ use Utopia\Query\Schema\IndexType;
 class Redis extends Adapter implements
     Feature\Relationships,
     Feature\Upserts,
-    Feature\ConnectionId
+    Feature\Connection
 {
     public const string KEY_PREFIX = 'utopia';
 
@@ -79,9 +79,9 @@ class Redis extends Adapter implements
         $this->client = $client;
     }
 
-    public function getDriver(): mixed
+    public function getDriver(): RedisClient
     {
-        return 'redis';
+        return $this->client;
     }
 
     /**
@@ -108,6 +108,11 @@ class Redis extends Adapter implements
 
     public function reconnect(): void
     {
+    }
+
+    public function hostname(): string
+    {
+        return $this->hostname;
     }
 
     public function startTransaction(): bool
@@ -158,7 +163,7 @@ class Redis extends Adapter implements
         $name = $this->filter($name);
         $dbsKey = $this->key($this->nsBase(), 'dbs');
 
-        $this->tx(fn (RedisClient $client) => $client->sAdd($dbsKey, $name));
+        $this->transaction(fn (RedisClient $client) => $client->sAdd($dbsKey, $name));
 
         return true;
     }
@@ -282,7 +287,7 @@ class Redis extends Adapter implements
         $dbsKey = $this->key($this->nsBase(), 'dbs');
         $colsKey = $this->key($this->nsFor($namespace, $name), 'cols');
 
-        $this->tx(function (RedisClient $client) use ($name, $namespace, $dbsKey, $colsKey): void {
+        $this->transaction(function (RedisClient $client) use ($name, $namespace, $dbsKey, $colsKey): void {
             /** @var array<int, string>|false $collections */
             $collections = $client->sMembers($colsKey);
             if (\is_array($collections)) {
@@ -337,7 +342,7 @@ class Redis extends Adapter implements
             'indexes' => $indexPayload,
         ]);
 
-        $this->tx(function (RedisClient $client) use ($id, $colsKey, $metaKey, $idxKey, $schema, $attributePayload, $indexPayload): void {
+        $this->transaction(function (RedisClient $client) use ($id, $colsKey, $metaKey, $idxKey, $schema, $attributePayload, $indexPayload): void {
             $client->hMSet($metaKey, [
                 'schema' => \json_encode($schema->getArrayCopy(), JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
                 'attrs' => \json_encode($attributePayload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
@@ -383,7 +388,7 @@ class Redis extends Adapter implements
         $database = $this->getDatabase();
         $colsKey = $this->key($this->ns(), 'cols');
 
-        $this->tx(function (RedisClient $client) use ($id, $namespace, $database, $colsKey): void {
+        $this->transaction(function (RedisClient $client) use ($id, $namespace, $database, $colsKey): void {
             $this->purgeCollectionKeys($client, $namespace, $database, $id);
             $client->sRem($colsKey, $id);
         });
@@ -418,10 +423,10 @@ class Redis extends Adapter implements
 
         $record = self::attributeRecord($id, $attribute);
 
-        $this->tx(function (RedisClient $client) use ($metaKey, $record): void {
-            $attrs = $this->readAttributesField($client, $metaKey);
-            $attrs = $this->upsertAttributeRecord($attrs, $record);
-            $client->hSet($metaKey, 'attrs', \json_encode($attrs, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
+        $this->transaction(function (RedisClient $client) use ($metaKey, $record): void {
+            $attributes = $this->readAttributesField($client, $metaKey);
+            $attributes = $this->upsertAttributeRecord($attributes, $record);
+            $client->hSet($metaKey, 'attrs', \json_encode($attributes, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
         });
 
         return true;
@@ -456,10 +461,10 @@ class Redis extends Adapter implements
 
         $record = self::attributeRecord($id, $attribute);
 
-        $this->tx(function (RedisClient $client) use ($metaKey, $record): void {
-            $attrs = $this->readAttributesField($client, $metaKey);
-            $attrs = $this->upsertAttributeRecord($attrs, $record);
-            $client->hSet($metaKey, 'attrs', \json_encode($attrs, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
+        $this->transaction(function (RedisClient $client) use ($metaKey, $record): void {
+            $attributes = $this->readAttributesField($client, $metaKey);
+            $attributes = $this->upsertAttributeRecord($attributes, $record);
+            $client->hSet($metaKey, 'attrs', \json_encode($attributes, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
         });
 
         return true;
@@ -475,10 +480,10 @@ class Redis extends Adapter implements
             return true;
         }
 
-        $this->tx(function (RedisClient $client) use ($metaKey, $id): void {
-            $attrs = $this->readAttributesField($client, $metaKey);
+        $this->transaction(function (RedisClient $client) use ($metaKey, $id): void {
+            $attributes = $this->readAttributesField($client, $metaKey);
             $filtered = [];
-            foreach ($attrs as $attribute) {
+            foreach ($attributes as $attribute) {
                 $existingId = $this->recordIdentifier($attribute);
                 if ($this->filter($existingId) === $id) {
                     continue;
@@ -519,23 +524,23 @@ class Redis extends Adapter implements
             throw new NotFoundException('Collection not found');
         }
 
-        $this->tx(function (RedisClient $client) use ($metaKey, $old, $new): void {
-            $attrs = $this->readAttributesField($client, $metaKey);
+        $this->transaction(function (RedisClient $client) use ($metaKey, $old, $new): void {
+            $attributes = $this->readAttributesField($client, $metaKey);
             $touched = false;
-            foreach ($attrs as $i => $attribute) {
+            foreach ($attributes as $i => $attribute) {
                 $existingId = $this->recordIdentifier($attribute);
                 if ($this->filter($existingId) !== $old) {
                     continue;
                 }
                 $attribute[Document::ID] = $new;
                 $attribute['key'] = $new;
-                $attrs[$i] = $attribute;
+                $attributes[$i] = $attribute;
                 $touched = true;
             }
             if (! $touched) {
                 return;
             }
-            $client->hSet($metaKey, 'attrs', \json_encode($attrs, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
+            $client->hSet($metaKey, 'attrs', \json_encode($attributes, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
         });
 
         $this->renameDocumentField($collection, $old, $new);
@@ -685,7 +690,7 @@ class Redis extends Adapter implements
         $lengths = $index->lengths;
         $orders = self::orderValues($index);
 
-        $this->tx(function (RedisClient $client) use ($metaKey, $collection, $id, $type, $attributes, $lengths, $orders): void {
+        $this->transaction(function (RedisClient $client) use ($metaKey, $collection, $id, $type, $attributes, $lengths, $orders): void {
             $indexes = $this->readIndexesField($client, $metaKey);
 
             foreach ($indexes as $existing) {
@@ -769,7 +774,7 @@ class Redis extends Adapter implements
             return true;
         }
 
-        $this->tx(function (RedisClient $client) use ($metaKey, $id): void {
+        $this->transaction(function (RedisClient $client) use ($metaKey, $id): void {
             $indexes = $this->readIndexesField($client, $metaKey);
             $filtered = [];
             foreach ($indexes as $index) {
@@ -795,7 +800,7 @@ class Redis extends Adapter implements
             throw new NotFoundException('Collection not found');
         }
 
-        return $this->tx(function (RedisClient $client) use ($metaKey, $old, $new): bool {
+        return $this->transaction(function (RedisClient $client) use ($metaKey, $old, $new): bool {
             $indexes = $this->readIndexesField($client, $metaKey);
             $ids = \array_map(static fn (array $index): mixed => $index[Document::ID] ?? $index['key'] ?? null, $indexes);
             $position = \array_search($old, $ids, true);
@@ -868,7 +873,7 @@ class Redis extends Adapter implements
         $seqKey = $this->seqKey($col, $tenant);
         $permDocKey = $this->permDocKey($col, $id, $tenant);
 
-        return $this->tx(function (RedisClient $redis) use ($col, $id, $document, $docKey, $idxKey, $seqKey, $permDocKey): ?Document {
+        return $this->transaction(function (RedisClient $redis) use ($col, $id, $document, $docKey, $idxKey, $seqKey, $permDocKey): ?Document {
             if ((bool) $redis->exists($docKey)) {
                 if ($this->skippingDuplicates()) {
                     $existingPayload = $redis->get($docKey);
@@ -947,7 +952,7 @@ class Redis extends Adapter implements
             }
         }
 
-        return $this->tx(function (RedisClient $redis) use ($col, $id, $document, $skipPermissions, $oldKey, $idxKey, $useNullTenant): Document {
+        return $this->transaction(function (RedisClient $redis) use ($col, $id, $document, $skipPermissions, $oldKey, $idxKey, $useNullTenant): Document {
             $existingPayload = $redis->get($oldKey);
             if (! \is_string($existingPayload) || $existingPayload === '') {
                 throw new NotFoundException('Document not found');
@@ -1009,18 +1014,18 @@ class Redis extends Adapter implements
             return 0;
         }
 
-        $attrs = $updates->getAttributes();
+        $changed = $updates->getAttributes();
         $hasCreatedAt = ! empty($updates->getCreatedAt());
         $hasUpdatedAt = ! empty($updates->getUpdatedAt());
         $hasPermissions = $updates->offsetExists(Document::PERMISSIONS);
-        if (empty($attrs) && ! $hasCreatedAt && ! $hasUpdatedAt && ! $hasPermissions) {
+        if (empty($changed) && ! $hasCreatedAt && ! $hasUpdatedAt && ! $hasPermissions) {
             return 0;
         }
 
         $col = $this->filter($collection->getId());
         $documents = \array_values($documents);
 
-        return $this->tx(function (RedisClient $redis) use ($col, $documents, $updates, $attrs, $hasCreatedAt, $hasUpdatedAt, $hasPermissions): int {
+        return $this->transaction(function (RedisClient $redis) use ($col, $documents, $updates, $changed, $hasCreatedAt, $hasUpdatedAt, $hasPermissions): int {
             $docKeys = [];
             foreach ($documents as $doc) {
                 $docKeys[] = $this->docKey($col, $doc->getId());
@@ -1054,7 +1059,7 @@ class Redis extends Adapter implements
                     $existing = $this->surfaceRelationshipAttributesUsing($relationshipKeys, $existing);
                 }
                 $merged = $existing->getArrayCopy();
-                $resolved = $this->applyOperators($attrs, $merged);
+                $resolved = $this->applyOperators($changed, $merged);
                 foreach ($resolved as $attribute => $value) {
                     $merged[$attribute] = $value;
                 }
@@ -1071,7 +1076,7 @@ class Redis extends Adapter implements
                 $writes[] = new Write($doc->getId(), $docKeys[$i], $existingPayload, new Document($merged));
             }
 
-            if ($attrs !== []) {
+            if ($changed !== []) {
                 $this->enforceUniqueIndexesForDocuments(
                     $redis,
                     $col,
@@ -1117,7 +1122,7 @@ class Redis extends Adapter implements
         $col = $this->filter($collection->getId());
         $attribute = $increase ?? '';
 
-        return $this->tx(function (RedisClient $redis) use ($col, $attribute, $changes): array {
+        return $this->transaction(function (RedisClient $redis) use ($col, $attribute, $changes): array {
             $results = [];
 
             $redis->multi(\Redis::PIPELINE);
@@ -1397,7 +1402,7 @@ class Redis extends Adapter implements
             throw new NotFoundException('Collection not found');
         }
 
-        return $this->tx(function (RedisClient $client) use ($collectionId, $queries, $limit, $offset, $orderAttributes, $orderTypes, $cursor, $cursorDirection, $forPermission): array {
+        return $this->transaction(function (RedisClient $client) use ($collectionId, $queries, $limit, $offset, $orderAttributes, $orderTypes, $cursor, $cursorDirection, $forPermission): array {
             $documents = $this->loadCollectionDocuments($client, $collectionId, $forPermission);
             $documents = $this->filterDocumentsByQueries($collectionId, $documents, $queries);
             $documents = $this->orderDocuments($documents, $orderAttributes, $orderTypes, $cursorDirection);
@@ -1436,7 +1441,7 @@ class Redis extends Adapter implements
             throw new NotFoundException('Collection not found');
         }
 
-        return $this->tx(function (RedisClient $client) use ($collectionId, $attribute, $queries, $max): float|int {
+        return $this->transaction(function (RedisClient $client) use ($collectionId, $attribute, $queries, $max): float|int {
             $documents = $this->loadCollectionDocuments($client, $collectionId, PermissionType::Read);
             $documents = $this->filterDocumentsByQueries($collectionId, $documents, $queries);
 
@@ -1484,7 +1489,7 @@ class Redis extends Adapter implements
             }
         }
 
-        return $this->tx(function (RedisClient $client) use ($collectionId, $queries, $max): int {
+        return $this->transaction(function (RedisClient $client) use ($collectionId, $queries, $max): int {
             $documents = $this->loadCollectionDocuments($client, $collectionId, PermissionType::Read);
             $documents = $this->filterDocumentsByQueries($collectionId, $documents, $queries);
 
@@ -1588,7 +1593,7 @@ class Redis extends Adapter implements
     }
 
     #[\Override]
-    public function getConnectionId(): string
+    public function id(): string
     {
         return '0';
     }
@@ -1704,15 +1709,15 @@ class Redis extends Adapter implements
 
     /**
      * @template T
-     * @param callable(RedisClient): T $fn
+     * @param callable(RedisClient): T $callback
      * @return T
      */
-    protected function tx(callable $fn): mixed
+    protected function transaction(callable $callback): mixed
     {
         try {
-            return $fn($this->client);
+            return $callback($this->client);
         } catch (\RedisException $exception) {
-            throw new TransactionException('tx failed: '.$exception->getMessage(), 0, $exception);
+            throw new TransactionException('Redis transaction failed: '.$exception->getMessage(), 0, $exception);
         }
     }
 
@@ -1878,13 +1883,13 @@ class Redis extends Adapter implements
     /**
      * @param array<string, mixed> $payload
      */
-    protected function journal(string $op, array $payload): void
+    protected function journal(string $operation, array $payload): void
     {
         if ($this->inTransaction === 0) {
             return;
         }
         $this->journalStack[\count($this->journalStack) - 1][] = [
-            'op' => $op,
+            'op' => $operation,
             'payload' => $payload,
         ];
     }
@@ -1947,10 +1952,10 @@ class Redis extends Adapter implements
 
         for ($i = \count($frame) - 1; $i >= 0; $i--) {
             $entry = $frame[$i];
-            $op = $entry['op'];
+            $operation = $entry['op'];
             $payload = $entry['payload'];
 
-            switch ($op) {
+            switch ($operation) {
                 case 'createDoc':
                     $collection = $this->payloadStringOr($payload, 'collection', '');
                     $id = $this->payloadStringOr($payload, 'id', '');
@@ -2020,7 +2025,7 @@ class Redis extends Adapter implements
                     break;
 
                 default:
-                    throw new TransactionException('Unknown journal op: '.$op);
+                    throw new TransactionException('Unknown journal op: '.$operation);
             }
         }
     }
@@ -2074,28 +2079,28 @@ class Redis extends Adapter implements
     }
 
     /**
-     * @param array<int, array<string, mixed>> $attrs
+     * @param array<int, array<string, mixed>> $attributes
      * @param array<string, mixed> $record
      * @return array<int, array<string, mixed>>
      */
-    private function upsertAttributeRecord(array $attrs, array $record): array
+    private function upsertAttributeRecord(array $attributes, array $record): array
     {
         $targetId = $this->stringOrEmpty($record[Document::ID] ?? '');
         $replaced = false;
-        foreach ($attrs as $i => $existing) {
+        foreach ($attributes as $i => $existing) {
             $existingId = $this->recordIdentifier($existing);
             if ($existingId !== $targetId) {
                 continue;
             }
-            $attrs[$i] = $record;
+            $attributes[$i] = $record;
             $replaced = true;
             break;
         }
         if (! $replaced) {
-            $attrs[] = $record;
+            $attributes[] = $record;
         }
 
-        return \array_values($attrs);
+        return \array_values($attributes);
     }
 
     private function enforceUniqueIndexes(RedisClient $client, string $collection, Document $document, ?string $excludeId = null): void
@@ -2520,10 +2525,10 @@ class Redis extends Adapter implements
             'required' => false,
         ];
 
-        $this->tx(function (RedisClient $client) use ($metaKey, $record): void {
-            $attrs = $this->readAttributesField($client, $metaKey);
-            $attrs = $this->upsertAttributeRecord($attrs, $record);
-            $client->hSet($metaKey, 'attrs', \json_encode($attrs, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
+        $this->transaction(function (RedisClient $client) use ($metaKey, $record): void {
+            $attributes = $this->readAttributesField($client, $metaKey);
+            $attributes = $this->upsertAttributeRecord($attributes, $record);
+            $client->hSet($metaKey, 'attrs', \json_encode($attributes, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
         });
     }
 
@@ -2539,7 +2544,7 @@ class Redis extends Adapter implements
 
         $idxKey = $this->idxKey($collection);
 
-        $this->tx(function (RedisClient $client) use ($collection, $oldKey, $newKey, $idxKey): void {
+        $this->transaction(function (RedisClient $client) use ($collection, $oldKey, $newKey, $idxKey): void {
             /** @var array<int, string>|false $docIds */
             $docIds = $client->sMembers($idxKey);
             if (! \is_array($docIds) || $docIds === []) {
@@ -2576,7 +2581,7 @@ class Redis extends Adapter implements
         $field = $this->filter($field);
         $idxKey = $this->idxKey($collection);
 
-        $this->tx(function (RedisClient $client) use ($collection, $field, $idxKey): void {
+        $this->transaction(function (RedisClient $client) use ($collection, $field, $idxKey): void {
             /** @var array<int, string>|false $docIds */
             $docIds = $client->sMembers($idxKey);
             if (! \is_array($docIds) || $docIds === []) {
@@ -3492,14 +3497,14 @@ class Redis extends Adapter implements
     }
 
     /**
-     * @param array<string, mixed> $attrs
+     * @param array<string, mixed> $attributes
      * @param array<string, mixed> $existing
      * @return array<string, mixed>
      */
-    protected function applyOperators(array $attrs, array $existing): array
+    protected function applyOperators(array $attributes, array $existing): array
     {
         $result = [];
-        foreach ($attrs as $attribute => $value) {
+        foreach ($attributes as $attribute => $value) {
             if (Operator::isOperator($value)) {
                 /** @var Operator $value */
                 $result[$attribute] = $this->applyOperator($existing[$attribute] ?? null, $value);

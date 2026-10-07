@@ -15,7 +15,6 @@ enum Capability
     case AttributeResizing;
     case Caching;
     case DefinedAttributes;
-    case Hostname;
     case IndexArray;
     case IndexArrayCast;
     case IndexFulltext;

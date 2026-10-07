@@ -216,6 +216,15 @@ class TimeoutRecordingMemory extends Memory implements Feature\Timeouts
      */
     public array $timeouts = [];
 
+    private int $timeout = 0;
+
+    public function getTimeout(Event $event = Event::All): int
+    {
+        return $this->timeouts[$event->value]
+            ?? $this->timeouts[Event::All->value]
+            ?? $this->timeout;
+    }
+
     public function setTimeout(int $milliseconds, Event $event = Event::All): void
     {
         $this->timeouts[$event->value] = $milliseconds;

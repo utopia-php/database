@@ -104,7 +104,7 @@ class ReadWritePoolTest extends TestCase
             'getSizeOfCollection',
             'getSizeOfCollectionOnDisk',
             'ping',
-            'getConnectionId',
+            'id',
             'getAttributeWidth',
             'getCountOfAttributes',
             'getCountOfIndexes',
@@ -331,7 +331,7 @@ class ReadWritePoolTest extends TestCase
             $pool->setNamespace('new_ns');
             $pool->setTenant(2);
 
-            $this->assertTrue($pool->ping());
+            $pool->list();
             $this->assertSame('new_db', $writeAdapter->getDatabase());
             $this->assertSame('new_ns', $writeAdapter->getNamespace());
             $this->assertSame(2, $writeAdapter->getTenant());
@@ -603,7 +603,7 @@ class ReadWritePoolTest extends TestCase
             'count', 'sum', 'getSizeOfCollection', 'getSizeOfCollectionOnDisk',
             'getAttributeWidth', 'getCountOfAttributes', 'getCountOfIndexes' => 0,
             'exists', 'collectionExists', 'ping', 'supports', 'hasFeature' => true,
-            'getConnectionId' => 'string',
+            'id' => 'string',
             'limits' => (new Memory())->limits(),
             'getSchemaAttributes', 'getSchemaIndexes', 'capabilities', 'decode' => [],
             'encode' => 'POINT(1 2)',
@@ -629,7 +629,7 @@ class ReadWritePoolTest extends TestCase
             'list' => [],
             'getSizeOfCollection', 'getSizeOfCollectionOnDisk' => ['collection'],
             'ping' => [],
-            'getConnectionId' => [],
+            'id' => [],
             'getAttributeWidth' => [new Document()],
             'getCountOfAttributes' => [new Document()],
             'getCountOfIndexes' => [new Document()],

@@ -80,7 +80,7 @@ use Utopia\Query\Schema\Table\PostgreSQL as PostgreSQLTable;
 /**
  * Abstract base adapter for SQL-based database engines (MariaDB, MySQL, PostgreSQL, SQLite).
  */
-abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBuilder, Feature\Relationships, Feature\Upserts
+abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQuery, Feature\QueryBuilder, Feature\Relationships, Feature\Upserts
 {
     /**
      * remapRow() drops every column with this prefix from every row it reads. filter() strips `$` from
@@ -191,7 +191,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             Capability::Operators,
             Capability::OrderRandom,
             Capability::IndexIdentical,
-            Capability::Hostname,
             Capability::AttributeResizing,
             Capability::DefinedAttributes,
             Capability::Joins,
@@ -199,43 +198,13 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         ]);
     }
 
-    /**
-     * Returns the current PDO object
-     *
-     * @deprecated Use getDriver() instead
-     */
-    protected function getPDO(): DatabasePDO|PDOProxy|PDO
+    public function getDriver(): DatabasePDO|PDOProxy|PDO
     {
         if ($this->pdo instanceof DatabasePDO || $this->pdo instanceof PDOProxy || $this->pdo instanceof PDO) {
             return $this->pdo;
         }
 
         throw new DatabaseException('SQL adapter requires Utopia\\Database\\PDO, Swoole\\Database\\PDOProxy, or PDO');
-    }
-
-    /**
-     * Returns the current PDO object
-     */
-    public function getDriver(): DatabasePDO|PDOProxy|PDO
-    {
-        return $this->getPDO();
-    }
-
-    /**
-     * Returns default PDO configuration
-     *
-     * @return array<int, mixed>
-     */
-    public static function getPDOAttributes(): array
-    {
-        return [
-            PDO::ATTR_TIMEOUT => 3, // Specifies the timeout duration in seconds. Takes a value of type int.
-            PDO::ATTR_PERSISTENT => true, // Create a persistent connection
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC, // Fetch a result row as an associative array.
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, // PDO will throw a PDOException on errors
-            PDO::ATTR_EMULATE_PREPARES => true, // Emulate prepared statements
-            PDO::ATTR_STRINGIFY_FETCHES => true, // Returns all fetched data as Strings
-        ];
     }
 
     /**
@@ -246,12 +215,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         return sprintf('%.'.$this->floatPrecision.'F', $value);
     }
 
-    /**
-     * Get the hostname of the database connection.
-     *
-     * @return string
-     */
-    public function getHostname(): string
+    public function hostname(): string
     {
         try {
             if ($this->pdo instanceof DatabasePDO) {
@@ -264,14 +228,9 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
     }
 
-    /**
-     * Get the ALTER TABLE lock type clause for concurrent DDL operations.
-     *
-     * @return string
-     */
-    public function getLockType(): string
+    protected function getLockType(): string
     {
-        if ($this->supports(Capability::AlterLock) && $this->alterLocks) {
+        if ($this->supports(Capability::AlterLock) && $this->locks) {
             return ',LOCK=SHARED';
         }
 
@@ -279,8 +238,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
-     * Ping Database
-     *
      * @throws Exception
      * @throws PDOException
      */
@@ -291,14 +248,9 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         return $this->prepareStatement($result->query)->execute();
     }
 
-    /**
-     * Reconnect to the database and reset the transaction counter.
-     *
-     * @return void
-     */
     public function reconnect(): void
     {
-        $pdo = $this->getPDO();
+        $pdo = $this->getDriver();
         if ($pdo instanceof DatabasePDO) {
             $pdo->reconnect();
         }
@@ -313,8 +265,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         try {
             if ($this->inTransaction === 0) {
                 try {
-                    if ($this->getPDO()->inTransaction()) {
-                        $this->getPDO()->rollBack();
+                    if ($this->getDriver()->inTransaction()) {
+                        $this->getDriver()->rollBack();
                     } else {
                         // If no active transaction, this has no effect.
                         $this->prepareStatement('ROLLBACK')->execute();
@@ -326,10 +278,10 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     // effort; swallow it and begin a fresh transaction below.
                 }
 
-                $result = $this->getPDO()->beginTransaction();
+                $result = $this->getDriver()->beginTransaction();
 
             } else {
-                $this->getPDO()->exec('SAVEPOINT transaction'.$this->inTransaction);
+                $this->getDriver()->exec('SAVEPOINT transaction'.$this->inTransaction);
                 $result = true;
             }
         } catch (PDOException $e) {
@@ -354,7 +306,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             return false;
         }
 
-        if (! $this->getPDO()->inTransaction()) {
+        if (! $this->getDriver()->inTransaction()) {
             $this->inTransaction = 0;
 
             throw new TransactionException('Failed to commit transaction: the connection no longer holds the transaction');
@@ -367,7 +319,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         try {
-            $result = $this->getPDO()->commit();
+            $result = $this->getDriver()->commit();
             $this->inTransaction = 0;
         } catch (PDOException $e) {
             throw new TransactionException('Failed to commit transaction: '.$e->getMessage(), $e->getCode(), $e);
@@ -391,11 +343,11 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         try {
             if ($this->inTransaction > 1) {
-                $this->getPDO()->exec('ROLLBACK TO transaction'.($this->inTransaction - 1));
+                $this->getDriver()->exec('ROLLBACK TO transaction'.($this->inTransaction - 1));
                 $this->inTransaction--;
                 $result = true;
             } else {
-                $result = $this->getPDO()->rollBack();
+                $result = $this->getDriver()->rollBack();
                 $this->inTransaction = 0;
             }
         } catch (PDOException $e) {
@@ -413,7 +365,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     #[\Override]
     protected function abandonTransaction(): void
     {
-        $pdo = $this->getPDO();
+        $pdo = $this->getDriver();
         if (! $pdo->inTransaction()) {
             return;
         }
@@ -649,7 +601,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             empty($selections)
             && ! $this->queriesHaveJoins($queries)
         ) {
-            $tableExpr = $this->getSQLTable($name);
+            $tableExpr = $this->getTable($name);
             $aliasQuoted = $this->quote($alias);
             $uidQuoted = $this->quote(Storage::UID);
             $sql = "SELECT * FROM {$tableExpr} AS {$aliasQuoted} WHERE {$this->collateDocumentId($uidQuoted)} = " . ':'.Storage::UID;
@@ -664,25 +616,25 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             if ($forUpdate && $this->supports(Capability::UpdateLock)) {
                 $sql .= ' FOR UPDATE';
             }
-            $stmt = null;
+            $statement = null;
             $row = false;
             $exception = null;
 
             try {
-                $stmt = $this->prepareStatement($sql, Event::DocumentRead);
+                $statement = $this->prepareStatement($sql, Event::DocumentRead);
                 foreach ($bindings as $parameter => $value) {
-                    $stmt->bindValue($parameter, $value, $this->getPDOType($value));
+                    $statement->bindValue($parameter, $value, $this->getPdoType($value));
                 }
-                $this->describeStatement($stmt, $bindings, $name);
-                $this->execute($stmt);
+                $this->describeStatement($statement, $bindings, $name);
+                $this->execute($statement);
                 /** @var array<string, mixed>|false $row */
-                $row = $stmt->fetch(PDO::FETCH_ASSOC);
+                $row = $statement->fetch(PDO::FETCH_ASSOC);
             } catch (PDOException $e) {
                 $exception = $e;
             } finally {
-                if ($stmt !== null) {
+                if ($statement !== null) {
                     try {
-                        $stmt->closeCursor();
+                        $statement->closeCursor();
                     } catch (PDOException $e) {
                         $exception ??= $e;
                     }
@@ -903,12 +855,12 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $attributeKeys[] = Storage::SEQUENCE;
         }
 
-        $builder = $this->createBuilder()->into($this->getSQLTableRaw($name));
+        $builder = $this->createBuilder()->into($this->getTableRaw($name));
 
         $spatialMap = \array_fill_keys($spatialAttributes, true);
 
         foreach ($spatialAttributes as $spatialColumn) {
-            $builder->insertColumnExpression($spatialColumn, $this->getSpatialGeomFromText('?'));
+            $builder->insertColumnExpression($spatialColumn, $this->getSpatialGeometryFromText('?'));
         }
 
         $intBools = $this->supports(Capability::IntegerBooleans);
@@ -1184,7 +1136,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         // Spatial attributes use setRaw with ST_GeomFromText(?)
         foreach ($spatialRows as $column => $value) {
-            $builder->setRaw($column, $this->getSpatialGeomFromText('?'), [$value]);
+            $builder->setRaw($column, $this->getSpatialGeometryFromText('?'), [$value]);
         }
 
         // Operator attributes use setRaw with converted expressions
@@ -1200,15 +1152,15 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $builder->filter([BaseQuery::equal(Storage::SEQUENCE, \array_values($sequences))]);
 
         $result = $builder->update();
-        $stmt = $this->executeResult($result, Event::DocumentsUpdate);
+        $statement = $this->executeResult($result, Event::DocumentsUpdate);
 
         try {
-            $this->execute($stmt);
+            $this->execute($statement);
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
 
-        $affected = $stmt->rowCount();
+        $affected = $statement->rowCount();
 
         $ctx = $this->buildWriteContext($name);
         $this->runWriteHooks(fn ($hook) => $hook->afterDocumentBatchUpdate($name, $updates, $documents, $ctx));
@@ -1282,8 +1234,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                         $signature = 'no_ops';
                     } else {
                         $parts = [];
-                        foreach ($operators as $attr => $op) {
-                            $parts[] = $attr.':'.$op->getMethod()->value.':'.json_encode($op->getValues());
+                        foreach ($operators as $attr => $operation) {
+                            $parts[] = $attr.':'.$operation->getMethod()->value.':'.json_encode($operation->getValues());
                         }
                         sort($parts);
                         $signature = implode('|', $parts);
@@ -1336,9 +1288,9 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $builder = $this->newBuilder($name);
             $builder->filter([BaseQuery::equal(Storage::SEQUENCE, \array_values($sequences))]);
             $result = $builder->delete();
-            $stmt = $this->executeResult($result, Event::DocumentsDelete);
+            $statement = $this->executeResult($result, Event::DocumentsDelete);
 
-            if (! $this->execute($stmt)) {
+            if (! $this->execute($statement)) {
                 throw new DatabaseException('Failed to delete documents');
             }
 
@@ -1348,7 +1300,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
         }
 
-        return $stmt->rowCount();
+        return $statement->rowCount();
     }
 
     /**
@@ -1389,22 +1341,22 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $builder->filter([BaseQuery::equal(Storage::UID, $documentIds)]);
 
         $result = $builder->build();
-        $stmt = $this->executeResult($result, Event::DocumentRead);
-        $this->execute($stmt);
+        $statement = $this->executeResult($result, Event::DocumentRead);
+        $this->execute($statement);
 
         $sequenceKey = static fn (mixed $tenant, mixed $id): string => (\is_scalar($tenant) ? (string) $tenant : '')."\0".(\is_scalar($id) ? (string) $id : '');
 
         if ($keyedByTenant) {
             $sequences = [];
             /** @var array<string, mixed> $row */
-            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
                 $sequences[$sequenceKey($row[Storage::TENANT] ?? null, $row[Storage::UID] ?? null)] = $row[Storage::SEQUENCE] ?? null;
             }
         } else {
             /** @var array<string, mixed> $sequences */
-            $sequences = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+            $sequences = $statement->fetchAll(PDO::FETCH_KEY_PAIR);
         }
-        $stmt->closeCursor();
+        $statement->closeCursor();
 
         foreach ($documents as $document) {
             $key = $keyedByTenant ? $sequenceKey($document->getTenant(), $document->getId()) : $document->getId();
@@ -1445,10 +1397,10 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         $result = $builder->update();
         $event = $value < 0 ? Event::DocumentDecrease : Event::DocumentIncrease;
-        $stmt = $this->executeResult($result, $event);
+        $statement = $this->executeResult($result, $event);
 
         try {
-            $this->execute($stmt);
+            $this->execute($statement);
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -1467,13 +1419,13 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $filters = [BaseQuery::equal(Storage::UID, [$id])];
             $builder->filter($filters);
             $result = $builder->delete();
-            $stmt = $this->executeResult($result, Event::DocumentDelete);
+            $statement = $this->executeResult($result, Event::DocumentDelete);
 
-            if (! $this->execute($stmt)) {
+            if (! $this->execute($statement)) {
                 throw new DatabaseException('Failed to delete document');
             }
 
-            $deleted = $stmt->rowCount();
+            $deleted = $statement->rowCount();
 
             $ctx = $this->buildWriteContext($name);
             $this->runWriteHooks(fn ($hook) => $hook->afterDocumentDelete($name, [$id], $ctx));
@@ -1521,29 +1473,29 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             && $cursorDirection === CursorDirection::After
         ) {
             $internalOrder = $this->quote($this->getInternalKeyForAttribute(Document::SEQUENCE));
-            $tableExpr = $this->getSQLTable($name);
+            $tableExpr = $this->getTable($name);
             $aliasQuoted = $this->quote($alias);
             $pageLimit = $limit ?? ($offset !== null && $offset > 0 ? self::UNBOUNDED_LIMIT : null);
             $limitClause = $pageLimit !== null ? " LIMIT {$pageLimit}" : '';
             $offsetClause = $offset !== null && $offset > 0 ? " OFFSET {$offset}" : ($pageLimit !== null ? ' OFFSET 0' : '');
 
             $sql = "SELECT * FROM {$tableExpr} AS {$aliasQuoted} ORDER BY {$internalOrder} ASC{$limitClause}{$offsetClause}";
-            $stmt = null;
+            $statement = null;
             $rows = [];
             $exception = null;
 
             try {
-                $stmt = $this->prepareStatement($sql, Event::DocumentFind);
-                $this->describeStatement($stmt, [], $name);
-                $this->execute($stmt);
+                $statement = $this->prepareStatement($sql, Event::DocumentFind);
+                $this->describeStatement($statement, [], $name);
+                $this->execute($statement);
                 /** @var array<int, array<string, mixed>> $rows */
-                $rows = $stmt->fetchAll();
+                $rows = $statement->fetchAll();
             } catch (PDOException $e) {
                 $exception = $e;
             } finally {
-                if ($stmt !== null) {
+                if ($statement !== null) {
                     try {
-                        $stmt->closeCursor();
+                        $statement->closeCursor();
                     } catch (PDOException $e) {
                         $exception ??= $e;
                     }
@@ -1822,7 +1774,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     $builder->select(['*']);
                 }
                 $builder->selectRaw(
-                    $this->getSQLReadableDistance($vectorDistance['expression']).' AS '.$this->quote(Storage::DISTANCE),
+                    $this->getSqlReadableDistance($vectorDistance['expression']).' AS '.$this->quote(Storage::DISTANCE),
                     $vectorDistance['bindings']
                 );
             }
@@ -1880,17 +1832,17 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     public function rawQuery(string $query, array $bindings = []): array
     {
         try {
-            $stmt = $this->prepareStatement($query);
+            $statement = $this->prepareStatement($query);
             foreach ($bindings as $i => $value) {
-                $stmt->bindValue($i + 1, $value, $this->getPDOType($value));
+                $statement->bindValue($i + 1, $value, $this->getPdoType($value));
             }
-            $this->execute($stmt);
+            $this->execute($statement);
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
 
-        $results = $stmt->fetchAll();
-        $stmt->closeCursor();
+        $results = $statement->fetchAll();
+        $statement->closeCursor();
 
         $documents = [];
         foreach ($results as $row) {
@@ -2199,7 +2151,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         if ($this->sharedTables) {
-            $tenant = (new TenantFilter($this->currentTenant(), Database::METADATA, $name, quoteChar: $this->getIdentifierQuoteChar()))->filter($alias);
+            $tenant = (new TenantFilter($this->currentTenant(), Database::METADATA, $name, quoteCharacter: $this->getIdentifierQuote()))->filter($alias);
             $conditions[] = $tenant->expression;
             \array_push($bindings, ...$tenant->bindings);
         }
@@ -2210,7 +2162,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             \array_push($bindings, ...$permission->bindings);
         }
 
-        $rows = $this->getSQLTable($name).' AS '.$this->quote($alias);
+        $rows = $this->getTable($name).' AS '.$this->quote($alias);
         if ($conditions !== []) {
             $rows .= ' WHERE '.\implode(' AND ', $conditions);
         }
@@ -2394,7 +2346,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         $function = ($aggregate->getMethod()->sqlFunction() ?? '').'(';
-        $quote = $this->getIdentifierQuoteChar();
+        $quote = $this->getIdentifierQuote();
         $expressions = [];
         foreach (\array_keys($row) as $name) {
             if (\str_starts_with(\strtoupper($name), $function) && \str_ends_with($name, ')')) {
@@ -2974,7 +2926,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         $schema = $this->schema();
         $addColumn = function (string $tableName, string $columnId) use ($schema): string {
-            $table = $schema->table($this->getSQLTableRaw($tableName));
+            $table = $schema->table($this->getTableRaw($tableName));
             $table->string($columnId, 255)->nullable()->default(null);
             $result = $table->alter();
 
@@ -3012,7 +2964,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         $schema = $this->schema();
         $renameColumn = function (string $tableName, string $from, string $to) use ($schema): string {
-            $table = $schema->table($this->getSQLTableRaw($tableName));
+            $table = $schema->table($this->getTableRaw($tableName));
             $table->renameColumn($from, $to);
             $result = $table->alter();
 
@@ -3082,7 +3034,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         $schema = $this->schema();
         $dropColumn = function (string $tableName, string $columnId) use ($schema): string {
-            $table = $schema->table($this->getSQLTableRaw($tableName));
+            $table = $schema->table($this->getTableRaw($tableName));
             $table->dropColumn($columnId);
             $result = $table->alter();
 
@@ -3118,8 +3070,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             case RelationshipType::ManyToMany:
                 $junctionName = $this->getJunctionName($collection, $relationship->relatedCollection, $side);
 
-                $junctionResult = $schema->table($this->getSQLTableRaw($junctionName))->drop();
-                $permissionsResult = $schema->table($this->getSQLTableRaw(Storage::permissionsTable($junctionName)))->drop();
+                $junctionResult = $schema->table($this->getTableRaw($junctionName))->drop();
+                $permissionsResult = $schema->table($this->getTableRaw(Storage::permissionsTable($junctionName)))->drop();
 
                 $sql = $junctionResult->query . '; ' . $permissionsResult->query;
                 break;
@@ -3175,10 +3127,10 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         return $canonical === 'JSON' ? 'LONGTEXT' : $canonical;
     }
 
-    protected function getSQLType(ColumnType $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
+    protected function getSqlType(ColumnType $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
     {
         if (in_array($type, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon], true)) {
-            return $this->getSpatialSQLType($type->value, $required);
+            return $this->getSpatialSqlType($type->value, $required);
         }
         if ($array === true) {
             return 'JSON';
@@ -3233,7 +3185,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      * @param bool $required Whether the column is NOT NULL
      * @return string
      */
-    protected function getSpatialSQLType(string $type, bool $required): string
+    protected function getSpatialSqlType(string $type, bool $required): string
     {
         $srid = $this->getSpatialColumnSrid();
         $modifier = $srid === null ? '' : "({$srid})";
@@ -3258,13 +3210,13 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     /**
      * Generate ST_GeomFromText call with proper SRID and axis order support
      */
-    protected function getSpatialGeomFromText(string $wktPlaceholder, ?int $srid = null): string
+    protected function getSpatialGeometryFromText(string $wktPlaceholder, ?int $srid = null): string
     {
         $srid = $srid ?? Database::DEFAULT_SRID;
         $geomFromText = "ST_GeomFromText({$wktPlaceholder}, {$srid}";
 
         if ($this->supports(Capability::SpatialAxisOrder)) {
-            $geomFromText .= ', '.$this->getSpatialAxisOrderSpec();
+            $geomFromText .= ', '.$this->getSpatialAxisOrder();
         }
 
         $geomFromText .= ')';
@@ -3275,7 +3227,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     /**
      * Get the spatial axis order specification string
      */
-    protected function getSpatialAxisOrderSpec(): string
+    protected function getSpatialAxisOrder(): string
     {
         return "'axis-order=long-lat'";
     }
@@ -3341,7 +3293,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      *
      * @throws DatabaseException
      */
-    protected function convertArrayToWKT(array $geometry): string
+    protected function convertArrayToWkt(array $geometry): string
     {
         if ($geometry === [] || ! \array_is_list($geometry)) {
             throw new DatabaseException('Unrecognized geometry array format');
@@ -3393,7 +3345,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      *
      * @throws DatabaseException
      */
-    protected function getSQLTable(string $name): string
+    protected function getTable(string $name): string
     {
         return "{$this->quote($this->getDatabase())}.{$this->quote($this->getNamespace().'_'.$this->filter($name))}";
     }
@@ -3403,7 +3355,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      *
      * @throws DatabaseException
      */
-    protected function getSQLTableRaw(string $name): string
+    protected function getTableRaw(string $name): string
     {
         return $this->getDatabase().'.'.$this->getNamespace().'_'.$this->filter($name);
     }
@@ -3434,7 +3386,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      */
     protected function newBuilder(string $table, string $alias = '', bool $allowNullTenant = false, array $tenants = []): SQLBuilder
     {
-        $builder = $this->createBuilder()->from($this->getSQLTableRaw($table), $alias);
+        $builder = $this->createBuilder()->from($this->getTableRaw($table), $alias);
 
         // AttributeMap is a readonly stateless config object — share one
         // instance across builders to avoid allocating it on every read.
@@ -3451,7 +3403,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 Database::METADATA,
                 $table,
                 $allowNullColumn,
-                $this->getIdentifierQuoteChar(),
+                $this->getIdentifierQuote(),
             );
             $builder->addHook($tenantFilter);
             $builder->addHook(new OuterJoinTenantFilter($tenantFilter, $source));
@@ -3463,17 +3415,17 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     public function rawMutation(string $query, array $bindings = []): int
     {
         try {
-            $stmt = $this->prepareStatement($query);
+            $statement = $this->prepareStatement($query);
             foreach ($bindings as $i => $value) {
-                $stmt->bindValue($i + 1, $value, $this->getPDOType($value));
+                $statement->bindValue($i + 1, $value, $this->getPdoType($value));
             }
-            $this->execute($stmt);
+            $this->execute($statement);
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
 
-        $count = $stmt->rowCount();
-        $stmt->closeCursor();
+        $count = $statement->rowCount();
+        $statement->closeCursor();
 
         return $count;
     }
@@ -3495,12 +3447,12 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             return $this->newBuilder($name);
         }
 
-        $table = $this->getSQLTableRaw($name);
+        $table = $this->getTableRaw($name);
         $tenants = new RawTenantFilter(
             $this->currentTenant(),
             $table,
             $name === Database::METADATA || $name === Storage::permissionsTable(Database::METADATA),
-            $this->getIdentifierQuoteChar(),
+            $this->getIdentifierQuote(),
         );
         $this->attributeMap ??= new AttributeMap(Storage::attributeMap());
 
@@ -3533,21 +3485,21 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     {
         return new PermissionFilter(
             roles: \array_values($roles),
-            permissionsTable: fn (string $table) => $this->getSQLTableRaw(Storage::permissionsTable($collection)),
+            permissionsTable: fn (string $table) => $this->getTableRaw(Storage::permissionsTable($collection)),
             type: $type,
             documentColumn: $documentColumn,
-            permDocumentColumn: Storage::PERM_DOCUMENT,
-            permRoleColumn: Storage::PERM_PERMISSION,
-            permTypeColumn: Storage::PERM_TYPE,
+            permissionDocumentColumn: Storage::PERM_DOCUMENT,
+            permissionRoleColumn: Storage::PERM_PERMISSION,
+            permissionTypeColumn: Storage::PERM_TYPE,
             subqueryFilter: $this->sharedTables
                 ? new TenantFilter(
                     $this->currentTenant(),
                     Database::METADATA,
                     Storage::permissionsTable($collection),
-                    quoteChar: $this->getIdentifierQuoteChar(),
+                    quoteCharacter: $this->getIdentifierQuote(),
                 )
                 : null,
-            quoteChar: $this->getIdentifierQuoteChar(),
+            quoteCharacter: $this->getIdentifierQuote(),
         );
     }
 
@@ -3594,10 +3546,10 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         return new WriteContext(
             newBuilder: fn (string $table, string $alias = '') => $this->newBuilder($table, $alias),
             executeResult: fn (Statement $result, ?Event $event = null) => $this->executeResult($result, $event),
-            execute: fn (mixed $stmt) => $this->execute($stmt),
+            execute: fn (mixed $statement) => $this->execute($statement),
             decorateRow: fn (array $row, array $metadata) => $this->decorateRow($row, $metadata),
             createBuilder: fn () => $this->createBuilder(),
-            getTableRaw: fn (string $table) => $this->getSQLTableRaw($table),
+            getTableRaw: fn (string $table) => $this->getTableRaw($table),
             skipDuplicates: $this->skippingDuplicates(),
             lookupId: $lookupId,
         );
@@ -3615,20 +3567,20 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      */
     protected function executeResult(Statement $result, ?Event $event = null, string $collection = ''): PDOStatement|DatabasePDOStatement|PDOStatementProxy
     {
-        $stmt = $this->prepareStatement($result->query, $event);
-        $this->describeStatement($stmt, $result->bindings, $collection);
+        $prepared = $this->prepareStatement($result->query, $event);
+        $this->describeStatement($prepared, $result->bindings, $collection);
         foreach ($result->bindings as $i => $value) {
             if (\is_bool($value) && $this->supports(Capability::IntegerBooleans)) {
                 $value = (int) $value;
             }
             if (\is_float($value)) {
-                $stmt->bindValue($i + 1, $this->getFloatPrecision($value), PDO::PARAM_STR);
+                $prepared->bindValue($i + 1, $this->getFloatPrecision($value), PDO::PARAM_STR);
             } else {
-                $stmt->bindValue($i + 1, $value, $this->getPDOType($value));
+                $prepared->bindValue($i + 1, $value, $this->getPdoType($value));
             }
         }
 
-        return $stmt;
+        return $prepared;
     }
 
     /**
@@ -3670,31 +3622,31 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      * Keep the values bound to a statement and the collection it runs on for the profiler, while
      * one is recording.
      *
-     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $stmt
+     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $statement
      * @param  array<mixed>  $bindings
      */
-    protected function describeStatement(PDOStatement|DatabasePDOStatement|PDOStatementProxy $stmt, array $bindings, string $collection): void
+    protected function describeStatement(PDOStatement|DatabasePDOStatement|PDOStatementProxy $statement, array $bindings, string $collection): void
     {
         if ($this->profiler === null || ! $this->profiler->isEnabled()) {
             return;
         }
 
         $this->statementBindings ??= new \WeakMap();
-        $this->statementBindings[$stmt] = $bindings;
+        $this->statementBindings[$statement] = $bindings;
         $this->statementCollections ??= new \WeakMap();
-        $this->statementCollections[$stmt] = $collection;
+        $this->statementCollections[$statement] = $collection;
     }
 
     /**
-     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $stmt
+     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $statement
      */
-    protected function getStatementEvent(PDOStatement|DatabasePDOStatement|PDOStatementProxy $stmt): ?Event
+    protected function getStatementEvent(PDOStatement|DatabasePDOStatement|PDOStatementProxy $statement): ?Event
     {
         if ($this->statementEvents === null) {
             return null;
         }
 
-        return $this->statementEvents[$stmt] ?? null;
+        return $this->statementEvents[$statement] ?? null;
     }
 
     protected function prepareStatement(string $sql, ?Event $event = null): DatabasePDOStatement|PDOStatementProxy|PDOStatement
@@ -3705,7 +3657,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $sql = $this->transformQuery($event, $sql);
         }
 
-        $statement = $this->getPDO()->prepare($sql);
+        $statement = $this->getDriver()->prepare($sql);
         if (! $statement instanceof DatabasePDOStatement && ! $statement instanceof PDOStatementProxy && ! $statement instanceof PDOStatement) {
             throw new DatabaseException('Failed to prepare SQL statement');
         }
@@ -3763,7 +3715,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
     private function transformQuery(Event $event, string $sql): string
     {
-        foreach ($this->queryTransforms as $transform) {
+        foreach ($this->transforms as $transform) {
             $sql = $transform->transform($event, $sql);
         }
 
@@ -3796,10 +3748,10 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         array $attributeDefaults,
         bool $hasOperators
     ): void {
-        $builder = $this->createBuilder()->into($this->getSQLTableRaw($name));
+        $builder = $this->createBuilder()->into($this->getTableRaw($name));
 
         foreach ($spatialAttributes as $spatialCol) {
-            $builder->insertColumnExpression($spatialCol, $this->getSpatialGeomFromText('?'));
+            $builder->insertColumnExpression($spatialCol, $this->getSpatialGeometryFromText('?'));
         }
 
         // Postgres requires an alias on the INSERT target for conflict resolution
@@ -3940,9 +3892,9 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         $result = $builder->upsert();
-        $stmt = $this->executeResult($result, Event::DocumentsUpsert);
-        $this->execute($stmt);
-        $stmt->closeCursor();
+        $statement = $this->executeResult($result, Event::DocumentsUpsert);
+        $this->execute($statement);
+        $statement->closeCursor();
     }
 
     /**
@@ -4125,7 +4077,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         $aliasSet = \array_fill_keys($joinAliases, true);
-        $quote = $this->getIdentifierQuoteChar();
+        $quote = $this->getIdentifierQuote();
         $columns = [];
         foreach ($selections as $selection) {
             $dot = \strpos($selection, '.');
@@ -4235,7 +4187,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
     protected function getAttributeSqlType(Attribute $attribute): string
     {
-        return $this->getSQLType($attribute->type, $attribute->size ?? 0, $attribute->signed, $attribute->array, $attribute->required);
+        return $this->getSqlType($attribute->type, $attribute->size ?? 0, $attribute->signed, $attribute->array, $attribute->required);
     }
 
     /**
@@ -4413,7 +4365,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             }
 
             $joinTable = $query->getAttribute();
-            $resolvedTable = $this->getSQLTableRaw($this->filter($joinTable));
+            $resolvedTable = $this->getTableRaw($this->filter($joinTable));
             $query->setAttribute($resolvedTable);
 
             $method = $query->getMethod();
@@ -4963,12 +4915,12 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $preserving = $chain->hasPreservingOuterJoin();
 
         if ($this->sharedTables && $preserving) {
-            $tenantFilter = new TenantFilter($this->currentTenant(), quoteChar: $this->getIdentifierQuoteChar());
+            $tenantFilter = new TenantFilter($this->currentTenant(), quoteCharacter: $this->getIdentifierQuote());
             $tenantConditions = [];
             foreach ($joinTablePrefixes as $join) {
                 $tenantConditions[$join['alias']] = $tenantFilter->joined($join['alias']);
             }
-            $builder->addHook(new OuterJoinChainFilter($chain, $tenantConditions, $this->getIdentifierQuoteChar()));
+            $builder->addHook(new OuterJoinChainFilter($chain, $tenantConditions, $this->getIdentifierQuote()));
         }
 
         if ($this->authorization->getStatus()) {
@@ -4983,7 +4935,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     $permissionHook = new PermissionAllowNullUid(
                         $permissionHook,
                         $docCol,
-                        $this->getIdentifierQuoteChar(),
+                        $this->getIdentifierQuote(),
                     );
                 }
                 $builder->addHook($permissionHook);
@@ -5012,14 +4964,14 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $builder->addHook(new PermissionJoinFilter(
                     $permissionHook,
                     $join['alias'],
-                    $this->getIdentifierQuoteChar(),
+                    $this->getIdentifierQuote(),
                     $preserving,
                 ));
             }
 
             if ($permissionConditions !== []) {
-                $builder->addHook(new OuterJoinPermissionFilter($alias, $permissionConditions, $this->getIdentifierQuoteChar()));
-                $builder->addHook(new OuterJoinChainFilter($chain, $permissionConditions, $this->getIdentifierQuoteChar()));
+                $builder->addHook(new OuterJoinPermissionFilter($alias, $permissionConditions, $this->getIdentifierQuote()));
+                $builder->addHook(new OuterJoinChainFilter($chain, $permissionConditions, $this->getIdentifierQuote()));
             }
         }
     }
@@ -5130,7 +5082,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     {
         $filtered = $this->filter($table);
         $keys = [$table, $filtered];
-        $qualified = $this->getSQLTableRaw($filtered);
+        $qualified = $this->getTableRaw($filtered);
         $keys[] = $qualified;
 
         $dot = \strrpos($qualified, '.');
@@ -5945,7 +5897,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         if ($afterUnion) {
-            $quote = $this->getIdentifierQuoteChar();
+            $quote = $this->getIdentifierQuote();
             $builder->afterBuild(function (Statement $result) use (
                 $orderAttributes,
                 $orderTypes,
@@ -6049,20 +6001,20 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      */
     private function runSelect(Statement $result, Event $event, string $collection): array
     {
-        $stmt = null;
+        $statement = null;
         $results = [];
         $exception = null;
         try {
-            $stmt = $this->executeResult($result, $event, $collection);
-            $this->execute($stmt);
+            $statement = $this->executeResult($result, $event, $collection);
+            $this->execute($statement);
             /** @var array<int, array<string, mixed>> $results */
-            $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $results = $statement->fetchAll(PDO::FETCH_ASSOC);
         } catch (PDOException $e) {
             $exception = $e;
         } finally {
-            if ($stmt !== null) {
+            if ($statement !== null) {
                 try {
-                    $stmt->closeCursor();
+                    $statement->closeCursor();
                 } catch (PDOException $e) {
                     $exception ??= $e;
                 }
@@ -6286,7 +6238,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     protected function encodeSpatialWriteValue(mixed $value): mixed
     {
         if (\is_array($value)) {
-            return $this->convertArrayToWKT($value);
+            return $this->convertArrayToWkt($value);
         }
 
         return $value;
@@ -6298,12 +6250,12 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      *
      * @return string|null Returns null if operator can't be expressed in SQL
      */
-    abstract protected function getOperatorSQL(string $column, Operator $operator, int &$bindIndex): ?string;
+    abstract protected function getOperatorSql(string $column, Operator $operator, int &$bindIndex): ?string;
 
     /**
      * Bind operator parameters to prepared statement
      */
-    protected function bindOperatorParams(PDOStatement|DatabasePDOStatement|PDOStatementProxy $stmt, Operator $operator, int &$bindIndex): void
+    protected function bindOperatorParameters(PDOStatement|DatabasePDOStatement|PDOStatementProxy $statement, Operator $operator, int &$bindIndex): void
     {
         $method = $operator->getMethod();
         $values = $operator->getValues();
@@ -6315,13 +6267,13 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             case OperatorType::Divide:
                 $value = $values[0] ?? 1;
                 $bindKey = "op_{$bindIndex}";
-                $stmt->bindValue(':'.$bindKey, $value, $this->getPDOType($value));
+                $statement->bindValue(':'.$bindKey, $value, $this->getPdoType($value));
                 $bindIndex++;
 
                 if (isset($values[1])) {
                     $limitKey = "op_{$bindIndex}";
                     $limit = self::exactLimit($values[1]);
-                    $stmt->bindValue(':'.$limitKey, $limit, $this->getPDOType($limit));
+                    $statement->bindValue(':'.$limitKey, $limit, $this->getPdoType($limit));
                     $bindIndex++;
                 }
                 break;
@@ -6329,20 +6281,20 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             case OperatorType::Modulo:
                 $value = $values[0] ?? 1;
                 $bindKey = "op_{$bindIndex}";
-                $stmt->bindValue(':'.$bindKey, $value, $this->getPDOType($value));
+                $statement->bindValue(':'.$bindKey, $value, $this->getPdoType($value));
                 $bindIndex++;
                 break;
 
             case OperatorType::Power:
                 $value = $values[0] ?? 1;
                 $bindKey = "op_{$bindIndex}";
-                $stmt->bindValue(':'.$bindKey, $value, $this->getPDOType($value));
+                $statement->bindValue(':'.$bindKey, $value, $this->getPdoType($value));
                 $bindIndex++;
 
                 if (isset($values[1])) {
                     $maxKey = "op_{$bindIndex}";
                     $limit = self::exactLimit($values[1]);
-                    $stmt->bindValue(':'.$maxKey, $limit, $this->getPDOType($limit));
+                    $statement->bindValue(':'.$maxKey, $limit, $this->getPdoType($limit));
                     $bindIndex++;
                 }
                 break;
@@ -6350,7 +6302,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             case OperatorType::StringConcat:
                 $value = $values[0] ?? '';
                 $bindKey = "op_{$bindIndex}";
-                $stmt->bindValue(':'.$bindKey, $value, PDO::PARAM_STR);
+                $statement->bindValue(':'.$bindKey, $value, PDO::PARAM_STR);
                 $bindIndex++;
                 break;
 
@@ -6358,10 +6310,10 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $search = $values[0] ?? '';
                 $replace = $values[1] ?? '';
                 $searchKey = "op_{$bindIndex}";
-                $stmt->bindValue(':'.$searchKey, $search, PDO::PARAM_STR);
+                $statement->bindValue(':'.$searchKey, $search, PDO::PARAM_STR);
                 $bindIndex++;
                 $replaceKey = "op_{$bindIndex}";
-                $stmt->bindValue(':'.$replaceKey, $replace, PDO::PARAM_STR);
+                $statement->bindValue(':'.$replaceKey, $replace, PDO::PARAM_STR);
                 $bindIndex++;
                 break;
 
@@ -6369,7 +6321,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             case OperatorType::DateSubDays:
                 $days = $values[0] ?? 0;
                 $bindKey = "op_{$bindIndex}";
-                $stmt->bindValue(':'.$bindKey, $days, PDO::PARAM_INT);
+                $statement->bindValue(':'.$bindKey, $days, PDO::PARAM_INT);
                 $bindIndex++;
                 break;
 
@@ -6381,7 +6333,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
                 $arrayValue = json_encode($values);
                 $bindKey = "op_{$bindIndex}";
-                $stmt->bindValue(':'.$bindKey, $arrayValue, PDO::PARAM_STR);
+                $statement->bindValue(':'.$bindKey, $arrayValue, PDO::PARAM_STR);
                 $bindIndex++;
                 break;
 
@@ -6391,7 +6343,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 if (is_array($value)) {
                     $value = json_encode($value);
                 }
-                $stmt->bindValue(':'.$bindKey, $value, $this->getPDOType($value));
+                $statement->bindValue(':'.$bindKey, $value, $this->getPdoType($value));
                 $bindIndex++;
                 break;
 
@@ -6399,10 +6351,10 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $index = $values[0] ?? 0;
                 $value = $values[1] ?? null;
                 $indexKey = "op_{$bindIndex}";
-                $stmt->bindValue(':'.$indexKey, $index, PDO::PARAM_INT);
+                $statement->bindValue(':'.$indexKey, $index, PDO::PARAM_INT);
                 $bindIndex++;
                 $valueKey = "op_{$bindIndex}";
-                $stmt->bindValue(':'.$valueKey, json_encode($value), PDO::PARAM_STR);
+                $statement->bindValue(':'.$valueKey, json_encode($value), PDO::PARAM_STR);
                 $bindIndex++;
                 break;
 
@@ -6414,7 +6366,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
                 $arrayValue = json_encode($values);
                 $bindKey = "op_{$bindIndex}";
-                $stmt->bindValue(':'.$bindKey, $arrayValue, PDO::PARAM_STR);
+                $statement->bindValue(':'.$bindKey, $arrayValue, PDO::PARAM_STR);
                 $bindIndex++;
                 break;
         }
@@ -6423,7 +6375,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     /**
      * Get the operator expression and positional bindings for use with the query builder's setRaw().
      *
-     * Calls getOperatorSQL() to get the expression with named bindings, strips the
+     * Calls getOperatorSql() to get the expression with named bindings, strips the
      * column assignment prefix, and converts named :op_N bindings to positional ? placeholders.
      *
      * @param  string  $column  The unquoted column name
@@ -6435,7 +6387,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     protected function getOperatorBuilderExpression(string $column, Operator $operator): array
     {
         $bindIndex = 0;
-        $fullExpression = $this->getOperatorSQL($column, $operator, $bindIndex);
+        $fullExpression = $this->getOperatorSql($column, $operator, $bindIndex);
 
         if ($fullExpression === null) {
             throw new DatabaseException('Operator cannot be expressed in SQL: '.$operator->getMethod()->value);
@@ -6821,7 +6773,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      *
      * @throws Exception
      */
-    protected function getPDOType(mixed $value): int
+    protected function getPdoType(mixed $value): int
     {
         return match (gettype($value)) {
             'string', 'double' => \PDO::PARAM_STR,
@@ -6938,7 +6890,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     /**
      * Render a vector distance expression in a form safe to hydrate as a PHP float.
      */
-    protected function getSQLReadableDistance(string $distance): string
+    protected function getSqlReadableDistance(string $distance): string
     {
         return $distance;
     }

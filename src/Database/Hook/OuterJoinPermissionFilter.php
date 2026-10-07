@@ -29,7 +29,7 @@ final readonly class OuterJoinPermissionFilter implements JoinFilter
     public function __construct(
         private string $source,
         private array $conditions,
-        private string $quoteChar = '`',
+        private string $quoteCharacter = '`',
     ) {
     }
 
@@ -44,7 +44,7 @@ final readonly class OuterJoinPermissionFilter implements JoinFilter
             $conditions[] = AllowNullColumn::wrap(
                 $this->conditions[$this->source],
                 $this->source.'.'.Storage::UID,
-                $this->quoteChar,
+                $this->quoteCharacter,
             );
         }
         if (isset($this->conditions[$table])) {

@@ -18,6 +18,7 @@ use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\Memory;
+use Utopia\Database\Adapter\Timeout;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\AttributeUpdate;
@@ -358,14 +359,14 @@ class MirrorTest extends TestCase
         ];
         yield 'setTimeout' => [
             static fn (Mirror $mirror): mixed => $mirror->setTimeout(500),
-            static fn (Database $database): mixed => $database->getAdapter()->getTimeout(),
+            static fn (Database $database): mixed => self::timeout($database),
             500,
         ];
         yield 'clearTimeout' => [
             static function (Mirror $mirror): void {
                 self::onEach($mirror, static fn (Database $database): mixed => $database->setTimeout(500))->clearTimeout();
             },
-            static fn (Database $database): mixed => $database->getAdapter()->getTimeout(),
+            static fn (Database $database): mixed => self::timeout($database),
             0,
         ];
         yield 'setMetadata' => [
@@ -390,9 +391,9 @@ class MirrorTest extends TestCase
             $meta,
             ['filtered' => true],
         ];
-        yield 'enableLocks' => [
-            static fn (Mirror $mirror): mixed => $mirror->enableLocks(true),
-            static fn (Database $database): mixed => $database->getAdapter()->getAlterLocks(),
+        yield 'setLocks' => [
+            static fn (Mirror $mirror): mixed => $mirror->setLocks(true),
+            static fn (Database $database): mixed => self::locking($database),
             true,
         ];
         yield 'enableProfiling' => [
@@ -599,7 +600,7 @@ class MirrorTest extends TestCase
         yield 'setTimeout' => [
             'setTimeout',
             static fn (Mirror $mirror): mixed => $mirror->setTimeout(500),
-            static fn (Database $database): mixed => $database->getAdapter()->getTimeout(),
+            static fn (Database $database): mixed => self::timeout($database),
             500,
         ];
         yield 'clearTimeout' => [
@@ -607,7 +608,7 @@ class MirrorTest extends TestCase
             static function (Mirror $mirror): void {
                 $mirror->clearTimeout();
             },
-            static fn (Database $database): mixed => $database->getAdapter()->getTimeout(),
+            static fn (Database $database): mixed => self::timeout($database),
             0,
         ];
     }
@@ -621,6 +622,8 @@ class MirrorTest extends TestCase
     {
         $source = new Database(self::configurableAdapter(), new Cache(new None()));
         $destination = new Database(new class () extends Memory implements Feature\Timeouts {
+            use Timeout;
+
             public function setTimeout(int $milliseconds, Event $event = Event::All): void
             {
                 throw new RuntimeException('destination unreachable');
@@ -864,6 +867,8 @@ class MirrorTest extends TestCase
     private static function configurableAdapter(): Memory
     {
         return new class () extends Memory implements Feature\Timeouts {
+            use Timeout;
+
             /**
              * @return array<Capability>
              */
@@ -881,7 +886,28 @@ class MirrorTest extends TestCase
             {
                 $this->clearTimeoutState($event);
             }
+
+            public function isLocking(): bool
+            {
+                return $this->locks;
+            }
         };
+    }
+
+    private static function timeout(Database $database): int
+    {
+        $adapter = $database->getAdapter();
+        self::assertInstanceOf(Feature\Timeouts::class, $adapter);
+
+        return $adapter->getTimeout();
+    }
+
+    private static function locking(Database $database): bool
+    {
+        $adapter = $database->getAdapter();
+        self::assertTrue(\method_exists($adapter, 'isLocking'));
+
+        return $adapter->isLocking();
     }
 
     /**
@@ -895,7 +921,7 @@ class MirrorTest extends TestCase
         return [new Mirror($source, $destination), $source, $destination];
     }
 
-    public function testEnableLocksFailureOnTheDestinationReachesOnError(): void
+    public function testSetLocksFailureOnTheDestinationReachesOnError(): void
     {
         $source = new Database(self::configurableAdapter(), new Cache(new None()));
         $destination = new Database(new class () extends Memory {
@@ -907,7 +933,7 @@ class MirrorTest extends TestCase
                 return [...parent::capabilities(), Capability::AlterLock];
             }
 
-            public function enableAlterLocks(bool $enable): self
+            public function setLocks(bool $locks): static
             {
                 throw new RuntimeException('destination unreachable');
             }
@@ -918,10 +944,10 @@ class MirrorTest extends TestCase
             $errors[] = [$action, $error->getMessage()];
         });
 
-        $mirror->enableLocks(true);
+        $mirror->setLocks(true);
 
-        $this->assertTrue($source->getAdapter()->getAlterLocks());
-        $this->assertSame([['enableLocks', 'destination unreachable']], $errors);
+        $this->assertTrue(self::locking($source));
+        $this->assertSame([['setLocks', 'destination unreachable']], $errors);
     }
 
     public function testCacheWriterTimeoutReachesSourceAndDestination(): void
@@ -1039,7 +1065,7 @@ class MirrorTest extends TestCase
             static function (Mirror $mirror): mixed {
                 $mirror->setTimeout(500);
 
-                return $mirror->getSource()->getAdapter()->getTimeout();
+                return self::timeout($mirror->getSource());
             },
             500,
         ];

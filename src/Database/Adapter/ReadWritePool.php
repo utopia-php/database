@@ -23,7 +23,7 @@ class ReadWritePool extends Pool
         'getSizeOfCollection',
         'getSizeOfCollectionOnDisk',
         'ping',
-        'getConnectionId',
+        'id',
     ];
 
     /**
@@ -55,7 +55,7 @@ class ReadWritePool extends Pool
      * document and query cache keys, so it must not change with the pool a read goes to.
      */
     final protected const array WRITE_POOL_METADATA_METHODS = [
-        'getHostname',
+        'hostname',
     ];
 
     private const string REPLICA_READ = 'utopia.database.replicaRead.';
@@ -99,9 +99,10 @@ class ReadWritePool extends Pool
         return $this;
     }
 
-    public function delegate(string $method, array $args): mixed
+    #[\Override]
+    public function delegate(string $method, array $arguments): mixed
     {
-        return $this->borrowAndInvoke($method, $args);
+        return $this->borrowAndInvoke($method, $arguments);
     }
 
     #[\Override]
@@ -115,9 +116,9 @@ class ReadWritePool extends Pool
     }
 
     #[\Override]
-    public function getHostname(): string
+    public function hostname(): string
     {
-        return $this->writePoolHostname ??= parent::getHostname();
+        return $this->writePoolHostname ??= parent::hostname();
     }
 
     /**
@@ -144,16 +145,16 @@ class ReadWritePool extends Pool
     }
 
     /**
-     * @param  array<mixed>  $args
+     * @param  array<mixed>  $arguments
      * @param  class-string|null  $feature
      */
     #[\Override]
-    protected function borrowAndInvoke(string $method, array $args, ?string $feature = null): mixed
+    protected function borrowAndInvoke(string $method, array $arguments, ?string $feature = null): mixed
     {
-        if ($this->isWrite($method, $args)) {
+        if ($this->isWrite($method, $arguments)) {
             $this->recordRead($method, false);
             try {
-                return parent::borrowAndInvoke($method, $args, $feature);
+                return parent::borrowAndInvoke($method, $arguments, $feature);
             } finally {
                 $this->stick();
             }
@@ -162,28 +163,28 @@ class ReadWritePool extends Pool
         if ($this->pin() !== null || $this->isSticky() || \in_array($method, self::WRITE_POOL_METADATA_METHODS, true)) {
             $this->recordRead($method, false);
 
-            return parent::borrowAndInvoke($method, $args, $feature);
+            return parent::borrowAndInvoke($method, $arguments, $feature);
         }
 
         $this->recordRead($method, true);
 
-        return $this->readPool->use(function (Adapter $adapter) use ($method, $args, $feature) {
+        return $this->readPool->use(function (Adapter $adapter) use ($method, $arguments, $feature) {
             try {
-                $this->syncBorrowedAdapter($adapter);
+                $this->syncBorrowed($adapter);
 
-                return $this->invokeDelegated($adapter, $method, $args, $feature);
+                return $this->invokeDelegated($adapter, $method, $arguments, $feature);
             } finally {
-                $this->releaseBorrowedAdapter($adapter);
+                $this->releaseBorrowed($adapter);
             }
         });
     }
 
     /**
-     * @param  array<mixed>  $args
+     * @param  array<mixed>  $arguments
      */
-    private function isWrite(string $method, array $args): bool
+    private function isWrite(string $method, array $arguments): bool
     {
-        if ($this->decidesWrite($method, $args)) {
+        if ($this->decidesWrite($method, $arguments)) {
             return true;
         }
 
@@ -196,13 +197,13 @@ class ReadWritePool extends Pool
      * A read whose result decides a write must see the primary: a lagging replica would select
      * rows the primary has already changed, or miss rows it has already written.
      *
-     * @param  array<mixed>  $args
+     * @param  array<mixed>  $arguments
      */
-    private function decidesWrite(string $method, array $args): bool
+    private function decidesWrite(string $method, array $arguments): bool
     {
         return match ($method) {
-            'getDocument' => ($args[3] ?? $args['forUpdate'] ?? false) === true,
-            'find' => ($args[8] ?? $args['forPermission'] ?? PermissionType::Read) !== PermissionType::Read,
+            'getDocument' => ($arguments[3] ?? $arguments['forUpdate'] ?? false) === true,
+            'find' => ($arguments[8] ?? $arguments['forPermission'] ?? PermissionType::Read) !== PermissionType::Read,
             default => false,
         };
     }

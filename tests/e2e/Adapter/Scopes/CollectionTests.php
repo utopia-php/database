@@ -12,6 +12,7 @@ use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\SQL;
+use Utopia\Database\Adapter\Redis;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\AttributeUpdate;
@@ -122,12 +123,18 @@ trait CollectionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Hostname)) {
+        $host = $database->getHostname();
+        if ($host === null) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        $host = $database->getAdapter()->getHostname();
+        $adapter = $database->getAdapter();
+        if ($adapter->hasFeature(SQLite::class) || $adapter->hasFeature(Redis::class)) {
+            $this->assertSame('', $host, 'An engine reached without a network host names none');
+            return;
+        }
+
         $this->assertContains($host, ['mysql', 'mariadb', 'postgres', 'mongo']);
     }
 
@@ -432,7 +439,7 @@ trait CollectionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! ($database->getAdapter()->hasFeature(Feature\ConnectionId::class))) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Connection::class))) {
             $this->expectNotToPerformAssertions();
 
             return;

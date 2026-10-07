@@ -442,9 +442,9 @@ class Mirror extends Database
      *
      * {@inheritdoc}
      */
-    public function enableLocks(bool $enabled): static
+    public function setLocks(bool $locks): static
     {
-        parent::enableLocks($enabled);
+        parent::setLocks($locks);
         $this->delegate(__FUNCTION__, \func_get_args());
 
         return $this;

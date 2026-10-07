@@ -120,7 +120,7 @@ final class BaseAdapterStateTest extends TestCase
         $this->assertNull($adapter->getTenantHook());
     }
 
-    public function testClearTimeoutsForgetsEveryEvent(): void
+    public function testClearingTheGlobalTimeoutForgetsEveryEvent(): void
     {
         $adapter = new TimeoutRecordingAdapter();
         $adapter->setTimeout(100);
@@ -129,7 +129,7 @@ final class BaseAdapterStateTest extends TestCase
         $this->assertSame(100, $adapter->getTimeout());
         $this->assertSame(50, $adapter->getTimeout(Event::DocumentFind));
 
-        $adapter->clearTimeouts();
+        $adapter->clearTimeout();
 
         $this->assertSame(0, $adapter->getTimeout());
         $this->assertSame(0, $adapter->getTimeout(Event::DocumentFind));

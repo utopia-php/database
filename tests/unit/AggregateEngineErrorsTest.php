@@ -131,7 +131,9 @@ final class AggregateEngineErrorsTest extends TestCase
             'MySQL' => [new MySQL(new stdClass())],
             'Postgres' => [new Postgres(new stdClass())],
             'SQLite' => [new SQLite(new PDO('sqlite::memory:'))],
-            'SQLite emulating MySQL' => [(new SQLite(new PDO('sqlite::memory:')))->setEmulateMySQL(true)],
+            'SQLite emulating MySQL' => [new class (new PDO('sqlite::memory:')) extends SQLite {
+                protected bool $emulateMySQL = true;
+            }],
         ];
     }
 

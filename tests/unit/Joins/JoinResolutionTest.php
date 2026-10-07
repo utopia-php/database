@@ -333,7 +333,7 @@ final class JoinResolutionTest extends TestCase
         $authorization = new Authorization();
         $authorization->addRole(Role::any()->toString());
 
-        $connection = new PDO('sqlite::memory:', null, null, [PDO::ATTR_PERSISTENT => false] + SQLite::getPDOAttributes());
+        $connection = new PDO('sqlite::memory:', null, null, [PDO::ATTR_PERSISTENT => false, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC, PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_EMULATE_PREPARES => true, PDO::ATTR_STRINGIFY_FETCHES => true]);
         $database = new Database(new SQLite($connection), $cache);
         $database
             ->setAuthorization($authorization)

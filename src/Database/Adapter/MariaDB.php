@@ -44,8 +44,10 @@ use Utopia\Query\Schema\MySQL as MySQLSchema;
 /**
  * Database adapter for MariaDB, extending the base SQL adapter with MariaDB-specific features.
  */
-class MariaDB extends SQL implements Feature\ConnectionId, Feature\Spatial, Feature\Timeouts
+class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
 {
+    use Timeout;
+
     /**
      * Get the list of capabilities supported by the MariaDB adapter.
      *
@@ -66,12 +68,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Spatial, Feat
         ]);
     }
 
-    /**
-     * Get the current database connection ID.
-     *
-     * @return string
-     */
-    public function getConnectionId(): string
+    public function id(): string
     {
         $result = $this->createBuilder()->fromNone()->selectRaw('CONNECTION_ID()')->build();
         $statement = $this->prepareStatement($result->query);
@@ -201,7 +198,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Spatial, Feat
             $hash[$this->filter($attribute->key)] = $attribute;
         }
 
-        $table = $schema->table($this->getSQLTableRaw($id));
+        $table = $schema->table($this->getTableRaw($id));
         $table->id(Storage::SEQUENCE);
         $table->string(Storage::UID, 255);
         $table->datetime(Storage::CREATED_AT, 3)->nullable()->default(null);
@@ -260,7 +257,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Spatial, Feat
         $collectionResult = $table->create();
         $collection = $collectionResult->query;
 
-        $permissionsTable = $schema->table($this->getSQLTableRaw(Storage::permissionsTable($id)));
+        $permissionsTable = $schema->table($this->getTableRaw(Storage::permissionsTable($id)));
         $permissionsTable->id(Storage::SEQUENCE);
         $permissionsTable->string(Storage::PERM_TYPE, 12);
         $permissionsTable->string(Storage::PERM_PERMISSION, 255);
@@ -628,7 +625,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Spatial, Feat
 
             // Build document INSERT using query builder
             // Spatial columns use insertColumnExpression() for ST_GeomFromText() wrapping
-            $builder = $this->createBuilder()->into($this->getSQLTableRaw($name));
+            $builder = $this->createBuilder()->into($this->getTableRaw($name));
             $row = [Storage::UID => $document->getId()];
 
             if (! empty($document->getSequence())) {
@@ -644,7 +641,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Spatial, Feat
                     $value = $this->encodeSpatialWriteValue($value);
                     $value = (\is_bool($value)) ? (int) $value : $value;
                     $row[$column] = $value;
-                    $builder->insertColumnExpression($column, $this->getSpatialGeomFromText('?'));
+                    $builder->insertColumnExpression($column, $this->getSpatialGeometryFromText('?'));
                 } else {
                     if (\is_array($value)) {
                         $value = \json_encode($value);
@@ -657,11 +654,11 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Spatial, Feat
             $row = $this->decorateRow($row, $this->documentMetadata($document));
             $builder->set($row);
             $result = $builder->insert();
-            $stmt = $this->executeResult($result, Event::DocumentCreate);
+            $statement = $this->executeResult($result, Event::DocumentCreate);
 
-            $this->execute($stmt);
+            $this->execute($statement);
 
-            $document[Document::SEQUENCE] = $this->getPDO()->lastInsertId();
+            $document[Document::SEQUENCE] = $this->getDriver()->lastInsertId();
 
             if (empty($document[Document::SEQUENCE])) {
                 throw new DatabaseException('Error creating document empty "'.Document::SEQUENCE.'"');
@@ -737,15 +734,15 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Spatial, Feat
                 $column = $this->filter($attribute);
 
                 if (isset($operators[$attribute])) {
-                    $op = $operators[$attribute];
-                    if ($op instanceof Operator) {
-                        $opResult = $this->getOperatorBuilderExpression($column, $op);
+                    $operation = $operators[$attribute];
+                    if ($operation instanceof Operator) {
+                        $opResult = $this->getOperatorBuilderExpression($column, $operation);
                         $builder->setRaw($column, $opResult['expression'], $opResult['bindings']);
                     }
                 } elseif (isset($spatialMap[$attribute])) {
                     $value = $this->encodeSpatialWriteValue($value);
                     $value = (\is_bool($value)) ? (int) $value : $value;
-                    $builder->setRaw($column, $this->getSpatialGeomFromText('?'), [$value]);
+                    $builder->setRaw($column, $this->getSpatialGeometryFromText('?'), [$value]);
                 } else {
                     if (\is_array($value)) {
                         $value = \json_encode($value);
@@ -759,9 +756,9 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Spatial, Feat
             $filters = [BaseQuery::equal(Storage::SEQUENCE, [$document->getSequence()])];
             $builder->filter($filters);
             $result = $builder->update();
-            $stmt = $this->executeResult($result, Event::DocumentUpdate);
+            $statement = $this->executeResult($result, Event::DocumentUpdate);
 
-            $this->execute($stmt);
+            $this->execute($statement);
 
             $ctx = $this->buildWriteContext($name, $id);
             $this->runWriteHooks(fn ($hook) => $hook->afterDocumentUpdate($name, $document, $skipPermissions, $ctx));
@@ -1242,7 +1239,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Spatial, Feat
      * Get operator SQL
      * Override to handle MariaDB/MySQL-specific operators
      */
-    protected function getOperatorSQL(string $column, Operator $operator, int &$bindIndex): ?string
+    protected function getOperatorSql(string $column, Operator $operator, int &$bindIndex): ?string
     {
         $quotedColumn = $this->quote($column);
         $method = $operator->getMethod();

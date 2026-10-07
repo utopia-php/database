@@ -34,6 +34,8 @@ use Utopia\Query\Schema\ColumnType;
  */
 class Pool extends Adapter implements Feature\Timeouts
 {
+    use Timeout;
+
     /**
      * @var UtopiaPool<covariant Adapter>
      */
@@ -56,7 +58,7 @@ class Pool extends Adapter implements Feature\Timeouts
      *
      * @var \WeakMap<UtopiaPool<covariant Adapter>, array<Capability>>|null
      */
-    private static ?\WeakMap $capabilities = null;
+    private static ?\WeakMap $declared = null;
 
     /**
      * @var \WeakMap<UtopiaPool<covariant Adapter>, array<class-string, bool>>|null
@@ -81,56 +83,56 @@ class Pool extends Adapter implements Feature\Timeouts
      *
      * Required because __call() can't be used to implement abstract methods.
      *
-     * @param  array<mixed>  $args
+     * @param  array<mixed>  $arguments
      *
      * @throws DatabaseException
      */
-    public function delegate(string $method, array $args): mixed
+    public function delegate(string $method, array $arguments): mixed
     {
-        return $this->borrowAndInvoke($method, $args);
+        return $this->borrowAndInvoke($method, $arguments);
     }
 
     /**
      * @param  class-string  $feature
-     * @param  array<mixed>  $args
+     * @param  array<mixed>  $arguments
      */
-    protected function delegateFeature(string $feature, string $method, array $args): mixed
+    protected function delegateFeature(string $feature, string $method, array $arguments): mixed
     {
-        return $this->borrowAndInvoke($method, $args, $feature);
+        return $this->borrowAndInvoke($method, $arguments, $feature);
     }
 
     /**
-     * @param  array<mixed>  $args
+     * @param  array<mixed>  $arguments
      * @param  class-string|null  $feature
      */
-    protected function borrowAndInvoke(string $method, array $args, ?string $feature = null): mixed
+    protected function borrowAndInvoke(string $method, array $arguments, ?string $feature = null): mixed
     {
         $pinned = $this->pin();
         if ($pinned !== null) {
-            $this->syncBorrowedAdapter($pinned);
+            $this->syncBorrowed($pinned);
 
             return $pinned->withTenant(
                 $this->getTenant(),
-                fn (): mixed => $this->invokeDelegated($pinned, $method, $args, $feature),
+                fn (): mixed => $this->invokeDelegated($pinned, $method, $arguments, $feature),
             );
         }
 
-        return $this->pool->use(function (Adapter $adapter) use ($method, $args, $feature) {
+        return $this->pool->use(function (Adapter $adapter) use ($method, $arguments, $feature) {
             try {
-                $this->syncBorrowedAdapter($adapter);
+                $this->syncBorrowed($adapter);
 
-                return $this->invokeDelegated($adapter, $method, $args, $feature);
+                return $this->invokeDelegated($adapter, $method, $arguments, $feature);
             } finally {
-                $this->releaseBorrowedAdapter($adapter);
+                $this->releaseBorrowed($adapter);
             }
         });
     }
 
     /**
-     * @param  array<mixed>  $args
+     * @param  array<mixed>  $arguments
      * @param  class-string|null  $feature
      */
-    protected function invokeDelegated(Adapter $adapter, string $method, array $args, ?string $feature = null): mixed
+    protected function invokeDelegated(Adapter $adapter, string $method, array $arguments, ?string $feature = null): mixed
     {
         if ($feature !== null && ! $adapter instanceof $feature) {
             throw new DatabaseException($this->unsupportedFeatureMessage($feature));
@@ -138,11 +140,11 @@ class Pool extends Adapter implements Feature\Timeouts
 
         if ($this->skippingDuplicates()) {
             return $adapter->skipDuplicates(
-                fn () => $adapter->{$method}(...$args)
+                fn () => $adapter->{$method}(...$arguments)
             );
         }
 
-        return $adapter->{$method}(...$args);
+        return $adapter->{$method}(...$arguments);
     }
 
     /**
@@ -156,7 +158,7 @@ class Pool extends Adapter implements Feature\Timeouts
             Feature\QueryBuilder::class => 'Adapter does not support query builder',
             Feature\Spatial::class => 'Adapter does not support spatial',
             Feature\Casting::class => 'Adapter does not support casting',
-            Feature\ConnectionId::class => 'Adapter does not support connection id',
+            Feature\Connection::class => 'Adapter does not support connections',
             Feature\Relationships::class => 'Adapter does not support relationships',
             Feature\Timeouts::class => 'Adapter does not support timeouts',
             Feature\Schemaless::class => 'Adapter does not support schemaless',
@@ -164,7 +166,7 @@ class Pool extends Adapter implements Feature\Timeouts
         };
     }
 
-    protected function syncBorrowedAdapter(Adapter $adapter): void
+    protected function syncBorrowed(Adapter $adapter): void
     {
         $adapter->setDatabase($this->getDatabase());
         $adapter->setNamespace($this->getNamespace());
@@ -172,7 +174,7 @@ class Pool extends Adapter implements Feature\Timeouts
         $adapter->setTenant($this->getTenant());
         $adapter->setTenantPerDocument($this->getTenantPerDocument());
         $adapter->setAuthorization($this->authorization);
-        $adapter->enableAlterLocks($this->alterLocks);
+        $adapter->setLocks($this->locks);
 
         if ($this->schemaless !== null && $adapter instanceof Feature\Schemaless) {
             $adapter->setSchemaless($this->schemaless);
@@ -189,25 +191,28 @@ class Pool extends Adapter implements Feature\Timeouts
         }
         $adapter->setProfiler($this->profiler);
         $adapter->resetTransforms();
-        foreach ($this->queryTransforms as $tName => $tTransform) {
-            $adapter->addTransform($tName, $tTransform);
+        foreach ($this->transforms as $name => $transform) {
+            $adapter->addTransform($name, $transform);
         }
         $this->syncWriteHooks($adapter);
     }
 
     /**
-     * Take back what syncBorrowedAdapter() lent the connection for one checkout.
+     * Take back what syncBorrowed() lent the connection for one checkout.
      * A subclass that checks connections out itself calls this before handing
      * the connection back to the pool.
      */
-    protected function releaseBorrowedAdapter(Adapter $adapter): void
+    protected function releaseBorrowed(Adapter $adapter): void
     {
         $adapter->setProfiler(null);
     }
 
-    public function getDriver(): mixed
+    public function getDriver(): object
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var object $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+
+        return $result;
     }
 
     /**
@@ -259,15 +264,15 @@ class Pool extends Adapter implements Feature\Timeouts
      */
     public function capabilities(): array
     {
-        $remembered = self::$capabilities[$this->pool] ?? null;
+        $remembered = self::$declared[$this->pool] ?? null;
         if ($remembered !== null) {
             return $remembered;
         }
 
         /** @var array<Capability> $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());
-        self::$capabilities ??= new \WeakMap();
-        self::$capabilities[$this->pool] = $result;
+        self::$declared ??= new \WeakMap();
+        self::$declared[$this->pool] = $result;
 
         return $result;
     }
@@ -309,7 +314,7 @@ class Pool extends Adapter implements Feature\Timeouts
      */
     public function addTransform(string $name, Transform $transform): static
     {
-        $this->queryTransforms[$name] = $transform;
+        $this->transforms[$name] = $transform;
 
         return $this;
     }
@@ -322,7 +327,7 @@ class Pool extends Adapter implements Feature\Timeouts
      */
     public function removeTransform(string $name): static
     {
-        unset($this->queryTransforms[$name]);
+        unset($this->transforms[$name]);
 
         return $this;
     }
@@ -475,10 +480,11 @@ class Pool extends Adapter implements Feature\Timeouts
         return $this->pin()?->inTransaction() ?? parent::inTransaction();
     }
 
-    public function getHostname(): string
+    public function hostname(): string
     {
         /** @var string $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        $result = $this->delegateFeature(Feature\Connection::class, __FUNCTION__, \func_get_args());
+
         return $result;
     }
 
@@ -505,7 +511,7 @@ class Pool extends Adapter implements Feature\Timeouts
 
         return $this->pool->use(function (Adapter $adapter) use ($callback) {
             try {
-                $this->syncBorrowedAdapter($adapter);
+                $this->syncBorrowed($adapter);
 
                 return $this->pinned()->with($adapter, function () use ($adapter, $callback): mixed {
                     if ($this->skippingDuplicates()) {
@@ -517,7 +523,7 @@ class Pool extends Adapter implements Feature\Timeouts
                     return $adapter->withTransaction($callback);
                 });
             } finally {
-                $this->releaseBorrowedAdapter($adapter);
+                $this->releaseBorrowed($adapter);
             }
         });
     }
@@ -585,13 +591,11 @@ class Pool extends Adapter implements Feature\Timeouts
         }
     }
 
-    /**
-     * {@inheritDoc}
-     */
     public function ping(): bool
     {
         /** @var bool $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        $result = $this->delegateFeature(Feature\Connection::class, __FUNCTION__, \func_get_args());
+
         return $result;
     }
 
@@ -603,12 +607,9 @@ class Pool extends Adapter implements Feature\Timeouts
         return $result;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     public function reconnect(): void
     {
-        $this->delegate(__FUNCTION__, \func_get_args());
+        $this->delegateFeature(Feature\Connection::class, __FUNCTION__, \func_get_args());
     }
 
     /**
@@ -1002,13 +1003,11 @@ class Pool extends Adapter implements Feature\Timeouts
         return $result;
     }
 
-    /**
-     * {@inheritDoc}
-     */
-    public function getConnectionId(): string
+    public function id(): string
     {
         /** @var string $result */
-        $result = $this->delegateFeature(Feature\ConnectionId::class, __FUNCTION__, \func_get_args());
+        $result = $this->delegateFeature(Feature\Connection::class, __FUNCTION__, \func_get_args());
+
         return $result;
     }
 

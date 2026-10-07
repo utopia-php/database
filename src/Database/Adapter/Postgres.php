@@ -55,8 +55,10 @@ use Utopia\Query\Schema\PostgreSQL as PostgreSQLSchema;
  * 3. DATETIME is TIMESTAMP
  * 4. Full-text search is different - to_tsvector() and to_tsquery()
  */
-class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Feature\Timeouts
+class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
 {
+    use Timeout;
+
     public const MAX_IDENTIFIER_NAME = 63;
 
     protected const string MIN_DATETIME = '-4713-01-01 00:00:00';
@@ -66,7 +68,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
     private const string HASHED_IDENTIFIER = '/^[0-9a-f]{32}(?:_[A-Za-z0-9_-]+)?$/';
 
     /**
-     * The catalog's format_type() spellings mapped onto getSQLType()'s.
+     * The catalog's format_type() spellings mapped onto getSqlType()'s.
      *
      * @var array<string, string>
      */
@@ -93,12 +95,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         ]);
     }
 
-    /**
-     * Get the PostgreSQL backend process ID as the connection identifier.
-     *
-     * @return string
-     */
-    public function getConnectionId(): string
+    public function id(): string
     {
         $result = $this->createBuilder()->fromNone()->selectRaw('pg_backend_pid()')->build();
         $statement = $this->prepareStatement($result->query);
@@ -223,8 +220,8 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
     {
         $namespace = $this->getNamespace();
         $id = $this->filter($collection);
-        $tableRaw = $this->getSQLTableRaw($id);
-        $permissionsTableRaw = $this->getSQLTableRaw(Storage::permissionsTable($id));
+        $tableRaw = $this->getTableRaw($id);
+        $permissionsTableRaw = $this->getTableRaw(Storage::permissionsTable($id));
 
         $schema = $this->schema();
 
@@ -351,8 +348,8 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         $name = $this->filter($collection);
         $schema = $this->schema();
 
-        $main = $schema->analyzeTable($this->getSQLTableRaw($name));
-        $permissions = $schema->analyzeTable($this->getSQLTableRaw(Storage::permissionsTable($name)));
+        $main = $schema->analyzeTable($this->getTableRaw($name));
+        $permissions = $schema->analyzeTable($this->getTableRaw(Storage::permissionsTable($name)));
 
         try {
             return $this->executeStatement($main->query.'; '.$permissions->query, Event::CollectionUpdate);
@@ -369,8 +366,8 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
     public function getSizeOfCollectionOnDisk(string $collection): int
     {
         $collection = $this->filter($collection);
-        $name = $this->getSQLTable($collection);
-        $permissions = $this->getSQLTable(Storage::permissionsTable($collection));
+        $name = $this->getTable($collection);
+        $permissions = $this->getTable(Storage::permissionsTable($collection));
 
         $builder = $this->createBuilder();
 
@@ -408,8 +405,8 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
     public function getSizeOfCollection(string $collection): int
     {
         $collection = $this->filter($collection);
-        $name = $this->getSQLTable($collection);
-        $permissions = $this->getSQLTable(Storage::permissionsTable($collection));
+        $name = $this->getTable($collection);
+        $permissions = $this->getTable(Storage::permissionsTable($collection));
 
         $builder = $this->createBuilder();
 
@@ -495,7 +492,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             'SELECT a.attname, format_type(a.atttypid, a.atttypmod) FROM pg_attribute a WHERE a.attrelid = to_regclass(?) AND a.attnum > 0 AND NOT a.attisdropped',
             Event::CollectionRead,
         );
-        $statement->bindValue(1, $this->getSQLTable($this->filter($collection)));
+        $statement->bindValue(1, $this->getTable($this->filter($collection)));
 
         try {
             $this->execute($statement);
@@ -543,7 +540,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         if (! empty($newKey) && $id !== $newKey) {
             $newKey = $this->filter($newKey);
 
-            $renameTable = $schema->table($this->getSQLTableRaw($collection));
+            $renameTable = $schema->table($this->getTableRaw($collection));
             $renameTable->renameColumn($id, $newKey);
             $renameResult = $renameTable->alter();
 
@@ -563,7 +560,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         }
 
         $sqlType = $this->getAttributeSqlType($attribute);
-        $tableRaw = $this->getSQLTableRaw($name);
+        $tableRaw = $this->getTableRaw($name);
 
         if ($sqlType == 'TIMESTAMP(3)') {
             $result = $schema->alterColumnType($tableRaw, $id, 'TIMESTAMP(3)', $this->quote($id).'::TIMESTAMP(3)');
@@ -615,7 +612,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
     {
         $schema = $this->schema();
         $statement = $schema->alterColumnNullable(
-            $this->getSQLTableRaw($this->filter($collection)),
+            $this->getTableRaw($this->filter($collection)),
             $this->filter($id),
             true,
         );
@@ -687,7 +684,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             'SELECT a.attname FROM pg_attribute a WHERE a.attrelid = to_regclass(?) AND a.attnum > 0 AND NOT a.attisdropped',
             Event::CollectionRead,
         );
-        $statement->bindValue(1, $this->getSQLTable($collection));
+        $statement->bindValue(1, $this->getTable($collection));
 
         try {
             $this->execute($statement);
@@ -992,7 +989,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
     private function getCollectionTenants(string $collection): array
     {
         $statement = $this->prepareStatement(
-            'SELECT DISTINCT '.$this->quote(Storage::TENANT).' FROM '.$this->getSQLTable(Database::METADATA).' WHERE '.$this->quote(Storage::UID).' = ?',
+            'SELECT DISTINCT '.$this->quote(Storage::TENANT).' FROM '.$this->getTable(Database::METADATA).' WHERE '.$this->quote(Storage::UID).' = ?',
             Event::IndexRename,
         );
         $statement->bindValue(1, $collection);
@@ -1055,7 +1052,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
 
             $name = $this->filter($collection);
 
-            $builder = $this->createBuilder()->into($this->getSQLTableRaw($name));
+            $builder = $this->createBuilder()->into($this->getTableRaw($name));
 
             $row = [Storage::UID => $document->getId()];
             if (! empty($document->getSequence())) {
@@ -1063,7 +1060,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             }
 
             foreach ($spatialAttributes as $spatialCol) {
-                $builder->insertColumnExpression($spatialCol, $this->getSpatialGeomFromText('?'));
+                $builder->insertColumnExpression($spatialCol, $this->getSpatialGeometryFromText('?'));
             }
 
             $spatialMap = \array_fill_keys($spatialAttributes, true);
@@ -1073,7 +1070,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
 
                 if (isset($spatialMap[$attr])) {
                     $row[$column] = $this->encodeSpatialWriteValue($value);
-                    $builder->insertColumnExpression($column, $this->getSpatialGeomFromText('?'));
+                    $builder->insertColumnExpression($column, $this->getSpatialGeometryFromText('?'));
                 } else {
                     if (\is_array($value)) {
                         $value = \json_encode($value);
@@ -1085,10 +1082,10 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             $row = $this->decorateRow($row, $this->documentMetadata($document));
             $builder->set($row);
             $result = $builder->insert();
-            $stmt = $this->executeResult($result, Event::DocumentCreate);
+            $statement = $this->executeResult($result, Event::DocumentCreate);
 
-            $this->execute($stmt);
-            $lastInsertedId = $this->getPDO()->lastInsertId();
+            $this->execute($statement);
+            $lastInsertedId = $this->getDriver()->lastInsertId();
             $document[Document::SEQUENCE] ??= $lastInsertedId;
 
             $ctx = $this->buildWriteContext($name);
@@ -1140,13 +1137,13 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
                 $column = $this->filter($attribute);
 
                 if (isset($operators[$attribute])) {
-                    $op = $operators[$attribute];
-                    if ($op instanceof Operator) {
-                        $opResult = $this->getOperatorBuilderExpression($column, $op);
+                    $operation = $operators[$attribute];
+                    if ($operation instanceof Operator) {
+                        $opResult = $this->getOperatorBuilderExpression($column, $operation);
                         $builder->setRaw($column, $opResult['expression'], $opResult['bindings']);
                     }
                 } elseif (isset($spatialMap[$attribute])) {
-                    $builder->setRaw($column, $this->getSpatialGeomFromText('?'), [$this->encodeSpatialWriteValue($value)]);
+                    $builder->setRaw($column, $this->getSpatialGeometryFromText('?'), [$this->encodeSpatialWriteValue($value)]);
                 } else {
                     if (\is_array($value)) {
                         $value = \json_encode($value);
@@ -1159,9 +1156,9 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             $filters = [BaseQuery::equal(Storage::SEQUENCE, [$document->getSequence()])];
             $builder->filter($filters);
             $result = $builder->update();
-            $stmt = $this->executeResult($result, Event::DocumentUpdate);
+            $statement = $this->executeResult($result, Event::DocumentUpdate);
 
-            $this->execute($stmt);
+            $this->execute($statement);
 
             $ctx = $this->buildWriteContext($name, $id);
             $this->runWriteHooks(fn ($hook) => $hook->afterDocumentUpdate($name, $document, $skipPermissions, $ctx));
@@ -1531,7 +1528,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             return $this->executeAndProfile($statement);
         }
 
-        $pdo = $this->getPDO();
+        $pdo = $this->getDriver();
         $pdo->exec("SET statement_timeout = '{$timeout}ms'");
 
         $exception = null;
@@ -1557,7 +1554,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             return;
         }
 
-        $this->getPDO()->exec($milliseconds === 0
+        $this->getDriver()->exec($milliseconds === 0
             ? 'SET LOCAL statement_timeout = DEFAULT'
             : "SET LOCAL statement_timeout = '{$milliseconds}ms'");
 
@@ -1616,7 +1613,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
     protected function getOperatorUpsertExpression(string $column, Operator $operator): array
     {
         $bindIndex = 0;
-        $fullExpression = $this->getOperatorSQL($column, $operator, $bindIndex, useTargetPrefix: true);
+        $fullExpression = $this->getOperatorSql($column, $operator, $bindIndex, useTargetPrefix: true);
 
         if ($fullExpression === null) {
             throw new DatabaseException('Operator cannot be expressed in SQL: '.$operator->getMethod()->value);
@@ -1773,7 +1770,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         return new PostgreSQLSchema();
     }
 
-    protected function getSQLType(ColumnType $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
+    protected function getSqlType(ColumnType $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
     {
         if ($array === true) {
             return 'JSONB';
@@ -1807,7 +1804,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
      *
      * @throws DatabaseException
      */
-    protected function getPDOType(mixed $value): int
+    protected function getPdoType(mixed $value): int
     {
         return match (\gettype($value)) {
             'string', 'double' => PDO::PARAM_STR,
@@ -1854,7 +1851,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
     }
 
     #[\Override]
-    protected function getSQLReadableDistance(string $distance): string
+    protected function getSqlReadableDistance(string $distance): string
     {
         return "{$distance}::text";
     }
@@ -1880,7 +1877,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
                     permissionsTable: static fn (string $table): string => $table,
                     type: $type,
                     documentColumn: $documentColumn,
-                    quoteChar: '"',
+                    quoteCharacter: '"',
                 );
             }
 
@@ -2076,7 +2073,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         return '"'.\str_replace('"', '""', $string).'"';
     }
 
-    protected function getIdentifierQuoteChar(): string
+    protected function getIdentifierQuote(): string
     {
         return '"';
     }
@@ -2097,7 +2094,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
     /**
      * Get SQL expression for operator
      */
-    protected function getOperatorSQL(string $column, Operator $operator, int &$bindIndex, bool $useTargetPrefix = false): ?string
+    protected function getOperatorSql(string $column, Operator $operator, int &$bindIndex, bool $useTargetPrefix = false): ?string
     {
         $quotedColumn = $this->quote($column);
         $columnRef = $useTargetPrefix ? "target.{$quotedColumn}" : $quotedColumn;
@@ -2387,13 +2384,13 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
     }
 
     #[\Override]
-    protected function getSQLTable(string $name): string
+    protected function getTable(string $name): string
     {
         return "{$this->quote($this->getDatabase())}.{$this->quote($this->getPhysicalTableName($name))}";
     }
 
     #[\Override]
-    protected function getSQLTableRaw(string $name): string
+    protected function getTableRaw(string $name): string
     {
         return $this->getDatabase().'.'.$this->getPhysicalTableName($name);
     }

@@ -117,7 +117,7 @@ final class PoolCapabilityTest extends TestCase
         $pool = $this->pool($this->connections(new Memory()));
 
         $this->assertTrue($pool->supports(Capability::Operators));
-        $this->assertFalse($pool->supports(Capability::Hostname));
+        $this->assertFalse($pool->supports(Capability::AlterLock));
         $this->assertSame((new Memory())->capabilities(), $pool->capabilities());
         $this->assertSame(1, $this->checkouts);
     }

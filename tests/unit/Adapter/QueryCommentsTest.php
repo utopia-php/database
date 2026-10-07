@@ -150,7 +150,7 @@ final class QueryCommentsTest extends TestCase
         $adapter = new $class($connection);
         $adapter->setMetadata('user', 'user-1');
 
-        $this->assertSame('7', $adapter->getConnectionId());
+        $this->assertSame('7', $adapter->id());
         $this->assertEveryStatementStartsWith("/* user: user-1 */\n");
     }
 

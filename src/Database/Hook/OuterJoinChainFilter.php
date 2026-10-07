@@ -28,7 +28,7 @@ final readonly class OuterJoinChainFilter implements JoinFilter
     public function __construct(
         private JoinChain $chain,
         private array $conditions,
-        private string $quoteChar = '`',
+        private string $quoteCharacter = '`',
     ) {
     }
 
@@ -45,7 +45,7 @@ final readonly class OuterJoinChainFilter implements JoinFilter
                 continue;
             }
 
-            $condition = AllowNullColumn::wrap($this->conditions[$alias], $alias.'.'.Storage::UID, $this->quoteChar);
+            $condition = AllowNullColumn::wrap($this->conditions[$alias], $alias.'.'.Storage::UID, $this->quoteCharacter);
             $expressions[] = $condition->expression;
             \array_push($bindings, ...$condition->bindings);
         }

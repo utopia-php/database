@@ -42,7 +42,7 @@ class MariaDBTest extends Base
         $dbUser = 'root';
         $dbPass = 'password';
 
-        $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MariaDB::getPDOAttributes());
+        $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, self::PDO_ATTRIBUTES);
 
         $redis = new Redis();
         $redis->connect('redis', 6379);
@@ -155,7 +155,7 @@ class MariaDBTest extends Base
             'mysql:host=mariadb;port=3306;charset=utf8mb4',
             'root',
             'password',
-            [PhpPDO::ATTR_PERSISTENT => false] + MariaDB::getPDOAttributes(),
+            [PhpPDO::ATTR_PERSISTENT => false] + self::PDO_ATTRIBUTES,
         );
 
         $main = $this->getDatabase();

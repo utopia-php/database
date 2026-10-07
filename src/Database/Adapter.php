@@ -51,13 +51,6 @@ abstract class Adapter
 
     protected bool $tenantPerDocument = false;
 
-    protected int $timeout = 0;
-
-    /**
-     * @var array<string, int>
-     */
-    protected array $timeouts = [];
-
     protected int $inTransaction = 0;
 
     /**
@@ -65,7 +58,7 @@ abstract class Adapter
      */
     private int $transactionCalls = 0;
 
-    protected bool $alterLocks = false;
+    protected bool $locks = false;
 
     protected bool $skipDuplicates {
         get => $this->duplicateSkipping()->get();
@@ -82,7 +75,7 @@ abstract class Adapter
     /**
      * @var array<string, Transform>
      */
-    protected array $queryTransforms = [];
+    protected array $transforms = [];
 
     /**
      * @var array<string, mixed>
@@ -99,20 +92,20 @@ abstract class Adapter
     protected Authorization $authorization;
 
     /** @var array<string, true>|null */
-    protected ?array $capabilitySet = null;
+    protected ?array $capabilities = null;
 
     protected ?Limits $limits = null;
 
     public function supports(Capability $capability): bool
     {
-        if ($this->capabilitySet === null) {
-            $this->capabilitySet = [];
+        if ($this->capabilities === null) {
+            $this->capabilities = [];
             foreach ($this->capabilities() as $declared) {
-                $this->capabilitySet[$declared->name] = true;
+                $this->capabilities[$declared->name] = true;
             }
         }
 
-        return isset($this->capabilitySet[$capability->name]);
+        return isset($this->capabilities[$capability->name]);
     }
 
     /**
@@ -235,14 +228,6 @@ abstract class Adapter
         $this->hostname = $hostname;
 
         return $this;
-    }
-
-    /**
-     * Get Hostname.
-     */
-    public function getHostname(): string
-    {
-        return $this->hostname;
     }
 
     /**
@@ -430,55 +415,14 @@ abstract class Adapter
         return $this;
     }
 
-    protected function setTimeoutState(int $milliseconds, Event $event): void
-    {
-        $this->timeouts[$event->value] = $milliseconds;
-
-        if ($event === Event::All) {
-            $this->timeout = $milliseconds;
-        }
-    }
-
     /**
-     * Get the current query timeout value.
-     *
-     * @return int Timeout in milliseconds, or 0 if no timeout is set.
+     * Whether ALTER TABLE statements take LOCK=SHARED, on the engines that support it.
      */
-    public function getTimeout(Event $event = Event::All): int
+    public function setLocks(bool $locks): static
     {
-        return $this->timeouts[$event->value]
-            ?? $this->timeouts[Event::All->value]
-            ?? $this->timeout;
-    }
-
-    protected function clearTimeoutState(Event $event): void
-    {
-        if ($event === Event::All) {
-            $this->timeouts = [];
-            $this->timeout = 0;
-
-            return;
-        }
-
-        unset($this->timeouts[$event->value]);
-    }
-
-    /**
-     * Enable or disable LOCK=SHARED during ALTER TABLE operations.
-     *
-     * @param bool $enable True to enable alter locks.
-     * @return $this
-     */
-    public function enableAlterLocks(bool $enable): self
-    {
-        $this->alterLocks = $enable;
+        $this->locks = $locks;
 
         return $this;
-    }
-
-    public function getAlterLocks(): bool
-    {
-        return $this->alterLocks;
     }
 
     /**
@@ -556,7 +500,7 @@ abstract class Adapter
      */
     public function addTransform(string $name, Transform $transform): static
     {
-        $this->queryTransforms[$name] = $transform;
+        $this->transforms[$name] = $transform;
 
         return $this;
     }
@@ -569,7 +513,7 @@ abstract class Adapter
      */
     public function removeTransform(string $name): static
     {
-        unset($this->queryTransforms[$name]);
+        unset($this->transforms[$name]);
 
         return $this;
     }
@@ -581,35 +525,9 @@ abstract class Adapter
      */
     public function resetTransforms(): static
     {
-        $this->queryTransforms = [];
+        $this->transforms = [];
 
         return $this;
-    }
-
-    /**
-     * Ping Database
-     */
-    abstract public function ping(): bool;
-
-    /**
-     * Reconnect Database
-     */
-    abstract public function reconnect(): void;
-
-    /**
-     * Clears every timeout this adapter carries, for any event.
-     *
-     * A pooled connection outlives the handle that configured it, so the handle
-     * that takes it next has to be able to reset it without knowing which
-     * events the previous one set a timeout for.
-     *
-     * @return void
-     */
-    public function clearTimeouts(): void
-    {
-        // Event::All empties the whole map rather than unsetting one entry, so
-        // this needs no knowledge of which events a previous holder set.
-        $this->clearTimeoutState(Event::All);
     }
 
     /**
@@ -1148,12 +1066,12 @@ abstract class Adapter
     /**
      * Run the callable once per registered write hook, in registration order.
      *
-     * @param callable(Write): void $fn
+     * @param callable(Write): void $callback
      */
-    protected function runWriteHooks(callable $fn): void
+    protected function runWriteHooks(callable $callback): void
     {
         foreach ($this->writeHooks as $hook) {
-            $fn($hook);
+            $callback($hook);
         }
     }
 
@@ -1215,7 +1133,7 @@ abstract class Adapter
     }
 
     /**
-     * @return mixed
+     * The client the adapter talks to its engine through, such as a PDO or a MongoDB client.
      */
-    abstract public function getDriver(): mixed;
+    abstract public function getDriver(): object;
 }

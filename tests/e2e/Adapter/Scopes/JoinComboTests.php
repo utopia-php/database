@@ -204,7 +204,7 @@ trait JoinComboTests
         [$mCol, , $secCol] = $this->seedJoinComboFixture($database);
 
         $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $secCol): void {
-            $aggregated = $database->find($mCol, [
+            $aggregated = $database->aggregate($mCol, [
                 Query::join($secCol, '$id', 'mainId', '=', 'rev'),
                 Query::equal('name', ['Main']),
                 Query::sum('rev.score', 'total'),
@@ -213,17 +213,17 @@ trait JoinComboTests
             ]);
 
             $this->assertSame(1, \count($aggregated));
-            $this->assertComboSecretsHidden($aggregated);
-            $total = $aggregated[0]->getAttribute('total');
+            $this->assertComboSecretsHidden(self::rowDocuments($aggregated));
+            $total = $aggregated[0]['total'] ?? null;
             $this->assertTrue(\is_numeric($total));
             $this->assertSame(323, (int) $total);
             $this->assertNotSame(1100, (int) $total);
-            $cnt = $aggregated[0]->getAttribute('cnt');
+            $cnt = $aggregated[0]['cnt'] ?? null;
             $this->assertTrue(\is_numeric($cnt));
             $this->assertSame(2, (int) $cnt);
             $this->assertNotSame(3, (int) $cnt);
 
-            $havingSum = $database->find($mCol, [
+            $havingSum = $database->aggregate($mCol, [
                 Query::join($secCol, '$id', 'mainId', '=', 'rev'),
                 Query::sum('rev.score', 'total'),
                 Query::count('*', 'cnt'),
@@ -231,9 +231,9 @@ trait JoinComboTests
                 Query::having([Query::equal('total', [1100])]),
             ]);
             $this->assertSame(0, \count($havingSum));
-            $this->assertComboSecretsHidden($havingSum);
+            $this->assertComboSecretsHidden(self::rowDocuments($havingSum));
 
-            $havingCount = $database->find($mCol, [
+            $havingCount = $database->aggregate($mCol, [
                 Query::join($secCol, '$id', 'mainId', '=', 'rev'),
                 Query::sum('rev.score', 'total'),
                 Query::count('*', 'cnt'),
@@ -241,7 +241,7 @@ trait JoinComboTests
                 Query::having([Query::equal('cnt', [3])]),
             ]);
             $this->assertSame(0, \count($havingCount));
-            $this->assertComboSecretsHidden($havingCount);
+            $this->assertComboSecretsHidden(self::rowDocuments($havingCount));
         });
 
         $this->cleanupAggCollections($database, $this->joinComboCollections());
@@ -1831,6 +1831,15 @@ trait JoinComboTests
                 $authorization->addRole($role);
             }
         }
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<Document>
+     */
+    private static function rowDocuments(array $rows): array
+    {
+        return \array_map(static fn (array $row): Document => new Document($row), $rows);
     }
 
     /**

@@ -495,7 +495,7 @@ trait AttributeTests
             Query::orderDesc('people'),
         ]);
         $this->assertSame([[2, 5], [1, 5]], \array_map(
-            fn (Document $group): array => [$this->aggregatedNumber($group, 'people'), $this->aggregatedNumber($group, 'score')],
+            fn (array $group): array => [$this->aggregatedNumber($group, 'people'), $this->aggregatedNumber($group, 'score')],
             $groups,
         ));
 
@@ -518,9 +518,12 @@ trait AttributeTests
         $database->deleteCollection($collection);
     }
 
-    private function aggregatedNumber(Document $group, string $key): int
+    /**
+     * @param  array<string, mixed>  $group
+     */
+    private function aggregatedNumber(array $group, string $key): int
     {
-        $value = $group->getAttribute($key);
+        $value = $group[$key] ?? null;
         $this->assertIsNumeric($value, "The aggregate {$key} is a number");
 
         return (int) $value;

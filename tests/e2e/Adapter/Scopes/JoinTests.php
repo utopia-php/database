@@ -8332,7 +8332,7 @@ trait JoinTests
         }
 
         $iterated = [];
-        foreach ($database->iterate($notes, [Query::distinct(), Query::select(['label']), Query::orderAsc('label'), Query::limit(1)]) as $row) {
+        foreach ($database->cursor($notes, [Query::distinct(), Query::select(['label']), Query::orderAsc('label')], batchSize: 1) as $row) {
             $iterated[] = $row->getAttribute('label');
             if (\count($iterated) > 3) {
                 break;
@@ -8855,10 +8855,10 @@ trait JoinTests
                 }
 
                 $iterated = [];
-                foreach ($database->iterate($authors, [...$queries, Query::limit(2)]) as $row) {
+                foreach ($database->cursor($authors, $queries, 2) as $row) {
                     $iterated[] = $this->joinCursorKey($row);
                 }
-                $this->assertSame($keys, $iterated, "{$label}: iterate()");
+                $this->assertSame($keys, $iterated, "{$label}: cursor()");
             }
 
             if ($database->getAdapter()->supports(Capability::IndexFulltext)) {
@@ -8985,10 +8985,10 @@ trait JoinTests
                     }
 
                     $iterated = [];
-                    foreach ($database->iterate($authors, [...$queries, ...$orders, Query::limit(2)]) as $row) {
+                    foreach ($database->cursor($authors, [...$queries, ...$orders], 2) as $row) {
                         $iterated[] = $this->joinCursorKey($row);
                     }
-                    $this->assertSame($keys, $iterated, "{$label}: iterate()");
+                    $this->assertSame($keys, $iterated, "{$label}: cursor()");
                 }
             }
         } finally {

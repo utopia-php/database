@@ -4527,7 +4527,7 @@ trait OperatorTests
                 'tags' => Operator::arrayAppend(['updated'])
             ]),
             [],
-            Database::INSERT_BATCH_SIZE,
+            Database::BATCH_SIZE,
             function (Document $doc, Document $old) use (&$callbackResults) {
                 // Verify callback receives fresh computed values, not Operator objects
                 $this->assertIsInt($doc->getAttribute('count'));
@@ -4623,7 +4623,7 @@ trait OperatorTests
         $count = $database->upsertDocuments(
             $collectionId,
             $documents,
-            Database::INSERT_BATCH_SIZE,
+            Database::BATCH_SIZE,
             function (Document $doc, ?Document $old) use (&$callbackResults) {
                 // Verify callback receives fresh computed values, not Operator objects
                 $this->assertIsInt($doc->getAttribute('count'));

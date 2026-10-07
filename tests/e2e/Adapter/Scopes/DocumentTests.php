@@ -2899,9 +2899,6 @@ trait DocumentTests
             Query::greaterThanEqual('integer', 5),
         ], onNext: function ($doc) use (&$results) {
             $results[] = $doc;
-            throw new Exception("Error thrown to test that update doesn't stop and error is caught");
-        }, onError: function ($e) {
-            $this->assertEquals("Error thrown to test that update doesn't stop and error is caught", $e->getMessage());
         });
 
         $this->assertEquals(5, $count);
@@ -7285,7 +7282,7 @@ trait DocumentTests
          */
         $database->createCollection(Collection::create(id: 'moviesEmpty'));
         $documents = [];
-        foreach ($database->iterate('moviesEmpty', queries: [Query::limit(2)]) as $document) {
+        foreach ($database->cursor('moviesEmpty', batchSize: 2) as $document) {
             $documents[] = $document;
         }
         $this->assertEquals(0, \count($documents));
@@ -7296,7 +7293,7 @@ trait DocumentTests
          * Test, foreach generator
          */
         $documents = [];
-        foreach ($database->iterate($this->getMoviesCollection(), queries: [Query::limit(2)]) as $document) {
+        foreach ($database->cursor($this->getMoviesCollection(), batchSize: 2) as $document) {
             $documents[] = $document;
         }
         $this->assertEquals(6, count($documents));
@@ -7305,9 +7302,9 @@ trait DocumentTests
          * Test, foreach goes through all the documents
          */
         $documents = [];
-        $database->foreach($this->getMoviesCollection(), queries: [Query::limit(2)], callback: function ($document) use (&$documents) {
+        foreach ($database->cursor($this->getMoviesCollection(), batchSize: 2) as $document) {
             $documents[] = $document;
-        });
+        }
         $this->assertEquals(6, count($documents));
 
         /**
@@ -7316,9 +7313,9 @@ trait DocumentTests
 
         $first = $documents[0];
         $documents = [];
-        $database->foreach($this->getMoviesCollection(), queries: [Query::limit(2), Query::cursorAfter($first)], callback: function ($document) use (&$documents) {
+        foreach ($database->cursor($this->getMoviesCollection(), [Query::cursorAfter($first)], batchSize: 2) as $document) {
             $documents[] = $document;
-        });
+        }
         $this->assertEquals(5, count($documents));
 
         /**
@@ -7326,18 +7323,17 @@ trait DocumentTests
          */
 
         $documents = [];
-        $database->foreach($this->getMoviesCollection(), queries: [Query::limit(2), Query::offset(2)], callback: function ($document) use (&$documents) {
+        foreach ($database->cursor($this->getMoviesCollection(), [Query::offset(2)], batchSize: 2) as $document) {
             $documents[] = $document;
-        });
+        }
         $this->assertEquals(4, count($documents));
 
         /**
          * Test, cursor before throws error
          */
         try {
-            $database->foreach($this->getMoviesCollection(), queries: [Query::cursorBefore($documents[0]), Query::offset(2)], callback: function ($document) use (&$documents) {
-                $documents[] = $document;
-            });
+            $database->cursor($this->getMoviesCollection(), [Query::cursorBefore($documents[0]), Query::offset(2)]);
+            $this->fail('A cursor before was accepted');
 
         } catch (Throwable $e) {
             $this->assertInstanceOf(DatabaseException::class, $e);
@@ -7952,11 +7948,11 @@ trait DocumentTests
         $this->assertEquals(0, \count($database->find('bulk_delete_queries')));
 
         // Test Limit more than batchSize
-        $this->propagateBulkDocuments('bulk_delete_queries', Database::DELETE_BATCH_SIZE * 2);
-        $this->assertEquals(Database::DELETE_BATCH_SIZE * 2, \count($database->find('bulk_delete_queries', [Query::limit(Database::DELETE_BATCH_SIZE * 2)])));
-        $this->assertEquals(Database::DELETE_BATCH_SIZE + 2, $database->deleteDocuments('bulk_delete_queries', [Query::limit(Database::DELETE_BATCH_SIZE + 2)]));
-        $this->assertEquals(Database::DELETE_BATCH_SIZE - 2, \count($database->find('bulk_delete_queries', [Query::limit(Database::DELETE_BATCH_SIZE * 2)])));
-        $this->assertEquals(Database::DELETE_BATCH_SIZE - 2, $this->getDatabase()->deleteDocuments('bulk_delete_queries'));
+        $this->propagateBulkDocuments('bulk_delete_queries', Database::BATCH_SIZE * 2);
+        $this->assertEquals(Database::BATCH_SIZE * 2, \count($database->find('bulk_delete_queries', [Query::limit(Database::BATCH_SIZE * 2)])));
+        $this->assertEquals(Database::BATCH_SIZE + 2, $database->deleteDocuments('bulk_delete_queries', [Query::limit(Database::BATCH_SIZE + 2)]));
+        $this->assertEquals(Database::BATCH_SIZE - 2, \count($database->find('bulk_delete_queries', [Query::limit(Database::BATCH_SIZE * 2)])));
+        $this->assertEquals(Database::BATCH_SIZE - 2, $this->getDatabase()->deleteDocuments('bulk_delete_queries'));
 
         // Test Offset
         $this->propagateBulkDocuments('bulk_delete_queries', 100);
@@ -8025,6 +8021,7 @@ trait DocumentTests
         $docs = $database->find('bulk_delete_with_callback');
         $this->assertCount(10, $docs);
 
+        $deleted = 0;
         $count = $database->deleteDocuments(
             collection: 'bulk_delete_with_callback',
             queries: [
@@ -8036,17 +8033,13 @@ trait DocumentTests
                 Query::limit(2),
             ],
             batchSize: 1,
-            onNext: function () {
-                // simulating error throwing but should not stop deletion
-                throw new Exception("Error thrown to test that deletion doesn't stop and error is caught");
-            },
-            onError:function ($e) {
-                $this->assertInstanceOf(Exception::class, $e);
-                $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
+            onNext: function () use (&$deleted) {
+                $deleted++;
             }
         );
 
         $this->assertEquals(2, $count);
+        $this->assertEquals(2, $deleted);
 
         // TEST: Bulk Delete All Documents without passing callbacks
         $this->assertEquals(8, $database->deleteDocuments('bulk_delete_with_callback'));
@@ -8062,9 +8055,6 @@ trait DocumentTests
             Query::greaterThanEqual('integer', 5)
         ], onNext: function ($doc) use (&$results) {
             $results[] = $doc;
-            throw new Exception("Error thrown to test that deletion doesn't stop and error is caught");
-        }, onError:function ($e) {
-            $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
         });
 
         $this->assertEquals(5, $count);
@@ -10469,25 +10459,20 @@ trait DocumentTests
                 $database->createDocument($items, new Document(['$id' => $code, '$permissions' => [], 'code' => $code, 'name' => $name]));
             }
 
-            $rows = static function (array $documents): array {
-                /** @var array<Document> $documents */
-                return \array_map(static fn (Document $document): array => $document->getArrayCopy(), $documents);
-            };
-
             foreach (['join' => Query::join($items, 'item', 'code', '=', 'it'), 'full outer join' => Query::fullOuterJoin($items, 'item', 'code', '=', 'it')] as $case => $join) {
                 $this->assertEquals(
                     [['orders' => 2, 'name' => 'x', 'it.name' => 'apple'], ['orders' => 1, 'name' => 'y', 'it.name' => 'banana']],
-                    $rows($database->find($orders, [$join, Query::count('*', 'orders'), Query::groupBy(['name', 'it.name']), Query::orderAsc('name')])),
+                    $database->aggregate($orders, [$join, Query::count('*', 'orders'), Query::groupBy(['name', 'it.name']), Query::orderAsc('name')]),
                     $case,
                 );
                 $this->assertEquals(
                     [['orders' => 1, 'name' => 'y', 'it.name' => 'banana']],
-                    $rows($database->find($orders, [$join, Query::count('*', 'orders'), Query::groupBy(['it.name', 'name']), Query::having([Query::equal('it.name', ['banana'])])])),
+                    $database->aggregate($orders, [$join, Query::count('*', 'orders'), Query::groupBy(['it.name', 'name']), Query::having([Query::equal('it.name', ['banana'])])]),
                     $case.': a having on the qualified group',
                 );
                 $this->assertEquals(
                     [['orders' => 2, 'name' => 'apple'], ['orders' => 1, 'name' => 'banana']],
-                    $rows($database->find($orders, [$join, Query::count('*', 'orders'), Query::groupBy(['it.name']), Query::orderAsc('it.name')])),
+                    $database->aggregate($orders, [$join, Query::count('*', 'orders'), Query::groupBy(['it.name']), Query::orderAsc('it.name')]),
                     $case.': a joined group alone keeps its bare name',
                 );
             }
@@ -10558,7 +10543,7 @@ trait DocumentTests
             $this->assertSame(['o2', 'o1', 'o3'], $ids($database->find($orders, [$item, Query::orderDesc('name'), Query::orderAsc('$id')])), 'a name the main collection declares reads the main table');
             $this->assertEquals(
                 [['orders' => 1, 'code' => 'b'], ['orders' => 2, 'code' => 'a']],
-                \array_map(static fn (Document $row): array => $row->getArrayCopy(), $database->find($orders, [$item, Query::count('*', 'orders'), Query::groupBy(['code']), Query::orderDesc('code')])),
+                $database->aggregate($orders, [$item, Query::count('*', 'orders'), Query::groupBy(['code']), Query::orderDesc('code')]),
             );
 
             foreach ([

@@ -2,7 +2,6 @@
 
 namespace Utopia\Database\Traits;
 
-use Closure;
 use Exception;
 use Throwable;
 use Utopia\Database\Adapter\Feature;
@@ -214,8 +213,8 @@ trait Attributes
 
     /**
      * Applies a sparse update: a null field keeps its value and `default: null` clears the default. An explicit
-     * `required: true` clears the default; a default on a required attribute is refused. `required: false`
-     * relaxes the column's NOT NULL.
+     * `required: true` clears the default; a default on an attribute that is or becomes required is refused.
+     * `required: false` relaxes the column's NOT NULL.
      *
      * @return Attribute The attribute as stored
      *
@@ -254,7 +253,7 @@ trait Attributes
         }
 
         $required = $update->required ?? $stored->required;
-        if ($update->required !== true && $required && $update->changesDefault() && $update->default !== null) {
+        if ($required && $update->changesDefault() && $update->default !== null) {
             throw new DatabaseException('Cannot set a default value on a required attribute');
         }
 
@@ -328,8 +327,6 @@ trait Attributes
                 throw new DatabaseException('Failed to update attribute');
             }
         } elseif ($stored->required && ! $updated->required) {
-            // The alter path applies nullability itself. A required-only change relaxes the column on its own,
-            // because the column rewrite re-casts datetime columns on Postgres.
             if (! $this->adapter->relaxAttributeRequired($definition->getId(), $key)) {
                 throw new DatabaseException('Failed to update attribute');
             }
@@ -520,54 +517,6 @@ trait Attributes
             Event::AttributeUpdate,
             $renamed->toDocument()->setAttribute(Document::COLLECTION, $definition->getId()),
         );
-    }
-
-    /**
-     * Rewrites one attribute's metadata without touching the schema; relationships keep their stored
-     * definitions in step through it.
-     *
-     * @param  Closure(Attribute): Attribute  $update
-     *
-     * @throws ConflictException
-     * @throws DatabaseException
-     * @throws NotFoundException
-     */
-    private function updateAttributeMeta(string $collection, string $key, Closure $update, bool $triggerEvent = true): Attribute
-    {
-        $definition = $this->silent(fn () => $this->getCollection($collection));
-
-        if ($definition->getId() === self::METADATA) {
-            throw new DatabaseException('Cannot update metadata attributes');
-        }
-
-        $attributes = $definition->attributes();
-        $position = self::attributePosition($attributes, $key);
-
-        if ($position === null) {
-            throw new NotFoundException('Attribute not found');
-        }
-
-        $attribute = $update($attributes[$position]);
-
-        $this->writeAttributes($definition, self::replacing($attributes, $key, $attribute));
-
-        $this->updateMetadata(
-            collection: $definition,
-            rollbackOperation: null,
-            shouldRollback: false,
-            operationDescription: "attribute metadata update '{$key}'"
-        );
-
-        $this->withRetries(fn () => $this->purgeCachedCollection($definition->getId()));
-
-        if ($triggerEvent) {
-            $this->triggerHooks(
-                Event::AttributeUpdate,
-                $attribute->toDocument()->setAttribute(Document::COLLECTION, $definition->getId()),
-            );
-        }
-
-        return $attribute;
     }
 
     /**
@@ -1078,16 +1027,5 @@ trait Attributes
         }
 
         return $errors;
-    }
-
-    /**
-     * @param  list<string>  $keys
-     */
-    private function rollbackAttributeMetadata(Collection $definition, array $keys): void
-    {
-        $this->writeAttributes($definition, \array_values(\array_filter(
-            $definition->attributes(),
-            static fn (Attribute $attribute): bool => ! \in_array($attribute->key, $keys, true),
-        )));
     }
 }

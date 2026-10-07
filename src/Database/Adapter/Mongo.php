@@ -15,7 +15,6 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Change;
-use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
@@ -1026,10 +1025,10 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
         switch ($relationship->type) {
             case RelationshipType::OneToOne:
-                if ($newKey !== null && $key !== $newKey) {
+                if (($twoWay || $side === RelationshipSide::Parent) && $newKey !== null && $key !== $newKey) {
                     $this->getClient()->update($collectionName, updates: $renameKey, multi: true);
                 }
-                if ($twoWay && $newTwoWayKey !== null && $twoWayKey !== $newTwoWayKey) {
+                if (($twoWay || $side === RelationshipSide::Child) && $newTwoWayKey !== null && $twoWayKey !== $newTwoWayKey) {
                     $this->getClient()->update($relatedCollectionName, updates: $renameTwoWayKey, multi: true);
                 }
                 break;
@@ -1314,10 +1313,8 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $collectionDocument = $this->getDocument($metadataCollection, $collection);
         $old = $this->filter($old);
         $new = $this->filter($new);
-        $stored = self::storedCollection($collectionDocument);
-
         $index = null;
-        foreach ($stored->indexes() as $candidate) {
+        foreach (self::collectionIndexes($collectionDocument) as $candidate) {
             if ($candidate->key === $old) {
                 $index = $candidate;
                 break;
@@ -1326,8 +1323,9 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
         $indexAttributeTypes = [];
         if ($index !== null) {
+            $attributes = self::collectionAttributes($collectionDocument);
             foreach ($index->attributes as $indexed) {
-                foreach ($stored->attributes() as $attribute) {
+                foreach ($attributes as $attribute) {
                     if ($attribute->key === $indexed) {
                         $indexAttributeTypes[$indexed] = $attribute->type->value;
                         break;
@@ -1340,17 +1338,13 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             if ($index === null) {
                 throw new DatabaseException('Index not found: '.$old);
             }
-            $deletedindex = $this->deleteIndex($collection, $old);
-            $createdindex = $this->createIndex($collection, $index->withKey($new), $indexAttributeTypes);
+            $deleted = $this->deleteIndex($collection, $old);
+            $created = $this->createIndex($collection, $index->withKey($new), $indexAttributeTypes);
         } catch (Exception $e) {
             throw $this->processException($e);
         }
 
-        if ($deletedindex && $createdindex) {
-            return true;
-        }
-
-        return false;
+        return $deleted && $created;
     }
 
     /**
@@ -3020,7 +3014,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             return $document;
         }
 
-        foreach ([...Collection::fromDocument($collection)->attributes(), ...Database::internalAttributesFor(true)] as $attribute) {
+        foreach (self::collectionAttributesWithInternal($collection) as $attribute) {
             $key = $attribute->key;
             $type = $attribute->type;
             $array = $attribute->array;
@@ -3145,7 +3139,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     private function getReadCasts(Document $collection): array
     {
         $casts = [];
-        foreach ([...Collection::fromDocument($collection)->attributes(), ...Database::internalAttributesFor(true)] as $attribute) {
+        foreach (self::collectionAttributesWithInternal($collection) as $attribute) {
             $casts[] = [$attribute->key, $attribute->type, $attribute->array];
         }
 
@@ -3316,7 +3310,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     private function getEscapedAttributes(Document $collection): array
     {
         $dotAttributes = [];
-        foreach (Collection::fromDocument($collection)->attributes() as $attribute) {
+        foreach (self::collectionAttributes($collection) as $attribute) {
             $key = $attribute->key;
             if (\str_contains($key, '.') || \str_starts_with($key, '$')) {
                 $dotAttributes[$key] = $this->escapeMongoFieldName($key);
@@ -3332,7 +3326,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      */
     protected function ensureRelationshipDefaults(Document $collection, Document $document): void
     {
-        foreach (Collection::fromDocument($collection)->attributes() as $attribute) {
+        foreach (self::collectionAttributes($collection) as $attribute) {
             $relationship = $attribute->relationship;
             if ($relationship === null || $document->offsetExists($attribute->key)) {
                 continue;

@@ -497,10 +497,10 @@ class Redis extends Adapter implements
 
         switch ($relationship->type) {
             case RelationshipType::OneToOne:
-                if ($newKey !== null && $newKey !== $key) {
+                if (($twoWay || $side === RelationshipSide::Parent) && $newKey !== null && $newKey !== $key) {
                     $this->renameAttribute($collection, $key, $newKey);
                 }
-                if ($twoWay && $newTwoWayKey !== null && $newTwoWayKey !== $twoWayKey) {
+                if (($twoWay || $side === RelationshipSide::Child) && $newTwoWayKey !== null && $newTwoWayKey !== $twoWayKey) {
                     $this->renameAttribute($relatedCollection, $twoWayKey, $newTwoWayKey);
                 }
                 break;

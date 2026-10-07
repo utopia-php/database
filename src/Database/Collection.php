@@ -7,13 +7,13 @@ use Utopia\Database\Exception\Structure as StructureException;
 
 class Collection extends Document
 {
-    private const string NAME = 'name';
+    public const string NAME = 'name';
 
-    private const string ATTRIBUTES = 'attributes';
+    public const string ATTRIBUTES = 'attributes';
 
-    private const string INDEXES = 'indexes';
+    public const string INDEXES = 'indexes';
 
-    private const string DOCUMENT_SECURITY = 'documentSecurity';
+    public const string DOCUMENT_SECURITY = 'documentSecurity';
 
     private const array CORE_KEYS = [self::ATTRIBUTES, self::INDEXES, self::DOCUMENT_SECURITY];
 
@@ -22,10 +22,22 @@ class Collection extends Document
 
     private mixed $attributeSource = null;
 
+    /** @var list<Attribute>|null */
+    private ?array $attributesWithInternal = null;
+
+    /** @var list<Attribute>|null */
+    private ?array $internalSource = null;
+
     /** @var list<Index>|null */
     private ?array $indexModels = null;
 
     private mixed $indexSource = null;
+
+    private ?string $fingerprint = null;
+
+    private mixed $fingerprintPermissions = null;
+
+    private mixed $fingerprintDocumentSecurity = null;
 
     /**
      * @param  array<string, mixed>  $input
@@ -39,7 +51,8 @@ class Collection extends Document
      * @param  list<Attribute>  $attributes
      * @param  list<Index>  $indexes
      * @param  list<string>|null  $permissions  null grants the default create-any permission on creation; [] grants none
-     * @param  array<string, mixed>  $metadata
+     * @param  array<string, mixed>  $metadata  only keys the metadata collection stores; createCollection() refuses
+     *                                          any other key with Exception\Structure
      *
      * @throws StructureException
      */
@@ -124,25 +137,51 @@ class Collection extends Document
      */
     public function attributes(): array
     {
-        $source = $this->getAttribute(self::ATTRIBUTES, []);
+        $source = $this->getAttribute(self::ATTRIBUTES);
         if ($this->attributeModels !== null && $source === $this->attributeSource) {
             return $this->attributeModels;
         }
 
+        $stored = self::storedList($source)
+            ?? throw new StructureException('Collection attributes must be a list of attribute documents');
+
         $models = [];
-        if (\is_array($source)) {
-            foreach ($source as $attribute) {
-                $models[] = match (true) {
-                    $attribute instanceof Document => Attribute::fromDocument($attribute),
-                    \is_array($attribute) => Attribute::fromDocument(new Document(self::stringKeyed($attribute))),
-                    default => throw new StructureException('Collection attributes must be attribute documents'),
-                };
-            }
+        foreach ($stored as $attribute) {
+            $models[] = match (true) {
+                $attribute instanceof Document => Attribute::fromDocument($attribute),
+                \is_array($attribute) => Attribute::fromDocument(new Document(self::stringKeyed($attribute))),
+                default => throw new StructureException('Collection attributes must be attribute documents'),
+            };
         }
 
+        $this->fingerprint = null;
+        $this->attributesWithInternal = null;
         $this->attributeSource = $source;
 
         return $this->attributeModels = $models;
+    }
+
+    /**
+     * The declared attributes followed by $internal, built at most once per schema state so per-document passes
+     * over the whole schema do not rebuild the list.
+     *
+     * @internal
+     *
+     * @param  list<Attribute>  $internal
+     * @return list<Attribute>
+     *
+     * @throws StructureException
+     */
+    public function attributesWith(array $internal): array
+    {
+        $attributes = $this->attributes();
+        if ($this->attributesWithInternal !== null && $internal === $this->internalSource) {
+            return $this->attributesWithInternal;
+        }
+
+        $this->internalSource = $internal;
+
+        return $this->attributesWithInternal = [...$attributes, ...$internal];
     }
 
     /**
@@ -152,25 +191,62 @@ class Collection extends Document
      */
     public function indexes(): array
     {
-        $source = $this->getAttribute(self::INDEXES, []);
+        $source = $this->getAttribute(self::INDEXES);
         if ($this->indexModels !== null && $source === $this->indexSource) {
             return $this->indexModels;
         }
 
+        $stored = self::storedList($source)
+            ?? throw new IndexException('Collection indexes must be a list of index documents');
+
         $models = [];
-        if (\is_array($source)) {
-            foreach ($source as $index) {
-                $models[] = match (true) {
-                    $index instanceof Document => Index::fromDocument($index),
-                    \is_array($index) => Index::fromArray(self::stringKeyed($index)),
-                    default => throw new IndexException('Collection indexes must be index documents'),
-                };
-            }
+        foreach ($stored as $index) {
+            $models[] = match (true) {
+                $index instanceof Document => Index::fromDocument($index),
+                \is_array($index) => Index::fromArray(self::stringKeyed($index)),
+                default => throw new IndexException('Collection indexes must be index documents'),
+            };
         }
 
+        $this->fingerprint = null;
         $this->indexSource = $source;
 
         return $this->indexModels = $models;
+    }
+
+    /**
+     * A hash of everything a query against this collection is validated and cached by: its attributes, indexes,
+     * permissions and document security. Computed at most once per schema state.
+     *
+     * @internal
+     *
+     * @throws StructureException
+     * @throws IndexException
+     */
+    public function fingerprint(): string
+    {
+        $attributes = $this->attributes();
+        $indexes = $this->indexes();
+        $permissions = $this->getAttribute(self::PERMISSIONS);
+        $documentSecurity = $this->getAttribute(self::DOCUMENT_SECURITY);
+
+        if (
+            $this->fingerprint !== null
+            && $permissions === $this->fingerprintPermissions
+            && $documentSecurity === $this->fingerprintDocumentSecurity
+        ) {
+            return $this->fingerprint;
+        }
+
+        $this->fingerprintPermissions = $permissions;
+        $this->fingerprintDocumentSecurity = $documentSecurity;
+
+        return $this->fingerprint = \hash('xxh128', \serialize([
+            $attributes,
+            $indexes,
+            $this->getPermissions(),
+            $this->documentSecurity(),
+        ]));
     }
 
     public function name(): string
@@ -195,42 +271,39 @@ class Collection extends Document
 
     public function __clone()
     {
-        $attributes = $this->attributeModels !== null && $this->getAttribute(self::ATTRIBUTES, []) === $this->attributeSource
+        $attributes = $this->attributeModels !== null && $this->getAttribute(self::ATTRIBUTES) === $this->attributeSource
             ? $this->attributeModels
             : null;
-        $indexes = $this->indexModels !== null && $this->getAttribute(self::INDEXES, []) === $this->indexSource
+        $indexes = $this->indexModels !== null && $this->getAttribute(self::INDEXES) === $this->indexSource
             ? $this->indexModels
             : null;
+        $fingerprint = $attributes !== null && $indexes !== null ? $this->fingerprint : null;
 
         parent::__clone();
 
-        $this->forget();
+        $this->forget(self::ATTRIBUTES);
+        $this->forget(self::INDEXES);
         if ($attributes !== null) {
             $this->attributeModels = $attributes;
-            $this->attributeSource = $this->getAttribute(self::ATTRIBUTES, []);
+            $this->attributeSource = $this->getAttribute(self::ATTRIBUTES);
         }
         if ($indexes !== null) {
             $this->indexModels = $indexes;
-            $this->indexSource = $this->getAttribute(self::INDEXES, []);
+            $this->indexSource = $this->getAttribute(self::INDEXES);
         }
+        $this->fingerprint = $fingerprint;
     }
 
     public function offsetSet(mixed $key, mixed $value): void
     {
         parent::offsetSet($key, $value);
-        $this->forget();
+        $this->forget($key);
     }
 
     public function offsetUnset(mixed $key): void
     {
         parent::offsetUnset($key);
-        $this->forget();
-    }
-
-    public function append(mixed $value): void
-    {
-        parent::append($value);
-        $this->forget();
+        $this->forget($key);
     }
 
     /**
@@ -240,17 +313,46 @@ class Collection extends Document
     public function exchangeArray(array|object $array): array
     {
         $previous = parent::exchangeArray($array);
-        $this->forget();
+
+        if (($previous[self::ATTRIBUTES] ?? null) !== $this->getAttribute(self::ATTRIBUTES)) {
+            $this->forget(self::ATTRIBUTES);
+        }
+        if (($previous[self::INDEXES] ?? null) !== $this->getAttribute(self::INDEXES)) {
+            $this->forget(self::INDEXES);
+        }
 
         return $previous;
     }
 
-    private function forget(): void
+    private function forget(mixed $key): void
     {
-        $this->attributeModels = null;
-        $this->attributeSource = null;
-        $this->indexModels = null;
-        $this->indexSource = null;
+        if ($key === self::ATTRIBUTES) {
+            $this->attributeModels = null;
+            $this->attributeSource = null;
+            $this->fingerprint = null;
+        } elseif ($key === self::INDEXES) {
+            $this->indexModels = null;
+            $this->indexSource = null;
+            $this->fingerprint = null;
+        }
+    }
+
+    /**
+     * The stored list as written, or decoded from the JSON a raw metadata row holds; null when it is neither.
+     *
+     * @return array<mixed>|null
+     */
+    private static function storedList(mixed $source): ?array
+    {
+        if ($source === null) {
+            return [];
+        }
+
+        if (\is_string($source)) {
+            $source = \json_decode($source, true);
+        }
+
+        return \is_array($source) ? $source : null;
     }
 
     /**

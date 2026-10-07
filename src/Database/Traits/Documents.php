@@ -411,23 +411,7 @@ trait Documents
      */
     private function documentsValidatorCacheKey(Document $collection, string $context, bool $supportForJoins, bool $supportForAggregations): string
     {
-        return $context.'::'.$this->maxQueryValues.'::'.(int) $supportForJoins.(int) $supportForAggregations.(int) $this->adapter->getSharedTables().'::'.$this->collectionFingerprint($collection);
-    }
-
-    /**
-     * A hash of everything a query validator is built from: the collection's attributes, indexes,
-     * permissions and document security.
-     */
-    private function collectionFingerprint(Document $collection): string
-    {
-        $definition = Collection::fromDocument($collection);
-
-        return \hash('xxh128', \serialize([
-            $definition->attributes(),
-            $definition->indexes(),
-            $definition->getPermissions(),
-            $definition->documentSecurity(),
-        ]));
+        return $context.'::'.$this->maxQueryValues.'::'.(int) $supportForJoins.(int) $supportForAggregations.(int) $this->adapter->getSharedTables().'::'.Collection::fromDocument($collection)->fingerprint();
     }
 
     /**
@@ -4447,7 +4431,7 @@ trait Documents
     {
         $key = $this->getCollectionMetadataCacheKey($collection->getId())
             .'::'.(int) $supportForAttributes.(int) $this->adapter->getSharedTables()
-            .'::'.$this->collectionFingerprint($collection);
+            .'::'.Collection::fromDocument($collection)->fingerprint();
 
         if (isset($this->sumValidatorCache[$key])) {
             return $this->sumValidatorCache[$key];

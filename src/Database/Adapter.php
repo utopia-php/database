@@ -1109,6 +1109,11 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     abstract public function getCountOfAttributes(Document $collection): int;
 
     /**
+     * The attributes a collection definition declares, also when it is a metadata row read straight from storage
+     * that still holds them as JSON.
+     *
+     * @internal
+     *
      * @return list<Attribute>
      *
      * @throws StructureException
@@ -1119,6 +1124,25 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     }
 
     /**
+     * The attributes a collection definition declares followed by every internal attribute, `$tenant` included.
+     *
+     * @internal
+     *
+     * @return list<Attribute>
+     *
+     * @throws StructureException
+     */
+    protected static function collectionAttributesWithInternal(Document $collection): array
+    {
+        return Collection::fromDocument($collection)->attributesWith(Database::internalAttributesFor(true));
+    }
+
+    /**
+     * The indexes a collection definition declares, also when it is a metadata row read straight from storage
+     * that still holds them as JSON.
+     *
+     * @internal
+     *
      * @return list<Index>
      *
      * @throws IndexException
@@ -1126,25 +1150,6 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     protected static function collectionIndexes(Document $collection): array
     {
         return Collection::fromDocument($collection)->indexes();
-    }
-
-    /**
-     * The collection a metadata row read straight from storage describes. Such a row still holds its attributes
-     * and indexes as the JSON that Database encodes them to, so they are decoded here, once.
-     *
-     * @throws IndexException
-     * @throws StructureException
-     */
-    protected static function storedCollection(Document $metadata): Collection
-    {
-        $data = $metadata->getArrayCopy();
-        foreach (self::STORED_SCHEMA_KEYS as $key) {
-            if (\is_string($data[$key] ?? null)) {
-                $data[$key] = \json_decode($data[$key], true);
-            }
-        }
-
-        return Collection::fromArray($data);
     }
 
     /**
@@ -1201,8 +1206,6 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     private static array $filteredKeyCache = [];
 
     private const FILTERED_KEY_CACHE_LIMIT = 4096;
-
-    private const array STORED_SCHEMA_KEYS = ['attributes', 'indexes'];
 
     /**
      * Filter Keys

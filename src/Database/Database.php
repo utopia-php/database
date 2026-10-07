@@ -139,22 +139,6 @@ class Database
     public const DELETE_BATCH_SIZE = 1_000;
 
     /**
-     * Attribute types whose stored value is produced by a filter of the same name. Every public
-     * creation path adds it, so an attribute made through createCollection(), createAttribute()
-     * or createAttributes() encodes and decodes the same way as any identical one.
-     *
-     * @var list<ColumnType>
-     */
-    public const array ATTRIBUTE_FILTER_COLUMN_TYPES = [
-        ColumnType::Point,
-        ColumnType::Linestring,
-        ColumnType::Polygon,
-        ColumnType::Vector,
-        ColumnType::Object,
-        ColumnType::Datetime,
-    ];
-
-    /**
      * @var list<string>
      */
     public const array DEFAULT_FILTERS = [
@@ -183,13 +167,13 @@ class Database
         Storage::PERMISSIONS,
     ];
 
-    private const string COLLECTION_NAME = 'name';
+    private const string COLLECTION_NAME = Collection::NAME;
 
-    private const string COLLECTION_ATTRIBUTES = 'attributes';
+    private const string COLLECTION_ATTRIBUTES = Collection::ATTRIBUTES;
 
-    private const string COLLECTION_INDEXES = 'indexes';
+    private const string COLLECTION_INDEXES = Collection::INDEXES;
 
-    private const string COLLECTION_DOCUMENT_SECURITY = 'documentSecurity';
+    private const string COLLECTION_DOCUMENT_SECURITY = Collection::DOCUMENT_SECURITY;
 
     private const string INDEX_ATTRIBUTES = 'attributes';
 
@@ -1828,7 +1812,7 @@ class Database
     {
         $known = [];
 
-        foreach ([...Collection::fromDocument($collection)->attributes(), ...$this->internalAttributes()] as $attribute) {
+        foreach (Collection::fromDocument($collection)->attributesWith($this->internalAttributes()) as $attribute) {
             $key = $attribute->key;
             $array = $attribute->array;
             $default = $attribute->default;
@@ -2200,7 +2184,7 @@ class Database
             return $document;
         }
 
-        foreach ([...Collection::fromDocument($collection)->attributes(), ...$this->internalAttributes()] as $attribute) {
+        foreach (Collection::fromDocument($collection)->attributesWith($this->internalAttributes()) as $attribute) {
             $key = $attribute->key;
             $type = $attribute->type;
             $array = $attribute->array;
@@ -2761,20 +2745,9 @@ class Database
             'filters' => $this->getActiveFilterSignatures(),
         ];
 
-        $schemaHash = '';
-        if ($collection !== null) {
-            $definition = Collection::fromDocument($collection);
-            $schemaHash = \md5(\json_encode([
-                $definition->attributes(),
-                $definition->indexes(),
-                $definition->getPermissions(),
-                $definition->documentSecurity(),
-            ]) ?: '');
-        }
-
         return \sprintf(
             '%s:%s:%s',
-            $schemaHash,
+            $collection === null ? '' : Collection::fromDocument($collection)->fingerprint(),
             \md5(\json_encode($queryPayload) ?: ''),
             $field,
         );

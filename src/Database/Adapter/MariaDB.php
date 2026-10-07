@@ -422,7 +422,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
             throw new NotFoundException('Collection not found');
         }
 
-        $collectionAttributes = self::storedCollection($collection)->attributes();
+        $collectionAttributes = self::collectionAttributes($collection);
         $id = $this->filter($index->key);
         $type = $index->type;
 

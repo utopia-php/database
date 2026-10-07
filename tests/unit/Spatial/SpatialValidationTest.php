@@ -38,9 +38,9 @@ class SpatialValidationTest extends TestCase
     protected function setUp(): void
     {
         $this->adapter = self::createStub(SpatialAdapter::class);
-        $this->adapter->method('getSharedTables')->willReturn(false);
+        $this->adapter->method('hasSharedTables')->willReturn(false);
         $this->adapter->method('getTenant')->willReturn(null);
-        $this->adapter->method('getTenantPerDocument')->willReturn(false);
+        $this->adapter->method('isTenantPerDocument')->willReturn(false);
         $this->adapter->method('getNamespace')->willReturn('');
         $this->adapter->method('limits')->willReturn(new Limits(
             string: 16777215,

@@ -976,7 +976,7 @@ trait SchemalessTests
         $curDate1 = '2000-01-05T05:05:05.000+00:00';
 
         // createDocument with preserved dates
-        $doc1 = $this->asDocument($database->withPreserveDates(function () use ($database, $col, $permissions, $createdAt1, $updatedAt1, $curDate1) {
+        $doc1 = $this->asDocument($database->withPreserveDates(true, function () use ($database, $col, $permissions, $createdAt1, $updatedAt1, $curDate1) {
             return $database->createDocument($col, new Document([
                 '$id' => 'd1',
                 '$permissions' => $permissions,
@@ -1029,7 +1029,7 @@ trait SchemalessTests
         $updatedAt3 = '2002-03-05T05:06:08.000+00:00';
         $curDate3 = '2002-03-06T07:08:09.000+00:00';
 
-        $countCreated = $database->withPreserveDates(function () use ($database, $col, $permissions, $createdAt2, $updatedAt2, $curDate2, $createdAt3, $updatedAt3, $curDate3) {
+        $countCreated = $database->withPreserveDates(true, function () use ($database, $col, $permissions, $createdAt2, $updatedAt2, $curDate2, $createdAt3, $updatedAt3, $curDate3) {
             return $database->createDocuments($col, [
                 new Document([
                     '$id' => 'd2',
@@ -1080,7 +1080,7 @@ trait SchemalessTests
         // updateDocument with preserved $updatedAt and custom date field
         $newCurDate1 = '2000-02-01T00:00:00.000+00:00';
         $newUpdatedAt1 = '2000-02-02T02:02:02.000+00:00';
-        $updated1 = $this->asDocument($database->withPreserveDates(function () use ($database, $col, $newCurDate1, $newUpdatedAt1) {
+        $updated1 = $this->asDocument($database->withPreserveDates(true, function () use ($database, $col, $newCurDate1, $newUpdatedAt1) {
             return $database->updateDocument($col, 'd1', new Document([
                 'curDate' => $newCurDate1,
                 '$updatedAt' => $newUpdatedAt1,
@@ -1105,7 +1105,7 @@ trait SchemalessTests
         // updateDocuments with preserved $updatedAt over a subset
         $bulkCurDate = '2001-01-01T00:00:00.000+00:00';
         $bulkUpdatedAt = '2001-01-02T00:00:00.000+00:00';
-        $updatedCount = $database->withPreserveDates(function () use ($database, $col, $bulkCurDate, $bulkUpdatedAt) {
+        $updatedCount = $database->withPreserveDates(true, function () use ($database, $col, $bulkCurDate, $bulkUpdatedAt) {
             return $database->updateDocuments(
                 $col,
                 new Document([
@@ -1137,7 +1137,7 @@ trait SchemalessTests
         $createdAt4 = '2003-03-03T03:03:03.000+00:00';
         $updatedAt4 = '2003-03-04T04:04:04.000+00:00';
         $curDate4 = '2003-03-05T05:05:05.000+00:00';
-        $up1 = $this->asDocument($database->withPreserveDates(function () use ($database, $col, $permissions, $createdAt4, $updatedAt4, $curDate4) {
+        $up1 = $this->asDocument($database->withPreserveDates(true, function () use ($database, $col, $permissions, $createdAt4, $updatedAt4, $curDate4) {
             return $database->upsertDocument($col, new Document([
                 '$id' => 'd4',
                 '$permissions' => $permissions,
@@ -1162,7 +1162,7 @@ trait SchemalessTests
 
         $updatedAt4b = '2003-03-06T06:06:06.000+00:00';
         $curDate4b = '2003-03-07T07:07:07.000+00:00';
-        $up2 = $this->asDocument($database->withPreserveDates(function () use ($database, $col, $updatedAt4b, $curDate4b) {
+        $up2 = $this->asDocument($database->withPreserveDates(true, function () use ($database, $col, $updatedAt4b, $curDate4b) {
             return $database->upsertDocument($col, new Document([
                 '$id' => 'd4',
                 'curDate' => $curDate4b,
@@ -1192,7 +1192,7 @@ trait SchemalessTests
         $updatedAt2b = '2001-02-08T08:08:08.000+00:00';
         $curDate2b = '2001-02-09T09:09:09.000+00:00';
 
-        $upCount = $database->withPreserveDates(function () use ($database, $col, $permissions, $createdAt5, $updatedAt5, $curDate5, $updatedAt2b, $curDate2b) {
+        $upCount = $database->withPreserveDates(true, function () use ($database, $col, $permissions, $createdAt5, $updatedAt5, $curDate5, $updatedAt2b, $curDate2b) {
             return $database->upsertDocuments($col, [
                 new Document([
                     '$id' => 'd5',

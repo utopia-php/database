@@ -781,7 +781,7 @@ trait IndexTests
         ];
         $index = Index::key(key: 'tagsfirst', attributes: ['tags', 'status', 'name'], lengths: [255, null, 16], orders: [null, null, OrderDirection::Desc]);
 
-        $tenant = $database->getSharedTables() ? ['_tenant'] : [];
+        $tenant = $database->hasSharedTables() ? ['_tenant'] : [];
         $expected = match (true) {
             $adapter instanceof Postgres => [...$tenant, 'tags', 'status', 'name DESC'],
             $adapter->supports(Capability::IndexArrayCast) => [...$tenant, '', 'status', 'name(16)'],
@@ -825,7 +825,7 @@ trait IndexTests
             $database->createIndex($collection, Index::key(key: 'countryfirst', attributes: ['data.country', 'status'], orders: [OrderDirection::Desc, null]));
 
             $parts = $this->getIndexKeyParts($database, $collection, 'countryfirst');
-            $tenant = $database->getSharedTables() ? ['_tenant'] : [];
+            $tenant = $database->hasSharedTables() ? ['_tenant'] : [];
 
             $this->assertSame([...$tenant, "(data ->> 'country'::text) DESC", 'status'], $parts);
         } finally {
@@ -1219,7 +1219,7 @@ trait IndexTests
                 $this->markTestSkipped('getSchemaIndexes() does not report indexes under their id on this adapter');
             }
 
-            if ($database->getSharedTables()) {
+            if ($database->hasSharedTables()) {
                 try {
                     $database->createIndex($collection, Index::unique(key: 'lookup', attributes: ['email']));
                     $this->fail('An index another tenant may use must not be replaced under shared tables');
@@ -1487,7 +1487,7 @@ trait IndexTests
      */
     private function explainMongoFind(Mongo $adapter, string $collection, array $filter): string
     {
-        if ($adapter->getSharedTables()) {
+        if ($adapter->hasSharedTables()) {
             $filter = [Storage::TENANT => $adapter->getTenant(), ...$filter];
         }
 

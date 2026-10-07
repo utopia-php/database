@@ -24,7 +24,7 @@ final class MetadataWriteRecorder extends Database
     public function updateDocument(string $collection, string $id, Document $document): Document
     {
         if ($collection === self::METADATA) {
-            $this->validations[] = $this->isValidationEnabled();
+            $this->validations[] = $this->isValidating();
         }
 
         return parent::updateDocument($collection, $id, $document);

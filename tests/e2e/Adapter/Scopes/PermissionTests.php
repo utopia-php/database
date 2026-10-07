@@ -35,7 +35,7 @@ trait PermissionTests
 
         // Only the SQL adapters keep permissions in a side table that carries
         // its own tenant column; Mongo stores them on the document itself.
-        if (! $database->getSharedTables() || ! $database->getAdapter() instanceof SQL) {
+        if (! $database->hasSharedTables() || ! $database->getAdapter() instanceof SQL) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -84,7 +84,7 @@ trait PermissionTests
         $database = $this->getDatabase();
         $adapter = $database->getAdapter();
 
-        if (! $database->getSharedTables() || ! $adapter instanceof SQL) {
+        if (! $database->hasSharedTables() || ! $adapter instanceof SQL) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -160,7 +160,7 @@ trait PermissionTests
         $database = $this->getDatabase();
         $adapter = $database->getAdapter();
 
-        if (! $database->getSharedTables() || ! $adapter instanceof SQL) {
+        if (! $database->hasSharedTables() || ! $adapter instanceof SQL) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -263,7 +263,7 @@ trait PermissionTests
         $adapter = $database->getAdapter();
 
         if (
-            ! $database->getSharedTables()
+            ! $database->hasSharedTables()
             || ! $adapter->hasFeature(Feature\Upserts::class)
             || ! $adapter->supports(Capability::Schemas)
         ) {
@@ -272,7 +272,7 @@ trait PermissionTests
             return;
         }
 
-        $tenantPerDocument = $database->getTenantPerDocument();
+        $tenantPerDocument = $database->isTenantPerDocument();
         $tenant = $database->getTenant();
         $namespace = $database->getNamespace();
         $current = $database->getDatabase();

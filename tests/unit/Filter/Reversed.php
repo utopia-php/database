@@ -1,10 +1,10 @@
 <?php
 
-namespace Tests\Unit\Type;
+namespace Tests\Unit\Filter;
 
-use Utopia\Database\Type\Custom;
+use Utopia\Database\Filter\Codec;
 
-final readonly class Reversed implements Custom
+final readonly class Reversed implements Codec
 {
     public function __construct(private string $name = 'reversed')
     {

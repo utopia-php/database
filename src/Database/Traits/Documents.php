@@ -468,7 +468,7 @@ trait Documents
         }
 
         if (empty($id)) {
-            return $this->createDocumentInstance($collection, []);
+            return $this->newDocument($collection, []);
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
@@ -561,14 +561,14 @@ trait Documents
         }
 
         if (\is_array($cached) && isset($cached[self::CACHE_EMPTY_MARKER])) {
-            return $this->createDocumentInstance($collection->getId(), []);
+            return $this->newDocument($collection->getId(), []);
         }
 
         if ($cached) {
             /** @var array<string, mixed> $cached */
             $document = $definition
                 ? $this->createDefinitionInstance($documentKey, $cached)
-                : $this->createDocumentInstance($collection->getId(), $cached);
+                : $this->newDocument($collection->getId(), $cached);
             $document = $this->casting($collection, $document);
 
             if ($collection->getId() !== self::METADATA) {
@@ -577,7 +577,7 @@ trait Documents
                     ...$collection->getPermissionsByType(PermissionType::Read),
                     ...($documentSecurity ? $document->getPermissionsByType(PermissionType::Read) : []),
                 ]))) {
-                    return $this->createDocumentInstance($collection->getId(), []);
+                    return $this->newDocument($collection->getId(), []);
                 }
             }
 
@@ -586,7 +586,7 @@ trait Documents
             $this->trigger(Event::DocumentRead, $document);
 
             if ($this->isTtlExpired($collection, $document)) {
-                return $this->createDocumentInstance($collection->getId(), []);
+                return $this->newDocument($collection->getId(), []);
             }
 
             $this->attachCollectionCacheEpoch($document, \is_string($collectionEpoch) ? $collectionEpoch : null);
@@ -654,11 +654,11 @@ trait Documents
                 Console::warning('Failed to save empty document to cache: '.$e->getMessage());
             }
 
-            return $this->createDocumentInstance($collection->getId(), []);
+            return $this->newDocument($collection->getId(), []);
         }
 
         if ($this->isTtlExpired($collection, $document)) {
-            return $this->createDocumentInstance($collection->getId(), []);
+            return $this->newDocument($collection->getId(), []);
         }
 
         $collectionState = $cacheable && $definition
@@ -669,7 +669,7 @@ trait Documents
 
         // Convert to custom document type if mapped
         if (isset($this->documentTypes[$collection->getId()])) {
-            $document = $this->createDocumentInstance($collection->getId(), $document->getArrayCopy());
+            $document = $this->newDocument($collection->getId(), $document->getArrayCopy());
         }
 
         $document->setAttribute(Document::COLLECTION, $collection->getId());
@@ -679,7 +679,7 @@ trait Documents
                 ...$collection->getPermissionsByType(PermissionType::Read),
                 ...($documentSecurity ? $document->getPermissionsByType(PermissionType::Read) : []),
             ]))) {
-                return $this->createDocumentInstance($collection->getId(), []);
+                return $this->newDocument($collection->getId(), []);
             }
         }
 
@@ -802,7 +802,7 @@ trait Documents
     private function createDefinitionInstance(string $documentKey, array $cached): Document
     {
         if (($this->documentTypes[self::METADATA] ?? null) !== Collection::class) {
-            return $this->createDocumentInstance(self::METADATA, $cached);
+            return $this->newDocument(self::METADATA, $cached);
         }
 
         $entry = self::$definitionModels[$documentKey] ?? null;
@@ -810,7 +810,7 @@ trait Documents
             return clone $entry['model'];
         }
 
-        $model = $this->createDocumentInstance(self::METADATA, $cached);
+        $model = $this->newDocument(self::METADATA, $cached);
 
         if (\count(self::$definitionModels) >= self::DEFINITION_MODELS_LIMIT) {
             self::$definitionModels = [];
@@ -1048,7 +1048,7 @@ trait Documents
         $document = $this->decode($collection, $document);
 
         if (isset($this->documentTypes[$collection->getId()])) {
-            $document = $this->createDocumentInstance($collection->getId(), $document->getArrayCopy());
+            $document = $this->newDocument($collection->getId(), $document->getArrayCopy());
         }
 
         $document = $this->decorateDocument(Event::DocumentCreate, $collection, $document);
@@ -1116,16 +1116,16 @@ trait Documents
     {
         if (
             $collection !== self::METADATA
-            && $this->adapter->getSharedTables()
-            && ! $this->adapter->getTenantPerDocument()
+            && $this->adapter->hasSharedTables()
+            && ! $this->adapter->isTenantPerDocument()
             && empty($this->adapter->getTenant())
         ) {
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
         if (
-            ! $this->adapter->getSharedTables()
-            && $this->adapter->getTenantPerDocument()
+            ! $this->adapter->hasSharedTables()
+            && $this->adapter->isTenantPerDocument()
         ) {
             throw new DatabaseException('Shared tables must be enabled if tenant per document is enabled.');
         }
@@ -1161,8 +1161,8 @@ trait Documents
             $document->setAttribute(Document::PERMISSIONS, []);
         }
 
-        if ($this->adapter->getSharedTables()) {
-            if ($this->adapter->getTenantPerDocument()) {
+        if ($this->adapter->hasSharedTables()) {
+            if ($this->adapter->isTenantPerDocument()) {
                 if (
                     $collection->getId() !== static::METADATA
                     && $document->getTenant() === null
@@ -1220,14 +1220,14 @@ trait Documents
         ?callable $onError = null,
     ): int {
         if (
-            $this->adapter->getSharedTables()
-            && ! $this->adapter->getTenantPerDocument()
+            $this->adapter->hasSharedTables()
+            && ! $this->adapter->isTenantPerDocument()
             && empty($this->adapter->getTenant())
         ) {
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
-        if (! $this->adapter->getSharedTables() && $this->adapter->getTenantPerDocument()) {
+        if (! $this->adapter->hasSharedTables() && $this->adapter->isTenantPerDocument()) {
             throw new DatabaseException('Shared tables must be enabled if tenant per document is enabled.');
         }
 
@@ -1272,8 +1272,8 @@ trait Documents
                 $document->setAttribute(Document::PERMISSIONS, []);
             }
 
-            if ($this->adapter->getSharedTables()) {
-                if ($this->adapter->getTenantPerDocument()) {
+            if ($this->adapter->hasSharedTables()) {
+                if ($this->adapter->isTenantPerDocument()) {
                     if ($document->getTenant() === null) {
                         throw new DatabaseException('Missing tenant. Tenant must be set when tenant per document is enabled.');
                     }
@@ -1315,7 +1315,7 @@ trait Documents
                 }
             );
             $batch = $this->duplicateSkipping()->get()
-                ? $this->adapter->skipDuplicates($insert)
+                ? $this->adapter->ignoreDuplicates($insert)
                 : $insert();
 
             if ($onNext !== null || $hasRelationships) {
@@ -1410,7 +1410,7 @@ trait Documents
             }
             $document[Document::CREATED_AT] = ($createdAt === null || ! $this->datePreservation()->get()) ? $old->getCreatedAt() : $createdAt;
 
-            if ($this->adapter->getSharedTables()) {
+            if ($this->adapter->hasSharedTables()) {
                 $document[Document::TENANT] = $old->getTenant(); // Make sure user doesn't switch tenant
             }
             $document = new Document($document);
@@ -1647,7 +1647,7 @@ trait Documents
 
         // Convert to custom document type if mapped
         if (isset($this->documentTypes[$collection->getId()])) {
-            $document = $this->createDocumentInstance($collection->getId(), $document->getArrayCopy());
+            $document = $this->newDocument($collection->getId(), $document->getArrayCopy());
         }
 
         $document = $this->decorateDocument(Event::DocumentUpdate, $collection, $document);
@@ -1731,7 +1731,7 @@ trait Documents
             $updates[Document::CREATED_AT] = $updates->getCreatedAt();
         }
 
-        if ($this->adapter->getSharedTables()) {
+        if ($this->adapter->hasSharedTables()) {
             $updates[Document::TENANT] = $this->adapter->getTenant();
         }
 
@@ -1975,14 +1975,14 @@ trait Documents
         }
 
         if (
-            $this->adapter->getSharedTables()
-            && ! $this->adapter->getTenantPerDocument()
+            $this->adapter->hasSharedTables()
+            && ! $this->adapter->isTenantPerDocument()
             && empty($this->adapter->getTenant())
         ) {
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
-        if (! $this->adapter->getSharedTables() && $this->adapter->getTenantPerDocument()) {
+        if (! $this->adapter->hasSharedTables() && $this->adapter->isTenantPerDocument()) {
             throw new DatabaseException('Shared tables must be enabled if tenant per document is enabled.');
         }
 
@@ -2119,8 +2119,8 @@ trait Documents
                 $document->setAttribute(Document::PERMISSIONS, $old->getPermissions());
             }
 
-            if ($this->adapter->getSharedTables()) {
-                if ($this->adapter->getTenantPerDocument()) {
+            if ($this->adapter->hasSharedTables()) {
+                if ($this->adapter->isTenantPerDocument()) {
                     if ($document->getTenant() === null) {
                         throw new DatabaseException('Missing tenant. Tenant must be set when tenant per document is enabled.');
                     }
@@ -2299,7 +2299,7 @@ trait Documents
      */
     private function findDocumentsToUpsert(string $collection, array $documents): array
     {
-        $perTenant = $this->getSharedTables() && $this->getTenantPerDocument();
+        $perTenant = $this->hasSharedTables() && $this->isTenantPerDocument();
 
         $batches = [];
         foreach ($documents as $document) {
@@ -2345,7 +2345,7 @@ trait Documents
      */
     private function upsertKey(Document $document): string
     {
-        return $this->getSharedTables() && $this->getTenantPerDocument()
+        return $this->hasSharedTables() && $this->isTenantPerDocument()
             ? $document->getTenant().':'.$document->getId()
             : $document->getId();
     }
@@ -2720,7 +2720,7 @@ trait Documents
     ): int {
         $this->rejectJoins($queries, 'Join queries are not supported for bulk deletes');
 
-        if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
+        if ($this->adapter->hasSharedTables() && empty($this->adapter->getTenant())) {
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
@@ -3276,7 +3276,7 @@ trait Documents
         // under the adapter's tenant, so borrowing the document's null here
         // purged an epoch no reader ever looks at and left every cached
         // _metadata entry - a negative marker above all - live for its full TTL.
-        if ($this->getSharedTables() && $this->getTenantPerDocument() && $tenant !== null) {
+        if ($this->hasSharedTables() && $this->isTenantPerDocument() && $tenant !== null) {
             $this->withTenant($tenant, $callback);
 
             return;
@@ -3287,7 +3287,7 @@ trait Documents
 
     private function getDocumentIdentity(Document $document): string
     {
-        if (! $this->adapter->getTenantPerDocument()) {
+        if (! $this->adapter->isTenantPerDocument()) {
             return $document->getId();
         }
 
@@ -3484,7 +3484,7 @@ trait Documents
                                 }
 
                                 /** @var array<string, mixed> $item */
-                                $document = $this->createDocumentInstance($collection->getId(), $item);
+                                $document = $this->newDocument($collection->getId(), $item);
                                 $document = $this->casting($collection, $document);
 
                                 if ($this->isTtlExpired($collection, $document)) {
@@ -3914,7 +3914,7 @@ trait Documents
             }
 
             if ($hasCustomType) {
-                $node = $this->createDocumentInstance($collectionId, $node->getArrayCopy());
+                $node = $this->newDocument($collectionId, $node->getArrayCopy());
             }
 
             if (! $node->isEmpty()) {
@@ -4293,7 +4293,7 @@ trait Documents
         if (! \str_contains($attribute, '.') && $this->declaresSumAttribute($collection, $attribute)) {
             $validator = $this->getSumValidator($collection, $attributes, $supportForAttributes);
         } else {
-            $validator = new Aggregate($attributes, $supportForAttributes, $this->adapter->getSharedTables());
+            $validator = new Aggregate($attributes, $supportForAttributes, $this->adapter->hasSharedTables());
             $joins = [];
             foreach ($this->aliasedJoinCollections($queries, $joinedCollections) as $alias => $joined) {
                 $joins[] = JoinedCollection::of($alias, $joined);
@@ -4316,7 +4316,7 @@ trait Documents
     private function getSumValidator(Document $collection, array $attributes, bool $supportForAttributes): Aggregate
     {
         $key = $this->getCollectionMetadataCacheKey($collection->getId())
-            .'::'.(int) $supportForAttributes.(int) $this->adapter->getSharedTables()
+            .'::'.(int) $supportForAttributes.(int) $this->adapter->hasSharedTables()
             .'::'.Collection::fromDocument($collection)->fingerprint();
 
         if (isset($this->sumValidatorCache[$key])) {
@@ -4327,7 +4327,7 @@ trait Documents
             $this->sumValidatorCache = [];
         }
 
-        return $this->sumValidatorCache[$key] = new Aggregate($attributes, $supportForAttributes, $this->adapter->getSharedTables());
+        return $this->sumValidatorCache[$key] = new Aggregate($attributes, $supportForAttributes, $this->adapter->hasSharedTables());
     }
 
     /**

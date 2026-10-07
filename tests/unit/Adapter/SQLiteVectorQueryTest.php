@@ -52,7 +52,7 @@ final class SQLiteVectorQueryTest extends TestCase
 
     public function testWithoutValidationAVectorQueryAddsNoDistanceOrderOrFilter(): void
     {
-        $this->database->disableValidation();
+        $this->database->setValidation(false);
 
         $items = $this->database->find('items', [
             Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),

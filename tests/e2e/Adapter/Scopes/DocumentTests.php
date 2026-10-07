@@ -3197,13 +3197,13 @@ trait DocumentTests
             $this->assertNotSame('', $e->getMessage());
         }
 
-        $database->disableValidation();
+        $database->setValidation(false);
 
         $database->find('validation', queries: [
             Query::equal('$id', ['docwithmorethan36charsasitsidentifier']),
         ]);
 
-        $database->enableValidation();
+        $database->setValidation(true);
 
         try {
             $database->find('validation', queries: [
@@ -3220,7 +3220,7 @@ trait DocumentTests
             ]);
         });
 
-        $database->enableValidation();
+        $database->setValidation(true);
     }
 
     public function testExceptionDuplicate(): void
@@ -3274,7 +3274,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSharedTables()) {
+        if ($database->getAdapter()->hasSharedTables()) {
             $documents = $database->find(
                 $this->getDocumentsCollection(),
                 [Query::select(['*'])] // Mongo bug with Integer UID
@@ -5092,14 +5092,14 @@ trait DocumentTests
             $document->setAttribute('value', $index + 100);
         }
 
-        $profiler = $database->enableProfiling()->getProfiler();
+        $profiler = $database->setProfiling(true)->getProfiler();
         $this->assertNotNull($profiler);
 
         try {
             $profiler->reset();
             $updated = $database->upsertDocuments($collection, $documents);
         } finally {
-            $database->disableProfiling();
+            $database->setProfiling(false);
         }
 
         $table = $database->getNamespace().'_'.$collection;
@@ -5241,7 +5241,7 @@ trait DocumentTests
         $doc1 = $database->getDocument($collectionName, 'doc1');
         $currentSeq1 = $doc1->getSequence();
 
-        $database->withPreserveSequence(function () use ($database, $collectionName, $currentSeq1) {
+        $database->withPreserveSequence(true, function () use ($database, $collectionName, $currentSeq1) {
             $database->upsertDocuments($collectionName, [
                 new Document([
                     '$id' => 'doc1',
@@ -5260,7 +5260,7 @@ trait DocumentTests
         $this->assertEquals($currentSeq1, $doc1Final->getSequence());
 
         // Verify flag was reset after withPreserveSequence
-        $this->assertFalse($database->getPreserveSequence());
+        $this->assertFalse($database->isPreservingSequence());
 
         // Test: With preserveSequence=true, invalid $sequence should throw error (SQL adapters only)
         $database->setPreserveSequence(true);
@@ -5731,7 +5731,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getSharedTables()) {
+        if (! $database->hasSharedTables()) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -5760,7 +5760,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getSharedTables() || $database->getTenantPerDocument()) {
+        if (! $database->hasSharedTables() || $database->isTenantPerDocument()) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -8534,7 +8534,7 @@ trait DocumentTests
         $database->createAttribute($collectionId, Attribute::string(key: 'attrB', size: 50, required: true));
 
         // bypass required
-        $database->disableValidation();
+        $database->setValidation(false);
 
         $permissions = [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any()), Permission::delete(Role::any())];
         $docs = $database->createDocuments($collectionId, [
@@ -8548,7 +8548,7 @@ trait DocumentTests
             $this->assertEquals('B', $doc->getAttribute('attrB'));
         }
         // reset
-        $database->enableValidation();
+        $database->setValidation(true);
 
         try {
             $database->createDocuments($collectionId, [
@@ -8596,7 +8596,7 @@ trait DocumentTests
             $this->assertInstanceOf(StructureException::class, $e);
         }
 
-        $database->disableValidation();
+        $database->setValidation(false);
         $doc = $database->createDocument($collection, new Document([
             '$id' => 'created-null',
             '$permissions' => [Permission::read(Role::any()), Permission::create(Role::any()), Permission::update(Role::any())],
@@ -8604,7 +8604,7 @@ trait DocumentTests
             'age' => null,
         ]));
         $this->assertEquals('created-null', $doc->getId());
-        $database->enableValidation();
+        $database->setValidation(true);
 
         // Seed a valid document for updates
         $valid = $database->createDocument($collection, new Document([
@@ -8625,12 +8625,12 @@ trait DocumentTests
             $this->assertInstanceOf(StructureException::class, $e);
         }
 
-        $database->disableValidation();
+        $database->setValidation(false);
         $updated = $database->updateDocument($collection, 'valid', new Document([
             'age' => null,
         ]));
         $this->assertNull($updated->getAttribute('age'));
-        $database->enableValidation();
+        $database->setValidation(true);
 
         // Seed a few valid docs for bulk update
         for ($i = 0; $i < 2; $i++) {
@@ -8653,12 +8653,12 @@ trait DocumentTests
                 $this->assertInstanceOf(StructureException::class, $e);
             }
 
-            $database->disableValidation();
+            $database->setValidation(false);
             $count = $database->updateDocuments($collection, new Document([
                 'name' => null,
             ]));
             $this->assertGreaterThanOrEqual(3, $count); // at least the seeded docs are updated
-            $database->enableValidation();
+            $database->setValidation(true);
         }
 
         // 4) upsertDocuments with an increase and a null required should fail when validation enabled, pass when disabled
@@ -8678,7 +8678,7 @@ trait DocumentTests
                 $this->assertInstanceOf(StructureException::class, $e);
             }
 
-            $database->disableValidation();
+            $database->setValidation(false);
             $ucount = $database->upsertDocuments(
                 collection: $collection,
                 increase: 'value',
@@ -8689,7 +8689,7 @@ trait DocumentTests
                 ])]
             );
             $this->assertEquals(1, $ucount);
-            $database->enableValidation();
+            $database->setValidation(true);
         }
 
         // Cleanup
@@ -8737,7 +8737,7 @@ trait DocumentTests
             return null;
         }
 
-        $profiler = $database->enableProfiling()->getProfiler();
+        $profiler = $database->setProfiling(true)->getProfiler();
         $this->assertNotNull($profiler);
 
         try {
@@ -8746,7 +8746,7 @@ trait DocumentTests
 
             return $profiler->getQueryCount();
         } finally {
-            $database->disableProfiling();
+            $database->setProfiling(false);
         }
     }
 
@@ -8782,9 +8782,9 @@ trait DocumentTests
             $this->assertEquals('Invalid document structure: Unknown attribute: "unknown"', $e->getMessage());
         }
 
-        $this->assertSame(false, $database->getDropUnknownAttributes());
+        $this->assertSame(false, $database->isDroppingUnknownAttributes());
         $database->setDropUnknownAttributes(true);
-        $this->assertSame(true, $database->getDropUnknownAttributes());
+        $this->assertSame(true, $database->isDroppingUnknownAttributes());
 
         try {
             $collection = $database->getCollection(__FUNCTION__);
@@ -8845,7 +8845,7 @@ trait DocumentTests
             $database->setDropUnknownAttributes(false);
         }
 
-        $this->assertSame(false, $database->getDropUnknownAttributes());
+        $this->assertSame(false, $database->isDroppingUnknownAttributes());
     }
 
     public function testCreateDocumentWithBigIntType(): void
@@ -9084,7 +9084,7 @@ trait DocumentTests
 
         $emittedIds = [];
         $collection = __FUNCTION__;
-        $count = $database->skipDuplicates(function () use ($database, $collection, &$emittedIds) {
+        $count = $database->ignoreDuplicates(function () use ($database, $collection, &$emittedIds) {
             return $database->createDocuments($collection, [
                 new Document([
                     '$id' => 'doc1',
@@ -9141,7 +9141,7 @@ trait DocumentTests
 
         $emittedIds = [];
         $collection = __FUNCTION__;
-        $count = $database->skipDuplicates(function () use ($database, $collection, &$emittedIds) {
+        $count = $database->ignoreDuplicates(function () use ($database, $collection, &$emittedIds) {
             return $database->createDocuments($collection, [
                 new Document([
                     '$id' => 'existing',
@@ -9175,7 +9175,7 @@ trait DocumentTests
         $database->createCollection(Collection::create(id: $collection));
         $database->createAttribute($collection, Attribute::string(key: 'name', size: 128, required: true));
 
-        $count = $database->skipDuplicates(fn () => $database->createDocuments($collection, []));
+        $count = $database->ignoreDuplicates(fn () => $database->createDocuments($collection, []));
 
         $this->assertSame(0, $count);
         $this->assertCount(0, $database->find($collection));
@@ -9202,8 +9202,8 @@ trait DocumentTests
 
         $database->createDocuments($collection, [$makeDoc('seed', 'Seed')]);
 
-        $countOuter = $database->skipDuplicates(function () use ($database, $collection, $makeDoc) {
-            $countInner = $database->skipDuplicates(function () use ($database, $collection, $makeDoc) {
+        $countOuter = $database->ignoreDuplicates(function () use ($database, $collection, $makeDoc) {
+            $countInner = $database->ignoreDuplicates(function () use ($database, $collection, $makeDoc) {
                 return $database->createDocuments($collection, [
                     $makeDoc('seed', 'Dup'),
                     $makeDoc('innerNew', 'InnerNew'),
@@ -9268,7 +9268,7 @@ trait DocumentTests
         }
 
         $emittedIds = [];
-        $count = $database->skipDuplicates(function () use ($database, $collection, $batch, &$emittedIds) {
+        $count = $database->ignoreDuplicates(function () use ($database, $collection, $batch, &$emittedIds) {
             return $database->createDocuments($collection, $batch, batchSize: 100, onNext: function (Document $doc) use (&$emittedIds) {
                 $emittedIds[] = $doc->getId();
             });
@@ -9309,13 +9309,13 @@ trait DocumentTests
             ['a', 'b', 'c']
         );
 
-        $firstCount = $database->skipDuplicates(
+        $firstCount = $database->ignoreDuplicates(
             fn () => $database->createDocuments($collection, $makeBatch('First'))
         );
         $this->assertSame(3, $firstCount);
 
         $emittedIds = [];
-        $secondCount = $database->skipDuplicates(function () use ($database, $collection, $makeBatch, &$emittedIds) {
+        $secondCount = $database->ignoreDuplicates(function () use ($database, $collection, $makeBatch, &$emittedIds) {
             return $database->createDocuments($collection, $makeBatch('Second'), onNext: function (Document $doc) use (&$emittedIds) {
                 $emittedIds[] = $doc->getId();
             });
@@ -9404,7 +9404,7 @@ trait DocumentTests
             ]),
         ];
 
-        $database->skipDuplicates(fn () => $database->createDocuments($parent, $batch));
+        $database->ignoreDuplicates(fn () => $database->createDocuments($parent, $batch));
 
         $existing = $database->getDocument($parent, 'existingParent');
         $this->assertFalse($existing->isEmpty());
@@ -9878,7 +9878,7 @@ trait DocumentTests
         try {
             $database->getAuthorization()->skip(fn (): Document => $database->getAdapter()->createDocument($database->getCollection($collection), new Document([
                 '$id' => 'legacy',
-                ...($database->getSharedTables() ? ['$tenant' => $database->getTenant()] : []),
+                ...($database->hasSharedTables() ? ['$tenant' => $database->getTenant()] : []),
                 '$permissions' => [],
                 '$createdAt' => DateTime::now(),
                 '$updatedAt' => DateTime::now(),
@@ -9932,7 +9932,7 @@ trait DocumentTests
             ]));
 
             $emittedIds = [];
-            $created = $database->skipDuplicates(function () use ($database, $collection, &$emittedIds): int {
+            $created = $database->ignoreDuplicates(function () use ($database, $collection, &$emittedIds): int {
                 return $database->createDocuments($collection, [
                     new Document([
                         '$id' => 'existing',
@@ -9997,7 +9997,7 @@ trait DocumentTests
             $created = null;
             $thrown = null;
             try {
-                $created = $database->skipDuplicates(fn (): int => $database->createDocuments($collection, [
+                $created = $database->ignoreDuplicates(fn (): int => $database->createDocuments($collection, [
                     new Document(['$id' => 'colliding', '$permissions' => $permissions, 'slug' => 'shared']),
                 ]));
             } catch (DuplicateException $exception) {
@@ -10356,7 +10356,7 @@ trait DocumentTests
                 'category' => 'profiled_value',
             ]));
 
-            $profiler = $database->enableProfiling()->getProfiler();
+            $profiler = $database->setProfiling(true)->getProfiler();
             $this->assertNotNull($profiler);
 
             try {
@@ -10364,7 +10364,7 @@ trait DocumentTests
                 $database->find($collection, [Query::equal('category', ['profiled_value'])]);
                 $database->count($collection, [Query::equal('category', ['profiled_value'])]);
             } finally {
-                $database->disableProfiling();
+                $database->setProfiling(false);
             }
 
             $operations = [];
@@ -10606,14 +10606,14 @@ trait DocumentTests
      */
     private function statementsOn(Database $database, string $table, callable $read): array
     {
-        $profiler = $database->enableProfiling()->getProfiler();
+        $profiler = $database->setProfiling(true)->getProfiler();
         $this->assertNotNull($profiler);
 
         try {
             $profiler->reset();
             $result = $read();
         } finally {
-            $database->disableProfiling();
+            $database->setProfiling(false);
         }
 
         $statements = [];

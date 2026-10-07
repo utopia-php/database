@@ -1263,7 +1263,7 @@ class Memory extends Adapter implements Feature\Relationships
     }
 
     /**
-     * @return Document|null The stored document, or null when skipDuplicates() skipped it
+     * @return Document|null The stored document, or null when ignoreDuplicates() skipped it
      */
     private function insertDocument(Document $collection, Document $document): ?Document
     {

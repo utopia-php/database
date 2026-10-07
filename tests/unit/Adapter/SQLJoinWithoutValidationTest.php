@@ -45,7 +45,7 @@ final class SQLJoinWithoutValidationTest extends TestCase
             $this->database->createDocument('notes', new Document(['$id' => $note, 'customerId' => $customer, 'body' => $note]));
         }
 
-        $this->database->disableValidation();
+        $this->database->setValidation(false);
     }
 
     public function testAJoinedSumOfAnInternalAttributeReadsTheMainTable(): void

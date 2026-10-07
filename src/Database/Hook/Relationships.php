@@ -508,7 +508,7 @@ class Relationships implements Attachable, Hook
 
         $adapter = $this->database->getAdapter();
 
-        return $adapter->inTransaction() && ! $adapter->getTenantPerDocument();
+        return $adapter->inTransaction() && ! $adapter->isTenantPerDocument();
     }
 
     private function hasRelatedDocuments(Document $collection, Document $document): bool
@@ -645,7 +645,7 @@ class Relationships implements Attachable, Hook
     private function anyStored(PreparedCreate $prepared, array $ids): bool
     {
         $adapter = $this->database->getAdapter();
-        $tenant = $adapter->getSharedTables() ? $adapter->getTenant() : null;
+        $tenant = $adapter->hasSharedTables() ? $adapter->getTenant() : null;
 
         try {
             foreach ($ids as $collection => $collectionIds) {

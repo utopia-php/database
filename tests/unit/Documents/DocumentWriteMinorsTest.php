@@ -18,6 +18,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Filter;
+use Utopia\Database\Filter\Callback;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
@@ -226,9 +227,10 @@ final class DocumentWriteMinorsTest extends TestCase
     private function database(Adapter $adapter): Database
     {
         $database = new Database($adapter, new Cache(new None()), [
-            self::WRAPPED => [
-                'encode' => static fn (mixed $value): ?string => $value === null ? null : \json_encode(['value' => $value], JSON_THROW_ON_ERROR),
-                'decode' => static function (mixed $value): mixed {
+            new Callback(
+                self::WRAPPED,
+                static fn (mixed $value): ?string => $value === null ? null : \json_encode(['value' => $value], JSON_THROW_ON_ERROR),
+                static function (mixed $value): mixed {
                     if ($value === null) {
                         return null;
                     }
@@ -240,7 +242,7 @@ final class DocumentWriteMinorsTest extends TestCase
 
                     return $decoded['value'];
                 },
-            ],
+            ),
         ]);
         $database->addHook(new Permissions());
         $database

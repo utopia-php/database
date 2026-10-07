@@ -163,7 +163,7 @@ trait DatabaseTests
     public function testUpdateIsRefusedUnderSharedTables(): void
     {
         $database = $this->getDatabase();
-        if (! $database->getSharedTables()) {
+        if (! $database->hasSharedTables()) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -229,7 +229,7 @@ trait DatabaseTests
      */
     private function renamesDatabases(Database $database): bool
     {
-        return ! $database->getSharedTables()
+        return ! $database->hasSharedTables()
             && $database->getAdapter()->supports(Capability::Schemas)
             && ! $this->engineIs(SQLite::class);
     }

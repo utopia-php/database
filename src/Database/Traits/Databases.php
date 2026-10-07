@@ -68,7 +68,7 @@ trait Databases
      */
     public function update(string $database, string $new): bool
     {
-        if ($this->adapter->getSharedTables()) {
+        if ($this->adapter->hasSharedTables()) {
             throw new DatabaseException('Cannot rename a database while shared tables are enabled');
         }
 

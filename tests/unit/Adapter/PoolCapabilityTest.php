@@ -35,7 +35,7 @@ final class PoolCapabilityTest extends TestCase
     {
         $connections = $this->connections(new Memory());
         $database = $this->database($connections);
-        $database->disableValidation();
+        $database->setValidation(false);
         $database->getDocument('posts', 'first');
 
         $this->checkouts = 0;
@@ -49,7 +49,7 @@ final class PoolCapabilityTest extends TestCase
     {
         $connections = $this->connections(new Memory());
         $database = $this->database($connections);
-        $database->disableValidation();
+        $database->setValidation(false);
         $database->getDocument('posts', 'first');
 
         $this->down = true;

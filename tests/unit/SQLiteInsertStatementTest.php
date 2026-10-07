@@ -39,7 +39,7 @@ final class SQLiteInsertStatementTest extends TestCase
         $database = $this->database($shared);
         $database->createDocument(self::COLLECTION, $this->document('warmup', $documentPermissions));
 
-        $profiler = $database->enableProfiling()->getProfiler();
+        $profiler = $database->setProfiling(true)->getProfiler();
         $this->assertNotNull($profiler);
         $profiler->reset();
 

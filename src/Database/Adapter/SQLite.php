@@ -199,17 +199,15 @@ class SQLite extends SQL
         );
     }
 
-    public function setTenant(int|string|null $tenant): bool
+    public function setTenant(int|string|null $tenant): static
     {
         $changed = $this->currentTenant() !== $tenant;
-        $result = parent::setTenant($tenant);
+        parent::setTenant($tenant);
         if ($changed) {
-            // Invalidate after the parent setter so a validation failure
-            // doesn't leave us with a cleared cache against the prior tenant.
             $this->ftsTableCache = [];
         }
 
-        return $result;
+        return $this;
     }
 
     public function setNamespace(string $namespace): static
@@ -222,15 +220,15 @@ class SQLite extends SQL
         return $this;
     }
 
-    public function setSharedTables(bool $sharedTables): bool
+    public function setSharedTables(bool $sharedTables): static
     {
         $changed = $this->sharedTables !== $sharedTables;
-        $result = parent::setSharedTables($sharedTables);
+        parent::setSharedTables($sharedTables);
         if ($changed) {
             $this->ftsTableCache = [];
         }
 
-        return $result;
+        return $this;
     }
 
     #[Override]

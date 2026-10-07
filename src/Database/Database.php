@@ -33,6 +33,8 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Exception\Unconfirmed as UnconfirmedException;
+use Utopia\Database\Filter\Codec;
+use Utopia\Database\Filter\Registry;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Hook\Lifecycle;
 use Utopia\Database\Hook\Named;
@@ -42,7 +44,6 @@ use Utopia\Database\Hook\Transform;
 use Utopia\Database\Profiler\QueryProfiler;
 use Utopia\Database\State\Snapshot;
 use Utopia\Database\State\Value;
-use Utopia\Database\Type\TypeRegistry;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Query\Method;
@@ -226,10 +227,7 @@ class Database
 
     private static ?Collection $definition = null;
 
-    /**
-     * @var array<string, array{encode: callable, decode: callable, signature: string}>
-     */
-    protected array $instanceFilters = [];
+    protected ?Registry $codecs = null;
 
     /**
      * @var array<Lifecycle>
@@ -274,61 +272,9 @@ class Database
     /** @var Value<bool>|null */
     private ?Value $duplicateSkipping = null;
 
-    protected ?NativeDateTime $timestamp {
-        get => $this->requestTimestamp()->get();
-        set {
-            $this->requestTimestamp()->set($value);
-        }
-    }
-
     protected ?Relationships $relationshipHook = null;
 
-    protected bool $filter {
-        get => $this->filtering()->get();
-        set {
-            $this->filtering()->set($value);
-        }
-    }
-
-    /**
-     * @var array<string, bool>|null
-     */
-    protected ?array $disabledFilters {
-        get => $this->filterExclusions()->get();
-        set {
-            $this->filterExclusions()->set($value);
-        }
-    }
-
-    protected bool $validate {
-        get => $this->validation()->get();
-        set {
-            $this->validation()->set($value);
-        }
-    }
-
     protected bool $dropUnknownAttributes = false;
-
-    protected bool $preserveDates {
-        get => $this->datePreservation()->get();
-        set {
-            $this->datePreservation()->set($value);
-        }
-    }
-
-    protected bool $preserveSequence {
-        get => $this->sequencePreservation()->get();
-        set {
-            $this->sequencePreservation()->set($value);
-        }
-    }
-
-    protected bool $skipDuplicates {
-        get => $this->duplicateSkipping()->get();
-        set {
-            $this->duplicateSkipping()->set($value);
-        }
-    }
 
     protected int $maxQueryValues = 5000;
 
@@ -350,8 +296,6 @@ class Database
      */
     protected array $documentTypes = [];
 
-    protected ?TypeRegistry $typeRegistry = null;
-
     protected ?QueryCache $queryCache = null;
 
     protected ?Invalidator $invalidator = null;
@@ -361,24 +305,23 @@ class Database
     private Authorization $authorization;
 
     /**
-     * Construct a new Database instance with the given adapter, cache, and optional instance-level filters.
+     * @param  list<Codec>  $filters  Filters of this handle, which take precedence over the ones addFilter() registers
      *
-     * @param Adapter $adapter The database adapter to use for storage operations.
-     * @param Cache $cache The cache instance for document and collection caching.
-     * @param array<string, array{encode: callable, decode: callable}> $filters Instance-level encode/decode filters.
+     * @throws DuplicateException When a filter is named after a built-in one
      */
     public function __construct(
         Adapter $adapter,
         Cache $cache,
-        array $filters = []
+        array $filters = [],
     ) {
         $this->adapter = $adapter;
         $this->cache = $cache;
-        foreach ($filters as $name => $callbacks) {
-            $filters[$name]['signature'] = self::computeCallableSignature($callbacks['encode'])
-                . ':' . self::computeCallableSignature($callbacks['decode']);
+        if ($filters !== []) {
+            $this->codecs = new Registry();
+            foreach ($filters as $codec) {
+                $this->codecs->register($codec);
+            }
         }
-        $this->instanceFilters = $filters;
 
         $this->setAuthorization(new Authorization());
         $this->documentTypes[self::METADATA] = Collection::class;
@@ -775,7 +718,7 @@ class Database
             $adapter->limits(),
             \array_values($capabilities),
             \array_values(\array_filter(self::FEATURES, $adapter->hasFeature(...))),
-            $adapter->getSharedTables(),
+            $adapter->hasSharedTables(),
             $this->migrating,
             static fn (): bool => $adapter->supports(Capability::DefinedAttributes),
         );
@@ -908,18 +851,26 @@ class Database
         }
     }
 
-    public function setTypeRegistry(?TypeRegistry $typeRegistry): static
+    /**
+     * Use these filters on this handle instead of the ones it was constructed with. They take precedence over the
+     * ones addFilter() registers, and the handles sharing the registry see what is registered on it later.
+     */
+    public function setFilters(Registry $filters): static
     {
-        $this->typeRegistry = $typeRegistry;
+        $this->codecs = $filters;
 
         return $this;
     }
 
-    public function getTypeRegistry(): ?TypeRegistry
+    public function getFilters(): Registry
     {
-        return $this->typeRegistry;
+        return $this->codecs ??= new Registry();
     }
 
+    /**
+     * Cache find() results in the query cache, which takes its name and writer timeout from this database; null stops
+     * caching them.
+     */
     public function setQueryCache(?QueryCache $queryCache): static
     {
         $this->lifecycleHooks = \array_values(\array_filter(
@@ -930,6 +881,7 @@ class Database
         $this->queryCache = $queryCache;
 
         if ($queryCache !== null) {
+            $queryCache->attach($this);
             $this->invalidator = new Invalidator($queryCache);
         }
 
@@ -941,27 +893,28 @@ class Database
         return $this->queryCache;
     }
 
-    public function enableProfiling(): static
+    /**
+     * Record the queries the adapter runs in getProfiler(), or stop recording them.
+     */
+    public function setProfiling(bool $profiling): static
     {
-        if ($this->profiler === null) {
-            $this->profiler = new QueryProfiler();
+        if (! $profiling) {
+            $this->profiler?->disable();
+            $this->adapter->setProfiler(null);
+
+            return $this;
         }
 
+        $this->profiler ??= new QueryProfiler();
         $this->profiler->enable();
         $this->adapter->setProfiler($this->profiler);
 
         return $this;
     }
 
-    public function disableProfiling(): static
+    public function isProfiling(): bool
     {
-        if ($this->profiler !== null) {
-            $this->profiler->disable();
-        }
-
-        $this->adapter->setProfiler(null);
-
-        return $this;
+        return $this->profiler?->isEnabled() ?? false;
     }
 
     public function getProfiler(): ?QueryProfiler
@@ -1024,13 +977,11 @@ class Database
     }
 
     /**
-     * Get shared tables
-     *
-     * Get whether to share tables between tenants
+     * Whether tenants share tables, told apart by the tenant column.
      */
-    public function getSharedTables(): bool
+    public function hasSharedTables(): bool
     {
-        return $this->adapter->getSharedTables();
+        return $this->adapter->hasSharedTables();
     }
 
     /**
@@ -1081,17 +1032,17 @@ class Database
     }
 
     /**
-     * Get whether to allow creating documents with tenant set per document.
+     * Whether a document carries its own tenant instead of the handle's.
      */
-    public function getTenantPerDocument(): bool
+    public function isTenantPerDocument(): bool
     {
-        return $this->adapter->getTenantPerDocument();
+        return $this->adapter->isTenantPerDocument();
     }
 
     /**
      * Sets instance of authorization for permission checks
      */
-    public function setAuthorization(Authorization $authorization): self
+    public function setAuthorization(Authorization $authorization): static
     {
         $this->adapter->setAuthorization($authorization);
         $this->authorization = $authorization;
@@ -1156,7 +1107,7 @@ class Database
         return $this;
     }
 
-    public function getDropUnknownAttributes(): bool
+    public function isDroppingUnknownAttributes(): bool
     {
         return $this->dropUnknownAttributes;
     }
@@ -1175,37 +1126,34 @@ class Database
         return $this;
     }
 
-    /**
-     * Get whether date preservation is enabled.
-     *
-     * @return bool True if dates are being preserved.
-     */
-    public function getPreserveDates(): bool
+    public function isPreservingDates(): bool
     {
         return $this->datePreservation()->get();
     }
 
     /**
-     * Execute a callback with date preservation enabled, restoring the previous state afterward.
-     * Scoped to the calling coroutine and the coroutines it starts.
+     * Run the callback with date preservation on or off for the calling coroutine and the coroutines it starts.
      *
-     * @param callable $callback The callback to execute.
-     * @return mixed The callback's return value.
+     * @template T
+     *
+     * @param  callable(): T  $callback
+     * @return T
      */
-    public function withPreserveDates(callable $callback): mixed
+    public function withPreserveDates(bool $preserve, callable $callback): mixed
     {
-        return $this->datePreservation()->with(true, $callback);
+        return $this->datePreservation()->with($preserve, $callback);
     }
 
     /**
-     * Execute a callback with skipDuplicates enabled, restoring the previous state afterward.
-     * Scoped to the calling coroutine and the coroutines it starts.
+     * Run the callback with creates that hit an existing id or unique key skipping that document instead of
+     * failing, for the calling coroutine and the coroutines it starts.
      *
      * @template T
-     * @param callable(): T $callback
+     *
+     * @param  callable(): T  $callback
      * @return T
      */
-    public function skipDuplicates(callable $callback): mixed
+    public function ignoreDuplicates(callable $callback): mixed
     {
         return $this->duplicateSkipping()->with(true, $callback);
     }
@@ -1223,26 +1171,22 @@ class Database
         return $this;
     }
 
-    /**
-     * Get whether sequence preservation is enabled.
-     *
-     * @return bool True if sequence values are being preserved.
-     */
-    public function getPreserveSequence(): bool
+    public function isPreservingSequence(): bool
     {
         return $this->sequencePreservation()->get();
     }
 
     /**
-     * Execute a callback with sequence preservation enabled, restoring the previous state afterward.
-     * Scoped to the calling coroutine and the coroutines it starts.
+     * Run the callback with sequence preservation on or off for the calling coroutine and the coroutines it starts.
      *
-     * @param callable $callback The callback to execute.
-     * @return mixed The callback's return value.
+     * @template T
+     *
+     * @param  callable(): T  $callback
+     * @return T
      */
-    public function withPreserveSequence(callable $callback): mixed
+    public function withPreserveSequence(bool $preserve, callable $callback): mixed
     {
-        return $this->sequencePreservation()->with(true, $callback);
+        return $this->sequencePreservation()->with($preserve, $callback);
     }
 
     /**
@@ -1251,7 +1195,7 @@ class Database
      * @param bool $migrating True to enable migration mode.
      * @return $this
      */
-    public function setMigrating(bool $migrating): self
+    public function setMigrating(bool $migrating): static
     {
         $this->migrating = $migrating;
         $this->resetProfile();
@@ -1275,7 +1219,7 @@ class Database
      * @param int $max The maximum number of query values.
      * @return $this
      */
-    public function setMaxQueryValues(int $max): self
+    public function setMaxQueryValues(int $max): static
     {
         if ($this->maxQueryValues !== $max) {
             // Validator cache key encodes maxQueryValues; entries built under
@@ -1371,21 +1315,17 @@ class Database
      *
      * @param  string  $collection  Collection ID
      */
-    public function clearDocumentType(string $collection): static
+    public function clearDocumentType(string $collection): void
     {
         unset($this->documentTypes[$collection]);
-
-        return $this;
     }
 
     /**
-     * Clear all document type mappings
+     * Clear every document type mapping a caller set; the metadata collection keeps its own.
      */
-    public function clearAllDocumentTypes(): static
+    public function clearDocumentTypes(): void
     {
         $this->documentTypes = [self::METADATA => Collection::class];
-
-        return $this;
     }
 
     /**
@@ -1400,42 +1340,36 @@ class Database
         return $this;
     }
 
-    /**
-     * Enable validation
-     *
-     * @return $this
-     */
-    public function enableValidation(): static
+    public function setValidation(bool $validation): static
     {
-        $this->validation()->set(true);
+        $this->validation()->set($validation);
 
         return $this;
     }
 
     /**
-     * Disable validation
-     *
-     * @return $this
+     * Whether documents, queries and schema changes are validated.
      */
-    public function disableValidation(): static
-    {
-        $this->validation()->set(false);
-
-        return $this;
-    }
-
-    /**
-     * Whether document structure validation is currently enabled.
-     */
-    public function isValidationEnabled(): bool
+    public function isValidating(): bool
     {
         return $this->validation()->get();
     }
 
     /**
-     * Skip Validation
+     * Run the callback with validation on or off for the calling coroutine and the coroutines it starts.
      *
-     * Execute a callback without validation. Scoped to the calling coroutine and the coroutines it starts.
+     * @template T
+     *
+     * @param  callable(): T  $callback
+     * @return T
+     */
+    public function withValidation(bool $validation, callable $callback): mixed
+    {
+        return $this->validation()->with($validation, $callback);
+    }
+
+    /**
+     * Run the callback without validation for the calling coroutine and the coroutines it starts.
      *
      * @template T
      *
@@ -1444,7 +1378,7 @@ class Database
      */
     public function skipValidation(callable $callback): mixed
     {
-        return $this->validation()->with(false, $callback);
+        return $this->withValidation(false, $callback);
     }
 
     /**
@@ -1614,13 +1548,13 @@ class Database
      * @template T
      *
      * @param  callable(): T  $callback
-     * @param  array<string>|null  $listeners  Names of the hooks to silence; null silences every hook
+     * @param  array<string>|null  $hooks  Names of the hooks to silence; null silences every hook
      * @return T
      */
-    public function silent(callable $callback, ?array $listeners = null): mixed
+    public function silent(callable $callback, ?array $hooks = null): mixed
     {
-        if ($listeners !== null) {
-            return $this->silenceListeners($callback, $listeners);
+        if ($hooks !== null) {
+            return $this->silenceListeners($callback, $hooks);
         }
 
         return $this->silenced()->with(true, $callback);
@@ -1712,12 +1646,11 @@ class Database
             ),
         );
 
-        $authorized = fn () => $this->authorization->withRoles(
+        return $this->authorization->restore(
+            $snapshot->authorization,
             $snapshot->roles,
             $hook === null ? $scoped : fn () => $hook->withSnapshot($snapshot, $scoped),
         );
-
-        return $this->authorization->withStatus($snapshot->authorization, $authorized);
     }
 
     /**
@@ -1852,40 +1785,55 @@ class Database
             return $class . '::' . $callable[1];
         }
 
-        $closure = \Closure::fromCallable($callable);
-        $ref = new \ReflectionFunction($closure);
-        return ($ref->getFileName() ?: 'unknown') . ':' . $ref->getStartLine();
+        $reflection = new \ReflectionFunction(\Closure::fromCallable($callable));
+
+        return ($reflection->getFileName() ?: 'unknown').':'.$reflection->getStartLine();
     }
 
-    /**
-     * Enable filters
-     *
-     * @return $this
-     */
-    public function enableFilters(): static
+    public function setFiltering(bool $filtering): static
     {
-        $this->filtering()->set(true);
+        $this->filtering()->set($filtering);
 
         return $this;
     }
 
     /**
-     * Disable filters
-     *
-     * @return $this
+     * Whether attribute filters encode values before they are stored and decode them after they are read.
      */
-    public function disableFilters(): static
+    public function isFiltering(): bool
     {
-        $this->filtering()->set(false);
-
-        return $this;
+        return $this->filtering()->get();
     }
 
     /**
-     * Skip filters
+     * Run the callback with filtering on or off for the calling coroutine and the coroutines it starts. Given
+     * filter names, filtering stays as it is and only the named filters are turned off (they become the ones
+     * turned off) or back on.
      *
-     * Execute a callback without filters, or without the named ones.
-     * Scoped to the calling coroutine and the coroutines it starts.
+     * @template T
+     *
+     * @param  callable(): T  $callback
+     * @param  array<string>|null  $filters
+     * @return T
+     */
+    public function withFiltering(bool $filtering, callable $callback, ?array $filters = null): mixed
+    {
+        if (empty($filters)) {
+            return $this->filtering()->with($filtering, $callback);
+        }
+
+        $named = \array_fill_keys($filters, true);
+        $excluded = $filtering ? \array_diff_key($this->filterExclusions()->get() ?? [], $named) : $named;
+
+        return $this->filtering()->with(
+            $this->filtering()->get(),
+            fn (): mixed => $this->filterExclusions()->with($excluded, $callback),
+        );
+    }
+
+    /**
+     * Run the callback without filters, or without the named ones, for the calling coroutine and the coroutines it
+     * starts.
      *
      * @template T
      *
@@ -1895,14 +1843,7 @@ class Database
      */
     public function skipFilters(callable $callback, ?array $filters = null): mixed
     {
-        if (empty($filters)) {
-            return $this->filtering()->with(false, $callback);
-        }
-
-        return $this->filtering()->with(
-            $this->filtering()->get(),
-            fn (): mixed => $this->filterExclusions()->with(\array_fill_keys($filters, true), $callback),
-        );
+        return $this->withFiltering(false, $callback, $filters);
     }
 
     /**
@@ -2711,7 +2652,7 @@ class Database
      */
     public function internalAttributes(): array
     {
-        return self::internalAttributesFor($this->adapter->getSharedTables());
+        return self::internalAttributesFor($this->adapter->hasSharedTables());
     }
 
     /**
@@ -2777,7 +2718,7 @@ class Database
 
         if (
             $collectionId === self::METADATA &&
-            $this->adapter->getSharedTables() &&
+            $this->adapter->hasSharedTables() &&
             $documentId !== null &&
             isset($this->globalCollections[$documentId])
         ) {
@@ -2853,6 +2794,8 @@ class Database
 
     /**
      * Stable cache field for cached query entries on a collection.
+     *
+     * @internal
      *
      * @param  array<Query>  $queries
      */
@@ -2973,15 +2916,7 @@ class Database
             $signatures[$name] = $callbacks['signature'];
         }
 
-        foreach ($this->typeRegistry?->all() ?? [] as $name => $type) {
-            $signatures[$name] = $type::class;
-        }
-
-        foreach ($this->instanceFilters as $name => $callbacks) {
-            $signatures[$name] = $callbacks['signature'];
-        }
-
-        $signatures = \array_diff_key($signatures, $this->filterExclusions()->get() ?? []);
+        $signatures = \array_diff_key(($this->codecs?->signatures() ?? []) + $signatures, $this->filterExclusions()->get() ?? []);
         \ksort($signatures);
 
         return $signatures;
@@ -3021,7 +2956,7 @@ class Database
             $event,
             $data,
             $this->getQueryCacheScope(),
-            $this->adapter->getSharedTables() && $this->adapter->getTenantPerDocument(),
+            $this->adapter->hasSharedTables() && $this->adapter->isTenantPerDocument(),
         ) ?? [];
     }
 
@@ -3150,7 +3085,7 @@ class Database
      * @param  string  $collection  Collection ID
      * @param  array<string, mixed>  $data  Document data
      */
-    protected function createDocumentInstance(string $collection, array $data): Document
+    protected function newDocument(string $collection, array $data): Document
     {
         $className = $this->documentTypes[$collection] ?? null;
         if ($className === null) {
@@ -3214,13 +3149,9 @@ class Database
     protected function encodeAttribute(string $name, mixed $value, Document $document): mixed
     {
         try {
-            if (\array_key_exists($name, $this->instanceFilters)) {
-                return $this->instanceFilters[$name]['encode']($value, $document, $this);
-            }
-
-            $type = $this->typeRegistry?->get($name);
-            if ($type !== null) {
-                return $type->encode($value);
+            $codec = $this->codecs?->get($name);
+            if ($codec !== null) {
+                return $codec->encode($value);
             }
 
             if (\array_key_exists($name, self::$filters)) {
@@ -3243,13 +3174,9 @@ class Database
      */
     protected function decodeAttribute(string $filter, mixed $value, Document $document, string $attribute): mixed
     {
-        if (\array_key_exists($filter, $this->instanceFilters)) {
-            return $this->instanceFilters[$filter]['decode']($value, $document, $this, $attribute);
-        }
-
-        $type = $this->typeRegistry?->get($filter);
-        if ($type !== null) {
-            return $type->decode($value);
+        $codec = $this->codecs?->get($filter);
+        if ($codec !== null) {
+            return $codec->decode($value);
         }
 
         if (\array_key_exists($filter, self::$filters)) {

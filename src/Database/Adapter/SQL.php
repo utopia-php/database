@@ -714,7 +714,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     /**
      * Create Documents in batches
      *
-     * Under skipDuplicates() only the documents written are returned and handed to the write
+     * Under ignoreDuplicates() only the documents written are returned and handed to the write
      * hooks, so a skipped document writes no permission rows for a stored one.
      *
      * @param  array<Document>  $documents

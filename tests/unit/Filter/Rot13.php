@@ -1,10 +1,10 @@
 <?php
 
-namespace Tests\Unit\Type;
+namespace Tests\Unit\Filter;
 
-use Utopia\Database\Type\Custom;
+use Utopia\Database\Filter\Codec;
 
-final readonly class Rot13 implements Custom
+final readonly class Rot13 implements Codec
 {
     public function __construct(private string $name = 'rot13')
     {

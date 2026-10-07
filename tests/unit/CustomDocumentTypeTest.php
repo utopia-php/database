@@ -70,9 +70,9 @@ class CustomDocumentTypeTest extends TestCase
     {
         $this->adapter = self::createStub(Adapter::class);
 
-        $this->adapter->method('getSharedTables')->willReturn(false);
+        $this->adapter->method('hasSharedTables')->willReturn(false);
         $this->adapter->method('getTenant')->willReturn(null);
-        $this->adapter->method('getTenantPerDocument')->willReturn(false);
+        $this->adapter->method('isTenantPerDocument')->willReturn(false);
         $this->adapter->method('limits')->willReturn(new Limits(
             string: 0,
             varchar: 0,
@@ -106,8 +106,8 @@ class CustomDocumentTypeTest extends TestCase
 
         $cache = new Cache(new NoneAdapter());
         $this->database = new Database($this->adapter, $cache);
-        $this->database->disableValidation();
-        $this->database->disableFilters();
+        $this->database->setValidation(false);
+        $this->database->setFiltering(false);
     }
 
     public function testSetDocumentTypeStoresMapping(): void
@@ -160,7 +160,7 @@ class CustomDocumentTypeTest extends TestCase
         $this->assertEquals(TestUserDocument::class, $this->database->getDocumentType('users'));
         $this->assertEquals(TestPostDocument::class, $this->database->getDocumentType('posts'));
 
-        $this->database->clearAllDocumentTypes();
+        $this->database->clearDocumentTypes();
 
         $this->assertNull($this->database->getDocumentType('users'));
         $this->assertNull($this->database->getDocumentType('posts'));
@@ -186,7 +186,7 @@ class CustomDocumentTypeTest extends TestCase
     public function testClearAllDocumentTypesReturnsSelf(): void
     {
         $this->database->setDocumentType('users', TestUserDocument::class);
-        $this->database->clearAllDocumentTypes();
+        $this->database->clearDocumentTypes();
         $this->assertNull($this->database->getDocumentType('users'));
     }
 

@@ -21,9 +21,9 @@ class SkipPermissionsTest extends TestCase
     private function makeAdapter(): Adapter&Stub
     {
         $adapter = self::createStub(Adapter::class);
-        $adapter->method('getSharedTables')->willReturn(false);
+        $adapter->method('hasSharedTables')->willReturn(false);
         $adapter->method('getTenant')->willReturn(null);
-        $adapter->method('getTenantPerDocument')->willReturn(false);
+        $adapter->method('isTenantPerDocument')->willReturn(false);
         $adapter->method('getNamespace')->willReturn('');
         $adapter->method('limits')->willReturn(new Limits(
             string: 16777215,

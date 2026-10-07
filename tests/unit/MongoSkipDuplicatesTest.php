@@ -13,7 +13,7 @@ use Utopia\Database\Storage;
 use Utopia\Mongo\Client;
 
 /**
- * Under skipDuplicates() MongoDB returns only the documents it inserted, so the database counts
+ * Under ignoreDuplicates() MongoDB returns only the documents it inserted, so the database counts
  * and emits the same documents on every adapter.
  */
 final class MongoSkipDuplicatesTest extends TestCase
@@ -25,7 +25,7 @@ final class MongoSkipDuplicatesTest extends TestCase
         $rows = new ArrayObject([$this->row('stored', 'sequence-stored', tenant: null)]);
         $adapter = $this->createAdapter($rows, sharedTables: false);
 
-        $created = $adapter->skipDuplicates(fn (): array => $adapter->createDocuments(new Document(['$id' => self::COLLECTION]), [
+        $created = $adapter->ignoreDuplicates(fn (): array => $adapter->createDocuments(new Document(['$id' => self::COLLECTION]), [
             new Document(['$id' => 'stored', 'name' => 'replayed']),
             new Document(['$id' => 'fresh', 'name' => 'first']),
             new Document(['$id' => 'fresh', 'name' => 'second']),
@@ -42,7 +42,7 @@ final class MongoSkipDuplicatesTest extends TestCase
         $rows = new ArrayObject([$this->row('shared', 'sequence-one', tenant: 1)]);
         $adapter = $this->createAdapter($rows, sharedTables: true);
 
-        $created = $adapter->skipDuplicates(fn (): array => $adapter->createDocuments(new Document(['$id' => self::COLLECTION]), [
+        $created = $adapter->ignoreDuplicates(fn (): array => $adapter->createDocuments(new Document(['$id' => self::COLLECTION]), [
             new Document(['$id' => 'shared', '$tenant' => 1, 'name' => 'replayed']),
             new Document(['$id' => 'shared', '$tenant' => 2, 'name' => 'new']),
         ]));
@@ -56,7 +56,7 @@ final class MongoSkipDuplicatesTest extends TestCase
         $rows = new ArrayObject([$this->row('Stored', 'sequence-stored', tenant: null)]);
         $adapter = $this->createAdapter($rows, sharedTables: false);
 
-        $created = $adapter->skipDuplicates(fn (): array => $adapter->createDocuments(new Document(['$id' => self::COLLECTION]), [
+        $created = $adapter->ignoreDuplicates(fn (): array => $adapter->createDocuments(new Document(['$id' => self::COLLECTION]), [
             new Document(['$id' => 'stored', 'name' => 'replayed']),
             new Document(['$id' => 'Fresh', 'name' => 'first']),
             new Document(['$id' => 'fresh', 'name' => 'second']),
@@ -71,7 +71,7 @@ final class MongoSkipDuplicatesTest extends TestCase
         $rows = new ArrayObject([$this->row('resume', 'sequence-stored', tenant: null)]);
         $adapter = $this->createAdapter($rows, sharedTables: false);
 
-        $created = $adapter->skipDuplicates(fn (): array => $adapter->createDocuments(new Document(['$id' => self::COLLECTION]), [
+        $created = $adapter->ignoreDuplicates(fn (): array => $adapter->createDocuments(new Document(['$id' => self::COLLECTION]), [
             new Document(['$id' => 'résumé', 'name' => 'replayed']),
         ]));
 
@@ -86,7 +86,7 @@ final class MongoSkipDuplicatesTest extends TestCase
             $rows->append($this->row('raced', 'sequence-other-writer', tenant: null));
         });
 
-        $created = $adapter->skipDuplicates(fn (): array => $adapter->createDocuments(new Document(['$id' => self::COLLECTION]), [
+        $created = $adapter->ignoreDuplicates(fn (): array => $adapter->createDocuments(new Document(['$id' => self::COLLECTION]), [
             new Document(['$id' => 'raced', 'name' => 'late']),
             new Document(['$id' => 'fresh', 'name' => 'new']),
         ]));
@@ -100,7 +100,7 @@ final class MongoSkipDuplicatesTest extends TestCase
         $rows = new ArrayObject([$this->row('stored', 'sequence-stored', tenant: null)]);
         $adapter = $this->createAdapter($rows, sharedTables: false);
 
-        $created = $adapter->skipDuplicates(fn (): array => $adapter->createDocuments(new Document(['$id' => self::COLLECTION]), [
+        $created = $adapter->ignoreDuplicates(fn (): array => $adapter->createDocuments(new Document(['$id' => self::COLLECTION]), [
             new Document(['$id' => 'stored', '$sequence' => 'sequence-stored', 'name' => 'replayed']),
             new Document(['$id' => 'moved', '$sequence' => 'sequence-new', 'name' => 'new']),
         ]));
@@ -114,7 +114,7 @@ final class MongoSkipDuplicatesTest extends TestCase
         $rows = new ArrayObject([$this->row('stored', 'sequence-stored', tenant: null)]);
         $adapter = $this->createAdapter($rows, sharedTables: false);
 
-        $created = $adapter->skipDuplicates(fn (): array => $adapter->createDocuments(new Document(['$id' => self::COLLECTION]), [
+        $created = $adapter->ignoreDuplicates(fn (): array => $adapter->createDocuments(new Document(['$id' => self::COLLECTION]), [
             new Document(['$id' => 'stored', 'name' => 'replayed']),
         ]));
 

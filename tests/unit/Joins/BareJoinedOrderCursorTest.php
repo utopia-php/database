@@ -139,7 +139,7 @@ final class BareJoinedOrderCursorTest extends TestCase
         $cursor = $this->database->find(self::MAIN, [...$joins, Query::orderAsc(self::ALIAS.'.price'), Query::limit(1)])[0];
 
         if (! $validate) {
-            $this->database->disableValidation();
+            $this->database->setValidation(false);
         }
 
         try {

@@ -12,6 +12,7 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Query as QueryException;
+use Utopia\Database\Filter\Callback;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
@@ -20,9 +21,9 @@ use Utopia\Query\Schema\ColumnType;
 class CacheKeyTest extends TestCase
 {
     /**
-     * @param array<string, array{encode: callable, decode: callable}> $instanceFilters
+     * @param  list<Callback>  $filters
      */
-    private function createDatabase(array $instanceFilters = [], string $database = 'test'): Database
+    private function createDatabase(array $filters = [], string $database = 'test'): Database
     {
         $adapter = self::createStub(Adapter::class);
         $adapter->method('supports')->willReturn(false);
@@ -30,7 +31,7 @@ class CacheKeyTest extends TestCase
         $adapter->method('getNamespace')->willReturn('test');
         $adapter->method('getDatabase')->willReturn($database);
 
-        return new Database($adapter, new Cache(new None()), $instanceFilters);
+        return new Database($adapter, new Cache(new None()), $filters);
     }
 
     private function getHashKey(Database $db, string $collection = 'col', string $docId = 'doc1'): string
@@ -48,7 +49,7 @@ class CacheKeyTest extends TestCase
         $adapter->method('hostname')->willReturn('mysql-project');
         $adapter->method('getNamespace')->willReturn('project');
         $adapter->method('getTenant')->willReturn(42);
-        $adapter->method('getSharedTables')->willReturn(true);
+        $adapter->method('hasSharedTables')->willReturn(true);
 
         $db = new Database($adapter, new Cache(new None()));
         $db->setGlobalCollections(['global']);
@@ -105,51 +106,34 @@ class CacheKeyTest extends TestCase
         $this->assertEquals($hashA, $hashB);
     }
 
-    public function testInstanceFilterOverrideProducesDifferentCacheKey(): void
+    public function testConstructorFilterProducesDifferentCacheKey(): void
     {
-        $noop = function (mixed $value) {
-            return $value;
-        };
+        $noop = static fn (mixed $value): mixed => $value;
 
-        $dbDefault = $this->createDatabase();
-        $dbOverride = $this->createDatabase([
-            'json' => [
-                'encode' => $noop,
-                'decode' => $noop,
-            ],
-        ]);
-
-        $this->assertNotEquals(
-            $this->getHashKey($dbDefault),
-            $this->getHashKey($dbOverride)
+        $this->assertNotSame(
+            $this->getHashKey($this->createDatabase()),
+            $this->getHashKey($this->createDatabase([new Callback('myFilter', $noop, $noop)])),
         );
     }
 
-    public function testDifferentInstanceFilterCallablesProduceDifferentCacheKeys(): void
+    public function testDifferentConstructorFilterClosuresProduceDifferentCacheKeys(): void
     {
-        $noopA = function (mixed $value) {
-            return $value;
-        };
-        $noopB = function (mixed $value) {
-            return $value;
-        };
+        $noopA = static fn (mixed $value): mixed => $value;
+        $noopB = static fn (mixed $value): mixed => $value;
 
-        $dbA = $this->createDatabase([
-            'myFilter' => [
-                'encode' => $noopA,
-                'decode' => $noopA,
-            ],
-        ]);
-        $dbB = $this->createDatabase([
-            'myFilter' => [
-                'encode' => $noopB,
-                'decode' => $noopB,
-            ],
-        ]);
+        $this->assertNotSame(
+            $this->getHashKey($this->createDatabase([new Callback('myFilter', $noopA, $noopA)])),
+            $this->getHashKey($this->createDatabase([new Callback('myFilter', $noopB, $noopB)])),
+        );
+    }
 
-        $this->assertNotEquals(
-            $this->getHashKey($dbA),
-            $this->getHashKey($dbB)
+    public function testSameConstructorFilterClosuresShareCacheKeys(): void
+    {
+        $noop = static fn (mixed $value): mixed => $value;
+
+        $this->assertSame(
+            $this->getHashKey($this->createDatabase([new Callback('myFilter', $noop, $noop)])),
+            $this->getHashKey($this->createDatabase([new Callback('myFilter', $noop, $noop)])),
         );
     }
 
@@ -172,9 +156,9 @@ class CacheKeyTest extends TestCase
 
         $hashEnabled = $this->getHashKey($db);
 
-        $db->disableFilters();
+        $db->setFiltering(false);
         $hashDisabled = $this->getHashKey($db);
-        $db->enableFilters();
+        $db->setFiltering(true);
 
         $this->assertNotEquals($hashEnabled, $hashDisabled);
     }
@@ -362,7 +346,7 @@ class CacheKeyTest extends TestCase
         $adapter->method('hostname')->willReturn($hostname);
         $adapter->method('getDatabase')->willReturn('appwrite');
         $adapter->method('getTenant')->willReturn(999);
-        $adapter->method('getSharedTables')->willReturn(true);
+        $adapter->method('hasSharedTables')->willReturn(true);
         $adapter->method('getNamespace')->willReturn('_ns');
 
         $db = new Database($adapter, new Cache(new None()), []);

@@ -100,9 +100,9 @@ class RelationshipValidationTest extends TestCase
         $adapter->method('hasFeature')->willReturnCallback(
             static fn (string $feature): bool => is_a(RelationshipsAdapter::class, $feature, true)
         );
-        $adapter->method('getSharedTables')->willReturn(false);
+        $adapter->method('hasSharedTables')->willReturn(false);
         $adapter->method('getTenant')->willReturn(null);
-        $adapter->method('getTenantPerDocument')->willReturn(false);
+        $adapter->method('isTenantPerDocument')->willReturn(false);
         $adapter->method('getNamespace')->willReturn('');
         $adapter->method('limits')->willReturn(new Limits(
             string: 16777215,

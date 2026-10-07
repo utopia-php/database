@@ -250,7 +250,7 @@ final class DocumentFromStorageTest extends TestCase
              */
             public function rebuild(string $collection, array $data): Document
             {
-                return $this->createDocumentInstance($collection, $data);
+                return $this->newDocument($collection, $data);
             }
         };
         $database->setDocumentType('users', $user::class);

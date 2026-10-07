@@ -100,7 +100,7 @@ abstract class Base extends TestCase
 
     protected function tearDown(): void
     {
-        self::$authorization?->setDefaultStatus(true);
+        self::$authorization?->reset();
 
     }
 

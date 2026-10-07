@@ -17,39 +17,27 @@ class Input
     protected string $action;
 
     /**
-     * Create a new authorization input.
-     *
-     * @param PermissionType|string $action The action being authorized (e.g., read, write)
-     * @param string[] $permissions List of permission strings to check against
+     * @param  array<string>  $permissions  The permissions that grant the action
      */
-    public function __construct(PermissionType|string $action, array $permissions)
+    public function __construct(PermissionType $action, array $permissions)
     {
         $this->permissions = $permissions;
-        $this->action = $action instanceof PermissionType ? $action->value : $action;
+        $this->action = $action->value;
     }
 
     /**
-     * Set the permissions to check against.
-     *
-     * @param string[] $permissions List of permission strings
-     * @return self
+     * @param  array<string>  $permissions
      */
-    public function setPermissions(array $permissions): self
+    public function setPermissions(array $permissions): static
     {
         $this->permissions = $permissions;
 
         return $this;
     }
 
-    /**
-     * Set the action being authorized.
-     *
-     * @param PermissionType|string $action The action name
-     * @return self
-     */
-    public function setAction(PermissionType|string $action): self
+    public function setAction(PermissionType $action): static
     {
-        $this->action = $action instanceof PermissionType ? $action->value : $action;
+        $this->action = $action->value;
 
         return $this;
     }

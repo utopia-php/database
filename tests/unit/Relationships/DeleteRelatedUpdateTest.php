@@ -170,7 +170,7 @@ final class DeleteRelatedUpdateTest extends TestCase
                 $database->addHook($dispatcher);
             }
 
-            $database->enableProfiling();
+            $database->setProfiling(true);
             $this->assertTrue($database->deleteDocument('parent', 'parent1'), $case);
             $reads[$case] = \count(\array_filter(
                 $database->getProfiler()?->getLogs() ?? [],

@@ -38,9 +38,9 @@ class IncreaseDecreaseTest extends TestCase
         );
         $this->adapter->method('castBefore')->willReturnArgument(1);
         $this->adapter->method('castAfter')->willReturnArgument(1);
-        $this->adapter->method('getSharedTables')->willReturn(false);
+        $this->adapter->method('hasSharedTables')->willReturn(false);
         $this->adapter->method('getTenant')->willReturn(null);
-        $this->adapter->method('getTenantPerDocument')->willReturn(false);
+        $this->adapter->method('isTenantPerDocument')->willReturn(false);
         $this->adapter->method('getNamespace')->willReturn('');
         $this->adapter->method('limits')->willReturn(new Limits(
             string: 16777215,

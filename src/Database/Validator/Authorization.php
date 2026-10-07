@@ -10,7 +10,7 @@ use Utopia\Validator;
 /**
  * Validates authorization by checking if any of the current roles match the required permissions.
  *
- * The status and the roles are shared by every caller, except inside skip(), withStatus() and withRoles(): those
+ * The status and the roles are shared by every caller, except inside skip() and withRoles(): those
  * scopes belong to the calling coroutine and the coroutines it starts (see {@see Value}). The status and the roles
  * share one {@see Group}, so any of those scopes keeps the status and role changes of a coroutine cut off from it,
  * because a coroutine between them has returned, local to that coroutine.
@@ -23,22 +23,19 @@ class Authorization extends Validator
     private Value $status;
 
     /**
-     * Default value in case we need
-     *  to reset Authorization status
-     */
-    protected bool $statusDefault = true;
-
-    /**
      * @var Value<array<string, bool>>
      */
     private Value $roles;
 
     protected string $message = 'Authorization Error';
 
-    public function __construct()
+    /**
+     * @param  bool  $defaultStatus  The status the handle starts with, which reset() restores
+     */
+    public function __construct(protected readonly bool $defaultStatus = true)
     {
         $group = new Group();
-        $this->status = new Value(true, $group);
+        $this->status = new Value($defaultStatus, $group);
 
         /** @var Value<array<string, bool>> $roles */
         $roles = new Value(['any' => true], $group);
@@ -103,30 +100,22 @@ class Authorization extends Validator
         return false;
     }
 
-    /**
-     * Add a role to the authorized roles list.
-     *
-     * @param string $role Role identifier to add
-     * @return void
-     */
-    public function addRole(string $role): void
+    public function addRole(string $role): static
     {
         $roles = $this->roles->get();
         $roles[$role] = true;
         $this->roles->set($roles);
+
+        return $this;
     }
 
-    /**
-     * Remove a role from the authorized roles list.
-     *
-     * @param string $role Role identifier to remove
-     * @return void
-     */
-    public function removeRole(string $role): void
+    public function removeRole(string $role): static
     {
         $roles = $this->roles->get();
         unset($roles[$role]);
         $this->roles->set($roles);
+
+        return $this;
     }
 
     /**
@@ -152,49 +141,25 @@ class Authorization extends Validator
         return $this->roles->with(\array_fill_keys($roles, true), $callback);
     }
 
-    /**
-     * Remove all roles from the authorized roles list.
-     *
-     * @return void
-     */
-    public function cleanRoles(): void
+    public function cleanRoles(): static
     {
         $this->roles->set([]);
+
+        return $this;
     }
 
-    /**
-     * Check whether a specific role exists in the authorized roles list.
-     *
-     * @param string $role Role identifier to check
-     * @return bool
-     */
     public function hasRole(string $role): bool
     {
         return \array_key_exists($role, $this->roles->get());
     }
 
-    /**
-     * Change default status.
-     * This will be used for the
-     *  value set on the $this->reset() method
-     */
-    public function setDefaultStatus(bool $status): void
-    {
-        $this->statusDefault = $status;
-        $this->status->set($status);
-    }
-
-    /**
-     * Change status
-     */
-    public function setStatus(bool $status): void
+    public function setStatus(bool $status): static
     {
         $this->status->set($status);
+
+        return $this;
     }
 
-    /**
-     * Get status
-     */
     public function getStatus(): bool
     {
         return $this->status->get();
@@ -216,40 +181,42 @@ class Authorization extends Validator
     }
 
     /**
-     * Run the callback with the given status for the calling coroutine and the coroutines it starts
+     * Run the callback with exactly this status and these roles for the calling coroutine and the coroutines it
+     * starts, as Database::withSnapshot() restores them.
+     *
+     * @internal
      *
      * @template T
      *
+     * @param  array<string>  $roles
      * @param  callable(): T  $callback
      * @return T
      */
-    public function withStatus(bool $status, callable $callback): mixed
+    public function restore(bool $status, array $roles, callable $callback): mixed
     {
-        return $this->status->with($status, $callback);
+        return $this->status->with($status, fn (): mixed => $this->withRoles($roles, $callback));
     }
 
-    /**
-     * Enable Authorization checks
-     */
-    public function enable(): void
+    public function enable(): static
     {
         $this->status->set(true);
+
+        return $this;
     }
 
-    /**
-     * Disable Authorization checks
-     */
-    public function disable(): void
+    public function disable(): static
     {
         $this->status->set(false);
+
+        return $this;
     }
 
     /**
-     * Reset the status to the default status
+     * Restore the status the handle was constructed with.
      */
     public function reset(): void
     {
-        $this->status->set($this->statusDefault);
+        $this->status->set($this->defaultStatus);
     }
 
     /**

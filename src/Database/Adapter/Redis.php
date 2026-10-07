@@ -737,7 +737,7 @@ class Redis extends Adapter implements
                 /** @var array<int, string>|false $docIds */
                 $docIds = $client->sMembers($idxKey);
                 if (\is_array($docIds) && $docIds !== []) {
-                    $sharedTables = $this->getSharedTables();
+                    $sharedTables = $this->hasSharedTables();
                     $currentTenant = $sharedTables ? $this->getTenant() : null;
                     $docKeys = [];
                     foreach ($docIds as $docId) {
@@ -853,7 +853,7 @@ class Redis extends Adapter implements
         $col = $this->filter($collection->getId());
         $payload = $this->client->get($this->docKey($col, $id));
 
-        if ((! \is_string($payload) || $payload === '') && $this->getSharedTables() && $col === Database::METADATA) {
+        if ((! \is_string($payload) || $payload === '') && $this->hasSharedTables() && $col === Database::METADATA) {
             $payload = $this->client->get($this->docKey($col, $id, '_'));
         }
 
@@ -863,7 +863,7 @@ class Redis extends Adapter implements
 
         $document = $this->decode($payload);
 
-        if ($this->getSharedTables()) {
+        if ($this->hasSharedTables()) {
             $rowTenant = $document->getAttribute(Document::TENANT);
             $tenant = $this->getTenant();
             $allowNullTenant = $col === Database::METADATA && $rowTenant === null;
@@ -890,7 +890,7 @@ class Redis extends Adapter implements
     }
 
     /**
-     * @return Document|null The stored document, or null when skipDuplicates() skipped it
+     * @return Document|null The stored document, or null when ignoreDuplicates() skipped it
      */
     private function insertDocument(Document $collection, Document $document): ?Document
     {
@@ -978,7 +978,7 @@ class Redis extends Adapter implements
         $idxKey = $this->idxKey($col);
 
         $useNullTenant = false;
-        if ($col === Database::METADATA && $this->getSharedTables() && $this->getTenant() !== null) {
+        if ($col === Database::METADATA && $this->hasSharedTables() && $this->getTenant() !== null) {
             if ((bool) $this->client->exists($oldKey) === false) {
                 $oldKey = $this->docKey($col, $id, '_');
                 $useNullTenant = true;
@@ -1513,7 +1513,7 @@ class Redis extends Adapter implements
         if (
             empty($queries)
             && $this->authorization->getStatus() === false
-            && $this->getSharedTables() === false
+            && $this->hasSharedTables() === false
         ) {
             $idxKey = $this->idxKey($collectionId);
             $cardinality = $this->client->sCard($idxKey);
@@ -1654,7 +1654,7 @@ class Redis extends Adapter implements
     private function docKey(string $collection, string $id, int|string|null $tenant = null): string
     {
         $id = \strtolower($id);
-        if (! $this->getSharedTables()) {
+        if (! $this->hasSharedTables()) {
             return $this->key($this->ns(), 'doc', $collection, $id);
         }
 
@@ -1665,7 +1665,7 @@ class Redis extends Adapter implements
 
     private function idxKey(string $collection, int|string|null $tenant = null): string
     {
-        if (! $this->getSharedTables()) {
+        if (! $this->hasSharedTables()) {
             return $this->key($this->ns(), 'idx', $collection);
         }
 
@@ -1674,7 +1674,7 @@ class Redis extends Adapter implements
 
     private function seqKey(string $collection, int|string|null $tenant = null): string
     {
-        if (! $this->getSharedTables()) {
+        if (! $this->hasSharedTables()) {
             return $this->key($this->ns(), 'seq', $collection);
         }
 
@@ -1692,7 +1692,7 @@ class Redis extends Adapter implements
 
     private function tenantBucket(int|string|null $tenant = null): ?string
     {
-        if (! $this->getSharedTables()) {
+        if (! $this->hasSharedTables()) {
             return null;
         }
 
@@ -2155,7 +2155,7 @@ class Redis extends Adapter implements
             return;
         }
 
-        $sharedTables = $this->getSharedTables();
+        $sharedTables = $this->hasSharedTables();
         $claimed = [];
         $replaced = [];
         $tenants = [];
@@ -2197,7 +2197,7 @@ class Redis extends Adapter implements
             return;
         }
 
-        $sharedTables = $this->getSharedTables();
+        $sharedTables = $this->hasSharedTables();
         $owners = [];
         $held = [];
         foreach ($writes as $write) {
@@ -2261,7 +2261,7 @@ class Redis extends Adapter implements
                 continue;
             }
             $existing = $this->decode($payload);
-            if ($this->getSharedTables() && $existing->getTenant() !== $tenant) {
+            if ($this->hasSharedTables() && $existing->getTenant() !== $tenant) {
                 continue;
             }
             $id = $ids[$position];
@@ -2321,7 +2321,7 @@ class Redis extends Adapter implements
                 }
                 $signature[] = $this->normalizeIndexValue($value);
             }
-            if ($this->getSharedTables()) {
+            if ($this->hasSharedTables()) {
                 \array_unshift($signature, $tenant);
             }
             $signatures[$index] = \serialize($signature);
@@ -2667,7 +2667,7 @@ class Redis extends Adapter implements
     {
         $id = $this->filter($collection);
         $payload = $this->client->get($this->docKey(Database::METADATA, $id));
-        if ((! \is_string($payload) || $payload === '') && $this->getSharedTables()) {
+        if ((! \is_string($payload) || $payload === '') && $this->hasSharedTables()) {
             $payload = $this->client->get($this->docKey(Database::METADATA, $id, '_'));
         }
         if (! \is_string($payload) || $payload === '') {
@@ -2759,7 +2759,7 @@ class Redis extends Adapter implements
 
         /** @var array<int, mixed> $payloads */
         $payloads = $client->mGet($keys);
-        $sharedTables = $this->getSharedTables();
+        $sharedTables = $this->hasSharedTables();
         $tenant = $sharedTables ? $this->getTenant() : null;
         $allowNullTenant = $sharedTables && $collection === Database::METADATA;
 

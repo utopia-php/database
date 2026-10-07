@@ -389,7 +389,7 @@ trait CollectionTests
             $this->assertNotSame('', $columns[$internal]->type);
         }
 
-        if ($db->getSharedTables()) {
+        if ($db->hasSharedTables()) {
             $this->assertArrayHasKey(Storage::TENANT, $columns);
             $this->assertNull($columns[Storage::TENANT]->length);
             $this->assertTrue($columns[Storage::TENANT]->nullable);
@@ -695,7 +695,7 @@ trait CollectionTests
          */
         /** @var Database $database */
         $database = $this->getDatabase();
-        $sharedTables = $database->getSharedTables();
+        $sharedTables = $database->hasSharedTables();
         $namespace = $database->getNamespace();
         $schema = $database->getDatabase();
         $tenant = $database->getTenant();
@@ -890,7 +890,7 @@ trait CollectionTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        $sharedTables = $database->getSharedTables();
+        $sharedTables = $database->hasSharedTables();
         $namespace = $database->getNamespace();
         $schema = $database->getDatabase();
         $tenant = $database->getTenant();
@@ -961,7 +961,7 @@ trait CollectionTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        $sharedTables = $database->getSharedTables();
+        $sharedTables = $database->hasSharedTables();
         $namespace = $database->getNamespace();
         $schema = $database->getDatabase();
         $originalTenant = $database->getTenant();
@@ -1040,7 +1040,7 @@ trait CollectionTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        $sharedTables = $database->getSharedTables();
+        $sharedTables = $database->hasSharedTables();
         $namespace = $database->getNamespace();
         $schema = $database->getDatabase();
         $originalTenant = $database->getTenant();
@@ -1390,7 +1390,7 @@ trait CollectionTests
         $this->assertNotEmpty($documentKey);
         $this->assertNotEmpty($hashKey);
 
-        if ($db->getSharedTables()) {
+        if ($db->hasSharedTables()) {
             $this->assertSame('', $this->cacheKeyTenantSegment($collectionKey));
         }
 
@@ -1400,7 +1400,7 @@ trait CollectionTests
             Database::METADATA,
             $nonGlobalCollectionId
         );
-        if ($db->getSharedTables()) {
+        if ($db->hasSharedTables()) {
             $this->assertSame(
                 (string) $db->getAdapter()->getTenant(),
                 $this->cacheKeyTenantSegment($collectionKeyRegular)
@@ -1418,7 +1418,7 @@ trait CollectionTests
         $this->assertNotEmpty($documentKey);
         $this->assertNotEmpty($hashKey);
 
-        if ($db->getSharedTables()) {
+        if ($db->hasSharedTables()) {
             $this->assertStringContainsString((string) $db->getAdapter()->getTenant(), $collectionKey);
         }
 
@@ -1557,7 +1557,7 @@ trait CollectionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSharedTables()) {
+        if ($database->getAdapter()->hasSharedTables()) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2147,7 +2147,7 @@ trait CollectionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getSharedTables() || ! $this->engineIs(Postgres::class)) {
+        if (! $database->hasSharedTables() || ! $this->engineIs(Postgres::class)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2211,7 +2211,7 @@ trait CollectionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getSharedTables() || ! $this->engineIs(Postgres::class)) {
+        if (! $database->hasSharedTables() || ! $this->engineIs(Postgres::class)) {
             $this->expectNotToPerformAssertions();
 
             return;

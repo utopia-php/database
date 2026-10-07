@@ -98,7 +98,7 @@ trait GeneralTests
     public function testSharedTablesUpdateTenant(): void
     {
         $database = $this->getDatabase();
-        $sharedTables = $database->getSharedTables();
+        $sharedTables = $database->hasSharedTables();
         $namespace = $database->getNamespace();
         $schema = $database->getDatabase();
         $tenant = $database->getTenant();
@@ -156,8 +156,8 @@ trait GeneralTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $sharedTables = $database->getSharedTables();
-        $tenantPerDocument = $database->getTenantPerDocument();
+        $sharedTables = $database->hasSharedTables();
+        $tenantPerDocument = $database->isTenantPerDocument();
         $namespace = $database->getNamespace();
         $schema = $database->getDatabase();
         $tenant = $database->getTenant();
@@ -408,7 +408,7 @@ trait GeneralTests
         $adapter = $database->getAdapter();
 
         if (
-            ! $database->getSharedTables()
+            ! $database->hasSharedTables()
             || ! $adapter->hasFeature(Feature\Upserts::class)
             || ! $adapter->supports(Capability::Schemas)
             || ! $adapter->supports(Capability::Caching)
@@ -418,7 +418,7 @@ trait GeneralTests
             return;
         }
 
-        $tenantPerDocument = $database->getTenantPerDocument();
+        $tenantPerDocument = $database->isTenantPerDocument();
         $tenant = $database->getTenant();
         $namespace = $database->getNamespace();
         $schema = $database->getDatabase();
@@ -446,7 +446,7 @@ trait GeneralTests
             ));
             $database
                 ->setTenantPerDocument(true)
-                ->setQueryCache(new QueryCache($database->getCache(), ID::unique()));
+                ->setQueryCache(new QueryCache($database->getCache()));
 
             foreach ([5, 6] as $documentTenant) {
                 $database->createDocument('notes', $this->queryCacheTenantNote($documentTenant, ['alice', 'bob'], 'draft'));
@@ -520,12 +520,12 @@ trait GeneralTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getSharedTables()) {
+        if (! $database->hasSharedTables()) {
             $this->markTestSkipped('Reads are only tenant scoped when tables are shared');
         }
 
         $tenant = $database->getTenant();
-        $tenantPerDocument = $database->getTenantPerDocument();
+        $tenantPerDocument = $database->isTenantPerDocument();
         $collection = 'sharedTablesTenantScopedReads';
 
         try {
@@ -812,7 +812,7 @@ trait GeneralTests
         ]));
         $this->assertSame('sibling', $database->getDocument($collection, 'sibling')->getAttribute('name'));
 
-        $profiler = $database->enableProfiling()->getProfiler();
+        $profiler = $database->setProfiling(true)->getProfiler();
         $this->assertNotNull($profiler);
 
         try {
@@ -825,7 +825,7 @@ trait GeneralTests
             $this->assertSame('updated', $database->getDocument($collection, 'user')->getAttribute('name'));
             $this->assertGreaterThan(0, $profiler->getQueryCount(), 'The written document itself must be read again');
         } finally {
-            $database->disableProfiling();
+            $database->setProfiling(false);
             $database->deleteCollection($collection);
         }
     }
@@ -1674,7 +1674,7 @@ trait GeneralTests
         ]));
         $this->assertSame('sibling', $database->getDocument($collection, 'sibling')->getAttribute('name'));
 
-        $profiler = $database->enableProfiling()->getProfiler();
+        $profiler = $database->setProfiling(true)->getProfiler();
         $this->assertNotNull($profiler);
         $metadata = $database->getNamespace().'_'.Database::METADATA;
 
@@ -1693,7 +1693,7 @@ trait GeneralTests
             $this->assertSame(0, $this->countStatementsAgainst($profiler, $metadata), 'withTransaction(update + get) must read no collection definition on a warm cache (7.3.12: 0 statements)');
             $this->assertSame('renamed', $database->getDocument($collection, 'user')->getAttribute('name'));
         } finally {
-            $database->disableProfiling();
+            $database->setProfiling(false);
             $database->deleteCollection($collection);
         }
     }
@@ -1727,7 +1727,7 @@ trait GeneralTests
         $queryCache = $database->getQueryCache();
         $database->setCache(new Cache($counting))->setQueryCache(null);
         $counted = $database->getAdapter() instanceof MariaDB;
-        $profiler = $database->enableProfiling()->getProfiler();
+        $profiler = $database->setProfiling(true)->getProfiler();
         $this->assertNotNull($profiler);
 
         $collection = 'roundTrips'.ID::unique();
@@ -1778,7 +1778,7 @@ trait GeneralTests
             $this->assertSame('created', $read->getAttribute('name'));
             $this->assertSame('again', $database->getDocument($collection, 'written')->getAttribute('name'));
         } finally {
-            $database->disableProfiling();
+            $database->setProfiling(false);
             $database->setQueryCache($queryCache)->setCache($original);
             $database->deleteCollection($collection);
         }
@@ -1793,8 +1793,8 @@ trait GeneralTests
             $this->markTestSkipped('Tenant per document needs a schema to hold the shared table');
         }
 
-        $sharedTables = $database->getSharedTables();
-        $tenantPerDocument = $database->getTenantPerDocument();
+        $sharedTables = $database->hasSharedTables();
+        $tenantPerDocument = $database->isTenantPerDocument();
         $namespace = $database->getNamespace();
         $schema = $database->getDatabase();
         $tenant = $database->getTenant();

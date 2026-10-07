@@ -71,7 +71,7 @@ trait MongoReadFilterTests
         $database = (new Database($adapter, new Cache(new None())))
             ->setAuthorization(new Authorization())
             ->setDatabase($this->testDatabase)
-            ->setSharedTables($lane->getSharedTables())
+            ->setSharedTables($lane->hasSharedTables())
             ->setTenant($lane->getTenant())
             ->setNamespace('unhooked_'.\uniqid());
 

@@ -387,7 +387,7 @@ class MirrorTest extends Base
         ], documentSecurity: false));
 
         // Seed the SOURCE only (bypass the mirror) with the row we want to
-        // skipDuplicates over later. Destination intentionally does NOT have it —
+        // ignoreDuplicates over later. Destination intentionally does NOT have it —
         // this simulates an in-flight backfill where the collection is marked
         // 'upgraded' (schema mirrored) but not every row has reached destination.
         $database->getSource()->createDocument($collection, new Document([
@@ -410,7 +410,7 @@ class MirrorTest extends Base
             $destination->getDocument($collection, 'dup')->isEmpty()
         );
 
-        $database->skipDuplicates(fn () => $database->createDocuments($collection, [
+        $database->ignoreDuplicates(fn () => $database->createDocuments($collection, [
             new Document([
                 '$id' => 'dup',
                 'name' => 'WouldBe',

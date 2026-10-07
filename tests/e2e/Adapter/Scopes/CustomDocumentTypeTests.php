@@ -31,7 +31,7 @@ trait CustomDocumentTypeTests
         $this->assertSame(User::class, $database->getDocumentType('users'));
         $this->assertSame(Post::class, $database->getDocumentType('posts'));
 
-        $database->clearAllDocumentTypes();
+        $database->clearDocumentTypes();
 
         $this->assertNull($database->getDocumentType('users'));
         $this->assertNull($database->getDocumentType('posts'));
@@ -85,7 +85,7 @@ trait CustomDocumentTypeTests
         $this->assertSame(User::class, $database->getDocumentType('users'));
         $this->assertSame(Post::class, $database->getDocumentType('posts'));
 
-        $database->clearAllDocumentTypes();
+        $database->clearDocumentTypes();
 
         $this->assertNull($database->getDocumentType('users'));
         $this->assertNull($database->getDocumentType('posts'));
@@ -106,7 +106,7 @@ trait CustomDocumentTypeTests
         $this->assertSame(User::class, $database->getDocumentType('users'));
         $this->assertSame(Post::class, $database->getDocumentType('posts'));
 
-        $database->clearAllDocumentTypes();
+        $database->clearDocumentTypes();
     }
 
     public function testCustomDocumentTypeWithGetDocument(): void

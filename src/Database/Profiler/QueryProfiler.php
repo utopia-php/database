@@ -28,14 +28,18 @@ class QueryProfiler
     /** @var callable|null */
     private $onSlowQuery = null;
 
-    public function enable(): void
+    public function enable(): static
     {
         $this->enabled = true;
+
+        return $this;
     }
 
-    public function disable(): void
+    public function disable(): static
     {
         $this->enabled = false;
+
+        return $this;
     }
 
     public function isEnabled(): bool
@@ -43,9 +47,11 @@ class QueryProfiler
         return $this->enabled;
     }
 
-    public function setSlowThreshold(float $milliseconds): void
+    public function setSlowThreshold(float $milliseconds): static
     {
         $this->slowThreshold = $milliseconds;
+
+        return $this;
     }
 
     /**
@@ -53,7 +59,7 @@ class QueryProfiler
      *
      * @throws InvalidArgumentException
      */
-    public function setCapacity(int $capacity): void
+    public function setCapacity(int $capacity): static
     {
         if ($capacity < 1) {
             throw new InvalidArgumentException('Profiler capacity must be at least 1');
@@ -62,6 +68,8 @@ class QueryProfiler
         $this->logs = \array_slice($this->getLogs(), -$capacity);
         $this->oldest = 0;
         $this->capacity = $capacity;
+
+        return $this;
     }
 
     public function getCapacity(): int
@@ -69,14 +77,18 @@ class QueryProfiler
         return $this->capacity;
     }
 
-    public function enableBacktrace(bool $enabled = true): void
+    public function enableBacktrace(bool $enabled = true): static
     {
         $this->captureBacktrace = $enabled;
+
+        return $this;
     }
 
-    public function onSlowQuery(callable $callback): void
+    public function onSlowQuery(callable $callback): static
     {
         $this->onSlowQuery = $callback;
+
+        return $this;
     }
 
     /**

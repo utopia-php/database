@@ -306,7 +306,7 @@ final class ParallelPopulationTest extends TestCase
 
     /**
      * A connection whose withTransaction() runs the callback without a transaction, as MongoDB does on a standalone
-     * server or under skipDuplicates().
+     * server or under ignoreDuplicates().
      */
     private function sqliteWithoutTransactions(): SQLite
     {

@@ -615,7 +615,7 @@ class Filter extends Base
                     $nestedQueries[] = $nested;
                 }
 
-                $filters = Query::groupForDatabase($nestedQueries)['filters'];
+                $filters = Query::groupByType($nestedQueries)->filters;
 
                 if (count($nestedQueries) !== count($filters)) {
                     $this->message = \ucfirst($method->value).' queries can only contain filter queries';
@@ -664,7 +664,7 @@ class Filter extends Base
                     $nestedQueries[] = $nested;
                 }
 
-                $filters = Query::groupForDatabase($nestedQueries)['filters'];
+                $filters = Query::groupByType($nestedQueries)->filters;
                 if (count($nestedQueries) !== count($filters)) {
                     $this->message = 'elemMatch queries can only contain filter queries';
 

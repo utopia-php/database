@@ -3430,7 +3430,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     protected function buildFilters(array $queries, string $separator = '$and'): array
     {
         $filters = [];
-        $queries = Query::groupForDatabase($queries)['filters'];
+        $queries = Query::groupByType($queries)->filters;
 
         foreach ($queries as $query) {
             /* @var $query Query */

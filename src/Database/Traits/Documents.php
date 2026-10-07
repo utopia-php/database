@@ -491,9 +491,9 @@ trait Documents
 
         $relationships = self::relationshipAttributes($collection);
 
-        $grouped = Query::groupForDatabase($queries);
-        $selects = $grouped['selections'];
-        $joins = $grouped['joins'];
+        $parsed = Query::groupByType($queries);
+        $selects = $parsed->selections;
+        $joins = $parsed->joins;
 
         if (! empty($joins) && ! $this->adapter->supports(Capability::Joins)) {
             throw new QueryException('Join queries are not supported by this adapter');
@@ -1731,9 +1731,9 @@ trait Documents
             }
         }
 
-        $grouped = Query::groupForDatabase($queries);
-        $limit = $grouped['limit'];
-        $cursor = $grouped['cursor'];
+        $parsed = Query::groupByType($queries);
+        $limit = $parsed->limit;
+        $cursor = $parsed->cursor;
 
         if (! empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
             throw new DatabaseException('Cursor document must be from the same Collection.');
@@ -1782,7 +1782,7 @@ trait Documents
             }
             $adapterData[$key] = $value;
         }
-        $selections = $this->validateSelections($collection, $grouped['selections']);
+        $selections = $this->validateSelections($collection, $parsed->selections);
         $decodedKeys = $selections === []
             ? []
             : \array_values(\array_unique([...$selections, ...\array_map(\strval(...), \array_keys($adapterData))]));
@@ -1893,7 +1893,7 @@ trait Documents
             });
 
             if ($hasOperators) {
-                $batch = $this->refetchDocuments($collection, $batch, $grouped['selections']);
+                $batch = $this->refetchDocuments($collection, $batch, $parsed->selections);
             }
 
             // The operator refetch goes through find(), which already decoded every document;
@@ -2805,9 +2805,9 @@ trait Documents
             }
         }
 
-        $grouped = Query::groupForDatabase($queries);
-        $limit = $grouped['limit'];
-        $cursor = $grouped['cursor'];
+        $parsed = Query::groupByType($queries);
+        $limit = $parsed->limit;
+        $cursor = $parsed->cursor;
 
         if (! empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
             throw new DatabaseException('Cursor document must be from the same Collection.');
@@ -3726,23 +3726,23 @@ trait Documents
 
         $relationships = self::relationshipAttributes($collection);
 
-        $grouped = Query::groupForDatabase($queries);
-        $filters = $grouped['filters'];
-        $selects = $grouped['selections'];
-        $aggregations = $grouped['aggregations'];
-        $groupByAttrs = $grouped['groupBy'];
-        $having = $grouped['having'];
-        $joins = $grouped['joins'];
+        $parsed = Query::groupByType($queries);
+        $filters = $parsed->filters;
+        $selects = $parsed->selections;
+        $aggregations = $parsed->aggregations;
+        $groupByAttrs = $parsed->groupBy;
+        $having = $parsed->having;
+        $joins = $parsed->joins;
         // Skipping authorization would also skip the joined collections' permission filters,
         // so with joins the main collection's grant travels to the adapter instead.
         $skipAuth = $collectionGranted && empty($joins);
-        $distinct = $grouped['distinct'];
-        $limit = $grouped['limit'];
-        $offset = $grouped['offset'];
-        $orderAttributes = $grouped['orderAttributes'];
-        $orderTypes = $grouped['orderTypes'];
-        $cursor = $grouped['cursor'];
-        $cursorDirection = $grouped['cursorDirection'] ?? CursorDirection::After;
+        $distinct = $parsed->distinct;
+        $limit = $parsed->limit;
+        $offset = $parsed->offset;
+        $orderAttributes = $parsed->orderAttributes;
+        $orderTypes = $parsed->orderTypes;
+        $cursor = $parsed->cursor;
+        $cursorDirection = $parsed->cursorDirection ?? CursorDirection::After;
 
         $isAggregation = ! empty($aggregations) || ! empty($groupByAttrs);
 
@@ -4358,9 +4358,9 @@ trait Documents
         PermissionType $forPermission = PermissionType::Read,
     ): Generator {
         $batchSize = self::batchSize($batchSize);
-        $grouped = Query::groupForDatabase($queries);
+        $parsed = Query::groupByType($queries);
 
-        if ($grouped['cursor'] !== null && $grouped['cursorDirection'] === CursorDirection::Before) {
+        if ($parsed->cursor !== null && $parsed->cursorDirection === CursorDirection::Before) {
             throw new DatabaseException('Cursor '.CursorDirection::Before->value.' not supported in this method.');
         }
 
@@ -4369,7 +4369,7 @@ trait Documents
             static fn (Query $query): bool => ! \in_array($query->getMethod(), [Method::Limit, Method::Offset, Method::CursorAfter, Method::CursorBefore], true),
         ));
 
-        return $this->pages($collection, $filters, $batchSize, $forPermission, $grouped['limit'], $grouped['offset'], $grouped['cursor']);
+        return $this->pages($collection, $filters, $batchSize, $forPermission, $parsed->limit, $parsed->offset, $parsed->cursor);
     }
 
     /**
@@ -4559,20 +4559,20 @@ trait Documents
      */
     private function nextPageCheck(string $collection, array $queries): Closure
     {
-        $grouped = Query::groupForDatabase($queries);
-        $joins = $grouped['joins'];
-        $distinct = $grouped['distinct'];
-        if (($joins === [] && ! $distinct) || $grouped['aggregations'] !== [] || $grouped['groupBy'] !== []) {
+        $parsed = Query::groupByType($queries);
+        $joins = $parsed->joins;
+        $distinct = $parsed->distinct;
+        if (($joins === [] && ! $distinct) || $parsed->aggregations !== [] || $parsed->groupBy !== []) {
             return static function (Document $cursor): void {
             };
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $joinedCollections = $this->joinedCollectionsByAlias($joins, $this->resolveJoinedCollections($joins));
-        $selects = $grouped['selections'];
-        $filters = $grouped['filters'];
-        $orderAttributes = $grouped['orderAttributes'];
-        $orderTypes = $grouped['orderTypes'];
+        $selects = $parsed->selections;
+        $filters = $parsed->filters;
+        $orderAttributes = $parsed->orderAttributes;
+        $orderTypes = $parsed->orderTypes;
 
         return function (Document $cursor) use ($collection, $joins, $distinct, $joinedCollections, $selects, $filters, $orderAttributes, $orderTypes): void {
             $orders = $orderAttributes;
@@ -4797,9 +4797,9 @@ trait Documents
         bool $collectionGranted,
         ?array $joinedCollections = null,
     ): ?array {
-        $grouped = Query::groupForDatabase($queries);
-        $filters = $grouped['filters'];
-        $joins = $grouped['joins'];
+        $parsed = Query::groupByType($queries);
+        $filters = $parsed->filters;
+        $joins = $parsed->joins;
 
         if (! empty($joins)) {
             if (! $this->adapter->supports(Capability::Joins)) {

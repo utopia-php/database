@@ -14,6 +14,7 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
@@ -68,6 +69,28 @@ final class CursorTest extends TestCase
         $this->expectExceptionMessage('Cursor before not supported in this method.');
 
         $database->cursor(HookFixture::COLLECTION, [Query::cursorBefore($first)]);
+    }
+
+    public function testAnArrayCursorIsRefusedAsAQueryErrorWithValidationOff(): void
+    {
+        $database = $this->seeded(2);
+
+        try {
+            $database->skipValidation(fn (): \Generator => $database->cursor(HookFixture::COLLECTION, [Query::cursorAfter([Document::ID => 'doc1'])]));
+            $this->fail('An array cursor was accepted');
+        } catch (QueryException $error) {
+            $this->assertSame('Invalid query: Invalid cursor: a cursor must be a document, array given', $error->getMessage());
+        }
+    }
+
+    public function testAnArrayCursorIsRefusedByFindWithValidationOff(): void
+    {
+        $database = $this->seeded(2);
+
+        $this->expectException(QueryException::class);
+        $this->expectExceptionMessage('Invalid query: Invalid cursor: a cursor must be a document, array given');
+
+        $database->skipValidation(fn (): array => $database->find(HookFixture::COLLECTION, [Query::cursorAfter([Document::ID => 'doc1'])]));
     }
 
     public function testThePermissionTheCursorReadsUnder(): void

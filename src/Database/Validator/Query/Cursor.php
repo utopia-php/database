@@ -23,13 +23,9 @@ class Cursor extends Base
     }
 
     /**
-     * Is valid.
-     *
-     * Returns true if method is cursorBefore or cursorAfter and its value is a valid document id or a document
-     * holding one. A document without an id is a row a join or a distinct read returned; the read decides whether
-     * its values name a row.
-     *
-     * Otherwise, returns false
+     * A cursorAfter or cursorBefore query whose value is a document ID, or a document holding one. A document
+     * without an ID is a row a join or a distinct read returned; the read decides whether its values name a row.
+     * Any other value, an array included, is refused.
      *
      * @param  mixed  $value
      */

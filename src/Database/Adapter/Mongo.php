@@ -705,11 +705,13 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
+     * MongoDB creates a database on its first write, so only a database holding data is listed and exists.
+     *
      * @throws Exception
      */
     public function exists(string $database): bool
     {
-        return $this->getClient()->selectDatabase() != null;
+        return \in_array($this->filter($database), $this->getDatabaseNames(), true);
     }
 
     public function collectionExists(string $database, string $collection): bool

@@ -82,11 +82,16 @@ class MongoDBTest extends Base
      */
     public function testCreateExistsDelete(): void
     {
-        // Mongo creates databases on the fly, so exists would always pass. So we override this test to remove the exists check.
-        $this->assertTrue($this->getDatabase()->create());
-        $this->assertTrue($this->getDatabase()->delete($this->testDatabase));
-        $this->assertTrue($this->getDatabase()->create());
-        $this->assertSame($this->getDatabase(), $this->getDatabase()->setDatabase($this->testDatabase));
+        $database = $this->getDatabase();
+
+        $this->assertTrue($database->create());
+        $this->assertTrue($database->exists($this->testDatabase));
+        $this->assertFalse($database->exists($this->testDatabase.'Absent'));
+        $this->assertTrue($database->delete($this->testDatabase));
+        $this->assertFalse($database->exists($this->testDatabase));
+        $this->assertTrue($database->create());
+        $this->assertTrue($database->exists($this->testDatabase));
+        $this->assertSame($database, $database->setDatabase($this->testDatabase));
     }
 
     public function testCollectionGrantsAuthorizeWritesWithoutReadPermission(): void

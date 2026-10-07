@@ -1576,17 +1576,17 @@ class Relationships implements Hook
                 $nextQueue = [];
 
                 foreach ($queue as $item) {
-                    $docs = $item['documents'];
-                    $coll = $item['collection'];
-                    $sels = $item['selects'];
+                    $batchDocuments = $item['documents'];
+                    $batchCollection = $item['collection'];
+                    $batchSelects = $item['selects'];
                     $skipKey = $item['skipKey'] ?? null;
                     $parentHasExplicitSelects = $item['hasExplicitSelects'];
 
-                    if (empty($docs)) {
+                    if (empty($batchDocuments)) {
                         continue;
                     }
 
-                    foreach (self::attributes($coll) as $attribute) {
+                    foreach (self::attributes($batchCollection) as $attribute) {
                         $relationship = $attribute->relationship;
                         $side = $attribute->side;
                         $key = $attribute->key;
@@ -1594,25 +1594,25 @@ class Relationships implements Hook
                             $relationship === null
                             || $side === null
                             || $key === $skipKey
-                            || ($parentHasExplicitSelects && ! \array_key_exists($key, $sels))
+                            || ($parentHasExplicitSelects && ! \array_key_exists($key, $batchSelects))
                         ) {
                             continue;
                         }
 
-                        $queries = $sels[$key] ?? [];
+                        $queries = $batchSelects[$key] ?? [];
                         $isAtMaxDepth = ($currentDepth + 1) >= Database::RELATION_MAX_DEPTH;
 
                         if ($isAtMaxDepth) {
-                            foreach ($docs as $doc) {
-                                $doc->removeAttribute($key);
+                            foreach ($batchDocuments as $document) {
+                                $document->removeAttribute($key);
                             }
 
                             continue;
                         }
 
-                        $relatedDocs = $this->populateSingleRelationshipBatch(
-                            $docs,
-                            $coll,
+                        $relatedDocuments = $this->populateSingleRelationshipBatch(
+                            $batchDocuments,
+                            $batchCollection,
                             $key,
                             $relationship,
                             $side,
@@ -1622,23 +1622,23 @@ class Relationships implements Hook
                         $twoWay = $relationship->twoWay;
                         $twoWayKey = $relationship->twoWayKey ?? '';
 
-                        $hasNestedSelectsForThisRel = isset($sels[$key]);
-                        $shouldQueue = ! empty($relatedDocs) &&
-                            ($hasNestedSelectsForThisRel || ! $parentHasExplicitSelects);
+                        $hasNestedSelects = isset($batchSelects[$key]);
+                        $shouldQueue = ! empty($relatedDocuments) &&
+                            ($hasNestedSelects || ! $parentHasExplicitSelects);
 
                         if ($shouldQueue) {
                             $relatedCollectionId = $relationship->relatedCollection;
                             $relatedCollection = $this->db->silent(fn () => $this->db->findCollection($relatedCollectionId));
 
                             if ($relatedCollection !== null) {
-                                $relationshipQueries = $hasNestedSelectsForThisRel ? $sels[$key] : [];
+                                $relationshipQueries = $hasNestedSelects ? $batchSelects[$key] : [];
 
                                 $nextSelects = $this->processQueries(self::relationships($relatedCollection), $relationshipQueries);
 
                                 $childHasExplicitSelects = $parentHasExplicitSelects;
 
                                 $nextQueue[] = [
-                                    'documents' => $relatedDocs,
+                                    'documents' => $relatedDocuments,
                                     'collection' => $relatedCollection,
                                     'depth' => $currentDepth + 1,
                                     'selects' => $nextSelects,
@@ -1648,9 +1648,9 @@ class Relationships implements Hook
                             }
                         }
 
-                        if ($twoWay && ! empty($relatedDocs)) {
-                            foreach ($relatedDocs as $relatedDoc) {
-                                $relatedDoc->removeAttribute($twoWayKey);
+                        if ($twoWay && ! empty($relatedDocuments)) {
+                            foreach ($relatedDocuments as $relatedDocument) {
+                                $relatedDocument->removeAttribute($twoWayKey);
                             }
                         }
                     }

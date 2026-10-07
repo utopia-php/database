@@ -180,8 +180,8 @@ trait Relationships
             // failure: keep it and write the metadata.
         }
 
-        $collection->setAttribute('attributes', $parent->toDocument(), SetType::Append);
-        $relatedCollection->setAttribute('attributes', $child->toDocument(), SetType::Append);
+        $collection->setAttribute(self::COLLECTION_ATTRIBUTES, $parent->toDocument(), SetType::Append);
+        $relatedCollection->setAttribute(self::COLLECTION_ATTRIBUTES, $child->toDocument(), SetType::Append);
 
         $this->silent(function () use ($collection, $relatedCollection, $relationship, $key, $twoWayKey, $junctionCollection, $created) {
             $committedFailure = null;
@@ -492,8 +492,8 @@ trait Relationships
 
         $collection = $this->silent(fn () => $this->getCollection($collection->getId()));
         $relatedCollection = $this->silent(fn () => $this->getCollection($relatedCollection->getId()));
-        $collection->setAttribute('attributes', $collectionAttributes);
-        $relatedCollection->setAttribute('attributes', $relatedCollectionAttributes);
+        $collection->setAttribute(self::COLLECTION_ATTRIBUTES, $collectionAttributes);
+        $relatedCollection->setAttribute(self::COLLECTION_ATTRIBUTES, $relatedCollectionAttributes);
 
         $shouldRollback = false;
         try {
@@ -657,7 +657,7 @@ trait Relationships
         $found = false;
         foreach ($indexes as $position => $index) {
             if ($index->key === $indexKey) {
-                $indexes[$position] = Index::fromDocument($index->toDocument()->setAttribute('attributes', [$newKey]));
+                $indexes[$position] = Index::fromDocument($index->toDocument()->setAttribute(self::INDEX_ATTRIBUTES, [$newKey]));
                 $found = true;
                 break;
             }
@@ -667,7 +667,7 @@ trait Relationships
             throw new NotFoundException('Index not found');
         }
 
-        $definition->setAttribute('indexes', \array_map(static fn (Index $index): Document => $index->toDocument(), $indexes));
+        $definition->setAttribute(self::COLLECTION_INDEXES, \array_map(static fn (Index $index): Document => $index->toDocument(), $indexes));
         $this->updateMetadata(
             collection: $definition,
             rollbackOperation: null,
@@ -702,7 +702,7 @@ trait Relationships
             throw new NotFoundException('Attribute not found');
         }
 
-        $definition->setAttribute('attributes', \array_map(static fn (Attribute $stored): Document => $stored->toDocument(), $attributes));
+        $definition->setAttribute(self::COLLECTION_ATTRIBUTES, \array_map(static fn (Attribute $stored): Document => $stored->toDocument(), $attributes));
         $this->updateMetadata(
             collection: $definition,
             rollbackOperation: null,
@@ -736,7 +736,7 @@ trait Relationships
      */
     private function forgetAttribute(Collection $collection, string $key): void
     {
-        $collection->setAttribute('attributes', self::attributeDocuments($collection->attributes(), $key));
+        $collection->setAttribute(self::COLLECTION_ATTRIBUTES, self::attributeDocuments($collection->attributes(), $key));
     }
 
     /**

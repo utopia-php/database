@@ -18,6 +18,7 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
@@ -37,9 +38,15 @@ trait Collections
      * @throws DuplicateException
      * @throws IndexException
      * @throws LimitException
+     * @throws StructureException when the collection carries a key the metadata collection does not store
      */
     public function createCollection(Collection $collection): Collection
     {
+        $unknown = \array_diff_key($collection->getArrayCopy(), self::COLLECTION_RESERVED_KEYS);
+        if ($unknown !== []) {
+            throw new StructureException('Unknown collection keys: '.\implode(', ', \array_keys($unknown)));
+        }
+
         $id = $collection->getId();
         $attributes = \array_map(self::normalise(...), $collection->attributes());
         $permissions = $collection->declaredPermissions() ?? [Permission::create(Role::any())];
@@ -78,7 +85,6 @@ trait Collections
             indexes: $indexes,
             permissions: $permissions,
             documentSecurity: $collection->documentSecurity(),
-            metadata: \array_diff_key($collection->getArrayCopy(), self::COLLECTION_RESERVED_KEYS),
         );
 
         if ($this->validation()->get()) {

@@ -163,7 +163,7 @@ final class RelationshipCoroutineTest extends TestCase
             ->setAuthorization(new Authorization())
             ->setDatabase('relationships')
             ->setNamespace('relationships_'.\uniqid());
-        $database->addHook(new Relationships($database));
+        $database->addHook(new Relationships());
         $database->create();
 
         return $database;

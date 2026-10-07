@@ -661,7 +661,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
                 }
             }
 
-            $row = $this->decorateRow($row, $this->documentMetadata($document));
+            $row = $this->decorateRow($row, $document);
             $builder->set($row);
             $result = $builder->insert();
             $statement = $this->executeResult($result, Event::DocumentCreate);
@@ -674,9 +674,9 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
                 throw new DatabaseException('Error creating document empty "'.Document::SEQUENCE.'"');
             }
 
-            $ctx = $this->buildWriteContext($name);
+            $context = $this->writeContext();
             try {
-                $this->runWriteHooks(fn ($hook) => $hook->afterDocumentCreate($name, [$document], $ctx));
+                $this->runWriteHooks(fn ($hook) => $hook->afterDocumentCreate($name, [$document], $context));
             } catch (PDOException $e) {
                 $isOrphanedPermission = $e->getCode() === '23000'
                     && isset($e->errorInfo[1])
@@ -694,7 +694,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
                 $cleanupStmt = $this->executeResult($cleanupResult, Event::PermissionsDelete);
                 $this->execute($cleanupStmt);
 
-                $this->runWriteHooks(fn ($hook) => $hook->afterDocumentCreate($name, [$document], $ctx));
+                $this->runWriteHooks(fn ($hook) => $hook->afterDocumentCreate($name, [$document], $context));
             }
         } catch (PDOException $e) {
             throw $this->processException($e);
@@ -770,8 +770,8 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
 
             $this->execute($statement);
 
-            $ctx = $this->buildWriteContext($name, $id);
-            $this->runWriteHooks(fn ($hook) => $hook->afterDocumentUpdate($name, $document, $skipPermissions, $ctx));
+            $context = $this->writeContext($skipPermissions);
+            $this->runWriteHooks(fn ($hook) => $hook->afterDocumentUpdate($name, $id, $document, $context));
         } catch (PDOException $e) {
             throw $this->processException($e);
         }

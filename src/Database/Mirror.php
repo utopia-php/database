@@ -642,9 +642,10 @@ class Mirror extends Database
     }
 
     /**
-     * {@inheritdoc}
+     * Lifecycle hooks are registered on the source, where the mirror's writes run; the mirror keeps its own
+     * query-cache invalidator as well.
      */
-    public function addLifecycleHook(Lifecycle $hook): static
+    protected function addLifecycleHook(Lifecycle $hook): static
     {
         if ($hook instanceof Invalidator) {
             parent::addHook($hook);
@@ -1858,7 +1859,9 @@ class Mirror extends Database
     }
 
     /**
-     * {@inheritdoc}
+     * A relationships hook is the mirror's own, and the source and the destination each attach a copy of it, so
+     * both sides relate documents exactly as it is configured to. A write hook also intercepts the destination's
+     * writes.
      */
     public function addHook(\Utopia\Query\Hook $hook): static
     {
@@ -1869,12 +1872,35 @@ class Mirror extends Database
         }
 
         if ($hook instanceof Relationships) {
-            $this->source->addHook(new Relationships($this->source, $hook->shouldPrepare()));
-            $this->destination?->addHook(new Relationships($this->destination, $hook->shouldPrepare()));
+            $this->source->addHook(clone $hook);
+            $this->destination?->addHook(clone $hook);
         }
 
         if ($hook instanceof Write) {
             $this->destination?->getAdapter()->addWriteHook($hook);
+        }
+
+        return $this;
+    }
+
+    /**
+     * Also removes the hook from where {@see self::addHook()} registered it on the source and the destination.
+     */
+    public function removeHook(\Utopia\Query\Hook|string $hook): static
+    {
+        parent::removeHook($hook);
+
+        if ($hook instanceof Lifecycle || (\is_string($hook) && \is_a($hook, Lifecycle::class, true))) {
+            $this->source->removeHook($hook);
+        }
+
+        if ($hook instanceof Relationships || (\is_string($hook) && \is_a($hook, Relationships::class, true))) {
+            $this->source->removeHook(Relationships::class);
+            $this->destination?->removeHook(Relationships::class);
+        }
+
+        if ($hook instanceof Write || (\is_string($hook) && \is_a($hook, Write::class, true))) {
+            $this->destination?->getAdapter()->removeWriteHook($hook);
         }
 
         return $this;

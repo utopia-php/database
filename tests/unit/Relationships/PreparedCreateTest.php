@@ -320,7 +320,7 @@ final class PreparedCreateTest extends TestCase
         $database = new Database($adapter, new Cache(new None()));
         $database->setAuthorization($authorization)->setDatabase('prepared_create')->setNamespace('prepared');
         $database->create();
-        $database->addHook(new Relationships($database, prepare: $prepare));
+        $database->addHook(new Relationships(prepare: $prepare));
         foreach (['parents', 'children'] as $collection) {
             $database->createCollection(Collection::create(id: $collection, attributes: [Attribute::string(key: 'name', size: 64)], permissions: self::permissions(), documentSecurity: false));
         }
@@ -800,7 +800,7 @@ final class PreparedCreateTest extends TestCase
         }
 
         $database->create();
-        $database->addHook(new Relationships($database, prepare: $mode === self::DEFERRED || $mode === self::IMMEDIATE));
+        $database->addHook(new Relationships(prepare: $mode === self::DEFERRED || $mode === self::IMMEDIATE));
         $database->addHook(new Permissions());
 
         return $database;

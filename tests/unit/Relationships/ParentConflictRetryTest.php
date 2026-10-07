@@ -154,7 +154,7 @@ final class ParentConflictRetryTest extends TestCase
         $database = new Database($adapter, new Cache(new None()));
         $database->setAuthorization($authorization)->setDatabase('parent_conflict')->setNamespace('conflict');
         $database->create();
-        $database->addHook(new Relationships($database, prepare: $prepare));
+        $database->addHook(new Relationships(prepare: $prepare));
 
         $permissions = [
             Permission::create(Role::any()),

@@ -477,7 +477,7 @@ final class RedisAdapterPathsTest extends TestCase
             ->setAuthorization($this->authorization)
             ->setDatabase(self::DATABASE)
             ->setNamespace(self::NAMESPACE);
-        $database->addHook(new Relationships($database));
+        $database->addHook(new Relationships());
 
         return $database;
     }

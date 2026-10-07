@@ -68,20 +68,30 @@ final class BaseAdapterStateTest extends TestCase
         $adapter->addWriteHook(new class () extends Interceptor {
         });
 
-        $this->assertFalse($adapter->hasTenantHook());
         $this->assertNull($adapter->getTenantHook());
 
-        $tenancy = new Tenancy(7);
+        $tenancy = new Tenancy();
         $adapter->addWriteHook($tenancy);
 
-        $this->assertTrue($adapter->hasTenantHook());
         $this->assertSame($tenancy, $adapter->getTenantHook());
 
         $adapter->removeWriteHook(Tenancy::class);
 
-        $this->assertFalse($adapter->hasTenantHook());
         $this->assertNull($adapter->getTenantHook());
         $this->assertCount(1, $adapter->getWriteHooks());
+    }
+
+    public function testRemovingAWriteHookInstanceKeepsAnotherOfItsClass(): void
+    {
+        $adapter = new SQLite(new PDO('sqlite::memory:'));
+        $kept = new Tenancy();
+        $removed = new Tenancy('owner');
+        $adapter->addWriteHook($kept);
+        $adapter->addWriteHook($removed);
+
+        $adapter->removeWriteHook($removed);
+
+        $this->assertSame([$kept], $adapter->getWriteHooks());
     }
 
     public function testTenantHookFollowsSharedTablesOnAWrite(): void
@@ -97,9 +107,7 @@ final class BaseAdapterStateTest extends TestCase
         $database->createCollection($this->notes('own'));
         $database->createDocument('own', new Document(['$id' => 'first', 'body' => 'one']));
 
-        $this->assertFalse($adapter->hasTenantHook());
-        $hook = $adapter->getTenantHook();
-        $this->assertNull($hook);
+        $this->assertNull($adapter->getTenantHook());
 
         $database->setSharedTables(true)->setTenant(7);
         $database->setNamespace(self::NAMESPACE . '_shared');
@@ -107,16 +115,13 @@ final class BaseAdapterStateTest extends TestCase
         $database->createCollection($this->notes('shared'));
         $database->createDocument('shared', new Document(['$id' => 'second', 'body' => 'two']));
 
-        $this->assertTrue($adapter->hasTenantHook());
-        $hook = $adapter->getTenantHook();
-        $this->assertNotNull($hook);
-        $this->assertSame(7, $hook->getTenant());
+        $this->assertNotNull($adapter->getTenantHook());
+        $this->assertSame(7, $database->getDocument('shared', 'second')->getTenant());
 
         $database->setSharedTables(false)->setTenant(null);
         $database->setNamespace(self::NAMESPACE);
         $database->createDocument('own', new Document(['$id' => 'third', 'body' => 'three']));
 
-        $this->assertFalse($adapter->hasTenantHook());
         $this->assertNull($adapter->getTenantHook());
     }
 

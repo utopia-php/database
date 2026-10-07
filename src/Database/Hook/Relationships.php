@@ -39,7 +39,7 @@ use Utopia\Query\Method;
  * Handles relationship side effects for document CRUD, populates nested relationships
  * on read, and converts relationship filter queries into adapter-compatible subqueries.
  */
-class Relationships implements Hook
+class Relationships implements Attachable, Hook
 {
     /**
      * The most chunks of related ids one population reads at the same time
@@ -86,18 +86,38 @@ class Relationships implements Hook
      */
     private array $replays = [];
 
+    private Database $database;
+
     /**
-     * @param Database $database The database instance used for relationship operations
      * @param bool $prepare Whether a create whose related documents are all new prepares them instead of creating
      *                      each through createDocument(), which reads it before and after writing it
      */
     public function __construct(
-        private Database $database,
         private readonly bool $prepare = true,
     ) {
         $this->enabled = new Value(true);
         $this->checkExist = new Value(true);
         $this->inBatchPopulation = new Value(false);
+    }
+
+    /**
+     * A copy configured like this hook, with none of its state, for another database to attach.
+     */
+    public function __clone()
+    {
+        $this->enabled = new Value(true);
+        $this->checkExist = new Value(true);
+        $this->inBatchPopulation = new Value(false);
+        $this->fetchDepth = 0;
+        $this->writeStacks = [];
+        $this->deleteStacks = [];
+        $this->prepared = [];
+        $this->replays = [];
+    }
+
+    public function attach(Database $database): void
+    {
+        $this->database = $database;
     }
 
     /**
@@ -219,7 +239,7 @@ class Relationships implements Hook
     }
 
     /**
-     * {@inheritDoc}
+     * @internal
      */
     public function isEnabled(): bool
     {
@@ -227,7 +247,7 @@ class Relationships implements Hook
     }
 
     /**
-     * {@inheritDoc}
+     * @internal
      */
     public function setEnabled(bool $enabled): void
     {
@@ -241,6 +261,8 @@ class Relationships implements Hook
      *
      * @param  callable(): T  $callback
      * @return T
+     *
+     * @internal
      */
     public function withEnabled(bool $enabled, callable $callback): mixed
     {
@@ -248,21 +270,11 @@ class Relationships implements Hook
     }
 
     /**
-     * {@inheritDoc}
+     * @internal
      */
     public function shouldCheckExist(): bool
     {
         return $this->checkExist->get();
-    }
-
-    /**
-     * Whether a create whose related documents are all new prepares them instead of creating each one by one.
-     *
-     * @internal
-     */
-    public function shouldPrepare(): bool
-    {
-        return $this->prepare;
     }
 
     /**
@@ -272,6 +284,8 @@ class Relationships implements Hook
      *
      * @param  callable(): T  $callback
      * @return T
+     *
+     * @internal
      */
     public function withCheckExist(bool $check, callable $callback): mixed
     {
@@ -279,7 +293,7 @@ class Relationships implements Hook
     }
 
     /**
-     * {@inheritDoc}
+     * @internal
      */
     public function getWriteStackCount(): int
     {
@@ -287,7 +301,7 @@ class Relationships implements Hook
     }
 
     /**
-     * {@inheritDoc}
+     * @internal
      */
     public function getFetchDepth(): int
     {
@@ -295,7 +309,7 @@ class Relationships implements Hook
     }
 
     /**
-     * {@inheritDoc}
+     * @internal
      */
     public function isInBatchPopulation(): bool
     {
@@ -309,6 +323,8 @@ class Relationships implements Hook
      *
      * @param  callable(): T  $callback
      * @return T
+     *
+     * @internal
      */
     public function withSnapshot(Snapshot $snapshot, callable $callback): mixed
     {
@@ -333,6 +349,8 @@ class Relationships implements Hook
      *
      * @throws DuplicateException If a related document already exists
      * @throws RelationshipException If a relationship constraint is violated
+     *
+     * @internal
      */
     public function afterDocumentCreate(Document $collection, Document $document, ?array &$copies = null): Document
     {
@@ -925,11 +943,13 @@ class Relationships implements Hook
     }
 
     /**
-     * {@inheritDoc}
+     * Relate the related documents of an updated document.
      *
      * @throws DuplicateException If a related document already exists
      * @throws RelationshipException If a relationship constraint is violated
      * @throws RestrictedException If a restricted relationship is violated
+     *
+     * @internal
      */
     public function afterDocumentUpdate(Document $collection, Document $old, Document $document): Document
     {
@@ -1411,6 +1431,8 @@ class Relationships implements Hook
      * @return list<Document>
      *
      * @throws RestrictedException If a restricted relationship prevents deletion
+     *
+     * @internal
      */
     public function beforeDocumentDelete(Document $collection, Document $document, bool $report = false): array
     {
@@ -1557,6 +1579,8 @@ class Relationships implements Hook
      * @param  array<Document>  $documents
      * @param  array<string, array<Query>>  $selects
      * @return array<Document>
+     *
+     * @internal
      */
     public function populateDocuments(array $documents, Document $collection, int $fetchDepth, array $selects = []): array
     {
@@ -1670,6 +1694,8 @@ class Relationships implements Hook
      * @param  array<Attribute>  $relationships  The relationship attributes of the collection the queries read
      * @param  array<Query>  $queries
      * @return array<string, array<Query>>
+     *
+     * @internal
      */
     public function processQueries(array $relationships, array $queries): array
     {
@@ -1762,6 +1788,8 @@ class Relationships implements Hook
      * @return array<Query>|null
      *
      * @throws QueryException If a relationship query references an invalid attribute
+     *
+     * @internal
      */
     public function convertQueries(array $relationships, array $queries, ?Document $collection = null): ?array
     {

@@ -610,7 +610,7 @@ final class MirrorReplicationTest extends TestCase
      */
     private function relate(): void
     {
-        $this->mirror->addHook(new Relationships($this->mirror));
+        $this->mirror->addHook(new Relationships());
         $this->authorization->skip(function (): void {
             foreach ([self::PARENTS, self::CHILDREN] as $collection) {
                 $this->mirror->createCollection(Collection::create(

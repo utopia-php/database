@@ -166,9 +166,7 @@ class MariaDBTest extends Base
             ->setDatabase($main->getDatabase())
             ->setNamespace($main->getNamespace());
 
-        if (! $database->getAdapter()->hasPermissionHook()) {
-            $database->addHook(new Permissions());
-        }
+        $database->addHook(new Permissions());
 
         return $database;
     }

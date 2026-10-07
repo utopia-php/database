@@ -14,6 +14,8 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Hook\Permissions;
+use Utopia\Database\Hook\Write;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Mongo\Client;
@@ -75,7 +77,7 @@ trait MongoReadFilterTests
 
         $database->create();
 
-        $this->assertFalse($adapter->hasPermissionHook());
+        $this->assertSame([], \array_filter($adapter->getWriteHooks(), static fn (Write $hook): bool => $hook instanceof Permissions));
 
         return $database;
     }

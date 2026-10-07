@@ -325,7 +325,7 @@ class CacheKeyTest extends TestCase
     public function testQueryCacheFieldIncludesAmbientState(): void
     {
         $db = $this->createDatabase();
-        $db->addHook(new Relationships($db));
+        $db->addHook(new Relationships());
 
         $field = $db->getQueryCacheField(null, [Query::limit(10)]);
 

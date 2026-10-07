@@ -114,7 +114,7 @@ $cli
             $database = new Database(new ($cfg['adapter'])($pdo), $cache);
             $database
                 ->addHook(new Permissions())
-                ->addHook(new Relationships($database))
+                ->addHook(new Relationships())
                 ->setDatabase($name)
                 ->setNamespace($namespace);
 

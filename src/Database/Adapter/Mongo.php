@@ -1525,7 +1525,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         /** @var array<string, mixed> $documentArray */
         $documentArray = (array) $document;
         $record = $this->replaceCharacters('$', '_', $documentArray);
-        $record = $this->decorateRow($record, $this->documentMetadata($document));
+        $record = $this->decorateRow($record, $document);
 
         // Insert manual id if set
         if (! empty($sequence)) {
@@ -1574,7 +1574,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
             /** @var array<string, mixed> $documentArr */
             $documentArr = (array) $document;
             $record = $this->replaceCharacters('$', '_', $documentArr);
-            $record = $this->decorateRow($record, $this->documentMetadata($document));
+            $record = $this->decorateRow($record, $document);
 
             if (! empty($sequence)) {
                 $record[Storage::SEQUENCE] = $sequence;
@@ -2103,7 +2103,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
                 }
 
                 $record = $this->replaceCharacters('$', '_', $attributes);
-                $record = $this->decorateRow($record, $this->documentMetadata($document));
+                $record = $this->decorateRow($record, $document);
 
                 unset($record[Storage::SEQUENCE]); // Don't update _id
 

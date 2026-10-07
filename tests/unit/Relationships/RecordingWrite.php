@@ -22,7 +22,7 @@ class RecordingWrite extends Interceptor
         $this->writes[] = ['create', $collection, \array_values(\array_map(static fn (Document $document): string => $document->getId(), $documents))];
     }
 
-    public function afterDocumentUpdate(string $collection, Document $document, bool $skipPermissions, WriteContext $context): void
+    public function afterDocumentUpdate(string $collection, string $id, Document $document, WriteContext $context): void
     {
         $this->writes[] = ['update', $collection, [$document->getId()]];
     }

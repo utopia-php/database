@@ -400,22 +400,9 @@ abstract class Adapter
         return $this;
     }
 
-    public function hasPermissionHook(): bool
-    {
-        foreach ($this->writeHooks as $hook) {
-            if ($hook instanceof Hook\Permissions) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    public function hasTenantHook(): bool
-    {
-        return $this->getTenantHook() !== null;
-    }
-
+    /**
+     * @internal
+     */
     public function getTenantHook(): ?Hook\Tenancy
     {
         foreach ($this->writeHooks as $hook) {
@@ -428,23 +415,23 @@ abstract class Adapter
     }
 
     /**
-     * Remove a write hook by its class name.
+     * Remove a write hook, or every write hook of a class.
      *
-     * @param string $class The fully qualified class name of the hook to remove.
+     * @param  Write|class-string  $hook
      * @return $this
      */
-    public function removeWriteHook(string $class): static
+    public function removeWriteHook(Write|string $hook): static
     {
         $this->writeHooks = \array_values(\array_filter(
             $this->writeHooks,
-            fn (Write $h) => ! ($h instanceof $class)
+            static fn (Write $registered): bool => \is_string($hook) ? ! $registered instanceof $hook : $registered !== $hook,
         ));
 
         return $this;
     }
 
     /**
-     * Get all registered write hooks.
+     * @internal
      *
      * @return list<Write>
      */
@@ -1021,14 +1008,18 @@ abstract class Adapter
     }
 
     /**
-     * Apply all write hooks' decorateRow to a row.
+     * The row as every write hook decorates a row written for the document.
      *
      * @param  array<string, mixed>  $row
-     * @param  array<string, mixed>  $metadata
      * @return array<string, mixed>
      */
-    protected function decorateRow(array $row, array $metadata): array
+    protected function decorateRow(array $row, Document $document): array
     {
+        if ($this->writeHooks === []) {
+            return $row;
+        }
+
+        $metadata = new Hook\RowMetadata($document->getTenant() ?? $this->currentTenant());
         foreach ($this->writeHooks as $hook) {
             $row = $hook->decorateRow($row, $metadata);
         }
@@ -1046,14 +1037,6 @@ abstract class Adapter
         foreach ($this->writeHooks as $hook) {
             $callback($hook);
         }
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    protected function documentMetadata(Document $document): array
-    {
-        return ['id' => $document->getId(), 'tenant' => $document->getTenant()];
     }
 
     /**

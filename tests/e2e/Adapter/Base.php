@@ -93,11 +93,9 @@ abstract class Base extends TestCase
 
         $db = $this->getDatabase();
         if ($db->getRelationshipHook() === null) {
-            $db->addHook(new Relationships($db));
+            $db->addHook(new Relationships());
         }
-        if (! $db->getAdapter()->hasPermissionHook()) {
-            $db->addHook(new Permissions());
-        }
+        $db->removeHook(Permissions::class)->addHook(new Permissions());
     }
 
     protected function tearDown(): void

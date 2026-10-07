@@ -12,6 +12,7 @@ use Throwable;
 use Utopia\Console;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\SQL\BoundedPage;
+use Utopia\Database\Adapter\SQL\Hook\WriteContext;
 use Utopia\Database\Attribute;
 use Utopia\Database\Builder\Filtering;
 use Utopia\Database\Capability;
@@ -38,7 +39,6 @@ use Utopia\Database\Hook\RawOuterJoinTenantFilter;
 use Utopia\Database\Hook\RawTenantFilter;
 use Utopia\Database\Hook\Tenancy;
 use Utopia\Database\Hook\TenantFilter;
-use Utopia\Database\Hook\WriteContext;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
 use Utopia\Database\PDO as DatabasePDO;
@@ -748,7 +748,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             }
 
             if (! empty($documents)) {
-                $context = $this->buildWriteContext($name);
+                $context = $this->writeContext();
                 $this->runWriteHooks(fn ($hook) => $hook->afterDocumentCreate($name, $documents, $context));
             }
         } catch (PDOException $e) {
@@ -865,7 +865,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
         foreach ($documents as $document) {
             $row = $this->buildDocumentRow($document, $attributeKeys, $spatialMap, $intBools);
-            $row = $this->decorateRow($row, $this->documentMetadata($document));
+            $row = $this->decorateRow($row, $document);
             $builder->set($row);
         }
 
@@ -1160,8 +1160,8 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
         $affected = $statement->rowCount();
 
-        $ctx = $this->buildWriteContext($name);
-        $this->runWriteHooks(fn ($hook) => $hook->afterDocumentBatchUpdate($name, $updates, $documents, $ctx));
+        $context = $this->writeContext();
+        $this->runWriteHooks(fn ($hook) => $hook->afterDocumentBatchUpdate($name, $updates, $documents, $context));
 
         return $affected;
     }
@@ -1254,8 +1254,8 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 }
             }
 
-            $ctx = $this->buildWriteContext($name);
-            $this->runWriteHooks(fn ($hook) => $hook->afterDocumentUpsert($name, $changes, $ctx));
+            $context = $this->writeContext();
+            $this->runWriteHooks(fn ($hook) => $hook->afterDocumentUpsert($name, $changes, $context));
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -1292,8 +1292,8 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 throw new DatabaseException('Failed to delete documents');
             }
 
-            $ctx = $this->buildWriteContext($name);
-            $this->runWriteHooks(fn ($hook) => $hook->afterDocumentDelete($name, \array_values($permissionIds), $ctx));
+            $context = $this->writeContext();
+            $this->runWriteHooks(fn ($hook) => $hook->afterDocumentDelete($name, \array_values($permissionIds), $context));
         } catch (Throwable $e) {
             throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
         }
@@ -1425,8 +1425,8 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
             $deleted = $statement->rowCount();
 
-            $ctx = $this->buildWriteContext($name);
-            $this->runWriteHooks(fn ($hook) => $hook->afterDocumentDelete($name, [$id], $ctx));
+            $context = $this->writeContext();
+            $this->runWriteHooks(fn ($hook) => $hook->afterDocumentDelete($name, [$id], $context));
         } catch (\Throwable $e) {
             throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
         }
@@ -3454,12 +3454,9 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
-     * Re-register the write hooks this adapter owns.
-     *
-     * Only Tenancy, and only while shared tables are active. It takes each
-     * row's tenant from the document being written and falls back to the
-     * ambient tenant, so it is needed in per-document mode too, where there is
-     * no ambient tenant at all.
+     * Keeps the write hook this adapter owns registered: Tenancy, while shared tables are active. It stores each
+     * row's tenant from the document being written, or the adapter's when the document names none, so it is needed
+     * in per-document mode too, where there is no adapter tenant at all.
      *
      * Permissions is deliberately not here, and this does not restore it. It is
      * registered once by whoever builds the Database, so a handle constructed
@@ -3469,31 +3466,32 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      */
     protected function syncWriteHooks(): void
     {
-        $this->removeWriteHook(Tenancy::class);
+        $registered = $this->getTenantHook() !== null;
+        if ($registered === $this->sharedTables) {
+            return;
+        }
+
         if ($this->sharedTables) {
-            $this->addWriteHook(new Tenancy($this->currentTenant()));
+            $this->addWriteHook(new Tenancy());
+        } else {
+            $this->removeWriteHook(Tenancy::class);
         }
     }
 
     /**
-     * Build a WriteContext that delegates to this adapter's query infrastructure.
-     *
-     * @param  string  $collection  The filtered collection name
-     * @param  string|null  $lookupId  The document id used to load/update this write
+     * The context this adapter's write hooks write their own rows through.
      */
-    protected function buildWriteContext(string $collection, ?string $lookupId = null): WriteContext
+    protected function writeContext(bool $skipPermissions = false): WriteContext
     {
-        $name = $this->filter($collection);
-
         return new WriteContext(
-            newBuilder: fn (string $table, string $alias = '') => $this->newBuilder($table, $alias),
-            executeResult: fn (Statement $result, ?Event $event = null) => $this->executeResult($result, $event),
-            execute: fn (mixed $statement) => $this->execute($statement),
-            decorateRow: fn (array $row, array $metadata) => $this->decorateRow($row, $metadata),
-            createBuilder: fn () => $this->createBuilder(),
-            getTableRaw: fn (string $table) => $this->getTableRaw($table),
-            skipDuplicates: $this->skippingDuplicates(),
-            lookupId: $lookupId,
+            builder: fn (string $table): SQLBuilder => $this->newBuilder($table),
+            rawBuilder: $this->createBuilder(...),
+            rawTable: $this->getTableRaw(...),
+            prepare: fn (Statement $statement, Event $event): PDOStatement|DatabasePDOStatement|PDOStatementProxy => $this->executeResult($statement, $event),
+            execute: fn (PDOStatement|DatabasePDOStatement|PDOStatementProxy $statement): bool => $this->execute($statement),
+            decorateRow: $this->decorateRow(...),
+            ignoreDuplicates: $this->skippingDuplicates(),
+            skipPermissions: $skipPermissions,
         );
     }
 
@@ -3734,7 +3732,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 $currentRegularAttributes[Storage::SEQUENCE] = $document->getSequence();
             }
 
-            $currentRegularAttributes = $this->decorateRow($currentRegularAttributes, $this->documentMetadata($document));
+            $currentRegularAttributes = $this->decorateRow($currentRegularAttributes, $document);
 
             foreach (\array_keys($currentRegularAttributes) as $column) {
                 $allColumnNames[$column] = true;

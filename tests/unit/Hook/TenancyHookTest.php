@@ -4,6 +4,7 @@ namespace Tests\Unit\Hook;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Utopia\Database\Hook\RowMetadata;
 use Utopia\Database\Hook\Tenancy;
 use Utopia\Database\Storage;
 
@@ -22,17 +23,21 @@ final class TenancyHookTest extends TestCase
     }
 
     #[DataProvider('tenants')]
-    public function testGetTenantReturnsTheAmbientTenant(int|string|null $tenant): void
+    public function testDecorateRowStoresTheRowsTenant(int|string|null $tenant): void
     {
-        $this->assertSame($tenant, (new Tenancy($tenant))->getTenant());
+        $this->assertSame(
+            ['title' => 'x', Storage::TENANT => $tenant],
+            (new Tenancy())->decorateRow(['title' => 'x'], new RowMetadata($tenant)),
+        );
     }
 
-    public function testDecorateRowPrefersTheMetadataTenantOverTheAmbientOne(): void
+    public function testDecorateRowStoresTheTenantInTheGivenColumn(): void
     {
-        $hook = new Tenancy(5);
+        $this->assertSame(['title' => 'x', 'owner' => 5], (new Tenancy('owner'))->decorateRow(['title' => 'x'], new RowMetadata(5)));
+    }
 
-        $this->assertSame(['title' => 'x', Storage::TENANT => 7], $hook->decorateRow(['title' => 'x'], ['tenant' => 7]));
-        $this->assertSame(['title' => 'x', Storage::TENANT => 5], $hook->decorateRow(['title' => 'x']));
-        $this->assertSame(['title' => 'x', 'owner' => 5], (new Tenancy(5, 'owner'))->decorateRow(['title' => 'x']));
+    public function testDecorateRowReplacesATenantTheRowAlreadyHolds(): void
+    {
+        $this->assertSame([Storage::TENANT => 7], (new Tenancy())->decorateRow([Storage::TENANT => 5], new RowMetadata(7)));
     }
 }

@@ -279,9 +279,6 @@ class MirrorTest extends TestCase
         yield 'addHook' => [
             static fn (Mirror $mirror, Invalidator $invalidator): mixed => $mirror->addHook($invalidator),
         ];
-        yield 'addLifecycleHook' => [
-            static fn (Mirror $mirror, Invalidator $invalidator): mixed => $mirror->addLifecycleHook($invalidator),
-        ];
     }
 
     /**
@@ -513,7 +510,7 @@ class MirrorTest extends TestCase
     public function testScopedSetterAppliesToTheSourceOnce(Closure $scope, Closure $read, mixed $inside, mixed $outside, mixed $destinationInside): void
     {
         [$mirror, $source, $destination] = $this->pair();
-        $mirror->addHook(new Relationships($mirror));
+        $mirror->addHook(new Relationships());
         $databases = [$mirror, $source, $destination];
         $observed = [];
 

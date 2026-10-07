@@ -94,7 +94,7 @@ final class DocumentMinorsTest extends TestCase
         };
         $database->setAuthorization($authorization)->setDatabase('minors')->setNamespace('minors_'.\uniqid());
         $database->create();
-        $database->addHook(new Relationships($database));
+        $database->addHook(new Relationships());
         $readOnly = [Permission::create(Role::any()), Permission::read(Role::any())];
         $database->createCollection(Collection::create(id: 'parents', permissions: $readOnly));
         $database->createCollection(Collection::create(id: 'children', permissions: [...$readOnly, Permission::update(Role::any())]));
@@ -200,7 +200,7 @@ final class DocumentMinorsTest extends TestCase
         $database = new Database(new Memory(), new Cache(new None()));
         $database->setAuthorization($authorization)->setDatabase('minors')->setNamespace('minors_'.\uniqid());
         $database->create();
-        $database->addHook(new Relationships($database));
+        $database->addHook(new Relationships());
         $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
         $database->createCollection(Collection::create(id: 'books', attributes: [Attribute::integer(key: 'pages')], permissions: $permissions));
         $database->createCollection(Collection::create(id: 'authors', attributes: [Attribute::string(key: 'name', size: 32)], permissions: $permissions));

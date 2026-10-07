@@ -597,7 +597,7 @@ final class RelationshipHookTest extends TestCase
         }
 
         $database->create();
-        $database->addHook(new Relationships($database));
+        $database->addHook(new Relationships());
         $database->addHook(new Permissions());
 
         return $database;
@@ -1329,7 +1329,7 @@ final class RelationshipHookTest extends TestCase
             ->setDatabase('relationship_hook')
             ->setNamespace('relationship_hook_'.\uniqid());
         $database->create();
-        $database->addHook(new Relationships($database));
+        $database->addHook(new Relationships());
 
         $this->relate(
             $database,

@@ -533,7 +533,7 @@ final class DeleteRelatedUpdateTest extends TestCase
             ->setNamespace('related_update_'.\uniqid());
 
         $database->create();
-        $database->addHook(new Relationships($database));
+        $database->addHook(new Relationships());
         $database->addHook(new Permissions());
 
         return $database;

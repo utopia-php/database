@@ -129,7 +129,7 @@ final class RelationshipHookCoverageTest extends TestCase
             ->setDatabase('relationship_hook_coverage')
             ->setNamespace('race_'.\uniqid());
         $database->create();
-        $database->addHook(new Relationships($database));
+        $database->addHook(new Relationships());
         $database->createCollection(Collection::create(id: 'parent', permissions: $this->permissions(), documentSecurity: false));
         $database->createCollection(Collection::create(id: 'child', permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: true));
         $database->createRelationship('parent', Relationship::oneToMany(relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: RelationshipDeleteAction::SetNull));
@@ -200,7 +200,7 @@ final class RelationshipHookCoverageTest extends TestCase
             ->setDatabase('relationship_hook_coverage')
             ->setNamespace('library_'.\uniqid());
         $database->create();
-        $database->addHook(new Relationships($database));
+        $database->addHook(new Relationships());
 
         foreach (['books' => 'title', 'authors' => 'name', 'publishers' => 'name'] as $collection => $attribute) {
             $database->createCollection(Collection::create(id: $collection, attributes: [Attribute::string(key: $attribute, size: 64)], permissions: $this->permissions()));

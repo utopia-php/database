@@ -5,7 +5,7 @@ namespace Utopia\Database\Filter;
 use Closure;
 use ReflectionFunction;
 
-final readonly class Callback implements Codec
+final readonly class Callback implements Signed
 {
     public function __construct(
         private string $name,
@@ -32,8 +32,6 @@ final readonly class Callback implements Codec
     /**
      * Where the two closures are declared, so cached documents decoded by other closures are told apart while
      * every process declaring the same ones shares them.
-     *
-     * @internal
      */
     public function signature(): string
     {

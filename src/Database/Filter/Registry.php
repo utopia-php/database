@@ -8,6 +8,8 @@ use Utopia\Database\Filter;
 /**
  * The filters of the Database handles it is set on. A filter registered later reaches every one of them, and one
  * registered under a name already taken replaces the earlier one.
+ *
+ * Cache keys tell codecs apart by {@see Signed::signature()} or, for any other codec, by class alone.
  */
 final class Registry
 {
@@ -29,7 +31,7 @@ final class Registry
         }
 
         $this->codecs[$name] = $codec;
-        $this->signatures[$name] = $codec instanceof Callback ? $codec->signature() : $codec::class;
+        $this->signatures[$name] = $codec instanceof Signed ? $codec->signature() : $codec::class;
 
         return $this;
     }

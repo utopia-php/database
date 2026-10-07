@@ -16,9 +16,10 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
-use Utopia\Database\RelationType;
+use Utopia\Database\RelationshipDeleteAction;
+use Utopia\Database\RelationshipType;
+use Utopia\Database\RelationshipUpdate;
 use Utopia\Query\Schema\ColumnType;
-use Utopia\Query\Schema\ForeignKeyAction;
 
 trait ManyToOneTests
 {
@@ -33,43 +34,43 @@ trait ManyToOneTests
             return;
         }
 
-        $database->createCollection(new Collection(id: 'review'));
-        $database->createCollection(new Collection(id: 'movie'));
+        $database->createCollection(Collection::create(id: 'review'));
+        $database->createCollection(Collection::create(id: 'movie'));
 
         $database->createAttribute('review', Attribute::string(key: 'name', required: true));
         $database->createAttribute('movie', Attribute::string(key: 'name', required: true));
-        $database->createAttribute('movie', Attribute::integer(key: 'length', required: true, formatOptions: ['min' => 0, 'max' => 999]));
-        $database->createAttribute('movie', Attribute::datetime(key: 'date', filters: ['datetime']));
-        $database->createAttribute('review', Attribute::datetime(key: 'date', filters: ['datetime']));
-        $database->createRelationship(Relationship::manyToOne(collection: 'review', relatedCollection: 'movie', twoWayKey: 'reviews'));
+        $database->createAttribute('movie', Attribute::integer(key: 'length', required: true));
+        $database->createAttribute('movie', Attribute::datetime(key: 'date'));
+        $database->createAttribute('review', Attribute::datetime(key: 'date'));
+        $database->createRelationship('review', Relationship::manyToOne(relatedCollection: 'movie', twoWayKey: 'reviews'));
 
         // Check metadata for collection
         $collection = $database->getCollection('review');
-        foreach ($collection->attributes as $attribute) {
+        foreach ($collection->attributes() as $attribute) {
             if ($attribute->key === 'movie') {
                 $this->assertEquals(ColumnType::Relationship, $attribute->type);
-                $this->assertEquals('movie', $attribute->getId());
                 $this->assertEquals('movie', $attribute->key);
-                $options = $attribute->options ?? [];
-                $this->assertEquals('movie', $options['relatedCollection'] ?? null);
-                $this->assertEquals(RelationType::ManyToOne->value, $options['relationType'] ?? null);
-                $this->assertEquals(false, $options['twoWay'] ?? null);
-                $this->assertEquals('reviews', $options['twoWayKey'] ?? null);
+                $relationship = $attribute->relationship;
+                $this->assertNotNull($relationship);
+                $this->assertSame('movie', $relationship->relatedCollection);
+                $this->assertSame(RelationshipType::ManyToOne, $relationship->type);
+                $this->assertSame(false, $relationship->twoWay);
+                $this->assertSame('reviews', $relationship->twoWayKey);
             }
         }
 
         // Check metadata for related collection
         $collection = $database->getCollection('movie');
-        foreach ($collection->attributes as $attribute) {
+        foreach ($collection->attributes() as $attribute) {
             if ($attribute->key === 'reviews') {
                 $this->assertEquals(ColumnType::Relationship, $attribute->type);
-                $this->assertEquals('reviews', $attribute->getId());
                 $this->assertEquals('reviews', $attribute->key);
-                $options = $attribute->options ?? [];
-                $this->assertEquals('review', $options['relatedCollection'] ?? null);
-                $this->assertEquals(RelationType::ManyToOne->value, $options['relationType'] ?? null);
-                $this->assertEquals(false, $options['twoWay'] ?? null);
-                $this->assertEquals('movie', $options['twoWayKey'] ?? null);
+                $relationship = $attribute->relationship;
+                $this->assertNotNull($relationship);
+                $this->assertSame('review', $relationship->relatedCollection);
+                $this->assertSame(RelationshipType::ManyToOne, $relationship->type);
+                $this->assertSame(false, $relationship->twoWay);
+                $this->assertSame('movie', $relationship->twoWayKey);
             }
         }
 
@@ -268,7 +269,7 @@ trait ManyToOneTests
         $database->updateRelationship(
             'review',
             'movie',
-            'newMovie',
+            new RelationshipUpdate(key: 'newMovie'),
         );
 
         // Get document with new relationship key
@@ -315,8 +316,8 @@ trait ManyToOneTests
         // Change on delete to set null
         $database->updateRelationship(
             collection: 'review',
-            id: 'newMovie',
-            onDelete: ForeignKeyAction::SetNull
+            key: 'newMovie',
+            update: new RelationshipUpdate(onDelete: RelationshipDeleteAction::SetNull)
         );
 
         // Delete child, set parent relationship to null
@@ -329,8 +330,8 @@ trait ManyToOneTests
         // Change on delete to cascade
         $database->updateRelationship(
             collection: 'review',
-            id: 'newMovie',
-            onDelete: ForeignKeyAction::Cascade
+            key: 'newMovie',
+            update: new RelationshipUpdate(onDelete: RelationshipDeleteAction::Cascade)
         );
 
         // Delete child, will delete parent
@@ -366,43 +367,43 @@ trait ManyToOneTests
             return;
         }
 
-        $database->createCollection(new Collection(id: 'product'));
-        $database->createCollection(new Collection(id: 'store'));
+        $database->createCollection(Collection::create(id: 'product'));
+        $database->createCollection(Collection::create(id: 'store'));
 
         $database->createAttribute('store', Attribute::string(key: 'name', required: true));
         $database->createAttribute('store', Attribute::string(key: 'opensAt', size: 5, required: true));
 
         $database->createAttribute('product', Attribute::string(key: 'name', required: true));
 
-        $database->createRelationship(Relationship::manyToOne(collection: 'product', relatedCollection: 'store', twoWay: true, twoWayKey: 'products'));
+        $database->createRelationship('product', Relationship::manyToOne(relatedCollection: 'store', twoWay: true, twoWayKey: 'products'));
 
         // Check metadata for collection
         $collection = $database->getCollection('product');
-        foreach ($collection->attributes as $attribute) {
+        foreach ($collection->attributes() as $attribute) {
             if ($attribute->key === 'store') {
                 $this->assertEquals(ColumnType::Relationship, $attribute->type);
-                $this->assertEquals('store', $attribute->getId());
                 $this->assertEquals('store', $attribute->key);
-                $options = $attribute->options ?? [];
-                $this->assertEquals('store', $options['relatedCollection'] ?? null);
-                $this->assertEquals(RelationType::ManyToOne->value, $options['relationType'] ?? null);
-                $this->assertEquals(true, $options['twoWay'] ?? null);
-                $this->assertEquals('products', $options['twoWayKey'] ?? null);
+                $relationship = $attribute->relationship;
+                $this->assertNotNull($relationship);
+                $this->assertSame('store', $relationship->relatedCollection);
+                $this->assertSame(RelationshipType::ManyToOne, $relationship->type);
+                $this->assertSame(true, $relationship->twoWay);
+                $this->assertSame('products', $relationship->twoWayKey);
             }
         }
 
         // Check metadata for related collection
         $collection = $database->getCollection('store');
-        foreach ($collection->attributes as $attribute) {
+        foreach ($collection->attributes() as $attribute) {
             if ($attribute->key === 'products') {
                 $this->assertEquals(ColumnType::Relationship, $attribute->type);
-                $this->assertEquals('products', $attribute->getId());
                 $this->assertEquals('products', $attribute->key);
-                $options = $attribute->options ?? [];
-                $this->assertEquals('product', $options['relatedCollection'] ?? null);
-                $this->assertEquals(RelationType::ManyToOne->value, $options['relationType'] ?? null);
-                $this->assertEquals(true, $options['twoWay'] ?? null);
-                $this->assertEquals('store', $options['twoWayKey'] ?? null);
+                $relationship = $attribute->relationship;
+                $this->assertNotNull($relationship);
+                $this->assertSame('product', $relationship->relatedCollection);
+                $this->assertSame(RelationshipType::ManyToOne, $relationship->type);
+                $this->assertSame(true, $relationship->twoWay);
+                $this->assertSame('store', $relationship->twoWayKey);
             }
         }
 
@@ -711,8 +712,10 @@ trait ManyToOneTests
         $database->updateRelationship(
             'product',
             'store',
-            'newStore',
-            'newProducts'
+            new RelationshipUpdate(
+                key: 'newStore',
+                twoWayKey: 'newProducts',
+            )
         );
 
         // Get document with new relationship key
@@ -767,8 +770,8 @@ trait ManyToOneTests
         // Change on delete to set null
         $database->updateRelationship(
             collection: 'product',
-            id: 'newStore',
-            onDelete: ForeignKeyAction::SetNull
+            key: 'newStore',
+            update: new RelationshipUpdate(onDelete: RelationshipDeleteAction::SetNull)
         );
 
         // Delete child, set parent relationship to null
@@ -799,8 +802,8 @@ trait ManyToOneTests
         // Change on delete to cascade
         $database->updateRelationship(
             collection: 'product',
-            id: 'newStore',
-            onDelete: ForeignKeyAction::Cascade
+            key: 'newStore',
+            update: new RelationshipUpdate(onDelete: RelationshipDeleteAction::Cascade)
         );
 
         // Delete child, will delete parent
@@ -841,17 +844,16 @@ trait ManyToOneTests
             return;
         }
 
-        $database->createCollection(new Collection(id: 'towns'));
-        $database->createCollection(new Collection(id: 'homelands'));
-        $database->createCollection(new Collection(id: 'capitals'));
+        $database->createCollection(Collection::create(id: 'towns'));
+        $database->createCollection(Collection::create(id: 'homelands'));
+        $database->createCollection(Collection::create(id: 'capitals'));
 
         $database->createAttribute('towns', Attribute::string(key: 'name', required: true));
         $database->createAttribute('homelands', Attribute::string(key: 'name', required: true));
         $database->createAttribute('capitals', Attribute::string(key: 'name', required: true));
 
-        $database->createRelationship(Relationship::manyToOne(collection: 'towns', relatedCollection: 'homelands', twoWay: true, key: 'homeland'));
-        $database->createRelationship(Relationship::oneToOne(
-            collection: 'homelands',
+        $database->createRelationship('towns', Relationship::manyToOne(relatedCollection: 'homelands', twoWay: true, key: 'homeland'));
+        $database->createRelationship('homelands', Relationship::oneToOne(
             relatedCollection: 'capitals',
             twoWay: true,
             key: 'capital',
@@ -940,17 +942,16 @@ trait ManyToOneTests
             return;
         }
 
-        $database->createCollection(new Collection(id: 'players'));
-        $database->createCollection(new Collection(id: 'teams'));
-        $database->createCollection(new Collection(id: 'supporters'));
+        $database->createCollection(Collection::create(id: 'players'));
+        $database->createCollection(Collection::create(id: 'teams'));
+        $database->createCollection(Collection::create(id: 'supporters'));
 
         $database->createAttribute('players', Attribute::string(key: 'name', required: true));
         $database->createAttribute('teams', Attribute::string(key: 'name', required: true));
         $database->createAttribute('supporters', Attribute::string(key: 'name', required: true));
 
-        $database->createRelationship(Relationship::manyToOne(collection: 'players', relatedCollection: 'teams', twoWay: true, key: 'team'));
-        $database->createRelationship(Relationship::oneToMany(
-            collection: 'teams',
+        $database->createRelationship('players', Relationship::manyToOne(relatedCollection: 'teams', twoWay: true, key: 'team'));
+        $database->createRelationship('teams', Relationship::oneToMany(
             relatedCollection: 'supporters',
             twoWay: true,
             key: 'supporters',
@@ -1049,16 +1050,16 @@ trait ManyToOneTests
             return;
         }
 
-        $database->createCollection(new Collection(id: 'cows'));
-        $database->createCollection(new Collection(id: 'farms'));
-        $database->createCollection(new Collection(id: 'farmer'));
+        $database->createCollection(Collection::create(id: 'cows'));
+        $database->createCollection(Collection::create(id: 'farms'));
+        $database->createCollection(Collection::create(id: 'farmer'));
 
         $database->createAttribute('cows', Attribute::string(key: 'name', required: true));
         $database->createAttribute('farms', Attribute::string(key: 'name', required: true));
         $database->createAttribute('farmer', Attribute::string(key: 'name', required: true));
 
-        $database->createRelationship(Relationship::manyToOne(collection: 'cows', relatedCollection: 'farms', twoWay: true, key: 'farm'));
-        $database->createRelationship(Relationship::manyToOne(collection: 'farms', relatedCollection: 'farmer', twoWay: true, key: 'farmer'));
+        $database->createRelationship('cows', Relationship::manyToOne(relatedCollection: 'farms', twoWay: true, key: 'farm'));
+        $database->createRelationship('farms', Relationship::manyToOne(relatedCollection: 'farmer', twoWay: true, key: 'farmer'));
 
         $database->createDocument('cows', new Document([
             '$id' => 'cow1',
@@ -1144,16 +1145,16 @@ trait ManyToOneTests
             return;
         }
 
-        $database->createCollection(new Collection(id: 'books'));
-        $database->createCollection(new Collection(id: 'entrants'));
-        $database->createCollection(new Collection(id: 'rooms'));
+        $database->createCollection(Collection::create(id: 'books'));
+        $database->createCollection(Collection::create(id: 'entrants'));
+        $database->createCollection(Collection::create(id: 'rooms'));
 
         $database->createAttribute('books', Attribute::string(key: 'name', required: true));
         $database->createAttribute('entrants', Attribute::string(key: 'name', required: true));
         $database->createAttribute('rooms', Attribute::string(key: 'name', required: true));
 
-        $database->createRelationship(Relationship::manyToOne(collection: 'books', relatedCollection: 'entrants', twoWay: true, key: 'entrant'));
-        $database->createRelationship(Relationship::manyToMany(collection: 'entrants', relatedCollection: 'rooms', twoWay: true));
+        $database->createRelationship('books', Relationship::manyToOne(relatedCollection: 'entrants', twoWay: true, key: 'entrant'));
+        $database->createRelationship('entrants', Relationship::manyToMany(relatedCollection: 'rooms', twoWay: true));
 
         $database->createDocument('books', new Document([
             '$id' => 'book1',
@@ -1212,14 +1213,14 @@ trait ManyToOneTests
         $level3Collection = 'level3ManyToOneParent';
         $level4Collection = 'level4ManyToOneParent';
 
-        $database->createCollection(new Collection(id: $level1Collection));
-        $database->createCollection(new Collection(id: $level2Collection));
-        $database->createCollection(new Collection(id: $level3Collection));
-        $database->createCollection(new Collection(id: $level4Collection));
+        $database->createCollection(Collection::create(id: $level1Collection));
+        $database->createCollection(Collection::create(id: $level2Collection));
+        $database->createCollection(Collection::create(id: $level3Collection));
+        $database->createCollection(Collection::create(id: $level4Collection));
 
-        $database->createRelationship(Relationship::manyToOne(collection: $level1Collection, relatedCollection: $level2Collection, twoWay: true));
-        $database->createRelationship(Relationship::manyToOne(collection: $level2Collection, relatedCollection: $level3Collection, twoWay: true));
-        $database->createRelationship(Relationship::manyToOne(collection: $level3Collection, relatedCollection: $level4Collection, twoWay: true));
+        $database->createRelationship($level1Collection, Relationship::manyToOne(relatedCollection: $level2Collection, twoWay: true));
+        $database->createRelationship($level2Collection, Relationship::manyToOne(relatedCollection: $level3Collection, twoWay: true));
+        $database->createRelationship($level3Collection, Relationship::manyToOne(relatedCollection: $level4Collection, twoWay: true));
 
         $level1 = $database->createDocument($level1Collection, new Document([
             '$id' => 'level1',
@@ -1276,10 +1277,10 @@ trait ManyToOneTests
             return;
         }
 
-        $database->createCollection(new Collection(id: '$symbols_coll.ection5'));
-        $database->createCollection(new Collection(id: '$symbols_coll.ection6'));
+        $database->createCollection(Collection::create(id: '$symbols_coll.ection5'));
+        $database->createCollection(Collection::create(id: '$symbols_coll.ection6'));
 
-        $database->createRelationship(Relationship::manyToOne(collection: '$symbols_coll.ection5', relatedCollection: '$symbols_coll.ection6', twoWay: true));
+        $database->createRelationship('$symbols_coll.ection5', Relationship::manyToOne(relatedCollection: '$symbols_coll.ection6', twoWay: true));
 
         $doc1 = $database->createDocument('$symbols_coll.ection6', new Document([
             '$id' => ID::unique(),
@@ -1318,16 +1319,16 @@ trait ManyToOneTests
         $one = 'one_' . uniqid();
         $two = 'two_' . uniqid();
 
-        $database->createCollection(new Collection(id: $one, attributes: [
-            Attribute::string(key: 'name', size: 100, format: ''),
+        $database->createCollection(Collection::create(id: $one, attributes: [
+            Attribute::string(key: 'name', size: 100),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
         ]));
-        $database->createCollection(new Collection(id: $two, attributes: [
-            Attribute::string(key: 'name', size: 100, format: ''),
+        $database->createCollection(Collection::create(id: $two, attributes: [
+            Attribute::string(key: 'name', size: 100),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -1335,13 +1336,13 @@ trait ManyToOneTests
             Permission::delete(Role::any()),
         ]));
 
-        $database->createRelationship(Relationship::manyToOne(collection: $one, relatedCollection: $two));
+        $database->createRelationship($one, Relationship::manyToOne(relatedCollection: $two));
 
         $database->deleteRelationship($one, $two);
 
-        $result = $database->createRelationship(Relationship::manyToOne(collection: $one, relatedCollection: $two));
+        $relationship = $database->createRelationship($one, Relationship::manyToOne(relatedCollection: $two));
 
-        $this->assertTrue($result);
+        $this->assertSame($two, $relationship->relatedCollection);
 
         $database->deleteCollection($one);
         $database->deleteCollection($two);
@@ -1361,16 +1362,16 @@ trait ManyToOneTests
         $one = 'one_' . uniqid();
         $two = 'two_' . uniqid();
 
-        $database->createCollection(new Collection(id: $one, attributes: [
-            Attribute::string(key: 'name', size: 100, format: ''),
+        $database->createCollection(Collection::create(id: $one, attributes: [
+            Attribute::string(key: 'name', size: 100),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
         ]));
-        $database->createCollection(new Collection(id: $two, attributes: [
-            Attribute::string(key: 'name', size: 100, format: ''),
+        $database->createCollection(Collection::create(id: $two, attributes: [
+            Attribute::string(key: 'name', size: 100),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -1378,13 +1379,13 @@ trait ManyToOneTests
             Permission::delete(Role::any()),
         ]));
 
-        $database->createRelationship(Relationship::manyToOne(collection: $one, relatedCollection: $two));
+        $database->createRelationship($one, Relationship::manyToOne(relatedCollection: $two));
 
         $database->deleteRelationship($two, $one);
 
-        $result = $database->createRelationship(Relationship::manyToOne(collection: $one, relatedCollection: $two));
+        $relationship = $database->createRelationship($one, Relationship::manyToOne(relatedCollection: $two));
 
-        $this->assertTrue($result);
+        $this->assertSame($two, $relationship->relatedCollection);
 
         $database->deleteCollection($one);
         $database->deleteCollection($two);
@@ -1404,16 +1405,16 @@ trait ManyToOneTests
         $one = 'one_' . uniqid();
         $two = 'two_' . uniqid();
 
-        $database->createCollection(new Collection(id: $one, attributes: [
-            Attribute::string(key: 'name', size: 100, format: ''),
+        $database->createCollection(Collection::create(id: $one, attributes: [
+            Attribute::string(key: 'name', size: 100),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
         ]));
-        $database->createCollection(new Collection(id: $two, attributes: [
-            Attribute::string(key: 'name', size: 100, format: ''),
+        $database->createCollection(Collection::create(id: $two, attributes: [
+            Attribute::string(key: 'name', size: 100),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -1421,13 +1422,13 @@ trait ManyToOneTests
             Permission::delete(Role::any()),
         ]));
 
-        $database->createRelationship(Relationship::manyToOne(collection: $one, relatedCollection: $two, twoWay: true));
+        $database->createRelationship($one, Relationship::manyToOne(relatedCollection: $two, twoWay: true));
 
         $database->deleteRelationship($one, $two);
 
-        $result = $database->createRelationship(Relationship::manyToOne(collection: $one, relatedCollection: $two, twoWay: true));
+        $relationship = $database->createRelationship($one, Relationship::manyToOne(relatedCollection: $two, twoWay: true));
 
-        $this->assertTrue($result);
+        $this->assertSame($two, $relationship->relatedCollection);
 
         $database->deleteCollection($one);
         $database->deleteCollection($two);
@@ -1447,16 +1448,16 @@ trait ManyToOneTests
         $one = 'one_' . uniqid();
         $two = 'two_' . uniqid();
 
-        $database->createCollection(new Collection(id: $one, attributes: [
-            Attribute::string(key: 'name', size: 100, format: ''),
+        $database->createCollection(Collection::create(id: $one, attributes: [
+            Attribute::string(key: 'name', size: 100),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
         ]));
-        $database->createCollection(new Collection(id: $two, attributes: [
-            Attribute::string(key: 'name', size: 100, format: ''),
+        $database->createCollection(Collection::create(id: $two, attributes: [
+            Attribute::string(key: 'name', size: 100),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -1464,13 +1465,13 @@ trait ManyToOneTests
             Permission::delete(Role::any()),
         ]));
 
-        $database->createRelationship(Relationship::manyToOne(collection: $one, relatedCollection: $two, twoWay: true));
+        $database->createRelationship($one, Relationship::manyToOne(relatedCollection: $two, twoWay: true));
 
         $database->deleteRelationship($two, $one);
 
-        $result = $database->createRelationship(Relationship::manyToOne(collection: $one, relatedCollection: $two, twoWay: true));
+        $relationship = $database->createRelationship($one, Relationship::manyToOne(relatedCollection: $two, twoWay: true));
 
-        $this->assertTrue($result);
+        $this->assertSame($two, $relationship->relatedCollection);
 
         $database->deleteCollection($one);
         $database->deleteCollection($two);
@@ -1487,15 +1488,15 @@ trait ManyToOneTests
             return;
         }
 
-        $this->getDatabase()->createCollection(new Collection(id: 'bulk_delete_person_m2o'));
-        $this->getDatabase()->createCollection(new Collection(id: 'bulk_delete_library_m2o'));
+        $this->getDatabase()->createCollection(Collection::create(id: 'bulk_delete_person_m2o'));
+        $this->getDatabase()->createCollection(Collection::create(id: 'bulk_delete_library_m2o'));
 
         $this->getDatabase()->createAttribute('bulk_delete_person_m2o', Attribute::string(key: 'name', required: true));
         $this->getDatabase()->createAttribute('bulk_delete_library_m2o', Attribute::string(key: 'name', required: true));
         $this->getDatabase()->createAttribute('bulk_delete_library_m2o', Attribute::string(key: 'area', required: true));
 
         // Many-to-One Relationship
-        $this->getDatabase()->createRelationship(Relationship::manyToOne(collection: 'bulk_delete_person_m2o', relatedCollection: 'bulk_delete_library_m2o'));
+        $this->getDatabase()->createRelationship('bulk_delete_person_m2o', Relationship::manyToOne(relatedCollection: 'bulk_delete_library_m2o'));
 
         $person1 = $this->getDatabase()->createDocument('bulk_delete_person_m2o', new Document([
             '$id' => 'person1',
@@ -1573,14 +1574,14 @@ trait ManyToOneTests
         $parentCollection = 'parent_combined_m2o';
         $childCollection = 'child_combined_m2o';
 
-        $database->createCollection(new Collection(id: $parentCollection));
-        $database->createCollection(new Collection(id: $childCollection));
+        $database->createCollection(Collection::create(id: $parentCollection));
+        $database->createCollection(Collection::create(id: $childCollection));
 
         $database->createAttribute($parentCollection, Attribute::string(key: 'name', required: true));
         $database->createAttribute($childCollection, Attribute::string(key: 'name', required: true));
         $database->createAttribute($childCollection, Attribute::integer(key: 'parentNumber'));
 
-        $database->createRelationship(Relationship::manyToOne(collection: $childCollection, relatedCollection: $parentCollection));
+        $database->createRelationship($childCollection, Relationship::manyToOne(relatedCollection: $parentCollection));
 
         $database->createDocument($parentCollection, new Document([
             '$id' => 'parent1',
@@ -1649,12 +1650,12 @@ trait ManyToOneTests
         $parentCollection = 'parent_relationship_error_many_to_one';
         $childCollection = 'child_relationship_error_many_to_one';
 
-        $database->createCollection(new Collection(id: $parentCollection));
-        $database->createCollection(new Collection(id: $childCollection));
+        $database->createCollection(Collection::create(id: $parentCollection));
+        $database->createCollection(Collection::create(id: $childCollection));
         $database->createAttribute($parentCollection, Attribute::string(key: 'name', required: true));
         $database->createAttribute($childCollection, Attribute::string(key: 'name', required: true));
 
-        $database->createRelationship(Relationship::manyToOne(collection: $childCollection, relatedCollection: $parentCollection));
+        $database->createRelationship($childCollection, Relationship::manyToOne(relatedCollection: $parentCollection));
 
         $parent = $database->createDocument($parentCollection, new Document([
             '$id' => 'parent1',
@@ -1702,15 +1703,14 @@ trait ManyToOneTests
             return;
         }
 
-        $database->createCollection(new Collection(id: 'companies'));
-        $database->createCollection(new Collection(id: 'employees'));
+        $database->createCollection(Collection::create(id: 'companies'));
+        $database->createCollection(Collection::create(id: 'employees'));
 
         $database->createAttribute('companies', Attribute::string(key: 'name', required: true));
         $database->createAttribute('employees', Attribute::string(key: 'name', required: true));
         $database->createAttribute('employees', Attribute::integer(key: 'salary'));
 
-        $database->createRelationship(Relationship::manyToOne(
-            collection: 'employees',
+        $database->createRelationship('employees', Relationship::manyToOne(
             relatedCollection: 'companies',
             twoWay: true,
             key: 'company',
@@ -1780,15 +1780,14 @@ trait ManyToOneTests
             return;
         }
 
-        $database->createCollection(new Collection(id: 'departments'));
-        $database->createCollection(new Collection(id: 'staff'));
+        $database->createCollection(Collection::create(id: 'departments'));
+        $database->createCollection(Collection::create(id: 'staff'));
 
         $database->createAttribute('departments', Attribute::string(key: 'name', required: true));
         $database->createAttribute('departments', Attribute::integer(key: 'budget'));
         $database->createAttribute('staff', Attribute::string(key: 'name', required: true));
 
-        $database->createRelationship(Relationship::manyToOne(
-            collection: 'staff',
+        $database->createRelationship('staff', Relationship::manyToOne(
             relatedCollection: 'departments',
             twoWay: true,
             key: 'department',
@@ -1843,18 +1842,17 @@ trait ManyToOneTests
             Permission::delete(Role::any()),
         ];
 
-        $database->createCollection(new Collection(id: 'mto_select_parent', permissions: $collectionPermissions, documentSecurity: true));
-        $database->createCollection(new Collection(id: 'mto_select_child', permissions: $collectionPermissions, documentSecurity: true));
+        $database->createCollection(Collection::create(id: 'mto_select_parent', permissions: $collectionPermissions, documentSecurity: true));
+        $database->createCollection(Collection::create(id: 'mto_select_child', permissions: $collectionPermissions, documentSecurity: true));
         $database->createAttribute('mto_select_parent', Attribute::string(key: 'name', size: 255));
         $database->createAttribute('mto_select_child', Attribute::string(key: 'name', size: 255));
 
-        $database->createRelationship(Relationship::manyToOne(
-            collection: 'mto_select_parent',
+        $database->createRelationship('mto_select_parent', Relationship::manyToOne(
             relatedCollection: 'mto_select_child',
             twoWay: true,
             key: 'child',
             twoWayKey: 'parent',
-            onDelete: ForeignKeyAction::SetNull,
+            onDelete: RelationshipDeleteAction::SetNull,
         ));
 
         $database->createDocument('mto_select_child', new Document([
@@ -1891,10 +1889,10 @@ trait ManyToOneTests
         $database = static::getDatabase();
 
         // No collection-level read: only document permissions grant access
-        $database->createCollection(new Collection(id: 'mto_hidden_product', permissions: [
+        $database->createCollection(Collection::create(id: 'mto_hidden_product', permissions: [
             Permission::create(Role::any()),
         ], documentSecurity: true));
-        $database->createCollection(new Collection(id: 'mto_hidden_store', permissions: [
+        $database->createCollection(Collection::create(id: 'mto_hidden_store', permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
             Permission::delete(Role::any()),
@@ -1903,13 +1901,12 @@ trait ManyToOneTests
         $database->createAttribute('mto_hidden_product', Attribute::string(key: 'name', size: 255));
         $database->createAttribute('mto_hidden_store', Attribute::string(key: 'name', size: 255));
 
-        $database->createRelationship(Relationship::manyToOne(
-            collection: 'mto_hidden_product',
+        $database->createRelationship('mto_hidden_product', Relationship::manyToOne(
             relatedCollection: 'mto_hidden_store',
             twoWay: true,
             key: 'store',
             twoWayKey: 'products',
-            onDelete: ForeignKeyAction::SetNull,
+            onDelete: RelationshipDeleteAction::SetNull,
         ));
 
         $database->createDocument('mto_hidden_store', new Document([
@@ -1963,10 +1960,10 @@ trait ManyToOneTests
             Permission::delete(Role::any()),
         ];
 
-        $database->createCollection(new Collection(id: $parentCollection, permissions: $permissions, documentSecurity: false));
-        $database->createCollection(new Collection(id: $childCollection, permissions: $permissions, documentSecurity: false));
+        $database->createCollection(Collection::create(id: $parentCollection, permissions: $permissions, documentSecurity: false));
+        $database->createCollection(Collection::create(id: $childCollection, permissions: $permissions, documentSecurity: false));
         $database->createAttribute($parentCollection, Attribute::string(key: 'name', size: 64));
-        $database->createRelationship(Relationship::manyToOne(collection: $childCollection, relatedCollection: $parentCollection, twoWay: true, key: 'parent', twoWayKey: 'children', onDelete: ForeignKeyAction::Cascade));
+        $database->createRelationship($childCollection, Relationship::manyToOne(relatedCollection: $parentCollection, twoWay: true, key: 'parent', twoWayKey: 'children', onDelete: RelationshipDeleteAction::Cascade));
 
         foreach (['1', '2'] as $suffix) {
             $database->createDocument($parentCollection, new Document(['$id' => "parent{$suffix}"]));
@@ -2003,10 +2000,10 @@ trait ManyToOneTests
             Permission::delete(Role::any()),
         ];
 
-        $database->createCollection(new Collection(id: $parentCollection, permissions: $permissions, documentSecurity: false));
-        $database->createCollection(new Collection(id: $childCollection, permissions: $permissions, documentSecurity: false));
+        $database->createCollection(Collection::create(id: $parentCollection, permissions: $permissions, documentSecurity: false));
+        $database->createCollection(Collection::create(id: $childCollection, permissions: $permissions, documentSecurity: false));
         $database->createAttribute($parentCollection, Attribute::string(key: 'name', size: 64));
-        $database->createRelationship(Relationship::manyToOne(collection: $childCollection, relatedCollection: $parentCollection, twoWay: true, key: 'parent', twoWayKey: 'children', onDelete: ForeignKeyAction::Restrict));
+        $database->createRelationship($childCollection, Relationship::manyToOne(relatedCollection: $parentCollection, twoWay: true, key: 'parent', twoWayKey: 'children', onDelete: RelationshipDeleteAction::Restrict));
 
         foreach (['1', '2'] as $suffix) {
             $database->createDocument($parentCollection, new Document(['$id' => "parent{$suffix}"]));

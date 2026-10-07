@@ -9,6 +9,8 @@ use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Contention as ContentionException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Index as IndexException;
+use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Hook\Transform;
@@ -1109,7 +1111,7 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     /**
      * @return list<Attribute>
      *
-     * @throws Exception\Structure
+     * @throws StructureException
      */
     protected static function collectionAttributes(Document $collection): array
     {
@@ -1121,7 +1123,7 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     /**
      * @return list<Index>
      *
-     * @throws Exception\Index
+     * @throws IndexException
      */
     protected static function collectionIndexes(Document $collection): array
     {

@@ -154,7 +154,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
             $indexColumns = [];
 
             foreach ($index->attributes as $nested => $attribute) {
-                $indexOrder = ($index->orders[$nested] ?? null)?->value ?? '';
+                $indexOrder = $index->orders[$nested]->value ?? '';
 
                 if ($indexType === IndexType::Spatial && ! $this->supports(Capability::SpatialIndexOrder) && ! empty($indexOrder)) {
                     throw new DatabaseException('Spatial indexes with explicit orders are not supported. Remove the orders to create this index.');
@@ -446,7 +446,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
                 $this->filter($this->getInternalKeyForAttribute($key)),
                 ! empty($attribute['array']),
                 $index->lengths[$position] ?? 0,
-                $type === IndexType::Fulltext ? '' : (($index->orders[$position] ?? null)?->value ?? ''),
+                $type === IndexType::Fulltext ? '' : ($index->orders[$position]->value ?? ''),
             );
         }
 

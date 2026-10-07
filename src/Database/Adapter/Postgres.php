@@ -725,7 +725,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             $column = $isNestedPath
                 ? $this->buildJsonbPath($attribute, true)
                 : $this->quote($this->filter($this->getInternalKeyForAttribute($attribute)));
-            $order = $type === IndexType::Fulltext ? '' : (($index->orders[$position] ?? null)?->value ?? '');
+            $order = $type === IndexType::Fulltext ? '' : ($index->orders[$position]->value ?? '');
 
             $columns[] = $column
                 .($operatorClass !== '' ? ' '.$operatorClass : '')

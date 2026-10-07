@@ -119,7 +119,7 @@ class IndexDefinition extends Validator
      * Stored index documents are checked for a known type and a TTL before they are hydrated, since
      * Index::fromDocument() reads stored metadata leniently.
      *
-     * @param  Index|Document  $value
+     * @param  mixed  $value
      *
      * @throws DatabaseException
      */
@@ -613,7 +613,7 @@ class IndexDefinition extends Validator
 
         foreach ($index->attributes as $attributeName) {
             $attribute = $this->findAttribute($attributeName);
-            $attributeType = $attribute?->type ?? ColumnType::String;
+            $attributeType = $attribute->type ?? ColumnType::String;
 
             if (! \in_array($attributeType, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon], true)) {
                 $this->message = 'Spatial index can only be created on spatial attributes (point, linestring, polygon). Attribute "'.$attributeName.'" is of type "'.$attributeType->value.'"';
@@ -621,7 +621,7 @@ class IndexDefinition extends Validator
                 return false;
             }
 
-            if (! ($attribute?->required ?? false) && ! $this->supportForSpatialIndexNull) {
+            if (! ($attribute->required ?? false) && ! $this->supportForSpatialIndexNull) {
                 $this->message = 'Spatial indexes do not allow null values. Mark the attribute "'.$attributeName.'" as required or create the index on a column with no null values.';
 
                 return false;
@@ -653,7 +653,7 @@ class IndexDefinition extends Validator
 
         foreach ($index->attributes as $attributeName) {
             $attribute = $this->findAttribute($attributeName);
-            $attributeType = $attribute?->type ?? ColumnType::String;
+            $attributeType = $attribute->type ?? ColumnType::String;
 
             if (\in_array($attributeType, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon], true)) {
                 $this->message = 'Cannot create '.$type->value.' index on spatial attribute "'.$attributeName.'". Spatial attributes require spatial indexes.';
@@ -880,7 +880,7 @@ class IndexDefinition extends Validator
             return false;
         }
 
-        $attributeName = (string) ($index->attributes[0] ?? '');
+        $attributeName = $index->attributes[0];
 
         // Object indexes are only allowed on the top-level object attribute,
         // not on nested paths like "data.key.nestedKey".
@@ -891,7 +891,7 @@ class IndexDefinition extends Validator
         }
 
         $attribute = $this->findAttribute($attributeName);
-        $attributeType = $attribute?->type ?? ColumnType::String;
+        $attributeType = $attribute->type ?? ColumnType::String;
 
         if ($attributeType !== ColumnType::Object) {
             $this->message = 'Object index can only be created on object attributes. Attribute "'.$attributeName.'" is of type "'.$attributeType->value.'"';
@@ -922,9 +922,9 @@ class IndexDefinition extends Validator
             return false;
         }
 
-        $attributeName = (string) ($index->attributes[0] ?? '');
+        $attributeName = $index->attributes[0];
         $attribute = $this->findAttribute($attributeName);
-        $attributeType = $attribute?->type ?? ColumnType::String;
+        $attributeType = $attribute->type ?? ColumnType::String;
 
         if ($this->supportForAttributes && $attributeType !== ColumnType::Datetime) {
             $this->message = 'TTL index can only be created on datetime attributes. Attribute "'.$attributeName.'" is of type "'.$attributeType->value.'"';

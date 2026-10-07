@@ -674,9 +674,9 @@ class Redis extends Adapter implements
                 Document::ID => $id,
                 'key' => $id,
                 'type' => $type,
-                'attributes' => \array_values($attributes),
-                'lengths' => \array_values($lengths),
-                'orders' => \array_values(\is_array($orders) ? $orders : []),
+                'attributes' => $attributes,
+                'lengths' => $lengths,
+                'orders' => $orders,
             ];
 
             $client->hSet($metaKey, 'indexes', \json_encode($indexes, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));

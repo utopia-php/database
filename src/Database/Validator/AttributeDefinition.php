@@ -122,7 +122,7 @@ class AttributeDefinition extends Validator
      *
      * Returns true if attribute is valid.
      *
-     * @param  Attribute|Document  $value
+     * @param  mixed  $value
      *
      * @throws DatabaseException
      * @throws DuplicateException

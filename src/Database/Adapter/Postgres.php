@@ -85,6 +85,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
      *
      * @return array<Capability>
      */
+    #[\Override]
     public function capabilities(): array
     {
         return array_merge(parent::capabilities(), [
@@ -97,6 +98,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         ]);
     }
 
+    #[\Override]
     public function id(): string
     {
         $result = $this->createBuilder()->fromNone()->selectRaw('pg_backend_pid()')->build();
@@ -115,6 +117,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function create(string $name): bool
     {
         $name = $this->filter($name);
@@ -156,6 +159,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function update(string $name, string $new): bool
     {
         if ($this->hasSharedTables()) {
@@ -223,6 +227,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
      *
      * @throws DuplicateException
      */
+    #[\Override]
     public function createCollection(string $collection, array $attributes = [], array $indexes = []): bool
     {
         $namespace = $this->getNamespace();
@@ -370,6 +375,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function getSizeOfCollectionOnDisk(string $collection): int
     {
         $collection = $this->filter($collection);
@@ -409,6 +415,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function getSizeOfCollection(string $collection): int
     {
         $collection = $this->filter($collection);
@@ -449,6 +456,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function createAttribute(string $collection, Attribute $attribute): bool
     {
         self::assertVectorDimensions($attribute);
@@ -529,6 +537,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
      * @throws Exception
      * @throws PDOException
      */
+    #[\Override]
     public function updateAttribute(string $collection, string $key, Attribute $attribute): bool
     {
         $name = $this->filter($collection);
@@ -615,6 +624,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         }
     }
 
+    #[\Override]
     public function relaxAttributeRequired(string $collection, string $id): bool
     {
         $schema = $this->schema();
@@ -634,6 +644,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     /**
      * @throws DatabaseException
      */
+    #[\Override]
     public function deleteAttribute(string $collection, string $key): bool
     {
         $schema = $this->schema();
@@ -660,6 +671,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
      * @throws Exception
      * @throws PDOException
      */
+    #[\Override]
     public function renameAttribute(string $collection, string $old, string $new): bool
     {
         if ($this->isRenamed($collection, $old, $new)) {
@@ -685,6 +697,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
      *
      * @throws DatabaseException
      */
+    #[\Override]
     protected function getColumnNames(string $collection): array
     {
         $statement = $this->prepareStatement(
@@ -710,6 +723,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function getSchemaAttributes(string $collection): array
     {
         $statement = $this->prepareStatement(
@@ -768,6 +782,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function getSchemaIndexes(string $collection): array
     {
         $statement = $this->prepareStatement(
@@ -858,6 +873,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
      * @param  array<string,string>  $indexAttributeTypes
      * @param  array<string, mixed>  $collation
      */
+    #[\Override]
     public function createIndex(
         string $collection,
         Index $index,
@@ -942,6 +958,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     /**
      * @throws Exception
      */
+    #[\Override]
     public function deleteIndex(string $collection, string $key): bool
     {
         $collection = $this->filter($collection);
@@ -968,6 +985,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
      * @throws Exception
      * @throws PDOException
      */
+    #[\Override]
     public function renameIndex(string $collection, string $old, string $new): bool
     {
         $name = $this->filter($collection);
@@ -1054,6 +1072,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     /**
      * Create Document
      */
+    #[\Override]
     public function createDocument(Document $collection, Document $document): Document
     {
         try {
@@ -1120,6 +1139,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
      * @throws DatabaseException
      * @throws DuplicateException
      */
+    #[\Override]
     public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
     {
         try {
@@ -1190,6 +1210,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function setTimeout(int $milliseconds, Event $event = Event::All): void
     {
         if ($milliseconds <= 0) {
@@ -1199,6 +1220,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         $this->setTimeoutState($milliseconds, $event);
     }
 
+    #[\Override]
     public function clearTimeout(Event $event = Event::All): void
     {
         $this->clearTimeoutState($event);
@@ -1207,6 +1229,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     /**
      * @return array<mixed>
      */
+    #[\Override]
     public function decode(string $value, ColumnType $type): array
     {
         return match ($type) {
@@ -1217,6 +1240,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         };
     }
 
+    #[\Override]
     public function encode(mixed $value, ColumnType $type): string
     {
         return Wkt::encode($value, $type);
@@ -1497,6 +1521,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
      */
     private ?int $localTimeout = 0;
 
+    #[\Override]
     public function commitTransaction(): bool
     {
         try {
@@ -1508,6 +1533,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         }
     }
 
+    #[\Override]
     public function rollbackTransaction(): bool
     {
         try {
@@ -1517,6 +1543,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         }
     }
 
+    #[\Override]
     public function reconnect(): void
     {
         $this->localTimeout = null;
@@ -1527,6 +1554,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     /**
      * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $statement
      */
+    #[\Override]
     protected function execute(mixed $statement, ?Event $event = null): bool
     {
         $event ??= $this->getStatementEvent($statement);
@@ -1577,11 +1605,13 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         $this->localTimeout = $milliseconds;
     }
 
+    #[\Override]
     protected function insertRequiresAlias(): bool
     {
         return true;
     }
 
+    #[\Override]
     protected function getConflictTenantExpression(string $column): string
     {
         $quoted = $this->quote($this->filter($column));
@@ -1589,6 +1619,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         return 'CASE WHEN target.'.Storage::TENANT.' = EXCLUDED.'.Storage::TENANT." THEN EXCLUDED.{$quoted} ELSE target.{$quoted} END";
     }
 
+    #[\Override]
     protected function getConflictIncrementExpression(string $column): string
     {
         $quoted = $this->quote($this->filter($column));
@@ -1596,6 +1627,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         return "target.{$quoted} + EXCLUDED.{$quoted}";
     }
 
+    #[\Override]
     protected function getConflictTenantIncrementExpression(string $column): string
     {
         $quoted = $this->quote($this->filter($column));
@@ -1613,6 +1645,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
      * @param  string  $column  The unquoted, filtered column name
      * @param  Operator  $operator  The operator to convert
      */
+    #[\Override]
     protected function getOperatorUpsertExpression(string $column, Operator $operator): Expression
     {
         $bindIndex = 0;
@@ -1762,6 +1795,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     /**
      * Get SQL Type
      */
+    #[\Override]
     protected function createBuilder(): SQLBuilder
     {
         return new PostgresBuilder();
@@ -1773,6 +1807,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         return new PostgresSchema();
     }
 
+    #[\Override]
     protected function getSqlType(ColumnType $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
     {
         if ($array === true) {
@@ -1807,6 +1842,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
      *
      * @throws DatabaseException
      */
+    #[\Override]
     protected function getPdoType(mixed $value): int
     {
         return match (\gettype($value)) {
@@ -1818,11 +1854,13 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         };
     }
 
+    #[\Override]
     protected function getNullOrder(): OrderDirection
     {
         return OrderDirection::Desc;
     }
 
+    #[\Override]
     protected function getVectorOrderRaw(Query $query, string $alias): ?Expression
     {
         $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
@@ -1910,12 +1948,14 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     /**
      * Size of POINT spatial type
      */
+    #[\Override]
     protected function getMaxPointSize(): int
     {
         // https://stackoverflow.com/questions/30455025/size-of-data-type-geographypoint-4326-in-postgis
         return 32;
     }
 
+    #[\Override]
     protected function processException(PDOException $e): Exception
     {
         // Timeout
@@ -2068,11 +2108,13 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         return $columns;
     }
 
+    #[\Override]
     protected function quote(string $string): string
     {
         return '"'.\str_replace('"', '""', $string).'"';
     }
 
+    #[\Override]
     protected function getIdentifierQuote(): string
     {
         return '"';
@@ -2094,6 +2136,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     /**
      * Get SQL expression for operator
      */
+    #[\Override]
     protected function getOperatorSql(string $column, Operator $operator, int &$bindIndex, bool $useTargetPrefix = false): ?string
     {
         $quotedColumn = $this->quote($column);
@@ -2335,6 +2378,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         }
     }
 
+    #[\Override]
     protected function getOperatorBuilderExpression(string $column, Operator $operator): Expression
     {
         if ($operator->getMethod() === OperatorType::ArrayRemove) {

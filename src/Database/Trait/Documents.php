@@ -5019,8 +5019,8 @@ trait Documents
     }
 
     /**
-     * Maps each joined collection, as its join query names it, to the attributes one of its key or
-     * unique indexes leads with: the ones a join can look its rows up by.
+     * Under shared tables, maps each joined collection, as its join query names it, to the attributes one of its key
+     * or unique indexes leads with: the ones a join can look its rows up by.
      */
     public const string JOIN_INDEXED = 'joinIndexed';
 
@@ -5032,7 +5032,7 @@ trait Documents
      */
     private function withJoinIndexed(Document $collection, array $joins, ?array $joinedCollections = null): Document
     {
-        if ($joins === []) {
+        if ($joins === [] || ! $this->adapter->hasSharedTables()) {
             return $collection;
         }
 

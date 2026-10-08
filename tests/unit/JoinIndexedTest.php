@@ -21,8 +21,8 @@ use Utopia\Database\Validator\Authorization;
 use Utopia\Query\CursorDirection;
 
 /**
- * Every join read hands the adapter, for each joined collection, the attributes its key and unique indexes lead
- * with: what tells the adapter whether an index serves a join.
+ * Every join read under shared tables hands the adapter, for each joined collection, the attributes its key and
+ * unique indexes lead with: what tells the adapter whether an index serves a join.
  */
 final class JoinIndexedTest extends TestCase
 {
@@ -79,6 +79,20 @@ final class JoinIndexedTest extends TestCase
         $this->assertNull($this->last()->getAttribute(Database::JOIN_INDEXED));
     }
 
+    public function testJoinReadOfPlainTablesHandsTheAdapterNoLeadingAttributes(): void
+    {
+        $database = $this->database(shared: false);
+
+        $database->find(self::CUSTOMERS, [$this->join()]);
+        $this->assertNull($this->indexed());
+
+        $database->count(self::CUSTOMERS, [$this->join()]);
+        $this->assertNull($this->indexed());
+
+        $database->getDocument(self::CUSTOMERS, 'c1', [$this->join()]);
+        $this->assertNull($this->indexed());
+    }
+
     private function join(): Query
     {
         return Query::join(self::LABELS, 'label', [Query::on('name', 'name')]);
@@ -100,7 +114,7 @@ final class JoinIndexedTest extends TestCase
         return $collections[\array_key_last($collections)];
     }
 
-    private function database(): Database
+    private function database(bool $shared = true): Database
     {
         $adapter = new class (new PDO('sqlite::memory:'), $this->collections) extends SQLite {
             /**
@@ -149,6 +163,9 @@ final class JoinIndexedTest extends TestCase
 
         $database = new Database($adapter, new Cache(new None()));
         $database->setDatabase('indexed')->setNamespace('indexed')->setAuthorization($authorization);
+        if ($shared) {
+            $database->setSharedTables(true)->setTenant(1);
+        }
         $database->create();
 
         $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];

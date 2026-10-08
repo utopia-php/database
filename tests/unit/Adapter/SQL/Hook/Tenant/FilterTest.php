@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Adapter\SQL\Hook\Tenant;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Adapter\SQL\Hook\Tenant\Filter;
 use Utopia\Database\Database;
@@ -95,6 +96,65 @@ final class FilterTest extends TestCase
 
         $this->assertSame(Placement::On, $result->placement);
         $this->assertSame('`j0`.'.Storage::TENANT.' IN (?)', $result->condition->expression);
+    }
+
+    /**
+     * @return iterable<string, array{JoinType}>
+     */
+    public static function onJoins(): iterable
+    {
+        yield 'inner' => [JoinType::Inner];
+        yield 'left' => [JoinType::Left];
+    }
+
+    #[DataProvider('onJoins')]
+    public function testFilterJoinMatchesTheTenantOfAnUnindexedJoinAsARange(JoinType $joinType): void
+    {
+        $hook = new Filter(7, unindexed: ['j0']);
+        $result = $hook->filterJoin('j0', $joinType);
+
+        $this->assertSame(Placement::On, $result->placement);
+        $this->assertSame('(`j0`.'.Storage::TENANT.' >= ? AND `j0`.'.Storage::TENANT.' <= ?)', $result->condition->expression);
+        $this->assertSame([7, 7], $result->condition->bindings);
+    }
+
+    public function testFilterJoinKeepsTheEqualityOfAnIndexedJoin(): void
+    {
+        $hook = new Filter(7, unindexed: ['j1']);
+        $result = $hook->filterJoin('j0', JoinType::Inner);
+
+        $this->assertSame('`j0`.'.Storage::TENANT.' IN (?)', $result->condition->expression);
+        $this->assertSame([7], $result->condition->bindings);
+    }
+
+    /**
+     * @return iterable<string, array{JoinType}>
+     */
+    public static function whereJoins(): iterable
+    {
+        yield 'right' => [JoinType::Right];
+        yield 'full outer' => [JoinType::FullOuter];
+        yield 'cross' => [JoinType::Cross];
+    }
+
+    #[DataProvider('whereJoins')]
+    public function testFilterJoinKeepsTheEqualityOfAnUnindexedJoinPlacedInWhere(JoinType $joinType): void
+    {
+        $hook = new Filter(7, unindexed: ['j0']);
+        $result = $hook->filterJoin('j0', $joinType);
+
+        $this->assertSame(Placement::Where, $result->placement);
+        $this->assertStringContainsString('`j0`.'.Storage::TENANT.' IN (?)', $result->condition->expression);
+        $this->assertStringNotContainsString('>=', $result->condition->expression);
+    }
+
+    public function testFilterJoinMatchesSeveralTenantsOfAnUnindexedJoinAsAList(): void
+    {
+        $hook = new Filter([7, 8], unindexed: ['j0']);
+        $result = $hook->filterJoin('j0', JoinType::Inner);
+
+        $this->assertSame('`j0`.'.Storage::TENANT.' IN (?, ?)', $result->condition->expression);
+        $this->assertSame([7, 8], $result->condition->bindings);
     }
 
     public function testFilterJoinCrossPlacesTenantInWhereClause(): void

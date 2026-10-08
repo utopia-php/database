@@ -649,7 +649,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             $joinTablePrefixes = $this->remapJoinQueries($queries);
             $queries = $this->rewriteFullOuterJoins($queries, Method::LeftJoin);
 
-            $builder = $this->newBuilder($name, $alias, $this->keepsUnmatchedRows($queries));
+            $builder = $this->newBuilder($name, $alias, $this->keepsUnmatchedRows($queries), unindexed: $this->unindexedJoins($collectionDoc, $queries, $joinTablePrefixes));
             $this->configureFindBuilder(
                 $builder,
                 $collectionDoc,
@@ -1547,6 +1547,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         if ($hasJoins) {
             $joinTablePrefixes = $this->remapJoinQueries($queries);
         }
+        $unindexed = $this->unindexedJoins($collectionDoc, $queries, $joinTablePrefixes);
 
         $hasPreservingOuterJoin = false;
         if ($hasJoins) {
@@ -1599,7 +1600,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             [$leftQueries, $rightQueries] = $this->emulateFullOuterJoin($queries, $alias);
             $leftPreserving = $this->keepsUnmatchedRows($leftQueries);
 
-            $left = $this->newBuilder($name, $alias, $leftPreserving);
+            $left = $this->newBuilder($name, $alias, $leftPreserving, unindexed: $unindexed);
             $leftProjected = $this->configureFindBuilder(
                 $left,
                 $collectionDoc,
@@ -1633,7 +1634,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 nullable: true,
             );
 
-            $right = $this->newBuilder($name, $alias, true);
+            $right = $this->newBuilder($name, $alias, true, unindexed: $unindexed);
             $rightProjected = $this->configureFindBuilder(
                 $right,
                 $collectionDoc,
@@ -1679,7 +1680,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 ? $this->boundedPage($collectionDoc, $queries, $adapterFilterQueries, $joinTablePrefixes, $orderAttributes, $orderTypes, $limit, $offset, $cursor)
                 : null;
 
-            $builder = $this->newBuilder($name, $alias, $hasPreservingOuterJoin);
+            $builder = $this->newBuilder($name, $alias, $hasPreservingOuterJoin, unindexed: $unindexed);
             $hasSelectionProjection = $this->configureFindBuilder(
                 $builder,
                 $collectionDoc,
@@ -2010,6 +2011,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         $queries = $filterQueries;
 
         $joinTablePrefixes = $this->remapJoinQueries($queries);
+        $unindexed = $this->unindexedJoins($collection, $queries, $joinTablePrefixes);
         $selectRaw = $sumAttribute === null
             ? '1'
             : $this->qualifySumSelect($sumAttribute, $joinTablePrefixes, $collection).' AS '.$this->quote('sum_attr');
@@ -2027,7 +2029,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             [$leftQueries, $rightQueries] = $this->emulateFullOuterJoin($queries, $alias);
             $leftPreserving = $this->keepsUnmatchedRows($leftQueries);
 
-            $left = $this->newBuilder($name, $alias, $leftPreserving);
+            $left = $this->newBuilder($name, $alias, $leftPreserving, unindexed: $unindexed);
             $left->selectRaw($selectRaw);
             $this->applyFindFilters(
                 $left,
@@ -2041,7 +2043,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 PermissionType::Read,
             );
 
-            $right = $this->newBuilder($name, $alias, true);
+            $right = $this->newBuilder($name, $alias, true, unindexed: $unindexed);
             $right->selectRaw($selectRaw);
             $this->applyFindFilters(
                 $right,
@@ -2063,7 +2065,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             return $left;
         }
 
-        $builder = $this->newBuilder($name, $alias, $hasPreservingOuterJoin);
+        $builder = $this->newBuilder($name, $alias, $hasPreservingOuterJoin, unindexed: $unindexed);
         $builder->selectRaw($selectRaw);
         $this->applyFindFilters(
             $builder,
@@ -3279,10 +3281,11 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      *
      * @param  list<int|string|null>  $tenants  Tenants this query spans, for the reads that cross
      *                                          tenants deliberately; defaults to the selected tenant
+     * @param  list<string>  $unindexed  The read's join aliases unindexedJoins() names
      *
      * @throws DatabaseException
      */
-    protected function newBuilder(string $table, string $alias = '', bool $allowNullTenant = false, array $tenants = []): SQLBuilder
+    protected function newBuilder(string $table, string $alias = '', bool $allowNullTenant = false, array $tenants = [], array $unindexed = []): SQLBuilder
     {
         $builder = $this->createBuilder()->from($this->getTableRaw($table), $alias);
 
@@ -3302,6 +3305,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 $table,
                 $allowNullColumn,
                 $this->getIdentifierQuote(),
+                $unindexed,
             );
             $builder->addHook($tenantFilter);
             $builder->addHook(new Tenant\OuterJoin($tenantFilter, $source));
@@ -5065,8 +5069,9 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         [$leftQueries, $rightQueries] = $this->emulateFullOuterJoin($rowQueries, $alias);
         $leftPreserving = $this->keepsUnmatchedRows($leftQueries);
         $halves = [];
+        $unindexed = $this->unindexedJoins($collection, $rowQueries, $joinTablePrefixes);
         foreach ([[$leftQueries, $leftPreserving], [$rightQueries, true]] as [$halfQueries, $preservingOuter]) {
-            $half = $this->newBuilder($name, $alias, $preservingOuter);
+            $half = $this->newBuilder($name, $alias, $preservingOuter, unindexed: $unindexed);
             if ($columns === []) {
                 $half->selectRaw('1');
             }
@@ -5446,6 +5451,95 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     protected function boundsJoinedSort(): bool
     {
         return false;
+    }
+
+    /**
+     * Whether the engine looks a joined table's rows up by an equality on the leading `_tenant` of an index
+     * alone, once per row the join pairs, when no index serves the join.
+     */
+    protected function looksUpByTenantAlone(): bool
+    {
+        return false;
+    }
+
+    /**
+     * The aliases of the joins no index of their collection serves: no ON equality of the read reaches a column
+     * one of its key or unique indexes leads with, nor an internal column every collection indexes. Under shared
+     * tables every other index of such a table leads with `_tenant`. A join whose collection the Database layer
+     * described no indexes of is taken as served.
+     *
+     * @param  array<BaseQuery>  $queries  With the join columns remapJoinQueries() qualified
+     * @param  list<JoinAlias>  $joinTablePrefixes
+     * @return list<string>
+     */
+    private function unindexedJoins(Document $collection, array $queries, array $joinTablePrefixes): array
+    {
+        if (! $this->sharedTables || $joinTablePrefixes === [] || ! $this->looksUpByTenantAlone()) {
+            return [];
+        }
+
+        $joinIndexed = $collection->getAttribute(Database::JOIN_INDEXED, []);
+        if (! \is_array($joinIndexed)) {
+            return [];
+        }
+
+        $bound = $this->joinEqualityColumns($queries);
+        $internal = \array_map(\strtolower(...), [Storage::UID, Storage::SEQUENCE, Storage::CREATED_AT, Storage::UPDATED_AT]);
+
+        $unindexed = [];
+        foreach ($joinTablePrefixes as $join) {
+            $leads = $joinIndexed[$join->table] ?? null;
+            if (! \is_array($leads)) {
+                continue;
+            }
+
+            $indexed = $internal;
+            foreach ($leads as $lead) {
+                if (\is_string($lead)) {
+                    $indexed[] = \strtolower($this->getInternalKeyForAttribute($lead));
+                }
+            }
+
+            if (\array_intersect($bound[$join->alias] ?? [], $indexed) === []) {
+                $unindexed[] = $join->alias;
+            }
+        }
+
+        return $unindexed;
+    }
+
+    /**
+     * The columns each alias compares for equality with another alias's column in a join's ON.
+     *
+     * @param  array<BaseQuery>  $queries  With the join columns remapJoinQueries() qualified
+     * @return array<string, list<string>>
+     */
+    private function joinEqualityColumns(array $queries): array
+    {
+        $columns = [];
+        foreach ($queries as $query) {
+            if (! $query->getMethod()->isJoin()) {
+                continue;
+            }
+
+            foreach ($query->getJoinOnQueries() as $on) {
+                $values = $on->getValues();
+                if ($on->getMethod() !== Method::On || ($values[1] ?? null) !== '=' || ! \is_string($values[0] ?? null) || ! \is_string($values[2] ?? null)) {
+                    continue;
+                }
+
+                $left = \explode('.', $values[0], 2);
+                $right = \explode('.', $values[2], 2);
+                if (\count($left) !== 2 || \count($right) !== 2 || $left[0] === $right[0]) {
+                    continue;
+                }
+
+                $columns[$left[0]][] = \strtolower($left[1]);
+                $columns[$right[0]][] = \strtolower($right[1]);
+            }
+        }
+
+        return $columns;
     }
 
     /**

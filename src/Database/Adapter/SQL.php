@@ -70,9 +70,6 @@ use Utopia\Query\Schema\PostgreSQL as PostgresSchema;
 use Utopia\Query\Schema\Table;
 use Utopia\Query\Schema\Table\PostgreSQL as PostgresTable;
 
-/**
- * Abstract base adapter for SQL-based database engines (MariaDB, MySQL, PostgreSQL, SQLite).
- */
 abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQuery, Feature\QueryBuilder, Feature\Relationships, Feature\Upserts
 {
     /**
@@ -167,8 +164,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
-     * Get the list of capabilities supported by SQL adapters.
-     *
      * @return array<Capability>
      */
     #[\Override]
@@ -425,8 +420,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
-     * List Databases
-     *
      * @return array<Document>
      */
     #[\Override]
@@ -436,8 +429,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
-     * Create Attribute
-     *
      * @throws Exception
      * @throws PDOException
      */
@@ -468,8 +459,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
-     * Create Attributes
-     *
      * @param  list<Attribute>  $attributes
      *
      * @throws DatabaseException
@@ -519,8 +508,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
-     * Rename Attribute
-     *
      * @throws Exception
      * @throws PDOException
      */
@@ -575,8 +562,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     abstract protected function getColumnNames(string $collection): array;
 
     /**
-     * Get Document
-     *
      * @param  Query[]  $queries
      *
      * @throws DatabaseException
@@ -714,8 +699,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
-     * Create Documents in batches
-     *
      * Under ignoreDuplicates() only the documents written are returned and handed to the write
      * hooks, so a skipped document writes no permission rows for a stored one.
      *
@@ -1054,10 +1037,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
-     * Update documents
-     *
-     * Updates all documents which match the given query.
-     *
      * @param  array<Document>  $documents
      * @param  array<string, true>  $skipPermissions
      *
@@ -1095,7 +1074,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
         $name = $this->filter($collection);
 
-        // Build the UPDATE using the query builder
         $builder = $this->newBuilder($name);
 
         // Single pass over update attributes, bucketing into regular / spatial /
@@ -1137,12 +1115,10 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             $builder->set($regularRow);
         }
 
-        // Spatial attributes use setRaw with ST_GeomFromText(?)
         foreach ($spatialRows as $column => $value) {
             $builder->setRaw($column, $this->getSpatialGeometryFromText('?'), [$value]);
         }
 
-        // Operator attributes use setRaw with converted expressions
         foreach ($operators as $attribute => $operator) {
             $column = $this->filter($attribute);
             /** @var Operator $operator */
@@ -1150,7 +1126,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             $builder->setRaw($column, $expression->sql, $expression->bindings);
         }
 
-        // WHERE _id IN (sequence values)
         $sequences = \array_map(fn ($document) => $document->getSequence(), $documents);
         $builder->filter([BaseQuery::equal(Storage::SEQUENCE, \array_values($sequences))]);
 
@@ -1271,8 +1246,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
-     * Delete Documents
-     *
      * @param  array<string>  $sequences
      * @param  array<string>  $permissionIds
      *
@@ -1290,7 +1263,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         try {
             $name = $this->filter($collection->getId());
 
-            // Delete documents
             $builder = $this->newBuilder($name);
             $builder->filter([BaseQuery::equal(Storage::SEQUENCE, \array_values($sequences))]);
             $result = $builder->delete();
@@ -1446,8 +1418,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
-     * Find Documents
-     *
      * @param  array<Query>  $queries
      * @param  array<string>  $orderAttributes
      * @param  array<OrderDirection>  $orderTypes
@@ -1736,7 +1706,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 $builder->whereRaw($this->quote($alias).".{$vectorAttribute} IS NOT NULL");
             }
 
-            // Cursor pagination - build nested Query objects for complex multi-attribute cursor conditions
             if (! empty($cursor) && $vectorDistance !== null && ! $hasDistinct) {
                 $distance = $cursor[Document::DISTANCE] ?? null;
                 if (! \is_numeric($distance)) {
@@ -1865,8 +1834,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
-     * Count Documents
-     *
      * @param  array<Query>  $queries
      *
      * @throws Exception
@@ -1939,8 +1906,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
-     * Sum an Attribute
-     *
      * @param  array<Query>  $queries
      *
      * @throws Exception
@@ -2415,18 +2380,12 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         );
     }
 
-    /**
-     * Get current attribute count from collection document
-     */
     #[\Override]
     public function getCountOfAttributes(Document $collection): int
     {
         return \count(self::collectionAttributes($collection)) + $this->limits()->defaultAttributes;
     }
 
-    /**
-     * Get current index count from collection document
-     */
     #[\Override]
     public function getCountOfIndexes(Document $collection): int
     {
@@ -2566,9 +2525,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         return $total;
     }
 
-    /**
-     * Size of POINT spatial type
-     */
     abstract protected function getMaxPointSize(): int;
 
     /**
@@ -2857,8 +2813,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
-     * Analyze a collection, updating its metadata on the database engine.
-     *
      * @throws DatabaseException
      */
     #[\Override]
@@ -2868,8 +2822,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
-     * Delete a database schema.
-     *
      * @throws Exception
      * @throws PDOException
      */
@@ -3202,13 +3154,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         };
     }
 
-    /**
-     * Get the SQL type definition for spatial column types.
-     *
-     * @param string $type The spatial type (point, linestring, polygon)
-     * @param bool $required Whether the column is NOT NULL
-     * @return string
-     */
     protected function getSpatialSqlType(string $type, bool $required): string
     {
         $srid = $this->getSpatialColumnSrid();
@@ -3231,9 +3176,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         };
     }
 
-    /**
-     * Generate ST_GeomFromText call with proper SRID and axis order support
-     */
     protected function getSpatialGeometryFromText(string $wktPlaceholder, ?int $srid = null): string
     {
         $srid = $srid ?? Database::DEFAULT_SRID;
@@ -3248,9 +3190,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         return $geomFromText;
     }
 
-    /**
-     * Get the spatial axis order specification string
-     */
     protected function getSpatialAxisOrder(): string
     {
         return "'axis-order=long-lat'";
@@ -3309,8 +3248,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
-     * Get SQL table
-     *
      * @throws DatabaseException
      */
     protected function getTable(string $name): string
@@ -3328,14 +3265,8 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         return $this->getDatabase().'.'.$this->getNamespace().'_'.$this->filter($name);
     }
 
-    /**
-     * Create a new query builder instance for this adapter's SQL dialect.
-     */
     abstract protected function createBuilder(): SQLBuilder;
 
-    /**
-     * A schema builder in this adapter's SQL dialect.
-     */
     #[\Override]
     public function schema(): MySQLSchema|PostgresSchema
     {
@@ -3343,8 +3274,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
-     * Create and configure a new query builder for a given table.
-     *
      * Applies tenant filtering whenever shared tables are enabled, so that a query made
      * with no tenant selected matches no tenant's rows rather than every tenant's.
      *
@@ -3532,9 +3461,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * Prepares the SQL statement and binds positional parameters from the Statement.
      * Does NOT call execute() - the caller is responsible for that.
      *
-     * @param  Event|null  $event  Optional event to run through transformation system
      * @param  string  $collection  The collection the statement reads or writes, for the profiler
-     * @return PDOStatement|DatabasePDOStatement|PDOStatementProxy
      */
     protected function executeResult(Statement $result, ?Event $event = null, string $collection = ''): PDOStatement|DatabasePDOStatement|PDOStatementProxy
     {
@@ -3593,7 +3520,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * Keep the values bound to a statement and the collection it runs on for the profiler, while
      * one is recording.
      *
-     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $statement
      * @param  array<mixed>  $bindings
      */
     protected function describeStatement(PDOStatement|DatabasePDOStatement|PDOStatementProxy $statement, array $bindings, string $collection): void
@@ -3608,9 +3534,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         $this->statementCollections[$statement] = $collection;
     }
 
-    /**
-     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $statement
-     */
     protected function getStatementEvent(PDOStatement|DatabasePDOStatement|PDOStatementProxy $statement): ?Event
     {
         if ($this->statementEvents === null) {
@@ -3694,8 +3617,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
-     * Execute a single upsert batch using the query builder.
-     *
      * Builds an INSERT ... ON CONFLICT/DUPLICATE KEY UPDATE statement via the
      * query builder, handling spatial columns, shared-table tenant guards,
      * increment attributes, and operator expressions.
@@ -3706,7 +3627,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * @param  string  $attribute  Increment attribute name (empty if none)
      * @param  array<string, Operator>  $operators  Operator map keyed by attribute name
      * @param  array<string, mixed>  $attributeDefaults  Attribute default values
-     * @param  bool  $hasOperators  Whether this batch contains operator expressions
      *
      * @throws DatabaseException
      */
@@ -3853,8 +3773,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
-     * Map attribute selections to database column names.
-     *
      * Converts user-facing attribute names (like $id, $sequence) to internal
      * database column names (like _uid, _id) and ensures internal columns
      * are always included.
@@ -6087,8 +6005,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
-     * Build a key-value row array from a Document for batch INSERT.
-     *
      * Converts internal attributes ($id, $createdAt, etc.) to their column names
      * and encodes arrays as JSON. Spatial attributes are included with their raw
      * value (the caller must handle ST_GeomFromText wrapping separately).
@@ -6159,16 +6075,10 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
-     * Generate SQL expression for operator
-     * Each adapter must implement operators specific to their SQL dialect
-     *
      * @return string|null Returns null if operator can't be expressed in SQL
      */
     abstract protected function getOperatorSql(string $column, Operator $operator, int &$bindIndex): ?string;
 
-    /**
-     * Bind operator parameters to prepared statement
-     */
     protected function bindOperatorParameters(PDOStatement|DatabasePDOStatement|PDOStatementProxy $statement, Operator $operator, int &$bindIndex): void
     {
         $method = $operator->getMethod();
@@ -6293,7 +6203,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * column assignment prefix, and converts named :op_N bindings to positional ? placeholders.
      *
      * @param  string  $column  The unquoted column name
-     * @param  Operator  $operator  The operator to convert
      *
      * @throws DatabaseException
      */
@@ -6306,7 +6215,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             throw new DatabaseException('Operator cannot be expressed in SQL: '.$operator->getMethod()->value);
         }
 
-        // Strip the "quotedColumn = " prefix to get just the RHS expression
         $quotedColumn = $this->quote($column);
         $prefix = $quotedColumn.' = ';
         $expression = $fullExpression;
@@ -6314,7 +6222,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             $expression = substr($expression, strlen($prefix));
         }
 
-        // Collect the named binding keys and their values in order
         /** @var array<string, mixed> $namedBindings */
         $namedBindings = [];
         $method = $operator->getMethod();
@@ -6413,13 +6320,11 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 break;
         }
 
-        // Replace each named binding occurrence with ? and collect positional bindings
         // Process longest keys first to avoid partial replacement (e.g., :op_10 vs :op_1)
         $positionalBindings = [];
         $keys = array_keys($namedBindings);
         usort($keys, fn ($a, $b) => strlen($b) - strlen($a));
 
-        // Find all occurrences of all named bindings and sort by position
         $replacements = [];
         foreach ($keys as $key) {
             $search = ':'.$key;
@@ -6430,7 +6335,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             }
         }
 
-        // Sort by position (ascending) to replace in order
         usort($replacements, fn ($a, $b) => $a['pos'] - $b['pos']);
 
         // Replace from right to left to preserve positions
@@ -6440,7 +6344,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             $result = substr_replace($result, '?', $r['pos'], $r['len']);
         }
 
-        // Collect bindings in positional order (left to right)
         foreach ($replacements as $r) {
             $positionalBindings[] = $namedBindings[$r['key']];
         }
@@ -6449,14 +6352,11 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
-     * Get a builder-compatible operator expression for use in upsert conflict resolution.
-     *
      * By default this delegates to getOperatorBuilderExpression(). Adapters
      * that need to reference the existing row differently in upsert context
      * (e.g. Postgres using target.col) should override this method.
      *
      * @param  string  $column  The unquoted, filtered column name
-     * @param  Operator  $operator  The operator to convert
      */
     protected function getOperatorUpsertExpression(string $column, Operator $operator): Expression
     {
@@ -6468,7 +6368,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * This method applies the operator logic in PHP to compute what the SQL would compute.
      *
      * @param  mixed  $value  The current value (typically the attribute default)
-     * @return mixed The result after applying the operator
      */
     protected function applyOperatorToValue(Operator $operator, mixed $value): mixed
     {
@@ -6625,9 +6524,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         return \get_debug_type($value);
     }
 
-    /**
-     * Quote an identifier (table name, column name) with the appropriate quoting character.
-     */
     protected function quote(string $string): string
     {
         return '`'.\str_replace('`', '``', $string).'`';
@@ -6681,8 +6577,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     abstract protected function getConflictTenantIncrementExpression(string $column): string;
 
     /**
-     * Get PDO Type
-     *
      * @throws Exception
      */
     protected function getPdoType(mixed $value): int

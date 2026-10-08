@@ -136,6 +136,60 @@ final class PoolCoroutineTransactionTest extends TestCase
         );
     }
 
+    public function testChildCoroutinesOnThePinnedConnectionKeepTheirTenantsAcrossCalls(): void
+    {
+        /** @var list<PingRecordingMemory> $connections */
+        $connections = [];
+        $pool = $this->pool($connections, 1);
+
+        $this->inCoroutine(function () use ($pool, &$connections): void {
+            $pool->withTenant(self::TENANT, function () use ($pool, &$connections): void {
+                $pool->withTransaction(function () use ($pool, &$connections): void {
+                    $paused = new Channel(1);
+                    $resumed = new Channel(1);
+                    $scopedDone = new Channel(1);
+                    $inheritingDone = new Channel(1);
+
+                    $connections[0]->pauseNextPing(static function () use ($paused, $resumed): void {
+                        $paused->push(true);
+                        $resumed->pop();
+                    });
+
+                    Coroutine::create(function () use ($pool, $scopedDone): void {
+                        $pool->withTenant(self::CHILD_TENANT, function () use ($pool): void {
+                            $pool->ping();
+                            $pool->ping();
+                        });
+                        $scopedDone->push(true);
+                    });
+
+                    $paused->pop();
+                    Coroutine::create(function () use ($pool, $inheritingDone): void {
+                        $pool->ping();
+                        $inheritingDone->push(true);
+                    });
+                    $inheritingDone->pop();
+                    $pool->ping();
+                    $resumed->push(true);
+                    $scopedDone->pop();
+                    $pool->ping();
+                });
+            });
+        });
+
+        $this->assertCount(1, $connections);
+        $this->assertSame(
+            [
+                [self::TENANT, self::TENANT],
+                [self::TENANT, self::TENANT],
+                [self::CHILD_TENANT, self::CHILD_TENANT],
+                [self::CHILD_TENANT, self::CHILD_TENANT],
+                [self::TENANT, self::TENANT],
+            ],
+            \array_map(static fn (array $ping): array => [$ping['before'], $ping['after']], $connections[0]->pings),
+        );
+    }
+
     /**
      * @param  list<PingRecordingMemory>  $connections
      */

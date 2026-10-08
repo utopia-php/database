@@ -459,10 +459,6 @@ trait Documents
      */
     public function getDocument(string $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
-        if ($collection === self::METADATA && $id === self::METADATA) {
-            return self::collectionDefinition();
-        }
-
         if (empty($collection)) {
             throw new NotFoundException('Collection not found');
         }

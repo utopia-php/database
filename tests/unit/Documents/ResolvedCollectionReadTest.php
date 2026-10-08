@@ -6,6 +6,7 @@ use Closure;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Tests\Unit\Cache\CountingCache;
+use Tests\Unit\Cache\ObservedMemory;
 use Tests\Unit\Cache\RedisLeasableCache;
 use Tests\Unit\Support\CountingMemory;
 use Tests\Unit\Support\UncachedTwin;
@@ -282,19 +283,7 @@ final class ResolvedCollectionReadTest extends TestCase
     public function testADecoratorMutatingTheMetadataDefinitionLeavesTheNextReadIntact(): void
     {
         [$database] = $this->createDatabase();
-        $database->addHook(new class () implements Decorator {
-            #[\Override]
-            public function decorate(Event $event, Document $collection, Document $document): Document
-            {
-                if ($collection->getId() === Database::METADATA) {
-                    $collection->setAttribute(Collection::NAME, 'mutated');
-                    $collection->setAttribute(Collection::ATTRIBUTES, []);
-                    $collection->setAttribute(Collection::INDEXES, []);
-                }
-
-                return $document;
-            }
-        });
+        $database->addHook($this->metadataMutatingDecorator());
 
         foreach ([1, 2] as $read) {
             $stored = $database->getDocument(Database::METADATA, self::COLLECTION);
@@ -339,6 +328,47 @@ final class ResolvedCollectionReadTest extends TestCase
 
         $this->assertSame([self::COLLECTION => 1], $reader->collectionKeys, 'The definition\'s fill checks the epoch under the key it read it with');
         $this->assertSame(self::COLLECTION, $reader->getCollection(self::COLLECTION)->getId());
+    }
+
+    public function testADecoratorAddedDuringAMetadataReadLeavesTheSharedDefinitionIntact(): void
+    {
+        $adapter = new ObservedMemory();
+        $database = (new Database($adapter, new Cache(new RedisLeasableCache())))
+            ->setDatabase('utopiaTests')
+            ->setNamespace('resolved_'.\uniqid());
+        $database->create();
+        $database->createCollection(Collection::create(
+            id: self::COLLECTION,
+            attributes: [Attribute::string(key: 'name')],
+            permissions: [Permission::read(Role::any())],
+        ));
+        $database->purgeCachedDocument(Database::METADATA, self::COLLECTION);
+        $adapter->observeMetadata(self::COLLECTION, fn () => $database->addHook($this->metadataMutatingDecorator()));
+
+        $stored = $database->getDocument(Database::METADATA, self::COLLECTION);
+
+        $this->assertSame(1, $adapter->getObservedMetadataReads());
+        $this->assertSame(self::COLLECTION, $stored->getId());
+        $definition = Database::collectionDefinition();
+        $this->assertSame('collections', $definition->getAttribute(Collection::NAME), 'The decorator changed the shared metadata definition');
+        $this->assertCount(4, $definition->attributes());
+    }
+
+    private function metadataMutatingDecorator(): Decorator
+    {
+        return new class () implements Decorator {
+            #[\Override]
+            public function decorate(Event $event, Document $collection, Document $document): Document
+            {
+                if ($collection->getId() === Database::METADATA) {
+                    $collection->setAttribute(Collection::NAME, 'mutated');
+                    $collection->setAttribute(Collection::ATTRIBUTES, []);
+                    $collection->setAttribute(Collection::INDEXES, []);
+                }
+
+                return $document;
+            }
+        };
     }
 
     private function createSiblings(Database $database): void

@@ -95,7 +95,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     /**
      * Default batch size for cursor operations
      */
-    private const DEFAULT_BATCH_SIZE = 1000;
+    private const int DEFAULT_BATCH_SIZE = 1000;
 
     /**
      * The collation of the `_uid` index: a lookup or upsert by id must use it to match what the

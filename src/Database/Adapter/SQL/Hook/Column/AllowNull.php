@@ -9,7 +9,7 @@ use Utopia\Query\Hook\Filter;
 
 final readonly class AllowNull implements Filter
 {
-    private const IDENTIFIER_PATTERN = '/^[a-zA-Z0-9_\-][a-zA-Z0-9_.\-]*$/';
+    private const string IDENTIFIER_PATTERN = '/^[a-zA-Z0-9_\-][a-zA-Z0-9_.\-]*$/';
 
     public function __construct(
         private Filter $filter,

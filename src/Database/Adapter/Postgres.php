@@ -61,7 +61,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
 {
     use Timeout;
 
-    public const MAX_IDENTIFIER_NAME = 63;
+    public const int MAX_IDENTIFIER_NAME = 63;
 
     protected const string MIN_DATETIME = '-4713-01-01 00:00:00';
 

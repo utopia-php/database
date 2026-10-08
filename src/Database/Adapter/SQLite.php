@@ -70,16 +70,16 @@ use Utopia\Query\Schema\IndexType;
 class SQLite extends SQL
 {
     /** Suffix appended to every FTS5 virtual table name created by this adapter. */
-    private const FTS_TABLE_SUFFIX = '_fts';
+    private const string FTS_TABLE_SUFFIX = '_fts';
 
     /** AFTER INSERT trigger suffix on the parent collection. */
-    private const FTS_TRIGGER_INSERT = 'ai';
+    private const string FTS_TRIGGER_INSERT = 'ai';
 
     /** AFTER DELETE trigger suffix on the parent collection. */
-    private const FTS_TRIGGER_DELETE = 'ad';
+    private const string FTS_TRIGGER_DELETE = 'ad';
 
     /** AFTER UPDATE trigger suffix on the parent collection. */
-    private const FTS_TRIGGER_UPDATE = 'au';
+    private const string FTS_TRIGGER_UPDATE = 'au';
 
     private const string INDEX_1 = '_index_1';
 
@@ -90,13 +90,13 @@ class SQLite extends SQL
      * once per candidate row, so a pathological pattern is amplified by
      * table cardinality.
      */
-    private const REGEXP_MAX_PATTERN_LENGTH = 512;
+    private const int REGEXP_MAX_PATTERN_LENGTH = 512;
 
     /**
      * Cap on cached delimited patterns. Long-lived adapters processing many
      * distinct user patterns would otherwise grow this map without bound.
      */
-    private const REGEXP_PATTERN_CACHE_LIMIT = 256;
+    private const int REGEXP_PATTERN_CACHE_LIMIT = 256;
 
     private const array MISSING_AGGREGATES = [
         Method::Stddev,

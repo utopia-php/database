@@ -903,7 +903,7 @@ abstract class Adapter
      */
     private static array $filteredKeyCache = [];
 
-    private const FILTERED_KEY_CACHE_LIMIT = 4096;
+    private const int FILTERED_KEY_CACHE_LIMIT = 4096;
 
     /**
      * Filter Keys

@@ -14,6 +14,8 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Event;
+use Utopia\Database\Hook\Decorator;
 use Utopia\Database\Permission;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Role;
@@ -275,6 +277,40 @@ final class ResolvedCollectionReadTest extends TestCase
             static fn (Attribute $attribute): string => $attribute->key,
             $database->getCollection(self::COLLECTION)->attributes(),
         ), 'The next call resolves the changed definition');
+    }
+
+    public function testADecoratorMutatingTheMetadataDefinitionLeavesTheNextReadIntact(): void
+    {
+        [$database] = $this->createDatabase();
+        $database->addHook(new class () implements Decorator {
+            #[\Override]
+            public function decorate(Event $event, Document $collection, Document $document): Document
+            {
+                if ($collection->getId() === Database::METADATA) {
+                    $collection->setAttribute(Collection::NAME, 'mutated');
+                    $collection->setAttribute(Collection::ATTRIBUTES, []);
+                    $collection->setAttribute(Collection::INDEXES, []);
+                }
+
+                return $document;
+            }
+        });
+
+        foreach ([1, 2] as $read) {
+            $stored = $database->getDocument(Database::METADATA, self::COLLECTION);
+            $this->assertSame(self::COLLECTION, $stored->getId(), "Read {$read}");
+            $attributes = $stored->getAttribute(Collection::ATTRIBUTES);
+            $this->assertIsArray($attributes, "Read {$read} decodes the attributes under the metadata definition");
+            $this->assertCount(2, $attributes);
+        }
+
+        $definition = Database::collectionDefinition();
+        $this->assertSame('collections', $definition->getAttribute(Collection::NAME));
+        $this->assertCount(4, $definition->attributes());
+        $this->assertSame(['name', 'count'], \array_map(
+            static fn (Attribute $attribute): string => $attribute->key,
+            $database->getCollection(self::COLLECTION)->attributes(),
+        ));
     }
 
     private function createSiblings(Database $database): void

@@ -2344,9 +2344,18 @@ class Mongo extends Adapter
         }
 
         $options = $this->getTransactionOptions();
+        $namespace = $this->getNamespace() . '_' . $this->filter($collection);
         try {
+            // $inc refuses a null field, and a null never matches the bounds: a null counter (e.g. an
+            // attribute added after the document was written) counts as 0, as in the SQL adapters.
+            $nullFilters = ['_uid' => $id, $attribute => null];
+            if ($this->sharedTables) {
+                $nullFilters['_tenant'] = $this->getTenantFilters($collection);
+            }
+            $this->client->update($namespace, $nullFilters, ['$set' => [$attribute => 0]], options: $options);
+
             $this->client->update(
-                $this->getNamespace() . '_' . $this->filter($collection),
+                $namespace,
                 $filters,
                 [
                     '$inc' => [$attribute => $value],

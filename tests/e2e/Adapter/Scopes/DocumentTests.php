@@ -2189,6 +2189,39 @@ trait DocumentTests
         return $document;
     }
 
+    public function testIncreaseDecreaseAttributeAddedAfterDocument(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $collection = 'increase_decrease_added_attribute';
+        $database->createCollection($collection);
+        $this->assertEquals(true, $database->createAttribute($collection, 'name', Database::VAR_STRING, 64, false));
+
+        $document = $database->createDocument($collection, new Document([
+            'name' => 'existing',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+        ]));
+
+        // Added once the document exists: its stored value is NULL, not the default.
+        $this->assertEquals(true, $database->createAttribute($collection, 'counter', Database::VAR_INTEGER, 0, false, 0));
+
+        $doc = $database->increaseDocumentAttribute($collection, $document->getId(), 'counter', 1);
+        $this->assertEquals(1, $doc->getAttribute('counter'));
+        $this->assertEquals(1, $database->getDocument($collection, $document->getId())->getAttribute('counter'));
+
+        $database->increaseDocumentAttribute($collection, $document->getId(), 'counter', 2, 10);
+        $this->assertEquals(3, $database->getDocument($collection, $document->getId())->getAttribute('counter'));
+
+        $database->decreaseDocumentAttribute($collection, $document->getId(), 'counter', 1, 0);
+        $this->assertEquals(2, $database->getDocument($collection, $document->getId())->getAttribute('counter'));
+
+        $database->deleteCollection($collection);
+    }
+
     public function testCreateUpdateBigIntAndIncrementDecrement(): void
     {
         /** @var Database $database */

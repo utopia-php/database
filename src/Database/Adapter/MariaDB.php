@@ -1235,13 +1235,15 @@ class MariaDB extends SQL
         $name = $this->filter($collection);
         $attribute = $this->filter($attribute);
 
-        $sqlMax = $max !== null ? " AND `{$attribute}` <= :max" : '';
-        $sqlMin = $min !== null ? " AND `{$attribute}` >= :min" : '';
+        // A NULL counter (e.g. a column added to a table with existing rows) counts as 0, so it can
+        // be incremented and checked against its bounds instead of staying NULL forever.
+        $sqlMax = $max !== null ? " AND COALESCE(`{$attribute}`, 0) <= :max" : '';
+        $sqlMin = $min !== null ? " AND COALESCE(`{$attribute}`, 0) >= :min" : '';
 
         $sql = "
 			UPDATE {$this->getSQLTable($name)}
 			SET
-			    `{$attribute}` = `{$attribute}` + :val,
+			    `{$attribute}` = COALESCE(`{$attribute}`, 0) + :val,
 			    `_updatedAt` = :updatedAt
 			WHERE _uid = :_uid
 			{$this->getTenantQuery($collection)}

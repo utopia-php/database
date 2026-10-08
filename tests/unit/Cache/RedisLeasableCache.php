@@ -172,9 +172,6 @@ final class RedisLeasableCache implements CacheAdapter, Leasable
         $this->leaseGraceWindow = \max(0, $milliseconds);
     }
 
-    /**
-     * End every grace window still open, as if it had elapsed.
-     */
     public function expireTombstones(): void
     {
         $this->tombstones = [];

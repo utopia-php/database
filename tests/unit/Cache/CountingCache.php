@@ -114,8 +114,6 @@ final class CountingCache implements CacheAdapter, Leasable
     }
 
     /**
-     * How often each key was loaded since the last reset.
-     *
      * @return array<string, int>
      */
     public function getLoads(): array

@@ -147,6 +147,7 @@ class SQLite extends SQL
      * SQLite has no server-side connection id, so the handle's object id names the connection: unique only within
      * the process and only while the handle lives.
      */
+    #[\Override]
     public function id(): string
     {
         return (string) \spl_object_id($this->getDriver());
@@ -177,6 +178,7 @@ class SQLite extends SQL
      *
      * @return array<Capability>
      */
+    #[\Override]
     public function capabilities(): array
     {
         $remove = [
@@ -201,6 +203,7 @@ class SQLite extends SQL
         );
     }
 
+    #[\Override]
     public function setTenant(int|string|null $tenant): static
     {
         $changed = $this->currentTenant() !== $tenant;
@@ -212,6 +215,7 @@ class SQLite extends SQL
         return $this;
     }
 
+    #[\Override]
     public function setNamespace(string $namespace): static
     {
         // Invalidate after the parent setter so a thrown validation
@@ -222,6 +226,7 @@ class SQLite extends SQL
         return $this;
     }
 
+    #[\Override]
     public function setSharedTables(bool $sharedTables): static
     {
         $changed = $this->sharedTables !== $sharedTables;
@@ -298,6 +303,7 @@ class SQLite extends SQL
     /**
      * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $statement
      */
+    #[\Override]
     protected function execute(mixed $statement, ?Event $event = null): bool
     {
         return $this->executeAndProfile($statement);
@@ -312,6 +318,7 @@ class SQLite extends SQL
      * `BEGIN IMMEDIATE` reserves the writer slot up-front so concurrent
      * writers queue behind it under busy_timeout instead.
      */
+    #[\Override]
     public function startTransaction(): bool
     {
         try {
@@ -350,6 +357,7 @@ class SQLite extends SQL
      * would throw "no active transaction". Mirrors that with a raw COMMIT
      * and SAVEPOINT release for nested levels.
      */
+    #[\Override]
     public function commitTransaction(): bool
     {
         if ($this->inTransaction === 0) {
@@ -380,6 +388,7 @@ class SQLite extends SQL
      * Counterpart to commitTransaction — uses a raw ROLLBACK for the same
      * reason (raw BEGIN IMMEDIATE bypasses PDO's transaction tracking).
      */
+    #[\Override]
     public function rollbackTransaction(): bool
     {
         if ($this->inTransaction === 0) {
@@ -412,6 +421,7 @@ class SQLite extends SQL
      * @throws Exception
      * @throws PDOException
      */
+    #[\Override]
     public function create(string $name): bool
     {
         return true;
@@ -432,6 +442,7 @@ class SQLite extends SQL
      * and succeeds without checking either name, unlike every other adapter, which refuses a missing source or an
      * existing target.
      */
+    #[\Override]
     public function update(string $name, string $new): bool
     {
         return true;
@@ -475,6 +486,7 @@ class SQLite extends SQL
      * @throws Exception
      * @throws PDOException
      */
+    #[\Override]
     public function delete(string $name): bool
     {
         return true;
@@ -489,6 +501,7 @@ class SQLite extends SQL
      * @throws Exception
      * @throws PDOException
      */
+    #[\Override]
     public function createCollection(string $collection, array $attributes = [], array $indexes = []): bool
     {
         $id = $this->filter($collection);
@@ -590,6 +603,7 @@ class SQLite extends SQL
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function getSizeOfCollection(string $collection): int
     {
         $collection = $this->filter($collection);
@@ -632,6 +646,7 @@ class SQLite extends SQL
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function getSizeOfCollectionOnDisk(string $collection): int
     {
         return $this->getSizeOfCollection($collection);
@@ -647,6 +662,7 @@ class SQLite extends SQL
      * @throws Exception
      * @throws PDOException
      */
+    #[\Override]
     public function deleteCollection(string $collection): bool
     {
         $id = $this->filter($collection);
@@ -676,6 +692,7 @@ class SQLite extends SQL
      * @throws Exception
      * @throws PDOException
      */
+    #[\Override]
     public function updateAttribute(string $collection, string $key, Attribute $attribute): bool
     {
         if ($attribute->key !== $key) {
@@ -725,6 +742,7 @@ class SQLite extends SQL
      * @throws Exception
      * @throws PDOException
      */
+    #[\Override]
     public function deleteAttribute(string $collection, string $key): bool
     {
         $name = $this->filter($collection);
@@ -773,6 +791,7 @@ class SQLite extends SQL
      * @throws Exception
      * @throws PDOException
      */
+    #[\Override]
     public function createIndex(
         string $collection,
         Index $index,
@@ -971,6 +990,7 @@ class SQLite extends SQL
      * @throws Exception
      * @throws PDOException
      */
+    #[\Override]
     public function deleteIndex(string $collection, string $key, Event $event = Event::IndexDelete): bool
     {
         $name = $this->filter($collection);
@@ -1016,6 +1036,7 @@ class SQLite extends SQL
      * @throws Exception
      * @throws PDOException
      */
+    #[\Override]
     public function renameIndex(string $collection, string $old, string $new): bool
     {
         $metadataCollection = new Document([Document::ID => Database::METADATA]);
@@ -1183,6 +1204,7 @@ class SQLite extends SQL
      * @throws PDOException
      * @throws DuplicateException
      */
+    #[\Override]
     public function createDocument(Document $collection, Document $document): Document
     {
         try {
@@ -1242,6 +1264,7 @@ class SQLite extends SQL
      * @throws PDOException
      * @throws DuplicateException
      */
+    #[\Override]
     public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
     {
         try {
@@ -1315,6 +1338,7 @@ class SQLite extends SQL
      *
      * @return list<string>
      */
+    #[\Override]
     protected function getKeywords(): array
     {
         return [
@@ -1468,6 +1492,7 @@ class SQLite extends SQL
         ];
     }
 
+    #[\Override]
     protected function createBuilder(): SQLBuilder
     {
         return new SQLiteBuilder();
@@ -1488,6 +1513,7 @@ class SQLite extends SQL
         return parent::newPermissionHook($collection, $roles, $type, $documentColumn)->collate(SQLiteBuilder::COLLATION);
     }
 
+    #[\Override]
     protected function getSqlType(ColumnType $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
     {
         if (in_array($type, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon], true)) {
@@ -1539,6 +1565,7 @@ class SQLite extends SQL
         };
     }
 
+    #[\Override]
     protected function getMaxPointSize(): int
     {
         return 0;
@@ -1548,6 +1575,7 @@ class SQLite extends SQL
      * Override getSpatialGeometryFromText to return placeholder unchanged for SQLite
      * SQLite does not support ST_GeomFromText, so we return the raw placeholder
      */
+    #[\Override]
     protected function getSpatialGeometryFromText(string $wktPlaceholder, ?int $srid = null): string
     {
         return $wktPlaceholder;
@@ -1589,6 +1617,7 @@ class SQLite extends SQL
     /**
      * Get SQL table
      */
+    #[\Override]
     protected function getTable(string $name): string
     {
         return $this->quote("{$this->getNamespace()}_{$this->filter($name)}");
@@ -1597,6 +1626,7 @@ class SQLite extends SQL
     /**
      * SQLite doesn't use database-qualified table names.
      */
+    #[\Override]
     protected function getTableRaw(string $name): string
     {
         return $this->getNamespace().'_'.$this->filter($name);
@@ -1698,6 +1728,7 @@ class SQLite extends SQL
         );
     }
 
+    #[\Override]
     protected function processException(PDOException $e): Exception
     {
         // Table/index already exists (SQLITE_ERROR with "already exists" message)
@@ -1811,6 +1842,7 @@ class SQLite extends SQL
         parent::bindOperatorParameters($statement, $operator, $bindIndex);
     }
 
+    #[\Override]
     protected function getOperatorBuilderExpression(string $column, Operator $operator): Expression
     {
         if ($operator->getMethod() === OperatorType::ArrayFilter) {
@@ -1879,6 +1911,7 @@ class SQLite extends SQL
      * This is inherent to SQLite's JSON implementation and affects: ARRAY_APPEND, ARRAY_PREPEND,
      * ARRAY_UNIQUE, ARRAY_INTERSECT, ARRAY_DIFF, ARRAY_INSERT, and ARRAY_REMOVE.
      */
+    #[\Override]
     protected function getOperatorSql(string $column, Operator $operator, int &$bindIndex): ?string
     {
         $quotedColumn = $this->quote($column);
@@ -2218,6 +2251,7 @@ class SQLite extends SQL
         }
     }
 
+    #[\Override]
     protected function getConflictTenantExpression(string $column): string
     {
         $quoted = $this->quote($this->filter($column));
@@ -2225,6 +2259,7 @@ class SQLite extends SQL
         return 'CASE WHEN '.Storage::TENANT.' = excluded.'.Storage::TENANT." THEN excluded.{$quoted} ELSE {$quoted} END";
     }
 
+    #[\Override]
     protected function getConflictIncrementExpression(string $column): string
     {
         $quoted = $this->quote($this->filter($column));
@@ -2232,6 +2267,7 @@ class SQLite extends SQL
         return "{$quoted} + excluded.{$quoted}";
     }
 
+    #[\Override]
     protected function getConflictTenantIncrementExpression(string $column): string
     {
         $quoted = $this->quote($this->filter($column));
@@ -2253,6 +2289,7 @@ class SQLite extends SQL
      *
      * @throws DatabaseException
      */
+    #[\Override]
     protected function executeUpsertBatch(
         string $name,
         array $changes,
@@ -2441,6 +2478,7 @@ class SQLite extends SQL
      *
      * @param list<Attribute> $attributes
      */
+    #[\Override]
     public function createAttributes(string $collection, array $attributes): bool
     {
         // The flag advertises atomic batch creation. SQLite has no
@@ -2471,6 +2509,7 @@ class SQLite extends SQL
      * driver runs the first statement and silently drops the rest, so
      * re-implement the dispatch with one statement per call.
      */
+    #[\Override]
     public function createRelationship(string $collection, Relationship $relationship): bool
     {
         $table = $this->getTable($this->filter($collection));
@@ -2498,6 +2537,7 @@ class SQLite extends SQL
         return true;
     }
 
+    #[\Override]
     public function updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, RelationshipUpdate $update): bool
     {
         $table = $this->getTable($this->filter($collection));
@@ -2556,6 +2596,7 @@ class SQLite extends SQL
         return true;
     }
 
+    #[\Override]
     public function deleteRelationship(string $collection, Relationship $relationship, RelationshipSide $side): bool
     {
         $table = $this->getTable($this->filter($collection));
@@ -2608,6 +2649,7 @@ class SQLite extends SQL
     /**
      * @return list<SchemaColumn>
      */
+    #[\Override]
     public function getSchemaAttributes(string $collection): array
     {
         $table = "{$this->getNamespace()}_{$this->filter($collection)}";
@@ -2638,6 +2680,7 @@ class SQLite extends SQL
     /**
      * @return array<string>
      */
+    #[\Override]
     protected function getColumnNames(string $collection): array
     {
         return \array_map(
@@ -2653,6 +2696,7 @@ class SQLite extends SQL
      *
      * @return list<SchemaIndex>
      */
+    #[\Override]
     public function getSchemaIndexes(string $collection): array
     {
         $filtered = $this->filter($collection);

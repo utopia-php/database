@@ -36,9 +36,6 @@ class Datetime extends Validator
         }
     }
 
-    /**
-     * Validator Description.
-     */
     #[\Override]
     public function getDescription(): string
     {

@@ -19,9 +19,6 @@ class Key extends Validator
         return $this->message;
     }
 
-    /**
-     * Expression constructor
-     */
     public function __construct(
         protected readonly bool $allowInternal = false,
         protected readonly int $maxLength = Database::MAX_UID_DEFAULT_LENGTH,
@@ -40,7 +37,6 @@ class Key extends Validator
             return false;
         }
 
-        // No leading special characters
         $leading = \mb_substr($value, 0, 1);
         if ($leading === '_' || $leading === '.' || $leading === '-') {
             return false;
@@ -55,7 +51,6 @@ class Key extends Validator
         if ($isInternal) {
             $allowList = [Document::ID, Document::CREATED_AT, Document::UPDATED_AT];
 
-            // If exact match, no need for any further checks
             return \in_array($value, $allowList);
         }
 
@@ -64,7 +59,6 @@ class Key extends Validator
             return false;
         }
 
-        // At most maxLength chars
         if (\mb_strlen($value) > $this->maxLength) {
             return false;
         }

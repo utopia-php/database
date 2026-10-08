@@ -160,10 +160,6 @@ class Authorization extends Validator
     }
 
     /**
-     * Skip Authorization
-     *
-     * Skips authorization for the code to be executed inside the callback
-     *
      * @template T
      *
      * @param  callable(): T  $callback

@@ -46,11 +46,6 @@ class Having extends Base
      */
     private array $groupBy = [];
 
-    /**
-     * Get the method type this validator handles.
-     *
-     * @return string
-     */
     #[\Override]
     public function getMethodType(): string
     {

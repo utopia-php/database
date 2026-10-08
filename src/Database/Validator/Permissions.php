@@ -24,8 +24,6 @@ class Permissions extends Roles
     protected int $length;
 
     /**
-     * Permissions constructor.
-     *
      * @param  int  $length  maximum amount of permissions. 0 means unlimited.
      * @param  array<PermissionType>  $allowed  allowed permissions. Defaults to all available.
      */

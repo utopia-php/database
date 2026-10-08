@@ -62,8 +62,6 @@ class Structure extends Validator
     private readonly bool $supportUnsignedBigInt;
 
     /**
-     * Structure constructor.
-     *
      * @param  list<string>  $storedAttributes  Attributes whose values are the stored ones, unchanged by the
      *                                         write: they are not validated again, as the rules may have
      *                                         tightened since those values were stored.
@@ -80,9 +78,6 @@ class Structure extends Validator
     }
 
     /**
-     * Add a new Validator
-     * Stores a callback and required params to create Validator
-     *
      * @param  Closure(array<string, mixed>): Validator  $callback
      * @param  ColumnType  $type  Primitive data type for validation
      */
@@ -94,9 +89,6 @@ class Structure extends Validator
         ];
     }
 
-    /**
-     * Check if validator has been added
-     */
     public static function hasFormat(string $name, ColumnType $type): bool
     {
         if (isset(self::$formats[$name]) && self::$formats[$name]['type'] === $type->value) {
@@ -107,8 +99,6 @@ class Structure extends Validator
     }
 
     /**
-     * Get a Format array to create Validator
-     *
      * @return array{callback: callable, type: string}
      *
      * @throws Exception
@@ -126,9 +116,6 @@ class Structure extends Validator
         throw new DatabaseException('Unknown format validator "'.$name.'"');
     }
 
-    /**
-     * Remove a Validator
-     */
     public static function removeFormat(string $name): void
     {
         unset(self::$formats[$name]);

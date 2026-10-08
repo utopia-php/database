@@ -11,7 +11,6 @@ use Utopia\Validator;
  */
 class Roles extends Validator
 {
-    // Roles
     public const string ROLE_ANY = 'any';
 
     public const string ROLE_GUESTS = 'guests';
@@ -120,7 +119,6 @@ class Roles extends Validator
         ],
     ];
 
-    // Dimensions
     public const string DIMENSION_VERIFIED = 'verified';
 
     public const string DIMENSION_UNVERIFIED = 'unverified';
@@ -131,8 +129,6 @@ class Roles extends Validator
     ];
 
     /**
-     * Roles constructor.
-     *
      * @param  int  $length  maximum amount of role. 0 means unlimited.
      * @param  array<string>  $allowed  allowed roles. Defaults to all available.
      */
@@ -248,39 +244,33 @@ class Roles extends Validator
             return false;
         }
 
-        // Process identifier configuration
         $allowed = $config['identifier']['allowed'];
         $required = $config['identifier']['required'];
 
-        // Not allowed and has an identifier
         if (! $allowed && ! empty($identifier)) {
             $this->message = 'Role "'.$role.'"'.' can not have an ID value.';
 
             return false;
         }
 
-        // Required and has no identifier
         if ($allowed && $required && empty($identifier)) {
             $this->message = 'Role "'.$role.'"'.' must have an ID value.';
 
             return false;
         }
 
-        // Allowed and has an invalid identifier
         if ($allowed && ! empty($identifier) && ! $identifierValidator->isValid($identifier)) {
             $this->message = 'Role "'.$role.'"'.' identifier value is invalid: '.$identifierValidator->getDescription();
 
             return false;
         }
 
-        // Process dimension configuration
         /** @var bool $allowed */
         $allowed = $config['dimension']['allowed'];
         /** @var bool $required */
         $required = $config['dimension']['required'];
         $options = $config['dimension']['options'] ?? [$dimension];
 
-        // Not allowed and has a dimension
         if (! $allowed && ! empty($dimension)) {
             $this->message = 'Role "'.$role.'"'.' can not have a dimension value.';
 
@@ -295,13 +285,11 @@ class Roles extends Validator
         }
 
         if ($allowed && ! empty($dimension)) {
-            // Allowed and dimension is not an allowed option
             if (! \in_array($dimension, $options)) {
                 $this->message = 'Role "'.$role.'"'.' dimension value is invalid. Must be one of: '.\implode(', ', $options).'.';
 
                 return false;
             }
-            // Allowed and dimension is not a valid key
             if (! $dimensionValidator->isValid($dimension)) {
                 $this->message = 'Role "'.$role.'"'.' dimension value is invalid: '.$dimensionValidator->getDescription();
 

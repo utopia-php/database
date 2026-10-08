@@ -10,8 +10,6 @@ use Utopia\Database\Database;
 class Label extends Key
 {
     /**
-     * Create a new label validator.
-     *
      * @param bool $allowInternal Whether to allow internal attribute names starting with $
      * @param int $maxLength Maximum allowed string length
      */

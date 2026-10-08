@@ -12,8 +12,6 @@ class Vector extends Validator
     protected int $size;
 
     /**
-     * Vector constructor.
-     *
      * @param  int  $size  The size (number of elements) the vector should have
      */
     public function __construct(int $size)
@@ -53,7 +51,6 @@ class Vector extends Validator
             return false;
         }
 
-        // Check that all values are int or float (not strings, booleans, null, arrays, objects)
         foreach ($value as $component) {
             if (! \is_int($component) && ! \is_float($component)) {
                 return false;

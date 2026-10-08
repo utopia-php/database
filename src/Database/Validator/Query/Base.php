@@ -91,8 +91,5 @@ abstract class Base extends Validator
         return $column !== '' && \preg_match('/^[A-Za-z_$][A-Za-z0-9_$]*$/', $column) === 1;
     }
 
-    /**
-     * Returns what type of query this Validator is for
-     */
     abstract public function getMethodType(): string;
 }

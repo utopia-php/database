@@ -84,10 +84,6 @@ class Select extends Base
     }
 
     /**
-     * Returns true if method is TYPE_SELECT selections are valid
-     *
-     * Otherwise, returns false
-     *
      * @param  mixed  $value
      */
     #[\Override]
@@ -132,7 +128,6 @@ class Select extends Base
             $attribute = $attributeValue;
             $dot = \strpos($attribute, '.');
             if ($dot !== false) {
-                // special symbols with `dots`
                 if (isset($this->schema[$attribute])) {
                     continue;
                 }
@@ -166,7 +161,6 @@ class Select extends Base
                 $attribute = $alias;
             }
 
-            // Skip internal attributes
             if (\in_array($attribute, $internalKeys)) {
                 continue;
             }
@@ -253,11 +247,6 @@ class Select extends Base
         );
     }
 
-    /**
-     * Get the method type this validator handles.
-     *
-     * @return string
-     */
     #[\Override]
     public function getMethodType(): string
     {

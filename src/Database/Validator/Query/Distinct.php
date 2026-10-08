@@ -7,11 +7,6 @@ namespace Utopia\Database\Validator\Query;
  */
 class Distinct extends Base
 {
-    /**
-     * Get the method type this validator handles.
-     *
-     * @return string
-     */
     #[\Override]
     public function getMethodType(): string
     {

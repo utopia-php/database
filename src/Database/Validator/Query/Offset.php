@@ -15,8 +15,6 @@ class Offset extends Base
     protected int $maxOffset;
 
     /**
-     * Create a new offset query validator.
-     *
      * @param int $maxOffset Maximum allowed offset value
      */
     public function __construct(int $maxOffset = PHP_INT_MAX)
@@ -64,11 +62,6 @@ class Offset extends Base
         return true;
     }
 
-    /**
-     * Get the method type this validator handles.
-     *
-     * @return string
-     */
     #[\Override]
     public function getMethodType(): string
     {

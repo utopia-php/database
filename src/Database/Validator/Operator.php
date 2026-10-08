@@ -30,8 +30,6 @@ class Operator extends Validator
     protected ?Document $currentDocument = null;
 
     /**
-     * Constructor
-     *
      * @param  Document|null  $currentDocument  Current document for runtime validation (e.g., array bounds checking)
      */
     public function __construct(
@@ -214,7 +212,6 @@ class Operator extends Validator
         $method = $value->getMethod();
         $attribute = $value->getAttribute();
 
-        // Check if attribute exists in collection
         $attributeConfig = $this->attributes[$attribute] ?? null;
         if ($attributeConfig === null) {
             $this->message = "Attribute '{$attribute}' does not exist in collection";
@@ -222,7 +219,6 @@ class Operator extends Validator
             return false;
         }
 
-        // Validate operator against attribute type
         return $this->validateOperatorForAttribute($value, $attributeConfig);
     }
 
@@ -267,7 +263,6 @@ class Operator extends Validator
             case OperatorType::Divide:
             case OperatorType::Modulo:
             case OperatorType::Power:
-                // Numeric operations only work on numeric types
                 if (! $attribute->isNumeric()) {
                     $this->message = "Cannot apply {$methodName} operator to non-numeric field '{$operator->getAttribute()}'";
 
@@ -282,14 +277,12 @@ class Operator extends Validator
                     return false;
                 }
 
-                // Validate the numeric value and optional max/min
                 if (! isset($values[0]) || ! $this->isNumericValueInBounds($values[0], $attribute)) {
                     $this->message = "Cannot apply {$methodName} operator: value must be numeric, got ".gettype($operator->getValue());
 
                     return false;
                 }
 
-                // Special validation for divide/modulo by zero
                 $integerType = $attribute->isInteger();
                 $operatorValue = $integerType
                     ? $this->getIntegerValue($values[0])
@@ -333,7 +326,6 @@ class Operator extends Validator
                 break;
             case OperatorType::ArrayAppend:
             case OperatorType::ArrayPrepend:
-                // For relationships, check if it's a "many" side
                 if ($type === ColumnType::Relationship) {
                     if (! $this->isRelationshipArray($attribute)) {
                         $this->message = "Cannot apply {$methodName} operator to single-value relationship '{$operator->getAttribute()}'";
@@ -431,7 +423,6 @@ class Operator extends Validator
                     }
                 }
 
-                // Runtime validation: Check if index is within bounds
                 if ($this->currentDocument !== null) {
                     $currentArray = $this->currentDocument->getAttribute($operator->getAttribute());
                     if (\is_array($currentArray)) {
@@ -587,7 +578,6 @@ class Operator extends Validator
 
                 break;
             case OperatorType::StringReplace:
-                // Replace only works on string types
                 if (! \in_array($type, [ColumnType::String, ColumnType::Varchar, ColumnType::Text, ColumnType::MediumText, ColumnType::LongText])) {
                     $this->message = "Cannot apply {$methodName} operator to non-string field '{$operator->getAttribute()}'";
 
@@ -602,7 +592,6 @@ class Operator extends Validator
 
                 break;
             case OperatorType::Toggle:
-                // Toggle only works on boolean types
                 if ($type !== ColumnType::Boolean) {
                     $this->message = "Cannot apply {$methodName} operator to non-boolean field '{$operator->getAttribute()}'";
 

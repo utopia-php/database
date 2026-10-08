@@ -192,8 +192,8 @@ final class UpsertTenancyTest extends TestCase
     {
         $table = $this->table(Storage::permissionsTable(self::COLLECTION));
         $statement = $this->pdo->query(
-            'SELECT '.Storage::PERM_DOCUMENT.', '.Storage::PERM_TYPE.', '.Storage::TENANT
-            ." FROM {$table} ORDER BY ".Storage::PERM_DOCUMENT.', '.Storage::PERM_TYPE,
+            'SELECT '.Storage::PERMISSIONS_DOCUMENT.', '.Storage::PERMISSIONS_TYPE.', '.Storage::TENANT
+            ." FROM {$table} ORDER BY ".Storage::PERMISSIONS_DOCUMENT.', '.Storage::PERMISSIONS_TYPE,
         );
         $this->assertNotFalse($statement);
 

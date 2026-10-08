@@ -3417,9 +3417,9 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             permissionsTable: fn (string $table) => $this->getTableRaw(Storage::permissionsTable($collection)),
             type: $type,
             documentColumn: $documentColumn,
-            permissionDocumentColumn: Storage::PERM_DOCUMENT,
-            permissionRoleColumn: Storage::PERM_PERMISSION,
-            permissionTypeColumn: Storage::PERM_TYPE,
+            permissionDocumentColumn: Storage::PERMISSIONS_DOCUMENT,
+            permissionRoleColumn: Storage::PERMISSIONS_PERMISSION,
+            permissionTypeColumn: Storage::PERMISSIONS_TYPE,
             subqueryFilter: $this->sharedTables
                 ? new Tenant\Filter(
                     $this->currentTenant(),

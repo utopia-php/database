@@ -32,8 +32,8 @@ final class WriteContextTestRecorder extends Interceptor
         }
 
         $table = Storage::permissionsTable($collection);
-        $scoped = $context->builder($table)->sortAsc(Storage::PERM_DOCUMENT)->build();
-        $raw = $context->rawBuilder()->from($context->rawTable($table))->sortAsc(Storage::PERM_DOCUMENT)->build();
+        $scoped = $context->builder($table)->sortAsc(Storage::PERMISSIONS_DOCUMENT)->build();
+        $raw = $context->rawBuilder()->from($context->rawTable($table))->sortAsc(Storage::PERMISSIONS_DOCUMENT)->build();
 
         $this->permissionRows = [
             'scoped' => $this->rows($context->fetch($scoped, Event::PermissionsRead)),
@@ -54,8 +54,8 @@ final class WriteContextTestRecorder extends Interceptor
     private function rows(array $rows): array
     {
         return \array_map(static function (array $row): array {
-            $document = $row[Storage::PERM_DOCUMENT] ?? null;
-            $permission = $row[Storage::PERM_PERMISSION] ?? null;
+            $document = $row[Storage::PERMISSIONS_DOCUMENT] ?? null;
+            $permission = $row[Storage::PERMISSIONS_PERMISSION] ?? null;
             $tenant = $row[Storage::TENANT] ?? null;
 
             return [

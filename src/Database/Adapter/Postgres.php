@@ -281,9 +281,9 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         $permissionsTable = $schema->table($permissionsTableRaw);
         $permissionsTable->id(Storage::SEQUENCE);
         $permissionsTable->integer(Storage::TENANT)->nullable()->default(null);
-        $permissionsTable->string(Storage::PERM_TYPE, 12);
-        $permissionsTable->string(Storage::PERM_PERMISSION, 255);
-        $permissionsTable->string(Storage::PERM_DOCUMENT, 255);
+        $permissionsTable->string(Storage::PERMISSIONS_TYPE, 12);
+        $permissionsTable->string(Storage::PERMISSIONS_PERMISSION, 255);
+        $permissionsTable->string(Storage::PERMISSIONS_DOCUMENT, 255);
         $permissionsResult = $permissionsTable->create();
 
         $permissionsIndexStatements = [];
@@ -291,13 +291,13 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         if ($this->sharedTables) {
             $uniquePermissionIndex = $this->getShortKey("{$namespace}_{$this->currentTenant()}_{$id}_ukey");
             $permissionIndex = $this->getShortKey("{$namespace}_{$this->currentTenant()}_{$id}_permission");
-            $permissionsIndexStatements[] = $schema->createIndex($permissionsTableRaw, $uniquePermissionIndex, [Storage::TENANT, Storage::PERM_DOCUMENT, Storage::PERM_TYPE, Storage::PERM_PERMISSION], unique: true, method: 'btree')->query;
-            $permissionsIndexStatements[] = $schema->createIndex($permissionsTableRaw, $permissionIndex, [Storage::TENANT, Storage::PERM_PERMISSION, Storage::PERM_TYPE], method: 'btree')->query;
+            $permissionsIndexStatements[] = $schema->createIndex($permissionsTableRaw, $uniquePermissionIndex, [Storage::TENANT, Storage::PERMISSIONS_DOCUMENT, Storage::PERMISSIONS_TYPE, Storage::PERMISSIONS_PERMISSION], unique: true, method: 'btree')->query;
+            $permissionsIndexStatements[] = $schema->createIndex($permissionsTableRaw, $permissionIndex, [Storage::TENANT, Storage::PERMISSIONS_PERMISSION, Storage::PERMISSIONS_TYPE], method: 'btree')->query;
         } else {
             $uniquePermissionIndex = $this->getShortKey("{$namespace}_{$id}_ukey");
             $permissionIndex = $this->getShortKey("{$namespace}_{$id}_permission");
-            $permissionsIndexStatements[] = $schema->createIndex($permissionsTableRaw, $uniquePermissionIndex, [Storage::PERM_DOCUMENT, Storage::PERM_TYPE, Storage::PERM_PERMISSION], unique: true, method: 'btree', collations: [Storage::PERM_DOCUMENT => 'utf8_ci_ai'])->query;
-            $permissionsIndexStatements[] = $schema->createIndex($permissionsTableRaw, $permissionIndex, [Storage::PERM_PERMISSION, Storage::PERM_TYPE], method: 'btree')->query;
+            $permissionsIndexStatements[] = $schema->createIndex($permissionsTableRaw, $uniquePermissionIndex, [Storage::PERMISSIONS_DOCUMENT, Storage::PERMISSIONS_TYPE, Storage::PERMISSIONS_PERMISSION], unique: true, method: 'btree', collations: [Storage::PERMISSIONS_DOCUMENT => 'utf8_ci_ai'])->query;
+            $permissionsIndexStatements[] = $schema->createIndex($permissionsTableRaw, $permissionIndex, [Storage::PERMISSIONS_PERMISSION, Storage::PERMISSIONS_TYPE], method: 'btree')->query;
         }
 
         $permissionsSql = $permissionsResult->query.'; '.implode('; ', $permissionsIndexStatements);

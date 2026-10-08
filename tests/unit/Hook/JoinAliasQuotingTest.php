@@ -179,9 +179,9 @@ final class JoinAliasQuotingTest extends TestCase
             roles: ['any'],
             permissionsTable: static fn (string $table): string => 'database.namespace_books_perms',
             documentColumn: $alias.'.'.Storage::UID,
-            permissionDocumentColumn: Storage::PERM_DOCUMENT,
-            permissionRoleColumn: Storage::PERM_PERMISSION,
-            permissionTypeColumn: Storage::PERM_TYPE,
+            permissionDocumentColumn: Storage::PERMISSIONS_DOCUMENT,
+            permissionRoleColumn: Storage::PERMISSIONS_PERMISSION,
+            permissionTypeColumn: Storage::PERMISSIONS_TYPE,
             quoteCharacter: $quote,
         );
     }

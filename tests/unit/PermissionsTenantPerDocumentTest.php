@@ -226,7 +226,7 @@ final class PermissionsTenantPerDocumentTest extends TestCase
         $database->upsertDocuments(self::COLLECTION, [$this->readers([self::ALICE])->setAttribute('$id', self::DOCUMENT)]);
 
         $statement = $pdo->query(
-            'SELECT '.Storage::PERM_PERMISSION.' FROM `permissions_not_shared_'.Storage::permissionsTable(self::COLLECTION).'`',
+            'SELECT '.Storage::PERMISSIONS_PERMISSION.' FROM `permissions_not_shared_'.Storage::permissionsTable(self::COLLECTION).'`',
         );
         $this->assertNotFalse($statement);
         $this->assertSame([Role::user(self::ALICE)->toString()], $statement->fetchAll(PDO::FETCH_COLUMN));
@@ -454,7 +454,7 @@ final class PermissionsTenantPerDocumentTest extends TestCase
      */
     private function grants(): array
     {
-        $columns = [Storage::TENANT, Storage::PERM_DOCUMENT, Storage::PERM_TYPE, Storage::PERM_PERMISSION];
+        $columns = [Storage::TENANT, Storage::PERMISSIONS_DOCUMENT, Storage::PERMISSIONS_TYPE, Storage::PERMISSIONS_PERMISSION];
         $statement = $this->pdo->query(
             'SELECT '.\implode(', ', $columns)
             .' FROM `permissions_tenant_per_document_'.Storage::permissionsTable(self::COLLECTION).'`'

@@ -269,17 +269,17 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
 
         $permissionsTable = $schema->table($this->getTableRaw(Storage::permissionsTable($id)));
         $permissionsTable->id(Storage::SEQUENCE);
-        $permissionsTable->string(Storage::PERM_TYPE, 12);
-        $permissionsTable->string(Storage::PERM_PERMISSION, 255);
-        $permissionsTable->string(Storage::PERM_DOCUMENT, 255);
+        $permissionsTable->string(Storage::PERMISSIONS_TYPE, 12);
+        $permissionsTable->string(Storage::PERMISSIONS_PERMISSION, 255);
+        $permissionsTable->string(Storage::PERMISSIONS_DOCUMENT, 255);
 
         if ($sharedTables) {
             $permissionsTable->integer(Storage::TENANT)->unsigned()->nullable()->default(null);
-            $permissionsTable->uniqueIndex([Storage::PERM_DOCUMENT, Storage::TENANT, Storage::PERM_TYPE, Storage::PERM_PERMISSION], Storage::INDEX_1);
-            $permissionsTable->index([Storage::TENANT, Storage::PERM_PERMISSION, Storage::PERM_TYPE], Storage::PERM_PERMISSION);
+            $permissionsTable->uniqueIndex([Storage::PERMISSIONS_DOCUMENT, Storage::TENANT, Storage::PERMISSIONS_TYPE, Storage::PERMISSIONS_PERMISSION], Storage::INDEX_1);
+            $permissionsTable->index([Storage::TENANT, Storage::PERMISSIONS_PERMISSION, Storage::PERMISSIONS_TYPE], Storage::PERMISSIONS_PERMISSION);
         } else {
-            $permissionsTable->uniqueIndex([Storage::PERM_DOCUMENT, Storage::PERM_TYPE, Storage::PERM_PERMISSION], Storage::INDEX_1);
-            $permissionsTable->index([Storage::PERM_PERMISSION, Storage::PERM_TYPE], Storage::PERM_PERMISSION);
+            $permissionsTable->uniqueIndex([Storage::PERMISSIONS_DOCUMENT, Storage::PERMISSIONS_TYPE, Storage::PERMISSIONS_PERMISSION], Storage::INDEX_1);
+            $permissionsTable->index([Storage::PERMISSIONS_PERMISSION, Storage::PERMISSIONS_TYPE], Storage::PERMISSIONS_PERMISSION);
         }
 
         $permissionsResult = $permissionsTable->create();
@@ -689,7 +689,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
 
                 // Clean up orphaned permissions from a previous failed delete, then retry
                 $cleanupBuilder = $this->newBuilder(Storage::permissionsTable($name));
-                $cleanupBuilder->filter([BaseQuery::equal(Storage::PERM_DOCUMENT, [$document->getId()])]);
+                $cleanupBuilder->filter([BaseQuery::equal(Storage::PERMISSIONS_DOCUMENT, [$document->getId()])]);
                 $cleanupResult = $cleanupBuilder->delete();
                 $cleanupStmt = $this->executeResult($cleanupResult, Event::PermissionsDelete);
                 $this->execute($cleanupStmt);

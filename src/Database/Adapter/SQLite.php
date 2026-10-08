@@ -521,9 +521,9 @@ class SQLite extends SQL
 			CREATE TABLE {$this->getTable(Storage::permissionsTable($id))} (
 				{$this->quote(Storage::SEQUENCE)} INTEGER PRIMARY KEY AUTOINCREMENT,
 				{$tenantQuery}
-				{$this->quote(Storage::PERM_TYPE)} VARCHAR(12) NOT NULL,
-				{$this->quote(Storage::PERM_PERMISSION)} VARCHAR(255) NOT NULL,
-				{$this->quote(Storage::PERM_DOCUMENT)} VARCHAR(255) NOT NULL
+				{$this->quote(Storage::PERMISSIONS_TYPE)} VARCHAR(12) NOT NULL,
+				{$this->quote(Storage::PERMISSIONS_PERMISSION)} VARCHAR(255) NOT NULL,
+				{$this->quote(Storage::PERMISSIONS_DOCUMENT)} VARCHAR(255) NOT NULL
 			)
 		";
 
@@ -539,8 +539,8 @@ class SQLite extends SQL
             $this->createIndex($id, Index::key(key: Storage::INDEX_CREATED_AT, attributes: [Storage::CREATED_AT]), event: Event::CollectionCreate);
             $this->createIndex($id, Index::key(key: Storage::INDEX_UPDATED_AT, attributes: [Storage::UPDATED_AT]), event: Event::CollectionCreate);
 
-            $this->createIndex(Storage::permissionsTable($id), Index::unique(key: self::INDEX_1, attributes: [Storage::PERM_DOCUMENT, Storage::PERM_TYPE, Storage::PERM_PERMISSION]), event: Event::CollectionCreate);
-            $this->createIndex(Storage::permissionsTable($id), Index::key(key: self::INDEX_2, attributes: [Storage::PERM_PERMISSION, Storage::PERM_TYPE]), event: Event::CollectionCreate);
+            $this->createIndex(Storage::permissionsTable($id), Index::unique(key: self::INDEX_1, attributes: [Storage::PERMISSIONS_DOCUMENT, Storage::PERMISSIONS_TYPE, Storage::PERMISSIONS_PERMISSION]), event: Event::CollectionCreate);
+            $this->createIndex(Storage::permissionsTable($id), Index::key(key: self::INDEX_2, attributes: [Storage::PERMISSIONS_PERMISSION, Storage::PERMISSIONS_TYPE]), event: Event::CollectionCreate);
 
             if ($this->sharedTables) {
                 $this->createIndex($id, Index::key(key: Storage::INDEX_TENANT_ID, attributes: [Storage::SEQUENCE]), event: Event::CollectionCreate);

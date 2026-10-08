@@ -116,8 +116,8 @@ trait PermissionTests
 
         $stored = $authorization->skip(static function () use ($adapter, $collection): array {
             $statement = $adapter->builder(Storage::permissionsTable($collection))
-                ->select([Storage::PERM_TYPE, Storage::PERM_PERMISSION])
-                ->filter([Query::equal(Storage::PERM_DOCUMENT, ['upserted'])])
+                ->select([Storage::PERMISSIONS_TYPE, Storage::PERMISSIONS_PERMISSION])
+                ->filter([Query::equal(Storage::PERMISSIONS_DOCUMENT, ['upserted'])])
                 ->build();
 
             return \array_map(
@@ -127,7 +127,7 @@ trait PermissionTests
         });
 
         $this->assertSame(
-            [[Storage::PERM_TYPE => PermissionType::Read->value, Storage::PERM_PERMISSION => $reader->toString()]],
+            [[Storage::PERMISSIONS_TYPE => PermissionType::Read->value, Storage::PERMISSIONS_PERMISSION => $reader->toString()]],
             $stored,
             'An upsert must store its permission rows under the tenant, where the permission hook and filter look for them',
         );
@@ -386,16 +386,16 @@ trait PermissionTests
         $grants = [];
         foreach ([5, 6] as $tenant) {
             $statement = $database->withTenant($tenant, fn () => $adapter->builder(Storage::permissionsTable('notes'))
-                ->select([Storage::PERM_PERMISSION])
+                ->select([Storage::PERMISSIONS_PERMISSION])
                 ->filter([
-                    Query::equal(Storage::PERM_DOCUMENT, ['note']),
-                    Query::equal(Storage::PERM_TYPE, [PermissionType::Read->value]),
+                    Query::equal(Storage::PERMISSIONS_DOCUMENT, ['note']),
+                    Query::equal(Storage::PERMISSIONS_TYPE, [PermissionType::Read->value]),
                 ])
                 ->build());
 
             $permissions = [];
             foreach ($adapter->rawQuery($statement->query, $statement->bindings) as $row) {
-                $permission = $row->getAttribute(Storage::PERM_PERMISSION);
+                $permission = $row->getAttribute(Storage::PERMISSIONS_PERMISSION);
                 $this->assertIsString($permission);
                 $permissions[] = $permission;
             }

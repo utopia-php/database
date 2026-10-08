@@ -19,7 +19,7 @@ use Utopia\Query\Query;
  */
 class Permissions extends Interceptor
 {
-    private const array PERM_TYPES = [
+    private const array PERMISSION_TYPES = [
         PermissionType::Create,
         PermissionType::Read,
         PermissionType::Update,
@@ -80,7 +80,7 @@ class Permissions extends Interceptor
         $removals = [];
         /** @var array<string, list<string>> $additions */
         $additions = [];
-        foreach (self::PERM_TYPES as $type) {
+        foreach (self::PERMISSION_TYPES as $type) {
             $removed = \array_values(\array_diff($permissions[$type->value], $document->getPermissionsByType($type)));
             if (! empty($removed)) {
                 $removals[$type->value] = $removed;
@@ -125,7 +125,7 @@ class Permissions extends Interceptor
 
         [$permissionsMap, $storedIds] = $this->readCurrentPermissionsBatch($collection, $eligible, $context);
         $updatesByType = [];
-        foreach (self::PERM_TYPES as $type) {
+        foreach (self::PERMISSION_TYPES as $type) {
             $updatesByType[$type->value] = $updates->getPermissionsByType($type);
         }
 
@@ -133,25 +133,25 @@ class Permissions extends Interceptor
             $permissions = $this->currentPermissions($permissionsMap, $document->getId());
             $permissionDocumentId = $this->permissionDocumentId($document->getId(), $storedIds);
 
-            foreach (self::PERM_TYPES as $type) {
+            foreach (self::PERMISSION_TYPES as $type) {
                 $diff = \array_diff($permissions[$type->value], $updatesByType[$type->value]);
                 if (! empty($diff)) {
                     $removeConditions[] = Query::and([
-                        Query::equal(Storage::PERM_DOCUMENT, [$permissionDocumentId]),
-                        Query::equal(Storage::PERM_TYPE, [$type->value]),
-                        Query::equal(Storage::PERM_PERMISSION, \array_values($diff)),
+                        Query::equal(Storage::PERMISSIONS_DOCUMENT, [$permissionDocumentId]),
+                        Query::equal(Storage::PERMISSIONS_TYPE, [$type->value]),
+                        Query::equal(Storage::PERMISSIONS_PERMISSION, \array_values($diff)),
                     ]);
                 }
             }
 
-            foreach (self::PERM_TYPES as $type) {
+            foreach (self::PERMISSION_TYPES as $type) {
                 $diff = $this->uniqueAdditions($updatesByType[$type->value], $permissions[$type->value]);
                 if (! empty($diff)) {
                     foreach ($diff as $permission) {
                         $row = $context->decorateRow([
-                            Storage::PERM_DOCUMENT => $permissionDocumentId,
-                            Storage::PERM_TYPE => $type->value,
-                            Storage::PERM_PERMISSION => $permission,
+                            Storage::PERMISSIONS_DOCUMENT => $permissionDocumentId,
+                            Storage::PERMISSIONS_TYPE => $type->value,
+                            Storage::PERMISSIONS_PERMISSION => $permission,
                         ], $document);
                         $addBuilder->set($row);
                         $hasAdditions = true;
@@ -188,29 +188,29 @@ class Permissions extends Interceptor
             $tenantScope = $this->tenantScope($document, $context);
 
             $current = [];
-            foreach (self::PERM_TYPES as $type) {
+            foreach (self::PERMISSION_TYPES as $type) {
                 $current[$type->value] = $old->getPermissionsByType($type);
             }
 
-            foreach (self::PERM_TYPES as $type) {
+            foreach (self::PERMISSION_TYPES as $type) {
                 $toRemove = \array_diff($current[$type->value], $document->getPermissionsByType($type));
                 if (! empty($toRemove)) {
                     $removeConditions[] = Query::and([
-                        Query::equal(Storage::PERM_DOCUMENT, [$document->getId()]),
+                        Query::equal(Storage::PERMISSIONS_DOCUMENT, [$document->getId()]),
                         ...$tenantScope,
-                        Query::equal(Storage::PERM_TYPE, [$type->value]),
-                        Query::equal(Storage::PERM_PERMISSION, \array_values($toRemove)),
+                        Query::equal(Storage::PERMISSIONS_TYPE, [$type->value]),
+                        Query::equal(Storage::PERMISSIONS_PERMISSION, \array_values($toRemove)),
                     ]);
                 }
             }
 
-            foreach (self::PERM_TYPES as $type) {
+            foreach (self::PERMISSION_TYPES as $type) {
                 $toAdd = $this->uniqueAdditions($document->getPermissionsByType($type), $current[$type->value]);
                 foreach ($toAdd as $permission) {
                     $row = $context->decorateRow([
-                        Storage::PERM_DOCUMENT => $document->getId(),
-                        Storage::PERM_TYPE => $type->value,
-                        Storage::PERM_PERMISSION => $permission,
+                        Storage::PERMISSIONS_DOCUMENT => $document->getId(),
+                        Storage::PERMISSIONS_TYPE => $type->value,
+                        Storage::PERMISSIONS_PERMISSION => $permission,
                     ], $document);
                     $addBuilder->set($row);
                     $hasAdditions = true;
@@ -261,7 +261,7 @@ class Permissions extends Interceptor
         }
 
         $permissionsBuilder = $context->builder(Storage::permissionsTable($collection));
-        $permissionsBuilder->filter([Query::equal(Storage::PERM_DOCUMENT, $documentIds)]);
+        $permissionsBuilder->filter([Query::equal(Storage::PERMISSIONS_DOCUMENT, $documentIds)]);
 
         if (! $context->run($permissionsBuilder->delete(), Event::PermissionsDelete)) {
             throw new DatabaseException('Failed to delete permissions');
@@ -287,8 +287,8 @@ class Permissions extends Interceptor
         }
 
         $readBuilder = $context->builder(Storage::permissionsTable($collection));
-        $readBuilder->select([Storage::PERM_DOCUMENT, Storage::PERM_TYPE, Storage::PERM_PERMISSION]);
-        $readBuilder->filter([Query::equal(Storage::PERM_DOCUMENT, $documentIds)]);
+        $readBuilder->select([Storage::PERMISSIONS_DOCUMENT, Storage::PERMISSIONS_TYPE, Storage::PERMISSIONS_PERMISSION]);
+        $readBuilder->filter([Query::equal(Storage::PERMISSIONS_DOCUMENT, $documentIds)]);
 
         /** @var array<array<string, string>> $rows */
         $rows = $context->fetch($readBuilder->build(), Event::PermissionsRead);
@@ -325,7 +325,7 @@ class Permissions extends Interceptor
     {
         $stored = [];
         foreach ($rows as $row) {
-            $storedId = $row[Storage::PERM_DOCUMENT] ?? null;
+            $storedId = $row[Storage::PERMISSIONS_DOCUMENT] ?? null;
             if (! \is_string($storedId) || $storedId === '') {
                 continue;
             }
@@ -373,9 +373,9 @@ class Permissions extends Interceptor
         }
 
         foreach ($rows as $row) {
-            $storedId = $row[Storage::PERM_DOCUMENT] ?? null;
-            $type = $row[Storage::PERM_TYPE] ?? null;
-            $permission = $row[Storage::PERM_PERMISSION] ?? null;
+            $storedId = $row[Storage::PERMISSIONS_DOCUMENT] ?? null;
+            $type = $row[Storage::PERMISSIONS_TYPE] ?? null;
+            $permission = $row[Storage::PERMISSIONS_PERMISSION] ?? null;
             if ($storedId === null || $type === null || $permission === null) {
                 continue;
             }
@@ -439,7 +439,7 @@ class Permissions extends Interceptor
     private function emptyPermissions(): array
     {
         $initial = [];
-        foreach (self::PERM_TYPES as $type) {
+        foreach (self::PERMISSION_TYPES as $type) {
             $initial[$type->value] = [];
         }
 
@@ -453,7 +453,7 @@ class Permissions extends Interceptor
     private function movePermissions(string $collection, string $previousId, Document $document, WriteContext $context): void
     {
         $removeBuilder = $context->builder(Storage::permissionsTable($collection));
-        $removeBuilder->filter([Query::equal(Storage::PERM_DOCUMENT, [$previousId])]);
+        $removeBuilder->filter([Query::equal(Storage::PERMISSIONS_DOCUMENT, [$previousId])]);
         $context->run($removeBuilder->delete(), Event::PermissionsDelete);
 
         $this->afterDocumentCreate($collection, [$document], $context);
@@ -471,9 +471,9 @@ class Permissions extends Interceptor
         $removeConditions = [];
         foreach ($removals as $type => $permissions) {
             $removeConditions[] = Query::and([
-                Query::equal(Storage::PERM_DOCUMENT, [$documentId]),
-                Query::equal(Storage::PERM_TYPE, [$type]),
-                Query::equal(Storage::PERM_PERMISSION, $permissions),
+                Query::equal(Storage::PERMISSIONS_DOCUMENT, [$documentId]),
+                Query::equal(Storage::PERMISSIONS_TYPE, [$type]),
+                Query::equal(Storage::PERMISSIONS_PERMISSION, $permissions),
             ]);
         }
 
@@ -496,9 +496,9 @@ class Permissions extends Interceptor
         foreach ($additions as $type => $permissions) {
             foreach (\array_values(\array_unique($permissions)) as $permission) {
                 $row = $context->decorateRow([
-                    Storage::PERM_DOCUMENT => $documentId,
-                    Storage::PERM_TYPE => $type,
-                    Storage::PERM_PERMISSION => $permission,
+                    Storage::PERMISSIONS_DOCUMENT => $documentId,
+                    Storage::PERMISSIONS_TYPE => $type,
+                    Storage::PERMISSIONS_PERMISSION => $permission,
                 ], $document);
                 $addBuilder->set($row);
             }
@@ -516,12 +516,12 @@ class Permissions extends Interceptor
     {
         $rows = [];
 
-        foreach (self::PERM_TYPES as $type) {
+        foreach (self::PERMISSION_TYPES as $type) {
             foreach ($document->getPermissionsByType($type) as $permission) {
                 $row = [
-                    Storage::PERM_DOCUMENT => $document->getId(),
-                    Storage::PERM_TYPE => $type->value,
-                    Storage::PERM_PERMISSION => \str_replace('"', '', $permission),
+                    Storage::PERMISSIONS_DOCUMENT => $document->getId(),
+                    Storage::PERMISSIONS_TYPE => $type->value,
+                    Storage::PERMISSIONS_PERMISSION => \str_replace('"', '', $permission),
                 ];
                 $rows[] = $context->decorateRow($row, $document);
             }

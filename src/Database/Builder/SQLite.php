@@ -27,7 +27,7 @@ class SQLite extends Base implements Filtering
 
     private const string COLLATE = ' COLLATE '.self::COLLATION;
 
-    private const array COLLATED_COLUMNS = [Storage::UID, Storage::PERM_DOCUMENT];
+    private const array COLLATED_COLUMNS = [Storage::UID, Storage::PERMISSIONS_DOCUMENT];
 
     private const array EQUALITY_OPERATORS = ['=', '!=', '<>'];
 

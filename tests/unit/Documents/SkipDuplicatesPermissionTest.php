@@ -342,8 +342,8 @@ final class SkipDuplicatesPermissionTest extends TestCase
     private function grants(string $document): array
     {
         $statement = $this->pdo->prepare(
-            'SELECT "'.Storage::PERM_TYPE.'", "'.Storage::PERM_PERMISSION.'" FROM "'.self::NAMESPACE.'_'.self::COLLECTION.'_perms"'
-            .' WHERE "'.Storage::PERM_DOCUMENT.'" = ? ORDER BY "'.Storage::PERM_PERMISSION.'"'
+            'SELECT "'.Storage::PERMISSIONS_TYPE.'", "'.Storage::PERMISSIONS_PERMISSION.'" FROM "'.self::NAMESPACE.'_'.self::COLLECTION.'_perms"'
+            .' WHERE "'.Storage::PERMISSIONS_DOCUMENT.'" = ? ORDER BY "'.Storage::PERMISSIONS_PERMISSION.'"'
         );
         $statement->execute([$document]);
 

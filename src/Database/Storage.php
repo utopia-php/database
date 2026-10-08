@@ -22,13 +22,13 @@ final readonly class Storage
 
     public const string DELETED_AT = '_deletedAt';
 
-    public const string PERMS_SUFFIX = '_perms';
+    public const string PERMISSIONS_TABLE_SUFFIX = '_perms';
 
-    public const string PERM_DOCUMENT = '_document';
+    public const string PERMISSIONS_DOCUMENT = '_document';
 
-    public const string PERM_TYPE = '_type';
+    public const string PERMISSIONS_TYPE = '_type';
 
-    public const string PERM_PERMISSION = '_permission';
+    public const string PERMISSIONS_PERMISSION = '_permission';
 
     public const string INDEX_PRIMARY = 'primary';
 
@@ -92,6 +92,6 @@ final readonly class Storage
 
     public static function permissionsTable(string $collection): string
     {
-        return $collection.self::PERMS_SUFFIX;
+        return $collection.self::PERMISSIONS_TABLE_SUFFIX;
     }
 }

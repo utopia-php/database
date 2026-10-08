@@ -406,6 +406,14 @@ have to make, with the 7.x and 8.0 forms side by side.
   fire, and the first exception reaches the caller afterwards. Finding the peers a cascade left costs a read per
   related collection, which a delete skips unless an active lifecycle hook handles `document_update`. See
   [`document_update` for related documents a delete changed](UPGRADE.md#document_update-for-related-documents-a-delete-changed).
+- The locked read of `updateDocument()`, `increaseDocumentAttribute()`, `decreaseDocumentAttribute()` and
+  `deleteDocument()`, and the page reads of `updateDocuments()` and `deleteDocuments()`, use the collection
+  definition the write resolved instead of reading it again: a schema change committed after the write resolved its
+  definition, or between two pages, is not seen by that read or those pages, as the write validated and encoded
+  under the earlier one. A bulk write reads `_metadata` at most once per call instead of once per page. A `Database`
+  subclass's `getDocument()` and `find()` overrides are no longer called for these reads, and its `getCollection()`
+  and `findCollection()` overrides are not called by `getDocument(Database::METADATA, ...)` while no
+  `Hook\Decorator` is registered or events are silenced. See [Caches](UPGRADE.md#caches).
 
 ### Deprecated
 
@@ -466,6 +474,8 @@ have to make, with the 7.x and 8.0 forms side by side.
 
 ### Fixed
 
+- `updateDocument()` no longer fails with `Exception\Structure` (`Unknown attribute`) when a schema change commits
+  between its collection definition lookup and its locked read of the document.
 - `Mirror::clearDocumentTypes()` keeps the metadata collection's `Collection` type, so the mirror's
   `getCollection()` still returns a `Collection` (it returned a plain `Document`).
 - `Adapter::hasFeature()` no longer tells PHPStan the adapter implements the feature: a `Pool` answers `true` for a

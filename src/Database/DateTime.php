@@ -23,21 +23,23 @@ class DateTime
     }
 
     /**
-     * @param \DateTime $date
+     * @param \DateTimeInterface $date
      * @return string
      */
-    public static function format(\DateTime $date): string
+    public static function format(\DateTimeInterface $date): string
     {
         return $date->format(self::$formatDb);
     }
 
     /**
-     * @param \DateTime $date
+     * Returns the given date shifted by $seconds. The given date is left untouched.
+     *
+     * @param \DateTimeInterface $date
      * @param int $seconds
      * @return string
      * @throws DatabaseException
      */
-    public static function addSeconds(\DateTime $date, int $seconds): string
+    public static function addSeconds(\DateTimeInterface $date, int $seconds): string
     {
         $interval  = \DateInterval::createFromDateString($seconds . ' seconds');
 
@@ -45,9 +47,7 @@ class DateTime
             throw new DatabaseException('Invalid interval');
         }
 
-        $date->add($interval);
-
-        return self::format($date);
+        return self::format(\DateTimeImmutable::createFromInterface($date)->add($interval));
     }
 
     /**

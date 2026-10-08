@@ -10,7 +10,7 @@ class SwooleAbsentTest extends TestCase
      * @param array<string> $flags
      * @return array{status: int, output: string}
      */
-    private function runFixture(array $flags): array
+    private function runFixture(array $flags, string $fixture = 'swoole-absent.php'): array
     {
         $command = \escapeshellarg(PHP_BINARY);
 
@@ -18,7 +18,7 @@ class SwooleAbsentTest extends TestCase
             $command .= ' ' . $flag;
         }
 
-        $command .= ' ' . \escapeshellarg(__DIR__ . '/Support/swoole-absent.php') . ' 2>&1';
+        $command .= ' ' . \escapeshellarg(__DIR__ . '/Support/' . $fixture) . ' 2>&1';
 
         \exec($command, $lines, $status);
 
@@ -49,6 +49,32 @@ class SwooleAbsentTest extends TestCase
         $this->assertStringContainsString('remaining=0', $output, $output);
         $this->assertStringContainsString('lostDetected=12/12', $output, $output);
         $this->assertStringContainsString('unrelatedDetected=0', $output, $output);
+    }
+
+    /**
+     * -n drops every shared extension, so the drivers the adapters build on are loaded again by name, leaving out
+     * only swoole and the debuggers.
+     */
+    public function testEveryClassLoadsWithoutSwoole(): void
+    {
+        $flags = ['-n'];
+        $directory = (string) \ini_get('extension_dir');
+        foreach (['pdo_mysql', 'pdo_pgsql', 'mongodb', 'redis'] as $extension) {
+            if (\is_file($directory.'/'.$extension.'.so')) {
+                $flags[] = '-d extension='.$extension;
+            }
+        }
+
+        ['status' => $status, 'output' => $output] = $this->runFixture($flags, 'swoole-absent-classes.php');
+
+        if (\str_contains($output, 'swoole=1')) {
+            $this->markTestSkipped('swoole is statically compiled into '.PHP_BINARY.', so its absence cannot be exercised');
+        }
+
+        $this->assertSame(0, $status, "Loading the library's classes without swoole exited {$status}:".PHP_EOL.$output);
+        $this->assertMatchesRegularExpression('/^loaded=\d+$/m', $output, $output);
+        $this->assertStringContainsString('loading=Utopia\Database\Adapter\SQLite', $output);
+        $this->assertStringContainsString('loading=Utopia\Database\Adapter\Mongo', $output);
     }
 
     /**

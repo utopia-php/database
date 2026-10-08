@@ -233,7 +233,7 @@ class Postgres extends SQL
             	CREATE INDEX \"{$createdIndex}\" ON {$this->getSQLTable($id)} (_tenant, \"_createdAt\");
             	CREATE INDEX \"{$updatedIndex}\" ON {$this->getSQLTable($id)} (_tenant, \"_updatedAt\");
             	CREATE INDEX \"{$tenantIdIndex}\" ON {$this->getSQLTable($id)} (_tenant, _id);
-            	CREATE INDEX \"{$permissionsIndex}\" ON {$this->getSQLTable($id)} USING gin (_permissions);
+            	CREATE INDEX \"{$permissionsIndex}\" ON {$this->getSQLTable($id)} USING gin (_permissions) WITH (fastupdate = off);
 			";
         } else {
             $uidIndex = $this->getShortKey("{$namespace}_{$id}_uid");
@@ -244,7 +244,7 @@ class Postgres extends SQL
 				CREATE UNIQUE INDEX \"{$uidIndex}\" ON {$this->getSQLTable($id)} (\"_uid\" COLLATE utf8_ci_ai);
             	CREATE INDEX \"{$createdIndex}\" ON {$this->getSQLTable($id)} (\"_createdAt\");
             	CREATE INDEX \"{$updatedIndex}\" ON {$this->getSQLTable($id)} (\"_updatedAt\");
-            	CREATE INDEX \"{$permissionsIndex}\" ON {$this->getSQLTable($id)} USING gin (_permissions);
+            	CREATE INDEX \"{$permissionsIndex}\" ON {$this->getSQLTable($id)} USING gin (_permissions) WITH (fastupdate = off);
 			";
         }
 

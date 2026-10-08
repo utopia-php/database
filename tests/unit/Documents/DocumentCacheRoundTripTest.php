@@ -175,6 +175,37 @@ final class DocumentCacheRoundTripTest extends TestCase
         $this->assertLessThanOrEqual($baseline, $cache->getOperations(), "7.3.12: {$baseline}");
     }
 
+    /**
+     * @return array<string, array{Closure(Database): mixed, string}>
+     */
+    public static function writtenDocuments(): array
+    {
+        $writes = [];
+        foreach (self::singleDocumentWrites() as $name => [$write]) {
+            $writes[$name] = [$write, $name === 'createDocument' ? 'created' : 'hook'];
+        }
+
+        return $writes;
+    }
+
+    /**
+     * @param  Closure(Database): mixed  $write
+     */
+    #[DataProvider('writtenDocuments')]
+    public function testASingleDocumentWritePurgesItsDocumentOnce(Closure $write, string $written): void
+    {
+        [$database, , $cache] = $this->createDatabase();
+        $database->createDocument('webhooks', $this->hook('hook'));
+        $database->getDocument('webhooks', 'hook');
+        $database->getDocument('webhooks', 'created');
+        $documentKey = \strtolower($database->getCacheKeys('webhooks', $written)[1]);
+
+        $cache->resetOperations();
+        $write($database);
+
+        $this->assertSame(1, $cache->getPurges()[$documentKey] ?? 0, 'The document is purged once, after its write commits');
+    }
+
     public function testAnUpdateAndAReadInATransactionStayWithinSevenThreeRoundTrips(): void
     {
         [$database, $adapter, $cache] = $this->createDatabase();

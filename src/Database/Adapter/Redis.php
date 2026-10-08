@@ -3264,19 +3264,15 @@ class Redis extends Adapter implements
             if ($reverse) {
                 $direction = $direction === OrderDirection::Asc ? OrderDirection::Desc : OrderDirection::Asc;
             }
-            $resolved[] = [
-                'attribute' => $attribute,
-                'direction' => $direction,
-                'reference' => $cursor[$attribute] ?? null,
-            ];
+            $resolved[] = new CursorBoundary($attribute, $direction, $cursor[$attribute] ?? null);
         }
 
         $output = [];
         foreach ($documents as $document) {
             foreach ($resolved as $entry) {
-                $current = $this->resolveDocumentAttribute($document, $entry['attribute']);
-                $reference = $entry['reference'];
-                $ascending = $entry['direction'] === OrderDirection::Asc;
+                $current = $this->resolveDocumentAttribute($document, $entry->field);
+                $reference = $entry->reference;
+                $ascending = $entry->direction === OrderDirection::Asc;
                 if ($current === $reference) {
                     continue;
                 }

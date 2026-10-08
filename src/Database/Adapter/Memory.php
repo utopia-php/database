@@ -3229,19 +3229,15 @@ class Memory extends Adapter implements Feature\Relationships
             if ($reverse) {
                 $direction = $direction === OrderDirection::Asc ? OrderDirection::Desc : OrderDirection::Asc;
             }
-            $resolved[] = [
-                'column' => $this->mapAttribute($attribute),
-                'direction' => $direction,
-                'reference' => $cursor[$attribute] ?? null,
-            ];
+            $resolved[] = new CursorBoundary($this->mapAttribute($attribute), $direction, $cursor[$attribute] ?? null);
         }
 
         $output = [];
         foreach ($rows as $row) {
             foreach ($resolved as $entry) {
-                $current = $row[$entry['column']] ?? null;
-                $reference = $entry['reference'];
-                $ascending = $entry['direction'] === OrderDirection::Asc;
+                $current = $row[$entry->field] ?? null;
+                $reference = $entry->reference;
+                $ascending = $entry->direction === OrderDirection::Asc;
                 if ($current === $reference) {
                     continue;
                 }

@@ -21,8 +21,10 @@ class SQLiteTest extends Base
 
     protected static ?PDO $pdo = null;
 
+    #[\Override]
     protected static string $namespace;
 
+    #[\Override]
     public function getDatabase(): Database
     {
         if (! is_null(self::$database)) {
@@ -45,6 +47,7 @@ class SQLiteTest extends Base
         $cache = new Cache((new RedisAdapter($redis))->setMaxRetries(3));
 
         $adapter = new class ($pdo) extends SQLite {
+            #[\Override]
             protected bool $emulateMySQL = true;
         };
 
@@ -105,6 +108,7 @@ class SQLiteTest extends Base
         }
     }
 
+    #[\Override]
     protected function deleteColumn(string $collection, string $column): bool
     {
         $sqlTable = '`'.$this->getDatabase()->getNamespace().'_'.$collection.'`';
@@ -116,6 +120,7 @@ class SQLiteTest extends Base
         return true;
     }
 
+    #[\Override]
     protected function deleteIndex(string $collection, string $index): bool
     {
         $index = '`'.$this->getDatabase()->getNamespace().'_'.$this->getDatabase()->getTenant()."_{$collection}_{$index}`";

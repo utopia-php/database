@@ -24,6 +24,7 @@ class MongoDBTest extends Base
 
     public static ?Database $database = null;
 
+    #[\Override]
     protected static string $namespace;
 
     /**
@@ -42,6 +43,7 @@ class MongoDBTest extends Base
     /**
      * @throws Exception
      */
+    #[\Override]
     public function getDatabase(): Database
     {
         if (! is_null(self::$database)) {
@@ -84,6 +86,7 @@ class MongoDBTest extends Base
     /**
      * @throws Exception
      */
+    #[\Override]
     public function testCreateExistsDelete(): void
     {
         $database = $this->getDatabase();
@@ -191,11 +194,13 @@ class MongoDBTest extends Base
         }
     }
 
+    #[\Override]
     protected function deleteColumn(string $collection, string $column): bool
     {
         return true;
     }
 
+    #[\Override]
     protected function deleteIndex(string $collection, string $index): bool
     {
         return true;

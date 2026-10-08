@@ -29,8 +29,10 @@ class MariaDBTest extends Base
 
     protected static ?PDO $pdo = null;
 
+    #[\Override]
     protected static string $namespace;
 
+    #[\Override]
     public function getDatabase(bool $fresh = false): Database
     {
         if (! is_null(self::$database) && ! $fresh) {
@@ -171,6 +173,7 @@ class MariaDBTest extends Base
         return $database;
     }
 
+    #[\Override]
     protected function deleteColumn(string $collection, string $column): bool
     {
         $sqlTable = '`'.$this->getDatabase()->getDatabase().'`.`'.$this->getDatabase()->getNamespace().'_'.$collection.'`';
@@ -182,6 +185,7 @@ class MariaDBTest extends Base
         return true;
     }
 
+    #[\Override]
     protected function deleteIndex(string $collection, string $index): bool
     {
         $sqlTable = '`'.$this->getDatabase()->getDatabase().'`.`'.$this->getDatabase()->getNamespace().'_'.$collection.'`';

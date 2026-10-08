@@ -30,6 +30,7 @@ class PoolTest extends Base
      */
     protected static UtopiaPool $pool;
 
+    #[\Override]
     protected static string $namespace;
 
     /**
@@ -37,6 +38,7 @@ class PoolTest extends Base
      * @throws Duplicate
      * @throws Limit
      */
+    #[\Override]
     public function getDatabase(): Database
     {
         if (! is_null(self::$database)) {
@@ -80,6 +82,7 @@ class PoolTest extends Base
         return self::$database = $database;
     }
 
+    #[\Override]
     protected function deleteColumn(string $collection, string $column): bool
     {
         $sqlTable = '`'.$this->getDatabase()->getDatabase().'`.`'.$this->getDatabase()->getNamespace().'_'.$collection.'`';
@@ -94,6 +97,7 @@ class PoolTest extends Base
         return true;
     }
 
+    #[\Override]
     protected function deleteIndex(string $collection, string $index): bool
     {
         $sqlTable = '`'.$this->getDatabase()->getDatabase().'`.`'.$this->getDatabase()->getNamespace().'_'.$collection.'`';

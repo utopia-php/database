@@ -1329,6 +1329,7 @@ trait CollectionTests
             {
             }
 
+            #[\Override]
             public function transform(Event $event, string $query): string
             {
                 if ($event !== Event::DocumentRead || ! \str_contains($query, $this->table)) {

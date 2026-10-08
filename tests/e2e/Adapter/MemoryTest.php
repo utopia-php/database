@@ -34,6 +34,7 @@ use Utopia\Database\Role;
 class MemoryTest extends Base
 {
     public static ?Database $database = null;
+    #[\Override]
     protected static string $namespace;
 
     public static function getAdapterName(): string
@@ -41,6 +42,7 @@ class MemoryTest extends Base
         return 'memory';
     }
 
+    #[\Override]
     public function getDatabase(): Database
     {
         if (!is_null(self::$database)) {
@@ -68,6 +70,7 @@ class MemoryTest extends Base
         return self::$database = $database;
     }
 
+    #[\Override]
     protected function deleteColumn(string $collection, string $column): bool
     {
         // Memory has no out-of-band schema mutation path; tests that exercise
@@ -75,6 +78,7 @@ class MemoryTest extends Base
         return true;
     }
 
+    #[\Override]
     protected function deleteIndex(string $collection, string $index): bool
     {
         return true;
@@ -105,6 +109,7 @@ class MemoryTest extends Base
      * The inherited scope test does not gate on instanceof Feature\Upserts;
      * skip here because Memory throws on upsert by design.
      */
+    #[\Override]
     public function testUpsertWithJSONFilters(): void
     {
         $this->markTestSkipped('Memory adapter does not implement upserts.');
@@ -115,21 +120,25 @@ class MemoryTest extends Base
      * Capability::Operators — Memory doesn't implement Feature\Upserts, so we
      * skip the upsert variants explicitly.
      */
+    #[\Override]
     public function testBulkUpsertWithOperatorsCallbackReceivesFreshData(): void
     {
         $this->markTestSkipped('Memory adapter does not implement upserts.');
     }
 
+    #[\Override]
     public function testSingleUpsertWithOperators(): void
     {
         $this->markTestSkipped('Memory adapter does not implement upserts.');
     }
 
+    #[\Override]
     public function testUpsertOperatorsOnNewDocuments(): void
     {
         $this->markTestSkipped('Memory adapter does not implement upserts.');
     }
 
+    #[\Override]
     public function testUpsertDocumentsWithAllOperators(): void
     {
         $this->markTestSkipped('Memory adapter does not implement upserts.');
@@ -140,6 +149,7 @@ class MemoryTest extends Base
      * INTEGER column is altered to VARCHAR. Memory keeps native PHP scalars,
      * so the historical int payload remains an int after the type change.
      */
+    #[\Override]
     public function testUpdateAttributeStructure(): void
     {
         $this->markTestSkipped(
@@ -152,6 +162,7 @@ class MemoryTest extends Base
      * Inherited test exercises VARCHAR truncation when shrinking a column
      * that holds oversize data. Memory does not enforce string sizes on disk.
      */
+    #[\Override]
     public function testUpdateAttributeSize(): void
     {
         $this->markTestSkipped(
@@ -164,6 +175,7 @@ class MemoryTest extends Base
      * Memory has no reserved keyword list; the inherited test then has no
      * keywords to iterate over and is flagged risky.
      */
+    #[\Override]
     public function testKeywords(): void
     {
         $this->markTestSkipped('Memory has no reserved keywords.');
@@ -589,6 +601,7 @@ class MemoryTest extends Base
      * millisecond between the two writes to keep the inherited
      * assertion honest without changing semantics for slower adapters.
      */
+    #[\Override]
     public function testSingleDocumentDateOperations(): void
     {
         $database = $this->getDatabase();

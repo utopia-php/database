@@ -21,6 +21,7 @@ final readonly class AllowNull implements Filter
         }
     }
 
+    #[\Override]
     public function filter(string $table): Condition
     {
         return self::wrap($this->filter->filter($table), $this->column, $this->quoteCharacter);

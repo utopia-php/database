@@ -171,6 +171,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      *
      * @return array<Capability>
      */
+    #[\Override]
     public function capabilities(): array
     {
         return array_merge(parent::capabilities(), [
@@ -191,6 +192,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         ]);
     }
 
+    #[\Override]
     public function getDriver(): DatabasePDO|PDOProxy|PDO
     {
         if ($this->pdo instanceof DatabasePDO || $this->pdo instanceof PDOProxy || $this->pdo instanceof PDO) {
@@ -208,6 +210,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         return sprintf('%.'.$this->floatPrecision.'F', $value);
     }
 
+    #[\Override]
     public function hostname(): string
     {
         try {
@@ -234,6 +237,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * @throws Exception
      * @throws PDOException
      */
+    #[\Override]
     public function ping(): bool
     {
         $result = $this->createBuilder()->fromNone()->selectRaw('1')->build();
@@ -241,6 +245,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         return $this->prepareStatement($result->query)->execute();
     }
 
+    #[\Override]
     public function reconnect(): void
     {
         $pdo = $this->getDriver();
@@ -250,6 +255,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         $this->inTransaction = 0;
     }
 
+    #[\Override]
     public function startTransaction(): bool
     {
         try {
@@ -287,6 +293,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         return true;
     }
 
+    #[\Override]
     public function commitTransaction(): bool
     {
         if ($this->inTransaction === 0) {
@@ -319,6 +326,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         return $result;
     }
 
+    #[\Override]
     public function rollbackTransaction(): bool
     {
         if ($this->inTransaction === 0) {
@@ -364,6 +372,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     /**
      * @throws DatabaseException
      */
+    #[\Override]
     public function exists(string $database): bool
     {
         $result = $this->createBuilder()
@@ -378,6 +387,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     /**
      * @throws DatabaseException
      */
+    #[\Override]
     public function collectionExists(string $database, string $collection): bool
     {
         $result = $this->createBuilder()
@@ -419,6 +429,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      *
      * @return array<Document>
      */
+    #[\Override]
     public function list(): array
     {
         return [];
@@ -430,6 +441,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * @throws Exception
      * @throws PDOException
      */
+    #[\Override]
     public function createAttribute(string $collection, Attribute $attribute): bool
     {
         return $this->createAttributeWithEvent($collection, $attribute, Event::AttributeCreate);
@@ -462,6 +474,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function createAttributes(string $collection, array $attributes): bool
     {
         $schema = $this->schema();
@@ -488,6 +501,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * @throws Exception
      * @throws PDOException
      */
+    #[\Override]
     public function deleteAttribute(string $collection, string $key): bool
     {
         $schema = $this->schema();
@@ -510,6 +524,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * @throws Exception
      * @throws PDOException
      */
+    #[\Override]
     public function renameAttribute(string $collection, string $old, string $new): bool
     {
         if ($this->isRenamed($collection, $old, $new)) {
@@ -566,6 +581,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
         $collectionDoc = $collection;
@@ -709,6 +725,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * @throws DuplicateException
      * @throws Throwable
      */
+    #[\Override]
     public function createDocuments(Document $collection, array $documents): array
     {
         if (empty($documents)) {
@@ -1046,6 +1063,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function updateDocuments(Document $collection, Document $updates, array $documents, array $skipPermissions = []): int
     {
         if (empty($documents)) {
@@ -1156,6 +1174,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     /**
      * @throws DatabaseException
      */
+    #[\Override]
     public function upsertDocument(Document $collection, Change $change): Document
     {
         return $this->upsertDocuments($collection, [$change])[0];
@@ -1167,6 +1186,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function upsertDocuments(Document $collection, array $changes, ?string $increase = null): array
     {
         if ($changes === []) {
@@ -1258,6 +1278,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function deleteDocuments(Document $collection, array $sequences, array $permissionIds): int
     {
         if (empty($sequences)) {
@@ -1296,6 +1317,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function getSequences(Document $collection, array $documents): array
     {
         $documentIds = [];
@@ -1353,6 +1375,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         return $documents;
     }
 
+    #[\Override]
     public function increaseDocumentAttribute(
         Document $collection,
         string $id,
@@ -1393,6 +1416,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         return true;
     }
 
+    #[\Override]
     public function deleteDocument(Document $collection, string $id): bool
     {
         try {
@@ -1434,6 +1458,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * @throws TimeoutException
      * @throws Exception
      */
+    #[\Override]
     public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read): array
     {
         $collectionDoc = $collection;
@@ -1814,6 +1839,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function rawQuery(string $query, array $bindings = []): array
     {
         try {
@@ -1846,6 +1872,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * @throws Exception
      * @throws PDOException
      */
+    #[\Override]
     public function count(Document $collection, array $queries = [], ?int $max = null): int
     {
         $collectionDoc = $collection;
@@ -1919,6 +1946,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * @throws Exception
      * @throws PDOException
      */
+    #[\Override]
     public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): int|float
     {
         $collectionDoc = $collection;
@@ -2364,6 +2392,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * InnoDB caps a table at 1017 columns, 64 indexes and a 65535-byte row; the varchar cap is the floor of
      * Postgres 16383, MySQL 16381 and MariaDB 16382; a shared table spends one byte of each index key on `_tenant`.
      */
+    #[\Override]
     public function limits(): Limits
     {
         return $this->limits ??= new Limits(
@@ -2389,6 +2418,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     /**
      * Get current attribute count from collection document
      */
+    #[\Override]
     public function getCountOfAttributes(Document $collection): int
     {
         return \count(self::collectionAttributes($collection)) + $this->limits()->defaultAttributes;
@@ -2397,6 +2427,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     /**
      * Get current index count from collection document
      */
+    #[\Override]
     public function getCountOfIndexes(Document $collection): int
     {
         return \count(self::collectionIndexes($collection)) + $this->limits()->defaultIndexes;
@@ -2409,6 +2440,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function getAttributeWidth(Document $collection): int
     {
         /**
@@ -2829,6 +2861,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function analyzeCollection(string $collection): bool
     {
         return false;
@@ -2840,6 +2873,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * @throws Exception
      * @throws PDOException
      */
+    #[\Override]
     public function delete(string $name): bool
     {
         $name = $this->filter($name);
@@ -2855,6 +2889,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function deleteCollection(string $collection): bool
     {
         $id = $this->filter($collection);
@@ -2902,6 +2937,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function createRelationship(string $collection, Relationship $relationship): bool
     {
         $name = $this->filter($collection);
@@ -2937,6 +2973,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, RelationshipUpdate $update): bool
     {
         $name = $this->filter($collection);
@@ -3009,6 +3046,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function deleteRelationship(string $collection, Relationship $relationship, RelationshipSide $side): bool
     {
         $name = $this->filter($collection);
@@ -3089,6 +3127,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         '/\b(TINYINT|SMALLINT|MEDIUMINT|INT|INTEGER|BIGINT)\(\d+\)/' => '$1',
     ];
 
+    #[\Override]
     public function getColumnType(Attribute $attribute): ?string
     {
         $type = $this->getAttributeSqlType($attribute);
@@ -3297,6 +3336,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     /**
      * A schema builder in this adapter's SQL dialect.
      */
+    #[\Override]
     public function schema(): MySQLSchema|PostgresSchema
     {
         return new MySQLSchema();
@@ -3341,6 +3381,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         return $builder;
     }
 
+    #[\Override]
     public function rawMutation(string $query, array $bindings = []): int
     {
         try {
@@ -3369,6 +3410,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * Not kept to the tenant: SQL the caller writes, builders that did not come from Database::from()
      * (subqueries, unions, lateral joins) and a dialect's multi-table updates and deletes.
      */
+    #[\Override]
     public function builder(string $collection): SQLBuilder
     {
         $name = $this->filter($collection);
@@ -6762,6 +6804,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         return $distance;
     }
 
+    #[\Override]
     protected function escapeWildcards(string $value): string
     {
         $wildcards = ['\\', '%', '_', '[', ']', '^', '-', '.', '*', '+', '?', '(', ')', '{', '}', '|'];

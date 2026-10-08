@@ -67,6 +67,7 @@ readonly class Filter implements FilterHook, JoinFilter
      * @return Condition A condition with an IN subquery against the permissions table
      * @throws DatabaseException If the permissions table name is invalid
      */
+    #[\Override]
     public function filter(string $table): Condition
     {
         if (empty($this->roles)) {
@@ -138,6 +139,7 @@ readonly class Filter implements FilterHook, JoinFilter
      * registered by the SQL adapter for each joined table. This hook only handles the
      * primary table's WHERE clause, so filterJoin returns null.
      */
+    #[\Override]
     public function filterJoin(string $table, JoinType $joinType): ?JoinCondition
     {
         return null;

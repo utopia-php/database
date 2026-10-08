@@ -40,26 +40,31 @@ final readonly class WriteContext implements Context
     ) {
     }
 
+    #[\Override]
     public function builder(string $table): Builder
     {
         return ($this->builder)($table);
     }
 
+    #[\Override]
     public function rawBuilder(): Builder
     {
         return ($this->rawBuilder)();
     }
 
+    #[\Override]
     public function rawTable(string $table): string
     {
         return ($this->rawTable)($table);
     }
 
+    #[\Override]
     public function run(Statement $statement, Event $event): bool
     {
         return ($this->execute)(($this->prepare)($statement, $event));
     }
 
+    #[\Override]
     public function fetch(Statement $statement, Event $event): array
     {
         $prepared = ($this->prepare)($statement, $event);
@@ -71,16 +76,19 @@ final readonly class WriteContext implements Context
         return $rows;
     }
 
+    #[\Override]
     public function decorateRow(array $row, Document $document): array
     {
         return ($this->decorateRow)($row, $document);
     }
 
+    #[\Override]
     public function skipPermissions(Document $document): bool
     {
         return isset($this->skipPermissions[$document->getId()]);
     }
 
+    #[\Override]
     public function ignoreDuplicates(): bool
     {
         return $this->ignoreDuplicates;

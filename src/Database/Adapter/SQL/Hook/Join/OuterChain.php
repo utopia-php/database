@@ -33,6 +33,7 @@ final readonly class OuterChain implements JoinFilter
     ) {
     }
 
+    #[\Override]
     public function filterJoin(string $table, JoinType $joinType): ?JoinCondition
     {
         if ($joinType !== JoinType::Right && $joinType !== JoinType::FullOuter) {

@@ -54,6 +54,7 @@ final readonly class Filter implements FilterHook, JoinFilter
         return \implode(', ', \array_fill(0, \count($this->tenants), '?'));
     }
 
+    #[\Override]
     public function filter(string $table): Condition
     {
         $prefix = (! \str_contains($table, '.') && ! \str_contains($table, $this->quoteCharacter))
@@ -94,6 +95,7 @@ final readonly class Filter implements FilterHook, JoinFilter
      * through $allowNullColumn - a table filtered in WHERE may be missing from a row, and only a
      * missing row may pass, never a stored row without a tenant: `_uid` is NOT NULL.
      */
+    #[\Override]
     public function filterJoin(string $table, JoinType $joinType): JoinCondition
     {
         $placement = match ($joinType) {

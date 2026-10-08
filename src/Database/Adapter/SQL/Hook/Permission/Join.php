@@ -31,6 +31,7 @@ final readonly class Join implements JoinFilter
     ) {
     }
 
+    #[\Override]
     public function filterJoin(string $table, JoinType $joinType): ?JoinCondition
     {
         if ($table !== $this->alias) {

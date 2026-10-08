@@ -188,7 +188,24 @@ final class MongoQueryFilterTest extends TestCase
 
     public function testUniqueIndexOnAnUntypedAttributeCoversEveryValueButNull(): void
     {
-        $any = ['$exists' => true, '$type' => ['string', 'int', 'long', 'double', 'decimal', 'bool', 'date', 'object', 'objectId']];
+        $any = ['$exists' => true, '$type' => [
+            'double',
+            'string',
+            'object',
+            'array',
+            'binData',
+            'objectId',
+            'bool',
+            'date',
+            'regex',
+            'javascript',
+            'int',
+            'timestamp',
+            'long',
+            'decimal',
+            'minKey',
+            'maxKey',
+        ]];
         $adapter = $this->createAdapter();
 
         $adapter->createIndex(self::COLLECTION, Index::unique(key: 'created_unique', attributes: ['$createdAt']), ['name' => ColumnType::String->value]);

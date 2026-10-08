@@ -1698,9 +1698,10 @@ as wildcards and a backslash as a literal character.
   whatever its type, so a unique index on an integer, big integer, float, boolean or datetime attribute covered no
   document and accepted duplicates. `createCollection()` required `int` for integers, `long` for big integers and
   `double` for floats, which left out integers past 32 bits, big integers inside 32 bits and floats stored as
-  integers. 8.0 requires every type a value of the attribute can be stored as, and any type but null for an
-  attribute without a declared type (an internal attribute such as `$createdAt`, or any attribute of a schemaless
-  collection), as 7.4.1 does.
+  integers. 8.0 requires every type a value of the attribute can be stored as, and for an attribute without a
+  declared type (an internal attribute such as `$createdAt`, or any attribute of a schemaless collection) every BSON
+  type the driver writes but null, arrays, binary data and timestamps included, where 7.4.1 covers strings, numbers,
+  booleans, dates and objects only.
 - Key indexes: both paths added a `$type` clause, and MongoDB uses a partial index only for queries that imply its
   filter, which a filter on a value never does for `$type`. No query used these indexes, whatever the attribute
   type. 8.0 gives a key index `{first attribute: {$exists: true}}` only, which a filter on a non-null value of that

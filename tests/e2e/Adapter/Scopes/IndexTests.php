@@ -4,6 +4,12 @@ namespace Tests\E2E\Adapter\Scopes;
 
 use DateTime as NativeDateTime;
 use Exception;
+use MongoDB\BSON\Binary;
+use MongoDB\BSON\Javascript;
+use MongoDB\BSON\MaxKey;
+use MongoDB\BSON\MinKey;
+use MongoDB\BSON\Regex;
+use MongoDB\BSON\Timestamp;
 use MongoDB\BSON\UTCDateTime;
 use stdClass;
 use Throwable;
@@ -32,6 +38,7 @@ use Utopia\Database\Query;
 use Utopia\Database\Role;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\IndexDefinition;
+use Utopia\Mongo\Exception as MongoException;
 use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
@@ -1453,6 +1460,52 @@ trait IndexTests
         $database->deleteCollection($collection);
     }
 
+    public function testMongoUniqueIndexOnAnUntypedAttributeCoversEveryStoredType(): void
+    {
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if (! $adapter instanceof Mongo) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = $this->createMongoUniqueIndexCollection($database, []);
+        $database->createIndex($collection, Index::unique(key: 'created_unique', attributes: ['$createdAt']));
+        $table = $adapter->getNamespace().'_'.$adapter->filter($collection);
+
+        $values = [
+            'an array' => [[1], [2]],
+            'an empty array' => [],
+            'binary data' => new Binary("\x01", Binary::TYPE_GENERIC),
+            'a timestamp' => new Timestamp(1, 1),
+            'a regular expression' => new Regex('x'),
+            'code' => new Javascript('1'),
+            'the lowest key' => new MinKey(),
+            'the highest key' => new MaxKey(),
+        ];
+
+        try {
+            foreach ($values as $name => $value) {
+                $adapter->getDriver()->insert($table, $this->rawMongoDocument($adapter, $value));
+
+                $error = null;
+                try {
+                    $adapter->getDriver()->insert($table, $this->rawMongoDocument($adapter, $value));
+                } catch (MongoException $caught) {
+                    $error = $caught;
+                }
+
+                $this->assertInstanceOf(MongoException::class, $error, 'The unique index on $createdAt must reject a second document holding '.$name);
+                $this->assertTrue($error->isDuplicateKeyError(), $name.': '.$error->getMessage());
+                $this->assertStringContainsString('created_unique', $error->getMessage(), $name.': the duplicate must be caught by created_unique');
+            }
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
     public function testMongoKeyIndexesServeEqualityFilters(): void
     {
         $database = $this->getDatabase();
@@ -1630,6 +1683,19 @@ trait IndexTests
         $this->assertIsString($plan);
 
         return $plan;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function rawMongoDocument(Mongo $adapter, mixed $createdAt): array
+    {
+        $document = [Storage::UID => \uniqid(), Storage::CREATED_AT => $createdAt];
+        if ($adapter->hasSharedTables()) {
+            $document[Storage::TENANT] = $adapter->getTenant();
+        }
+
+        return $document;
     }
 
     /**

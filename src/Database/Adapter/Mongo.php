@@ -125,6 +125,28 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     private const array PREFIX_SWAPPED_KEYS = ['permissions', 'createdAt', 'updatedAt', 'collection'];
 
     /**
+     * Every BSON type the driver writes but null. The deprecated undefined, dbPointer and symbol types are never written.
+     */
+    private const array NON_NULL_BSON_TYPES = [
+        'double',
+        'string',
+        'object',
+        'array',
+        'binData',
+        'objectId',
+        'bool',
+        'date',
+        'regex',
+        'javascript',
+        'int',
+        'timestamp',
+        'long',
+        'decimal',
+        'minKey',
+        'maxKey',
+    ];
+
+    /**
      * @throws MongoException
      */
     public function __construct(Client $client)
@@ -3965,14 +3987,14 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     /**
      * The BSON types a stored value of the column type can have. PHP integers are written as int
      * or long by magnitude, and a float attribute also accepts integers. A value of unknown type
-     * (a schemaless or internal attribute) may have any type but null.
+     * (a schemaless or internal attribute) may have any type the driver writes but null.
      *
      * @return string|list<string>
      */
     private function getMongoTypeCode(?ColumnType $type): string|array
     {
         return match ($type) {
-            null => ['string', 'int', 'long', 'double', 'decimal', 'bool', 'date', 'object', 'objectId'],
+            null => self::NON_NULL_BSON_TYPES,
             ColumnType::String,
             ColumnType::Varchar,
             ColumnType::Text,

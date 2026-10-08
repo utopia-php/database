@@ -313,6 +313,34 @@ final class ResolvedCollectionReadTest extends TestCase
         ));
     }
 
+    public function testAFirstDefinitionReadBuildsTheCollectionKeyOnce(): void
+    {
+        [$database, $adapter] = $this->createDatabase();
+        $reader = new class ($adapter, new Cache(new RedisLeasableCache())) extends Database {
+            /** @var array<string, int> */
+            public array $collectionKeys = [];
+
+            #[\Override]
+            public function getCacheBaseKeys(string $collectionId, ?string $documentId = null): array
+            {
+                if ($documentId === null) {
+                    $this->collectionKeys[$collectionId] = ($this->collectionKeys[$collectionId] ?? 0) + 1;
+                }
+
+                return parent::getCacheBaseKeys($collectionId, $documentId);
+            }
+        };
+        $reader
+            ->setAuthorization($database->getAuthorization())
+            ->setDatabase($database->getDatabase())
+            ->setNamespace($database->getNamespace());
+
+        $this->assertSame(self::COLLECTION, $reader->getCollection(self::COLLECTION)->getId());
+
+        $this->assertSame([self::COLLECTION => 1], $reader->collectionKeys, 'The definition\'s fill checks the epoch under the key it read it with');
+        $this->assertSame(self::COLLECTION, $reader->getCollection(self::COLLECTION)->getId());
+    }
+
     private function createSiblings(Database $database): void
     {
         foreach (['b', 'c', 'd', 'e', 'f'] as $id) {

@@ -195,10 +195,13 @@ class Pool extends Adapter implements Feature\Timeouts
             $adapter->setProfiler($this->profiler);
         }
 
-        $adapter->resetTransforms();
-        foreach ($this->transforms as $name => $transform) {
-            $adapter->addTransform($name, $transform);
+        if ($adapter->transforms !== $this->transforms) {
+            $adapter->resetTransforms();
+            foreach ($this->transforms as $name => $transform) {
+                $adapter->addTransform($name, $transform);
+            }
         }
+
         $this->syncWriteHooks($adapter);
     }
 

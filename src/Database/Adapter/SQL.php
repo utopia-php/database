@@ -5509,7 +5509,8 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
-     * The columns each alias compares for equality with another alias's column in a join's ON.
+     * The columns each join's own ON compares for equality with another alias's column, by the join's alias. A later
+     * join's ON never serves an earlier join's table, which a left join reads before the later ON is bound.
      *
      * @param  array<BaseQuery>  $queries  With the join columns remapJoinQueries() qualified
      * @return array<string, list<string>>
@@ -5522,6 +5523,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 continue;
             }
 
+            $alias = $query->getAlias();
             foreach ($query->getJoinOnQueries() as $on) {
                 $values = $on->getValues();
                 if ($on->getMethod() !== Method::On || ($values[1] ?? null) !== '=' || ! \is_string($values[0] ?? null) || ! \is_string($values[2] ?? null)) {
@@ -5534,8 +5536,11 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                     continue;
                 }
 
-                $columns[$left[0]][] = \strtolower($left[1]);
-                $columns[$right[0]][] = \strtolower($right[1]);
+                foreach ([$left, $right] as [$side, $column]) {
+                    if ($side === $alias) {
+                        $columns[$alias][] = \strtolower($column);
+                    }
+                }
             }
         }
 

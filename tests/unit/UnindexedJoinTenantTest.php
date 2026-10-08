@@ -85,14 +85,27 @@ final class UnindexedJoinTenantTest extends TestCase
         $this->assertStringNotContainsString($this->range($alias), $this->sql);
     }
 
-    public function testJoinOfAnotherAliasCanServeTheJoinedTable(): void
+    /**
+     * @return iterable<string, array{Query, Query}>
+     */
+    public static function chained(): iterable
     {
-        $this->find(new MySQL($this->pdo()), [
-            Query::join(self::LABELS, 'named', [Query::on('name', 'name')]),
-            Query::join(self::LABELS, 'coded', [Query::on('named.code', 'code')]),
-        ]);
+        $named = [Query::on('name', 'name')];
+        $coded = [Query::on('named.code', 'code')];
 
-        $this->assertStringContainsString($this->equality('named'), $this->sql, 'A later join compares named.code, which an index serves: '.$this->sql);
+        yield 'a left join then a left join' => [Query::leftJoin(self::LABELS, 'named', $named), Query::leftJoin(self::LABELS, 'coded', $coded)];
+        yield 'an inner join then a left join' => [Query::join(self::LABELS, 'named', $named), Query::leftJoin(self::LABELS, 'coded', $coded)];
+        yield 'a left join then an inner join' => [Query::leftJoin(self::LABELS, 'named', $named), Query::join(self::LABELS, 'coded', $coded)];
+        yield 'an inner join then an inner join' => [Query::join(self::LABELS, 'named', $named), Query::join(self::LABELS, 'coded', $coded)];
+    }
+
+    #[DataProvider('chained')]
+    public function testLaterJoinComparingAnIndexedColumnLeavesTheEarlierJoinUnserved(Query $named, Query $coded): void
+    {
+        $this->find(new MySQL($this->pdo()), [$named, $coded]);
+
+        $this->assertStringContainsString($this->range('named'), $this->sql, 'Only the ON of named reaches named, and it compares no indexed column: '.$this->sql);
+        $this->assertStringNotContainsString($this->equality('named'), $this->sql);
         $this->assertStringContainsString($this->equality('coded'), $this->sql);
     }
 

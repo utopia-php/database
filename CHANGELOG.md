@@ -969,7 +969,7 @@ not change anything for an upgrade from 7.x.
     attributes included, instead of sorting the whole join. Inner, right and full outer one-to-many joins, filters and
     searches on joined attributes and orders that start with a joined attribute still sort the whole join. See
     [Joins](UPGRADE.md#joins).
-  - MySQL: under shared tables, an inner or left join that no index of the joined collection serves reads the
+  - MySQL: under shared tables, an inner or left join whose own ON no index of the joined collection serves reads the
     tenant's rows of the joined table once, matching its tenant as a range (`_tenant >= ? AND _tenant <= ?`),
     instead of looking them all up again for every row the join pairs (50 s to 0.6 s for four such joins over 50 000
     rows). Joins an index serves, other join types and reads spanning several tenants are unchanged.

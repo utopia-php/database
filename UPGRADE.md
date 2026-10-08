@@ -1579,6 +1579,14 @@ override `#[\Override]` so that a later rename fails loudly instead of being ski
 `Pool::$pinnedAdapter` property is removed (see [Pools and profiling](#pools-and-profiling)). `Pool` implements
 `Feature\Timeouts` itself and forwards every other optional feature through `delegateFeature()`.
 
+`syncBorrowed()` sets the database, namespace, shared-tables and tenant-per-document modes, tenant, authorization,
+locks, schemaless mode and timeouts on the connection on every delegated call. It replays metadata, the profiler,
+transforms and write hooks only when the connection's differ from the pool's: `resetMetadata()` and `setMetadata()`
+when its `getMetadata()` is not identical, `setProfiler()` when it holds another profiler, and `resetTransforms()`
+and `addTransform()` when its transforms are not the same instances under the same names in the same order. A
+`Pool` subclass or a custom connection adapter must not rely on those methods being called on every delegated call.
+`releaseBorrowed()` still clears a borrowed connection's profiler after each checkout.
+
 ### Removed adapter methods
 
 Queries now compile through the utopia-php/query builders (`builder()`, `createBuilder()`), transforms through

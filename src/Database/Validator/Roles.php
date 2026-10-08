@@ -6,9 +6,6 @@ use Exception;
 use Utopia\Database\Role;
 use Utopia\Validator;
 
-/**
- * Validates role strings ensuring they use valid role names, identifiers, and dimensions.
- */
 class Roles extends Validator
 {
     public const string ROLE_ANY = 'any';

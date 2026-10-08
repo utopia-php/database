@@ -4,9 +4,6 @@ namespace Utopia\Database\Validator;
 
 use Utopia\Database\Database;
 
-/**
- * Validates unique identifier strings with alphanumeric chars, underscores, hyphens, and periods.
- */
 class UID extends Key
 {
     public function __construct(int $maxLength = Database::MAX_UID_DEFAULT_LENGTH)

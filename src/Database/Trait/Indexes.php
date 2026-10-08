@@ -22,9 +22,6 @@ use Utopia\Database\Index;
 use Utopia\Database\Schema;
 use Utopia\Database\Storage;
 
-/**
- * Provides CRUD operations for collection indexes including creation, renaming, and deletion.
- */
 trait Indexes
 {
     /**

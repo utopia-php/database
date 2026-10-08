@@ -4,9 +4,6 @@ namespace Utopia\Database\Validator;
 
 use Utopia\Database\Database;
 
-/**
- * Validates label strings ensuring they contain only alphanumeric characters.
- */
 class Label extends Key
 {
     /**

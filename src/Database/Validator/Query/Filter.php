@@ -20,9 +20,6 @@ use Utopia\Validator\FloatValidator;
 use Utopia\Validator\Integer;
 use Utopia\Validator\Text;
 
-/**
- * Validates filter query methods by checking attribute existence, type compatibility, and value constraints.
- */
 class Filter extends Base
 {
     use Attributes;

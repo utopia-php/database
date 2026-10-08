@@ -1026,9 +1026,6 @@ class Memory extends Adapter implements Feature\Relationships
         });
     }
 
-    /**
-     * Remove a field from every document in a collection.
-     */
     protected function dropDocumentField(string $collection, string $field): void
     {
         $key = $this->key($collection);
@@ -1658,7 +1655,6 @@ class Memory extends Adapter implements Feature\Relationships
                 }
             }
 
-            // Sync unique-index hashes per-row.
             $allIndexes = \array_unique([...\array_keys($entry['oldSignatures']), ...\array_keys($entry['newSignatures'])]);
             foreach ($allIndexes as $indexId) {
                 $this->probeUniqueHash(
@@ -1722,7 +1718,6 @@ class Memory extends Adapter implements Feature\Relationships
             $this->data[$key]['documents'][$docKey] = $existing;
         });
 
-        // Drop unique-index hash bindings for this row.
         foreach ($oldSignatures as $indexId => $hash) {
             if (($this->uniqueIndexHashes[$key][$indexId][$hash] ?? null) === $docKey) {
                 unset($this->uniqueIndexHashes[$key][$indexId][$hash]);

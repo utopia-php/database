@@ -8,8 +8,6 @@ use Utopia\Database\Validator\Authorization\Input;
 use Utopia\Validator;
 
 /**
- * Validates authorization by checking if any of the current roles match the required permissions.
- *
  * The status and the roles are shared by every caller, except inside skip() and withRoles(): those
  * scopes belong to the calling coroutine and the coroutines it starts (see {@see Value}). The status and the roles
  * share one {@see Group}, so any of those scopes keeps the status and role changes of a coroutine cut off from it,

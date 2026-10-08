@@ -7,9 +7,6 @@ use Utopia\Query\Method;
 use Utopia\Validator\Numeric;
 use Utopia\Validator\Range;
 
-/**
- * Validates limit query methods ensuring the value is a positive integer within the allowed range.
- */
 class Limit extends Base
 {
     protected int $maxLimit;

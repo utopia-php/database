@@ -6,9 +6,6 @@ use DateTime as PhpDateTime;
 use Exception;
 use Utopia\Validator;
 
-/**
- * Validates datetime strings against configurable precision, range, and future-date constraints.
- */
 class Datetime extends Validator
 {
     public const string PRECISION_DAYS = 'days';

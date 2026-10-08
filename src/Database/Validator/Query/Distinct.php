@@ -2,9 +2,6 @@
 
 namespace Utopia\Database\Validator\Query;
 
-/**
- * Validates distinct query methods for deduplicating result sets.
- */
 class Distinct extends Base
 {
     #[\Override]

@@ -32,7 +32,6 @@ use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
 use Utopia\Database\PDO as DatabasePDO;
 use Utopia\Database\PDOStatement as DatabasePDOStatement;
-use Utopia\Database\Query;
 use Utopia\Database\Schema\Column as SchemaColumn;
 use Utopia\Database\Schema\Index as SchemaIndex;
 use Utopia\Database\Storage;
@@ -42,16 +41,11 @@ use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 use Utopia\Query\Schema\MySQL as MySQLSchema;
 
-/**
- * Database adapter for MariaDB, extending the base SQL adapter with MariaDB-specific features.
- */
 class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
 {
     use Timeout;
 
     /**
-     * Get the list of capabilities supported by the MariaDB adapter.
-     *
      * @return array<Capability>
      */
     #[\Override]
@@ -85,8 +79,6 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     /**
-     * Create Database
-     *
      * @throws Exception
      * @throws PDOException
      */
@@ -193,8 +185,6 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     /**
-     * Create Collection
-     *
      * @param  list<Attribute>  $attributes
      * @param  list<Index>  $indexes
      *
@@ -335,8 +325,6 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     /**
-     * Analyze a collection updating it's metadata on the database engine
-     *
      * @throws DatabaseException
      */
     #[\Override]
@@ -351,8 +339,6 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     /**
-     * Get collection size on disk
-     *
      * @throws DatabaseException
      */
     #[\Override]
@@ -402,8 +388,6 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     /**
-     * Get Collection Size of the raw data
-     *
      * @throws DatabaseException
      */
     #[\Override]
@@ -454,8 +438,6 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     /**
-     * Update Attribute
-     *
      * @throws DatabaseException
      */
     #[\Override]
@@ -489,8 +471,6 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     /**
-     * Create Index
-     *
      * @param  array<string,string>  $indexAttributeTypes
      * @param  array<string, mixed>  $collation
      *
@@ -608,8 +588,6 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     /**
-     * Rename Index
-     *
      * @throws Exception
      */
     #[\Override]
@@ -626,8 +604,6 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     /**
-     * Create Document
-     *
      * @throws Exception
      * @throws PDOException
      * @throws DuplicateException
@@ -647,8 +623,6 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
             $attributes[Storage::PERMISSIONS] = \json_encode($document->getPermissions());
             $name = $this->filter($collection);
 
-            // Build document INSERT using query builder
-            // Spatial columns use insertColumnExpression() for ST_GeomFromText() wrapping
             $builder = $this->createBuilder()->into($this->getTableRaw($name));
             $row = [Storage::UID => $document->getId()];
 
@@ -718,8 +692,6 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     /**
-     * Update Document
-     *
      * @throws Exception
      * @throws PDOException
      * @throws DuplicateException
@@ -795,8 +767,6 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     /**
-     * Set max execution time
-     *
      * @throws DatabaseException
      */
     #[\Override]
@@ -823,9 +793,6 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
         $this->clearTimeoutState($event);
     }
 
-    /**
-     * Size of POINT spatial type
-     */
     #[\Override]
     protected function getMaxPointSize(): int
     {
@@ -986,7 +953,6 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
             }, $rings);
         }
 
-        // Convert HEX string to binary if needed
         if (str_starts_with($wkb, '0x') || ctype_xdigit($wkb)) {
             $wkb = hex2bin(str_starts_with($wkb, '0x') ? substr($wkb, 2) : $wkb);
             if ($wkb === false) {
@@ -1021,7 +987,6 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
             throw new DatabaseException("Not a POLYGON geometry type, got {$geomType}");
         }
 
-        // Skip SRID in type flag if present
         if ($hasSRID) {
             $offset += 4;
         }
@@ -1263,10 +1228,6 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
         );
     }
 
-    /**
-     * Get operator SQL
-     * Override to handle MariaDB/MySQL-specific operators
-     */
     #[\Override]
     protected function getOperatorSql(string $column, Operator $operator, int &$bindIndex): ?string
     {
@@ -1275,7 +1236,6 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
         $values = $operator->getValues();
 
         switch ($method) {
-            // Numeric operators
             case OperatorType::Increment:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
@@ -1377,7 +1337,6 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
 
                 return "{$quotedColumn} = POWER(COALESCE({$quotedColumn}, 0), :$bindKey)";
 
-                // String operators
             case OperatorType::StringConcat:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
@@ -1392,11 +1351,9 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
 
                 return "{$quotedColumn} = REPLACE({$quotedColumn}, :$searchKey, :$replaceKey)";
 
-                // Boolean operators
             case OperatorType::Toggle:
                 return "{$quotedColumn} = NOT COALESCE({$quotedColumn}, FALSE)";
 
-                // Array operators
             case OperatorType::ArrayAppend:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
@@ -1485,7 +1442,6 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
                     END
                 ), JSON_ARRAY())";
 
-                // Date operators
             case OperatorType::DateAddDays:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
@@ -1580,27 +1536,22 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
             return new CharacterException('Invalid character', $e->getCode(), $e);
         }
 
-        // Timeout
         if ($e->getCode() === '70100' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1969) {
             return new TimeoutException('Query timed out', $e->getCode(), $e);
         }
 
-        // Duplicate table
         if ($e->getCode() === '42S01' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1050) {
             return new DuplicateException('Collection already exists', $e->getCode(), $e);
         }
 
-        // Duplicate column
         if ($e->getCode() === '42S21' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1060) {
             return new DuplicateException('Attribute already exists', $e->getCode(), $e);
         }
 
-        // Duplicate index
         if ($e->getCode() === '42000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1061) {
             return new DuplicateException('Index already exists', $e->getCode(), $e);
         }
 
-        // Duplicate row
         if ($e->getCode() === '23000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1062) {
             $key = $this->getViolatedKey($e->getMessage());
             if ($key === Storage::INDEX_1) {
@@ -1613,23 +1564,19 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
             return new DuplicateException('Document already exists', $e->getCode(), $e);
         }
 
-        // Data is too big for column resize
         if (($e->getCode() === '22001' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1406) ||
             ($e->getCode() === '01000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1265)) {
             return new TruncateException('Resize would result in data truncation', $e->getCode(), $e);
         }
 
-        // Numeric value out of range
         if ($e->getCode() === '22003' && isset($e->errorInfo[1]) && ($e->errorInfo[1] === 1264 || $e->errorInfo[1] === 1690)) {
             return new LimitException('Value out of range', $e->getCode(), $e);
         }
 
-        // Numeric value out of range
         if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1690) {
             return new LimitException('Value is out of range', $e->getCode(), $e);
         }
 
-        // Unknown database
         if ($e->getCode() === '42000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1049) {
             return new NotFoundException('Database not found', $e->getCode(), $e);
         }
@@ -1638,7 +1585,6 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
             return new NotFoundException('Collection not found', $e->getCode(), $e);
         }
 
-        // Unknown column
         if ($e->getCode() === '42000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1091) {
             return new NotFoundException('Attribute not found', $e->getCode(), $e);
         }

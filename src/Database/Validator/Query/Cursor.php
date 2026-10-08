@@ -8,9 +8,6 @@ use Utopia\Database\Query;
 use Utopia\Database\Validator\UID;
 use Utopia\Query\Method;
 
-/**
- * Validates cursor-based pagination queries (cursorAfter and cursorBefore).
- */
 class Cursor extends Base
 {
     /**

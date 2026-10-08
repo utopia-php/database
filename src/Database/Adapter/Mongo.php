@@ -53,9 +53,6 @@ use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 
-/**
- * Database adapter for MongoDB, using the Utopia Mongo client for document-based storage.
- */
 class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feature\Relationships, Feature\Schemaless, Feature\Timeouts, Feature\Upserts
 {
     use Timeout;
@@ -92,9 +89,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      */
     protected array $readHooks = [];
 
-    /**
-     * Default batch size for cursor operations
-     */
     private const int DEFAULT_BATCH_SIZE = 1000;
 
     /**
@@ -119,8 +113,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     private const array COMMIT_RETRY_WRITE_CONCERN = ['w' => 'majority', 'wtimeout' => 10_000];
 
     /**
-     * Transaction/session state for MongoDB transactions
-     *
      * @var array<mixed>|null
      */
     private ?array $session = null;
@@ -133,10 +125,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     private const array PREFIX_SWAPPED_KEYS = ['permissions', 'createdAt', 'updatedAt', 'collection'];
 
     /**
-     * Constructor.
-     *
-     * Set connection and settings
-     *
      * @throws MongoException
      */
     public function __construct(Client $client)
@@ -168,8 +156,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
-     * Get the list of capabilities supported by the MongoDB adapter.
-     *
      * @return array<Capability>
      */
     #[\Override]
@@ -185,25 +171,12 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         ]);
     }
 
-    /**
-     * Set the maximum execution time for queries.
-     *
-     * @param int $milliseconds Timeout in milliseconds
-     * @param Event $event The event scope for the timeout
-     * @return void
-     */
     #[\Override]
     public function setTimeout(int $milliseconds, Event $event = Event::All): void
     {
         $this->timeout = $milliseconds;
     }
 
-    /**
-     * Clear the query execution timeout.
-     *
-     * @param Event $event The event scope to clear
-     * @return void
-     */
     #[\Override]
     public function clearTimeout(Event $event = Event::All): void
     {
@@ -310,8 +283,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     /**
      * Start a new database transaction or increment the nesting counter. A standalone server has no transactions.
      *
-     * @return bool
-     *
      * @throws DatabaseException If the transaction cannot be started.
      */
     #[\Override]
@@ -338,8 +309,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
 
     /**
      * Commit the current database transaction or decrement the nesting counter.
-     *
-     * @return bool
      *
      * @throws UnconfirmedException If the commit was sent but its result could not be confirmed.
      * @throws DatabaseException If the transaction cannot be committed, with an `Exception\Transaction` cause when
@@ -502,8 +471,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      * Roll back the current database transaction or decrement the nesting counter. A transaction the server already
      * aborted counts as rolled back.
      *
-     * @return bool
-     *
      * @throws DatabaseException If the rollback fails.
      */
     #[\Override]
@@ -637,9 +604,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         return parent::isTransient($error);
     }
 
-    /**
-     * Create Database
-     */
     #[\Override]
     public function create(string $name): bool
     {
@@ -790,8 +754,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
-     * List Databases
-     *
      * @return array<Document>
      *
      * @throws Exception
@@ -814,9 +776,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
-     * Delete Database
-     *
-     *
      * @throws Exception
      */
     #[\Override]
@@ -828,8 +787,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
-     * Create Collection
-     *
      * @param  list<Attribute>  $attributes
      * @param  list<Index>  $indexes
      *
@@ -989,8 +946,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
-     * List Collections
-     *
      * @return array<Document>
      *
      * @throws Exception
@@ -1024,18 +979,12 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         return (bool) $this->getClient()->dropCollection($id);
     }
 
-    /**
-     * Analyze a collection updating it's metadata on the database engine
-     */
     #[\Override]
     public function analyzeCollection(string $collection): bool
     {
         return false;
     }
 
-    /**
-     * Create Attribute
-     */
     #[\Override]
     public function createAttribute(string $collection, Attribute $attribute): bool
     {
@@ -1043,8 +992,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
-     * Create Attributes
-     *
      * @param  list<Attribute>  $attributes
      *
      * @throws DatabaseException
@@ -1055,9 +1002,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         return true;
     }
 
-    /**
-     * Update Attribute.
-     */
     #[\Override]
     public function updateAttribute(string $collection, string $key, Attribute $attribute): bool
     {
@@ -1106,8 +1050,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
-     * Rename Attribute.
-     *
      * @throws DatabaseException
      * @throws MongoException
      */
@@ -1278,8 +1220,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
-     * Create Index
-     *
      * @param  array<string, string>  $indexAttributeTypes
      * @param  array<string, mixed>  $collation
      *
@@ -1336,12 +1276,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
 
         $indexes['key'] = $indexKey;
 
-        /**
-         * Collation
-         *  1.  Moved under $indexes.
-         *  2.  Updated format.
-         *  3.  Avoid adding collation to fulltext index
-         */
         if (! empty($collation) &&
             $type !== IndexType::Fulltext) {
             $indexes['collation'] = [
@@ -1445,9 +1379,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
-     * Rename Index.
-     *
-     *
      * @throws Exception
      */
     #[\Override]
@@ -1493,8 +1424,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
-     * Get Document
-     *
      * @param  Query[]  $queries
      *
      * @throws DatabaseException
@@ -1545,9 +1474,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
-     * Create Document
-     *
-     *
      * @throws Exception
      */
     #[\Override]
@@ -1566,7 +1492,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         $record = $this->replaceCharacters('$', '_', $documentArray);
         $record = $this->decorateRow($record, $document);
 
-        // Insert manual id if set
         if (! empty($sequence)) {
             $record[Storage::SEQUENCE] = $sequence;
         }
@@ -1582,8 +1507,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
-     * Create Documents in batches
-     *
      * @param  array<Document>  $documents
      * @return array<Document>
      *
@@ -1697,8 +1620,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
-     * Update Document
-     *
      * @throws DuplicateException
      * @throws DatabaseException
      */
@@ -1735,10 +1656,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
-     * Update documents
-     *
-     * Updates all documents which match the given query.
-     *
      * @param  array<Document>  $documents
      * @param  array<string, true>  $skipPermissions
      *
@@ -2152,21 +2069,17 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
 
                 unset($record[Storage::SEQUENCE]); // Don't update _id
 
-                // Get fields to unset for schemaless mode
                 $unsetFields = $this->getUpsertAttributeRemovals($oldDocument, $document, $record);
 
                 if (! empty($attribute)) {
-                    // Get the attribute value before removing it from $set
                     $attributeValue = $record[$attribute] ?? 0;
 
                     // Remove the attribute from $set since we're incrementing it
                     // it is requierd to mimic the behaver of SQL on duplicate key update
                     unset($record[$attribute]);
 
-                    // Also remove from unset if it was there
                     unset($unsetFields[$attribute]);
 
-                    // Increment the specific attribute and update all other fields
                     $update = [
                         '$inc' => [$attribute => $attributeValue],
                         '$set' => $record,
@@ -2230,9 +2143,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
-     * Delete Document
-     *
-     *
      * @throws Exception
      */
     #[\Override]
@@ -2251,8 +2161,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
-     * Delete Documents
-     *
      * @param  array<string>  $sequences
      * @param  array<string>  $permissionIds
      *
@@ -2289,8 +2197,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
-     * Increase or decrease an attribute value
-     *
      * @throws DatabaseException
      * @throws MongoException
      * @throws Exception
@@ -2351,10 +2257,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
-     * Find Documents
-     *
-     * Find data sets using chosen queries
-     *
      * @param  array<Query>  $queries
      * @param  array<string>  $orderAttributes
      * @param  array<OrderDirection>  $orderTypes
@@ -2397,7 +2299,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
             $options['projection'] = $this->getAttributeProjection($selections);
         }
 
-        // Add transaction context to options
         $options = $this->getTransactionOptions($options);
 
         $orFilters = [];
@@ -2411,7 +2312,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
             $orderType = $orderTypes[$i] ?? OrderDirection::Asc;
             $direction = $orderType;
 
-            /** Get sort direction  ASC || DESC **/
             if ($cursorDirection === CursorDirection::Before) {
                 $direction = ($direction === OrderDirection::Asc)
                     ? OrderDirection::Desc
@@ -2421,7 +2321,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
             $sortOptions[$attribute] = $this->getOrder($direction);
             $options['sort'] = $sortOptions;
 
-            /** Get operator sign  '$lt' ? '$gt' **/
             $operator = $cursorDirection === CursorDirection::After
                 ? ($orderType === OrderDirection::Desc ? Method::LessThan : Method::GreaterThan)
                 : ($orderType === OrderDirection::Desc ? Method::GreaterThan : Method::LessThan);
@@ -2443,7 +2342,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
                 $tmp = $cursor[$originalAttribute];
 
                 if ($originalAttribute === Document::SEQUENCE) {
-                    /** If there is only $sequence attribute in $orderAttributes skip Or And  operators **/
                     if (count($orderAttributes) === 1) {
                         $filters[$attribute] = [
                             $operator => $tmp,
@@ -2468,7 +2366,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
             $filters['$or'] = $orFilters;
         }
 
-        // Translate operators and handle time filters
         /** @var array<string, mixed> $filters */
         $filters = $this->replaceInternalIdsKeys($filters, '$', '_', $this->operators);
 
@@ -2477,7 +2374,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         $cursorId = null;
 
         try {
-            // Use proper cursor iteration with reasonable batch size
             $options['batchSize'] = self::DEFAULT_BATCH_SIZE;
 
             $response = $this->client->find($name, $filters, $options);
@@ -2485,7 +2381,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
             $responseCursorFind = $response->cursor;
             /** @var array<mixed> $results */
             $results = $responseCursorFind->firstBatch ?? [];
-            // Process first batch
             foreach ($results as $result) {
                 /** @var array<string, mixed> $resultCast */
                 $resultCast = (array) $result;
@@ -2495,7 +2390,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
                 $found[] = Document::fromStorage($convertedRecord);
             }
 
-            // Get cursor ID for subsequent batches
             if (isset($responseCursorFind->id)) {
                 /** @var mixed $responseCursorFindId */
                 $responseCursorFindId = $responseCursorFind->id;
@@ -2507,7 +2401,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
                 $cursorId = null;
             }
 
-            // Continue fetching with getMore
             while ($cursorId !== null) {
                 $moreResponse = $this->client->getMore($cursorId, $name, self::DEFAULT_BATCH_SIZE);
                 /** @var \stdClass $moreCursorFind */
@@ -2570,8 +2463,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
-     * Count Documents
-     *
      * @param  array<Query>  $queries
      *
      * @throws Exception
@@ -2583,7 +2474,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
 
         $queries = array_map(fn ($query) => clone $query, $queries);
 
-        // Escape query attribute names that contain dots and match collection attributes
         $this->escapeQueryAttributes($collection, $queries);
 
         $filters = [];
@@ -2597,7 +2487,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
             $options['maxTimeMS'] = $this->timeout;
         }
 
-        // Build filters from queries
         /** @var array<string, mixed> $filters */
         $filters = $this->buildFilters($queries);
         $filters = $this->applyReadFilters($filters, $collection->getId(), PermissionType::Read);
@@ -2618,12 +2507,10 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
 
         $pipeline = [];
 
-        // Add match stage if filters are provided
         if (! empty($filters)) {
             $pipeline[] = ['$match' => $this->client->toObject($filters)];
         }
 
-        // Add limit stage if specified
         if (! \is_null($max) && $max > 0) {
             $pipeline[] = ['$limit' => $max];
         }
@@ -2632,7 +2519,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         // Note: $count stage doesn't works well with $limit in the same pipeline
         // When limit is specified, we need to use $group + $sum to count the limited documents
         if (! \is_null($max) && $max > 0) {
-            // When limit is specified, use $group and $sum to count limited documents
             $pipeline[] = [
                 '$group' => [
                     Storage::SEQUENCE => null,
@@ -2675,8 +2561,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
-     * Sum an attribute
-     *
      * @param  array<Query>  $queries
      *
      * @throws Exception
@@ -2694,14 +2578,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         $filters = $this->buildFilters($queries);
         $filters = $this->applyReadFilters($filters, $collection->getId(), PermissionType::Read);
 
-        // using aggregation to get sum an attribute as described in
-        // https://docs.mongodb.com/manual/reference/method/db.collection.aggregate/
-        // Pipeline consists of stages to aggregation, so first we set $match
-        // that will load only documents that matches the filters provided and passes to the next stage
-        // then we set $limit (if $max is provided) so that only $max documents will be passed to the next stage
-        // finally we use $group stage to sum the provided attribute that matches the given filters and max
-        // We pass the $pipeline to the aggregate method, which returns a cursor, then we get
-        // the array of results from the cursor, and we return the total sum of the attribute
         $pipeline = [];
         if (! empty($filters)) {
             $pipeline[] = ['$match' => $filters];
@@ -2749,8 +2625,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
-     * Get sequences for documents that were created
-     *
      * @param  array<Document>  $documents
      * @return array<Document>
      *
@@ -2786,7 +2660,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
             $filters[Storage::TENANT] = $this->getTenantFilters($collectionId, \array_values(\array_unique($documentTenants)));
         }
         try {
-            // Use cursor paging for large result sets
             $options = [
                 'projection' => [Storage::UID => 1, Storage::SEQUENCE => 1, Storage::TENANT => 1],
                 'batchSize' => self::DEFAULT_BATCH_SIZE,
@@ -2801,7 +2674,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
 
             $this->collectSequences($results, $sequences);
 
-            // Get cursor ID for subsequent batches
             /** @var int|null $cursorId */
             $cursorId = null;
             if (isset($responseCursor->id)) {
@@ -2813,7 +2685,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
                 }
             }
 
-            // Continue fetching with getMore
             while ($cursorId !== null) {
                 $moreResponse = $this->client->getMore($cursorId, $name, self::DEFAULT_BATCH_SIZE);
                 /** @var \stdClass $moreCursor */
@@ -2827,7 +2698,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
 
                 $this->collectSequences($moreResults, $sequences);
 
-                // Update cursor ID for next iteration
                 if (isset($moreCursor->id)) {
                     /** @var mixed $moreCursorIdVal */
                     $moreCursorIdVal = $moreCursor->id;
@@ -2939,18 +2809,12 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         );
     }
 
-    /**
-     * Get current attribute count from collection document
-     */
     #[\Override]
     public function getCountOfAttributes(Document $collection): int
     {
         return \count(self::collectionAttributes($collection)) + $this->limits()->defaultAttributes;
     }
 
-    /**
-     * Get current index count from collection document
-     */
     #[\Override]
     public function getCountOfIndexes(Document $collection): int
     {
@@ -2970,8 +2834,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
-     * Get Collection Size of raw data
-     *
      * @throws DatabaseException
      */
     #[\Override]
@@ -3002,8 +2864,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
-     * Get Collection Size on disk
-     *
      * @throws DatabaseException
      */
     #[\Override]
@@ -3268,7 +3128,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
-     * Escape a field name for MongoDB storage.
      * MongoDB field names cannot start with $ or contain dots.
      */
     protected function escapeMongoFieldName(string $name): string
@@ -3388,7 +3247,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      */
     protected function replaceCharacters(string $from, string $to, array $array): array
     {
-        // First pass: recursively process array values and collect keys to rename
         $keysToRename = [];
         foreach ($array as $k => $v) {
             if (is_array($v)) {
@@ -3401,7 +3259,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
 
             $newKey = $k;
 
-            // Handle key replacement for filtered attributes
             $clean_key = str_replace($from, '', $k);
             if (in_array($clean_key, self::PREFIX_SWAPPED_KEYS)) {
                 $newKey = str_replace($from, $to, $k);
@@ -3410,7 +3267,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
                 $newKey = $to.\substr($k, \strlen($from));
             }
 
-            // Handle dot escaping in MongoDB field names
             if ($from === '$' && \str_contains($newKey, '.')) {
                 $newKey = \str_replace('.', '__dot__', $newKey);
             } elseif ($from === '_' && \str_contains($k, '__dot__')) {
@@ -3427,7 +3283,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
             unset($array[$oldKey]);
         }
 
-        // Handle special attribute mappings
         if ($from === '_') {
             if (isset($array[Storage::SEQUENCE])) {
                 $array[Document::SEQUENCE] = $this->stringifyIdentifier($array[Storage::SEQUENCE]);
@@ -3490,7 +3345,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         $queries = Query::groupByType($queries)->filters;
 
         foreach ($queries as $query) {
-            /* @var $query Query */
             if ($query->isNested()) {
                 if ($query->getMethod() === Method::ElemMatch) {
                     /** @var array<Query> $elemMatchValues */
@@ -3554,7 +3408,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         } elseif ($query->getAttribute() === Document::UPDATED_AT) {
             $query->setAttribute(Storage::UPDATED_AT);
         } elseif (\str_starts_with($query->getAttribute(), '$')) {
-            // Escape $ prefix and dots in user-defined $-prefixed attribute names for MongoDB
             $query->setAttribute($this->escapeMongoFieldName($query->getAttribute()));
         }
 
@@ -3599,7 +3452,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
             $filter[$attribute] = $attrFilter3;
         } elseif ($operator == '$in') {
             if (in_array($query->getMethod(), [Method::Contains, Method::ContainsAny]) && ! $query->onArray()) {
-                // contains support array values
                 if (is_array($value)) {
                     $filter['$or'] = array_map(fn ($item) => [
                         $attribute => [
@@ -3690,9 +3542,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
-     * Get Query Operator
-     *
-     *
      * @throws Exception
      */
     protected function getQueryOperator(Method $operator): string
@@ -3738,9 +3587,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
-     * Get Mongo Order
-     *
-     *
      * @throws Exception
      */
     protected function getOrder(OrderDirection $order): int
@@ -3762,8 +3608,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
-     * Check if tenant should be added to index
-     *
      * @param  Document|string  $indexOrType  Index document or index type string
      */
     protected function shouldAddTenantToIndex(Index|Document|string|IndexType $indexOrType): bool
@@ -3819,14 +3663,11 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
-     * Flattens the array.
-     *
      * @return array<mixed>
      */
     protected function flattenArray(mixed $list): array
     {
         if (! is_array($list)) {
-            // make sure the input is an array
             return [$list];
         }
 
@@ -3861,12 +3702,10 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
 
     protected function processException(Throwable $e): Throwable
     {
-        // Timeout
         if ($e->getCode() === 50 || $e->getCode() === 262) {
             return new TimeoutException('Query timed out', $e->getCode(), $e);
         }
 
-        // Duplicate key error
         if ($e->getCode() === 11000 || $e->getCode() === 11001) {
             $index = $this->getViolatedIndex($e->getMessage());
             if ($index !== null && $index !== Storage::UID && $index !== '_id_') {
@@ -3876,27 +3715,22 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
             return new DuplicateException('Document already exists', $e->getCode(), $e);
         }
 
-        // Collection already exists
         if ($e->getCode() === 48) {
             return new DuplicateException('Collection already exists', $e->getCode(), $e);
         }
 
-        // Index already exists
         if ($e->getCode() === 85) {
             return new DuplicateException('Index already exists', $e->getCode(), $e);
         }
 
-        // No transaction
         if ($e->getCode() === 251) {
             return new TransactionException('No active transaction', $e->getCode(), $e);
         }
 
-        // Aborted transaction
         if ($e->getCode() === 112) {
             return new TransactionException('Transaction aborted', $e->getCode(), $e);
         }
 
-        // Invalid operation (MongoDB error code 14)
         if ($e->getCode() === 14) {
             return new TypeException('Invalid operation', $e->getCode(), $e);
         }
@@ -3947,7 +3781,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
             return false;
         }
 
-        // timezone detection
         $hasZ = ($value[$length - 1] === 'Z');
 
         $hasOffset = (
@@ -4008,7 +3841,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     protected function convertUtcDateToString(mixed $node): mixed
     {
         if ($node instanceof UTCDateTime) {
-            // Handle UTCDateTime objects
             $node = DateTime::format($node->toDateTime());
         } elseif (is_array($node) && isset($node['$date'])) {
             // Handle Extended JSON format from (array) cast
@@ -4038,9 +3870,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
-     * Helper to add transaction/session context to command options if in transaction
-     * Includes defensive check to ensure session is valid
-     *
      * @param  array<string, mixed>  $options
      * @return array<string, mixed>
      */
@@ -4055,9 +3884,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
-     * Create a safe MongoDB regex pattern by escaping special characters
-     *
-     * @param  string  $value  The user input to escape
      * @param  string  $pattern  The pattern template (e.g., ".*%s.*" for contains)
      */
     private function createSafeRegex(string $value, string $pattern = '%s', string $flags = 'i'): Regex
@@ -4159,8 +3985,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
-     * Converts timestamp to Mongo\BSON datetime format.
-     *
      * @throws Exception
      */
     private function toMongoDatetime(string $dt): UTCDateTime

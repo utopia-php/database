@@ -5,9 +5,6 @@ namespace Utopia\Database\Validator;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Validator;
 
-/**
- * Validates spatial data (point, linestring, polygon) as arrays or WKT strings with coordinate range checking.
- */
 class Spatial extends Validator
 {
     private string $spatialType;

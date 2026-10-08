@@ -61,9 +61,6 @@ readonly class Filter implements FilterHook, JoinFilter
     }
 
     /**
-     * Generate a SQL condition that filters documents by permission role membership.
-     *
-     * @param string $table The base table name being queried
      * @return Condition A condition with an IN subquery against the permissions table
      * @throws DatabaseException If the permissions table name is invalid
      */
@@ -74,7 +71,6 @@ readonly class Filter implements FilterHook, JoinFilter
             return new Condition('1 = 0');
         }
 
-        /** @var string $permTable */
         $permTable = ($this->permissionsTable)($table);
 
         if (! \preg_match(self::QUOTED_IDENTIFIER_PATTERN, $permTable)) {

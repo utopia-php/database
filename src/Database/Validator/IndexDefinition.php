@@ -15,9 +15,6 @@ use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 use Utopia\Validator;
 
-/**
- * Validates database index definitions including type support, attribute references, lengths, and constraints.
- */
 class IndexDefinition extends Validator
 {
     private const array STRING_TYPES = [

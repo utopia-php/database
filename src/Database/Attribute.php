@@ -4,6 +4,7 @@ namespace Utopia\Database;
 
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\Profile;
+use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Structure;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Query\Schema\ColumnType;
@@ -230,6 +231,7 @@ final readonly class Attribute
 
     /**
      * @throws Structure
+     * @throws RelationshipException
      */
     public static function fromDocument(Document $document): self
     {
@@ -591,6 +593,7 @@ final readonly class Attribute
 
     /**
      * @throws Structure
+     * @throws RelationshipException
      */
     private static function hydrate(
         string $key,
@@ -664,6 +667,7 @@ final readonly class Attribute
      * @return array{Relationship, RelationshipSide}
      *
      * @throws Structure
+     * @throws RelationshipException
      */
     private static function hydrateRelationship(string $key, mixed $options): array
     {

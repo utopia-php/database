@@ -650,6 +650,9 @@ have to make, with the 7.x and 8.0 forms side by side.
   attribute, with a degree box that holds every point in range. Lines, polygons and boxes that would reach a pole or
   the antimeridian keep the exact comparison only, which stays in every case, so the boundary is still exclusive. 7.x
   carries the same fix after 7.4.1.
+- A distance query whose distance is not finite (`NAN`, `INF`, `-INF`) is rejected with `Distance query requires a
+  finite distance`. PostgreSQL compares `'NaN'` as above every number, so its index condition and its exact check
+  disagreed on such a distance.
 - `updateAttribute()` no longer fails on MongoDB, Memory and Redis when a key or unique index covers the attribute
   (the index was compared with itself).
 - `Validator\IndexDefinition` rejects an index definition without a type, with an unknown type, or a TTL index

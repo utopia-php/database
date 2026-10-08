@@ -46,6 +46,9 @@ final class PostgresDistanceTest extends TestCase
             'a polygon value' => [self::typed(Query::distanceLessThan('location', [[[0, 0], [0, 1], [1, 1], [0, 0]]], 1000, true), ColumnType::Point)],
             'a box reaching a pole' => [self::typed(Query::distanceLessThan('location', [10, 89.99], 5000, true), ColumnType::Point)],
             'a box reaching the antimeridian' => [self::typed(Query::distanceLessThan('location', [179.99, 0], 5000, true), ColumnType::Point)],
+            'a distance that is not a number' => [self::typed(Query::distanceLessThan('location', [10, 20], NAN, true), ColumnType::Point)],
+            'an infinite distance' => [self::typed(Query::distanceLessThan('location', [10, 20], INF, true), ColumnType::Point)],
+            'a negatively infinite distance' => [self::typed(Query::distanceLessThan('location', [10, 20], -INF, true), ColumnType::Point)],
         ];
     }
 

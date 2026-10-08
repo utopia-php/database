@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Validator\Query;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
@@ -74,6 +75,32 @@ class FilterTypeBranchesTest extends TestCase
 
         $this->assertFalse($this->validator->isValid(Query::equal('point', ['1,2'])));
         $this->assertSame('Spatial data must be an array', $this->validator->getDescription());
+    }
+
+    /**
+     * @return iterable<string, array{Query}>
+     */
+    public static function nonFiniteDistances(): iterable
+    {
+        foreach (['not a number' => NAN, 'infinite' => INF, 'negatively infinite' => -INF] as $name => $distance) {
+            yield 'distanceEqual '.$name => [Query::distanceEqual('point', [1.0, 2.0], $distance)];
+            yield 'distanceNotEqual '.$name => [Query::distanceNotEqual('point', [1.0, 2.0], $distance)];
+            yield 'distanceGreaterThan '.$name => [Query::distanceGreaterThan('point', [1.0, 2.0], $distance)];
+            yield 'distanceLessThan '.$name.' in meters' => [Query::distanceLessThan('point', [1.0, 2.0], $distance, true)];
+        }
+    }
+
+    #[DataProvider('nonFiniteDistances')]
+    public function test_distance_must_be_finite(Query $query): void
+    {
+        $this->assertFalse($this->validator->isValid($query));
+        $this->assertSame('Distance query requires a finite distance', $this->validator->getDescription());
+    }
+
+    public function test_finite_distance_is_valid(): void
+    {
+        $this->assertTrue($this->validator->isValid(Query::distanceLessThan('point', [1.0, 2.0], 1000, true)));
+        $this->assertTrue($this->validator->isValid(Query::distanceGreaterThan('point', [1.0, 2.0], 0.5)));
     }
 
     public function test_object_containment_rejects_mixed_key_arrays(): void

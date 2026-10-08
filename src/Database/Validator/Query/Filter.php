@@ -507,6 +507,13 @@ class Filter extends Base
                     return false;
                 }
 
+                $distance = $value->getValues()[0][1];
+                if (! \is_numeric($distance) || ! \is_finite((float) $distance)) {
+                    $this->message = 'Distance query requires a finite distance';
+
+                    return false;
+                }
+
                 return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
 
             case Method::NotEqual:

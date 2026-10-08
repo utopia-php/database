@@ -95,15 +95,15 @@ class Postgres extends Base implements Filtering
      * The longitude and latitude degrees that hold every point within $meters of $point on the WGS84 spheroid, where a
      * degree of latitude spans at least 110,574 m and a degree of longitude at least 111,319 m × cos(latitude).
      *
-     * Null for a line or polygon, whose geodesic edges leave any degree box, and when the box would reach a pole or the
-     * antimeridian.
+     * Null for a line or polygon, whose geodesic edges leave any degree box, for a distance that is not finite, and
+     * when the box would reach a pole or the antimeridian.
      *
      * @param  string|array<mixed>  $point
      * @return array{0: float, 1: float}|null
      */
     private static function degreesWithinMeters(string|array $point, float $meters): ?array
     {
-        if (! \is_array($point) || \count($point) !== 2 || ! \is_numeric($point[0] ?? null) || ! \is_numeric($point[1] ?? null)) {
+        if (! \is_finite($meters) || ! \is_array($point) || \count($point) !== 2 || ! \is_numeric($point[0] ?? null) || ! \is_numeric($point[1] ?? null)) {
             return null;
         }
 

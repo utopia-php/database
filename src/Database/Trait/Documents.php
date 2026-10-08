@@ -100,6 +100,9 @@ trait Documents
     /** @var array<int, array<string, string>> Definition keys of the collections the open invalidation scope wrote, by coroutine id and collection key. */
     private array $documentCacheDefinitions = [];
 
+    /** @var array<int, array<string, array{key: string, field: string, generation: string, document: array<mixed>}>> Cached definitions a batch write found before dropping them, to cache again with the epoch it publishes, by coroutine id and collection key. */
+    private array $definitionRefills = [];
+
     /** @var array<string, array{source: array<string, mixed>, model: Document}> The model built from each definition's cached copy, by its cache key. */
     private static array $definitionModels = [];
 
@@ -3008,7 +3011,7 @@ trait Documents
 
         [$collectionKey] = $this->getCacheBaseKeys($collectionId);
 
-        return $this->advanceDocumentCacheEpoch($collectionKey, $this->getDefinitionCacheKey($collectionId));
+        return $this->advanceDocumentCacheEpoch($collectionKey, $this->getDefinitionCacheKey($collectionId), $this->getDefinitionCacheField($collectionId));
     }
 
     /**
@@ -3017,6 +3020,14 @@ trait Documents
     private function getDefinitionCacheKey(string $collectionId): string
     {
         return $this->getCacheBaseKeys(self::METADATA, $collectionId)[1];
+    }
+
+    /**
+     * The field of a collection's definition key that getCollection() reads under the current tenant and filters.
+     */
+    private function getDefinitionCacheField(string $collectionId): string
+    {
+        return \md5($this->getCacheKeys(self::METADATA, $collectionId)[2].':'.\json_encode($this->adapter->getTenant()));
     }
 
     /**
@@ -3144,7 +3155,11 @@ trait Documents
         return \time().self::DOCUMENT_CACHE_TOKEN_SEPARATOR.\bin2hex(\random_bytes(16));
     }
 
-    private function advanceDocumentCacheEpoch(string $collectionKey, string $definitionKey): bool
+    /**
+     * @param  string  $definitionField  The definition's field to cache again with the epoch the write publishes, as
+     *                                   a batch write does; '' drops the definition and leaves it to its next reader
+     */
+    private function advanceDocumentCacheEpoch(string $collectionKey, string $definitionKey, string $definitionField = ''): bool
     {
         $context = $this->getEventContext();
         if (isset($this->documentCacheMutations[$context][$collectionKey])) {
@@ -3152,7 +3167,7 @@ trait Documents
         }
 
         $token = $this->createDocumentCacheToken();
-        if (! $this->blockDocumentCacheEpoch($collectionKey, $token, $definitionKey)) {
+        if (! $this->blockDocumentCacheEpoch($collectionKey, $token, $definitionKey, $definitionField)) {
             return true;
         }
 
@@ -3163,16 +3178,21 @@ trait Documents
             return true;
         }
 
-        $this->activateDocumentCacheEpoch($collectionKey, $token, $definitionKey);
+        try {
+            $this->activateDocumentCacheEpoch($collectionKey, $token, $definitionKey);
+        } finally {
+            unset($this->definitionRefills[$context][$collectionKey]);
+        }
 
         return true;
     }
 
     /**
      * Publish a tombstone before the write, then drop the definition that carried the previous
-     * epoch, so readers refill it with the tombstone.
+     * epoch, so readers refill it with the tombstone. With a definition field, the definition cached
+     * there is kept, to cache again with the epoch the write publishes.
      */
-    private function blockDocumentCacheEpoch(string $collectionKey, string $token, string $definitionKey): bool
+    private function blockDocumentCacheEpoch(string $collectionKey, string $token, string $definitionKey, string $definitionField = ''): bool
     {
         $epochKey = $collectionKey.'#epoch';
         if (! (new Owners($this->cache))->register($collectionKey, $token)) {
@@ -3189,9 +3209,82 @@ trait Documents
         }
 
         $this->cache->purge($collectionKey.'#started');
+        $this->keepDefinitionRefill($collectionKey, $definitionKey, $definitionField);
         $this->purgeCachedDefinition($definitionKey);
 
         return true;
+    }
+
+    /**
+     * Keep the definition cached in the field, with the definition key's generation read before it. Every purge of
+     * the key advances that generation by one, and the write purges it twice, here and when it publishes its epoch,
+     * so a generation two ahead of this one then proves that nothing else invalidated the definition in between,
+     * as a schema change does.
+     */
+    private function keepDefinitionRefill(string $collectionKey, string $definitionKey, string $definitionField): void
+    {
+        $context = $this->getEventContext();
+        unset($this->definitionRefills[$context][$collectionKey]);
+        if ($definitionKey === '' || $definitionField === '') {
+            return;
+        }
+
+        try {
+            $generation = $this->cache->getGeneration($definitionKey);
+            $entry = $this->cache->load($definitionKey, self::TTL, $definitionField);
+        } catch (Throwable $error) {
+            Console::warning('Warning: Failed to read the definition to cache again: '.$error->getMessage());
+
+            return;
+        }
+
+        if (
+            ! \ctype_digit($generation)
+            || ! \is_array($entry)
+            || ($entry[self::DOCUMENT_CACHE_FIELD] ?? null) !== $definitionField
+            || ! \is_array($entry[self::DOCUMENT_CACHE_VALUE] ?? null)
+            || isset($entry[self::DOCUMENT_CACHE_VALUE][self::CACHE_EMPTY_MARKER])
+        ) {
+            return;
+        }
+
+        $this->definitionRefills[$context][$collectionKey] = [
+            'key' => $definitionKey,
+            'field' => $definitionField,
+            'generation' => $generation,
+            'document' => $entry[self::DOCUMENT_CACHE_VALUE],
+        ];
+    }
+
+    /**
+     * Cache the kept definition again under the epoch just published, unless its key was invalidated by anything
+     * but this write. A failure leaves the definition to its next reader, as the purge did.
+     */
+    private function refillDefinition(string $collectionKey, string $definitionKey, string $epoch): void
+    {
+        $context = $this->getEventContext();
+        $refill = $this->definitionRefills[$context][$collectionKey] ?? null;
+        unset($this->definitionRefills[$context][$collectionKey]);
+        if ($refill === null || $refill['key'] !== $definitionKey) {
+            return;
+        }
+
+        try {
+            $generation = $this->cache->getGeneration($definitionKey);
+            if ($generation !== (string) ((int) $refill['generation'] + 2)) {
+                return;
+            }
+
+            $this->cache->saveWithLease($definitionKey, [
+                self::DOCUMENT_CACHE_COLLECTION_EPOCH => $epoch,
+                self::DOCUMENT_CACHE_BLOCKED_AT => null,
+                self::DOCUMENT_CACHE_CHECKED_AT => \time(),
+                self::DOCUMENT_CACHE_FIELD => $refill['field'],
+                self::DOCUMENT_CACHE_VALUE => $refill['document'],
+            ], $refill['field'], $generation);
+        } catch (Throwable $error) {
+            Console::warning('Warning: Failed to cache the definition again: '.$error->getMessage());
+        }
     }
 
     private function purgeCachedDefinition(string $definitionKey): void
@@ -3218,6 +3311,7 @@ trait Documents
                 $failure ??= $error;
             }
         }
+        unset($this->definitionRefills[$context]);
 
         if ($failure !== null) {
             throw $failure;
@@ -3309,12 +3403,13 @@ trait Documents
     private function publishDocumentCacheEpoch(string $collectionKey, string $started, string $definitionKey): void
     {
         $epochKey = $collectionKey.'#epoch';
-        $epoch = self::DOCUMENT_CACHE_ACTIVE_PREFIX.\bin2hex(\random_bytes(16)).self::DOCUMENT_CACHE_SEPARATOR.$started;
-        if ($this->cache->save($epochKey, $epoch) === false) {
+        $marker = self::DOCUMENT_CACHE_ACTIVE_PREFIX.\bin2hex(\random_bytes(16));
+        if ($this->cache->save($epochKey, $marker.self::DOCUMENT_CACHE_SEPARATOR.$started) === false) {
             throw new RuntimeException("Failed to activate document cache epoch '{$epochKey}'");
         }
 
         $this->purgeCachedDefinition($definitionKey);
+        $this->refillDefinition($collectionKey, $definitionKey, $marker);
     }
 
     /**

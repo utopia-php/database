@@ -1,6 +1,6 @@
 # Upgrading from 7.x to 8.0
 
-This guide lists the changes you may need to make when you move from utopia-php/database 7.x (last release 7.4.0)
+This guide lists the changes you may need to make when you move from utopia-php/database 7.x (last release 7.4.1)
 to 8.0. [CHANGELOG.md](CHANGELOG.md) lists everything that is new in 8.0. If you built against the unreleased
 `feat-query-lib` branch, also read [Changes since the 8.0 pre-releases](#changes-since-the-80-pre-releases).
 
@@ -1091,7 +1091,9 @@ coroutine that opened it and the coroutines it starts; see [Pools and profiling]
   (7.x: `Unique index violation`). The class and its hierarchy are unchanged: `Unique` extends `Duplicate`, and a
   conflicting document `$id` still throws a plain `Duplicate` with `Document already exists`. Match on the class,
   not the message: catch `Unique` before `Duplicate` to tell the two apart. `Exception\Unique` has no constructor of
-  its own and never rewrites the message it is given. The message is `Exception\Unique::MESSAGE`.
+  its own and never rewrites the message it is given. The message is `Exception\Unique::MESSAGE`, also when
+  `createIndex()` refuses a unique index over documents that already share a value (7.4.1: `Unique index violation`,
+  and `Cannot create unique index: existing rows already contain duplicate values` on Redis).
 - **`ignoreDuplicates()` on PostgreSQL** skips only a document whose id is stored, as in 7.x: a new id that collides
   on another unique index throws `Utopia\Database\Exception\Unique`. MariaDB, MySQL and SQLite cannot name the
   index to ignore and, as in 7.x, skip such a row without error.

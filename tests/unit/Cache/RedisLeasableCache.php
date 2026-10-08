@@ -23,6 +23,11 @@ final class RedisLeasableCache implements CacheAdapter, Leasable
 
     private bool $corruptingFieldWrites = false;
 
+    private int $leaseGraceWindow = 0;
+
+    /** @var array<string, float> */
+    private array $tombstones = [];
+
     #[\Override]
     public function load(string $key, int $ttl, string $hash = ''): mixed
     {
@@ -60,6 +65,12 @@ final class RedisLeasableCache implements CacheAdapter, Leasable
             return false;
         }
 
+        if (($this->tombstones[$key] ?? 0.0) > \microtime(true)) {
+            return false;
+        }
+
+        unset($this->tombstones[$key]);
+
         return $this->save($key, $data, $hash);
     }
 
@@ -91,6 +102,9 @@ final class RedisLeasableCache implements CacheAdapter, Leasable
         }
 
         $this->generations[$key] = ($this->generations[$key] ?? 0) + 1;
+        if ($this->leaseGraceWindow > 0) {
+            $this->tombstones[$key] = \microtime(true) + $this->leaseGraceWindow / 1000;
+        }
 
         if ($hash === '') {
             $removed = \count($this->fields[$key] ?? []);
@@ -113,6 +127,7 @@ final class RedisLeasableCache implements CacheAdapter, Leasable
     {
         $this->fields = [];
         $this->generations = [];
+        $this->tombstones = [];
 
         return true;
     }
@@ -149,6 +164,23 @@ final class RedisLeasableCache implements CacheAdapter, Leasable
     }
 
     /**
+     * Refuse every leased save of a key for the given milliseconds after each purge of it, as the adapters'
+     * purge tombstone does (LUA_SAVE_WITH_LEASE).
+     */
+    public function setLeaseGraceWindow(int $milliseconds): void
+    {
+        $this->leaseGraceWindow = \max(0, $milliseconds);
+    }
+
+    /**
+     * End every grace window still open, as if it had elapsed.
+     */
+    public function expireTombstones(): void
+    {
+        $this->tombstones = [];
+    }
+
+    /**
      * Fail every purge of a single field, leaving the field in place.
      */
     public function failFieldPurges(): void
@@ -169,7 +201,7 @@ final class RedisLeasableCache implements CacheAdapter, Leasable
      */
     public function evict(string $key): void
     {
-        unset($this->fields[$key], $this->generations[$key]);
+        unset($this->fields[$key], $this->generations[$key], $this->tombstones[$key]);
     }
 
     /**

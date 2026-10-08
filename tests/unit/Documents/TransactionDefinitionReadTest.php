@@ -32,6 +32,8 @@ final class TransactionDefinitionReadTest extends TestCase
 {
     private const string COLLECTION = 'accounts';
 
+    private const string LEDGERS = 'ledgers';
+
     public function testATransactionReadsAnUnchangedDefinitionOnce(): void
     {
         $adapter = new CountingMemory();
@@ -170,6 +172,44 @@ final class TransactionDefinitionReadTest extends TestCase
         $database->purgeCachedDocument(Database::METADATA, self::COLLECTION);
         $this->assertSame(2, $this->transactionReads($database, $adapter, $update));
         $this->assertSame(0, $this->transactionReads($database, $adapter, $update), 'the transaction did not cache its definition');
+    }
+
+    public function testAFillRefusedInItsGraceWindowLeavesTransactionsFillingOtherDefinitions(): void
+    {
+        $adapter = new CountingMemory();
+        $cache = new RedisLeasableCache();
+        $database = $this->database($adapter, new Cache($cache));
+        $this->createLedgers($database);
+        $cache->setLeaseGraceWindow(60_000);
+
+        $database->purgeCachedDocument(Database::METADATA, self::COLLECTION);
+        $database->getCollection(self::COLLECTION);
+        $database->purgeCachedDocument(Database::METADATA, self::LEDGERS);
+        $cache->expireTombstones();
+
+        $read = fn (): Collection => $database->getCollection(self::LEDGERS);
+        $this->assertSame(2, $this->transactionReads($database, $adapter, $read), 'the refused fill stopped the refills');
+        $this->assertSame(0, $this->transactionReads($database, $adapter, $read), 'the transaction did not cache its definition');
+    }
+
+    public function testARefillRefusedByTheCommitsOwnPurgeLeavesLaterTransactionsFillingTheirs(): void
+    {
+        $adapter = new CountingMemory();
+        $cache = new RedisLeasableCache();
+        $database = $this->database($adapter, new Cache($cache));
+        $this->createLedgers($database);
+        $cache->setLeaseGraceWindow(60_000);
+        $database->purgeCachedDocument(Database::METADATA, self::COLLECTION);
+        $database->purgeCachedDocument(Database::METADATA, self::LEDGERS);
+        $cache->expireTombstones();
+
+        $database->withTransaction(fn (): int => $database->updateDocuments(self::COLLECTION, new Document(['balance' => 2])));
+        $cache->expireTombstones();
+
+        $read = fn (): Collection => $database->getCollection(self::LEDGERS);
+        $this->assertSame(2, $this->transactionReads($database, $adapter, $read), 'the refill the commit\'s purge refused stopped the refills');
+        $this->assertSame(0, $this->transactionReads($database, $adapter, $read), 'the transaction did not cache its definition');
+        $this->assertSame(2, $database->getDocument(self::COLLECTION, 'ada')->getAttribute('balance'));
     }
 
     public function testATransactionOnAReplicaReadPoolReadsItsDefinitionOnce(): void
@@ -463,6 +503,16 @@ final class TransactionDefinitionReadTest extends TestCase
         $database->getDocument(self::COLLECTION, 'ada');
 
         return $database;
+    }
+
+    private function createLedgers(Database $database): void
+    {
+        $database->createCollection(Collection::create(
+            id: self::LEDGERS,
+            attributes: [Attribute::integer(key: 'balance')],
+            permissions: [Permission::read(Role::any())],
+            documentSecurity: false,
+        ));
     }
 
     private function createAccounts(Database $database): void

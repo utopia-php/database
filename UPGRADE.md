@@ -797,6 +797,11 @@ method as a no-op, so a hook overrides only what it needs:
 - `increaseDocumentAttribute()` and `decreaseDocumentAttribute()` accept numeric strings as well
   (`string|int|float`), for unsigned 64-bit values, so an override has to widen its parameter types.
 - `Database` is now composed of the traits in `Utopia\Database\Trait`. Its public methods are unchanged by that.
+- `getDocument()` and `find()` overrides are not called for the locked read of `updateDocument()`,
+  `increaseDocumentAttribute()`, `decreaseDocumentAttribute()` and `deleteDocument()` or the page reads of
+  `updateDocuments()` and `deleteDocuments()`. `getCollection()` and `findCollection()` overrides are not called by
+  `getDocument(Database::METADATA, ...)` while no `Hook\Decorator` is registered or events are silenced (`silent()`
+  without hook names).
 - The protected `$listeners` and `$silentListeners` properties are gone. Registered lifecycle hooks are in the
   protected `$lifecycleHooks`; to silence or test for silence, use `silent()` and the protected
   `areEventsSilenced()`.
@@ -1210,6 +1215,12 @@ coroutine that opened it and the coroutines it starts; see [Pools and profiling]
   transaction and again after the outermost commit or rollback; other cached documents of the collection stay cached.
   Batch writes and schema changes retire the collection's cached documents at once. If the purge after a commit fails,
   the write throws with the data committed, and the collection's cached documents are retired instead.
+- **A write reads under the definition it resolved.** The locked read of `updateDocument()`,
+  `increaseDocumentAttribute()`, `decreaseDocumentAttribute()` and `deleteDocument()`, and every page read of
+  `updateDocuments()` and `deleteDocuments()`, use the collection definition the write resolved first. A schema
+  change committed after that, or between two pages, is not seen by that read or those pages; the write already
+  validated and encoded under the earlier definition. A bulk write reads `_metadata` at most once per call instead
+  of once per page. See [Subclasses of `Database`](#subclasses-of-database) for the overrides these reads skip.
 - **Transactions.** Inside `withTransaction()` a read uses the cache only for documents the transaction has not
   written; it never fills the cache. A transaction started on the adapter directly reads uncached (see
   [Known limitations](#known-limitations)).

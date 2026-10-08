@@ -645,6 +645,11 @@ have to make, with the 7.x and 8.0 forms side by side.
 - A document stored before an attribute became required, and so holding null for it, can be updated and upserted
   without a value for that attribute, as 7.4.1 does; every write failed with `Missing required attribute`. Creating a
   document without it, or clearing a stored value, still fails.
+- PostgreSQL: `distanceLessThan()` uses the spatial index; `ST_Distance()` alone cannot, so a radius query filtered
+  every row. It leads with `ST_DWithin()` on the geometry, or, for a distance in meters from a point to a point
+  attribute, with a degree box that holds every point in range. Lines, polygons and boxes that would reach a pole or
+  the antimeridian keep the exact comparison only, which stays in every case, so the boundary is still exclusive. 7.x
+  carries the same fix after 7.4.1.
 - `updateAttribute()` no longer fails on MongoDB, Memory and Redis when a key or unique index covers the attribute
   (the index was compared with itself).
 - `Validator\IndexDefinition` rejects an index definition without a type, with an unknown type, or a TTL index

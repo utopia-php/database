@@ -708,6 +708,114 @@ trait SpatialTests
         }
     }
 
+    public function testDistanceLessThanMatchesTheExactDistance(): void
+    {
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+        if (! $adapter->hasFeature(Feature\Spatial::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'distanceWithin';
+        $database->createCollection(Collection::create(id: $collection, attributes: [
+            Attribute::point(key: 'loc', required: true),
+        ], indexes: [
+            Index::spatial(key: 'loc_spatial', attribute: 'loc'),
+        ], permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ], documentSecurity: false));
+
+        try {
+            $centers = [[10.0, 60.0], [-120.0, -35.0], [179.95, 0.0], [0.0, 89.95]];
+            $documents = [];
+            foreach ($centers as $position => $center) {
+                for ($bearing = 0; $bearing < 360; $bearing += 15) {
+                    foreach ([0.5, 0.9, 0.99, 1.01, 1.1, 2.0] as $scale) {
+                        $radians = \deg2rad($bearing);
+                        $latitude = \max(-89.999, \min(89.999, $center[1] + $scale * 0.01 * \cos($radians)));
+                        $longitude = $center[0] + $scale * 0.01 * \sin($radians) / \cos(\deg2rad($center[1]));
+                        $longitude = $longitude > 180 ? $longitude - 360 : $longitude;
+                        $documents[] = new Document([
+                            '$id' => 'p'.$position.'_'.$bearing.'_'.\str_replace('.', '_', (string) $scale),
+                            'loc' => [$longitude, $latitude],
+                        ]);
+                    }
+                }
+            }
+            $database->createDocuments($collection, $documents);
+
+            $profiler = $database->setProfiling(true)->getProfiler();
+            $this->assertNotNull($profiler);
+
+            foreach ($centers as $center) {
+                foreach ([[0.01, false], [1111.95, true]] as [$distance, $meters]) {
+                    $profiler->reset();
+                    $within = $this->distanceIds($database, $collection, Query::distanceLessThan('loc', $center, $distance, $meters));
+                    $logs = $profiler->getLogs();
+
+                    $beyond = $this->distanceIds($database, $collection, Query::distanceGreaterThan('loc', $center, $distance, $meters));
+                    $equal = $this->distanceIds($database, $collection, Query::distanceEqual('loc', $center, $distance, $meters));
+
+                    $label = 'distanceLessThan('.\json_encode($center).', '.$distance.($meters ? ' m' : '').')';
+                    $this->assertNotEmpty($within, $label.' must match the points well inside the range');
+                    $this->assertSame([], \array_values(\array_intersect($within, $beyond)), $label.' must match no point beyond the range');
+                    $this->assertCount(\count($documents), \array_unique([...$within, ...$beyond, ...$equal]), $label.' must match every point that is neither beyond nor at the range');
+
+                    if ($adapter instanceof Postgres && $center[0] === 10.0) {
+                        $this->assertUsesIndex($adapter, '"'.$database->getDatabase().'"."'.$database->getNamespace().'_'.$collection.'"', $logs, 'loc_spatial', $label);
+                    }
+                }
+            }
+        } finally {
+            $database->setProfiling(false);
+            $database->deleteCollection($collection);
+        }
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function distanceIds(Database $database, string $collection, Query $query): array
+    {
+        $ids = \array_map(static fn (Document $document): string => $document->getId(), $database->find($collection, [$query, Query::limit(1000)]));
+        \sort($ids);
+
+        return $ids;
+    }
+
+    /**
+     * @param  list<\Utopia\Database\Profiler\Log>  $logs
+     */
+    private function assertUsesIndex(Postgres $adapter, string $table, array $logs, string $index, string $label): void
+    {
+        $plans = [];
+        $adapter->rawQuery('ANALYZE '.$table);
+        $adapter->rawQuery('SET enable_seqscan = off');
+        try {
+            foreach ($logs as $log) {
+                if (! \str_contains($log->query, 'ST_Distance')) {
+                    continue;
+                }
+
+                $rows = $adapter->rawQuery('EXPLAIN '.$log->query, $log->bindings);
+                $plans[] = \implode("\n", \array_map(static function (Document $row): string {
+                    $line = $row->getAttribute('QUERY PLAN');
+                    self::assertIsString($line);
+
+                    return $line;
+                }, $rows));
+            }
+        } finally {
+            $adapter->rawQuery('RESET enable_seqscan');
+        }
+
+        $this->assertCount(1, $plans, $label.' must run one statement');
+        $this->assertStringContainsString($index, $plans[0], $label.' must use the spatial index: '.$plans[0]);
+    }
+
     public function testSpatialIndex(): void
     {
         /** @var Database $database */

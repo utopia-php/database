@@ -6889,6 +6889,85 @@ trait JoinTests
         }
     }
 
+    /**
+     * A join no index serves and a join an index serves, inner and left, read only the selected tenant's rows:
+     * reviews are indexed by author, books are not.
+     */
+    public function testSharedTablesJoinsWithAndWithoutAnIndexReadOnlyTheSelectedTenantsRows(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->hasSharedTables() || ! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collections = ['jti_authors', 'jti_books', 'jti_reviews'];
+        [$authors, $books, $reviews] = $collections;
+        $tenant = $database->getTenant();
+
+        $rowsByChain = [
+            [Method::Join, Method::Join, [
+                1 => [['one-a1', 11, 5]],
+                2 => [],
+            ]],
+            [Method::LeftJoin, Method::LeftJoin, [
+                1 => [['one-a1', 11, 5], ['one-a2', null, 4]],
+                2 => [['two-a1', 21, null], ['two-a2', 22, null], ['two-shared', null, 1]],
+            ]],
+            [Method::Join, Method::LeftJoin, [
+                1 => [['one-a1', 11, 5]],
+                2 => [['two-a1', 21, null], ['two-a2', 22, null]],
+            ]],
+            [Method::LeftJoin, Method::Join, [
+                1 => [['one-a1', 11, 5], ['one-a2', null, 4]],
+                2 => [['two-shared', null, 1]],
+            ]],
+        ];
+
+        try {
+            $this->seedJoinTenancyFixture($database, ...$collections);
+            $database->createIndex($reviews, Index::key('author_key', ['authorId']));
+
+            foreach ($rowsByChain as [$first, $second, $rowsByTenant]) {
+                $joins = fn (): array => [
+                    $this->joinTenancyJoin($first, $books, 'book'),
+                    $this->joinTenancyJoin($second, $reviews, 'review'),
+                ];
+                $label = "{$first->value} unindexed books then {$second->value} indexed reviews";
+
+                foreach ($rowsByTenant as $selected => $rows) {
+                    $database->setTenant($selected);
+
+                    $this->assertSame(
+                        $this->joinTenancySorted($rows),
+                        $this->joinTenancyRows(
+                            $database->find($authors, [...$joins(), Query::select(['name', 'book.pages', 'review.stars'])]),
+                            ['book.pages', 'review.stars'],
+                        ),
+                        "Tenant {$selected} must read exactly its own rows through {$label}",
+                    );
+                    $this->assertSame(\count($rows), $database->count($authors, $joins()), "Tenant {$selected} must count exactly its own rows through {$label}");
+                    $this->assertSame(
+                        \array_sum(\array_map(static fn (array $row): int => $row[1] ?? 0, $rows)),
+                        $database->sum($authors, 'book.pages', $joins()),
+                        "Tenant {$selected} must sum exactly its own rows through {$label}",
+                    );
+                }
+
+                $database->setTenant(1);
+                $queries = fn (): array => [...$joins(), Query::select(['name', 'book.pages', 'review.stars'])];
+                $this->assertSame('one-a1', $database->getDocument($authors, 'a1', $queries())->getAttribute('name'));
+                $this->assertTrue($database->getDocument($authors, 'shared', $queries())->isEmpty(), "Tenant 1 must not read tenant 2's document through {$label}");
+                $this->assertTrue($database->getDocument($authors, 'legacy', $queries())->isEmpty(), "Tenant 1 must not read a tenantless document through {$label}");
+            }
+        } finally {
+            $database->setTenant(null);
+            $this->cleanupAggCollections($database, $collections);
+            $database->setTenant($tenant);
+        }
+    }
+
     public function testSharedTablesChainedJoinsKeepTheSelectedTenantsUnmatchedRows(): void
     {
         $database = static::getDatabase();

@@ -727,6 +727,7 @@ trait Documents
 
         if ($transactionDefinition) {
             $this->transactionDefinitions[$this->getEventContext()][$transactionDefinitionKey][$field] = clone $document;
+            $this->queueDefinitionRefill($transactionDefinitionKey, $field, $id);
         }
 
         $document = $this->decorateDocument(Event::DocumentRead, $collection, $document);
@@ -2955,7 +2956,10 @@ trait Documents
         }
         if (isset($this->transactionWrites[$context])) {
             $this->transactionWrites[$context][\strtolower($documentKey)] = true;
-            unset($this->transactionDefinitions[$context][\strtolower($documentKey)]);
+            unset(
+                $this->transactionDefinitions[$context][\strtolower($documentKey)],
+                $this->definitionRefills[$context][\strtolower($documentKey)],
+            );
         }
 
         $this->cache->purge($documentKey);

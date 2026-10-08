@@ -74,6 +74,41 @@ final class TransactionDefinitionReadTest extends TestCase
         $this->assertTrue($collection->getAttribute('documentSecurity'));
     }
 
+    public function testATransactionUnderAnotherTenantCachesThatTenantsDefinition(): void
+    {
+        $adapter = new CountingMemory();
+        $database = new Database($adapter, new Cache(new RedisLeasableCache()));
+        $database->setDatabase('transactions')->setNamespace('transactions_'.\uniqid());
+        $database->setSharedTables(true)->setTenant(1);
+        $database->create();
+        foreach ([1, 2] as $tenant) {
+            $database->withTenant($tenant, function () use ($database): void {
+                $this->createAccounts($database);
+                $database->getCollection(self::COLLECTION);
+            });
+        }
+        $database->withTenant(2, function () use ($database): void {
+            $database->purgeCachedDocument(Database::METADATA, self::COLLECTION);
+        });
+        $update = fn (): Document => $database->withTenant(2, fn (): Document => $database->updateDocument(self::COLLECTION, 'ada', new Document(['balance' => 2])));
+
+        $this->assertSame(2, $this->readsOf($adapter, fn (): Document => $database->withTransaction($update)));
+        $this->assertSame(0, $this->readsOf($adapter, fn (): Document => $database->withTransaction($update)), 'the transaction did not cache its tenant\'s definition');
+    }
+
+    public function testATransactionReadingARawDefinitionCachesTheRawDefinition(): void
+    {
+        $adapter = new CountingMemory();
+        $database = $this->database($adapter);
+        $database->purgeCachedDocument(Database::METADATA, self::COLLECTION);
+        $read = fn (): Document => $database->skipFilters(fn (): Document => $database->getDocument(Database::METADATA, self::COLLECTION));
+
+        $this->assertSame(2, $this->readsOf($adapter, fn (): Document => $database->withTransaction($read)));
+        $this->assertSame(0, $this->transactionReads($database, $adapter, $read), 'the transaction did not cache the raw definition');
+        $this->assertIsString($database->withTransaction($read)->getAttribute('attributes'));
+        $this->assertIsArray($database->getDocument(Database::METADATA, self::COLLECTION)->getAttribute('attributes'));
+    }
+
     public function testARolledBackTransactionLeavesItsDefinitionReadUncached(): void
     {
         $adapter = new CountingMemory();
@@ -206,11 +241,38 @@ final class TransactionDefinitionReadTest extends TestCase
         $this->assertSame('balance', $attributes[0]['key']);
     }
 
+    /**
+     * @param  callable(): mixed  $callback
+     */
+    private function transactionReads(Database $database, CountingMemory $adapter, callable $callback): int
+    {
+        return $this->readsOf($adapter, fn (): mixed => $database->withTransaction($callback));
+    }
+
+    /**
+     * @param  callable(): mixed  $callback
+     */
+    private function readsOf(CountingMemory $adapter, callable $callback): int
+    {
+        $adapter->reset();
+        $callback();
+
+        return $adapter->metadataReads;
+    }
+
     private function database(Adapter $adapter): Database
     {
         $database = new Database($adapter, new Cache(new RedisLeasableCache()));
         $database->setDatabase('transactions')->setNamespace('transactions_'.\uniqid());
         $database->create();
+        $this->createAccounts($database);
+        $database->getDocument(self::COLLECTION, 'ada');
+
+        return $database;
+    }
+
+    private function createAccounts(Database $database): void
+    {
         $database->createCollection(Collection::create(
             id: self::COLLECTION,
             attributes: [Attribute::integer(key: 'balance')],
@@ -218,8 +280,5 @@ final class TransactionDefinitionReadTest extends TestCase
             documentSecurity: false,
         ));
         $database->createDocument(self::COLLECTION, new Document([Document::ID => 'ada', 'balance' => 1]));
-        $database->getDocument(self::COLLECTION, 'ada');
-
-        return $database;
     }
 }

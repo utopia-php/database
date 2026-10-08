@@ -15,7 +15,9 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Permission;
+use Utopia\Database\PermissionType;
 use Utopia\Database\Role;
+use Utopia\Query\CursorDirection;
 
 /**
  * A single-document write reads the document it writes under the definition it resolved for the write, instead of
@@ -179,6 +181,113 @@ final class ResolvedCollectionReadTest extends TestCase
             static fn (Attribute $attribute): string => $attribute->key,
             $database->getCollection(self::COLLECTION)->attributes(),
         ), 'The next call resolves the changed definition');
+    }
+
+    /**
+     * @return array<string, array{Closure(Database, ?callable): int}>
+     */
+    public static function bulkWrites(): array
+    {
+        return [
+            'updateDocuments' => [static fn (Database $database, ?callable $onNext): int => $database->updateDocuments(self::COLLECTION, new Document(['name' => 'renamed']), batchSize: 2, onNext: $onNext)],
+            'deleteDocuments' => [static fn (Database $database, ?callable $onNext): int => $database->deleteDocuments(self::COLLECTION, batchSize: 2, onNext: $onNext)],
+        ];
+    }
+
+    /**
+     * @param  Closure(Database, ?callable): int  $write
+     */
+    #[DataProvider('bulkWrites')]
+    public function testABulkWriteReadsNoDefinitionForItsPages(Closure $write): void
+    {
+        [$database, $adapter] = $this->createDatabase();
+        $this->createSiblings($database);
+
+        $adapter->reset();
+        $this->assertSame(6, $write($database, null));
+
+        $this->assertSame(0, $adapter->metadataReads, 'Three pages of a cached definition read no _metadata row');
+    }
+
+    /**
+     * @param  Closure(Database, ?callable): int  $write
+     */
+    #[DataProvider('bulkWrites')]
+    public function testABulkWriteOfAnUncachedDefinitionReadsItOnce(Closure $write): void
+    {
+        [$database, $adapter] = $this->createDatabase();
+        $this->createSiblings($database);
+        $database->purgeCachedDocument(Database::METADATA, self::COLLECTION);
+
+        $adapter->reset();
+        $this->assertSame(6, $write($database, null));
+
+        $this->assertSame(1, $adapter->metadataReads);
+    }
+
+    /**
+     * A schema change committed while a bulk write pages is not seen by its later pages: every page is read under
+     * the definition the call validated its queries and encoded its updates with.
+     *
+     * @param  Closure(Database, ?callable): int  $write
+     */
+    #[DataProvider('bulkWrites')]
+    public function testEveryPageOfABulkWriteUsesTheDefinitionItResolved(Closure $write): void
+    {
+        $adapter = new class () extends CountingMemory {
+            private const string PAGED = 'webhooks';
+
+            /** @var list<list<string>> */
+            public array $pages = [];
+
+            #[\Override]
+            public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read): array
+            {
+                if ($collection->getId() === self::PAGED && $forPermission !== PermissionType::Read) {
+                    $this->pages[] = \array_map(
+                        static fn (Attribute $attribute): string => $attribute->key,
+                        Collection::fromDocument($collection)->attributes(),
+                    );
+                }
+
+                return parent::find($collection, $queries, $limit, $offset, $orderAttributes, $orderTypes, $cursor, $cursorDirection, $forPermission);
+            }
+        };
+        [$database, , , $cache] = $this->createDatabase($adapter);
+        $this->createSiblings($database);
+        $concurrent = (new Database($adapter, $cache))
+            ->setAuthorization($database->getAuthorization())
+            ->setDatabase($database->getDatabase())
+            ->setNamespace($database->getNamespace());
+        $changed = false;
+        $onNext = static function () use ($concurrent, &$changed): void {
+            if (! $changed) {
+                $changed = true;
+                $concurrent->createAttribute(self::COLLECTION, Attribute::string(key: 'label'));
+            }
+        };
+
+        $this->assertSame(6, $write($database, $onNext));
+
+        $this->assertTrue($changed);
+        $this->assertSame(\array_fill(0, 4, ['name', 'count']), $adapter->pages);
+        $this->assertSame(['name', 'count', 'label'], \array_map(
+            static fn (Attribute $attribute): string => $attribute->key,
+            $database->getCollection(self::COLLECTION)->attributes(),
+        ), 'The next call resolves the changed definition');
+    }
+
+    private function createSiblings(Database $database): void
+    {
+        foreach (['b', 'c', 'd', 'e', 'f'] as $id) {
+            $database->createDocument(self::COLLECTION, new Document([
+                '$id' => $id,
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any()), Permission::delete(Role::any())],
+                'name' => $id,
+                'count' => 1,
+            ]));
+        }
+        $database->getCollection(self::COLLECTION);
     }
 
     /**

@@ -3843,8 +3843,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         if ($node instanceof UTCDateTime) {
             $node = DateTime::format($node->toDateTime());
         } elseif (is_array($node) && isset($node['$date'])) {
-            // Handle Extended JSON format from (array) cast
-            // Format: {"$date":{"$numberLong":"1760405478290"}}
+            // Extended JSON an (array) cast leaves: {"$date":{"$numberLong":"1760405478290"}}
             if (is_array($node['$date']) && isset($node['$date']['$numberLong'])) {
                 /** @var mixed $numberLongVal */
                 $numberLongVal = $node['$date']['$numberLong'];

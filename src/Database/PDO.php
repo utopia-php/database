@@ -326,7 +326,6 @@ class PDO
             $name = \trim((string) $name);
             $value = $rawValue !== null ? \trim($rawValue) : null;
 
-            // Casting for scalars
             if ($value === 'true' || $value === 'false') {
                 $value = $value === 'true';
             } elseif (\is_numeric($value)) {

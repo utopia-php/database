@@ -863,7 +863,6 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
             throw new DatabaseException('Invalid WKB: missing coordinate bytes');
         }
 
-        // Unpack two doubles
         $coords = unpack('d2', $coordsBin);
         if ($coords === false || ! isset($coords[1], $coords[2])) {
             throw new DatabaseException('Invalid WKB: failed to unpack coordinates');

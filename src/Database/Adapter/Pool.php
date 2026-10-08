@@ -182,10 +182,15 @@ class Pool extends Adapter implements Feature\Timeouts
         }
 
         $this->syncTimeouts($adapter);
-        $adapter->resetMetadata();
-        foreach ($this->getMetadata() as $key => $value) {
-            $adapter->setMetadata($key, $value);
+
+        $metadata = $this->getMetadata();
+        if ($adapter->getMetadata() !== $metadata) {
+            $adapter->resetMetadata();
+            foreach ($metadata as $key => $value) {
+                $adapter->setMetadata($key, $value);
+            }
         }
+
         $adapter->setProfiler($this->profiler);
         $adapter->resetTransforms();
         foreach ($this->transforms as $name => $transform) {

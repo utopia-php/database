@@ -39,11 +39,63 @@ class Pool extends Adapter
     private array $timeouts = [];
 
     /**
+     * Answers to the getters that describe the adapter rather than a
+     * connection, by pool and method.
+     *
+     * Every connection in a pool is built by the same factory, so it is the
+     * same adapter class on the same DSN, and these answers are the same
+     * whichever connection gives them. Delegating them checked a connection
+     * out and replayed the whole handle state onto it to read a constant, and
+     * the hot path asks several per document. They are kept per pool rather
+     * than per handle because a handle is usually built for one request,
+     * while its pool lives as long as the process. Getters that read
+     * connection or handle state (the driver, the connection id, anything
+     * that varies with shared tables or with how a connection was set up)
+     * still delegate.
+     *
+     * @var \WeakMap<UtopiaPool<covariant Adapter>, array<string, mixed>>
+     */
+    private static \WeakMap $capabilities;
+
+    /**
+     * Attribute support each connection had when the pool first handed it
+     * out. A connection keeps whatever its last holder set, so a handle that
+     * never set it is given this back on checkout instead.
+     *
+     * @var \WeakMap<Adapter, bool>
+     */
+    private static \WeakMap $defaultSupportForAttributes;
+
+    /**
+     * Attribute support this handle asked for, replayed on every checkout so
+     * each connection runs with the value the getter reports.
+     */
+    private ?bool $supportForAttributes = null;
+
+    /**
+     * Attribute support as the adapter reports it to this handle. It is the
+     * one capability with a setter, so it is kept per handle, not per pool.
+     */
+    private ?bool $reportedSupportForAttributes = null;
+
+    /**
      * @param UtopiaPool<covariant Adapter> $pool The pool to use for connections. Must contain instances of Adapter.
      */
     public function __construct(UtopiaPool $pool)
     {
         $this->pool = $pool;
+
+        if (!isset(self::$capabilities)) {
+            /** @var \WeakMap<UtopiaPool<covariant Adapter>, array<string, mixed>> $capabilities */
+            $capabilities = new \WeakMap();
+            self::$capabilities = $capabilities;
+        }
+
+        if (!isset(self::$defaultSupportForAttributes)) {
+            /** @var \WeakMap<Adapter, bool> $defaults */
+            $defaults = new \WeakMap();
+            self::$defaultSupportForAttributes = $defaults;
+        }
     }
 
     /**
@@ -74,6 +126,8 @@ class Pool extends Adapter
             $adapter->setSharedTables($this->getSharedTables());
             $adapter->setTenant($this->getTenant());
             $adapter->setAuthorization($this->authorization);
+            self::$defaultSupportForAttributes[$adapter] ??= $adapter->getSupportForAttributes();
+            $adapter->setSupportForAttributes($this->supportForAttributes ?? self::$defaultSupportForAttributes[$adapter]);
 
             $this->syncTimeouts($adapter);
             $adapter->resetDebug();
@@ -92,6 +146,31 @@ class Pool extends Adapter
             }
             return $adapter->{$method}(...$args);
         });
+    }
+
+    /**
+     * Ask one connection for a capability the first time and keep the answer.
+     *
+     * @param string $method
+     * @return mixed
+     * @throws DatabaseException
+     */
+    protected function capability(string $method): mixed
+    {
+        $answers = self::$capabilities[$this->pool] ?? [];
+
+        if (\array_key_exists($method, $answers)) {
+            return $answers[$method];
+        }
+
+        $answer = $this->delegate($method, []);
+
+        // The checkout can yield to a coroutine that kept another answer meanwhile
+        $answers = self::$capabilities[$this->pool] ?? [];
+        $answers[$method] = $answer;
+        self::$capabilities[$this->pool] = $answers;
+
+        return $answer;
     }
 
     public function getDriver(): mixed
@@ -238,9 +317,28 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    /**
+     * The hostname comes from the DSN the pool connects with. An empty answer
+     * is what a SQL adapter reports when it cannot read it, so that one is
+     * not kept.
+     */
     public function getHostname(): string
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        $hostname = self::$capabilities[$this->pool][__FUNCTION__] ?? '';
+
+        if ($hostname !== '') {
+            return $hostname;
+        }
+
+        $hostname = $this->delegate(__FUNCTION__, \func_get_args());
+
+        if ($hostname !== '') {
+            $answers = self::$capabilities[$this->pool] ?? [];
+            $answers[__FUNCTION__] = $hostname;
+            self::$capabilities[$this->pool] = $answers;
+        }
+
+        return $hostname;
     }
 
     /**
@@ -267,6 +365,8 @@ class Pool extends Adapter
             $adapter->setSharedTables($this->getSharedTables());
             $adapter->setTenant($this->getTenant());
             $adapter->setAuthorization($this->authorization);
+            self::$defaultSupportForAttributes[$adapter] ??= $adapter->getSupportForAttributes();
+            $adapter->setSupportForAttributes($this->supportForAttributes ?? self::$defaultSupportForAttributes[$adapter]);
 
             $this->syncTimeouts($adapter);
             $adapter->resetDebug();
@@ -464,32 +564,32 @@ class Pool extends Adapter
 
     public function getLimitForString(): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getLimitForInt(): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getLimitForBigInt(): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForUnsignedBigInt(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getLimitForAttributes(): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getLimitForIndexes(): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getMaxIndexLength(): int
@@ -499,62 +599,62 @@ class Pool extends Adapter
 
     public function getMaxVarcharLength(): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getMaxUIDLength(): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getMinDateTime(): \DateTime
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return clone $this->capability(__FUNCTION__);
     }
 
     public function getSupportForSchemas(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForAttributes(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->reportedSupportForAttributes ??= $this->delegate(__FUNCTION__, \func_get_args());
     }
 
     public function getSupportForSchemaAttributes(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForIndex(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForIndexArray(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForCastIndexArray(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForUniqueIndex(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForFulltextIndex(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForFulltextWildcardIndex(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForPCRERegex(): bool
@@ -564,42 +664,42 @@ class Pool extends Adapter
 
     public function getSupportForPOSIXRegex(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForTrigramIndex(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForCasting(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForQueryContains(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForTimeouts(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForRelationships(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForUpdateLock(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForBatchOperations(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForAttributeResizing(): bool
@@ -609,62 +709,62 @@ class Pool extends Adapter
 
     public function getSupportForOperators(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForGetConnectionId(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForUpserts(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForUpsertOnUniqueIndex(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForVectors(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForCacheSkipOnFailure(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForCaching(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForReconnection(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForHostname(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForBatchCreateAttributes(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForSpatialAttributes(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForSpatialIndexNull(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getCountOfAttributes(Document $collection): int
@@ -679,17 +779,17 @@ class Pool extends Adapter
 
     public function getCountOfDefaultAttributes(): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getCountOfDefaultIndexes(): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getDocumentSizeLimit(): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getAttributeWidth(Document $collection): int
@@ -699,7 +799,7 @@ class Pool extends Adapter
 
     public function getKeywords(): array
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     protected function getAttributeProjection(array $selections, string $prefix): mixed
@@ -719,7 +819,7 @@ class Pool extends Adapter
 
     public function getInternalIndexesKeys(): array
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSchemaAttributes(string $collection): array
@@ -729,7 +829,7 @@ class Pool extends Adapter
 
     public function getSupportForSchemaIndexes(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSchemaIndexes(string $collection): array
@@ -749,7 +849,7 @@ class Pool extends Adapter
 
     public function getIdAttributeType(): string
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSequences(string $collection, array $documents): array
@@ -759,42 +859,42 @@ class Pool extends Adapter
 
     public function getSupportForBoundaryInclusiveContains(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForSpatialIndexOrder(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForSpatialAxisOrder(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForOptionalSpatialAttributeWithExistingRows(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForMultipleFulltextIndexes(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForIdenticalIndexes(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForOrderRandom(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function decodePoint(string $wkb): array
@@ -814,12 +914,12 @@ class Pool extends Adapter
 
     public function getSupportForObject(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForObjectIndexes(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function castingBefore(Document $collection, Document $document): Document
@@ -834,12 +934,12 @@ class Pool extends Adapter
 
     public function getSupportForInternalCasting(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForUTCCasting(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function setUTCDatetime(string $value): mixed
@@ -847,14 +947,35 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    /**
+     * The setter returns the support the adapter ends up with, which is what
+     * the getter has to report from now on. That answer depends only on the
+     * value asked for, so it is kept per pool, and every checkout replays the
+     * value itself. A pinned connection is not replayed onto, so it is told
+     * directly.
+     */
     public function setSupportForAttributes(bool $support): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        $this->supportForAttributes = $support;
+        $this->pinnedAdapter?->setSupportForAttributes($support);
+
+        $key = __FUNCTION__ . ($support ? '(true)' : '(false)');
+        $answer = self::$capabilities[$this->pool][$key] ?? null;
+
+        if ($answer === null) {
+            $answer = $this->delegate(__FUNCTION__, \func_get_args());
+
+            $answers = self::$capabilities[$this->pool] ?? [];
+            $answers[$key] = $answer;
+            self::$capabilities[$this->pool] = $answers;
+        }
+
+        return $this->reportedSupportForAttributes = $answer;
     }
 
     public function getSupportForIntegerBooleans(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function setAuthorization(Authorization $authorization): self
@@ -865,26 +986,26 @@ class Pool extends Adapter
 
     public function getSupportForAlterLocks(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportNonUtfCharacters(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForTTLIndexes(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForTransactionRetries(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 
     public function getSupportForNestedTransactions(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->capability(__FUNCTION__);
     }
 }

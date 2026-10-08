@@ -279,6 +279,7 @@ trait Transactions
             $documentTokens = $this->documentCacheMutations[$context];
             $documents = $this->documentCachePurges[$context];
             $purgeEvents = $this->documentPurgeEvents[$context];
+            $definitions = $this->transactionDefinitions[$context] ?? [];
             unset(
                 $this->queryCacheMutations[$context],
                 $this->documentCacheMutations[$context],
@@ -314,9 +315,35 @@ trait Transactions
 
                 throw $failure;
             }
+
+            $this->cacheTransactionDefinitions($definitions);
         }
 
         return $result;
+    }
+
+    /**
+     * Read again, now that the transaction has committed, each collection definition it had to read by SQL, so the
+     * read fills the shared cache a read inside the transaction must not: its snapshot may predate another writer's
+     * commit. Without this a definition dropped from the cache, as by a batch write, stays uncached for as long as
+     * only transactions read it. A failed read leaves the definition uncached, as it was.
+     *
+     * @param  array<string, array<string, Document>>  $definitions  Definitions read in the transaction, by lower-cased definition key and cache field
+     */
+    private function cacheTransactionDefinitions(array $definitions): void
+    {
+        foreach ($definitions as $fields) {
+            $definition = \reset($fields);
+            if ($definition === false || $definition->getId() === '') {
+                continue;
+            }
+
+            try {
+                $this->silent(fn (): Document => $this->getDocument(self::METADATA, $definition->getId()));
+            } catch (Throwable) {
+                // The definition stays uncached; the next read outside a transaction fills it.
+            }
+        }
     }
 
     /**

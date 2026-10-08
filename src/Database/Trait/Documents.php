@@ -27,6 +27,7 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Order as OrderException;
@@ -133,10 +134,10 @@ trait Documents
                 && ! $this->adapter->supports(Capability::UnsignedBigInt)) {
                 throw new TypeException('Unsigned 64-bit arithmetic is not supported by this adapter.');
             }
-            if ((! \is_int($current) && ! \is_string($current)) || ! BigInt::isIntegerString((string) $current)) {
+            if (! \is_int($current) && (! \is_string($current) || ! BigInt::isIntegerString($current))) {
                 throw new TypeException('Attribute value must be an integer.');
             }
-            if ((! \is_int($value) && ! \is_string($value)) || ! BigInt::isIntegerString((string) $value)) {
+            if (! \is_int($value) && (! \is_string($value) || ! BigInt::isIntegerString($value))) {
                 throw new TypeException('Change value must be an integer.');
             }
 
@@ -273,7 +274,7 @@ trait Documents
 
     private function assertIntegerChange(int|float|string $value): void
     {
-        if ((! \is_int($value) && ! \is_string($value)) || ! BigInt::isIntegerString((string) $value)) {
+        if (! \is_int($value) && (! \is_string($value) || ! BigInt::isIntegerString($value))) {
             throw new TypeException('Change value must be an integer.');
         }
     }
@@ -828,6 +829,14 @@ trait Documents
             $kept->getPermissions();
         } catch (StructureException) {
             // Permissions that do not parse fail where a clone's are read, as they would unparsed.
+        }
+        if ($kept instanceof Collection) {
+            try {
+                $kept->attributes();
+                $kept->indexes();
+            } catch (StructureException|IndexException) {
+                // Models that do not build fail where a clone's are read, as they would unbuilt.
+            }
         }
         self::$definitionModels[$documentKey] = ['source' => $cached, 'model' => $kept];
 

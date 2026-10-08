@@ -101,6 +101,31 @@ final class DefinitionModelCacheTest extends TestCase
         $this->assertSame(['users'], $database->getCollection(self::COLLECTION)->getPermissionsByType(PermissionType::Read));
     }
 
+    public function testReadsOfAnUnchangedCachedDefinitionShareItsModels(): void
+    {
+        $adapter = new CountingMemory();
+        $database = $this->database($adapter, new Cache(new MemoryCache()));
+        $this->cachedRead($database, $adapter);
+
+        $first = $database->getCollection(self::COLLECTION);
+        $second = $database->getCollection(self::COLLECTION);
+
+        $this->assertNotSame($first, $second);
+        $this->assertSame($first->attributes()[0], $second->attributes()[0]);
+        $this->assertSame('title', $second->attributes()[0]->key);
+    }
+
+    public function testEveryCopyOfTheMetadataDefinitionSharesItsModels(): void
+    {
+        $first = Database::collectionDefinition();
+        $second = Database::collectionDefinition();
+
+        $this->assertNotSame($first, $second);
+        $this->assertSame($first->attributes()[0], $second->attributes()[0]);
+        $this->assertSame($first->indexes(), $second->indexes());
+        $this->assertSame('name', $second->attributes()[0]->key);
+    }
+
     /**
      * Reads the definition twice and checks the second read was served by the cache.
      *

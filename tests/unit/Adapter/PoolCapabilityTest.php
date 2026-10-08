@@ -57,7 +57,7 @@ final class PoolCapabilityTest extends TestCase
         $this->assertSame('first', $database->getDocument('posts', 'first')->getAttribute('title'));
     }
 
-    public function testAWarmValidatedReadChecksOutOnlyForDefinedAttributes(): void
+    public function testAWarmValidatedReadOverSchemaEnforcingConnectionsChecksOutNoConnection(): void
     {
         /** @var ArrayObject<int, string> $asked */
         $asked = new ArrayObject();
@@ -68,10 +68,23 @@ final class PoolCapabilityTest extends TestCase
 
         $this->checkouts = 0;
         $asked->exchangeArray([]);
-        $database->getDocument('posts', 'first', $selection);
+        $document = $database->getDocument('posts', 'first', $selection);
 
-        $this->assertSame(['DefinedAttributes', 'DefinedAttributes'], $asked->getArrayCopy(), 'The database and the query validator each ask the connection, so they answer alike');
-        $this->assertSame(2, $this->checkouts);
+        $this->assertSame('first', $document->getAttribute('title'));
+        $this->assertSame([], $asked->getArrayCopy(), 'A connection without a schemaless mode always answers alike, so its answer is kept');
+        $this->assertSame(0, $this->checkouts);
+    }
+
+    public function testDefinedAttributesOfSchemaEnforcingConnectionsIsAskedOnce(): void
+    {
+        $pool = $this->pool($this->connections(new Memory()));
+        $this->assertTrue($pool->supports(Capability::DefinedAttributes));
+
+        $this->checkouts = 0;
+        $this->down = true;
+
+        $this->assertTrue($pool->supports(Capability::DefinedAttributes));
+        $this->assertSame(0, $this->checkouts);
     }
 
     public function testAWarmValidatedReadWithoutQueriesChecksOutNoConnection(): void
@@ -161,6 +174,8 @@ final class PoolCapabilityTest extends TestCase
             }
         };
         $pool = $this->pool($this->connections($mongo));
+        $this->assertTrue($pool->hasFeature(Feature\Schemaless::class));
+        $this->checkouts = 0;
 
         $mongo->setSchemaless(true);
         $this->assertFalse($pool->supports(Capability::DefinedAttributes));

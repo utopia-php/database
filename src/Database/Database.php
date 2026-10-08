@@ -2636,7 +2636,11 @@ class Database
      */
     public static function collectionDefinition(): Collection
     {
-        return clone (self::$definition ??= Collection::create(
+        if (self::$definition !== null) {
+            return clone self::$definition;
+        }
+
+        $definition = Collection::create(
             id: self::METADATA,
             name: 'collections',
             attributes: [
@@ -2647,7 +2651,11 @@ class Database
             ],
             documentSecurity: false,
             metadata: [Document::COLLECTION => self::METADATA],
-        ));
+        );
+        $definition->attributes();
+        $definition->indexes();
+
+        return clone (self::$definition = $definition);
     }
 
     /**

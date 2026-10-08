@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
+use Tests\Unit\Support\CountingMemory;
 use Utopia\Cache\Adapter\Memory as CacheMemory;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
@@ -51,5 +52,24 @@ class EmptyDocumentTypeTest extends TestCase
 
         $this->assertSame(Document::class, $empty::class);
         $this->assertTrue($empty->isEmpty());
+    }
+
+    public function testAZeroIdReadsNothing(): void
+    {
+        $adapter = new CountingMemory();
+        $database = new Database($adapter, new Cache(new CacheMemory()));
+        $database
+            ->setDatabase('utopiaTests')
+            ->setNamespace('empty_type_' . \uniqid());
+        $database->create();
+        $database->createCollection(Collection::create(id: 'users'));
+        $database->setDocumentType('users', TypedUser::class);
+        $adapter->reset();
+
+        $empty = $database->getDocument('users', '0');
+
+        $this->assertInstanceOf(TypedUser::class, $empty);
+        $this->assertTrue($empty->isEmpty());
+        $this->assertSame(0, $adapter->metadataReads + $adapter->documentReads);
     }
 }

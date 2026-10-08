@@ -9,6 +9,8 @@ use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Event;
+use Utopia\Database\Hook\Decorator;
 
 final class MetadataModelTest extends TestCase
 {
@@ -52,5 +54,21 @@ final class MetadataModelTest extends TestCase
         /** @var list<Document> $secondAttributes */
         $secondAttributes = $second->getAttribute('attributes');
         $this->assertNotSame($attributes[0], $secondAttributes[0]);
+    }
+
+    public function testMetadataDefinitionReadUnderADecoratorIsTheDefinition(): void
+    {
+        $database = new Database(new Memory(), new Cache(new None()));
+        $database->addHook(new class () implements Decorator {
+            #[\Override]
+            public function decorate(Event $event, Document $collection, Document $document): Document
+            {
+                return $document->setAttribute('decorated', true);
+            }
+        });
+
+        $definition = $database->getDocument(Database::METADATA, Database::METADATA);
+
+        $this->assertSame(Database::collectionDefinition()->getArrayCopy(), $definition->getArrayCopy());
     }
 }

@@ -57,7 +57,8 @@ have to make, with the 7.x and 8.0 forms side by side.
   `except()`.
 - `Exception\Order` and `Exception\Operator` extend `Exception\Query`, so a `catch (Exception\Query)` also catches
   them. See [Errors](UPGRADE.md#errors).
-- The validators that read adapter limits and capabilities take an `Adapter\Profile`. See
+- The validators that read adapter limits and capabilities take an `Adapter\Profile`. Every validator's `isValid()`
+  takes `mixed $value`, so a named argument `permissions:`, `roles:`, `document:` or `input:` is `value:`. See
   [Validators and helpers](UPGRADE.md#validators-and-helpers).
 - Cache key names changed: do not share a cache between 7.x and 8.0 processes, and flush it after the last 7.x
   process has stopped. See [Caches](UPGRADE.md#caches).
@@ -273,10 +274,10 @@ have to make, with the 7.x and 8.0 forms side by side.
   of a string attribute, and the Redis adapter supports upserts.
 - `Query::exists()` and `Query::notExists()` run on the SQL adapters. Each value names an attribute of the
   collection that holds a column, or an `alias.attribute` of a join; other names throw `Exception\Query`.
-- `Authorization::withRoles()`, `Adapter::withTenant()`, `Database::snapshot()` and
-  `Database::withSnapshot(Snapshot $snapshot, callable $callback)`: run work started in another coroutine under the
-  caller's authorization, relationship, silence, tenant and toggle state. `Hook\Relationships::withEnabled()`,
-  `withCheckExist()` and `withSnapshot()` scope the hook's flags the same way.
+- `Authorization::withRoles()` and `Adapter::withTenant()` scope the roles and the tenant to the calling coroutine,
+  and `Database::snapshot()` returns the calling coroutine's authorization, relationship, silence, tenant and toggle
+  state. `Hook\Relationships::withEnabled()` and `withCheckExist()` scope the hook's flags the same way.
+  `Database::withSnapshot()` and `Hook\Relationships::withSnapshot()` are `@internal`.
 - Scoped toggles take their value: `withValidation()`, `withFiltering()`, `withPreserveDates()` and
   `withPreserveSequence()`.
 - `Database::setCacheWriterTimeout()` bounds how long an unfinished invalidation keeps a collection's document and
@@ -309,11 +310,11 @@ have to make, with the 7.x and 8.0 forms side by side.
   `withTenant()`), including one the coroutine inherited from the coroutine that started it: there the change
   applies to the calling coroutine and the coroutines it starts, and lasts until the scope ends. A coroutine sees a
   scope only while every coroutine between it and the scope's owner is running; work that can outlive its starter
-  runs under `withSnapshot()`. A coroutine cut off from a scope, because a coroutine between it and the scope's
+  opens its own scopes. A coroutine cut off from a scope, because a coroutine between it and the scope's
   owner has returned, reads the shared values or a scope opened outside every coroutine, and while a scope over the
   same state is open on the handle its writes stay with it and the coroutines it starts; for `Authorization`,
   `skip()` and `withRoles()` count together. Such a coroutine changes and restores state with those
-  scopes or `withSnapshot()`, not with a pair of setters. See [Coroutines](UPGRADE.md#coroutines).
+  scopes, not with a pair of setters. See [Coroutines](UPGRADE.md#coroutines).
 - Relationship population reads its chunks of related ids concurrently only on `Adapter\Pool`, inside a coroutine
   and outside `withTransaction()`, and only as many at once as `Hook\Relationships::READ_CONCURRENCY` (4) and
   `Pool::getReadConcurrency()` (the connections the pool can hand out without waiting, less one) allow; elsewhere it
@@ -752,7 +753,7 @@ not change anything for an upgrade from 7.x.
     collection is checked against its own: a value of the wrong type, a comparison an array attribute does not take,
     or `contains` on a number is rejected as `Exception\Query` instead of failing in the engine (PostgreSQL 22P02,
     22007, 42883) or as `Unknown PDO Type`. Vector queries cannot target a joined attribute.
-  - `Validator\Queries` with a `length` caps every nested query group again, as in 7.x.
+  - `Validator\Queries\Base` with a `length` caps every nested query group again, as in 7.x.
   - `count()` and `sum()` with filters or document permissions run one flat aggregate over the table, as 7.x did,
     instead of an aggregate over a derived table; only `$max` and joins keep the derived table.
   - `count()` and `sum()` throw `Exception\Query` for a statement the query builder refuses, and the mapped engine

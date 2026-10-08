@@ -1017,13 +1017,12 @@ A plain setter is scoped only by a scope over the same state:
 - `Hook\Relationships::setEnabled()` by `Hook\Relationships::withEnabled()` and `skipRelationships()`;
 - `setPreserveDates()` by `withPreserveDates()`, and `setPreserveSequence()` by `withPreserveSequence()`.
 
-`withSnapshot()` opens a scope over each of them. Outside every scope over its state, a setter in the coroutine that
-opened a scope, or in a coroutine it started that is still connected to it, changes the shared value, as in 7.x:
-`disable()` inside `withRoles()` turns authorization off for every coroutine sharing the `Authorization`. A coroutine
-cut off from the scope is covered in the next paragraph. Inside such a scope, whether the calling coroutine opened it
-or inherited it from the coroutine that started it, a setter changes only what the calling coroutine and the
-coroutines it starts see, and only until the scope ends. When the scope ends, the value is what it was before the
-scope, as in 7.x.
+Outside every scope over its state, a setter in the coroutine that opened a scope, or in a coroutine it started that
+is still connected to it, changes the shared value, as in 7.x: `disable()` inside `withRoles()` turns authorization
+off for every coroutine sharing the `Authorization`. A coroutine cut off from the scope is covered in the next
+paragraph. Inside such a scope, whether the calling coroutine opened it or inherited it from the coroutine that
+started it, a setter changes only what the calling coroutine and the coroutines it starts see, and only until the
+scope ends. When the scope ends, the value is what it was before the scope, as in 7.x.
 
 A coroutine sees a scope only while every coroutine between it and the scope's owner is still running, because
 Swoole cannot report the parent of a coroutine that has finished. In a coroutine cut off this way:
@@ -1045,21 +1044,23 @@ so it keeps the write local: the same `disable()` there applies only to it and t
 A cut-off coroutine must not change and then restore state with a pair of setters, such as `disable()` then
 `enable()`, or `setTenant($tenant)` then `setTenant($original)`. Each write is shared or local depending on whether a
 scope over that state is open on the handle at that moment, so the restore can stay local while the change stays
-shared. Use `skip()`, `withRoles()` or `withTenant()`, or `withSnapshot()`, which always restore the
-value when they end.
+shared. Use `skip()`, `withRoles()`, `withTenant()` or another `with*()` scope, which always restores the value
+when it ends.
 
 While a cut-off coroutine holding such a local write is alive, reads of that state take the slower scoped path in
 every coroutine sharing the handle, as they do while any scope over it is open, so a long-lived coroutine should open
-its own scope with `withSnapshot()` around the work that needs it rather than call setters.
+its own scopes around the work that needs them rather than call setters.
 
-To inherit the caller's state, work that can outlive the coroutine that started it has to take `snapshot()` before it
-starts and open the scope itself, inside the child, with `withSnapshot()`; a snapshot does not carry a transaction.
+Work that can outlive the coroutine that started it loses that coroutine's scopes once it returns, so it opens the
+scopes it needs itself, inside the child. `Hook\Relationships::withEnabled()` and `withCheckExist()` scope the hook's
+own flags the same way as the database scopes.
 
-To run work started in another coroutine under the caller's state, take `$snapshot = $database->snapshot()` in the
-caller and run the work inside `$database->withSnapshot($snapshot, $callback)`. A snapshot carries the authorization
-status and roles, the relationship, silence and filter state, the tenant, the validation, preserve-dates,
-preserve-sequence and ignore-duplicates toggles, and the request timestamp. `Hook\Relationships::withEnabled()`,
-`withCheckExist()` and `withSnapshot()` scope the hook's own flags the same way.
+`Database::snapshot()` returns the calling coroutine's state as a `State\Snapshot`: the authorization status and
+roles, the relationship, silence and filter state, the tenant, the validation, preserve-dates, preserve-sequence and
+ignore-duplicates toggles, and the request timestamp; a snapshot does not carry a transaction.
+`Database::withSnapshot()` and `Hook\Relationships::withSnapshot()`, which run a callback under a snapshot, are
+`@internal`: `Mirror` and the relationship hook use them to carry the caller's state into the coroutines they start.
+They are not part of the public API.
 
 Relationship population reads its chunks of related ids concurrently only on `Adapter\Pool`, inside a coroutine and
 outside `withTransaction()`, and only as many at once as `Hook\Relationships::READ_CONCURRENCY` (4) and
@@ -1915,7 +1916,9 @@ $validator = new IndexDefinition($attributes, $indexes, $database->profile());
   `validateDefaultTypes()` take a `ColumnType`, `Structure::addFormat()`, `getFormat()` and `hasFormat()` (and those
   of `PartialStructure`) take a `ColumnType`, `Query\Filter::isValidAttributeAndValues()` takes a `Method` case, and
   `Validator\Spatial::isWKTString()` is `isWktString()`. `Validator\Operator` takes a trailing
-  `bool $supportUnsignedBigInt = true`. Every `isValid()` takes `mixed $value`.
+  `bool $supportUnsignedBigInt = true`. Every `isValid()` takes `mixed $value`: a call that names the argument
+  after the 7.x parameter (`$permissions` on `Permissions`, `$roles` on `Roles`, `$document` on `Structure` and
+  `PartialStructure`, `$input` on `Authorization`) passes `value:` instead.
 - `Validator\Permissions` and `Permission::aggregate()` take their allowed permission types as `PermissionType`
   cases; a list of strings throws a `TypeError`. `Validator\Authorization\Input` takes a `PermissionType` case.
 - `Validator\Authorization`'s status is no longer a `protected bool $status` property; subclasses read and change it
@@ -1977,7 +1980,7 @@ from those builds changed before 8.0.0; none of them exists in 7.x.
 | `Database::enableProfiling()`, `disableProfiling()`, `Profiler\QueryProfiler`, `Profiler\QueryLog` | `setProfiling(bool)`, `Utopia\Database\Profiler`, `Profiler\Log` |
 | `Database::setTypeRegistry()`, `Type\Custom`, `Type\TypeRegistry`, an associative constructor `$filters` | `setFilters()`, `Filter\Codec`, `Filter\Registry`, a list of `Filter\Codec` |
 | `Cache\QueryCache` with `$cacheName` and `writerTimeout` arguments | `Cache\Query`, which uses those of the `Database` calling it |
-| `Authorization::withStatus()` | `skip()`, or `setStatus()` inside `withSnapshot()` |
+| `Authorization::withStatus()` | `skip()`, or `setStatus()` inside `skip()` |
 | `Hook\Lifecycle::handle(Event $event, mixed $data)` | `handle(Event\Domain $event)` |
 | `Event\Documents\Created`, `Updated`, `Deleted` | `Event\Document\BatchCreated`, `BatchUpdated`, `BatchDeleted` |
 | `Event\Domain::$occurredAt` | Removed |
@@ -1991,6 +1994,10 @@ from those builds changed before 8.0.0; none of them exists in 7.x.
 | `Hook\Read`, `Hook\Mongo\PermissionFilter`, `Hook\Mongo\TenantFilter` | `Hook\Mongo\Read`, `Hook\Mongo\Permission`, `Hook\Mongo\Tenant` |
 | `Traits\`, `Builder\PostgreSQL`, `State\Scope` | `Trait\`, `Builder\Postgres`, `State\Frame` |
 | `Validator\Query\JoinedCollection`, `JoinedAttributes` | `Validator\Query\Joined\Collection`, `Joined\Attributes` |
+| A plain `class` extending `Hook\PermissionFilter`; `Hook\TenantFilter`, `Hook\Mongo\PermissionFilter` and `Hook\Mongo\TenantFilter` as base classes | `Adapter\SQL\Hook\Permission\Filter` is `readonly`, so a subclass, such as one an adapter's `newPermissionHook()` or `newJoinPermissionHook()` override returns, is declared `readonly class`; `Adapter\SQL\Hook\Tenant\Filter`, `Hook\Mongo\Permission` and `Hook\Mongo\Tenant` are `final readonly` |
+| The protected SQL adapter methods `compileAdapterFilter()`, `getOperatorBuilderExpression()`, `getOperatorUpsertExpression()` and `getVectorOrderRaw()` returning `array{expression: string, bindings: list<mixed>}`; `compileAdapterFilter()`'s `$joins` as `list<array{table: string, alias: string}>` | They return `Adapter\SQL\Expression` (`$sql`, `$bindings`), nullable where the array was; `$joins` is a `list<Adapter\SQL\JoinAlias>` (`$table`, `$alias`) |
+| `Cache\Region` with writable `$ttl` and `$enabled`; `Profiler\QueryLog` as a base class | `Cache\Region` and `Profiler\Log` are `final readonly`: pass a new `Region` to `Cache\Query::setRegion()` |
+| `Storage::PERMS_SUFFIX`, `PERM_DOCUMENT`, `PERM_TYPE`, `PERM_PERMISSION` | `Storage::PERMISSIONS_TABLE_SUFFIX`, `PERMISSIONS_DOCUMENT`, `PERMISSIONS_TYPE`, `PERMISSIONS_PERMISSION` |
 | `Query::join($collection, $left, $right, $operator, $alias)` and the other column-form joins, `getJoinAlias()`, `Storage::joinAlias()` | `Query::join($collection, $alias, [Query::on(...)])`, `getAlias()`; every join names its alias |
 | `Query::groupForDatabase()` | `Query::groupByType()`, which returns a `ParsedQuery` |
 | `Document::INTERNAL_ID` | `Document::SEQUENCE` |

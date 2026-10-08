@@ -969,6 +969,10 @@ not change anything for an upgrade from 7.x.
     attributes included, instead of sorting the whole join. Inner, right and full outer one-to-many joins, filters and
     searches on joined attributes and orders that start with a joined attribute still sort the whole join. See
     [Joins](UPGRADE.md#joins).
+  - MySQL: under shared tables, an inner or left join that no index of the joined collection serves reads the
+    tenant's rows of the joined table once, matching its tenant as a range (`_tenant >= ? AND _tenant <= ?`),
+    instead of looking them all up again for every row the join pairs (50 s to 0.6 s for four such joins over 50 000
+    rows). Joins an index serves, other join types and reads spanning several tenants are unchanged.
 - **Tooling:**
   - The `bin/` tasks (`load`, `index`, `query`, `relationships`, `operators`) start again: `bin/cli.php` no longer
     registers a resource with a class the locked `utopia-php/di` does not have, and it loads the autoloader relative
@@ -979,8 +983,9 @@ not change anything for an upgrade from 7.x.
 - A transaction begun on the adapter directly (`getAdapter()->startTransaction()`) is not an invalidation scope: each
   write inside it invalidates the caches and fires `document_purge` before that transaction commits. Use
   `withTransaction()`.
-- A join on an unindexed attribute is accepted, but on a large collection it can exceed the statement timeout
-  (observed on MariaDB and MySQL shared tables): index the attributes your join conditions compare.
+- A join on an unindexed attribute is accepted, but on a large collection it can exceed the statement timeout. On
+  MariaDB 10.11, which has no hash join and prunes the join orders it plans, a join whose ON columns are unindexed
+  can be very slow: index the attributes your join conditions compare.
 - On MySQL, left joins on a joined collection's own `$id` can be slow right after the collection is created or
   bulk-loaded, until InnoDB's automatic statistics recalculation has run (seconds, with the default
   `STATS_AUTO_RECALC`). Run `ANALYZE TABLE` after a bulk load.

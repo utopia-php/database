@@ -2100,7 +2100,10 @@ $database->find('reviews', [
   A bare order pages with a cursor like its qualified form: the cursor row holds the value under `alias.price`.
 - Index the attributes your join conditions compare. A join on an unindexed attribute is accepted, but the engine
   has to scan the joined table to pair its rows, and on a large collection such a read can exceed the statement
-  timeout (observed on MariaDB and MySQL shared tables).
+  timeout. On MariaDB 10.11 a join whose ON columns are unindexed can be very slow: MariaDB has no hash join, and its
+  optimizer prunes the join orders it considers, so it can pair each row with a scan of the joined table. On MySQL
+  under shared tables, an inner or left join no index serves reads the tenant's rows of the joined table once,
+  matching its tenant as a range, instead of once per row the join pairs.
 - On MySQL, a joined collection's permission check is kept out of the optimizer's semi-join search (`NO_SEMIJOIN`)
   when the collection is left, right or full outer joined, and for every joined collection from five joins. Inner
   joins below five keep semi-joins. Right after a collection is created or bulk-loaded, until InnoDB's automatic

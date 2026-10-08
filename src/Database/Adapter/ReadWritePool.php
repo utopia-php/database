@@ -225,7 +225,10 @@ class ReadWritePool extends Pool
         $context[$this->getReplicaReadKey()] = $replica;
     }
 
-    private function getCoroutineContext(): ?Context
+    /**
+     * @return Context|null
+     */
+    private function getCoroutineContext(): ?object
     {
         if (! \extension_loaded('swoole')) {
             return null;

@@ -650,6 +650,10 @@ have to make, with the 7.x and 8.0 forms side by side.
   attribute, with a degree box that holds every point in range. Lines, polygons and boxes that would reach a pole or
   the antimeridian keep the exact comparison only, which stays in every case, so the boundary is still exclusive. 7.x
   carries the same fix after 7.4.1.
+- The SQL adapters load on a PHP without ext-swoole, which composer.json only suggests: no native parameter, return
+  or property type names a Swoole class, so PHP no longer fails to check `SQL::getDriver()` and the statement methods
+  against their parents (`Could not check compatibility ... class Swoole\Database\PDOProxy is not available`). The
+  Swoole proxies stay in their docblock types.
 - A distance query whose distance is not finite (`NAN`, `INF`, `-INF`) is rejected with `Distance query requires a
   finite distance`. PostgreSQL compares `'NaN'` as above every number, so its index condition and its exact check
   disagreed on such a distance.

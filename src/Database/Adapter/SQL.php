@@ -187,8 +187,11 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         ]);
     }
 
+    /**
+     * @return DatabasePDO|PDOProxy|PDO
+     */
     #[\Override]
-    public function getDriver(): DatabasePDO|PDOProxy|PDO
+    public function getDriver(): object
     {
         if ($this->pdo instanceof DatabasePDO || $this->pdo instanceof PDOProxy || $this->pdo instanceof PDO) {
             return $this->pdo;
@@ -398,9 +401,11 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
+     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $statement
+     *
      * @throws DatabaseException
      */
-    private function returnsRows(PDOStatement|DatabasePDOStatement|PDOStatementProxy $statement): bool
+    private function returnsRows(object $statement): bool
     {
         try {
             $this->execute($statement);
@@ -3451,8 +3456,8 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             builder: fn (string $table): SQLBuilder => $this->newBuilder($table),
             rawBuilder: $this->createBuilder(...),
             rawTable: $this->getTableRaw(...),
-            prepare: fn (Statement $statement, Event $event): PDOStatement|DatabasePDOStatement|PDOStatementProxy => $this->executeResult($statement, $event),
-            execute: fn (PDOStatement|DatabasePDOStatement|PDOStatementProxy $statement): bool => $this->execute($statement),
+            prepare: fn (Statement $statement, Event $event): object => $this->executeResult($statement, $event),
+            execute: fn (object $statement): bool => $this->execute($statement),
             decorateRow: $this->decorateRow(...),
             ignoreDuplicates: $this->isIgnoringDuplicates(),
             skipPermissions: $skipPermissions,
@@ -3466,8 +3471,9 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * Does NOT call execute() - the caller is responsible for that.
      *
      * @param  string  $collection  The collection the statement reads or writes, for the profiler
+     * @return PDOStatement|DatabasePDOStatement|PDOStatementProxy
      */
-    protected function executeResult(Statement $result, ?Event $event = null, string $collection = ''): PDOStatement|DatabasePDOStatement|PDOStatementProxy
+    protected function executeResult(Statement $result, ?Event $event = null, string $collection = ''): object
     {
         $prepared = $this->prepareStatement($result->query, $event);
         $this->describeStatement($prepared, $result->bindings, $collection);
@@ -3524,9 +3530,10 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * Keep the values bound to a statement and the collection it runs on for the profiler, while
      * one is recording.
      *
+     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $statement
      * @param  array<mixed>  $bindings
      */
-    protected function describeStatement(PDOStatement|DatabasePDOStatement|PDOStatementProxy $statement, array $bindings, string $collection): void
+    protected function describeStatement(object $statement, array $bindings, string $collection): void
     {
         if ($this->profiler === null || ! $this->profiler->isEnabled()) {
             return;
@@ -3538,7 +3545,10 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         $this->statementCollections[$statement] = $collection;
     }
 
-    protected function getStatementEvent(PDOStatement|DatabasePDOStatement|PDOStatementProxy $statement): ?Event
+    /**
+     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $statement
+     */
+    protected function getStatementEvent(object $statement): ?Event
     {
         if ($this->statementEvents === null) {
             return null;
@@ -3547,7 +3557,10 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         return $this->statementEvents[$statement] ?? null;
     }
 
-    protected function prepareStatement(string $sql, ?Event $event = null): DatabasePDOStatement|PDOStatementProxy|PDOStatement
+    /**
+     * @return PDOStatement|DatabasePDOStatement|PDOStatementProxy
+     */
+    protected function prepareStatement(string $sql, ?Event $event = null): object
     {
         $sql = $this->comments().$sql;
 
@@ -6178,7 +6191,10 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      */
     abstract protected function getOperatorSql(string $column, Operator $operator, int &$bindIndex): ?string;
 
-    protected function bindOperatorParameters(PDOStatement|DatabasePDOStatement|PDOStatementProxy $statement, Operator $operator, int &$bindIndex): void
+    /**
+     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $statement
+     */
+    protected function bindOperatorParameters(object $statement, Operator $operator, int &$bindIndex): void
     {
         $method = $operator->getMethod();
         $values = $operator->getValues();

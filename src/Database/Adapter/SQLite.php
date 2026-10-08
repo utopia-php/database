@@ -156,12 +156,14 @@ class SQLite extends SQL
     /**
      * Prepare a statement and reject drivers that return false or another
      * non-statement value before a method is called on it.
+     *
+     * @return PDOStatement|DatabasePDOStatement|PDOStatementProxy
      */
     private function prepare(
         string $query,
         string $message = 'Failed to prepare SQLite statement',
         ?Event $event = null,
-    ): DatabasePDOStatement|PDOStatementProxy|PDOStatement {
+    ): object {
         try {
             return parent::prepareStatement($query, $event);
         } catch (DatabaseException $error) {
@@ -1779,9 +1781,11 @@ class SQLite extends SQL
     /**
      * Toggle, DateSetNow and ArrayUnique bind nothing: getOperatorSql() writes them without placeholders and
      * advances $bindIndex itself. ArrayFilter binds its comparison value only.
+     *
+     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $statement
      */
     #[Override]
-    protected function bindOperatorParameters(PDOStatement|DatabasePDOStatement|PDOStatementProxy $statement, Operator $operator, int &$bindIndex): void
+    protected function bindOperatorParameters(object $statement, Operator $operator, int &$bindIndex): void
     {
         $method = $operator->getMethod();
 

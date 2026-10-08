@@ -49,8 +49,10 @@ class Mirror extends Database
 
     /**
      * Closed once the latest destination change queued through the mirror has been applied or has failed
+     *
+     * @var Channel|null
      */
-    private ?Channel $latestReplication = null;
+    private ?object $latestReplication = null;
 
     /**
      * Coroutines applying a destination change, by coroutine id

@@ -190,9 +190,11 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     /**
+     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $statement
+     *
      * @throws DatabaseException
      */
-    private function returnsRows(PDOStatement|DatabasePDOStatement|PDOStatementProxy $statement): bool
+    private function returnsRows(object $statement): bool
     {
         try {
             $this->execute($statement);

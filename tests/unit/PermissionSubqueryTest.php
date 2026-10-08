@@ -69,6 +69,7 @@ final class PermissionSubqueryTest extends TestCase
      */
     private ArrayObject $statements;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->statements = new ArrayObject();

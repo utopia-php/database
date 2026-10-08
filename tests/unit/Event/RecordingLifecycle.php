@@ -11,6 +11,7 @@ class RecordingLifecycle implements Lifecycle
     /** @var list<Domain> */
     private array $events = [];
 
+    #[\Override]
     public function handle(Domain $event): void
     {
         $this->events[] = $event;

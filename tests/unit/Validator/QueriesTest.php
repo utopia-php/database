@@ -23,10 +23,12 @@ use Utopia\Query\Schema\ColumnType;
 
 class QueriesTest extends TestCase
 {
+    #[\Override]
     protected function setUp(): void
     {
     }
 
+    #[\Override]
     protected function tearDown(): void
     {
     }

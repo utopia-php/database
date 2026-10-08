@@ -21,6 +21,7 @@ class SelectTest extends TestCase
     /**
      * @throws Exception
      */
+    #[\Override]
     protected function setUp(): void
     {
         $this->validator = new Select(

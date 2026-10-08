@@ -20,6 +20,7 @@ final class MagicPropertyFetchRuleTest extends RuleTestCase
 
     private string $sourceDirectory = __DIR__.'/Data';
 
+    #[\Override]
     protected function getRule(): Rule
     {
         return new MagicPropertyFetchRule($this->sourceDirectory, self::getContainer()->getByType(FileHelper::class));

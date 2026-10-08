@@ -29,6 +29,7 @@ class AttributesTest extends TestCase
 
     private Document $profiles;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->customers = $this->collection('customers', [

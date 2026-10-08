@@ -10,6 +10,7 @@ class ProfilerAdvancedTest extends TestCase
 {
     private Profiler $profiler;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->profiler = new Profiler();

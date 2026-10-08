@@ -15,6 +15,7 @@ final class SQLiteStatementPreparationTest extends TestCase
 {
     private string $file = '';
 
+    #[\Override]
     protected function tearDown(): void
     {
         if ($this->file !== '' && \is_file($this->file)) {
@@ -130,6 +131,7 @@ final class SQLiteStatementPreparationTest extends TestCase
                 $this->callback = $callback;
             }
 
+            #[\Override]
             public function transform(Event $event, string $query): string
             {
                 return ($this->callback)($event, $query);

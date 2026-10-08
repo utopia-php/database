@@ -26,6 +26,7 @@ class QueryTest extends TestCase
 
     private Cache&Stub $cache;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->cache = self::createCache();

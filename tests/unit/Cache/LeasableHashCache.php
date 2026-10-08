@@ -15,6 +15,7 @@ final class LeasableHashCache implements CacheAdapter, Leasable
 
     private bool $failActivations = false;
 
+    #[\Override]
     public function load(string $key, int $ttl, string $hash = ''): mixed
     {
         $hash = $hash === '' ? $key : $hash;
@@ -23,6 +24,7 @@ final class LeasableHashCache implements CacheAdapter, Leasable
         return $saved !== null && $saved['time'] + $ttl > \time() ? $saved['data'] : false;
     }
 
+    #[\Override]
     public function save(string $key, array|string $data, string $hash = '', int $ttl = 0): bool|string|array
     {
         if ($key === '') {
@@ -44,11 +46,13 @@ final class LeasableHashCache implements CacheAdapter, Leasable
         return $data;
     }
 
+    #[\Override]
     public function getGeneration(string $key): string
     {
         return (string) ($this->generations[$key] ?? 0);
     }
 
+    #[\Override]
     public function saveWithLease(string $key, array|string $data, string $hash, string $generation): bool|string|array
     {
         if ($this->getGeneration($key) !== $generation) {
@@ -58,6 +62,7 @@ final class LeasableHashCache implements CacheAdapter, Leasable
         return $this->save($key, $data, $hash);
     }
 
+    #[\Override]
     public function touch(string $key, string $hash = ''): bool
     {
         $hash = $hash === '' ? $key : $hash;
@@ -71,11 +76,13 @@ final class LeasableHashCache implements CacheAdapter, Leasable
     }
 
     /** @return array<string> */
+    #[\Override]
     public function list(string $key): array
     {
         return \array_keys($this->store[$key] ?? []);
     }
 
+    #[\Override]
     public function purge(string $key, string $hash = ''): bool
     {
         $this->generations[$key] = ($this->generations[$key] ?? 0) + 1;
@@ -89,6 +96,7 @@ final class LeasableHashCache implements CacheAdapter, Leasable
         return true;
     }
 
+    #[\Override]
     public function flush(): bool
     {
         $this->store = [];
@@ -97,16 +105,19 @@ final class LeasableHashCache implements CacheAdapter, Leasable
         return true;
     }
 
+    #[\Override]
     public function ping(): bool
     {
         return true;
     }
 
+    #[\Override]
     public function getSize(): int
     {
         return \count($this->store);
     }
 
+    #[\Override]
     public function getName(?string $key = null): string
     {
         return 'leasable-hash';

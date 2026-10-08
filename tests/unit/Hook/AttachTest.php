@@ -58,6 +58,7 @@ final class AttachTest extends TestCase
             /** @var list<Database> */
             public array $attached = [];
 
+            #[\Override]
             public function attach(Database $database): void
             {
                 $this->attached[] = $database;

@@ -30,6 +30,7 @@ class IncreaseDecreaseTest extends TestCase
 
     private Database $database;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->adapter = self::createStub(CastingAdapterStub::class);

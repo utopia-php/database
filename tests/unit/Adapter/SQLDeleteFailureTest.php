@@ -29,6 +29,7 @@ final class SQLDeleteFailureTest extends TestCase
 
     private Database $database;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->pdo = new PDO('sqlite::memory:');
@@ -132,6 +133,7 @@ final class SQLDeleteFailureTest extends TestCase
             {
             }
 
+            #[\Override]
             public function afterDocumentDelete(string $collection, array $documentIds, WriteContext $context): void
             {
                 throw $this->failure;

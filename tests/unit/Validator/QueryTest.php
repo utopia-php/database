@@ -22,6 +22,7 @@ class QueryTest extends TestCase
     /**
      * @throws Exception
      */
+    #[\Override]
     protected function setUp(): void
     {
         $attributes = [
@@ -102,6 +103,7 @@ class QueryTest extends TestCase
         }
     }
 
+    #[\Override]
     protected function tearDown(): void
     {
     }

@@ -16,6 +16,7 @@ final class SQLiteOperatorBehaviorTest extends TestCase
 
     private Document $collection;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->adapter = new SQLite(new \PDO('sqlite::memory:'));

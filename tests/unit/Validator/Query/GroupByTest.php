@@ -13,6 +13,7 @@ class GroupByTest extends TestCase
 {
     protected GroupBy $validator;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->validator = new GroupBy(

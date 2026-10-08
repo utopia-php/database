@@ -23,6 +23,7 @@ final class StructureFormatTest extends TestCase
      */
     private array $received = [];
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->received = [];
@@ -35,6 +36,7 @@ final class StructureFormatTest extends TestCase
         }, ColumnType::String);
     }
 
+    #[\Override]
     protected function tearDown(): void
     {
         Structure::removeFormat(self::FORMAT);

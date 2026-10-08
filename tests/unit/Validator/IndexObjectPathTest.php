@@ -14,6 +14,7 @@ class IndexObjectPathTest extends TestCase
 {
     private IndexValidator $validator;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->validator = new IndexValidator(

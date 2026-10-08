@@ -21,6 +21,7 @@ class DocumentQueriesTest extends TestCase
     /**
      * @throws Exception
      */
+    #[\Override]
     protected function setUp(): void
     {
         $this->attributes = [
@@ -47,6 +48,7 @@ class DocumentQueriesTest extends TestCase
         ];
     }
 
+    #[\Override]
     protected function tearDown(): void
     {
     }

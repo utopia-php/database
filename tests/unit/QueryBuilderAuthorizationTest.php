@@ -36,6 +36,7 @@ final class QueryBuilderAuthorizationTest extends TestCase
 
     private Authorization $authorization;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->pdo = new PDO('sqlite::memory:');

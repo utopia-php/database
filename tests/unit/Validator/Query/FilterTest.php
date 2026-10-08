@@ -17,6 +17,7 @@ class FilterTest extends TestCase
     /**
      * @throws Exception
      */
+    #[\Override]
     protected function setUp(): void
     {
         $attributes = [

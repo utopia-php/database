@@ -134,6 +134,7 @@ final class DocumentMinorsTest extends TestCase
              * @param  array<int|string, mixed>|string  $data
              * @return bool|string|array<int|string, mixed>
              */
+            #[\Override]
             public function save(string $key, array|string $data, string $hash = '', int $ttl = 0): bool|string|array
             {
                 if ($this->refuseOwners && \str_contains($key, '#owner')) {

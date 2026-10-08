@@ -66,6 +66,7 @@ class CustomDocumentTypeTest extends TestCase
 
     private Adapter&Stub $adapter;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->adapter = self::createStub(Adapter::class);

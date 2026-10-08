@@ -72,6 +72,7 @@ final class SQLTimeoutScopeTest extends TestCase
             /** @var list<Event> */
             public array $events = [];
 
+            #[\Override]
             public function transform(Event $event, string $query): string
             {
                 $this->events[] = $event;

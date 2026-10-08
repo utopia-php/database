@@ -13,6 +13,7 @@ final class FilterObjectPathTest extends TestCase
 {
     private Filter $validator;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->validator = new Filter(

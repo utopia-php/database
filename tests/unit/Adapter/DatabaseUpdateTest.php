@@ -43,6 +43,7 @@ final class DatabaseUpdateTest extends TestCase
 
     private Authorization $authorization;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->authorization = new Authorization();

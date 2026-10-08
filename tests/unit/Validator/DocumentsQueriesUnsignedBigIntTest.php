@@ -20,6 +20,7 @@ class DocumentsQueriesUnsignedBigIntTest extends TestCase
      */
     private array $attributes;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->attributes = [

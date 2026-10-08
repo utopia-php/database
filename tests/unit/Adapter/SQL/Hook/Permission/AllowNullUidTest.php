@@ -33,6 +33,7 @@ final class AllowNullUidTest extends TestCase
     public function testQuotesPostgresStyleIdentifiers(): void
     {
         $inner = new class () implements Filter {
+            #[\Override]
             public function filter(string $table): Condition
             {
                 return new Condition('inner_expr', ['role']);

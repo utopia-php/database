@@ -53,6 +53,7 @@ final class QueryTenantPerDocumentTest extends TestCase
 
     private Database $database;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->adapter = new ObservedSQLite(new PDO('sqlite::memory:'));

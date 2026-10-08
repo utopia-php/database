@@ -34,6 +34,7 @@ class DispatcherHookTest extends TestCase
 
     private DispatcherHook $hook;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->hook = new DispatcherHook();

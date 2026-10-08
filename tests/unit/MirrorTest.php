@@ -962,6 +962,7 @@ class MirrorTest extends TestCase
                 return [...parent::capabilities(), Capability::AlterLock];
             }
 
+            #[\Override]
             public function setLocks(bool $locks): static
             {
                 throw new RuntimeException('destination unreachable');
@@ -1059,6 +1060,7 @@ class MirrorTest extends TestCase
         $destination = self::sqlite();
         $mirror = $this->seed(new Mirror(self::sqlite(), $destination));
         $mirror->addHook(new class () implements Decorator {
+            #[\Override]
             public function decorate(Event $event, Document $collection, Document $document): Document
             {
                 return $document->setAttribute('decoratedFor', $collection->getId());

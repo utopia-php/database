@@ -25,6 +25,7 @@ final class WriteContextTestRecorder extends Interceptor
     /** @var list<array<string, mixed>> */
     public array $decorated = [];
 
+    #[\Override]
     public function afterDocumentCreate(string $collection, array $documents, WriteContext $context): void
     {
         foreach ($documents as $document) {
@@ -41,6 +42,7 @@ final class WriteContextTestRecorder extends Interceptor
         ];
     }
 
+    #[\Override]
     public function afterDocumentUpdate(string $collection, string $id, Document $document, WriteContext $context): void
     {
         $this->skipPermissions[] = $context->skipPermissions($document);

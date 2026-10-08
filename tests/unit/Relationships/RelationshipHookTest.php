@@ -517,6 +517,7 @@ final class RelationshipHookTest extends TestCase
             /** @var array<string, mixed> */
             public array $options = [];
 
+            #[\Override]
             public function handle(Domain $event): void
             {
                 if ($event instanceof Event\Attribute\Updated) {

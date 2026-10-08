@@ -63,6 +63,7 @@ final class RedisAdapterPathsTest extends TestCase
     /** @var list<string> */
     private array $hashWrites = [];
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->authorization = new Authorization();

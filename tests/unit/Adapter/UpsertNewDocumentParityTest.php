@@ -24,6 +24,7 @@ final class UpsertNewDocumentParityTest extends TestCase
 
     private Database $database;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->database = new Database(new SQLite(new PDO('sqlite::memory:')), new Cache(new NoCache()));

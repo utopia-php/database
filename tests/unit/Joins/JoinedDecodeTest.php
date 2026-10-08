@@ -52,6 +52,7 @@ final class JoinedDecodeTest extends TestCase
 
     private bool $defaultsRegistered = false;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->witnessed = new ArrayObject();
@@ -71,6 +72,7 @@ final class JoinedDecodeTest extends TestCase
         );
     }
 
+    #[\Override]
     protected function tearDown(): void
     {
         FilterRegistry::restore($this->registered, $this->defaultsRegistered);

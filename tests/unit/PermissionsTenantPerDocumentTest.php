@@ -60,6 +60,7 @@ final class PermissionsTenantPerDocumentTest extends TestCase
      */
     private array $spannedTenants = [];
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->pdo = new PDO('sqlite::memory:');

@@ -149,6 +149,7 @@ class StructureTest extends TestCase
         'indexes' => [],
     ];
 
+    #[\Override]
     protected function setUp(): void
     {
         Structure::addFormat('email', function (mixed $attribute) {
@@ -176,6 +177,7 @@ class StructureTest extends TestCase
         $this->collection['attributes'] = $attrs;
     }
 
+    #[\Override]
     protected function tearDown(): void
     {
     }

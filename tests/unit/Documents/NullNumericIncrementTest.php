@@ -28,6 +28,7 @@ final class NullNumericIncrementTest extends TestCase
 
     private PDO $pdo;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->database = new Database(new Memory(), new Cache(new None()));

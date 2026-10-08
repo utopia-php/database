@@ -163,6 +163,7 @@ final class NamedTest extends TestCase
         $database = HookFixture::memory();
         HookFixture::seed($database, ['first']);
         $database->addHook(new class () implements Decorator {
+            #[\Override]
             public function decorate(Event $event, Document $collection, Document $document): Document
             {
                 return $document->setAttribute('decorated', true);
@@ -244,6 +245,7 @@ final class NamedTest extends TestCase
         HookFixture::seed($source, ['first']);
         $mirror = new Mirror($source);
         $mirror->addHook(new class () implements Decorator {
+            #[\Override]
             public function decorate(Event $event, Document $collection, Document $document): Document
             {
                 return $document->setAttribute('decorated', true);
@@ -271,6 +273,7 @@ final class NamedTest extends TestCase
             ) {
             }
 
+            #[\Override]
             public function handle(Domain $event): void
             {
                 ($this->record)($this->label);
@@ -288,11 +291,13 @@ final class NamedTest extends TestCase
             ) {
             }
 
+            #[\Override]
             public function getName(): string
             {
                 return $this->name;
             }
 
+            #[\Override]
             public function handle(Domain $event): void
             {
                 $this->hook->handle($event);
@@ -309,11 +314,13 @@ final class NamedTest extends TestCase
             ) {
             }
 
+            #[\Override]
             public function getName(): string
             {
                 return $this->name;
             }
 
+            #[\Override]
             public function handle(Domain $event): void
             {
                 $this->failing->handle($event);

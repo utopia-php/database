@@ -258,6 +258,7 @@ final class ReadWritePoolMetadataTest extends TestCase
         return new class () extends Memory implements Feature\Schemaless {
             private bool $schemaless = false;
 
+            #[\Override]
             public function setSchemaless(bool $schemaless): static
             {
                 $this->schemaless = $schemaless;
@@ -265,6 +266,7 @@ final class ReadWritePoolMetadataTest extends TestCase
                 return $this;
             }
 
+            #[\Override]
             public function isSchemaless(): bool
             {
                 return $this->schemaless;

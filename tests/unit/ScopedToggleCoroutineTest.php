@@ -54,6 +54,7 @@ final class ScopedToggleCoroutineTest extends TestCase
 
     private const int ROUNDS = 3;
 
+    #[\Override]
     protected function setUp(): void
     {
         if (! \extension_loaded('swoole')) {

@@ -26,6 +26,7 @@ class WithCacheLeaseTest extends TestCase
 
     private string $key;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->cache = new Cache(new LeasableMemoryCache());
@@ -191,6 +192,7 @@ class LeasableMemoryCache implements Adapter, Leasable
      */
     private array $store = [];
 
+    #[\Override]
     public function load(string $key, int $ttl, string $hash = ''): mixed
     {
         if ($hash === '') {
@@ -206,6 +208,7 @@ class LeasableMemoryCache implements Adapter, Leasable
         return ($saved['time'] + $ttl > \time()) ? $saved['data'] : false;
     }
 
+    #[\Override]
     public function save(string $key, array|string $data, string $hash = '', int $ttl = 0): bool|string|array
     {
         if (empty($key) || empty($data)) {
@@ -225,6 +228,7 @@ class LeasableMemoryCache implements Adapter, Leasable
         return $data;
     }
 
+    #[\Override]
     public function getGeneration(string $key): string
     {
         $generation = $this->store[$key][self::GENERATION_FIELD]['data'] ?? '0';
@@ -232,6 +236,7 @@ class LeasableMemoryCache implements Adapter, Leasable
         return \is_string($generation) ? $generation : '0';
     }
 
+    #[\Override]
     public function saveWithLease(string $key, array|string $data, string $hash, string $generation): bool|string|array
     {
         if (empty($key) || empty($data)) {
@@ -245,6 +250,7 @@ class LeasableMemoryCache implements Adapter, Leasable
         return $this->save($key, $data, $hash);
     }
 
+    #[\Override]
     public function touch(string $key, string $hash = ''): bool
     {
         if ($hash === '') {
@@ -263,6 +269,7 @@ class LeasableMemoryCache implements Adapter, Leasable
     /**
      * @return string[]
      */
+    #[\Override]
     public function list(string $key): array
     {
         return \array_values(\array_filter(
@@ -271,6 +278,7 @@ class LeasableMemoryCache implements Adapter, Leasable
         ));
     }
 
+    #[\Override]
     public function purge(string $key, string $hash = ''): bool
     {
         $generation = (string) (((int) $this->getGeneration($key)) + 1);
@@ -286,6 +294,7 @@ class LeasableMemoryCache implements Adapter, Leasable
         return true;
     }
 
+    #[\Override]
     public function flush(): bool
     {
         $this->store = [];
@@ -293,16 +302,19 @@ class LeasableMemoryCache implements Adapter, Leasable
         return true;
     }
 
+    #[\Override]
     public function ping(): bool
     {
         return true;
     }
 
+    #[\Override]
     public function getSize(): int
     {
         return \count($this->store);
     }
 
+    #[\Override]
     public function getName(?string $key = null): string
     {
         return 'leasable-memory';

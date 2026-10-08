@@ -16,6 +16,7 @@ class Format extends Text
      *
      * Returns validator description
      */
+    #[\Override]
     public function getDescription(): string
     {
         return 'Value must be a valid email address';
@@ -28,6 +29,7 @@ class Format extends Text
      *
      * @param  mixed  $value
      */
+    #[\Override]
     public function isValid($value): bool
     {
         if (! \filter_var($value, FILTER_VALIDATE_EMAIL)) {

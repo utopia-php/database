@@ -21,11 +21,13 @@ final class CastCountingSQLite extends SQLite implements Feature\Casting
         parent::__construct(new PDO('sqlite::memory:'));
     }
 
+    #[\Override]
     public function castBefore(Document $collection, Document $document): Document
     {
         return $document;
     }
 
+    #[\Override]
     public function castAfter(Document $collection, array $documents): array
     {
         if ($collection->getId() !== Database::METADATA) {
@@ -35,6 +37,7 @@ final class CastCountingSQLite extends SQLite implements Feature\Casting
         return $documents;
     }
 
+    #[\Override]
     public function castDatetime(string $value): mixed
     {
         return DateTime::setTimezone($value);

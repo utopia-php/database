@@ -26,6 +26,7 @@ class PermissionCheckTest extends TestCase
 
     private Authorization $authorization;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->adapter = self::createStub(Adapter::class);

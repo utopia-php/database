@@ -20,6 +20,7 @@ final class CoroutineRolesTest extends TestCase
 
     private Authorization $authorization;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->authorization = new Authorization();

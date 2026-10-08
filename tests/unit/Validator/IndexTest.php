@@ -29,10 +29,12 @@ class IndexTest extends TestCase
         Capability::IndexFulltext,
     ];
 
+    #[\Override]
     protected function setUp(): void
     {
     }
 
+    #[\Override]
     protected function tearDown(): void
     {
     }

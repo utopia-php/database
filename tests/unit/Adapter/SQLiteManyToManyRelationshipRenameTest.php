@@ -26,6 +26,7 @@ final class SQLiteManyToManyRelationshipRenameTest extends TestCase
 
     private Database $database;
 
+    #[\Override]
     protected function setUp(): void
     {
         $authorization = new Authorization();

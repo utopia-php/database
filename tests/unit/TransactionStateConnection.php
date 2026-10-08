@@ -92,6 +92,7 @@ final class TransactionStateConnection extends PDO
         throw EngineError::create('40001', 1213, 'SQLSTATE[40001]: Serialization failure: 1213 Deadlock found when trying to get lock; try restarting transaction');
     }
 
+    #[\Override]
     public function beginTransaction(): bool
     {
         $this->reconnectIfEnded();
@@ -101,6 +102,7 @@ final class TransactionStateConnection extends PDO
         return true;
     }
 
+    #[\Override]
     public function commit(): bool
     {
         if (! $this->transaction) {
@@ -113,6 +115,7 @@ final class TransactionStateConnection extends PDO
         return true;
     }
 
+    #[\Override]
     public function rollBack(): bool
     {
         if (! $this->transaction) {
@@ -124,11 +127,13 @@ final class TransactionStateConnection extends PDO
         return true;
     }
 
+    #[\Override]
     public function inTransaction(): bool
     {
         return $this->transaction;
     }
 
+    #[\Override]
     public function exec(string $statement): int
     {
         $this->reconnectIfEnded();
@@ -152,6 +157,7 @@ final class TransactionStateConnection extends PDO
     /**
      * @param array<mixed> $options
      */
+    #[\Override]
     public function prepare(string $query, array $options = []): PDOStatement
     {
         return $this->statement;

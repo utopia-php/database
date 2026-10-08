@@ -16,6 +16,7 @@ class AttributeJsonDefaultTest extends TestCase
 {
     private AttributeDefinition $validator;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->validator = new AttributeDefinition(

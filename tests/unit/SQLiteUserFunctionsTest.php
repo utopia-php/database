@@ -98,6 +98,7 @@ final class SQLiteUserFunctionsTest extends TestCase
             {
             }
 
+            #[\Override]
             public function __call(string $method, array $args): mixed
             {
                 $this->calls[] = $method;

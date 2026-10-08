@@ -74,6 +74,7 @@ class CreateCollectionRaceTest extends TestCase
         $cacheAdapter = new class () extends CacheMemory {
             public bool $failPurge = false;
 
+            #[\Override]
             public function purge(string $key, string $hash = ''): bool
             {
                 if ($this->failPurge) {

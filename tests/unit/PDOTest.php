@@ -391,16 +391,19 @@ class PDOTest extends TestCase
                     {
                     }
 
+                    #[\Override]
                     public function inTransaction(): bool
                     {
                         return true;
                     }
 
+                    #[\Override]
                     public function exec(string $statement): int|false
                     {
                         throw new PDOException('SQLSTATE[HY000]: General error: 2006 MySQL server has gone away');
                     }
 
+                    #[\Override]
                     public function rollBack(): bool
                     {
                         throw new PDOException('SQLSTATE[HY000]: General error: 2006 MySQL server has gone away');

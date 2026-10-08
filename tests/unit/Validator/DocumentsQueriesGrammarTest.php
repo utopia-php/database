@@ -18,6 +18,7 @@ class DocumentsQueriesGrammarTest extends TestCase
      */
     private array $attributes;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->attributes = [

@@ -12,6 +12,7 @@ class AggregateTest extends TestCase
 {
     protected Aggregate $validator;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->validator = new Aggregate(

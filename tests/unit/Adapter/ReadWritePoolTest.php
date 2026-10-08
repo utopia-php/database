@@ -47,6 +47,7 @@ class ReadWritePoolTest extends TestCase
     /** @var FeatureAdapterStub&Stub */
     private Adapter $readAdapter;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->writeAdapter = self::createStub(FeatureAdapterStub::class);

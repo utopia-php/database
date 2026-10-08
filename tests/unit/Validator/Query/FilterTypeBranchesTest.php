@@ -18,6 +18,7 @@ class FilterTypeBranchesTest extends TestCase
 {
     protected Filter $validator;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->validator = new Filter(

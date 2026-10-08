@@ -97,6 +97,7 @@ final class FailureTest extends TestCase
                 return [...parent::capabilities(), Capability::AlterLock];
             }
 
+            #[\Override]
             public function setLocks(bool $locks): static
             {
                 throw $this->refusal;

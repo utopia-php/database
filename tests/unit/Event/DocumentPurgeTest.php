@@ -962,6 +962,7 @@ final class DocumentPurgeTest extends TestCase
             ) {
             }
 
+            #[\Override]
             public function handle(Domain $event): void
             {
                 if ($event->event === Event::DocumentPurge) {

@@ -26,6 +26,7 @@ class VectorValidationTest extends TestCase
 
     private Database $database;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->adapter = self::createStub(Adapter::class);

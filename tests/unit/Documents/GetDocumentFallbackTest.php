@@ -106,6 +106,7 @@ final class GetDocumentFallbackTest extends TestCase
             {
             }
 
+            #[\Override]
             public function load(string $key, int $ttl, string $hash = ''): mixed
             {
                 $this->refuse('load', $key);
@@ -117,11 +118,13 @@ final class GetDocumentFallbackTest extends TestCase
              * @param  array<int|string, mixed>|string  $data
              * @return bool|string|array<int|string, mixed>
              */
+            #[\Override]
             public function save(string $key, array|string $data, string $hash = '', int $ttl = 0): bool|string|array
             {
                 return parent::save($key, $data, $hash);
             }
 
+            #[\Override]
             public function getGeneration(string $key): string
             {
                 $this->refuse('getGeneration', $key);
@@ -133,6 +136,7 @@ final class GetDocumentFallbackTest extends TestCase
              * @param  array<int|string, mixed>|string  $data
              * @return bool|string|array<int|string, mixed>
              */
+            #[\Override]
             public function saveWithLease(string $key, array|string $data, string $hash, string $generation): bool|string|array
             {
                 $this->refuse('saveWithLease', $key);

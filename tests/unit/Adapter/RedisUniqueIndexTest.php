@@ -61,6 +61,7 @@ final class RedisUniqueIndexTest extends TestCase
     /** @var list<mixed> */
     private array $queued = [];
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->authorization = new Authorization();

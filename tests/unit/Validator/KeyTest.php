@@ -9,11 +9,13 @@ class KeyTest extends TestCase
 {
     protected Key $object;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->object = new Key();
     }
 
+    #[\Override]
     protected function tearDown(): void
     {
     }

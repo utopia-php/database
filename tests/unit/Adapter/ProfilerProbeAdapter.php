@@ -23,11 +23,13 @@ final class ProfilerProbeAdapter extends Memory implements Feature\Connection
     {
     }
 
+    #[\Override]
     public function id(): string
     {
         return 'probe';
     }
 
+    #[\Override]
     public function hostname(): string
     {
         return '';

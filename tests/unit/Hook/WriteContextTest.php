@@ -99,6 +99,7 @@ final class WriteContextTest extends TestCase
     {
         $database = $this->database();
         $database->addHook(new class () extends Interceptor {
+            #[\Override]
             public function afterDocumentCreate(string $collection, array $documents, WriteContext $context): void
             {
                 $builder = $context->builder(Storage::permissionsTable($collection));

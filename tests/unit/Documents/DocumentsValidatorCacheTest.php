@@ -15,6 +15,7 @@ class DocumentsValidatorCacheTest extends TestCase
 
     private Document $customers;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->orders = new Document([

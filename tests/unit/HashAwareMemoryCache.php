@@ -12,6 +12,7 @@ use Utopia\Cache\Adapter\Memory;
  */
 class HashAwareMemoryCache extends Memory
 {
+    #[\Override]
     public function load(string $key, int $ttl, string $hash = ''): mixed
     {
         return parent::load($this->field($key, $hash), $ttl);
@@ -21,16 +22,19 @@ class HashAwareMemoryCache extends Memory
      * @param  array<int|string, mixed>|string  $data
      * @return bool|string|array<int|string, mixed>
      */
+    #[\Override]
     public function save(string $key, array|string $data, string $hash = '', int $ttl = 0): bool|string|array
     {
         return parent::save($this->field($key, $hash), $data);
     }
 
+    #[\Override]
     public function touch(string $key, string $hash = ''): bool
     {
         return parent::touch($this->field($key, $hash));
     }
 
+    #[\Override]
     public function purge(string $key, string $hash = ''): bool
     {
         if ($hash !== '') {

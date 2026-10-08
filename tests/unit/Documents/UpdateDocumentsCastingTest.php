@@ -34,6 +34,7 @@ final class UpdateDocumentsCastingTest extends TestCase
             /** @var array<int, int> */
             public array $receivedUpdateIds = [];
 
+            #[\Override]
             public function castBefore(Document $collection, Document $document): Document
             {
                 $this->casted[\spl_object_id($document)] = true;
@@ -49,11 +50,13 @@ final class UpdateDocumentsCastingTest extends TestCase
                 return $document;
             }
 
+            #[\Override]
             public function castAfter(Document $collection, array $documents): array
             {
                 return $documents;
             }
 
+            #[\Override]
             public function castDatetime(string $value): mixed
             {
                 return DateTime::setTimezone($value);

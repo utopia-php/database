@@ -16,6 +16,7 @@ class DocumentsValidatorGrammarTest extends TestCase
 {
     private Document $orders;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->orders = new Document([

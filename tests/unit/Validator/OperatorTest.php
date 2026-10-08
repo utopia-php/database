@@ -12,6 +12,7 @@ class OperatorTest extends TestCase
 {
     protected Document $collection;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->collection = new Document([
@@ -58,6 +59,7 @@ class OperatorTest extends TestCase
         ]);
     }
 
+    #[\Override]
     protected function tearDown(): void
     {
     }

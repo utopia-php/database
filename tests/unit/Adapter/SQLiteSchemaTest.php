@@ -30,6 +30,7 @@ final class SQLiteSchemaTest extends TestCase
 
     private Database $database;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->pdo = new PDO('sqlite::memory:');

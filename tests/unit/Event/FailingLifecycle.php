@@ -15,6 +15,7 @@ final class FailingLifecycle implements Lifecycle
     ) {
     }
 
+    #[\Override]
     public function handle(Domain $event): void
     {
         if ($event->event === $this->event) {

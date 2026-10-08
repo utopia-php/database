@@ -60,6 +60,7 @@ final class ParallelPopulationTest extends TestCase
 
     private int $connections = 0;
 
+    #[\Override]
     protected function setUp(): void
     {
         if (! \extension_loaded('swoole')) {
@@ -71,6 +72,7 @@ final class ParallelPopulationTest extends TestCase
         $this->file = $file;
     }
 
+    #[\Override]
     protected function tearDown(): void
     {
         if (isset($this->file) && \is_file($this->file)) {
@@ -335,6 +337,7 @@ final class ParallelPopulationTest extends TestCase
             {
             }
 
+            #[\Override]
             public function transform(Event $event, string $query): string
             {
                 if (\stripos($query, 'select') !== false) {
@@ -349,6 +352,7 @@ final class ParallelPopulationTest extends TestCase
             {
             }
 
+            #[\Override]
             public function handle(Domain $event): void
             {
                 ($this->record)($event->event);

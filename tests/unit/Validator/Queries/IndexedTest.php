@@ -19,10 +19,12 @@ use Utopia\Query\Schema\IndexType;
 
 class IndexedTest extends TestCase
 {
+    #[\Override]
     protected function setUp(): void
     {
     }
 
+    #[\Override]
     protected function tearDown(): void
     {
     }

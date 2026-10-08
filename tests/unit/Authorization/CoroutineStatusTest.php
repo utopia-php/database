@@ -17,6 +17,7 @@ final class CoroutineStatusTest extends TestCase
 {
     private Authorization $authorization;
 
+    #[\Override]
     protected function setUp(): void
     {
         if (! \extension_loaded('swoole')) {

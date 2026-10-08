@@ -10,16 +10,19 @@ final readonly class Reversed implements Codec
     {
     }
 
+    #[\Override]
     public function name(): string
     {
         return $this->name;
     }
 
+    #[\Override]
     public function encode(mixed $value): mixed
     {
         return \is_string($value) ? \strrev($value) : $value;
     }
 
+    #[\Override]
     public function decode(mixed $value): mixed
     {
         return \is_string($value) ? \strrev($value) : $value;

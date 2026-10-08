@@ -32,6 +32,7 @@ final class JoinResolutionTest extends TestCase
 
     private Database $database;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->database = $this->database(new Cache(new None()));
@@ -168,6 +169,7 @@ final class JoinResolutionTest extends TestCase
              */
             public array $loads = [];
 
+            #[\Override]
             public function load(string $key, int $ttl, string $hash = ''): mixed
             {
                 $this->loads[] = $key;

@@ -30,6 +30,7 @@ final class PermissionsBatchSkipTest extends TestCase
 
     private Database $database;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->pdo = new class ('sqlite::memory:', $this->record(...)) extends PDO {
@@ -41,6 +42,7 @@ final class PermissionsBatchSkipTest extends TestCase
             /**
              * @param  array<mixed>  $options
              */
+            #[\Override]
             public function prepare(string $query, array $options = []): \PDOStatement|false
             {
                 ($this->record)($query);

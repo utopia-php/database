@@ -49,14 +49,6 @@ use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 use Utopia\Query\Schema\PostgreSQL as PostgresSchema;
 
-/**
- * Differences between MariaDB and Postgres
- *
- * 1. Need to use CASCADE to DROP schema
- * 2. Quotes are different ` vs "
- * 3. DATETIME is TIMESTAMP
- * 4. Full-text search is different - to_tsvector() and to_tsquery()
- */
 class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
 {
     use Timeout;
@@ -81,8 +73,6 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     ];
 
     /**
-     * Get the list of capabilities supported by the PostgreSQL adapter.
-     *
      * @return array<Capability>
      */
     #[\Override]
@@ -112,9 +102,6 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     /**
-     * Create Database
-     *
-     *
      * @throws DatabaseException
      */
     #[\Override]
@@ -131,7 +118,6 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
 
         $dbCreation = $this->executeStatement($sql, Event::DatabaseCreate);
 
-        // Enable extensions — wrap in try-catch to handle concurrent creation race conditions
         foreach (['postgis', 'vector', 'pg_trgm'] as $ext) {
             try {
                 $this->executeStatement($schema->createExtension($ext)->query, Event::DatabaseCreate);
@@ -220,8 +206,6 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     /**
-     * Create Collection
-     *
      * @param  list<Attribute>  $attributes
      * @param  list<Index>  $indexes
      *
@@ -371,8 +355,6 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     /**
-     * Get Collection Size on disk
-     *
      * @throws DatabaseException
      */
     #[\Override]
@@ -411,8 +393,6 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     /**
-     * Get Collection Size of raw data
-     *
      * @throws DatabaseException
      */
     #[\Override]
@@ -451,9 +431,6 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     /**
-     * Create Attribute
-     *
-     *
      * @throws DatabaseException
      */
     #[\Override]
@@ -532,8 +509,6 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     /**
-     * Update Attribute
-     *
      * @throws Exception
      * @throws PDOException
      */
@@ -666,8 +641,6 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     /**
-     * Rename Attribute
-     *
      * @throws Exception
      * @throws PDOException
      */
@@ -868,8 +841,6 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     /**
-     * Create Index
-     *
      * @param  array<string,string>  $indexAttributeTypes
      * @param  array<string, mixed>  $collation
      */
@@ -976,8 +947,6 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     /**
-     * Rename Index
-     *
      * Reports the index renamed when the schema holds it under the new name afterwards. Under shared tables an
      * index is named after the tenant that created it, so a tenant without its own copy is renamed in its metadata
      * when another tenant's copy of the collection's index exists under the old or the new name.
@@ -1069,9 +1038,6 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         return $found !== [];
     }
 
-    /**
-     * Create Document
-     */
     #[\Override]
     public function createDocument(Document $collection, Document $document): Document
     {
@@ -1133,9 +1099,6 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     /**
-     * Update Document
-     *
-     *
      * @throws DatabaseException
      * @throws DuplicateException
      */
@@ -1206,8 +1169,6 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     /**
-     * Returns Max Execution Time
-     *
      * @throws DatabaseException
      */
     #[\Override]
@@ -1298,14 +1259,12 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
 
         $fmt = $isLE ? 'e' : 'E'; // little vs big endian double
 
-        // X coordinate
         $xArr = unpack($fmt, substr($bin, $offset, 8));
         if ($xArr === false || ! isset($xArr[1])) {
             throw new DatabaseException('Failed to unpack X coordinate');
         }
         $x = \is_numeric($xArr[1]) ? (float) $xArr[1] : 0.0;
 
-        // Y coordinate
         $yArr = unpack($fmt, substr($bin, $offset + 8, 8));
         if ($yArr === false || ! isset($yArr[1])) {
             throw new DatabaseException('Failed to unpack Y coordinate');
@@ -1439,7 +1398,6 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
             }, $rings);
         }
 
-        // Convert hex string to binary if needed
         if (preg_match('/^[0-9a-fA-F]+$/', $wkb)) {
             $wkb = hex2bin($wkb);
             if ($wkb === false) {
@@ -1472,7 +1430,6 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
             $offset += 4;
         }
 
-        // Number of rings
         $numRings = unpack($uInt32, substr($wkb, $offset, 4));
         if ($numRings === false) {
             throw new DatabaseException('Failed to unpack number of rings from WKB.');
@@ -1512,7 +1469,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
             $rings[] = $points;
         }
 
-        return $rings; // array of rings, each ring is array of [x,y]
+        return $rings;
     }
 
     /**
@@ -1636,14 +1593,11 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     /**
-     * Get a builder-compatible operator expression for upsert conflict resolution.
-     *
      * Overrides the base implementation to use target-prefixed column references
      * so that ON CONFLICT DO UPDATE SET expressions correctly reference the
      * existing row via the target alias.
      *
      * @param  string  $column  The unquoted, filtered column name
-     * @param  Operator  $operator  The operator to convert
      */
     #[\Override]
     protected function getOperatorUpsertExpression(string $column, Operator $operator): Expression
@@ -1655,7 +1609,6 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
             throw new DatabaseException('Operator cannot be expressed in SQL: '.$operator->getMethod()->value);
         }
 
-        // Strip the "quotedColumn = " prefix to get just the RHS expression
         $quotedColumn = $this->quote($column);
         $prefix = $quotedColumn.' = ';
         $expression = $fullExpression;
@@ -1663,7 +1616,6 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
             $expression = substr($expression, strlen($prefix));
         }
 
-        // Collect the named binding keys and their values in order
         /** @var array<string, mixed> $namedBindings */
         $namedBindings = [];
         $method = $operator->getMethod();
@@ -1762,7 +1714,6 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
                 break;
         }
 
-        // Replace each named binding occurrence with ? and collect positional bindings
         $positionalBindings = [];
         $keys = array_keys($namedBindings);
         usort($keys, fn ($a, $b) => strlen($b) - strlen($a));
@@ -1792,9 +1743,6 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         return new Expression($result, $positionalBindings);
     }
 
-    /**
-     * Get SQL Type
-     */
     #[\Override]
     protected function createBuilder(): SQLBuilder
     {
@@ -1837,9 +1785,6 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     /**
-     * Get PDO Type
-     *
-     *
      * @throws DatabaseException
      */
     #[\Override]
@@ -1945,9 +1890,6 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         };
     }
 
-    /**
-     * Size of POINT spatial type
-     */
     #[\Override]
     protected function getMaxPointSize(): int
     {
@@ -1958,22 +1900,18 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     #[\Override]
     protected function processException(PDOException $e): Exception
     {
-        // Timeout
         if ($e->getCode() === '57014' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
             return new TimeoutException('Query timed out', $e->getCode(), $e);
         }
 
-        // Duplicate table
         if ($e->getCode() === '42P07' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
             return new DuplicateException('Collection already exists', $e->getCode(), $e);
         }
 
-        // Duplicate column
         if ($e->getCode() === '42701' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
             return new DuplicateException('Attribute already exists', $e->getCode(), $e);
         }
 
-        // Duplicate row
         if ($e->getCode() === '23505' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
             $columns = $this->getViolatedColumns($e->getMessage());
             if ($columns !== null && $columns !== [Storage::UID] && $columns !== [Storage::TENANT, Storage::UID]) {
@@ -1983,22 +1921,18 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
             return new DuplicateException('Document already exists', $e->getCode(), $e);
         }
 
-        // Data is too big for column resize
         if ($e->getCode() === '22001' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
             return new TruncateException('Resize would result in data truncation', $e->getCode(), $e);
         }
 
-        // Numeric value out of range (overflow/underflow from operators)
         if ($e->getCode() === '22003' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
             return new LimitException('Numeric value out of range', $e->getCode(), $e);
         }
 
-        // Invalid argument for power function
         if ($e->getCode() === '2201F' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
             return new LimitException('Invalid argument for power function', $e->getCode(), $e);
         }
 
-        // Datetime field overflow
         if ($e->getCode() === '22008' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
             return new LimitException('Datetime field overflow', $e->getCode(), $e);
         }
@@ -2011,7 +1945,6 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
             return new NotFoundException('Collection not found', $e->getCode(), $e);
         }
 
-        // Unknown column
         if ($e->getCode() === '42703' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
             return new NotFoundException('Attribute not found', $e->getCode(), $e);
         }
@@ -2133,9 +2066,6 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         return new Statement($insert->query.' ON CONFLICT ('.$target.') DO NOTHING', $insert->bindings);
     }
 
-    /**
-     * Get SQL expression for operator
-     */
     #[\Override]
     protected function getOperatorSql(string $column, Operator $operator, int &$bindIndex, bool $useTargetPrefix = false): ?string
     {
@@ -2145,7 +2075,6 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         $values = $operator->getValues();
 
         switch ($method) {
-            // Numeric operators
             case OperatorType::Increment:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
@@ -2246,7 +2175,6 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
 
                 return "{$quotedColumn} = POWER(COALESCE({$columnRef}, 0), :$bindKey)";
 
-                // String operators
             case OperatorType::StringConcat:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
@@ -2261,11 +2189,9 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
 
                 return "{$quotedColumn} = REPLACE(COALESCE({$columnRef}, ''), :$searchKey, :$replaceKey)";
 
-                // Boolean operators
             case OperatorType::Toggle:
                 return "{$quotedColumn} = NOT COALESCE({$columnRef}, FALSE)";
 
-                // Array operators
             case OperatorType::ArrayAppend:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
@@ -2357,7 +2283,6 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
                     END
                 ), '[]'::jsonb)";
 
-                // Date operators
             case OperatorType::DateAddDays:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;

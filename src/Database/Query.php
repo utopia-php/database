@@ -21,7 +21,7 @@ class Query extends BaseQuery
     /**
      * Default table alias used in queries
      */
-    public const DEFAULT_ALIAS = 'table_main';
+    public const string DEFAULT_ALIAS = 'table_main';
 
     /**
      * Methods that compose child queries and contribute their inner

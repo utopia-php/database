@@ -414,6 +414,11 @@ have to make, with the 7.x and 8.0 forms side by side.
   subclass's `getDocument()` and `find()` overrides are no longer called for these reads, and its `getCollection()`
   and `findCollection()` overrides are not called by `getDocument(Database::METADATA, ...)` while no
   `Hook\Decorator` is registered or events are silenced. See [Caches](UPGRADE.md#caches).
+- `Adapter\Pool::syncBorrowed()` replays metadata, the profiler and transforms onto a connection only when the
+  connection's differ from the pool's, as it already did for write hooks; the tenant, schemaless mode, timeouts and
+  the other settings are still synced on every delegated call. A `Pool` subclass or custom connection adapter can
+  no longer rely on `resetMetadata()`, `setMetadata()`, `setProfiler()`, `resetTransforms()` or `addTransform()`
+  being called on every delegated call. See [Pool extension points](UPGRADE.md#pool-extension-points).
 
 ### Deprecated
 

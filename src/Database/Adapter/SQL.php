@@ -1076,6 +1076,16 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Can INSERT return the generated sequences (INSERT ... RETURNING)?
+     *
+     * @return bool
+     */
+    public function getSupportForInsertReturning(): bool
+    {
+        return false;
+    }
+
+    /**
      * Is hostname supported?
      *
      * @return bool
@@ -2527,10 +2537,21 @@ abstract class SQL extends Adapter
 
             $batchKeys = \implode(', ', $batchKeys);
 
+            // Read generated sequences from the insert itself, saving the getSequences() lookup
+            $returnSequences = !$hasSequence && $this->getSupportForInsertReturning();
+            $returning = '';
+            if ($returnSequences) {
+                $returning = 'RETURNING ' . $this->quote('_uid') . ', ' . $this->quote('_id');
+                if ($this->sharedTables) {
+                    $returning .= ', ' . $this->quote('_tenant');
+                }
+            }
+
             $stmt = $this->getPDO()->prepare("
                 {$this->getInsertKeyword()} {$this->getSQLTable($name)} {$columns}
                 VALUES {$batchKeys}
                 {$this->getInsertSuffix($name)}
+                {$returning}
             ");
 
             foreach ($bindValues as $key => $value) {
@@ -2538,6 +2559,22 @@ abstract class SQL extends Adapter
             }
 
             $this->execute($stmt);
+
+            if ($returnSequences) {
+                // Map by tenant and _uid, skipped duplicates are not returned and keep an empty sequence
+                $sequences = [];
+                foreach ($stmt->fetchAll(\PDO::FETCH_ASSOC) as $row) {
+                    $sequences[(string)($row['_tenant'] ?? '')][$row['_uid']] = $row['_id'];
+                }
+                $stmt->closeCursor();
+
+                foreach ($documents as $document) {
+                    $tenant = $this->sharedTables ? (string)$document->getTenant() : '';
+                    if (isset($sequences[$tenant][$document->getId()])) {
+                        $document['$sequence'] = $sequences[$tenant][$document->getId()];
+                    }
+                }
+            }
 
             if (!empty($permissions)) {
                 $tenantColumn = $this->sharedTables ? ', _tenant' : '';

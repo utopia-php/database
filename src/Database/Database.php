@@ -4052,6 +4052,9 @@ class Database
             }
         });
 
+        $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
+        $this->withRetries(fn () => $this->purgeCachedCollection($relatedCollection->getId()));
+
         try {
             $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $relationship);
         } catch (\Throwable $e) {
@@ -4998,17 +5001,28 @@ class Database
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
 
+        // Skip relationship population if we're in batch mode (relationships will be populated later)
+        $populateRelationships = !$this->inBatchRelationshipPopulation
+            && $this->resolveRelationships
+            && !empty($relationships)
+            && (empty($selects) || !empty($nestedSelections));
+
+        // Only reads that don't populate relationships use the cache: the cached value
+        // then holds just this document's own columns (related IDs), which are purged
+        // whenever this document is written, so a related document changing can't stale it.
+        // A locking read must observe the current row, not a cached copy:
+        // updateDocument merges the changes into this read and writes the result
+        // back, so serving it from a stale cache would persist the staleness.
+        $useCache = !$forUpdate && !$populateRelationships;
+
         [$collectionKey, $documentKey, $hashKey] = $this->getCacheKeys(
             $collection->getId(),
             $id,
             $selections
         );
 
-        // A locking read must observe the current row, not a cached copy:
-        // updateDocument merges the changes into this read and writes the result
-        // back, so serving it from a stale cache would persist the staleness.
         $cached = null;
-        if (!$forUpdate) {
+        if ($useCache) {
             try {
                 $cached = $this->cache->load($documentKey, self::TTL, $hashKey);
             } catch (Exception $e) {
@@ -5051,7 +5065,7 @@ class Database
         // Capture the generation before reading: if a concurrent purge advances
         // it, saveWithLease() below rejects this now-stale value. '0' means no lease.
         $generation = '0';
-        if (!$forUpdate) {
+        if ($useCache) {
             try {
                 $generation = $this->cache->getGeneration($documentKey);
             } catch (Exception $e) {
@@ -5067,7 +5081,7 @@ class Database
         );
 
         if ($document->isEmpty()) {
-            if (!$forUpdate && empty($relationships)) {
+            if ($useCache) {
                 try {
                     $marker = [self::CACHE_EMPTY_MARKER => true];
 
@@ -5107,21 +5121,15 @@ class Database
         $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document, $selections);
 
-        // Skip relationship population if we're in batch mode (relationships will be populated later)
-        if (!$this->inBatchRelationshipPopulation && $this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections))) {
+        if ($populateRelationships) {
             $documents = $this->silent(fn () => $this->populateDocumentsRelationships([$document], $collection, $this->relationshipFetchDepth, $nestedSelections));
             $document = $documents[0];
         }
 
-        $relationships = \array_filter(
-            $collection->getAttribute('attributes', []),
-            fn ($attribute) => $attribute['type'] === Database::VAR_RELATIONSHIP
-        );
-
-        // Don't save to cache if it's part of a relationship, or if this is a
+        // Don't save to cache if relationships were populated, or if this is a
         // locking read: a forUpdate read happens inside an open transaction, and
         // caching the pre-commit row would poison the cache for other readers.
-        if (!$forUpdate && empty($relationships)) {
+        if ($useCache) {
             try {
                 // Index for invalidation only when the value was actually cached.
                 if ($this->cache->saveWithLease($documentKey, $document->getArrayCopy(), $hashKey, $generation) !== false) {

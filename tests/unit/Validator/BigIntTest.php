@@ -111,7 +111,10 @@ final class BigIntTest extends TestCase
 
     public function testNativeIntegerArithmeticAtTheSignedLimits(): void
     {
-        $this->assertSame(BigInt::SIGNED_MAX, (string) BigInt::add(\PHP_INT_MAX - 1, 1));
+        $this->assertSame(\PHP_INT_MAX, BigInt::add(\PHP_INT_MAX - 1, 1));
+        $this->assertSame(\PHP_INT_MIN, BigInt::add(\PHP_INT_MIN + 1, -1));
+        $this->assertSame(\PHP_INT_MAX, BigInt::subtract(\PHP_INT_MAX - 1, -1));
+        $this->assertSame(12, BigInt::add('5', '7'));
         $this->assertSame('9223372036854775808', BigInt::add(\PHP_INT_MAX, 1));
         $this->assertSame('-9223372036854775809', BigInt::add(\PHP_INT_MIN, -1));
         $this->assertSame(\PHP_INT_MIN, BigInt::subtract(\PHP_INT_MIN + 1, 1));

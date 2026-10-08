@@ -8,7 +8,10 @@ use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use Tests\Unit\Cache\RedisLeasableCache;
+use Tests\Unit\Event\FailingLifecycle;
 use Tests\Unit\Support\CountingMemory;
+use Tests\Unit\Support\InterleavingMemory;
+use TypeError;
 use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\Cache\Cache;
@@ -20,6 +23,7 @@ use Utopia\Database\Collection;
 use Utopia\Database\CollectionUpdate;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Event;
 use Utopia\Database\Permission;
 use Utopia\Database\Role;
 use Utopia\Pools\Pool as UtopiaPool;
@@ -72,6 +76,7 @@ final class TransactionDefinitionReadTest extends TestCase
         $database = $this->database($adapter);
         $database->purgeCachedDocument(Database::METADATA, self::COLLECTION);
         $database->withTransaction(fn (): Collection => $database->getCollection(self::COLLECTION));
+        $this->assertSame(0, $this->transactionReads($database, $adapter, fn (): Collection => $database->getCollection(self::COLLECTION)), 'the transaction did not cache its definition');
 
         $database->updateCollection(self::COLLECTION, new CollectionUpdate(permissions: [Permission::read(Role::any()), Permission::update(Role::any())], documentSecurity: true));
 
@@ -220,6 +225,67 @@ final class TransactionDefinitionReadTest extends TestCase
         $this->assertSame(0, $this->transactionReads($database, $adapter, $read), 'the transaction did not cache the raw definition');
         $this->assertIsString($database->withTransaction($read)->getAttribute('attributes'));
         $this->assertIsArray($database->getDocument(Database::METADATA, self::COLLECTION)->getAttribute('attributes'));
+    }
+
+    public function testATransactionWhoseInvalidationFailedLeavesItsDefinitionReadUncached(): void
+    {
+        $adapter = new CountingMemory();
+        $database = $this->database($adapter);
+        $database->purgeCachedDocument(Database::METADATA, self::COLLECTION);
+        $failure = new TypeError('purge listener failed');
+        $database->addHook(new FailingLifecycle(Event::DocumentPurge, $failure));
+
+        try {
+            $database->withTransaction(fn (): Document => $database->updateDocument(self::COLLECTION, 'ada', new Document(['balance' => 2])));
+            $this->fail('the purge listener did not fail the transaction');
+        } catch (TypeError $error) {
+            $this->assertSame($failure, $error);
+        }
+
+        $adapter->reset();
+        $database->getCollection(self::COLLECTION);
+
+        $this->assertSame(1, $adapter->metadataReads);
+    }
+
+    public function testANestedTransactionCachesItsDefinitionOnlyAfterTheOutermostCommit(): void
+    {
+        $adapter = new CountingMemory();
+        $database = $this->database($adapter);
+        $database->purgeCachedDocument(Database::METADATA, self::COLLECTION);
+        $adapter->reset();
+
+        $readsBeforeOuterCommit = $database->withTransaction(function () use ($database, $adapter): int {
+            $database->withTransaction(fn (): Document => $database->updateDocument(self::COLLECTION, 'ada', new Document(['balance' => 2])));
+
+            return $adapter->metadataReads;
+        });
+
+        $this->assertSame(1, $readsBeforeOuterCommit);
+        $this->assertSame(2, $adapter->metadataReads);
+        $this->assertSame(0, $this->transactionReads($database, $adapter, fn (): Collection => $database->getCollection(self::COLLECTION)));
+    }
+
+    public function testADefinitionChangedWhileItIsCachedAfterCommitIsNotCachedStale(): void
+    {
+        $adapter = new InterleavingMemory();
+        $cache = new Cache(new RedisLeasableCache());
+        $database = $this->database($adapter, $cache);
+        $writer = new Database($adapter, $cache);
+        $writer->setDatabase($database->getDatabase())->setNamespace($database->getNamespace());
+        $database->purgeCachedDocument(Database::METADATA, self::COLLECTION);
+
+        $database->withTransaction(function () use ($database, $writer, $adapter): void {
+            $database->getCollection(self::COLLECTION);
+            $adapter->afterNextDefinitionRead(static function () use ($writer): void {
+                $writer->updateCollection(self::COLLECTION, new CollectionUpdate(permissions: [Permission::read(Role::any()), Permission::update(Role::any())], documentSecurity: true));
+            });
+        });
+
+        $read = fn (): Collection => $database->getCollection(self::COLLECTION);
+        $this->assertSame(2, $this->transactionReads($database, $adapter, $read), 'the stale definition was cached, or the lost lease stopped the refills');
+        $this->assertSame(0, $this->transactionReads($database, $adapter, $read), 'the transaction did not cache its definition');
+        $this->assertTrue($database->getCollection(self::COLLECTION)->getAttribute('documentSecurity'));
     }
 
     public function testARolledBackTransactionLeavesItsDefinitionReadUncached(): void

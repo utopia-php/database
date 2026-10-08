@@ -36,6 +36,7 @@ trait Indexes
      * @throws LimitException
      * @throws NotFoundException
      * @throws StructureException
+     * @throws UniqueException
      * @throws Exception
      */
     public function createIndex(string $collection, Index $index): Index
@@ -58,6 +59,7 @@ trait Indexes
      * @throws LimitException
      * @throws NotFoundException
      * @throws StructureException
+     * @throws UniqueException
      * @throws Exception
      */
     public function createIndexes(string $collection, array $indexes): array
@@ -185,6 +187,7 @@ trait Indexes
      * @throws DuplicateException
      * @throws IndexException
      * @throws LimitException
+     * @throws UniqueException
      * @throws Exception
      */
     private function storeIndexes(string $collection, array $indexes): array

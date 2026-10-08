@@ -6,9 +6,6 @@ use Exception;
 use Utopia\Database\Permission;
 use Utopia\Database\PermissionType;
 
-/**
- * Validates permission strings ensuring they use valid permission types and role formats.
- */
 class Permissions extends Roles
 {
     #[\Override]

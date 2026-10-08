@@ -7,9 +7,6 @@ use Utopia\Query\Method;
 use Utopia\Validator\Numeric;
 use Utopia\Validator\Range;
 
-/**
- * Validates offset query methods ensuring the value is a non-negative integer within the allowed range.
- */
 class Offset extends Base
 {
     protected int $maxOffset;

@@ -4,9 +4,6 @@ namespace Utopia\Database\Validator;
 
 use Utopia\Validator;
 
-/**
- * Validates that a value is a valid object (associative array or valid JSON string).
- */
 class ObjectValue extends Validator
 {
     #[\Override]

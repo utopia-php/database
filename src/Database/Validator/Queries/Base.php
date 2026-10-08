@@ -17,9 +17,6 @@ use Utopia\Database\Validator\Query\Select;
 use Utopia\Query\Method;
 use Utopia\Validator;
 
-/**
- * Validates an array of query objects by dispatching each to the appropriate method-type validator.
- */
 class Base extends Validator
 {
     protected string $message = 'Invalid queries';

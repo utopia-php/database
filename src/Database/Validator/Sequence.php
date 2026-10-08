@@ -7,9 +7,6 @@ use Utopia\Query\Schema\ColumnType;
 use Utopia\Validator;
 use Utopia\Validator\Range;
 
-/**
- * Validates sequence/ID values based on the configured ID attribute type (UUID7 or integer).
- */
 class Sequence extends Validator
 {
     private string $idAttributeType;

@@ -5,9 +5,6 @@ namespace Utopia\Database\Validator;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 
-/**
- * Validates partial document structures, only requiring attributes that are both marked required and present in the document.
- */
 class PartialStructure extends Structure
 {
     #[\Override]

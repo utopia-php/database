@@ -9,9 +9,6 @@ use Utopia\Database\Validator\Query\Joined\Attributes;
 use Utopia\Query\Method;
 use Utopia\Query\Query as BaseQuery;
 
-/**
- * Validates order query methods ensuring referenced attributes exist in the schema.
- */
 class Order extends Base
 {
     use Attributes;

@@ -12,9 +12,6 @@ use Utopia\Query\Method;
 use Utopia\Query\Query as BaseQuery;
 use Utopia\Query\Schema\ColumnType;
 
-/**
- * Validates aggregate query methods ensuring the aggregated attribute exists in the schema.
- */
 class Aggregate extends Base
 {
     use Attributes;

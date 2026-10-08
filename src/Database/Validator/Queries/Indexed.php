@@ -14,9 +14,6 @@ use Utopia\Query\Method;
 use Utopia\Query\Query as BaseQuery;
 use Utopia\Query\Schema\IndexType;
 
-/**
- * Validates queries against available indexes, ensuring search queries have matching fulltext indexes.
- */
 class Indexed extends Base
 {
     private const string UID_INDEX = '_uid_';

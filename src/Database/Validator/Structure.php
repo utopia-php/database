@@ -22,9 +22,6 @@ use Utopia\Validator\Integer;
 use Utopia\Validator\Range;
 use Utopia\Validator\Text;
 
-/**
- * Validates document structure against collection schema including required attributes, types, and formats.
- */
 class Structure extends Validator
 {
     /**

@@ -13,9 +13,6 @@ use Utopia\Database\RelationshipType;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Validator;
 
-/**
- * Validates update operators (increment, append, toggle, etc.) against collection attribute types and constraints.
- */
 class Operator extends Validator
 {
     protected Document $collection;

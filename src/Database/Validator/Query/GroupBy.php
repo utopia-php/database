@@ -8,9 +8,6 @@ use Utopia\Database\Query;
 use Utopia\Database\Validator\Query\Joined\Attributes;
 use Utopia\Database\Validator\Query\Joined\Collection;
 
-/**
- * Validates groupBy query methods ensuring the grouped attributes exist in the schema.
- */
 class GroupBy extends Base
 {
     use Attributes;

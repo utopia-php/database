@@ -7,9 +7,6 @@ use Utopia\Database\Document;
 use Utopia\Database\Index;
 use Utopia\Validator;
 
-/**
- * Validates that an attribute can be safely deleted or renamed by checking for index dependencies.
- */
 class IndexDependency extends Validator
 {
     protected string $message = "Attribute can't be deleted or renamed because it is used in an index";

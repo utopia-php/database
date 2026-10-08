@@ -474,7 +474,23 @@ trait Documents
             return $this->newDocument($collection, []);
         }
 
-        $collection = $this->silent(fn () => $this->getCollection($collection));
+        return $this->readDocument($this->silent(fn () => $this->getCollection($collection)), $id, $queries, $forUpdate);
+    }
+
+    /**
+     * getDocument() of a collection whose definition the caller already holds, as a write that read it a moment
+     * before does, so the definition is not looked up and copied again.
+     *
+     * @param  array<Query>  $queries
+     *
+     * @throws DatabaseException
+     * @throws QueryException
+     */
+    private function readDocument(Collection $collection, string $id, array $queries = [], bool $forUpdate = false): Document
+    {
+        if ($id === '') {
+            return $this->newDocument($collection->getId(), []);
+        }
 
         $attributes = $collection->attributes();
 
@@ -1402,7 +1418,7 @@ trait Documents
             : $collection->getId();
         $document = $this->withMutation(Event::DocumentUpdate, $cacheTarget, function () use ($collection, $id, $document, $newUpdatedAt, &$hasOperators) {
             $old = $this->authorization->skip(fn () => $this->silent(
-                fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
+                fn () => $this->readDocument($collection, $id, forUpdate: true)
             ));
             if ($old->isEmpty()) {
                 return new Document();
@@ -2441,7 +2457,7 @@ trait Documents
             : $collection->getId();
         $document = $this->withMutation(Event::DocumentIncrease, $cacheTarget, function () use ($collection, $id, $attribute, $value, $max, $numericAttribute) {
             /** @var Document $document */
-            $document = $this->authorization->skip(fn () => $this->silent(fn () => $this->getDocument($collection->getId(), $id, forUpdate: true))); // Skip ensures user does not need read permission for this
+            $document = $this->authorization->skip(fn () => $this->silent(fn () => $this->readDocument($collection, $id, forUpdate: true))); // Skip ensures user does not need read permission for this
 
             if ($document->isEmpty()) {
                 throw new NotFoundException('Document not found');
@@ -2565,7 +2581,7 @@ trait Documents
             : $collection->getId();
         $document = $this->withMutation(Event::DocumentDecrease, $cacheTarget, function () use ($collection, $id, $attribute, $value, $min, $numericAttribute) {
             /** @var Document $document */
-            $document = $this->authorization->skip(fn () => $this->silent(fn () => $this->getDocument($collection->getId(), $id, forUpdate: true))); // Skip ensures user does not need read permission for this
+            $document = $this->authorization->skip(fn () => $this->silent(fn () => $this->readDocument($collection, $id, forUpdate: true))); // Skip ensures user does not need read permission for this
 
             if ($document->isEmpty()) {
                 throw new NotFoundException('Document not found');
@@ -2666,7 +2682,7 @@ trait Documents
         $deleted = $this->withMutation(Event::DocumentDelete, $cacheTarget, function () use ($collection, $id, $report, &$changed): ?Document {
             $changed = [];
             $document = $this->authorization->skip(fn () => $this->silent(
-                fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
+                fn () => $this->readDocument($collection, $id, forUpdate: true)
             ));
 
             if ($document->isEmpty()) {

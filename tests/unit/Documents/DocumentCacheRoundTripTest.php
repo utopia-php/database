@@ -176,6 +176,14 @@ final class DocumentCacheRoundTripTest extends TestCase
     }
 
     /**
+     * @return array<string, array{Closure(Database): mixed}>
+     */
+    public static function writes(): array
+    {
+        return \array_map(static fn (array $write): array => [$write[0]], self::singleDocumentWrites());
+    }
+
+    /**
      * @return array<string, array{Closure(Database): mixed, string}>
      */
     public static function writtenDocuments(): array
@@ -204,6 +212,25 @@ final class DocumentCacheRoundTripTest extends TestCase
         $write($database);
 
         $this->assertSame(1, $cache->getPurges()[$documentKey] ?? 0, 'The document is purged once, after its write commits');
+    }
+
+    /**
+     * @param  Closure(Database): mixed  $write
+     */
+    #[DataProvider('writes')]
+    public function testASingleDocumentWriteReadsItsDefinitionOnce(Closure $write): void
+    {
+        [$database, $adapter, $cache] = $this->createDatabase();
+        $database->createDocument('webhooks', $this->hook('hook'));
+        $database->getDocument('webhooks', 'hook');
+        $definitionKey = \strtolower($database->getCacheKeys(Database::METADATA, 'webhooks')[1]);
+
+        $adapter->reset();
+        $cache->resetOperations();
+        $write($database);
+
+        $this->assertSame(1, $cache->getLoads()[$definitionKey] ?? 0, 'The write reads the definition it resolved once, not again to read the document');
+        $this->assertSame(0, $adapter->metadataReads);
     }
 
     public function testAnUpdateAndAReadInATransactionStayWithinSevenThreeRoundTrips(): void

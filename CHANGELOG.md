@@ -636,6 +636,9 @@ have to make, with the 7.x and 8.0 forms side by side.
 - `createIndex()` compares an index that exists in the schema but not in the metadata with the request (columns,
   prefix lengths, key, unique, fulltext or spatial) on adapters with schema index introspection: a match is adopted,
   a mismatch is dropped and recreated, as in 7.3.12.
+- `createIndex()` and `createIndexes()` refuse a unique index over documents that already share a value with
+  `Exception\Unique` and keep no metadata for it, as 7.4.1 does. The adapter's error was taken for an index already
+  in the schema, so the index was recorded without being built; SQLite threw a raw `PDOException` instead.
 - `updateAttribute()` no longer fails on MongoDB, Memory and Redis when a key or unique index covers the attribute
   (the index was compared with itself).
 - `Validator\IndexDefinition` rejects an index definition without a type, with an unknown type, or a TTL index

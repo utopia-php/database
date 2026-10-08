@@ -129,6 +129,58 @@ trait IndexTests
         $database->deleteCollection('indexes');
     }
 
+    public function testCreateUniqueIndexOverDuplicates(): void
+    {
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::IndexUnique)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'uniqueOverDuplicates';
+        $objectPaths = $database->getAdapter() instanceof Postgres && $database->getAdapter()->supports(Capability::Objects);
+
+        $database->createCollection(Collection::create(id: $collection, attributes: [
+            Attribute::string(key: 'name', size: 128),
+            Attribute::integer(key: 'age'),
+            ...($objectPaths ? [Attribute::object(key: 'data')] : []),
+        ], permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ], documentSecurity: false));
+
+        try {
+            foreach (['first', 'second'] as $id) {
+                $database->createDocument($collection, new Document([
+                    '$id' => $id,
+                    'name' => 'chester',
+                    'age' => 7,
+                    ...($objectPaths ? ['data' => ['country' => 'au']] : []),
+                ]));
+            }
+
+            foreach ($objectPaths ? ['name', 'age', 'data.country'] : ['name', 'age'] as $attribute) {
+                $key = 'unique_'.\str_replace('.', '_', $attribute);
+
+                $error = null;
+                try {
+                    $database->createIndex($collection, Index::unique(key: $key, attributes: [$attribute]));
+                } catch (Throwable $caught) {
+                    $error = $caught;
+                }
+
+                $this->assertInstanceOf(UniqueException::class, $error, 'A unique index on '.$attribute.' over duplicate values must be refused as Unique');
+
+                $keys = \array_map(static fn (Index $index): string => $index->key, $database->getCollection($collection)->indexes());
+                $this->assertNotContains($key, $keys, 'A refused unique index on '.$attribute.' must leave no metadata behind');
+            }
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
     public function testIndexLengthZero(): void
     {
         /** @var Database $database */

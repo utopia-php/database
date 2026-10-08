@@ -807,7 +807,11 @@ class SQLite extends SQL
 
         $sql = $this->getSqlIndex($name, $id, $type, $attributes);
 
-        return $this->execute($this->prepare($sql, event: $event));
+        try {
+            return $this->execute($this->prepare($sql, event: $event));
+        } catch (PDOException $error) {
+            throw $this->processException($error);
+        }
     }
 
     /**

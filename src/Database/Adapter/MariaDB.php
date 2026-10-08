@@ -536,6 +536,10 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
         try {
             return $this->executeStatement($sql, Event::IndexCreate);
         } catch (PDOException $error) {
+            if ($error->getCode() === '23000' && isset($error->errorInfo[1]) && $error->errorInfo[1] === 1062) {
+                throw new UniqueException(UniqueException::MESSAGE, $error->getCode(), $error);
+            }
+
             throw $this->processException($error);
         }
     }

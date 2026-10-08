@@ -27,6 +27,8 @@ use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Type as TypeException;
+use Utopia\Database\Exception\Unique as UniqueException;
+use Utopia\Database\Index;
 use Utopia\Database\Permission;
 use Utopia\Database\Query;
 use Utopia\Database\Role;
@@ -34,6 +36,7 @@ use Utopia\Database\Validator\Authorization;
 use Utopia\Mongo\Client;
 use Utopia\Mongo\Exception as MongoException;
 use Utopia\Query\OrderDirection;
+use Utopia\Query\Schema\ColumnType;
 
 final class EngineErrorMappingTest extends TestCase
 {
@@ -288,6 +291,24 @@ final class EngineErrorMappingTest extends TestCase
             'DROP TABLE "utopiaTests"."engine_orders"; DROP TABLE IF EXISTS "utopiaTests"."engine_orders_perms"',
             'DROP TABLE IF EXISTS "utopiaTests"."engine_orders_perms"',
         ], $statements);
+    }
+
+    public function testPostgresUniqueIndexOverDuplicateObjectPathValuesIsUnique(): void
+    {
+        $statements = [];
+        $duplicates = self::engineError('23505', 7, "SQLSTATE[23505]: Unique violation: 7 ERROR:  could not create unique index \"engine_orders_unique_country\"\nDETAIL:  Key ((data ->> 'country'::text))=(au) is duplicated.");
+        $adapter = $this->postgresRecording($statements, $duplicates);
+
+        $error = null;
+        try {
+            $adapter->createIndex('orders', Index::unique(key: 'unique_country', attributes: ['data.country']), ['data.country' => ColumnType::Object->value]);
+        } catch (Throwable $caught) {
+            $error = $caught;
+        }
+
+        $this->assertInstanceOf(UniqueException::class, $error);
+        $this->assertSame(UniqueException::MESSAGE, $error->getMessage());
+        $this->assertSame($duplicates, $error->getPrevious());
     }
 
     public function testPostgresDeleteCollectionDropsBothTablesInOneStatement(): void

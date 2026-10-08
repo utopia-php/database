@@ -12,6 +12,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Index;
 use Utopia\Database\Permission;
 use Utopia\Database\Query;
@@ -254,11 +255,6 @@ class MemoryTest extends Base
         $this->assertSame(['php', 'memory', 'adapter'], $fetched->getAttribute('tags'));
     }
 
-    /**
-     * Regression: CREATE UNIQUE INDEX on a collection that already contains
-     * duplicate values must surface DuplicateException at the adapter layer
-     * (matches MariaDB errno 1062).
-     */
     public function testCreateUniqueIndexRejectsExistingDuplicates(): void
     {
         $adapter = new Memory();
@@ -273,7 +269,8 @@ class MemoryTest extends Base
             new Document(['$id' => 'b', 'addr' => 'dup@example.com', '$permissions' => []])
         );
 
-        $this->expectException(DuplicateException::class);
+        $this->expectException(UniqueException::class);
+        $this->expectExceptionMessage(UniqueException::MESSAGE);
         $adapter->createIndex('emails', Index::unique(key: 'unique_addr', attributes: ['addr']));
     }
 

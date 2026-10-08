@@ -803,7 +803,7 @@ class Redis extends Adapter implements
                         }
                         $hash = \serialize($signature);
                         if (isset($seen[$hash])) {
-                            throw new DuplicateException('Cannot create unique index: existing rows already contain duplicate values');
+                            throw new UniqueException(UniqueException::MESSAGE);
                         }
                         $seen[$hash] = true;
                     }

@@ -18,6 +18,7 @@ use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Structure as StructureException;
+use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Index;
 use Utopia\Database\Schema;
 use Utopia\Database\Storage;
@@ -293,6 +294,7 @@ trait Indexes
      *
      * @throws DatabaseException
      * @throws DuplicateException
+     * @throws UniqueException When the stored documents violate a unique index
      */
     private function createIndexInSchema(string $collection, Index $index, array $attributes): bool
     {
@@ -304,6 +306,8 @@ trait Indexes
             if (! $this->adapter->createIndex($collection, $index, self::indexAttributeTypes($index, $attributes))) {
                 throw new DatabaseException('Failed to create index');
             }
+        } catch (UniqueException $error) {
+            throw $error;
         } catch (DuplicateException) {
             // The metadata holds no index under this key, so the schema's copy is an orphan of a
             // partial failure: it is kept and the metadata written for it.

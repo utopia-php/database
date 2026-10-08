@@ -922,6 +922,10 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         try {
             return $this->executeStatement($sql, $event);
         } catch (PDOException $error) {
+            if ($error->getCode() === '23505' && isset($error->errorInfo[1]) && $error->errorInfo[1] === 7) {
+                throw new UniqueException(UniqueException::MESSAGE, $error->getCode(), $error);
+            }
+
             throw $this->processException($error);
         }
     }

@@ -1361,6 +1361,10 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
 
             return $result;
         } catch (Exception $error) {
+            if ($error->getCode() === 11000 || $error->getCode() === 11001) {
+                throw new UniqueException(UniqueException::MESSAGE, $error->getCode(), $error);
+            }
+
             throw $this->processException($error);
         }
     }

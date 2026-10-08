@@ -174,8 +174,6 @@ class SQLite extends SQL
     }
 
     /**
-     * Get the list of capabilities supported by the SQLite adapter.
-     *
      * @return array<Capability>
      */
     #[\Override]
@@ -416,8 +414,6 @@ class SQLite extends SQL
     }
 
     /**
-     * Create Database
-     *
      * @throws Exception
      * @throws PDOException
      */
@@ -481,8 +477,6 @@ class SQLite extends SQL
     }
 
     /**
-     * Delete Database
-     *
      * @throws Exception
      * @throws PDOException
      */
@@ -493,8 +487,6 @@ class SQLite extends SQL
     }
 
     /**
-     * Create Collection
-     *
      * @param  list<Attribute>  $attributes
      * @param  list<Index>  $indexes
      *
@@ -599,8 +591,6 @@ class SQLite extends SQL
     }
 
     /**
-     * Get Collection Size of raw data
-     *
      * @throws DatabaseException
      */
     #[\Override]
@@ -642,8 +632,6 @@ class SQLite extends SQL
     }
 
     /**
-     * Get Collection Size on disk
-     *
      * @throws DatabaseException
      */
     #[\Override]
@@ -687,8 +675,6 @@ class SQLite extends SQL
     }
 
     /**
-     * Update Attribute
-     *
      * @throws Exception
      * @throws PDOException
      */
@@ -783,8 +769,6 @@ class SQLite extends SQL
     }
 
     /**
-     * Create Index
-     *
      * @param  array<string,string>  $indexAttributeTypes
      * @param  array<string, mixed>  $collation
      *
@@ -1031,8 +1015,6 @@ class SQLite extends SQL
     }
 
     /**
-     * Rename Index
-     *
      * @throws Exception
      * @throws PDOException
      */
@@ -1164,8 +1146,6 @@ class SQLite extends SQL
     }
 
     /**
-     * Every FTS5 vtable on `$collection`.
-     *
      * @return array<string>
      */
     protected function findFulltextTables(string $collection): array
@@ -1198,8 +1178,6 @@ class SQLite extends SQL
     }
 
     /**
-     * Create Document
-     *
      * @throws Exception
      * @throws PDOException
      * @throws DuplicateException
@@ -1258,8 +1236,6 @@ class SQLite extends SQL
     }
 
     /**
-     * Update Document
-     *
      * @throws Exception
      * @throws PDOException
      * @throws DuplicateException
@@ -1572,7 +1548,6 @@ class SQLite extends SQL
     }
 
     /**
-     * Override getSpatialGeometryFromText to return placeholder unchanged for SQLite
      * SQLite does not support ST_GeomFromText, so we return the raw placeholder
      */
     #[\Override]
@@ -1582,8 +1557,6 @@ class SQLite extends SQL
     }
 
     /**
-     * Get SQL Index
-     *
      * @param  array<string>  $attributes
      *
      * @throws Exception
@@ -1614,9 +1587,6 @@ class SQLite extends SQL
         return "CREATE {$sqlType} {$key} ON `{$this->getNamespace()}_{$collection}` ({$attributes})";
     }
 
-    /**
-     * Get SQL table
-     */
     #[\Override]
     protected function getTable(string $name): string
     {
@@ -1633,7 +1603,6 @@ class SQLite extends SQL
     }
 
     /**
-     * Check if SQLite math functions (like POWER) are available
      * SQLite must be compiled with -DSQLITE_ENABLE_MATH_FUNCTIONS
      */
     private function getSupportForMathFunctions(): bool
@@ -1645,7 +1614,6 @@ class SQLite extends SQL
         }
 
         try {
-            // Test if POWER function exists by attempting to use it
             $pdo = $this->getDriver();
             $statement = $pdo instanceof PDOProxy
                 ? $pdo->__call('query', ['SELECT POWER(2, 3) as test'])
@@ -1662,7 +1630,6 @@ class SQLite extends SQL
 
             return $available;
         } catch (PDOException $e) {
-            // Function doesn't exist
             $available = false;
 
             return false;
@@ -1731,12 +1698,10 @@ class SQLite extends SQL
     #[\Override]
     protected function processException(PDOException $e): Exception
     {
-        // Table/index already exists (SQLITE_ERROR with "already exists" message)
         if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1 && stripos($e->getMessage(), 'already exists') !== false) {
             return new DuplicateException('Collection already exists', $e->getCode(), $e);
         }
 
-        // Table not found (SQLITE_ERROR with "no such table" message)
         if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1 && stripos($e->getMessage(), 'no such table') !== false) {
             return new NotFoundException('Collection not found', $e->getCode(), $e);
         }
@@ -1773,7 +1738,6 @@ class SQLite extends SQL
             }
         }
 
-        // String or BLOB exceeds size limit
         if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 18) {
             return new LimitException('Value too large', $e->getCode(), $e);
         }
@@ -1871,7 +1835,6 @@ class SQLite extends SQL
                 }
             }
 
-            // Replace named bindings with positional
             $positionalBindings = [];
             $replacements = [];
             foreach (array_keys($namedBindings) as $key) {
@@ -1899,8 +1862,6 @@ class SQLite extends SQL
     }
 
     /**
-     * Get SQL expression for operator
-     *
      * IMPORTANT: SQLite JSON Limitations
      * Array operators using json_each() and json_group_array() have type conversion behavior:
      * - Numbers are preserved but may lose precision (e.g., 1.0 becomes 1)
@@ -1919,7 +1880,6 @@ class SQLite extends SQL
         $values = $operator->getValues();
 
         switch ($method) {
-            // Numeric operators
             case OperatorType::Increment:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
@@ -2033,7 +1993,6 @@ class SQLite extends SQL
 
                 return "{$quotedColumn} = POWER(COALESCE({$quotedColumn}, 0), :$bindKey)";
 
-                // String operators
             case OperatorType::StringConcat:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
@@ -2048,18 +2007,13 @@ class SQLite extends SQL
 
                 return "{$quotedColumn} = REPLACE({$quotedColumn}, :$searchKey, :$replaceKey)";
 
-                // Boolean operators
             case OperatorType::Toggle:
-                // SQLite: toggle boolean (0 or 1), treat NULL as 0
                 return "{$quotedColumn} = CASE WHEN COALESCE({$quotedColumn}, 0) = 0 THEN 1 ELSE 0 END";
 
-                // Array operators
             case OperatorType::ArrayAppend:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
 
-                // SQLite: merge arrays by using json_group_array on extracted elements
-                // We use json_each to extract elements from both arrays and combine them
                 return "{$quotedColumn} = (
                     SELECT json_group_array(value)
                     FROM (
@@ -2073,7 +2027,6 @@ class SQLite extends SQL
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
 
-                // SQLite: prepend by extracting and recombining with new elements first
                 return "{$quotedColumn} = (
                     SELECT json_group_array(value)
                     FROM (
@@ -2084,7 +2037,6 @@ class SQLite extends SQL
                 )";
 
             case OperatorType::ArrayUnique:
-                // SQLite: get distinct values from JSON array
                 return "{$quotedColumn} = (
                     SELECT json_group_array(DISTINCT value)
                     FROM json_each(IFNULL({$quotedColumn}, '[]'))
@@ -2095,7 +2047,6 @@ class SQLite extends SQL
                 $bindIndex++;
                 $removed = \is_float($values[0] ?? null) ? "CAST(:$bindKey AS REAL)" : ":$bindKey";
 
-                // SQLite: remove specific value from array
                 return "{$quotedColumn} = (
                     SELECT json_group_array(value)
                     FROM json_each(IFNULL({$quotedColumn}, '[]'))
@@ -2108,10 +2059,6 @@ class SQLite extends SQL
                 $valueKey = "op_{$bindIndex}";
                 $bindIndex++;
 
-                // SQLite: Insert element at specific index by:
-                // 1. Take elements before index (0 to index-1)
-                // 2. Add new element
-                // 3. Take elements from index to end
                 // The bound value is JSON-encoded by parent, json() parses it back to a value,
                 // then we wrap it in json_array() and extract to get the same format as json_each()
                 return "{$quotedColumn} = (
@@ -2141,7 +2088,6 @@ class SQLite extends SQL
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
 
-                // SQLite: keep only values that exist in both arrays
                 return "{$quotedColumn} = (
                     SELECT json_group_array(value)
                     FROM json_each(IFNULL({$quotedColumn}, '[]'))
@@ -2152,7 +2098,6 @@ class SQLite extends SQL
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
 
-                // SQLite: remove values that exist in the comparison array
                 return "{$quotedColumn} = (
                     SELECT json_group_array(value)
                     FROM json_each(IFNULL({$quotedColumn}, '[]'))
@@ -2162,7 +2107,6 @@ class SQLite extends SQL
             case OperatorType::ArrayFilter:
                 $values = $operator->getValues();
                 if (empty($values)) {
-                    // No filter criteria, return array unchanged
                     return "{$quotedColumn} = {$quotedColumn}";
                 }
 
@@ -2229,7 +2173,6 @@ class SQLite extends SQL
                         return "{$quotedColumn} = {$quotedColumn}";
                 }
 
-                // Date operators
                 // no break
             case OperatorType::DateAddDays:
                 $bindKey = "op_{$bindIndex}";
@@ -2285,7 +2228,6 @@ class SQLite extends SQL
      * @param  string  $attribute  Increment attribute name (empty if none)
      * @param  array<string, Operator>  $operators  Operator map keyed by attribute name
      * @param  array<string, mixed>  $attributeDefaults  Attribute default values
-     * @param  bool  $hasOperators  Whether this batch contains operator expressions
      *
      * @throws DatabaseException
      */
@@ -2398,7 +2340,6 @@ class SQLite extends SQL
             $regularAttributes[$key] = $value;
         }
 
-        // Build ON CONFLICT clause manually for SQLite
         $getUpdateClause = function (string $attribute, bool $increment = false): string {
             $attribute = $this->quote($this->filter($attribute));
             if ($increment) {

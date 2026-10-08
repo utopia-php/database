@@ -25,10 +25,9 @@ trait Transactions
     /** @var array<int, array<string, array<string, Document>>> Collection definitions read inside the transaction the open invalidation scope owns, by coroutine id, lower-cased definition key and cache field. */
     protected array $transactionDefinitions = [];
 
-    /** @var array<int, array<string, array<string, Closure(): void>>> Reads that fill the shared cache with the collection definitions the transaction the open invalidation scope owns read by SQL, under the tenant and filters each was read with, by coroutine id, lower-cased definition key and cache field. */
+    /** @var array<int, array<string, array<string, Closure(): void>>> */
     protected array $definitionRefills = [];
 
-    /** Whether the latest fill of a collection definition could not land: the cache refused it, or a replica served the read. Transactions leave their definitions uncached until a fill lands again. */
     private bool $definitionFillsFail = false;
 
     /** @var array<int, list<Closure(): void>> Document purge events of the open invalidation scope, by coroutine id, fired once its outermost transaction has or may have committed. */
@@ -331,10 +330,6 @@ trait Transactions
         return $result;
     }
 
-    /**
-     * Queue a read of the collection definition, once the transaction commits, under the tenant and filters of the
-     * read inside it, so the read fills the cache slot that read could not fill.
-     */
     private function queueDefinitionRefill(string $definitionKey, string $field, string $id): void
     {
         $tenant = $this->adapter->getTenant();
@@ -356,10 +351,9 @@ trait Transactions
      * Read again, now that the transaction has committed, each collection definition it had to read by SQL, so the
      * read fills the shared cache a read inside the transaction must not: its snapshot may predate another writer's
      * commit. Without this a definition dropped from the cache, as by a batch write, stays uncached for as long as
-     * only transactions read it. A failed read leaves the definition uncached, as it was, and once a fill cannot
-     * land the remaining definitions stay uncached too.
+     * only transactions read it. A failed read leaves the definition uncached, as it was.
      *
-     * @param  array<string, array<string, Closure(): void>>  $refills  Reads by lower-cased definition key and cache field
+     * @param  array<string, array<string, Closure(): void>>  $refills
      */
     private function cacheTransactionDefinitions(array $refills): void
     {

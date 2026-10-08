@@ -124,6 +124,7 @@ class Relationships implements Attachable, Hook
      *
      * @throws DatabaseException When the hook is already attached to another database
      */
+    #[\Override]
     public function attach(Database $database): void
     {
         if (isset($this->database) && $this->database !== $database) {

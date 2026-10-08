@@ -22,6 +22,7 @@ final readonly class Permission implements Read
      * @param  array<string, mixed>  $filters
      * @return array<string, mixed>
      */
+    #[\Override]
     public function applyFilters(array $filters, string $collection, PermissionType $forPermission): array
     {
         if (! $this->authorization->getStatus()) {

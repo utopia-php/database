@@ -25,6 +25,7 @@ final readonly class Tenant implements Read
      * @param  array<string, mixed>  $filters
      * @return array<string, mixed>
      */
+    #[\Override]
     public function applyFilters(array $filters, string $collection, PermissionType $forPermission = PermissionType::Read): array
     {
         if (! $this->sharedTables) {

@@ -18,6 +18,7 @@ use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Operator;
+use Utopia\Database\PDO as PDOWrapper;
 use Utopia\Database\Query;
 
 /**
@@ -31,6 +32,14 @@ use Utopia\Database\Query;
 class Postgres extends SQL
 {
     public const MAX_IDENTIFIER_NAME = 63;
+
+    /**
+     * Last statement_timeout sent on each physical connection, shared by every
+     * adapter using that connection and dropped together with it.
+     *
+     * @var \WeakMap<object, int>|null
+     */
+    private static ?\WeakMap $timeouts = null;
 
     /**
      * @inheritDoc
@@ -66,25 +75,53 @@ class Postgres extends SQL
     {
         $pdo = $this->getPDO();
 
-        // Choose the right SET command based on transaction state
-        $sql = $this->inTransaction === 0
-            ? "SET statement_timeout = '{$this->timeout}ms'"
-            : "SET LOCAL statement_timeout = '{$this->timeout}ms'";
+        // A persistent connection is shared by every PDO opened with the same DSN and
+        // outlives them, so its timeout is set and reset around each statement instead
+        if ($pdo->getAttribute(PDO::ATTR_PERSISTENT)) {
+            $sql = $this->inTransaction === 0
+                ? "SET statement_timeout = '{$this->timeout}ms'"
+                : "SET LOCAL statement_timeout = '{$this->timeout}ms'";
 
-        // Apply timeout
-        $pdo->exec($sql);
+            $pdo->exec($sql);
 
-        try {
-            return $stmt->execute();
-        } finally {
-            // Only reset the global timeout when not in a transaction
-            if ($this->inTransaction === 0) {
-                $pdo->exec("RESET statement_timeout");
+            try {
+                return $stmt->execute();
+            } finally {
+                if ($this->inTransaction === 0) {
+                    $pdo->exec("RESET statement_timeout");
+                }
             }
         }
+
+        $connection = $pdo instanceof PDOWrapper ? $pdo->getConnection() : $pdo;
+        $timeouts = self::$timeouts ??= new \WeakMap();
+
+        // Only send the timeout when it differs from what the connection already has
+        if (($timeouts[$connection] ?? null) !== $this->timeout) {
+            // Another adapter sharing the connection may have a transaction open, and
+            // its rollback would undo a session SET
+            if ($this->inTransaction === 0 && !$pdo->inTransaction()) {
+                $pdo->exec("SET statement_timeout = '{$this->timeout}ms'");
+                $timeouts[$connection] = $this->timeout;
+            } else {
+                // SET LOCAL ends with the transaction, so the session value is unknown until set again
+                $pdo->exec("SET LOCAL statement_timeout = '{$this->timeout}ms'");
+                unset($timeouts[$connection]);
+            }
+        }
+
+        return $stmt->execute();
     }
 
+    public function reconnect(): void
+    {
+        $pdo = $this->getPDO();
+        if (self::$timeouts !== null) {
+            unset(self::$timeouts[$pdo instanceof PDOWrapper ? $pdo->getConnection() : $pdo]);
+        }
 
+        parent::reconnect();
+    }
 
     /**
      * Returns Max Execution Time
@@ -124,14 +161,13 @@ class Postgres extends SQL
         $sql = "CREATE SCHEMA \"{$name}\"";
         $sql = $this->trigger(Database::EVENT_DATABASE_CREATE, $sql);
 
-        $dbCreation = $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        $dbCreation = $this->execute($this->getPDO()
+            ->prepare($sql));
 
         // Enable extensions
-        $this->getPDO()->prepare('CREATE EXTENSION IF NOT EXISTS postgis')->execute();
-        $this->getPDO()->prepare('CREATE EXTENSION IF NOT EXISTS vector')->execute();
-        $this->getPDO()->prepare('CREATE EXTENSION IF NOT EXISTS pg_trgm')->execute();
+        $this->execute($this->getPDO()->prepare('CREATE EXTENSION IF NOT EXISTS postgis'));
+        $this->execute($this->getPDO()->prepare('CREATE EXTENSION IF NOT EXISTS vector'));
+        $this->execute($this->getPDO()->prepare('CREATE EXTENSION IF NOT EXISTS pg_trgm'));
 
         $collation = "
             CREATE COLLATION IF NOT EXISTS utf8_ci_ai (
@@ -140,7 +176,7 @@ class Postgres extends SQL
             deterministic = false
             )
         ";
-        $this->getPDO()->prepare($collation)->execute();
+        $this->execute($this->getPDO()->prepare($collation));
         return $dbCreation;
     }
 
@@ -159,7 +195,7 @@ class Postgres extends SQL
         $sql = "DROP SCHEMA IF EXISTS \"{$name}\" CASCADE";
         $sql = $this->trigger(Database::EVENT_DATABASE_DELETE, $sql);
 
-        return $this->getPDO()->prepare($sql)->execute();
+        return $this->execute($this->getPDO()->prepare($sql));
     }
 
     /**
@@ -283,9 +319,9 @@ class Postgres extends SQL
         $permissions = $this->trigger(Database::EVENT_COLLECTION_CREATE, $permissions);
 
         try {
-            $this->getPDO()->prepare($collection)->execute();
+            $this->execute($this->getPDO()->prepare($collection));
 
-            $this->getPDO()->prepare($permissions)->execute();
+            $this->execute($this->getPDO()->prepare($permissions));
 
             foreach ($indexes as $index) {
                 $indexId = $this->filter($index->getId());
@@ -413,7 +449,7 @@ class Postgres extends SQL
         $sql = $this->trigger(Database::EVENT_COLLECTION_DELETE, $sql);
 
         try {
-            return $this->getPDO()->prepare($sql)->execute();
+            return $this->execute($this->getPDO()->prepare($sql));
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -923,7 +959,7 @@ class Postgres extends SQL
         $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
 
         try {
-            return $this->getPDO()->prepare($sql)->execute();
+            return $this->execute($this->getPDO()->prepare($sql));
         } catch (PDOException $e) {
             // Existing rows violate the new unique index. Classified here because an
             // expression key (nested object path) has no columns for processException() to parse.

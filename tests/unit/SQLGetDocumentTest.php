@@ -85,13 +85,10 @@ final class SQLGetDocumentTest extends TestCase
         $pdo->expects($this->once())
             ->method('prepare')
             ->willReturn($statement);
-        $pdo->expects($this->exactly(2))
+        $pdo->expects($this->once())
             ->method('exec')
-            ->withConsecutive(
-                ["SET statement_timeout = '25ms'"],
-                ['RESET statement_timeout']
-            )
-            ->willReturnOnConsecutiveCalls(0, 0);
+            ->with("SET statement_timeout = '25ms'")
+            ->willReturn(0);
 
         $adapter = new Postgres($pdo);
         $adapter->setDatabase('database');

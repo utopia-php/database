@@ -160,3 +160,34 @@ The probe scripts are in the cloud scratchpad only and are lost with the contain
 - 10-08 BENCH-B fix-forward (qlt-fix/api-bench-b @ fef489d49): txn update_then_read FIXED (extra _metadata SELECT after BEGIN: txn-only readers never refilled the cache after a batch purge → refill after outermost commit; MySQL 8→7 = 7.4.0, PG 9→8; CPU ratio ~1.05-1.19); collection.get.miss PARTIAL (shared definition models built once; miss = 5 cache round trips vs 4 in 7.4.0 by epoch design; local ratio 1.03-1.27 noisy); decrease/increase PARTIAL (BigInt native fast path, Pool DefinedAttributes cached for non-schemaless; no extra statement/round trip, residual CPU spread over clones/state/pool sync, ~1.15-1.5 local); depth3: identical statement counts. Agent questions open: (1) refill vs purge on batch write, (2) drop in-txn purge, (3) miss path epoch read lazily/same round trip. Merged into qlt-fix/api-w7 @ 4c67e22f5: PHPStan 0/0, Pint clean, unit 9890 (1 env-only fail). W7 review next, then ff ws-api-redesign + CI = checkpoint C.
 - 10-08 CI dispatched on qlt-fix/api-w7 @ 4c67e22f5: Tests 37732703099, Linter 37732705419, CodeQL 37732707659. User decisions: keep cutting before checkpoint C; approved cache changes = refill definition cache after batch write + drop in-txn purge (not: epoch in one trip); CI via push+REST dispatch from session; BENCH-C via user's local doctl. Handoff: handoff/HANDOVER-2026-10-08-cloud.md (also on origin branch handoff/query-train-2026-10-08).
 ```
+
+## UPDATE (later 2026-10-08, cloud session still running)
+- **CI on `4c67e22f5` all GREEN:** Tests 37732703099, Linter 37732705419, CodeQL 37732707659.
+- **W7 review (agent) of `ee1936f2c..4c67e22f5`: ready for checkpoint C, 0 critical/major.** It verified:
+  - the pure moves are R100 renames;
+  - no old FQCN remains;
+  - the sweep's enum/constant substitutions emit the same strings;
+  - the readonly classes are never written;
+  - SQL text and binding order are unchanged;
+  - there are no named-arg `isValid` callers in appwrite;
+  - the txn refill can't cache stale data (normal fill path, replica-aware, only after a clean outer commit);
+  - the shared definition models are immutable;
+  - the BigInt fast paths match the string path (200k random pairs plus edge cases);
+  - the Pool cache is safe (only Mongo is Schemaless).
+- **The review's minors were fixed in `a6dae3be9` (`qlt-fix/api-w7`, pushed):**
+  - 55 lowercase `{@inheritdoc}` lines removed from Mirror;
+  - the `Mirror\Filter::initialize()/shutdown()` docblocks now say Mirror never calls them (it didn't in 7.4.0 either);
+  - a failed post-commit definition refill now logs via `Console::warning`;
+  - the UPGRADE `withStatus()` row was reworded.
+  - Kept: `DefinitionModelCacheTest` identity asserts, which are that change's perf guard.
+  - CI on `a6dae3be9`: Tests 37733921911, Linter 37733923663, CodeQL 37733925925 (running at time of writing).
+- **Downstream note from the review:** appwrite/migration/cloud still import `Utopia\Database\Helpers\ID`/`Permission`/
+  `Role`, which are now `Utopia\Database\Id`/`Permission`/`Role` (`ID`→`Id` matters on case-sensitive filesystems).
+  The consumer work must apply the W7-1 move map.
+- **IN PROGRESS (cloud agent):** the two approved cache changes, plus further per-call overhead cuts, on
+  `qlt-fix/api-cache`, branched from `a6dae3be9`:
+  1. refill the definition cache after a batch write instead of purging it;
+  2. drop the in-transaction document purge.
+  - If this session ends before it reports, check `origin/qlt-fix/api-cache`. Re-check its statement/round-trip counts
+    against 7.4.0, review it, merge it into `qlt-fix/api-w7`, run CI, and that head is checkpoint C. Then
+    fast-forward `ws-api-redesign`.

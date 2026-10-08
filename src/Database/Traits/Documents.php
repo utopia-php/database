@@ -27,6 +27,7 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Order as OrderException;
@@ -830,6 +831,14 @@ trait Documents
             $kept->getPermissions();
         } catch (StructureException) {
             // Permissions that do not parse fail where a clone's are read, as they would unparsed.
+        }
+        if ($kept instanceof Collection) {
+            try {
+                $kept->attributes();
+                $kept->indexes();
+            } catch (StructureException|IndexException) {
+                // Models that do not build fail where a clone's are read, as they would unbuilt.
+            }
         }
         self::$definitionModels[$documentKey] = ['source' => $cached, 'model' => $kept];
 

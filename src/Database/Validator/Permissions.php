@@ -11,18 +11,19 @@ use Utopia\Database\PermissionType;
  */
 class Permissions extends Roles
 {
+    #[\Override]
     protected string $message = 'Permissions Error';
 
     /**
      * @var array<string>
      */
+    #[\Override]
     protected array $allowed;
 
+    #[\Override]
     protected int $length;
 
     /**
-     * Permissions constructor.
-     *
      * @param  int  $length  maximum amount of permissions. 0 means unlimited.
      * @param  array<PermissionType>  $allowed  allowed permissions. Defaults to all available.
      */
@@ -32,11 +33,13 @@ class Permissions extends Roles
         $this->allowed = \array_map(fn (PermissionType $p) => $p->value, $allowed);
     }
 
+    #[\Override]
     public function getDescription(): string
     {
         return $this->message;
     }
 
+    #[\Override]
     public function isValid(mixed $value): bool
     {
         if (! \is_array($value)) {
@@ -103,14 +106,13 @@ class Permissions extends Roles
         return true;
     }
 
-    /**
-     * Function will return true if object is array.
-     */
+    #[\Override]
     public function isArray(): bool
     {
         return false;
     }
 
+    #[\Override]
     public function getType(): string
     {
         return self::TYPE_ARRAY;

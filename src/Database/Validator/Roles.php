@@ -11,22 +11,21 @@ use Utopia\Validator;
  */
 class Roles extends Validator
 {
-    // Roles
-    public const ROLE_ANY = 'any';
+    public const string ROLE_ANY = 'any';
 
-    public const ROLE_GUESTS = 'guests';
+    public const string ROLE_GUESTS = 'guests';
 
-    public const ROLE_USERS = 'users';
+    public const string ROLE_USERS = 'users';
 
-    public const ROLE_USER = 'user';
+    public const string ROLE_USER = 'user';
 
-    public const ROLE_TEAM = 'team';
+    public const string ROLE_TEAM = 'team';
 
-    public const ROLE_MEMBER = 'member';
+    public const string ROLE_MEMBER = 'member';
 
-    public const ROLE_LABEL = 'label';
+    public const string ROLE_LABEL = 'label';
 
-    public const ROLES = [
+    public const array ROLES = [
         self::ROLE_ANY,
         self::ROLE_GUESTS,
         self::ROLE_USERS,
@@ -45,7 +44,7 @@ class Roles extends Validator
 
     protected int $length;
 
-    public const CONFIG = [
+    public const array CONFIG = [
         self::ROLE_ANY => [
             'identifier' => [
                 'allowed' => false,
@@ -120,19 +119,16 @@ class Roles extends Validator
         ],
     ];
 
-    // Dimensions
-    public const DIMENSION_VERIFIED = 'verified';
+    public const string DIMENSION_VERIFIED = 'verified';
 
-    public const DIMENSION_UNVERIFIED = 'unverified';
+    public const string DIMENSION_UNVERIFIED = 'unverified';
 
-    public const USER_DIMENSIONS = [
+    public const array USER_DIMENSIONS = [
         self::DIMENSION_VERIFIED,
         self::DIMENSION_UNVERIFIED,
     ];
 
     /**
-     * Roles constructor.
-     *
      * @param  int  $length  maximum amount of role. 0 means unlimited.
      * @param  array<string>  $allowed  allowed roles. Defaults to all available.
      */
@@ -142,11 +138,13 @@ class Roles extends Validator
         $this->allowed = $allowed;
     }
 
+    #[\Override]
     public function getDescription(): string
     {
         return $this->message;
     }
 
+    #[\Override]
     public function isValid(mixed $value): bool
     {
         if (! \is_array($value)) {
@@ -211,14 +209,13 @@ class Roles extends Validator
         return true;
     }
 
-    /**
-     * Function will return true if object is array.
-     */
+    #[\Override]
     public function isArray(): bool
     {
         return false;
     }
 
+    #[\Override]
     public function getType(): string
     {
         return self::TYPE_ARRAY;
@@ -247,39 +244,33 @@ class Roles extends Validator
             return false;
         }
 
-        // Process identifier configuration
         $allowed = $config['identifier']['allowed'];
         $required = $config['identifier']['required'];
 
-        // Not allowed and has an identifier
         if (! $allowed && ! empty($identifier)) {
             $this->message = 'Role "'.$role.'"'.' can not have an ID value.';
 
             return false;
         }
 
-        // Required and has no identifier
         if ($allowed && $required && empty($identifier)) {
             $this->message = 'Role "'.$role.'"'.' must have an ID value.';
 
             return false;
         }
 
-        // Allowed and has an invalid identifier
         if ($allowed && ! empty($identifier) && ! $identifierValidator->isValid($identifier)) {
             $this->message = 'Role "'.$role.'"'.' identifier value is invalid: '.$identifierValidator->getDescription();
 
             return false;
         }
 
-        // Process dimension configuration
         /** @var bool $allowed */
         $allowed = $config['dimension']['allowed'];
         /** @var bool $required */
         $required = $config['dimension']['required'];
         $options = $config['dimension']['options'] ?? [$dimension];
 
-        // Not allowed and has a dimension
         if (! $allowed && ! empty($dimension)) {
             $this->message = 'Role "'.$role.'"'.' can not have a dimension value.';
 
@@ -294,13 +285,11 @@ class Roles extends Validator
         }
 
         if ($allowed && ! empty($dimension)) {
-            // Allowed and dimension is not an allowed option
             if (! \in_array($dimension, $options)) {
                 $this->message = 'Role "'.$role.'"'.' dimension value is invalid. Must be one of: '.\implode(', ', $options).'.';
 
                 return false;
             }
-            // Allowed and dimension is not a valid key
             if (! $dimensionValidator->isValid($dimension)) {
                 $this->message = 'Role "'.$role.'"'.' dimension value is invalid: '.$dimensionValidator->getDescription();
 

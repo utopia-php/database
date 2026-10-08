@@ -19,6 +19,7 @@ class OrderTest extends TestCase
     /**
      * @throws Exception
      */
+    #[\Override]
     protected function setUp(): void
     {
         $this->validator = new Order(

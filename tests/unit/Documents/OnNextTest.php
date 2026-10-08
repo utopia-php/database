@@ -17,6 +17,7 @@ final class OnNextTest extends TestCase
 {
     private Database $database;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->database = HookFixture::sqlite();

@@ -18,6 +18,7 @@ class BigInt extends Validator
     ) {
     }
 
+    #[\Override]
     public function getDescription(): string
     {
         if ($this->signed) {
@@ -31,16 +32,19 @@ class BigInt extends Validator
             self::formatIntegerString($max);
     }
 
+    #[\Override]
     public function isArray(): bool
     {
         return false;
     }
 
+    #[\Override]
     public function getType(): string
     {
         return \Utopia\Query\Schema\ColumnType::BigInteger->value;
     }
 
+    #[\Override]
     public function isValid(mixed $value): bool
     {
         if (\is_int($value)) {

@@ -85,6 +85,7 @@ final class MirrorReplicationTest extends TestCase
 
     private int $peak = 0;
 
+    #[\Override]
     protected function setUp(): void
     {
         if (! \extension_loaded('swoole')) {

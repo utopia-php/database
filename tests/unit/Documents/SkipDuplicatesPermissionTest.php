@@ -286,6 +286,7 @@ final class SkipDuplicatesPermissionTest extends TestCase
             /** @var list<list<string>> */
             public array $created = [];
 
+            #[\Override]
             public function afterDocumentCreate(string $collection, array $documents, WriteContext $context): void
             {
                 $this->created[] = \array_map(static fn (Document $document): string => $document->getId(), \array_values($documents));

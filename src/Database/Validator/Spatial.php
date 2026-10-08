@@ -15,8 +15,6 @@ class Spatial extends Validator
     protected string $message = '';
 
     /**
-     * Create a new spatial validator for the given type.
-     *
      * @param string $spatialType The spatial type to validate (point, linestring, polygon)
      */
     public function __construct(string $spatialType)
@@ -137,7 +135,6 @@ class Spatial extends Validator
                 }
             }
 
-            // Check that the ring is closed (first point == last point)
             if ($ring[0] !== $ring[count($ring) - 1]) {
                 $this->message = "Ring #{$ringIndex} must be closed (first point must equal last point)";
 
@@ -161,39 +158,24 @@ class Spatial extends Validator
         return (bool) preg_match('/^(POINT|LINESTRING|POLYGON)\s*\(/i', $value);
     }
 
-    /**
-     * Get the validator description including the error message.
-     *
-     * @return string
-     */
+    #[\Override]
     public function getDescription(): string
     {
         return 'Value must be a valid '.$this->spatialType.": {$this->message}";
     }
 
-    /**
-     * @return bool
-     */
+    #[\Override]
     public function isArray(): bool
     {
         return false;
     }
 
-    /**
-     * Get the validator type.
-     *
-     * @return string
-     */
+    #[\Override]
     public function getType(): string
     {
         return self::TYPE_ARRAY;
     }
 
-    /**
-     * Get the spatial type this validator handles.
-     *
-     * @return string
-     */
     public function getSpatialType(): string
     {
         return $this->spatialType;
@@ -205,6 +187,7 @@ class Spatial extends Validator
      * @param mixed $value The spatial data to validate
      * @return bool
      */
+    #[\Override]
     public function isValid(mixed $value): bool
     {
         if (is_null($value)) {

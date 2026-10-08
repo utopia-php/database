@@ -14,8 +14,6 @@ use Utopia\Query\Method;
 class Cursor extends Base
 {
     /**
-     * Create a new cursor query validator.
-     *
      * @param int $maxLength Maximum allowed UID length for cursor values
      */
     public function __construct(private readonly int $maxLength = Database::MAX_UID_DEFAULT_LENGTH)
@@ -29,6 +27,7 @@ class Cursor extends Base
      *
      * @param  mixed  $value
      */
+    #[\Override]
     public function isValid(mixed $value): bool
     {
         if (! $value instanceof Query) {
@@ -60,11 +59,7 @@ class Cursor extends Base
         return false;
     }
 
-    /**
-     * Get the method type this validator handles.
-     *
-     * @return string
-     */
+    #[\Override]
     public function getMethodType(): string
     {
         return self::METHOD_TYPE_CURSOR;

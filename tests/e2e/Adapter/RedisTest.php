@@ -45,6 +45,7 @@ class RedisTest extends Base
         // Default: per-run unique namespace, no shared tables.
     }
 
+    #[\Override]
     public function getDatabase(): Database
     {
         if (self::$database !== null) {
@@ -88,12 +89,14 @@ class RedisTest extends Base
         return self::$database = $database;
     }
 
+    #[\Override]
     protected function deleteColumn(string $collection, string $column): bool
     {
         // Redis keeps no out-of-band schema; raw column drops do not apply.
         return true;
     }
 
+    #[\Override]
     protected function deleteIndex(string $collection, string $index): bool
     {
         return true;
@@ -104,6 +107,7 @@ class RedisTest extends Base
      * to VARCHAR. Redis stores documents as JSON; type changes do not
      * retroactively recast existing values the way PDO string returns do.
      */
+    #[\Override]
     public function testUpdateAttributeStructure(): void
     {
         $this->markTestSkipped(
@@ -115,6 +119,7 @@ class RedisTest extends Base
      * Inherited test exercises VARCHAR truncation when shrinking a column
      * that holds oversize data. Redis does not enforce string sizes on disk.
      */
+    #[\Override]
     public function testUpdateAttributeSize(): void
     {
         $this->markTestSkipped(

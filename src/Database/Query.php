@@ -21,7 +21,7 @@ class Query extends BaseQuery
     /**
      * Default table alias used in queries
      */
-    public const DEFAULT_ALIAS = 'table_main';
+    public const string DEFAULT_ALIAS = 'table_main';
 
     /**
      * Methods that compose child queries and contribute their inner
@@ -62,6 +62,7 @@ class Query extends BaseQuery
     /**
      * @throws QueryException
      */
+    #[\Override]
     public static function parse(string $query, bool $allowRaw = false): static
     {
         try {
@@ -78,6 +79,7 @@ class Query extends BaseQuery
      *
      * @throws QueryException
      */
+    #[\Override]
     public static function parseQuery(array $query, bool $allowRaw = false): static
     {
         try {
@@ -140,6 +142,7 @@ class Query extends BaseQuery
     /**
      * @param  array<string, mixed>|object  $value  a Document; Validator\Query\Cursor also takes its id, and refuses an array
      */
+    #[\Override]
     public static function cursorAfter(array|object $value): static
     {
         return new static(Method::CursorAfter, values: [$value]);
@@ -148,6 +151,7 @@ class Query extends BaseQuery
     /**
      * @param  array<string, mixed>|object  $value  a Document; Validator\Query\Cursor also takes its id, and refuses an array
      */
+    #[\Override]
     public static function cursorBefore(array|object $value): static
     {
         return new static(Method::CursorBefore, values: [$value]);
@@ -161,6 +165,7 @@ class Query extends BaseQuery
      * answers the same number; ask for stddevSamp() when you want the sample
      * statistic.
      */
+    #[\Override]
     public static function stddev(string $attribute, string $alias = ''): static
     {
         return parent::stddev($attribute, $alias);
@@ -174,6 +179,7 @@ class Query extends BaseQuery
      * answers the same number; ask for varSamp() when you want the sample
      * statistic.
      */
+    #[\Override]
     public static function variance(string $attribute, string $alias = ''): static
     {
         return parent::variance($attribute, $alias);
@@ -182,6 +188,7 @@ class Query extends BaseQuery
     /**
      * Check if method is supported. Accepts both string and Method enum.
      */
+    #[\Override]
     public static function isMethod(Method|string $value): bool
     {
         if ($value instanceof Method) {
@@ -209,6 +216,7 @@ class Query extends BaseQuery
      * @return string md5 hash of the canonical shape
      * @throws QueryException if an element is neither a string nor a Query
      */
+    #[\Override]
     public static function fingerprint(array $queries): string
     {
         $shapes = [];
@@ -245,6 +253,7 @@ class Query extends BaseQuery
      *
      * @throws QueryException if the tree exceeds self::SHAPE_MAX_NODES
      */
+    #[\Override]
     public function shape(): string
     {
         // 1. Preorder flatten the tree.
@@ -296,6 +305,7 @@ class Query extends BaseQuery
     /**
      * @return array<string, mixed>
      */
+    #[\Override]
     public function toArray(): array
     {
         $array = ['method' => $this->method->value];

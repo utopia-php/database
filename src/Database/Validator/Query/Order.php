@@ -57,7 +57,6 @@ class Order extends Base
     {
         $dot = \strpos($attribute, '.');
         if ($dot !== false) {
-            // Check for special symbol `.`
             if (isset($this->schema[$attribute])) {
                 return true;
             }
@@ -82,12 +81,10 @@ class Order extends Base
             }
         }
 
-        // Accept transient aggregation aliases registered by Queries::isValid
         if (isset($this->aggregationAliases[$attribute])) {
             return true;
         }
 
-        // Search for attribute in schema
         if ($this->supportForAttributes && ! isset($this->schema[$attribute])) {
             if ($dot === false && $this->joins !== []) {
                 return $this->isJoinedAttribute($attribute);
@@ -102,12 +99,9 @@ class Order extends Base
     }
 
     /**
-     * Returns true if method is ORDER_ASC or ORDER_DESC and attributes are valid
-     *
-     * Otherwise, returns false
-     *
      * @param  mixed  $value
      */
+    #[\Override]
     public function isValid(mixed $value): bool
     {
         if (! $value instanceof Query) {
@@ -134,6 +128,7 @@ class Order extends Base
         return false;
     }
 
+    #[\Override]
     protected function acceptsMainAttribute(string $attribute): bool
     {
         return isset($this->schema[$attribute]);
@@ -203,11 +198,7 @@ class Order extends Base
         return false;
     }
 
-    /**
-     * Get the method type this validator handles.
-     *
-     * @return string
-     */
+    #[\Override]
     public function getMethodType(): string
     {
         return self::METHOD_TYPE_ORDER;

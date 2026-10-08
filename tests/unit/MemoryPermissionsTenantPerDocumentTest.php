@@ -41,6 +41,7 @@ final class MemoryPermissionsTenantPerDocumentTest extends TestCase
 
     private Database $database;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->authorization = new Authorization();

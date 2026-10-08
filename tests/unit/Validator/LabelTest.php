@@ -9,11 +9,13 @@ class LabelTest extends TestCase
 {
     protected Label $object;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->object = new Label();
     }
 
+    #[\Override]
     protected function tearDown(): void
     {
     }

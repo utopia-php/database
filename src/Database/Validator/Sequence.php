@@ -16,38 +16,25 @@ class Sequence extends Validator
 
     private bool $primary;
 
-    /**
-     * Get the validator description.
-     *
-     * @return string
-     */
+    #[\Override]
     public function getDescription(): string
     {
         return 'Invalid sequence value';
     }
 
-    /**
-     * Expression constructor
-     */
     public function __construct(string $idAttributeType, bool $primary)
     {
         $this->primary = $primary;
         $this->idAttributeType = $idAttributeType;
     }
 
-    /**
-     * @return bool
-     */
+    #[\Override]
     public function isArray(): bool
     {
         return false;
     }
 
-    /**
-     * Get the validator type.
-     *
-     * @return string
-     */
+    #[\Override]
     public function getType(): string
     {
         return self::TYPE_STRING;
@@ -59,6 +46,7 @@ class Sequence extends Validator
      * @param mixed $value The value to validate
      * @return bool
      */
+    #[\Override]
     public function isValid(mixed $value): bool
     {
         if ($this->primary && empty($value)) {

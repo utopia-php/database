@@ -30,6 +30,7 @@ class FindLogicTest extends TestCase
 
     private Database $database;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->useAdapter(self::createStub(Adapter::class));

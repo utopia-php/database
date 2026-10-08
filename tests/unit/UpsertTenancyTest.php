@@ -41,6 +41,7 @@ final class UpsertTenancyTest extends TestCase
 
     private string $namespace;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->pdo = new PDO('sqlite::memory:');

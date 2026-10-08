@@ -24,6 +24,7 @@ final class AttachTestHook extends Interceptor implements Attachable
     ) {
     }
 
+    #[\Override]
     public function attach(Database $database): void
     {
         if ($this->failure !== null) {
@@ -33,6 +34,7 @@ final class AttachTestHook extends Interceptor implements Attachable
         $this->attached[] = $database;
     }
 
+    #[\Override]
     public function afterDocumentCreate(string $collection, array $documents, WriteContext $context): void
     {
         foreach ($documents as $document) {

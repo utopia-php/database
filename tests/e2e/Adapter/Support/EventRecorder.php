@@ -26,11 +26,13 @@ final class EventRecorder implements Lifecycle, Named
     ) {
     }
 
+    #[\Override]
     public function getName(): string
     {
         return $this->name;
     }
 
+    #[\Override]
     public function handle(Domain $event): void
     {
         if ($this->recording) {

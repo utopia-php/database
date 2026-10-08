@@ -22,6 +22,7 @@ class MetadataCacheTest extends TestCase
 
     private Database $database;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->adapter = new CountingMemory();

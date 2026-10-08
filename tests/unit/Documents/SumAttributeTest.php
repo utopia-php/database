@@ -22,6 +22,7 @@ final class SumAttributeTest extends TestCase
 
     private Database $database;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->database = new Database(new Memory(), new Cache(new MemoryCache()));

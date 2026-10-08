@@ -20,6 +20,7 @@ final class SQLiteCreateCollectionCleanupTest extends TestCase
 
     private SQLite $adapter;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->pdo = new PDO('sqlite::memory:');

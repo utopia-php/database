@@ -43,8 +43,6 @@ class Input
     }
 
     /**
-     * Get the permissions to check against.
-     *
      * @return string[]
      */
     public function getPermissions(): array
@@ -52,11 +50,6 @@ class Input
         return $this->permissions;
     }
 
-    /**
-     * Get the action being authorized.
-     *
-     * @return string
-     */
     public function getAction(): string
     {
         return $this->action;

@@ -117,6 +117,7 @@ final class QueriesValidatorTest extends TestCase
     {
         $database = $this->database();
         $database->addHook(new class () implements Lifecycle {
+            #[\Override]
             public function handle(Domain $event): void
             {
                 if ($event instanceof Event\Collection\Read) {

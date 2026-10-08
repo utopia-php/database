@@ -17,6 +17,7 @@ final class CountingCache implements CacheAdapter, Leasable
     ) {
     }
 
+    #[\Override]
     public function load(string $key, int $ttl, string $hash = ''): mixed
     {
         $this->operations++;
@@ -24,6 +25,7 @@ final class CountingCache implements CacheAdapter, Leasable
         return $this->cache->load($key, $ttl, $hash);
     }
 
+    #[\Override]
     public function save(string $key, array|string $data, string $hash = '', int $ttl = 0): bool|string|array
     {
         $this->operations++;
@@ -31,6 +33,7 @@ final class CountingCache implements CacheAdapter, Leasable
         return $this->cache->save($key, $data, $hash);
     }
 
+    #[\Override]
     public function touch(string $key, string $hash = ''): bool
     {
         $this->operations++;
@@ -39,6 +42,7 @@ final class CountingCache implements CacheAdapter, Leasable
     }
 
     /** @return array<string> */
+    #[\Override]
     public function list(string $key): array
     {
         $this->operations++;
@@ -46,6 +50,7 @@ final class CountingCache implements CacheAdapter, Leasable
         return $this->cache->list($key);
     }
 
+    #[\Override]
     public function purge(string $key, string $hash = ''): bool
     {
         $this->operations++;
@@ -53,6 +58,7 @@ final class CountingCache implements CacheAdapter, Leasable
         return $this->cache->purge($key, $hash);
     }
 
+    #[\Override]
     public function flush(): bool
     {
         $this->operations++;
@@ -60,6 +66,7 @@ final class CountingCache implements CacheAdapter, Leasable
         return $this->cache->flush();
     }
 
+    #[\Override]
     public function ping(): bool
     {
         $this->operations++;
@@ -67,6 +74,7 @@ final class CountingCache implements CacheAdapter, Leasable
         return $this->cache->ping();
     }
 
+    #[\Override]
     public function getSize(): int
     {
         $this->operations++;
@@ -74,11 +82,13 @@ final class CountingCache implements CacheAdapter, Leasable
         return $this->cache->getSize();
     }
 
+    #[\Override]
     public function getName(?string $key = null): string
     {
         return $this->cache->getName($key);
     }
 
+    #[\Override]
     public function getGeneration(string $key): string
     {
         $this->operations++;
@@ -86,6 +96,7 @@ final class CountingCache implements CacheAdapter, Leasable
         return $this->cache->getGeneration($key);
     }
 
+    #[\Override]
     public function saveWithLease(string $key, array|string $data, string $hash, string $generation): bool|string|array
     {
         $this->operations++;

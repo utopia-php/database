@@ -144,6 +144,7 @@ final class LeasedMemoryCache extends MemoryCache implements Leasable
     /** @var array<string, int> */
     private array $generations = [];
 
+    #[\Override]
     public function getGeneration(string $key): string
     {
         return (string) ($this->generations[$key] ?? 0);

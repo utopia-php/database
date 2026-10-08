@@ -34,6 +34,7 @@ final class SharedColumnTest extends TestCase
 
     private string $namespace;
 
+    #[\Override]
     protected function setUp(): void
     {
         $path = \tempnam(\sys_get_temp_dir(), 'shared_column_');
@@ -42,6 +43,7 @@ final class SharedColumnTest extends TestCase
         $this->namespace = 'shared_column_'.\uniqid();
     }
 
+    #[\Override]
     protected function tearDown(): void
     {
         if (\is_file($this->path)) {

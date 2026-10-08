@@ -28,42 +28,27 @@ class Role
      */
     public function toString(): string
     {
-        $str = $this->role;
+        $string = $this->role;
         if ($this->identifier) {
-            $str .= ':'.$this->identifier;
+            $string .= ':'.$this->identifier;
         }
         if ($this->dimension) {
-            $str .= '/'.$this->dimension;
+            $string .= '/'.$this->dimension;
         }
 
-        return $str;
+        return $string;
     }
 
-    /**
-     * Get the role type.
-     *
-     * @return string
-     */
     public function getRole(): string
     {
         return $this->role;
     }
 
-    /**
-     * Get the role identifier.
-     *
-     * @return string
-     */
     public function getIdentifier(): string
     {
         return $this->identifier;
     }
 
-    /**
-     * Get the role dimension.
-     *
-     * @return string
-     */
     public function getDimension(): string
     {
         return $this->dimension;
@@ -73,7 +58,6 @@ class Role
      * Parse a role string into a Role object.
      *
      * @param string $role The role string to parse (e.g. 'user:123/verified')
-     * @return self
      * @throws Exception If the dimension format is invalid
      */
     public static function parse(string $role): self
@@ -130,7 +114,6 @@ class Role
      *
      * @param string $identifier The user ID
      * @param string $status The user status dimension (e.g. 'verified')
-     * @return Role
      */
     public static function user(string $identifier, string $status = ''): self
     {
@@ -141,7 +124,6 @@ class Role
      * Create a users role representing all authenticated users.
      *
      * @param string $status The user status dimension (e.g. 'verified')
-     * @return self
      */
     public static function users(string $status = ''): self
     {
@@ -153,7 +135,6 @@ class Role
      *
      * @param string $identifier The team ID
      * @param string $dimension The team role dimension (e.g. 'admin', 'member')
-     * @return self
      */
     public static function team(string $identifier, string $dimension = ''): self
     {
@@ -164,7 +145,6 @@ class Role
      * Create a label role from the given identifier.
      *
      * @param string $identifier The label identifier
-     * @return self
      */
     public static function label(string $identifier): self
     {
@@ -173,8 +153,6 @@ class Role
 
     /**
      * Create a role that matches any user, authenticated or not.
-     *
-     * @return Role
      */
     public static function any(): self
     {
@@ -183,8 +161,6 @@ class Role
 
     /**
      * Create a role representing unauthenticated guest users.
-     *
-     * @return self
      */
     public static function guests(): self
     {
@@ -195,7 +171,6 @@ class Role
      * Create a member role from the given identifier.
      *
      * @param string $identifier The member ID
-     * @return self
      */
     public static function member(string $identifier): self
     {

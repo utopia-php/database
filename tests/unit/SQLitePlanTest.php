@@ -71,11 +71,13 @@ final class SQLitePlanTest extends TestCase
      */
     private ArrayObject $statements;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->statements = new ArrayObject();
     }
 
+    #[\Override]
     protected function tearDown(): void
     {
         if ($this->path !== '' && \is_file($this->path)) {

@@ -43,11 +43,13 @@ final class PingRecordingMemory extends Memory implements Feature\Connection
     {
     }
 
+    #[\Override]
     public function id(): string
     {
         return 'ping-recording';
     }
 
+    #[\Override]
     public function hostname(): string
     {
         return '';

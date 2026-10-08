@@ -20,6 +20,7 @@ final class PoolCoroutineTransactionTest extends TestCase
 
     private const int CHILD_TENANT = 2;
 
+    #[\Override]
     protected function setUp(): void
     {
         if (! \extension_loaded('swoole')) {

@@ -34,12 +34,14 @@ class MirrorTest extends Base
 
     protected static Database $destination;
 
+    #[\Override]
     protected static string $namespace;
 
     /**
      * @throws \RedisException
      * @throws Exception
      */
+    #[\Override]
     protected function getDatabase(bool $fresh = false): Mirror
     {
         if (! is_null(self::$database) && ! $fresh) {
@@ -453,6 +455,7 @@ class MirrorTest extends Base
         );
     }
 
+    #[\Override]
     protected function deleteColumn(string $collection, string $column): bool
     {
         $sqlTable = '`'.self::$source->getDatabase().'`.`'.self::$source->getNamespace().'_'.$collection.'`';
@@ -470,6 +473,7 @@ class MirrorTest extends Base
         return true;
     }
 
+    #[\Override]
     protected function deleteIndex(string $collection, string $index): bool
     {
         $sqlTable = '`'.self::$source->getDatabase().'`.`'.self::$source->getNamespace().'_'.$collection.'`';

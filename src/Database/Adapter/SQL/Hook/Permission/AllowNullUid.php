@@ -18,6 +18,7 @@ final readonly class AllowNullUid implements Filter
         $this->inner = new AllowNull($filter, $documentColumn, $quoteCharacter);
     }
 
+    #[\Override]
     public function filter(string $table): Condition
     {
         return $this->inner->filter($table);

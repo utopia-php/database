@@ -29,8 +29,6 @@ use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 
 /**
- * Connection pool adapter that delegates database operations to pooled adapter instances.
- *
  * Pool is a proxy: optional Feature methods are forwarded to the borrowed adapter.
  * Feature support is reported by hasFeature(), not instanceof.
  */
@@ -38,9 +36,6 @@ class Pool extends Adapter implements Feature\Timeouts
 {
     use Timeout;
 
-    /**
-     * The key of the DefinedAttributes answer of connections that have no schemaless mode, so always answer alike.
-     */
     private const int FIXED_SCHEMA = -1;
 
     /**
@@ -86,8 +81,6 @@ class Pool extends Adapter implements Feature\Timeouts
     }
 
     /**
-     * Forward method calls to the internal adapter instance via the pool.
-     *
      * Required because __call() can't be used to implement abstract methods.
      *
      * @param  array<mixed>  $arguments
@@ -221,8 +214,6 @@ class Pool extends Adapter implements Feature\Timeouts
     }
 
     /**
-     * Check if a specific capability is supported by the pooled adapter.
-     *
      * Answered from the capabilities the pool's connections reported when first asked, except
      * DefinedAttributes: it reflects the schema mode a connection is in. Once this handle has set
      * that mode, every connection it borrows is put in it first, so the answer is kept per pool
@@ -266,8 +257,6 @@ class Pool extends Adapter implements Feature\Timeouts
     }
 
     /**
-     * Get all capabilities supported by the pooled adapter, as its connections reported them when first asked.
-     *
      * @return array<Capability>
      */
     #[\Override]
@@ -315,13 +304,6 @@ class Pool extends Adapter implements Feature\Timeouts
         return $result;
     }
 
-    /**
-     * Register a named query transform hook on the pooled adapter.
-     *
-     * @param string $name The transform name
-     * @param Transform $transform The transform instance
-     * @return static
-     */
     #[\Override]
     public function addTransform(string $name, Transform $transform): static
     {
@@ -330,12 +312,6 @@ class Pool extends Adapter implements Feature\Timeouts
         return $this;
     }
 
-    /**
-     * Remove a named query transform hook from the pooled adapter.
-     *
-     * @param string $name The transform name to remove
-     * @return static
-     */
     #[\Override]
     public function removeTransform(string $name): static
     {
@@ -344,13 +320,6 @@ class Pool extends Adapter implements Feature\Timeouts
         return $this;
     }
 
-    /**
-     * Set the maximum execution time for queries on the pooled adapter.
-     *
-     * @param int $milliseconds Timeout in milliseconds
-     * @param Event $event The event scope for the timeout
-     * @return void
-     */
     #[\Override]
     public function setTimeout(int $milliseconds, Event $event = Event::All): void
     {

@@ -15,6 +15,7 @@ class Tenancy extends Interceptor
     ) {
     }
 
+    #[\Override]
     public function decorateRow(array $row, RowMetadata $metadata): array
     {
         $row[$this->column] = $metadata->tenant;

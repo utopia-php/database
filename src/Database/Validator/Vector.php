@@ -12,8 +12,6 @@ class Vector extends Validator
     protected int $size;
 
     /**
-     * Vector constructor.
-     *
      * @param  int  $size  The size (number of elements) the vector should have
      */
     public function __construct(int $size)
@@ -21,6 +19,7 @@ class Vector extends Validator
         $this->size = $size;
     }
 
+    #[\Override]
     public function getDescription(): string
     {
         return "Value must be an array of {$this->size} numeric values";
@@ -29,6 +28,7 @@ class Vector extends Validator
     /**
      * Validation will pass when $value is a valid vector array or JSON string
      */
+    #[\Override]
     public function isValid(mixed $value): bool
     {
         if (is_string($value)) {
@@ -51,7 +51,6 @@ class Vector extends Validator
             return false;
         }
 
-        // Check that all values are int or float (not strings, booleans, null, arrays, objects)
         foreach ($value as $component) {
             if (! \is_int($component) && ! \is_float($component)) {
                 return false;
@@ -61,14 +60,13 @@ class Vector extends Validator
         return true;
     }
 
-    /**
-     * Function will return true if object is array.
-     */
+    #[\Override]
     public function isArray(): bool
     {
         return false;
     }
 
+    #[\Override]
     public function getType(): string
     {
         return self::TYPE_ARRAY;

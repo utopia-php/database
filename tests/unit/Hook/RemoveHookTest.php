@@ -57,6 +57,7 @@ final class RemoveHookTest extends TestCase
     {
         $database = HookFixture::memory();
         $decorator = new class () implements Decorator {
+            #[\Override]
             public function decorate(Event $event, Document $collection, Document $document): Document
             {
                 return $document->setAttribute('decorated', true);
@@ -101,6 +102,7 @@ final class RemoveHookTest extends TestCase
         $transform = new class () implements Transform {
             public int $transformed = 0;
 
+            #[\Override]
             public function transform(Event $event, string $query): string
             {
                 $this->transformed++;

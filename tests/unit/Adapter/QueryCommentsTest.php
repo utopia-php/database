@@ -44,6 +44,7 @@ final class QueryCommentsTest extends TestCase
 
     private Database $database;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->adapter = new SQLite($this->recordingConnection());
@@ -79,6 +80,7 @@ final class QueryCommentsTest extends TestCase
              */
             public array $queries = [];
 
+            #[\Override]
             public function transform(Event $event, string $query): string
             {
                 $this->queries[$event->value] = $query;
@@ -227,6 +229,7 @@ final class QueryCommentsTest extends TestCase
     public function testMetadataValuesAreRenderedAsText(): void
     {
         $stringable = new class () implements Stringable {
+            #[\Override]
             public function __toString(): string
             {
                 return 'region */ one';
@@ -262,6 +265,7 @@ final class QueryCommentsTest extends TestCase
         $stringable = new class () implements Stringable {
             public string $text = 'first';
 
+            #[\Override]
             public function __toString(): string
             {
                 return $this->text;

@@ -25,6 +25,7 @@ final class CoroutineStateTest extends TestCase
 
     private Relationships $hook;
 
+    #[\Override]
     protected function setUp(): void
     {
         if (! \extension_loaded('swoole')) {

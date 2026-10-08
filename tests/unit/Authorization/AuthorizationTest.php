@@ -11,6 +11,7 @@ class AuthorizationTest extends TestCase
 {
     private Authorization $auth;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->auth = new Authorization();

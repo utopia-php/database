@@ -16,6 +16,7 @@ class PostgresTest extends Base
 
     public static ?PDO $pdo = null;
 
+    #[\Override]
     protected static string $namespace;
 
     /**
@@ -29,6 +30,7 @@ class PostgresTest extends Base
     /**
      * @reture Adapter
      */
+    #[\Override]
     public function getDatabase(): Database
     {
         if (! is_null(self::$database)) {
@@ -66,6 +68,7 @@ class PostgresTest extends Base
         return self::$database = $database;
     }
 
+    #[\Override]
     protected function deleteColumn(string $collection, string $column): bool
     {
         $sqlTable = '"'.$this->getDatabase()->getDatabase().'"."'.$this->getDatabase()->getNamespace().'_'.$collection.'"';
@@ -77,6 +80,7 @@ class PostgresTest extends Base
         return true;
     }
 
+    #[\Override]
     protected function deleteIndex(string $collection, string $index): bool
     {
         $key = '"'.$this->getDatabase()->getNamespace().'_'.$this->getDatabase()->getTenant()."_{$collection}_{$index}\"";

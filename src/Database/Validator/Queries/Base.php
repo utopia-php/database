@@ -37,8 +37,6 @@ class Base extends Validator
     protected array $joinedCollections = [];
 
     /**
-     * Queries constructor
-     *
      * @param  array<QueryBase>  $validators
      */
     public function __construct(array $validators = [], int $length = 0)
@@ -47,6 +45,7 @@ class Base extends Validator
         $this->length = $length;
     }
 
+    #[\Override]
     public function getDescription(): string
     {
         return $this->message;
@@ -79,6 +78,7 @@ class Base extends Validator
      *
      * @param  mixed  $value  Array of Query objects or query strings
      */
+    #[\Override]
     public function isValid(mixed $value): bool
     {
         if (! \is_array($value)) {
@@ -234,10 +234,6 @@ class Base extends Validator
 
             $method = $query->getMethod();
 
-            // Route every aggregate method through the single source of truth
-            // on the base enum. Previously this match hand-listed only half
-            // of the aggregate methods, silently rejecting stddevPop, varPop,
-            // bitAnd, etc. with "Invalid query method".
             if ($method->isAggregate()) {
                 $methodType = QueryBase::METHOD_TYPE_AGGREGATE;
             } else {
@@ -356,14 +352,13 @@ class Base extends Validator
         return $joins;
     }
 
-    /**
-     * Function will return true if object is array.
-     */
+    #[\Override]
     public function isArray(): bool
     {
         return true;
     }
 
+    #[\Override]
     public function getType(): string
     {
         return self::TYPE_OBJECT;

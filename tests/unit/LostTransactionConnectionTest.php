@@ -240,26 +240,31 @@ final class LostTransactionConnectionTest extends TestCase
                     {
                     }
 
+                    #[\Override]
                     public function inTransaction(): bool
                     {
                         return true;
                     }
 
+                    #[\Override]
                     public function beginTransaction(): bool
                     {
                         throw self::lost();
                     }
 
+                    #[\Override]
                     public function commit(): bool
                     {
                         throw self::lost();
                     }
 
+                    #[\Override]
                     public function rollBack(): bool
                     {
                         throw self::lost();
                     }
 
+                    #[\Override]
                     public function exec(string $statement): int|false
                     {
                         throw self::lost();
@@ -268,11 +273,13 @@ final class LostTransactionConnectionTest extends TestCase
                     /**
                      * @param  array<mixed>  $options
                      */
+                    #[\Override]
                     public function prepare(string $query, array $options = []): \PDOStatement|false
                     {
                         throw self::lost();
                     }
 
+                    #[\Override]
                     public function query(string $query, ?int $fetchMode = null, mixed ...$fetchModeArgs): \PDOStatement|false
                     {
                         throw self::lost();

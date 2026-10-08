@@ -163,6 +163,7 @@ final class WithCacheTest extends TestCase
             {
             }
 
+            #[\Override]
             public function load(string $key, int $ttl, string $hash = ''): mixed
             {
                 $epoch = \str_ends_with($key, '#epoch');
@@ -177,6 +178,7 @@ final class WithCacheTest extends TestCase
              * @param  array<int|string, mixed>|string  $data
              * @return bool|string|array<int|string, mixed>
              */
+            #[\Override]
             public function save(string $key, array|string $data, string $hash = '', int $ttl = 0): bool|string|array
             {
                 if ($this->failure === 'saveEpoch' && $key === 'reports:summary#epoch') {
@@ -186,6 +188,7 @@ final class WithCacheTest extends TestCase
                 return parent::save($key, $data, $hash);
             }
 
+            #[\Override]
             public function purge(string $key, string $hash = ''): bool
             {
                 if ($this->failure === 'purge' && \str_starts_with($key, 'reports:summary#')) {
@@ -195,6 +198,7 @@ final class WithCacheTest extends TestCase
                 return parent::purge($key, $hash);
             }
 
+            #[\Override]
             public function getGeneration(string $key): string
             {
                 if ($this->failure === 'getGeneration' && \str_starts_with($key, 'reports:summary#')) {
@@ -208,6 +212,7 @@ final class WithCacheTest extends TestCase
              * @param  array<int|string, mixed>|string  $data
              * @return bool|string|array<int|string, mixed>
              */
+            #[\Override]
             public function saveWithLease(string $key, array|string $data, string $hash, string $generation): bool|string|array
             {
                 if ($this->failure === 'saveWithLease' && \str_starts_with($key, 'reports:summary#')) {

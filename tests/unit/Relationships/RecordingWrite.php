@@ -17,11 +17,13 @@ class RecordingWrite extends Interceptor
     /**
      * @param  array<Document>  $documents
      */
+    #[\Override]
     public function afterDocumentCreate(string $collection, array $documents, WriteContext $context): void
     {
         $this->writes[] = ['create', $collection, \array_values(\array_map(static fn (Document $document): string => $document->getId(), $documents))];
     }
 
+    #[\Override]
     public function afterDocumentUpdate(string $collection, string $id, Document $document, WriteContext $context): void
     {
         $this->writes[] = ['update', $collection, [$document->getId()]];

@@ -23,6 +23,7 @@ class DocumentTest extends TestCase
 
     protected string $collection;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->id = uniqid();
@@ -56,6 +57,7 @@ class DocumentTest extends TestCase
         $this->empty = new Document();
     }
 
+    #[\Override]
     protected function tearDown(): void
     {
     }

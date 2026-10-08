@@ -10,8 +10,6 @@ use Utopia\Database\Database;
 class Label extends Key
 {
     /**
-     * Create a new label validator.
-     *
      * @param bool $allowInternal Whether to allow internal attribute names starting with $
      * @param int $maxLength Maximum allowed string length
      */
@@ -23,6 +21,7 @@ class Label extends Key
         $this->message = 'Value must be a valid string between 1 and '.$this->maxLength.' chars containing only alphanumeric chars';
     }
 
+    #[\Override]
     public function isValid(mixed $value): bool
     {
         if (! parent::isValid($value)) {

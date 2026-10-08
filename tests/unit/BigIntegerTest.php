@@ -223,8 +223,6 @@ final class BigIntegerTest extends TestCase
     public function testSqlBuilderPreservesUnsignedIntegerBindings(): void
     {
         $adapter = new class (new \stdClass()) extends MariaDB {
-            /**
-             */
             public function expression(Operator $operator): Expression
             {
                 return $this->getOperatorBuilderExpression('value', $operator);

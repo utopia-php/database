@@ -38,6 +38,7 @@ final class JoinInternalColumnsTest extends TestCase
 
     private Database $database;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->useDatabase(new SQLite(new PDO('sqlite::memory:')));

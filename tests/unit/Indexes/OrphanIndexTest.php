@@ -35,6 +35,7 @@ final class OrphanIndexTest extends TestCase
 
     private string $namespace;
 
+    #[\Override]
     protected function setUp(): void
     {
         $path = \tempnam(\sys_get_temp_dir(), 'orphan_index_');
@@ -43,6 +44,7 @@ final class OrphanIndexTest extends TestCase
         $this->namespace = 'orphan_index_'.\uniqid();
     }
 
+    #[\Override]
     protected function tearDown(): void
     {
         if (\is_file($this->path)) {
@@ -160,6 +162,7 @@ final class OrphanIndexTest extends TestCase
     private function adapter(): SQLite
     {
         return new class (new PDO('sqlite:'.$this->path)) extends SQLite {
+            #[\Override]
             public function getSchemaIndexType(IndexType $type): IndexType
             {
                 return $type === IndexType::Fulltext ? IndexType::Key : $type;

@@ -168,6 +168,7 @@ final class SpatialCodecTest extends TestCase
     public function testAFailingEncoderSurfacesThroughTheDatabase(): void
     {
         $adapter = new class (new stdClass()) extends MariaDB {
+            #[\Override]
             public function encode(mixed $value, ColumnType $type): string
             {
                 throw new RuntimeException('encoder unavailable');

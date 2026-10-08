@@ -21,7 +21,7 @@ class Aggregate extends Base
 
     public const int MAX_ALIAS_LENGTH = 63;
 
-    private const ALIAS_PATTERN = '/^[A-Za-z_][A-Za-z0-9_]*$/';
+    private const string ALIAS_PATTERN = '/^[A-Za-z_][A-Za-z0-9_]*$/';
 
     private const array NUMERIC_METHODS = [
         Method::Sum,
@@ -166,11 +166,13 @@ class Aggregate extends Base
         }
     }
 
+    #[\Override]
     public function getMethodType(): string
     {
         return self::METHOD_TYPE_AGGREGATE;
     }
 
+    #[\Override]
     protected function isValidQuery(Query $query): bool
     {
         $attribute = $query->getAttribute();
@@ -322,6 +324,7 @@ class Aggregate extends Base
         return ! $array && ! \in_array($type, self::UNORDERED_TYPES, true);
     }
 
+    #[\Override]
     protected function acceptsMainAttribute(string $attribute): bool
     {
         return isset($this->schema[$attribute]);

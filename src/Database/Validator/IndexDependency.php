@@ -33,6 +33,7 @@ class IndexDependency extends Validator
         }
     }
 
+    #[\Override]
     public function getDescription(): string
     {
         return $this->message;
@@ -41,6 +42,7 @@ class IndexDependency extends Validator
     /**
      * @param  Attribute|Document  $value
      */
+    #[\Override]
     public function isValid(mixed $value): bool
     {
         if (! $this->castIndexSupport) {
@@ -66,14 +68,13 @@ class IndexDependency extends Validator
         return true;
     }
 
-    /**
-     * Function will return true if object is array.
-     */
+    #[\Override]
     public function isArray(): bool
     {
         return false;
     }
 
+    #[\Override]
     public function getType(): string
     {
         return self::TYPE_OBJECT;

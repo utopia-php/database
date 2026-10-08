@@ -31,6 +31,7 @@ class Permissions extends Interceptor
      *
      * @param array<Document> $documents
      */
+    #[\Override]
     public function afterDocumentCreate(string $collection, array $documents, WriteContext $context): void
     {
         $permissionsBuilder = $context->rawBuilder()->into($context->rawTable(Storage::permissionsTable($collection)));
@@ -60,6 +61,7 @@ class Permissions extends Interceptor
     /**
      * Diff current vs. new permissions and apply additions/removals for a single document.
      */
+    #[\Override]
     public function afterDocumentUpdate(string $collection, string $id, Document $document, WriteContext $context): void
     {
         if ($context->skipPermissions($document)) {
@@ -101,6 +103,7 @@ class Permissions extends Interceptor
      *
      * @param array<Document> $documents
      */
+    #[\Override]
     public function afterDocumentBatchUpdate(string $collection, Document $updates, array $documents, WriteContext $context): void
     {
         if (! $updates->offsetExists(Document::PERMISSIONS)) {
@@ -176,6 +179,7 @@ class Permissions extends Interceptor
      *
      * @param array<Change> $changes
      */
+    #[\Override]
     public function afterDocumentUpsert(string $collection, array $changes, WriteContext $context): void
     {
         $removeConditions = [];
@@ -254,6 +258,7 @@ class Permissions extends Interceptor
      * @param list<string> $documentIds
      * @throws DatabaseException If the permission deletion fails
      */
+    #[\Override]
     public function afterDocumentDelete(string $collection, array $documentIds, WriteContext $context): void
     {
         if (empty($documentIds)) {

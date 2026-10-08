@@ -77,6 +77,7 @@ final class MongoSequencesTest extends TestCase
     {
         $adapter = $this->createAdapter(sharedTables: false, tenant: null);
         $objectId = new class () implements Stringable {
+            #[\Override]
             public function __toString(): string
             {
                 return '6553f1c2a4b8e3d2f0c1a9b7';

@@ -14,16 +14,19 @@ final readonly class Callback implements Signed
     ) {
     }
 
+    #[\Override]
     public function name(): string
     {
         return $this->name;
     }
 
+    #[\Override]
     public function encode(mixed $value): mixed
     {
         return ($this->encode)($value);
     }
 
+    #[\Override]
     public function decode(mixed $value): mixed
     {
         return ($this->decode)($value);
@@ -33,6 +36,7 @@ final readonly class Callback implements Signed
      * Where the two closures are declared, so cached documents decoded by other closures are told apart while
      * every process declaring the same ones shares them.
      */
+    #[\Override]
     public function signature(): string
     {
         return self::declaration($this->encode).':'.self::declaration($this->decode);

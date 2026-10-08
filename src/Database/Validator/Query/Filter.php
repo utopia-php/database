@@ -66,7 +66,6 @@ class Filter extends Base
 
         $dot = \strpos($attribute, '.');
         if ($dot !== false) {
-            // Check for special symbol `.`
             if (isset($this->schema[$attribute])) {
                 return true;
             }
@@ -93,7 +92,6 @@ class Filter extends Base
             $attribute = $alias;
         }
 
-        // Search for attribute in schema
         if ($this->supportForAttributes && ! isset($this->schema[$attribute])) {
             $this->message = 'Attribute not found in schema: '.$attribute;
 
@@ -134,8 +132,6 @@ class Filter extends Base
         /** @var array<string, mixed>|null $attributeSchema */
         $attributeSchema = null;
         $joined = false;
-        // isset check if for special symbols "." in the attribute name
-        // same for nested path on object
         $dot = \strpos($attribute, '.');
         if ($dot !== false && ! isset($this->schema[$attribute])) {
             $alias = \substr($attribute, 0, $dot);
@@ -169,7 +165,6 @@ class Filter extends Base
 
         if ($attributeSchema === null) {
             if (! $this->supportForAttributes && ! isset($this->schema[$attribute])) {
-                // First check maxValuesCount guard for any IN-style value arrays
                 if (count($values) > $this->maxValuesCount) {
                     $this->message = 'Query on attribute has greater than '.$this->maxValuesCount.' values: '.$attribute;
 
@@ -201,7 +196,6 @@ class Filter extends Base
 
         $isDottedOnObject = ! $joined && \str_contains($originalAttribute, '.') && $attributeType === ColumnType::Object;
 
-        // If the query method is spatial-only, the attribute must be a spatial type
         $query = new Query($method);
         if ($query->isSpatialQuery() && ! in_array($attributeType, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon], true)) {
             $this->message = 'Spatial query "'.$method->value.'" cannot be applied on non-spatial attribute: '.$attribute;
@@ -319,7 +313,6 @@ class Filter extends Base
                     continue 2;
 
                 case ColumnType::Vector:
-                    // For vector queries, validate that the value is an array of floats
                     if (! is_array($value)) {
                         $this->message = 'Vector query value must be an array';
 
@@ -332,7 +325,6 @@ class Filter extends Base
                             return false;
                         }
                     }
-                    // Check size match
                     /** @var int $expectedSize */
                     $expectedSize = $attributeSchema['size'] ?? 0;
                     if (count($value) !== $expectedSize) {
@@ -477,12 +469,9 @@ class Filter extends Base
     }
 
     /**
-     * Returns true if method is a filter method, attribute exists, and value matches attribute type
-     *
-     * Otherwise, returns false
-     *
      * @param  Query  $value
      */
+    #[\Override]
     public function isValid(mixed $value): bool
     {
         $method = $value->getMethod();
@@ -560,12 +549,10 @@ class Filter extends Base
             case Method::VectorDot:
             case Method::VectorCosine:
             case Method::VectorEuclidean:
-                // Validate that the attribute is a vector type
                 if (! $this->isValidAttribute($attribute)) {
                     return false;
                 }
 
-                // Handle dotted attributes (relationships)
                 $attributeKey = $attribute;
                 $dot = \strpos($attributeKey, '.');
                 if ($dot !== false && ! isset($this->schema[$attributeKey])) {
@@ -751,6 +738,7 @@ class Filter extends Base
         return true;
     }
 
+    #[\Override]
     protected function acceptsMainAttribute(string $attribute): bool
     {
         return isset($this->schema[$attribute]);
@@ -764,9 +752,7 @@ class Filter extends Base
         return $this->maxValuesCount;
     }
 
-    /**
-     * Get the method type this validator handles.
-     */
+    #[\Override]
     public function getMethodType(): string
     {
         return self::METHOD_TYPE_FILTER;

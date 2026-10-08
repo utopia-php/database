@@ -27,6 +27,7 @@ final class RedisDatabaseRenameTest extends TestCase
 
     private ?string $failOn = null;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->keys = [

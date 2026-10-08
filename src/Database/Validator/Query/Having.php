@@ -46,11 +46,7 @@ class Having extends Base
      */
     private array $groupBy = [];
 
-    /**
-     * Get the method type this validator handles.
-     *
-     * @return string
-     */
+    #[\Override]
     public function getMethodType(): string
     {
         return self::METHOD_TYPE_HAVING;
@@ -97,6 +93,7 @@ class Having extends Base
     /**
      * Validate a having query has at least one condition, each a Query that meets the filter rules.
      */
+    #[\Override]
     protected function isValidQuery(Query $query): bool
     {
         $conditions = $query->getValues();

@@ -95,7 +95,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     /**
      * Default batch size for cursor operations
      */
-    private const DEFAULT_BATCH_SIZE = 1000;
+    private const int DEFAULT_BATCH_SIZE = 1000;
 
     /**
      * The collation of the `_uid` index: a lookup or upsert by id must use it to match what the
@@ -125,6 +125,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      */
     private ?array $session = null;
 
+    #[\Override]
     protected int $inTransaction = 0;
 
     protected bool $schemaless = false;
@@ -144,6 +145,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         $this->client->connect();
     }
 
+    #[\Override]
     public function hostname(): string
     {
         return $this->client->getHost();
@@ -153,11 +155,13 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      * The wire protocol has no connection id, so the client's object id names the connection: unique only within
      * the process and only while the client lives.
      */
+    #[\Override]
     public function id(): string
     {
         return (string) \spl_object_id($this->client);
     }
 
+    #[\Override]
     public function getDriver(): Client
     {
         return $this->client;
@@ -168,6 +172,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      *
      * @return array<Capability>
      */
+    #[\Override]
     public function capabilities(): array
     {
         return array_merge(parent::capabilities(), [
@@ -205,6 +210,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         $this->timeout = 0;
     }
 
+    #[\Override]
     public function setSchemaless(bool $schemaless): static
     {
         $this->schemaless = $schemaless;
@@ -212,11 +218,13 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         return $this;
     }
 
+    #[\Override]
     public function isSchemaless(): bool
     {
         return $this->schemaless;
     }
 
+    #[\Override]
     public function supports(Capability $capability): bool
     {
         if ($capability === Capability::DefinedAttributes) {
@@ -269,6 +277,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      * @throws Exception
      * @throws MongoException
      */
+    #[\Override]
     public function ping(): bool
     {
         /** @var \stdClass|array<string, mixed>|int $result */
@@ -284,6 +293,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         return false;
     }
 
+    #[\Override]
     public function reconnect(): void
     {
         $this->client->connect();
@@ -304,6 +314,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      *
      * @throws DatabaseException If the transaction cannot be started.
      */
+    #[\Override]
     public function startTransaction(): bool
     {
         if (! $this->client->isReplicaSet()) {
@@ -334,6 +345,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      * @throws DatabaseException If the transaction cannot be committed, with an `Exception\Transaction` cause when
      *                           the server reports it aborted.
      */
+    #[\Override]
     public function commitTransaction(): bool
     {
         if (! $this->client->isReplicaSet()) {
@@ -494,6 +506,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      *
      * @throws DatabaseException If the rollback fails.
      */
+    #[\Override]
     public function rollbackTransaction(): bool
     {
         if (! $this->client->isReplicaSet()) {
@@ -543,6 +556,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      *
      * @throws Throwable
      */
+    #[\Override]
     public function withTransaction(callable $callback): mixed
     {
         if (! $this->client->isReplicaSet() || $this->inTransaction > 0) {
@@ -626,6 +640,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     /**
      * Create Database
      */
+    #[\Override]
     public function create(string $name): bool
     {
         return true;
@@ -640,6 +655,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function update(string $name, string $new): bool
     {
         if ($this->hasSharedTables()) {
@@ -741,6 +757,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      *
      * @throws Exception
      */
+    #[\Override]
     public function exists(string $database): bool
     {
         return \in_array($this->filter($database), $this->getDatabaseNames(), true);
@@ -749,6 +766,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     /**
      * An empty database name asks the database the client was built for.
      */
+    #[\Override]
     public function collectionExists(string $database, string $collection): bool
     {
         $database = $this->filter($database);
@@ -778,6 +796,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      *
      * @throws Exception
      */
+    #[\Override]
     public function list(): array
     {
         /** @var array<Document> $list */
@@ -800,6 +819,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      *
      * @throws Exception
      */
+    #[\Override]
     public function delete(string $name): bool
     {
         $this->getClient()->dropDatabase([], $this->filter($name));
@@ -815,6 +835,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      *
      * @throws Exception
      */
+    #[\Override]
     public function createCollection(string $collection, array $attributes = [], array $indexes = []): bool
     {
         $id = $this->getNamespace().'_'.$this->filter($collection);
@@ -995,6 +1016,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     /**
      * @throws Exception
      */
+    #[\Override]
     public function deleteCollection(string $collection): bool
     {
         $id = $this->getNamespace().'_'.$this->filter($collection);
@@ -1005,6 +1027,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     /**
      * Analyze a collection updating it's metadata on the database engine
      */
+    #[\Override]
     public function analyzeCollection(string $collection): bool
     {
         return false;
@@ -1013,6 +1036,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     /**
      * Create Attribute
      */
+    #[\Override]
     public function createAttribute(string $collection, Attribute $attribute): bool
     {
         return true;
@@ -1025,6 +1049,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function createAttributes(string $collection, array $attributes): bool
     {
         return true;
@@ -1033,6 +1058,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     /**
      * Update Attribute.
      */
+    #[\Override]
     public function updateAttribute(string $collection, string $key, Attribute $attribute): bool
     {
         if ($attribute->key !== $key) {
@@ -1046,6 +1072,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      * @throws DatabaseException
      * @throws MongoException
      */
+    #[\Override]
     public function deleteAttribute(string $collection, string $key): bool
     {
         $collection = $this->getNamespace().'_'.$this->filter($collection);
@@ -1060,16 +1087,19 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         return true;
     }
 
+    #[\Override]
     public function getSchemaAttributes(string $collection): array
     {
         return [];
     }
 
+    #[\Override]
     public function getSchemaIndexes(string $collection): array
     {
         return [];
     }
 
+    #[\Override]
     public function getColumnType(Attribute $attribute): ?string
     {
         return null;
@@ -1081,6 +1111,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      * @throws DatabaseException
      * @throws MongoException
      */
+    #[\Override]
     public function renameAttribute(string $collection, string $id, string $name): bool
     {
         $collection = $this->getNamespace().'_'.$this->filter($collection);
@@ -1103,6 +1134,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     /**
      * Create a relationship between collections. No-op for MongoDB since relationships are virtual.
      */
+    #[\Override]
     public function createRelationship(string $collection, Relationship $relationship): bool
     {
         return true;
@@ -1112,6 +1144,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      * @throws DatabaseException
      * @throws MongoException
      */
+    #[\Override]
     public function updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, RelationshipUpdate $update): bool
     {
         $collectionName = $this->getNamespace().'_'.$this->filter($collection);
@@ -1180,6 +1213,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      * @throws MongoException
      * @throws Exception
      */
+    #[\Override]
     public function deleteRelationship(string $collection, Relationship $relationship, RelationshipSide $side): bool
     {
         $collectionName = $this->getNamespace().'_'.$this->filter($collection);
@@ -1251,6 +1285,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      *
      * @throws Exception
      */
+    #[\Override]
     public function createIndex(string $collection, Index $index, array $indexAttributeTypes = [], array $collation = []): bool
     {
         $name = $this->getNamespace().'_'.$this->filter($collection);
@@ -1399,6 +1434,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     /**
      * @throws Exception
      */
+    #[\Override]
     public function deleteIndex(string $collection, string $key): bool
     {
         $name = $this->getNamespace().'_'.$this->filter($collection);
@@ -1414,6 +1450,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      *
      * @throws Exception
      */
+    #[\Override]
     public function renameIndex(string $collection, string $old, string $new): bool
     {
         $collection = $this->filter($collection);
@@ -1462,6 +1499,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
         $name = $this->getNamespace().'_'.$this->filter($collection->getId());
@@ -1512,6 +1550,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      *
      * @throws Exception
      */
+    #[\Override]
     public function createDocument(Document $collection, Document $document): Document
     {
         $this->syncWriteHooks();
@@ -1551,6 +1590,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      * @throws DuplicateException
      * @throws DatabaseException
      */
+    #[\Override]
     public function createDocuments(Document $collection, array $documents): array
     {
         $this->syncWriteHooks();
@@ -1662,6 +1702,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      * @throws DuplicateException
      * @throws DatabaseException
      */
+    #[\Override]
     public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
     {
         $name = $this->getNamespace().'_'.$this->filter($collection->getId());
@@ -1703,6 +1744,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function updateDocuments(Document $collection, Document $updates, array $documents, array $skipPermissions = []): int
     {
         $name = $this->getNamespace().'_'.$this->filter($collection->getId());
@@ -2056,6 +2098,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     /**
      * @throws DatabaseException
      */
+    #[\Override]
     public function upsertDocument(Document $collection, Change $change): Document
     {
         return $this->upsertDocuments($collection, [$change])[0];
@@ -2067,6 +2110,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function upsertDocuments(Document $collection, array $changes, ?string $increase = null): array
     {
         if ($changes === []) {
@@ -2191,6 +2235,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      *
      * @throws Exception
      */
+    #[\Override]
     public function deleteDocument(Document $collection, string $id): bool
     {
         $collectionId = $collection->getId();
@@ -2213,6 +2258,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function deleteDocuments(Document $collection, array $sequences, array $permissionIds): int
     {
         $collectionId = $collection->getId();
@@ -2249,6 +2295,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      * @throws MongoException
      * @throws Exception
      */
+    #[\Override]
     public function increaseDocumentAttribute(Document $collection, string $id, string $attribute, int|float|string $value, string $updatedAt, int|float|string|null $min = null, int|float|string|null $max = null): bool
     {
         $collectionId = $collection->getId();
@@ -2317,6 +2364,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      * @throws Exception
      * @throws TimeoutException
      */
+    #[\Override]
     public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read): array
     {
         $name = $this->getNamespace().'_'.$this->filter($collection->getId());
@@ -2528,6 +2576,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      *
      * @throws Exception
      */
+    #[\Override]
     public function count(Document $collection, array $queries = [], ?int $max = null): int
     {
         $name = $this->getNamespace().'_'.$this->filter($collection->getId());
@@ -2632,6 +2681,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      *
      * @throws Exception
      */
+    #[\Override]
     public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): float|int
     {
         $name = $this->getNamespace().'_'.$this->filter($collection->getId());
@@ -2707,6 +2757,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      * @throws DatabaseException
      * @throws MongoException
      */
+    #[\Override]
     public function getSequences(Document $collection, array $documents): array
     {
         $collectionId = $collection->getId();
@@ -2865,6 +2916,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     /**
      * Collections hold any number of attributes and documents of any width, so both caps are 0.
      */
+    #[\Override]
     public function limits(): Limits
     {
         return $this->limits ??= new Limits(
@@ -2890,6 +2942,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     /**
      * Get current attribute count from collection document
      */
+    #[\Override]
     public function getCountOfAttributes(Document $collection): int
     {
         return \count(self::collectionAttributes($collection)) + $this->limits()->defaultAttributes;
@@ -2898,6 +2951,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     /**
      * Get current index count from collection document
      */
+    #[\Override]
     public function getCountOfIndexes(Document $collection): int
     {
         return \count(self::collectionIndexes($collection)) + $this->limits()->defaultIndexes;
@@ -2909,6 +2963,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      * Needed to satisfy MariaDB/MySQL row width limit.
      * Return 0 when no restrictions apply to row width
      */
+    #[\Override]
     public function getAttributeWidth(Document $collection): int
     {
         return 0;
@@ -2919,6 +2974,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function getSizeOfCollection(string $collection): int
     {
         $namespace = $this->getNamespace();
@@ -2950,6 +3006,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function getSizeOfCollectionOnDisk(string $collection): int
     {
         return $this->getSizeOfCollection($collection);
@@ -3002,6 +3059,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     /**
      * @throws Exception
      */
+    #[\Override]
     public function castBefore(Document $collection, Document $document): Document
     {
         if ($document->isEmpty()) {
@@ -3098,6 +3156,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         return $document;
     }
 
+    #[\Override]
     public function castAfter(Document $collection, array $documents): array
     {
         $casts = $this->getReadCasts($collection);
@@ -3202,6 +3261,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         return $document;
     }
 
+    #[\Override]
     public function castDatetime(string $value): mixed
     {
         return new UTCDateTime(new NativeDateTime($value));

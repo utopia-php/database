@@ -11,15 +11,15 @@ use Utopia\Validator;
  */
 class Datetime extends Validator
 {
-    public const PRECISION_DAYS = 'days';
+    public const string PRECISION_DAYS = 'days';
 
-    public const PRECISION_HOURS = 'hours';
+    public const string PRECISION_HOURS = 'hours';
 
-    public const PRECISION_MINUTES = 'minutes';
+    public const string PRECISION_MINUTES = 'minutes';
 
-    public const PRECISION_SECONDS = 'seconds';
+    public const string PRECISION_SECONDS = 'seconds';
 
-    public const PRECISION_ANY = 'any';
+    public const string PRECISION_ANY = 'any';
 
     /**
      * @throws Exception
@@ -36,9 +36,7 @@ class Datetime extends Validator
         }
     }
 
-    /**
-     * Validator Description.
-     */
+    #[\Override]
     public function getDescription(): string
     {
         $message = 'Value must be valid date';
@@ -64,6 +62,7 @@ class Datetime extends Validator
     /**
      * @param  mixed  $value
      */
+    #[\Override]
     public function isValid(mixed $value): bool
     {
         if (empty($value) || ! is_string($value)) {
@@ -123,14 +122,13 @@ class Datetime extends Validator
         return true;
     }
 
-    /**
-     * Function will return true if object is array.
-     */
+    #[\Override]
     public function isArray(): bool
     {
         return false;
     }
 
+    #[\Override]
     public function getType(): string
     {
         return self::TYPE_STRING;

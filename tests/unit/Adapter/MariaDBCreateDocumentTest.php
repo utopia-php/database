@@ -116,6 +116,7 @@ final class MariaDBCreateDocumentTest extends TestCase
             {
             }
 
+            #[\Override]
             public function afterDocumentCreate(string $collection, array $documents, WriteContext $context): void
             {
                 ($this->record)();

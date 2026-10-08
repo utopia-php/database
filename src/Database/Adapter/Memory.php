@@ -113,6 +113,7 @@ class Memory extends Adapter implements Feature\Relationships
     /**
      * The adapter holds its data itself, so it is its own driver.
      */
+    #[\Override]
     public function getDriver(): static
     {
         return $this;
@@ -121,6 +122,7 @@ class Memory extends Adapter implements Feature\Relationships
     /**
      * @return array<Capability>
      */
+    #[\Override]
     public function capabilities(): array
     {
         return array_merge(parent::capabilities(), [
@@ -187,6 +189,7 @@ class Memory extends Adapter implements Feature\Relationships
         return null;
     }
 
+    #[\Override]
     public function startTransaction(): bool
     {
         $this->journals[] = [];
@@ -195,6 +198,7 @@ class Memory extends Adapter implements Feature\Relationships
         return true;
     }
 
+    #[\Override]
     public function commitTransaction(): bool
     {
         if ($this->inTransaction === 0) {
@@ -217,6 +221,7 @@ class Memory extends Adapter implements Feature\Relationships
         return true;
     }
 
+    #[\Override]
     public function rollbackTransaction(): bool
     {
         if ($this->inTransaction === 0) {
@@ -251,6 +256,7 @@ class Memory extends Adapter implements Feature\Relationships
      * Memoised `Adapter::filter()` — the regex pass is the hottest call in
      * the find inner loop and the inputs (attribute names) are bounded.
      */
+    #[\Override]
     public function filter(string $value): string
     {
         if (isset($this->filterCache[$value])) {
@@ -262,6 +268,7 @@ class Memory extends Adapter implements Feature\Relationships
         return $filtered;
     }
 
+    #[\Override]
     public function create(string $name): bool
     {
         if (! isset($this->databases[$name])) {
@@ -279,6 +286,7 @@ class Memory extends Adapter implements Feature\Relationships
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function update(string $name, string $new): bool
     {
         if ($this->hasSharedTables()) {
@@ -345,16 +353,19 @@ class Memory extends Adapter implements Feature\Relationships
         unset($store[$from]);
     }
 
+    #[\Override]
     public function exists(string $database): bool
     {
         return isset($this->databases[$database]);
     }
 
+    #[\Override]
     public function collectionExists(string $database, string $collection): bool
     {
         return isset($this->databases[$database][$this->filter($collection)]);
     }
 
+    #[\Override]
     public function list(): array
     {
         $databases = [];
@@ -365,6 +376,7 @@ class Memory extends Adapter implements Feature\Relationships
         return $databases;
     }
 
+    #[\Override]
     public function delete(string $name): bool
     {
         if (! isset($this->databases[$name])) {
@@ -429,6 +441,7 @@ class Memory extends Adapter implements Feature\Relationships
      * @param  list<Attribute>  $attributes
      * @param  list<Index>  $indexes
      */
+    #[\Override]
     public function createCollection(string $collection, array $attributes = [], array $indexes = []): bool
     {
         $key = $this->key($collection);
@@ -505,6 +518,7 @@ class Memory extends Adapter implements Feature\Relationships
         ];
     }
 
+    #[\Override]
     public function deleteCollection(string $collection): bool
     {
         $key = $this->key($collection);
@@ -554,11 +568,13 @@ class Memory extends Adapter implements Feature\Relationships
         return true;
     }
 
+    #[\Override]
     public function analyzeCollection(string $collection): bool
     {
         return false;
     }
 
+    #[\Override]
     public function createAttribute(string $collection, Attribute $attribute): bool
     {
         $key = $this->key($collection);
@@ -584,6 +600,7 @@ class Memory extends Adapter implements Feature\Relationships
     /**
      * @param  list<Attribute>  $attributes
      */
+    #[\Override]
     public function createAttributes(string $collection, array $attributes): bool
     {
         foreach ($attributes as $attribute) {
@@ -593,6 +610,7 @@ class Memory extends Adapter implements Feature\Relationships
         return true;
     }
 
+    #[\Override]
     public function updateAttribute(string $collection, string $key, Attribute $attribute): bool
     {
         $collectionKey = $this->key($collection);
@@ -620,6 +638,7 @@ class Memory extends Adapter implements Feature\Relationships
         return true;
     }
 
+    #[\Override]
     public function deleteAttribute(string $collection, string $key): bool
     {
         $table = $this->key($collection);
@@ -706,21 +725,25 @@ class Memory extends Adapter implements Feature\Relationships
         return true;
     }
 
+    #[\Override]
     public function getSchemaAttributes(string $collection): array
     {
         return [];
     }
 
+    #[\Override]
     public function getSchemaIndexes(string $collection): array
     {
         return [];
     }
 
+    #[\Override]
     public function getColumnType(Attribute $attribute): ?string
     {
         return null;
     }
 
+    #[\Override]
     public function renameAttribute(string $collection, string $old, string $new): bool
     {
         $key = $this->key($collection);
@@ -1064,6 +1087,7 @@ class Memory extends Adapter implements Feature\Relationships
             : '_'.$relatedSequence.'_'.$collectionSequence;
     }
 
+    #[\Override]
     public function renameIndex(string $collection, string $old, string $new): bool
     {
         $key = $this->key($collection);
@@ -1100,6 +1124,7 @@ class Memory extends Adapter implements Feature\Relationships
         return true;
     }
 
+    #[\Override]
     public function createIndex(string $collection, Index $index, array $indexAttributeTypes = [], array $collation = []): bool
     {
         $key = $this->key($collection);
@@ -1156,6 +1181,7 @@ class Memory extends Adapter implements Feature\Relationships
         return true;
     }
 
+    #[\Override]
     public function deleteIndex(string $collection, string $key): bool
     {
         $table = $this->key($collection);
@@ -1183,6 +1209,7 @@ class Memory extends Adapter implements Feature\Relationships
         return true;
     }
 
+    #[\Override]
     public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
         $key = $this->key($collection->getId());
@@ -1257,6 +1284,7 @@ class Memory extends Adapter implements Feature\Relationships
         return $projected;
     }
 
+    #[\Override]
     public function createDocument(Document $collection, Document $document): Document
     {
         return $this->insertDocument($collection, $document) ?? $document;
@@ -1330,6 +1358,7 @@ class Memory extends Adapter implements Feature\Relationships
         return $document;
     }
 
+    #[\Override]
     public function createDocuments(Document $collection, array $documents): array
     {
         // Mirror SQL's batch-level sequence consistency check: every document
@@ -1357,6 +1386,7 @@ class Memory extends Adapter implements Feature\Relationships
         return $created;
     }
 
+    #[\Override]
     public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
     {
         $key = $this->key($collection->getId());
@@ -1502,6 +1532,7 @@ class Memory extends Adapter implements Feature\Relationships
         return $document;
     }
 
+    #[\Override]
     public function updateDocuments(Document $collection, Document $updates, array $documents, array $skipPermissions = []): int
     {
         if (empty($documents)) {
@@ -1643,6 +1674,7 @@ class Memory extends Adapter implements Feature\Relationships
         return \count($prepared);
     }
 
+    #[\Override]
     public function getSequences(Document $collection, array $documents): array
     {
         $key = $this->key($collection->getId());
@@ -1666,6 +1698,7 @@ class Memory extends Adapter implements Feature\Relationships
         return $documents;
     }
 
+    #[\Override]
     public function deleteDocument(Document $collection, string $id): bool
     {
         $key = $this->key($collection->getId());
@@ -1705,6 +1738,7 @@ class Memory extends Adapter implements Feature\Relationships
         return true;
     }
 
+    #[\Override]
     public function deleteDocuments(Document $collection, array $sequences, array $permissionIds): int
     {
         $key = $this->key($collection->getId());
@@ -1767,6 +1801,7 @@ class Memory extends Adapter implements Feature\Relationships
         return $count;
     }
 
+    #[\Override]
     public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read): array
     {
         $key = $this->key($collection->getId());
@@ -1798,6 +1833,7 @@ class Memory extends Adapter implements Feature\Relationships
         return $results;
     }
 
+    #[\Override]
     public function count(Document $collection, array $queries = [], ?int $max = null): int
     {
         $key = $this->key($collection->getId());
@@ -1816,6 +1852,7 @@ class Memory extends Adapter implements Feature\Relationships
         return \count($rows);
     }
 
+    #[\Override]
     public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): float|int
     {
         $key = $this->key($collection->getId());
@@ -1846,6 +1883,7 @@ class Memory extends Adapter implements Feature\Relationships
         return $isFloat ? (float) $sum : (int) $sum;
     }
 
+    #[\Override]
     public function increaseDocumentAttribute(Document $collection, string $id, string $attribute, int|float|string $value, string $updatedAt, int|float|string|null $min = null, int|float|string|null $max = null): bool
     {
         $key = $this->key($collection->getId());
@@ -1913,6 +1951,7 @@ class Memory extends Adapter implements Feature\Relationships
         return true;
     }
 
+    #[\Override]
     public function getSizeOfCollection(string $collection): int
     {
         $key = $this->key($collection);
@@ -1923,6 +1962,7 @@ class Memory extends Adapter implements Feature\Relationships
         return \strlen(\serialize($this->data[$key]));
     }
 
+    #[\Override]
     public function getSizeOfCollectionOnDisk(string $collection): int
     {
         return $this->getSizeOfCollection($collection);
@@ -1932,6 +1972,7 @@ class Memory extends Adapter implements Feature\Relationships
      * No index is bounded by bytes here, but index validation subtracts from the index length, so it is
      * Mongo's positive cap.
      */
+    #[\Override]
     public function limits(): Limits
     {
         return $this->limits ??= new Limits(
@@ -1954,16 +1995,19 @@ class Memory extends Adapter implements Feature\Relationships
         );
     }
 
+    #[\Override]
     public function getCountOfAttributes(Document $collection): int
     {
         return \count(self::collectionAttributes($collection)) + $this->limits()->defaultAttributes;
     }
 
+    #[\Override]
     public function getCountOfIndexes(Document $collection): int
     {
         return \count(self::collectionIndexes($collection)) + $this->limits()->defaultIndexes;
     }
 
+    #[\Override]
     public function getAttributeWidth(Document $collection): int
     {
         return 0;
@@ -3185,19 +3229,15 @@ class Memory extends Adapter implements Feature\Relationships
             if ($reverse) {
                 $direction = $direction === OrderDirection::Asc ? OrderDirection::Desc : OrderDirection::Asc;
             }
-            $resolved[] = [
-                'column' => $this->mapAttribute($attribute),
-                'direction' => $direction,
-                'reference' => $cursor[$attribute] ?? null,
-            ];
+            $resolved[] = new CursorBoundary($this->mapAttribute($attribute), $direction, $cursor[$attribute] ?? null);
         }
 
         $output = [];
         foreach ($rows as $row) {
             foreach ($resolved as $entry) {
-                $current = $row[$entry['column']] ?? null;
-                $reference = $entry['reference'];
-                $ascending = $entry['direction'] === OrderDirection::Asc;
+                $current = $row[$entry->field] ?? null;
+                $reference = $entry->reference;
+                $ascending = $entry->direction === OrderDirection::Asc;
                 if ($current === $reference) {
                     continue;
                 }

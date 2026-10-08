@@ -53,6 +53,7 @@ final class Raw implements Filter, JoinFilter
         $this->joins = [];
     }
 
+    #[\Override]
     public function filterJoin(string $table, JoinType $joinType): JoinCondition
     {
         $this->joins[$table] = $joinType;
@@ -67,6 +68,7 @@ final class Raw implements Filter, JoinFilter
     /**
      * @throws QueryException When the statement has no table, or renames the main table a right or full outer join pairs with
      */
+    #[\Override]
     public function filter(string $table): Condition
     {
         $preserving = (new Chain($this->joins))->hasPreservingOuterJoin();

@@ -28,6 +28,7 @@ final class SQLiteSharedFulltextTest extends TestCase
 
     private Database $database;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->pdo = new PDO('sqlite::memory:');
@@ -115,6 +116,7 @@ final class SQLiteSharedFulltextTest extends TestCase
     public function testAFulltextIndexForATenantTheDriverCannotQuoteIsRefused(): void
     {
         $pdo = new class ('sqlite::memory:') extends PDO {
+            #[\Override]
             public function quote(string $string, int $type = PDO::PARAM_STR): string|false
             {
                 return false;

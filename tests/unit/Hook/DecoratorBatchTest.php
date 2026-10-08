@@ -111,6 +111,7 @@ final class DecoratorBatchTest extends TestCase
     private function decorator(): Decorator
     {
         return new class () implements Decorator {
+            #[\Override]
             public function decorate(Event $event, Document $collection, Document $document): Document
             {
                 return new Document([...$document->getArrayCopy(), DecoratorBatchTest::MARK => $event->value]);

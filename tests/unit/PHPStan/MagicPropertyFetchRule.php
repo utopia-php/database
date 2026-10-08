@@ -51,6 +51,7 @@ final readonly class MagicPropertyFetchRule implements Rule
         $this->sourceDirectory = \rtrim($directory, '/').'/';
     }
 
+    #[\Override]
     public function getNodeType(): string
     {
         return PropertyFetch::class;
@@ -59,6 +60,7 @@ final readonly class MagicPropertyFetchRule implements Rule
     /**
      * @return list<IdentifierRuleError>
      */
+    #[\Override]
     public function processNode(Node $node, Scope $scope): array
     {
         if (! \str_starts_with($scope->getFile(), $this->sourceDirectory)) {

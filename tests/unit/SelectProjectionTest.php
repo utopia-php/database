@@ -30,6 +30,7 @@ class SelectProjectionTest extends TestCase
 {
     private Database $database;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->database = new Database(new DatabaseMemory(), new Cache(new CacheMemory()));

@@ -419,6 +419,7 @@ final class UpdateAttributeValidationTest extends TestCase
     public function testAnUpdatePastTheRowWidthLimitIsRefused(): void
     {
         $database = $this->database(new class () extends Memory {
+            #[\Override]
             public function limits(): Limits
             {
                 $limits = parent::limits();

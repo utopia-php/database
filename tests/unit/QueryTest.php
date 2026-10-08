@@ -11,10 +11,12 @@ use Utopia\Query\OrderDirection;
 
 class QueryTest extends TestCase
 {
+    #[\Override]
     protected function setUp(): void
     {
     }
 
+    #[\Override]
     protected function tearDown(): void
     {
     }

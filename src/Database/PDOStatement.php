@@ -96,6 +96,7 @@ class PDOStatement implements \IteratorAggregate
      * Preserve \PDOStatement's native iterability (foreach over rows), which
      * does not route through __call().
      */
+    #[\Override]
     public function getIterator(): \Traversable
     {
         return $this->statement;

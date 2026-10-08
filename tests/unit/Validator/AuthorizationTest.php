@@ -15,11 +15,13 @@ class AuthorizationTest extends TestCase
 {
     protected Authorization $authorization;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->authorization = new Authorization();
     }
 
+    #[\Override]
     protected function tearDown(): void
     {
     }

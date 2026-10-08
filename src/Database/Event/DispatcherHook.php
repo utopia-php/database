@@ -35,6 +35,7 @@ class DispatcherHook implements Lifecycle, Selective
         return $this;
     }
 
+    #[\Override]
     public function handles(Event $event): bool
     {
         $class = $event->domain();
@@ -42,6 +43,7 @@ class DispatcherHook implements Lifecycle, Selective
         return $class !== null && (isset($this->listeners[$class]) || $this->dispatches());
     }
 
+    #[\Override]
     public function handle(Domain $event): void
     {
         $failure = null;

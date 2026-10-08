@@ -31,6 +31,7 @@ final class UpsertDocumentTest extends TestCase
 
     private Database $database;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->adapter = new SQLite(new PDO('sqlite::memory:'));

@@ -15,6 +15,7 @@ final class MongoIdentifierTest extends TestCase
     {
         $row = new stdClass();
         $row->{Storage::SEQUENCE} = new class () {
+            #[\Override]
             public function __toString(): string
             {
                 return '507f1f77bcf86cd799439011';

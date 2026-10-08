@@ -858,6 +858,7 @@ class HashMemoryCache implements Adapter
      */
     private array $store = [];
 
+    #[\Override]
     public function load(string $key, int $ttl, string $hash = ''): mixed
     {
         $hash = $hash === '' ? $key : $hash;
@@ -869,6 +870,7 @@ class HashMemoryCache implements Adapter
         return ($saved['time'] + $ttl > \time()) ? $saved['data'] : false;
     }
 
+    #[\Override]
     public function save(string $key, array|string $data, string $hash = '', int $ttl = 0): bool|string|array
     {
         if ($key === '' || empty($data)) {
@@ -884,6 +886,7 @@ class HashMemoryCache implements Adapter
         return $data;
     }
 
+    #[\Override]
     public function touch(string $key, string $hash = ''): bool
     {
         $hash = $hash === '' ? $key : $hash;
@@ -899,11 +902,13 @@ class HashMemoryCache implements Adapter
     /**
      * @return array<string>
      */
+    #[\Override]
     public function list(string $key): array
     {
         return \array_keys($this->store[$key] ?? []);
     }
 
+    #[\Override]
     public function purge(string $key, string $hash = ''): bool
     {
         if ($hash !== '') {
@@ -916,6 +921,7 @@ class HashMemoryCache implements Adapter
         return true;
     }
 
+    #[\Override]
     public function flush(): bool
     {
         $this->store = [];
@@ -923,16 +929,19 @@ class HashMemoryCache implements Adapter
         return true;
     }
 
+    #[\Override]
     public function ping(): bool
     {
         return true;
     }
 
+    #[\Override]
     public function getSize(): int
     {
         return \count($this->store);
     }
 
+    #[\Override]
     public function getName(?string $key = null): string
     {
         return 'hash-memory';
@@ -946,6 +955,7 @@ class JsonHashMemoryCache implements Adapter
      */
     private array $store = [];
 
+    #[\Override]
     public function load(string $key, int $ttl, string $hash = ''): mixed
     {
         $hash = $hash === '' ? $key : $hash;
@@ -957,6 +967,7 @@ class JsonHashMemoryCache implements Adapter
         return \json_decode($saved['data'], true);
     }
 
+    #[\Override]
     public function save(string $key, array|string $data, string $hash = '', int $ttl = 0): bool|string|array
     {
         if ($key === '' || empty($data)) {
@@ -972,6 +983,7 @@ class JsonHashMemoryCache implements Adapter
         return $data;
     }
 
+    #[\Override]
     public function touch(string $key, string $hash = ''): bool
     {
         $hash = $hash === '' ? $key : $hash;
@@ -987,11 +999,13 @@ class JsonHashMemoryCache implements Adapter
     /**
      * @return array<string>
      */
+    #[\Override]
     public function list(string $key): array
     {
         return \array_keys($this->store[$key] ?? []);
     }
 
+    #[\Override]
     public function purge(string $key, string $hash = ''): bool
     {
         if ($hash !== '') {
@@ -1004,6 +1018,7 @@ class JsonHashMemoryCache implements Adapter
         return true;
     }
 
+    #[\Override]
     public function flush(): bool
     {
         $this->store = [];
@@ -1011,16 +1026,19 @@ class JsonHashMemoryCache implements Adapter
         return true;
     }
 
+    #[\Override]
     public function ping(): bool
     {
         return true;
     }
 
+    #[\Override]
     public function getSize(): int
     {
         return \count($this->store);
     }
 
+    #[\Override]
     public function getName(?string $key = null): string
     {
         return 'json-hash-memory';

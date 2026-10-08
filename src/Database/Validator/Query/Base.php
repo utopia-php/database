@@ -10,43 +10,43 @@ use Utopia\Validator;
  */
 abstract class Base extends Validator
 {
-    public const METHOD_TYPE_LIMIT = 'limit';
+    public const string METHOD_TYPE_LIMIT = 'limit';
 
-    public const METHOD_TYPE_OFFSET = 'offset';
+    public const string METHOD_TYPE_OFFSET = 'offset';
 
-    public const METHOD_TYPE_CURSOR = 'cursor';
+    public const string METHOD_TYPE_CURSOR = 'cursor';
 
-    public const METHOD_TYPE_ORDER = 'order';
+    public const string METHOD_TYPE_ORDER = 'order';
 
-    public const METHOD_TYPE_FILTER = 'filter';
+    public const string METHOD_TYPE_FILTER = 'filter';
 
-    public const METHOD_TYPE_SELECT = 'select';
+    public const string METHOD_TYPE_SELECT = 'select';
 
-    public const METHOD_TYPE_JOIN = 'join';
+    public const string METHOD_TYPE_JOIN = 'join';
 
-    public const METHOD_TYPE_AGGREGATE = 'aggregate';
+    public const string METHOD_TYPE_AGGREGATE = 'aggregate';
 
-    public const METHOD_TYPE_GROUP_BY = 'groupBy';
+    public const string METHOD_TYPE_GROUP_BY = 'groupBy';
 
-    public const METHOD_TYPE_HAVING = 'having';
+    public const string METHOD_TYPE_HAVING = 'having';
 
-    public const METHOD_TYPE_DISTINCT = 'distinct';
+    public const string METHOD_TYPE_DISTINCT = 'distinct';
 
     protected string $message = 'Invalid query';
 
+    #[\Override]
     public function getDescription(): string
     {
         return $this->message;
     }
 
-    /**
-     * Function will return true if object is array.
-     */
+    #[\Override]
     public function isArray(): bool
     {
         return false;
     }
 
+    #[\Override]
     public function getType(): string
     {
         return self::TYPE_OBJECT;
@@ -61,6 +61,7 @@ abstract class Base extends Validator
      *
      * @param  mixed  $value
      */
+    #[\Override]
     public function isValid(mixed $value): bool
     {
         if (! $value instanceof Query) {
@@ -90,8 +91,5 @@ abstract class Base extends Validator
         return $column !== '' && \preg_match('/^[A-Za-z_$][A-Za-z0-9_$]*$/', $column) === 1;
     }
 
-    /**
-     * Returns what type of query this Validator is for
-     */
     abstract public function getMethodType(): string;
 }

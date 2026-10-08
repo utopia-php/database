@@ -49,6 +49,7 @@ class Authorization extends Validator
         $this->roles = new Value($this->roles->get(), $group);
     }
 
+    #[\Override]
     public function getDescription(): string
     {
         return $this->message;
@@ -57,6 +58,7 @@ class Authorization extends Validator
     /**
      * Validate that the given Authorization\Input has the required permissions for the current roles.
      */
+    #[\Override]
     public function isValid(mixed $value): bool
     {
         if (! ($value instanceof Input)) {
@@ -158,10 +160,6 @@ class Authorization extends Validator
     }
 
     /**
-     * Skip Authorization
-     *
-     * Skips authorization for the code to be executed inside the callback
-     *
      * @template T
      *
      * @param  callable(): T  $callback
@@ -211,14 +209,13 @@ class Authorization extends Validator
         $this->status->set($this->defaultStatus);
     }
 
-    /**
-     * Function will return true if object is array.
-     */
+    #[\Override]
     public function isArray(): bool
     {
         return false;
     }
 
+    #[\Override]
     public function getType(): string
     {
         return self::TYPE_ARRAY;

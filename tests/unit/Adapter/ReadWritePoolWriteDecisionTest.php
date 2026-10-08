@@ -32,6 +32,7 @@ final class ReadWritePoolWriteDecisionTest extends TestCase
 
     private Database $database;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->primary = new SQLite(new PDO('sqlite::memory:'));

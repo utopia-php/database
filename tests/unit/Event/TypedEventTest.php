@@ -25,6 +25,7 @@ final class TypedEventTest extends TestCase
 
     private RecordingLifecycle $recorder;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->database = HookFixture::sqlite();
@@ -223,6 +224,7 @@ final class TypedEventTest extends TestCase
     {
         $database = HookFixture::sqlite();
         $selective = new class () extends RecordingLifecycle implements Selective {
+            #[\Override]
             public function handles(Event $event): bool
             {
                 return $event === Event::DocumentCreate;

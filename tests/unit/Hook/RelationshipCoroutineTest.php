@@ -38,6 +38,7 @@ final class RelationshipCoroutineTest extends TestCase
 
     private bool $armed = false;
 
+    #[\Override]
     protected function setUp(): void
     {
         if (! \extension_loaded('swoole')) {

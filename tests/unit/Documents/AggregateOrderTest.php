@@ -31,6 +31,7 @@ final class AggregateOrderTest extends TestCase
 {
     private Database $database;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->database = $this->database(new SQLite(new PDO('sqlite::memory:')));

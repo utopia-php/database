@@ -11,6 +11,7 @@ final class NamedRecordingLifecycle extends RecordingLifecycle implements Named
     ) {
     }
 
+    #[\Override]
     public function getName(): string
     {
         return $this->name;

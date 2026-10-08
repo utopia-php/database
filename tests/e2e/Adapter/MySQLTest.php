@@ -21,6 +21,7 @@ class MySQLTest extends Base
 
     protected static ?PDO $pdo = null;
 
+    #[\Override]
     protected static string $namespace;
 
     /**
@@ -28,6 +29,7 @@ class MySQLTest extends Base
      * @throws Exception
      * @throws Limit
      */
+    #[\Override]
     public function getDatabase(): Database
     {
         if (! is_null(self::$database)) {
@@ -64,6 +66,7 @@ class MySQLTest extends Base
         return self::$database = $database;
     }
 
+    #[\Override]
     protected function deleteColumn(string $collection, string $column): bool
     {
         $sqlTable = '`'.$this->getDatabase()->getDatabase().'`.`'.$this->getDatabase()->getNamespace().'_'.$collection.'`';
@@ -75,6 +78,7 @@ class MySQLTest extends Base
         return true;
     }
 
+    #[\Override]
     protected function deleteIndex(string $collection, string $index): bool
     {
         $sqlTable = '`'.$this->getDatabase()->getDatabase().'`.`'.$this->getDatabase()->getNamespace().'_'.$collection.'`';

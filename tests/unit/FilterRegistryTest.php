@@ -38,6 +38,7 @@ class FilterRegistryTest extends TestCase
      */
     private array $registry = [];
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->adapter = new DatabaseMemory();
@@ -61,6 +62,7 @@ class FilterRegistryTest extends TestCase
         ]));
     }
 
+    #[\Override]
     protected function tearDown(): void
     {
         // addFilter() writes to a static registry with no removal API, so a test
@@ -259,16 +261,19 @@ class FilterRegistryTest extends TestCase
             {
             }
 
+            #[\Override]
             public function name(): string
             {
                 return 'failingCodec';
             }
 
+            #[\Override]
             public function encode(mixed $value): mixed
             {
                 throw $this->failure;
             }
 
+            #[\Override]
             public function decode(mixed $value): mixed
             {
                 return $value;

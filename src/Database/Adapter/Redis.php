@@ -79,6 +79,7 @@ class Redis extends Adapter implements
         $this->client = $client;
     }
 
+    #[\Override]
     public function getDriver(): RedisClient
     {
         return $this->client;
@@ -87,6 +88,7 @@ class Redis extends Adapter implements
     /**
      * @return array<Capability>
      */
+    #[\Override]
     public function capabilities(): array
     {
         return array_merge(parent::capabilities(), [
@@ -101,20 +103,24 @@ class Redis extends Adapter implements
         ]);
     }
 
+    #[\Override]
     public function ping(): bool
     {
         return (bool) $this->client->ping();
     }
 
+    #[\Override]
     public function reconnect(): void
     {
     }
 
+    #[\Override]
     public function hostname(): string
     {
         return $this->hostname;
     }
 
+    #[\Override]
     public function startTransaction(): bool
     {
         $this->journalStack[] = [];
@@ -123,6 +129,7 @@ class Redis extends Adapter implements
         return true;
     }
 
+    #[\Override]
     public function commitTransaction(): bool
     {
         if ($this->inTransaction === 0) {
@@ -139,6 +146,7 @@ class Redis extends Adapter implements
         return true;
     }
 
+    #[\Override]
     public function rollbackTransaction(): bool
     {
         if ($this->inTransaction === 0) {
@@ -158,6 +166,7 @@ class Redis extends Adapter implements
         return true;
     }
 
+    #[\Override]
     public function create(string $name): bool
     {
         $name = $this->filter($name);
@@ -176,6 +185,7 @@ class Redis extends Adapter implements
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function update(string $name, string $new): bool
     {
         if ($this->hasSharedTables()) {
@@ -280,11 +290,13 @@ class Redis extends Adapter implements
         $client->sAdd($grantsKey, ...$moved);
     }
 
+    #[\Override]
     public function exists(string $database): bool
     {
         return (bool) $this->client->sIsMember($this->key($this->nsBase(), 'dbs'), $this->filter($database));
     }
 
+    #[\Override]
     public function collectionExists(string $database, string $collection): bool
     {
         if (! $this->exists($database)) {
@@ -296,6 +308,7 @@ class Redis extends Adapter implements
         return (bool) $this->client->sIsMember($collections, $this->filter($collection));
     }
 
+    #[\Override]
     public function list(): array
     {
         $dbsKey = $this->key($this->nsBase(), 'dbs');
@@ -313,6 +326,7 @@ class Redis extends Adapter implements
         return $databases;
     }
 
+    #[\Override]
     public function delete(string $name): bool
     {
         $name = $this->filter($name);
@@ -340,6 +354,7 @@ class Redis extends Adapter implements
      * @param  list<Attribute>  $attributes
      * @param  list<Index>  $indexes
      */
+    #[\Override]
     public function createCollection(string $collection, array $attributes = [], array $indexes = []): bool
     {
         $id = $this->filter($collection);
@@ -414,6 +429,7 @@ class Redis extends Adapter implements
         return \array_map(static fn (?OrderDirection $order): ?string => $order?->value, $index->orders);
     }
 
+    #[\Override]
     public function deleteCollection(string $collection): bool
     {
         $id = $this->filter($collection);
@@ -429,21 +445,25 @@ class Redis extends Adapter implements
         return true;
     }
 
+    #[\Override]
     public function analyzeCollection(string $collection): bool
     {
         return false;
     }
 
+    #[\Override]
     public function getSizeOfCollection(string $collection): int
     {
         return $this->computeCollectionSize($collection);
     }
 
+    #[\Override]
     public function getSizeOfCollectionOnDisk(string $collection): int
     {
         return $this->computeCollectionSize($collection);
     }
 
+    #[\Override]
     public function createAttribute(string $collection, Attribute $attribute): bool
     {
         $collection = $this->filter($collection);
@@ -468,6 +488,7 @@ class Redis extends Adapter implements
     /**
      * @param  list<Attribute>  $attributes
      */
+    #[\Override]
     public function createAttributes(string $collection, array $attributes): bool
     {
         foreach ($attributes as $attribute) {
@@ -477,6 +498,7 @@ class Redis extends Adapter implements
         return true;
     }
 
+    #[\Override]
     public function updateAttribute(string $collection, string $key, Attribute $attribute): bool
     {
         $collection = $this->filter($collection);
@@ -503,6 +525,7 @@ class Redis extends Adapter implements
         return true;
     }
 
+    #[\Override]
     public function deleteAttribute(string $collection, string $key): bool
     {
         $collection = $this->filter($collection);
@@ -531,21 +554,25 @@ class Redis extends Adapter implements
         return true;
     }
 
+    #[\Override]
     public function getSchemaAttributes(string $collection): array
     {
         return [];
     }
 
+    #[\Override]
     public function getSchemaIndexes(string $collection): array
     {
         return [];
     }
 
+    #[\Override]
     public function getColumnType(Attribute $attribute): ?string
     {
         return null;
     }
 
+    #[\Override]
     public function renameAttribute(string $collection, string $old, string $new): bool
     {
         $collection = $this->filter($collection);
@@ -708,6 +735,7 @@ class Redis extends Adapter implements
         return true;
     }
 
+    #[\Override]
     public function createIndex(string $collection, Index $index, array $indexAttributeTypes = [], array $collation = []): bool
     {
         $collection = $this->filter($collection);
@@ -797,6 +825,7 @@ class Redis extends Adapter implements
         return true;
     }
 
+    #[\Override]
     public function deleteIndex(string $collection, string $key): bool
     {
         $collection = $this->filter($collection);
@@ -822,6 +851,7 @@ class Redis extends Adapter implements
         return true;
     }
 
+    #[\Override]
     public function renameIndex(string $collection, string $old, string $new): bool
     {
         $collection = $this->filter($collection);
@@ -848,6 +878,7 @@ class Redis extends Adapter implements
         }) === true;
     }
 
+    #[\Override]
     public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
         $col = $this->filter($collection->getId());
@@ -884,6 +915,7 @@ class Redis extends Adapter implements
         return $document;
     }
 
+    #[\Override]
     public function createDocument(Document $collection, Document $document): Document
     {
         return $this->insertDocument($collection, $document) ?? $document;
@@ -958,6 +990,7 @@ class Redis extends Adapter implements
         });
     }
 
+    #[\Override]
     public function createDocuments(Document $collection, array $documents): array
     {
         $created = [];
@@ -971,6 +1004,7 @@ class Redis extends Adapter implements
         return $created;
     }
 
+    #[\Override]
     public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
     {
         $col = $this->filter($collection->getId());
@@ -1041,6 +1075,7 @@ class Redis extends Adapter implements
         });
     }
 
+    #[\Override]
     public function updateDocuments(Document $collection, Document $updates, array $documents, array $skipPermissions = []): int
     {
         if (empty($documents)) {
@@ -1272,6 +1307,7 @@ class Redis extends Adapter implements
         });
     }
 
+    #[\Override]
     public function getSequences(Document $collection, array $documents): array
     {
         if (empty($documents)) {
@@ -1327,6 +1363,7 @@ class Redis extends Adapter implements
         return $documents;
     }
 
+    #[\Override]
     public function deleteDocument(Document $collection, string $id): bool
     {
         $collectionId = $this->filter($collection->getId());
@@ -1355,6 +1392,7 @@ class Redis extends Adapter implements
         });
     }
 
+    #[\Override]
     public function deleteDocuments(Document $collection, array $sequences, array $permissionIds): int
     {
         if (empty($sequences) && empty($permissionIds)) {
@@ -1426,6 +1464,7 @@ class Redis extends Adapter implements
         });
     }
 
+    #[\Override]
     public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read): array
     {
         $collectionId = $this->filter($collection->getId());
@@ -1465,6 +1504,7 @@ class Redis extends Adapter implements
         });
     }
 
+    #[\Override]
     public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): float|int
     {
         $collectionId = $this->filter($collection->getId());
@@ -1501,6 +1541,7 @@ class Redis extends Adapter implements
         });
     }
 
+    #[\Override]
     public function count(Document $collection, array $queries = [], ?int $max = null): int
     {
         $collectionId = $this->filter($collection->getId());
@@ -1534,6 +1575,7 @@ class Redis extends Adapter implements
         });
     }
 
+    #[\Override]
     public function increaseDocumentAttribute(Document $collection, string $id, string $attribute, int|float|string $value, string $updatedAt, int|float|string|null $min = null, int|float|string|null $max = null): bool
     {
         $collectionId = $this->filter($collection->getId());
@@ -1588,6 +1630,7 @@ class Redis extends Adapter implements
         });
     }
 
+    #[\Override]
     public function limits(): Limits
     {
         return $this->limits ??= new Limits(
@@ -1610,16 +1653,19 @@ class Redis extends Adapter implements
         );
     }
 
+    #[\Override]
     public function getCountOfAttributes(Document $collection): int
     {
         return \count(self::collectionAttributes($collection)) + $this->limits()->defaultAttributes;
     }
 
+    #[\Override]
     public function getCountOfIndexes(Document $collection): int
     {
         return \count(self::collectionIndexes($collection)) + $this->limits()->defaultIndexes;
     }
 
+    #[\Override]
     public function getAttributeWidth(Document $collection): int
     {
         return 0;
@@ -3218,19 +3264,15 @@ class Redis extends Adapter implements
             if ($reverse) {
                 $direction = $direction === OrderDirection::Asc ? OrderDirection::Desc : OrderDirection::Asc;
             }
-            $resolved[] = [
-                'attribute' => $attribute,
-                'direction' => $direction,
-                'reference' => $cursor[$attribute] ?? null,
-            ];
+            $resolved[] = new CursorBoundary($attribute, $direction, $cursor[$attribute] ?? null);
         }
 
         $output = [];
         foreach ($documents as $document) {
             foreach ($resolved as $entry) {
-                $current = $this->resolveDocumentAttribute($document, $entry['attribute']);
-                $reference = $entry['reference'];
-                $ascending = $entry['direction'] === OrderDirection::Asc;
+                $current = $this->resolveDocumentAttribute($document, $entry->field);
+                $reference = $entry->reference;
+                $ascending = $entry->direction === OrderDirection::Asc;
                 if ($current === $reference) {
                     continue;
                 }

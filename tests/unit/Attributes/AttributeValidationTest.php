@@ -31,6 +31,7 @@ class AttributeValidationTest extends TestCase
     /** @var list<Document> */
     private array $metadataWrites = [];
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->adapter = self::createStub(Adapter::class);

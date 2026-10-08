@@ -84,6 +84,7 @@ abstract class Base extends TestCase
 
     abstract protected function deleteIndex(string $collection, string $index): bool;
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->testDatabase = 'utopiaTests_'.static::getTestToken();
@@ -99,6 +100,7 @@ abstract class Base extends TestCase
             ->removeHook(Permissions::class)->addHook(new Permissions());
     }
 
+    #[\Override]
     protected function tearDown(): void
     {
         self::$authorization?->reset();

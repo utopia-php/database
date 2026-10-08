@@ -33,7 +33,19 @@ A list of the utopia/php concepts and their relevant equivalent using the differ
 
 ### Filters
 
-Attribute filters are functions that manipulate attributes before saving them to the database and after retrieving them from the database. You can add filters using the `Database::addFilter($name, $encode, $decode)` where `$name` is the name of the filter that we can add later to attribute `filters` array. `$encode` and `$decode` are the functions used to encode and decode the attribute, respectively. Filters added with `Database::addFilter()` apply to every `Database` instance in the process. There are also instance-level filters that can only be defined while constructing the `Database` instance, and custom types registered on a `Utopia\Database\Type\TypeRegistry` that apply to the instances you give the registry to with `setTypeRegistry()`. Instance level filters override the static filters if they have the same name.
+Attribute filters encode an attribute's value before it is saved and decode it after it is read. List a filter's name in an attribute's `filters`.
+
+- `Database::addFilter($name, $encode, $decode)` registers a filter for every `Database` instance in the process. Its callbacks receive the value, the document and the database.
+- A `Utopia\Database\Filter\Codec` (`name()`, `encode()`, `decode()`) belongs to the instances you give it to: pass a list of codecs to the `Database` constructor, or put them on a `Filter\Registry` given to several instances with `setFilters()`. `Filter\Callback` builds a codec from two closures. Codecs override global filters of the same name.
+
+```php
+use Utopia\Database\Database;
+use Utopia\Database\Filter\Callback;
+
+$database = new Database($adapter, $cache, [
+    new Callback('trim', fn (mixed $value) => \trim($value), fn (mixed $value) => $value),
+]);
+```
 
 ### Custom Document Types
 
@@ -85,7 +97,7 @@ if ($user->isAdmin()) {
 
 ### Attribute Types
 
-Attribute types are cases of `Utopia\Query\Schema\ColumnType`: `String`, `Varchar`, `Text`, `MediumText`, `LongText`, `Integer`, `BigInteger`, `Float`, `Double`, `Boolean`, `Datetime`, `Id`, `Relationship`, `Object`, `Point`, `Linestring`, `Polygon` and `Vector`. `Attribute::TYPES` lists them, and object, spatial and vector attributes need an adapter that supports them. Attributes of the other types can hold an array of values (`array: true`). Arrays and objects are encoded to JSON when stored and decoded back when fetched, where the adapter has no native type for them.
+Attributes are built with a factory per type on `Utopia\Database\Attribute` (`Attribute::string()`, `integer()`, `lineString()`, ...). Their types are cases of `Utopia\Query\Schema\ColumnType`: `String`, `Varchar`, `Text`, `MediumText`, `LongText`, `Integer`, `BigInteger`, `Float`, `Double`, `Boolean`, `Datetime`, `Id`, `Relationship`, `Object`, `Point`, `Linestring`, `Polygon` and `Vector`. `Attribute::TYPES` lists them, and object, spatial and vector attributes need an adapter that supports them. Attributes of the other types can hold an array of values (`array: true`). Arrays and objects are encoded to JSON when stored and decoded back when fetched, where the adapter has no native type for them.
 
 ### Supported Databases
 
@@ -133,7 +145,7 @@ What an adapter supports is reported by `$database->getAdapter()->supports(Capab
 
 ### Connecting to a Database 
 
-`Utopia\Database\PDO` wraps PHP's PDO: it reconnects when a connection is lost outside a transaction and retries the call. Each SQL adapter also accepts a plain `PDO`.
+`Utopia\Database\PDO` wraps PHP's PDO: it reconnects when a connection is lost outside a transaction and retries the call. Each SQL adapter also accepts a plain `PDO`. Pass the PDO attributes your application needs; the ones below are what the adapters expect.
 
 #### MariaDB
 
@@ -146,12 +158,16 @@ use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Database;
 use Utopia\Database\PDO;
 
-$dbHost = 'mariadb';
-$dbPort = '3306';
-$dbUser = 'root';
-$dbPass = 'password';
+$host = 'mariadb';
+$port = 3306;
 
-$pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MariaDB::getPDOAttributes());
+$pdo = new PDO("mysql:host={$host};port={$port};charset=utf8mb4", 'root', 'password', [
+    \PDO::ATTR_TIMEOUT => 3,
+    \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
+    \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
+    \PDO::ATTR_EMULATE_PREPARES => true,
+    \PDO::ATTR_STRINGIFY_FETCHES => true,
+]);
 
 $cache = new Cache(new Memory()); // or use any cache adapter you wish
 
@@ -169,12 +185,16 @@ use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Database;
 use Utopia\Database\PDO;
 
-$dbHost = 'mysql';
-$dbPort = '3306';
-$dbUser = 'root';
-$dbPass = 'password';
+$host = 'mysql';
+$port = 3306;
 
-$pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MySQL::getPDOAttributes());
+$pdo = new PDO("mysql:host={$host};port={$port};charset=utf8mb4", 'root', 'password', [
+    \PDO::ATTR_TIMEOUT => 3,
+    \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
+    \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
+    \PDO::ATTR_EMULATE_PREPARES => true,
+    \PDO::ATTR_STRINGIFY_FETCHES => true,
+]);
 
 $cache = new Cache(new Memory()); // or use any cache adapter you wish
 
@@ -192,12 +212,16 @@ use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Database;
 use Utopia\Database\PDO;
 
-$dbHost = 'postgres';
-$dbPort = '5432';
-$dbUser = 'root';
-$dbPass = 'password';
+$host = 'postgres';
+$port = 5432;
 
-$pdo = new PDO("pgsql:host={$dbHost};port={$dbPort}", $dbUser, $dbPass, Postgres::getPDOAttributes());
+$pdo = new PDO("pgsql:host={$host};port={$port}", 'root', 'password', [
+    \PDO::ATTR_TIMEOUT => 3,
+    \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
+    \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
+    \PDO::ATTR_EMULATE_PREPARES => true,
+    \PDO::ATTR_STRINGIFY_FETCHES => true,
+]);
 
 $cache = new Cache(new Memory()); // or use any cache adapter you wish
 
@@ -215,9 +239,13 @@ use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Database;
 use Utopia\Database\PDO;
 
-$dbPath = '/path/to/database.sqlite';
+$path = '/path/to/database.sqlite';
 
-$pdo = new PDO("sqlite:{$dbPath}", null, null, SQLite::getPDOAttributes());
+$pdo = new PDO("sqlite:{$path}", null, null, [
+    \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
+    \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
+    \PDO::ATTR_STRINGIFY_FETCHES => true,
+]);
 
 $cache = new Cache(new Memory()); // or use any cache adapter you wish
 
@@ -235,17 +263,11 @@ use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Database;
 use Utopia\Mongo\Client; // from utopia-php/mongo
 
-$dbHost = 'mongo';
-$dbPort = 27017;
-$dbUser = 'root';
-$dbPass = 'password';
-$dbName = 'dbName';
-
-$mongoClient = new Client($dbName, $dbHost, $dbPort, $dbUser, $dbPass, true);
+$client = new Client('database', 'mongo', 27017, 'root', 'password', true);
 
 $cache = new Cache(new Memory()); // or use any cache adapter you wish
 
-$database = new Database(new Mongo($mongoClient), $cache);
+$database = new Database(new Mongo($client), $cache);
 ```
 
 ### Hooks
@@ -262,23 +284,27 @@ use Utopia\Database\Hook\Relationships;
 $database->addHook(new Permissions());
 
 // Populates related documents and handles nested writes and cascades
-$database->addHook(new Relationships($database));
+$database->addHook(new Relationships());
 ```
 
 Without `Hook\Permissions`, MariaDB, MySQL and SQLite neither write nor remove permission rows, and without
 `Hook\Relationships` no `onDelete` rule runs. See
 [UPGRADE.md](UPGRADE.md#register-the-permission-and-relationship-hooks).
 
-To act on database events, register a lifecycle hook. It receives every event (`Utopia\Database\Event`), so check the event inside `handle()`. A hook that also implements `Named` replaces the hook already registered under its name, and `silent()` can silence it by name.
+To act on database events, register a lifecycle hook. Its `handle()` receives one typed event object per event, such as `Event\Document\Created` with its `collection` and `document`. A hook that also implements `Selective` receives only the events its `handles()` accepts, and one that implements `Named` replaces the hook already registered under its name and can be silenced by name with `silent()`.
 
 ```php
 use Utopia\Database\Event;
+use Utopia\Database\Event\Document\Created;
+use Utopia\Database\Event\Document\Deleted;
+use Utopia\Database\Event\Domain;
 use Utopia\Database\Hook\Lifecycle;
 use Utopia\Database\Hook\Named;
+use Utopia\Database\Hook\Selective;
 
-final class AuditLog implements Lifecycle, Named
+final class AuditLog implements Lifecycle, Named, Selective
 {
-    /** @var array<string> */
+    /** @var list<string> */
     public array $entries = [];
 
     public function getName(): string
@@ -286,10 +312,15 @@ final class AuditLog implements Lifecycle, Named
         return 'audit-log';
     }
 
-    public function handle(Event $event, mixed $data): void
+    public function handles(Event $event): bool
     {
-        if ($event === Event::DocumentCreate || $event === Event::DocumentDelete) {
-            $this->entries[] = $event->value;
+        return $event === Event::DocumentCreate || $event === Event::DocumentDelete;
+    }
+
+    public function handle(Domain $event): void
+    {
+        if ($event instanceof Created || $event instanceof Deleted) {
+            $this->entries[] = $event->event->value.':'.$event->document->getId();
         }
     }
 }
@@ -301,11 +332,13 @@ $database->addHook($auditLog);
 $database->silent(fn () => $database->ping(), ['audit-log']);
 ```
 
-A `Utopia\Database\Hook\Transform` rewrites SQL statements before they run, and a `Utopia\Database\Hook\Decorator` modifies the documents that reads and writes return. Both are registered with `addHook()` too.
+A `Utopia\Database\Hook\Transform` rewrites SQL statements before they run, and a `Utopia\Database\Hook\Decorator` modifies the documents that reads and writes return. Both are registered with `addHook()` too, and `removeHook()` unregisters a hook. `Event\DispatcherHook` forwards events to listeners registered per event class and to a PSR-14 dispatcher.
 
 ### Database Methods
 
 ```php
+use Utopia\Database\Capability;
+
 // Get namespace
 $database->getNamespace();
 
@@ -334,13 +367,19 @@ if ($database->exists(database: 'dbName')) {
 // Uses default database as the name.
 $database->create();
 
+// Renames a database
+$database->update(
+    database: 'dbName',
+    new: 'archive'
+);
+
 // Returns an array of all databases
 $database->list();
 
 // Check if collection exists
-$database->exists(
-    database: 'dbName',
-    collection: 'users'
+$database->collectionExists(
+    collection: 'users',
+    database: 'dbName'
 );
 
 // Ping database it returns true if the database is alive
@@ -349,8 +388,10 @@ $database->ping();
 // Get Database Adapter
 $database->getAdapter();
 
-// Get List of keywords that cannot be used
-$database->getKeywords();
+// Limits, capabilities and features of the adapter
+$profile = $database->profile();
+$profile->limits->keywords; // names that cannot be used as attribute keys
+$profile->supports(Capability::Joins);
 ```
 
 ### Collection Methods
@@ -358,22 +399,23 @@ $database->getKeywords();
 ```php
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\CollectionUpdate;
 use Utopia\Database\Index;
-use Utopia\Query\Schema\Order;
+use Utopia\Database\Permission;
+use Utopia\Database\Role;
+use Utopia\Query\OrderDirection;
 
 // Creates a new collection named 'users'. The SQL adapters store it as the table '$namespace_users',
 // with the table '$namespace_users_perms' for its document permissions.
-$database->createCollection(new Collection(
+$database->createCollection(Collection::create(
     id: 'users',
     attributes: [
-        Attribute::string(key: 'name', size: 256),
-        Attribute::integer(key: 'age'),
+        Attribute::string('name', size: 256),
+        Attribute::integer('age'),
     ],
     indexes: [
-        Index::key(key: 'idx_name', attributes: ['name'], lengths: [256], orders: [Order::Asc]),
-        Index::key(key: 'idx_name_age', attributes: ['name', 'age'], lengths: [128, null], orders: [Order::Asc, Order::Desc]),
+        Index::key('idx_name', ['name'], lengths: [256], orders: [OrderDirection::Asc]),
+        Index::key('idx_name_age', ['name', 'age'], lengths: [128, null], orders: [OrderDirection::Asc, OrderDirection::Desc]),
     ],
     permissions: [
         Permission::create(Role::any()),
@@ -382,22 +424,24 @@ $database->createCollection(new Collection(
     documentSecurity: true,
 ));
 
-// Update Collection Permissions
-$database->updateCollection(
-    id: 'users',
+// Update Collection Permissions; a field left null keeps its stored value
+$database->updateCollection('users', new CollectionUpdate(
     permissions: [
         Permission::create(Role::any()),
         Permission::read(Role::any()),
         Permission::update(Role::any()),
-        Permission::delete(Role::any())
+        Permission::delete(Role::any()),
     ],
-    documentSecurity: true
-);
+    documentSecurity: true,
+));
 
-// Get Collection
-$database->getCollection(
-    id: 'users'
-);
+// Get Collection; throws Exception\NotFound when it does not exist
+$collection = $database->getCollection('users');
+$collection->attributes(); // list of Attribute
+$collection->indexes(); // list of Index
+
+// Find Collection; null when it does not exist
+$database->findCollection('users');
 
 // List Collections
 $database->listCollections(
@@ -406,29 +450,28 @@ $database->listCollections(
 );
 
 // Delete cached documents of a collection
-$database->purgeCachedCollection(
-    collectionId: 'users'
-);
+$database->purgeCachedCollection('users');
 
 // Deletes the collection and its permissions table
-$database->createCollection(new Collection(id: 'drafts'));
-$database->deleteCollection(
-    id: 'drafts'
-);
+$database->createCollection(Collection::create(id: 'drafts'));
+$database->deleteCollection('drafts');
 ```
 
 ### Attribute Methods
 
 ```php
 use Utopia\Database\Attribute;
+use Utopia\Database\AttributeUpdate;
 use Utopia\Database\Collection;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Format;
+use Utopia\Database\IntegerWidth;
+use Utopia\Database\Permission;
+use Utopia\Database\Role;
 use Utopia\Database\Validator\Structure;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Validator\Range;
 
-$database->createCollection(new Collection(
+$database->createCollection(Collection::create(
     id: 'movies',
     permissions: [
         Permission::create(Role::any()),
@@ -438,104 +481,46 @@ $database->createCollection(new Collection(
     ],
 ));
 
-// Creates a new attribute named 'name' in the 'movies' collection.
-// Every type has a factory: Attribute::string(), integer(), float(), boolean(), datetime(), ...
-$database->createAttribute('movies', Attribute::string(
-    key: 'name',
-    size: 128,
-    required: true
-));
+// Creates a new attribute named 'name' in the 'movies' collection and returns the stored attribute.
+// Every type has a factory: Attribute::string(), integer(), float(), boolean(), datetime(), point(), ...
+$database->createAttribute('movies', Attribute::string('name', size: 128, required: true));
 
 // New attribute with optional parameters
 $database->createAttribute('movies', Attribute::string(
-    key: 'genres',
+    'genres',
     size: 128,
     required: false,
     default: null,
-    signed: true,
     array: true,
-    format: null,
-    formatOptions: [],
-    filters: []
-));
-
-// The same with the model's constructor
-$database->createAttribute('movies', new Attribute(
-    key: 'director',
-    type: ColumnType::String,
-    size: 128
+    filters: [],
 ));
 
 // Creates several attributes at once
 $database->createAttributes('movies', [
-    Attribute::integer(key: 'year'),
-    Attribute::float(key: 'price'),
-    Attribute::boolean(key: 'active'),
+    Attribute::string('director', size: 128),
+    Attribute::integer('year'),
+    Attribute::integer('views', signed: false, width: IntegerWidth::Bits64),
+    Attribute::float('price'),
+    Attribute::boolean('active'),
 ]);
 
-// Updates the attribute named 'genres' in the 'movies' collection.
-$database->updateAttribute(
-    collection: 'movies',
-    id: 'genres',
-    type: ColumnType::String,
-    size: 128,
-    required: false,
-    default: null,
-    signed: true,
-    array: true,
-    format: null,
-    formatOptions: [],
-    filters: []
-);
-
-// Update the required status of an attribute
-$database->updateAttributeRequired(
-    collection: 'movies',
-    id: 'genres',
-    required: true
-);
-
-// Update the attribute format. A format is a validator registered for an attribute type.
+// A format is a validator registered for an attribute type
 Structure::addFormat(
     'year',
     fn (array $attribute) => new Range($attribute['formatOptions']['min'] ?? 0, $attribute['formatOptions']['max'] ?? 9999),
     ColumnType::Integer
 );
 
-$database->updateAttributeFormat(
-    collection: 'movies',
-    id: 'year',
-    format: 'year'
-);
+// Updates an attribute. Only the fields given change; default: null and format: null remove them.
+$database->updateAttribute('movies', 'year', new AttributeUpdate(
+    required: true,
+    format: new Format('year', ['min' => 1888, 'max' => 2100]),
+));
 
-// Update the attribute format options
-$database->updateAttributeFormatOptions(
-    collection: 'movies',
-    id: 'year',
-    formatOptions: ['min' => 1888, 'max' => 2100]
-);
-
-// Update the attribute filters
-$database->updateAttributeFilters(
-    collection: 'movies',
-    id: 'genres',
-    filters: []
-);
-
-// Update the default value of an attribute
-$database->updateAttributeDefault(
-    collection: 'movies',
-    id: 'director',
-    default: 'Unknown'
-);
+$database->updateAttribute('movies', 'director', new AttributeUpdate(default: 'Unknown'));
 
 // Check if attribute can be added to a collection
-$collection = $database->getCollection('movies');
-
-$database->checkAttribute(
-    collection: $collection,
-    attribute: Attribute::integer(key: 'rating')
-);
+$database->checkAttribute('movies', Attribute::integer('rating'));
 
 // Get Adapter attribute limit
 $database->getLimitForAttributes(); // if 0 then no limit
@@ -544,7 +529,7 @@ $database->getLimitForAttributes(); // if 0 then no limit
 $database->getLimitForIndexes();
 
 // Renames the attribute from old to new in the 'movies' collection.
-$database->createAttribute('movies', Attribute::string(key: 'tagline', size: 256));
+$database->createAttribute('movies', Attribute::string('tagline', size: 256));
 $database->renameAttribute(
     collection: 'movies',
     old: 'tagline',
@@ -552,37 +537,31 @@ $database->renameAttribute(
 );
 
 // Deletes the attribute in the 'movies' collection.
-$database->deleteAttribute(
-    collection: 'movies',
-    id: 'slogan'
-);
+$database->deleteAttribute('movies', 'slogan');
 ```
 
 ### Index Methods
 
 ```php
 use Utopia\Database\Index;
-use Utopia\Query\Schema\IndexType;
-use Utopia\Query\Schema\Order;
+use Utopia\Query\OrderDirection;
 
-// Index types are cases of IndexType: Key, Unique, Fulltext, Spatial, Object, Trigram, Ttl,
-// HnswEuclidean, HnswCosine and HnswDot. Every type has a factory: Index::key(), unique(), fullText(), ...
-// Orders are Order::Asc and Order::Desc.
+// Every index type has a factory: Index::key(), unique(), fulltext(), trigram(), spatial(), object(), ttl(),
+// hnswEuclidean(), hnswCosine() and hnswDot(). Orders are OrderDirection::Asc and OrderDirection::Desc.
 
-// Creates a new index named 'index1' in the 'movies' collection.
+// Creates a new index named 'index1' in the 'movies' collection and returns the stored index.
 $database->createIndex('movies', Index::key(
-    key: 'index1',
-    attributes: ['name', 'year'],
+    'index1',
+    ['name', 'year'],
     lengths: [128, null],
-    orders: [Order::Asc, Order::Desc]
+    orders: [OrderDirection::Asc, OrderDirection::Desc]
 ));
 
-// The same with the model's constructor
-$database->createIndex('movies', new Index(
-    key: 'index_name_search',
-    type: IndexType::Fulltext,
-    attributes: ['name']
-));
+// Creates several indexes and writes the collection definition once
+$database->createIndexes('movies', [
+    Index::fulltext('index_name_search', ['name']),
+    Index::unique('index_director_year', ['director', 'year']),
+]);
 
 // Rename index from old to new in the 'movies' collection.
 $database->renameIndex(
@@ -592,10 +571,7 @@ $database->renameIndex(
 );
 
 // Deletes the index in the 'movies' collection.
-$database->deleteIndex(
-    collection: 'movies',
-    id: 'index2'
-);
+$database->deleteIndex('movies', 'index2');
 ```
 
 ### Relationship Methods
@@ -603,114 +579,102 @@ $database->deleteIndex(
 ```php
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Permission;
 use Utopia\Database\Relationship;
-use Utopia\Database\RelationType;
-use Utopia\Query\Schema\ForeignKeyAction;
+use Utopia\Database\RelationshipDeleteAction;
+use Utopia\Database\RelationshipUpdate;
+use Utopia\Database\Role;
 
-// Relationship types are cases of RelationType: OneToOne, OneToMany, ManyToOne and ManyToMany.
-// What happens to related documents when a document is deleted is a ForeignKeyAction:
+// Each relationship type has a factory: Relationship::oneToOne(), oneToMany(), manyToOne() and manyToMany().
+// What happens to related documents when a document is deleted is a RelationshipDeleteAction:
 // Restrict (the default), Cascade or SetNull.
 
 // Creates a relationship between the two collections with the default reference attributes:
 // 'users' on 'movies', and 'movies' on 'users'
-$database->createRelationship(new Relationship(
-    collection: 'movies',
-    relatedCollection: 'users',
-    type: RelationType::OneToOne,
-    twoWay: true
-));
+$database->createRelationship('movies', Relationship::oneToOne('users', twoWay: true));
 
-// Create a relationship with custom reference attributes. Every type has a factory.
-$database->createCollection(new Collection(
+// Create a relationship with custom reference attributes
+$database->createCollection(Collection::create(
     id: 'reviews',
-    attributes: [Attribute::string(key: 'body', size: 1024)],
+    attributes: [Attribute::string('body', size: 1024)],
     permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
 ));
 
-$database->createRelationship(Relationship::oneToMany(
-    collection: 'movies',
-    relatedCollection: 'reviews',
-    twoWay: true,
+$database->createRelationship('movies', Relationship::oneToMany(
+    'reviews',
     key: 'reviews',
+    twoWay: true,
     twoWayKey: 'movie',
-    onDelete: ForeignKeyAction::Cascade
+    onDelete: RelationshipDeleteAction::Cascade
 ));
 
 // Update the relationship with the default reference attributes
-$database->updateRelationship(
-    collection: 'movies',
-    id: 'users',
-    onDelete: ForeignKeyAction::SetNull
-);
+$database->updateRelationship('movies', 'users', new RelationshipUpdate(
+    onDelete: RelationshipDeleteAction::SetNull
+));
 
 // Update the relationship with custom reference attributes
-$database->updateRelationship(
-    collection: 'movies',
-    id: 'users',
-    newKey: 'viewer',
-    newTwoWayKey: 'favoriteMovie',
+$database->updateRelationship('movies', 'users', new RelationshipUpdate(
+    key: 'viewer',
+    twoWayKey: 'favoriteMovie',
     twoWay: true
-);
+));
 
 // Delete the relationship with the default or custom reference attributes
-$database->deleteRelationship(
-    collection: 'movies',
-    id: 'viewer'
-);
+$database->deleteRelationship('movies', 'viewer');
 ```
 
 ### Document Methods
 
 ```php
 use Utopia\Database\Document;
-use Utopia\Database\Helpers\ID;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Id;
+use Utopia\Database\Permission;
+use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
+use Utopia\Database\Role;
 use Utopia\Database\SetType;
 
 // Id helpers
-ID::unique(padding: 12); // Creates an id of 13 characters from uniqid() followed by 12 random hex characters
-ID::custom(id: 'my_user_3235');
+Id::unique(padding: 12); // Creates an id of 13 characters from uniqid() followed by 12 random hex characters
+Id::custom(id: 'my_user_3235');
 
 // Role helpers
 Role::any();
 Role::guests();
 Role::user(
-    identifier: ID::unique(),
+    identifier: Id::unique(),
     status: 'verified' // optional
 );
 Role::users();
 Role::team(
-    identifier: ID::unique()
+    identifier: Id::unique()
 );
 Role::team(
-    identifier: ID::unique(),
+    identifier: Id::unique(),
     dimension: '123' // team:id/dimension
 );
 Role::label(
     identifier: 'admin'
 );
 Role::member(
-    identifier: ID::unique()
+    identifier: Id::unique()
 );
 
 // Permission helpers
 Permission::read(Role::any());
-Permission::create(Role::user(ID::unique()));
-Permission::update(Role::user(ID::unique(padding: 23)));
-Permission::delete(Role::user(ID::custom(id: 'my_user_3235')));
+Permission::create(Role::user(Id::unique()));
+Permission::update(Role::user(Id::unique(padding: 23)));
+Permission::delete(Role::user(Id::custom(id: 'my_user_3235')));
 
 // To create a document
 $document = new Document([
     '$permissions' => [
         Permission::read(Role::any()),
-        Permission::update(Role::user(ID::custom('1x'))),
-        Permission::delete(Role::user(ID::unique(12))),
+        Permission::update(Role::user(Id::custom('1x'))),
+        Permission::delete(Role::user(Id::unique(12))),
     ],
-    '$id' => ID::unique(),
+    '$id' => Id::unique(),
     'name' => 'Captain Marvel',
     'director' => 'Anna Boden & Ryan Fleck',
     'year' => 2019,
@@ -777,10 +741,14 @@ $document = $database->updateDocument(
     document: $document
 );
 
-// Info regarding who has permission to read, update and delete a document
-$document->getRead(); // returns an array of roles that have permission to read the document
-$document->getUpdate(); // returns an array of roles that have permission to update the document
-$document->getDelete(); // returns an array of roles that have permission to delete the document
+// Roles that have permission to read, update and delete the document
+$document->getPermissionsByType(PermissionType::Read);
+$document->getPermissionsByType(PermissionType::Update);
+$document->getPermissionsByType(PermissionType::Delete);
+
+// The document as an array, with or without some top-level keys
+$document->only(['name', 'year']);
+$document->except(['$permissions']);
 
 // Get document with all attributes
 $database->getDocument(
@@ -839,6 +807,11 @@ $database->findOne(
     ]
 );
 
+// Read every match in batches of 100; a limit() caps how many are yielded
+foreach ($database->cursor('movies', [Query::greaterThan('year', 2000)], batchSize: 100) as $movie) {
+    $movie->getId();
+}
+
 // Get count of documents
 $database->count(
     collection: 'movies',
@@ -861,9 +834,16 @@ $database->sum(
 
 // Delete a cached document
 // Note: Cached Documents or Collections are automatically deleted when a document or collection is updated or deleted
-$database->purgeCachedDocument(
-    collectionId: 'movies',
-    id: $document->getId()
+$database->purgeCachedDocument('movies', $document->getId());
+
+// Delete documents in batches of at most Database::BATCH_SIZE; onNext receives each deleted document
+$deleted = [];
+$database->deleteDocuments(
+    collection: 'movies',
+    queries: [Query::lessThan(attribute: 'year', value: 1900)],
+    onNext: function (Document $document) use (&$deleted): void {
+        $deleted[] = $document->getId();
+    }
 );
 
 // Delete a document
@@ -875,7 +855,7 @@ $database->deleteDocument(
 
 ### Joins and Aggregations
 
-The SQL adapters run joins and aggregations (`Capability::Joins`, `Capability::Aggregations`). A joined collection is read with the same permissions as a direct read of it, and its attributes come back under the join's alias.
+The SQL adapters run joins and aggregations (`Capability::Joins`, `Capability::Aggregations`). A join names its alias and lists its conditions; a joined collection is read with the same permissions as a direct read of it, and its attributes come back under the join's alias. Aggregations run through `aggregate()`, which returns one row per group.
 
 ```php
 use Utopia\Database\Document;
@@ -897,12 +877,12 @@ $database->createDocument('reviews', new Document([
 
 // Join the reviews to their movies, aliased 'm'
 $database->find('reviews', [
-    Query::join('movies', 'movie', '$id', '=', 'm'),
+    Query::join('movies', 'm', [Query::on('movie', '$id')]),
     Query::select(['body', 'm.name']),
 ]);
 
 // Aggregate: one row per group, holding the groups and the aggregates
-$database->find('movies', [
+$database->aggregate('movies', [
     Query::count('*', 'movies'),
     Query::avg('price', 'averagePrice'),
     Query::groupBy(['active']),

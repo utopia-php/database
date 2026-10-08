@@ -781,8 +781,8 @@ not change anything for an upgrade from 7.x.
     deletes. On Redis, keys matching `*#owner:*`, document entries whose key ends in `:<hash>#<epoch>` and
     query-cache keys matching `*:qcache:*#active:*` left by earlier builds are no longer read and can be deleted.
   - Cache lookups cost one round trip again: a cached `getDocument()` is two round trips (was 12) and
-    `getCollection()`, `find()`, `count()` and `sum()` one (was 6) before their query; single-document writes are
-    back at or below 7.x's (create 3, update and delete 4, increase and decrease 4).
+    `getCollection()`, `find()`, `count()` and `sum()` one (was 6) before their query; single-document writes take
+    3 each, at or below 7.x's (create 3, update and delete 6, increase and decrease 4).
   - A cached miss for one casing of a document id no longer hides another casing on engines that compare ids
     case-sensitively (PostgreSQL, MongoDB).
   - Reads inside `withTransaction()` are served from the document cache again, except for documents the transaction

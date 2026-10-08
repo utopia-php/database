@@ -11,9 +11,6 @@ use Utopia\Database\Event;
 use Utopia\Database\Exception\Unconfirmed as UnconfirmedException;
 use WeakMap;
 
-/**
- * Provides transactional execution support, delegating to the underlying database adapter.
- */
 trait Transactions
 {
     /** @var array<int, array<string, string>> */
@@ -33,13 +30,13 @@ trait Transactions
     /** @var array<int, list<Closure(): void>> */
     protected array $documentPurgeEvents = [];
 
-    /** @var WeakMap<Throwable, true>|null Failures raised after their outermost transaction committed. */
+    /** @var WeakMap<Throwable, true>|null */
     private ?WeakMap $committedFailures = null;
 
-    /** @var WeakMap<Throwable, true>|null Failures an adapter transaction let through. */
+    /** @var WeakMap<Throwable, true>|null */
     private ?WeakMap $transactionFailures = null;
 
-    /** @var WeakMap<Throwable, true>|null Failures of a commit whose result could not be confirmed, raised after its callback returned. */
+    /** @var WeakMap<Throwable, true>|null */
     private ?WeakMap $unconfirmedCommits = null;
 
     /**

@@ -64,9 +64,6 @@ use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 use WeakMap;
 
-/**
- * Provides document CRUD operations including find, create, update, upsert, delete, and cache management.
- */
 trait Documents
 {
     private const string DOCUMENT_CACHE_ACTIVE_PREFIX = 'active:';

@@ -12,6 +12,7 @@ use Utopia\Database\Collection;
 use Utopia\Database\CollectionUpdate;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Index;
 use Utopia\Database\Permission;
 use Utopia\Database\PermissionType;
@@ -113,6 +114,41 @@ final class DefinitionModelCacheTest extends TestCase
         $this->assertNotSame($first, $second);
         $this->assertSame($first->attributes()[0], $second->attributes()[0]);
         $this->assertSame('title', $second->attributes()[0]->key);
+    }
+
+    public function testADefinitionWithAnUnbuildableRelationshipIsServedFromTheCache(): void
+    {
+        $adapter = new CountingMemory();
+        $database = $this->database($adapter, new Cache(new MemoryCache()));
+        $database->updateDocument(Database::METADATA, self::COLLECTION, new Document([
+            'attributes' => [new Document([
+                Document::ID => 'author',
+                'key' => 'author',
+                'type' => 'relationship',
+                'size' => 0,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+                'options' => [
+                    'relatedCollection' => 'authors',
+                    'relationType' => 'oneToOne',
+                    'twoWay' => false,
+                    'twoWayKey' => 'books',
+                    'onDelete' => 'bogus',
+                    'side' => 'parent',
+                ],
+            ])],
+        ]));
+
+        $database->getCollection(self::COLLECTION);
+        $adapter->reset();
+        $collection = $database->getCollection(self::COLLECTION);
+
+        $this->assertSame(0, $adapter->metadataReads, 'the definition was not served by the cache');
+        $this->assertSame(self::COLLECTION, $collection->getId());
+        $this->expectException(RelationshipException::class);
+        $collection->attributes();
     }
 
     public function testEveryCopyOfTheMetadataDefinitionSharesItsModels(): void

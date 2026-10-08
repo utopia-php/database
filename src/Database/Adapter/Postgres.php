@@ -233,7 +233,7 @@ class Postgres extends SQL
             	CREATE INDEX \"{$createdIndex}\" ON {$this->getSQLTable($id)} (_tenant, \"_createdAt\");
             	CREATE INDEX \"{$updatedIndex}\" ON {$this->getSQLTable($id)} (_tenant, \"_updatedAt\");
             	CREATE INDEX \"{$tenantIdIndex}\" ON {$this->getSQLTable($id)} (_tenant, _id);
-            	CREATE INDEX \"{$permissionsIndex}\" ON {$this->getSQLTable($id)} USING gin (_permissions);
+            	CREATE INDEX \"{$permissionsIndex}\" ON {$this->getSQLTable($id)} USING gin (_permissions) WITH (fastupdate = off);
 			";
         } else {
             $uidIndex = $this->getShortKey("{$namespace}_{$id}_uid");
@@ -244,7 +244,7 @@ class Postgres extends SQL
 				CREATE UNIQUE INDEX \"{$uidIndex}\" ON {$this->getSQLTable($id)} (\"_uid\" COLLATE utf8_ci_ai);
             	CREATE INDEX \"{$createdIndex}\" ON {$this->getSQLTable($id)} (\"_createdAt\");
             	CREATE INDEX \"{$updatedIndex}\" ON {$this->getSQLTable($id)} (\"_updatedAt\");
-            	CREATE INDEX \"{$permissionsIndex}\" ON {$this->getSQLTable($id)} USING gin (_permissions);
+            	CREATE INDEX \"{$permissionsIndex}\" ON {$this->getSQLTable($id)} USING gin (_permissions) WITH (fastupdate = off);
 			";
         }
 
@@ -1510,8 +1510,10 @@ class Postgres extends SQL
 
             $binds[":{$placeholder}_2"] = $degrees[0];
             $binds[":{$placeholder}_3"] = $degrees[1];
+            // Each use binds under its own name: the permissions condition's ?? fails once a placeholder repeats
+            $binds[":{$placeholder}_4"] = $binds[":{$placeholder}_0"];
 
-            return "{$alias}.{$attribute} && ST_Expand(" . $this->getSpatialGeomFromText(":{$placeholder}_0") . ", :{$placeholder}_2, :{$placeholder}_3) AND {$distance}";
+            return "{$alias}.{$attribute} && ST_Expand(" . $this->getSpatialGeomFromText(":{$placeholder}_4") . ", :{$placeholder}_2, :{$placeholder}_3) AND {$distance}";
         }
 
         // Without meters, use the original SRID (e.g., 4326)
@@ -1519,7 +1521,11 @@ class Postgres extends SQL
 
         // ST_DWithin can use the GIST index; ST_Distance keeps the boundary exclusive
         if ($within) {
-            return "ST_DWithin({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ", :{$placeholder}_1) AND {$distance}";
+            // Each use binds under its own name, as above
+            $binds[":{$placeholder}_2"] = $binds[":{$placeholder}_0"];
+            $binds[":{$placeholder}_3"] = $binds[":{$placeholder}_1"];
+
+            return "ST_DWithin({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_2") . ", :{$placeholder}_3) AND {$distance}";
         }
 
         return $distance;
@@ -1892,20 +1898,35 @@ class Postgres extends SQL
 
         $column = "{$this->quote($alias)}.{$this->quote('_permissions')}";
 
-        // Containment rather than jsonb's ?| key operator: PDO reads a lone ? as a positional
-        // placeholder, and doubling it to escape breaks once a named placeholder is repeated,
-        // which the cursor conditions do. Each role is its own @> so the index can answer them
-        // as a BitmapOr; jsonb_exists_any would express it in one call but is not indexable.
-        $permissions = \array_map(
-            fn ($role) => "{$column} @> {$this->getPDO()->quote(\json_encode(["{$type}(\"{$role}\")"]))}::jsonb",
-            $roles
-        );
+        $conditions = [];
 
-        if ($permissions === []) {
+        // A lone ?| is priced like a single equality, so the planner checks it first on every
+        // row. Matching "any" on its own makes the check cost two conditions, and the reader's
+        // own filters run before it.
+        if (\in_array('any', $roles, true)) {
+            $conditions[] = "{$column} @> " . $this->getPDO()->quote(\json_encode(["{$type}(\"any\")"])) . '::jsonb';
+            $roles = \array_values(\array_diff($roles, ['any']));
+        }
+
+        // One ?| for the other roles; a @> per role adds to the row estimate until the planner
+        // gives up on the GIN index. ?? is PDO's escape for a literal ?, which emulated prepares
+        // only accept while no named placeholder appears twice in the statement, so the queries
+        // this condition joins bind each value under its own name. jsonb_exists_any would avoid
+        // the ? but is not indexable.
+        if ($roles !== []) {
+            $permissions = \array_map(
+                fn ($role) => $this->getPDO()->quote("{$type}(\"{$role}\")"),
+                $roles
+            );
+
+            $conditions[] = "{$column} ??| ARRAY[" . \implode(', ', $permissions) . ']::text[]';
+        }
+
+        if ($conditions === []) {
             return 'FALSE';
         }
 
-        return '(' . \implode(' OR ', $permissions) . ')';
+        return '(' . \implode(' OR ', $conditions) . ')';
     }
 
     /**

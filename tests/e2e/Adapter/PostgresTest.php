@@ -129,6 +129,83 @@ class PostgresTest extends Base
     }
 
     /**
+     * A reader holding many roles must still be answered from the permissions index when few
+     * documents are readable. Matching each role as its own clause made the planner add up a
+     * minimum estimate per role, so enough roles convinced it most of the collection was
+     * readable, and it walked the whole collection in order instead.
+     *
+     * Sequential scans are priced out of the session, as in the vector plan test, so the
+     * assertion measures the estimate rather than the size of the collection.
+     */
+    public function testManyRolesUseThePermissionsIndex(): void
+    {
+        $database = $this->getDatabase();
+        $authorization = $database->getAuthorization();
+
+        $database->createCollection('rolesPlan', permissions: [
+            Permission::create(Role::any()),
+        ], documentSecurity: true);
+
+        $database->createAttribute('rolesPlan', 'owner', Database::VAR_INTEGER, 0, true);
+
+        $documents = [];
+        for ($i = 0; $i < 50000; $i++) {
+            $documents[] = new Document([
+                '$permissions' => [Permission::read(Role::user("owner{$i}"))],
+                'owner' => $i,
+            ]);
+        }
+        $database->createDocuments('rolesPlan', $documents, 1000);
+
+        $table = $database->getNamespace() . '_rolesPlan';
+        self::$pdo->exec("VACUUM ANALYZE \"{$database->getDatabase()}\".\"{$table}\"");
+
+        $scans = function () use ($table): int {
+            self::$pdo->query('SELECT pg_stat_force_next_flush()');
+            self::$pdo->query('SELECT pg_stat_clear_snapshot()');
+
+            $statement = self::$pdo->prepare('
+                SELECT COALESCE(SUM(statistics.idx_scan), 0)
+                FROM pg_stat_user_indexes AS statistics
+                JOIN pg_class AS index ON index.oid = statistics.indexrelid
+                JOIN pg_am AS method ON method.oid = index.relam
+                WHERE statistics.relname = :table AND method.amname = \'gin\'
+            ');
+            $statement->execute([':table' => $table]);
+
+            return (int)$statement->fetchColumn();
+        };
+
+        $before = $scans();
+
+        self::$pdo->exec('SET enable_seqscan = off');
+
+        try {
+            for ($i = 0; $i < 60; $i++) {
+                $authorization->addRole(Role::user("stranger{$i}")->toString());
+            }
+            $authorization->addRole(Role::user('owner7')->toString());
+
+            $results = $database->find('rolesPlan', [Query::limit(25)]);
+        } finally {
+            self::$pdo->exec('RESET enable_seqscan');
+            $authorization->cleanRoles();
+            $authorization->addRole(Role::any()->toString());
+        }
+
+        $this->assertCount(1, $results, 'Only the document owned by the reader may come back');
+        $this->assertSame(7, $results[0]->getAttribute('owner'));
+
+        $this->assertGreaterThan(
+            $before,
+            $scans(),
+            'A selective read must be answered from the permissions index however many roles the reader holds'
+        );
+
+        $database->deleteCollection('rolesPlan');
+    }
+
+    /**
      * A vector search must order by distance alone, because a vector index can answer exactly
      * one sort key. Adding a second one does not merely make the index look expensive, it makes
      * it unusable, and the collection is read in full instead.

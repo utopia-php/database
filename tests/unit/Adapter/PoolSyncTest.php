@@ -38,7 +38,7 @@ final class PoolSyncTest extends TestCase
     private static ?Profiler $otherProfiler = null;
 
     /**
-     * @param  Closure(Pool): void  $change
+     * @param  Closure(Pool): mixed  $change
      * @param  Closure(SyncSnapshot): mixed  $observe
      */
     #[DataProvider('changes')]
@@ -56,7 +56,7 @@ final class PoolSyncTest extends TestCase
     }
 
     /**
-     * @param  Closure(Pool): void  $change
+     * @param  Closure(Pool): mixed  $change
      * @param  Closure(SyncSnapshot): mixed  $observe
      */
     #[DataProvider('changes')]
@@ -76,7 +76,7 @@ final class PoolSyncTest extends TestCase
     }
 
     /**
-     * @param  Closure(Pool): void  $change
+     * @param  Closure(Pool): mixed  $change
      * @param  Closure(SyncSnapshot): mixed  $observe
      */
     #[DataProvider('changes')]
@@ -94,7 +94,7 @@ final class PoolSyncTest extends TestCase
     }
 
     /**
-     * @param  Closure(Pool): void  $change
+     * @param  Closure(Pool): mixed  $change
      * @param  Closure(SyncSnapshot): mixed  $observe
      */
     #[DataProvider('changes')]
@@ -154,7 +154,7 @@ final class PoolSyncTest extends TestCase
     }
 
     /**
-     * @return iterable<string, array{Closure(Pool): void, Closure(SyncSnapshot): mixed, mixed}>
+     * @return iterable<string, array{Closure(Pool): mixed, Closure(SyncSnapshot): mixed, mixed}>
      */
     public static function changes(): iterable
     {

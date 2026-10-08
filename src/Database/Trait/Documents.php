@@ -648,7 +648,7 @@ trait Documents
             && $collectionGranted;
 
         $getDocument = fn () => $this->adapter->getDocument(
-            $this->withJoinAttributes($this->withJoinAuthorization($collection, $joinDocumentSecurity, $collectionGranted || $collection->getId() === self::METADATA), $joins, $joinedCollections),
+            $this->withJoinIndexed($this->withJoinAttributes($this->withJoinAuthorization($collection, $joinDocumentSecurity, $collectionGranted || $collection->getId() === self::METADATA), $joins, $joinedCollections), $joins, $joinedCollections),
             $id,
             $queries,
             $forUpdate
@@ -3956,7 +3956,7 @@ trait Documents
             }
 
             if (! isset($results)) {
-                $adapterCollection = $this->withJoinAttributes($this->withJoinAuthorization($collection, $joinDocumentSecurity, $collectionGranted), $joins, $joinedCollectionsById);
+                $adapterCollection = $this->withJoinIndexed($this->withJoinAttributes($this->withJoinAuthorization($collection, $joinDocumentSecurity, $collectionGranted), $joins, $joinedCollectionsById), $joins, $joinedCollectionsById);
 
                 $find = fn (): array => $this->adapter->find(
                     $adapterCollection,
@@ -4848,11 +4848,11 @@ trait Documents
             $this->assertJoinCount($joins);
 
             $joinedCollections ??= $this->resolveJoinedCollections($joins);
-            $collection = $this->withJoinAuthorization(
+            $collection = $this->withJoinIndexed($this->withJoinAuthorization(
                 $collection,
                 $this->authorizeJoins($joins, PermissionType::Read, $joinedCollections),
                 $collectionGranted,
-            );
+            ), $joins, $joinedCollections);
         }
 
         $queries = \array_merge($filters, $joins);
@@ -5014,6 +5014,48 @@ trait Documents
 
         $adapterCollection = clone $collection;
         $adapterCollection->setAttribute(self::JOIN_ATTRIBUTES, $joinAttributes);
+
+        return $adapterCollection;
+    }
+
+    /**
+     * Maps each joined collection, as its join query names it, to the attributes one of its key or
+     * unique indexes leads with: the ones a join can look its rows up by.
+     */
+    public const string JOIN_INDEXED = 'joinIndexed';
+
+    private const array LOOKUP_INDEX_TYPES = [IndexType::Key, IndexType::Index, IndexType::Unique];
+
+    /**
+     * @param  array<Query>  $joins
+     * @param  array<string, Document>|null  $joinedCollections  The collection each join names, by its id
+     */
+    private function withJoinIndexed(Document $collection, array $joins, ?array $joinedCollections = null): Document
+    {
+        if ($joins === []) {
+            return $collection;
+        }
+
+        $joinedCollections ??= $this->resolveJoinedCollections($joins);
+
+        $joinIndexed = [];
+        foreach ($joins as $join) {
+            $joinCollectionId = $join->getAttribute();
+            if (isset($joinIndexed[$joinCollectionId]) || ! isset($joinedCollections[$joinCollectionId])) {
+                continue;
+            }
+
+            $leads = [];
+            foreach (Collection::fromDocument($joinedCollections[$joinCollectionId])->indexes() as $index) {
+                if (\in_array($index->type, self::LOOKUP_INDEX_TYPES, true) && isset($index->attributes[0])) {
+                    $leads[] = $index->attributes[0];
+                }
+            }
+            $joinIndexed[$joinCollectionId] = \array_values(\array_unique($leads));
+        }
+
+        $adapterCollection = clone $collection;
+        $adapterCollection->setAttribute(self::JOIN_INDEXED, $joinIndexed);
 
         return $adapterCollection;
     }

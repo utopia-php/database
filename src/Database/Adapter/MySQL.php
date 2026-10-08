@@ -147,6 +147,12 @@ class MySQL extends MariaDB
         return $joins >= self::LARGE_JOIN || self::isOuterJoin($joinType) ? $hook->withoutSemiJoin() : $hook;
     }
 
+    #[\Override]
+    protected function looksUpByTenantAlone(): bool
+    {
+        return true;
+    }
+
     private static function isOuterJoin(JoinType $joinType): bool
     {
         return match ($joinType) {

@@ -34,6 +34,9 @@ final readonly class Filter implements FilterHook, JoinFilter
      *                                that has no tenant would pass as if it were missing
      * @param string $quoteCharacter The adapter's identifier quote: tables are named quoted with it, as the
      *                          builder declares them
+     * @param list<string> $unindexed Join aliases no index serves the join of: an inner or left join matches
+     *                                their tenant as a range, so the engine cannot look their rows up by the
+     *                                tenant alone once per row it pairs them with
      */
     public function __construct(
         int|string|null|array $tenant,
@@ -41,6 +44,7 @@ final readonly class Filter implements FilterHook, JoinFilter
         private string $collection = '',
         private string $allowNullColumn = '',
         private string $quoteCharacter = '`',
+        private array $unindexed = [],
     ) {
         if (! \is_array($tenant)) {
             $tenant = [$tenant];
@@ -103,7 +107,9 @@ final readonly class Filter implements FilterHook, JoinFilter
             default => Placement::Where,
         };
 
-        $condition = $this->joined($table);
+        $condition = $placement === Placement::On && \in_array($table, $this->unindexed, true)
+            ? $this->range($table)
+            : $this->joined($table);
 
         if ($placement === Placement::Where && ($joinType === JoinType::FullOuter || $this->allowNullColumn !== '')) {
             $condition = AllowNull::wrap(
@@ -124,5 +130,21 @@ final readonly class Filter implements FilterHook, JoinFilter
         $column = AllowNull::quote($table, $this->quoteCharacter).'.'.Storage::TENANT;
 
         return new Condition("{$column} IN ({$this->placeholders()})", $this->tenants);
+    }
+
+    /**
+     * MySQL turns an equality on a single tenant into a lookup on the leading `_tenant` of every index, and
+     * prefers it to reading the table once for a join no index serves, though it reads the tenant's whole
+     * table again for every row the join pairs. A range it reads once.
+     */
+    private function range(string $table): Condition
+    {
+        if (\count($this->tenants) !== 1) {
+            return $this->joined($table);
+        }
+
+        $column = AllowNull::quote($table, $this->quoteCharacter).'.'.Storage::TENANT;
+
+        return new Condition("({$column} >= ? AND {$column} <= ?)", [$this->tenants[0], $this->tenants[0]]);
     }
 }

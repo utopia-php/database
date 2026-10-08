@@ -7,6 +7,7 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Index;
 use Utopia\Database\Permission;
 use Utopia\Database\Query;
 use Utopia\Database\Role;
@@ -138,6 +139,130 @@ trait MySQLJoinPlanTests
             }
             $database->deleteCollection($customers);
         }
+    }
+
+    /**
+     * Under shared tables every index but `_uid`'s and the primary key leads with `_tenant`, and MySQL looks a
+     * joined table's rows up by an equality on the tenant alone, once per row the join pairs, when no index
+     * serves the join: the tenant's whole table every time. The join reads like the one over a table of its
+     * own: no lookup is considered for the table no index serves, the lookup its index serves still is.
+     */
+    public function testJoinNoIndexServesIsNotLookedUpByTheTenant(): void
+    {
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+        $this->assertInstanceOf(RawQuery::class, $adapter);
+
+        $customers = 'tenant_lookup_customers';
+        $labels = 'tenant_lookup_labels';
+        $tags = 'tenant_lookup_tags';
+        $open = [Permission::create(Role::any()), Permission::read(Role::any())];
+        $database->createCollection(Collection::create(id: $customers, permissions: [Permission::create(Role::any())], documentSecurity: true));
+        $database->createCollection(Collection::create(id: $labels, permissions: $open, documentSecurity: false));
+        $database->createCollection(Collection::create(id: $tags, permissions: $open, documentSecurity: false));
+
+        $authorization = $database->getAuthorization();
+        $roles = $authorization->getRoles();
+
+        try {
+            $this->seed($database, $customers, [Role::any(), Role::user(self::HIDDEN)]);
+            $this->seed($database, $labels, [Role::any(), Role::any()]);
+            $this->seed($database, $tags, [Role::any(), Role::any()]);
+            $database->createIndex($tags, Index::key('name_key', ['name']));
+
+            $authorization->cleanRoles();
+            $authorization->addRole(Role::any()->toString());
+            $authorization->addRole(Role::user('caller')->toString());
+
+            [$found, $trace] = $this->traced($adapter, '`named`', fn (): array => $database->find($customers, [
+                Query::join($labels, 'named', [Query::on('name', 'name')]),
+                Query::join($tags, 'tagged', [Query::on('name', 'name')]),
+                Query::select(['name']),
+                Query::limit(100),
+            ]));
+
+            $ids = \array_map(static fn (Document $document): string => $document->getId(), $found);
+            \sort($ids);
+            $this->assertSame(self::READABLE, $ids);
+
+            $this->assertSame([], $this->lookups($trace, 'named'), 'A join no index serves is not looked up');
+            $this->assertContains('name_key', $this->lookups($trace, 'tagged'), 'A join its index serves is looked up through it');
+        } finally {
+            $authorization->cleanRoles();
+            foreach ($roles as $role) {
+                $authorization->addRole($role);
+            }
+            foreach ([$tags, $labels, $customers] as $collection) {
+                $database->deleteCollection($collection);
+            }
+        }
+    }
+
+    /**
+     * Runs $read with the optimizer trace on and returns its result and the trace of the statement naming $marker.
+     *
+     * @param  callable(): array<Document>  $read
+     * @return array{array<Document>, array<mixed>}
+     */
+    private function traced(RawQuery $adapter, string $marker, callable $read): array
+    {
+        $adapter->rawMutation("SET SESSION optimizer_trace = 'enabled=on', optimizer_trace_offset = -5, optimizer_trace_limit = 5, optimizer_trace_max_mem_size = 67108864");
+
+        try {
+            $found = $read();
+            $traces = $adapter->rawQuery('SELECT QUERY, TRACE FROM information_schema.OPTIMIZER_TRACE');
+        } finally {
+            $adapter->rawMutation("SET SESSION optimizer_trace = 'enabled=off'");
+        }
+
+        $matching = [];
+        foreach ($traces as $trace) {
+            $query = $trace->getAttribute('QUERY');
+            $text = $trace->getAttribute('TRACE');
+            if (\is_string($query) && \is_string($text) && \str_contains($query, $marker)) {
+                $matching[] = $text;
+            }
+        }
+        $this->assertNotSame([], $matching, 'The optimizer trace must hold the read');
+
+        $trace = \json_decode($matching[\array_key_last($matching)], true);
+        $this->assertIsArray($trace, 'The optimizer trace must fit its memory');
+
+        return [$found, $trace];
+    }
+
+    /**
+     * The indexes the optimizer considered looking the rows of $alias up through.
+     *
+     * @param  array<mixed>  $trace
+     * @return list<string>
+     */
+    private function lookups(array $trace, string $alias): array
+    {
+        $indexes = [];
+        $walk = static function (mixed $node) use (&$walk, &$indexes, $alias): void {
+            if (! \is_array($node)) {
+                return;
+            }
+
+            $table = $node['table'] ?? null;
+            $best = $node['best_access_path'] ?? null;
+            $paths = \is_array($best) ? ($best['considered_access_paths'] ?? null) : null;
+            if (\is_string($table) && \str_ends_with($table, '`'.$alias.'`') && \is_array($paths)) {
+                foreach ($paths as $path) {
+                    if (\is_array($path) && \in_array($path['access_type'] ?? null, ['ref', 'eq_ref'], true) && \is_string($path['index'] ?? null)) {
+                        $indexes[$path['index']] = true;
+                    }
+                }
+            }
+
+            foreach ($node as $child) {
+                $walk($child);
+            }
+        };
+        $walk($trace);
+
+        return \array_keys($indexes);
     }
 
     /**

@@ -1717,7 +1717,8 @@ database after upgrading. It covers both changes, so one rebuild is enough.
      `float`, `double`, `boolean` or `datetime`, or one without a declared type (an internal attribute, or any
      attribute in a schemaless database).
 2. For a `unique` index, look for duplicates first, because the rebuilt index enforces uniqueness and its creation
-   fails (error `11000`, `Exception\Duplicate` or `Exception\Unique`) while duplicates exist. Group the documents that
+   fails while duplicates exist: `createIndex()` throws `Exception\Unique`, and only a raw driver call sees error
+   `11000`. Group the documents that
    hold a value for every attribute of the index by those attributes (and by `_tenant` under shared tables), and list
    the groups with more than one document, for example:
 

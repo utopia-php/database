@@ -639,6 +639,9 @@ have to make, with the 7.x and 8.0 forms side by side.
 - `createIndex()` and `createIndexes()` refuse a unique index over documents that already share a value with
   `Exception\Unique` and keep no metadata for it, as 7.4.1 does. The adapter's error was taken for an index already
   in the schema, so the index was recorded without being built; SQLite threw a raw `PDOException` instead.
+- An index key longer than the engine allows throws `Exception\Index` (`Index key length exceeds the maximum`) on
+  MariaDB and MySQL, and an index row too large throws `Exception\Limit` (`Index row size exceeds the maximum`) on
+  PostgreSQL, as 7.4.1 does. Both threw a raw `PDOException`.
 - `updateAttribute()` no longer fails on MongoDB, Memory and Redis when a key or unique index covers the attribute
   (the index was compared with itself).
 - `Validator\IndexDefinition` rejects an index definition without a type, with an unknown type, or a TTL index

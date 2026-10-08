@@ -1941,6 +1941,10 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
             return new LimitException('Datetime field overflow', $e->getCode(), $e);
         }
 
+        if ($e->getCode() === '54000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7 && \str_contains($e->getMessage(), 'index row')) {
+            return new LimitException('Index row size exceeds the maximum', $e->getCode(), $e);
+        }
+
         if ($e->getCode() === '42P01' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
             if ($this->isUndefinedAlias($e->getMessage())) {
                 return new QueryException('Query references an undefined table or alias', $e->getCode(), $e);

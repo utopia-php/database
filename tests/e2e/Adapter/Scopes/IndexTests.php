@@ -19,6 +19,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
@@ -176,6 +177,56 @@ trait IndexTests
                 $keys = \array_map(static fn (Index $index): string => $index->key, $database->getCollection($collection)->indexes());
                 $this->assertNotContains($key, $keys, 'A refused unique index on '.$attribute.' must leave no metadata behind');
             }
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
+    public function testIndexKeyOverTheEngineLimitIsRefused(): void
+    {
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if (! $adapter instanceof MariaDB && ! $adapter instanceof Postgres) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'indexKeyOverLimit';
+        $database->createCollection(Collection::create(id: $collection, attributes: [
+            Attribute::string(key: 'first', size: 768),
+            Attribute::string(key: 'second', size: 768),
+            Attribute::string(key: 'note', size: 20000),
+        ], permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ], documentSecurity: false));
+
+        try {
+            $error = null;
+            if ($adapter instanceof MariaDB) {
+                try {
+                    $adapter->createIndex($collection, Index::key(key: 'wide', attributes: ['first', 'second'], lengths: [768, 768]));
+                } catch (Throwable $caught) {
+                    $error = $caught;
+                }
+
+                $this->assertInstanceOf(IndexException::class, $error, 'A key longer than the engine allows must be refused as an Index error');
+                $this->assertSame('Index key length exceeds the maximum', $error->getMessage());
+
+                return;
+            }
+
+            $database->createDocument($collection, new Document(['note' => \bin2hex(\random_bytes(8000))]));
+            try {
+                $adapter->createIndex($collection, Index::key(key: 'by_note', attributes: ['note']));
+            } catch (Throwable $caught) {
+                $error = $caught;
+            }
+
+            $this->assertInstanceOf(LimitException::class, $error, 'An index row larger than the engine allows must be refused as a Limit');
+            $this->assertSame('Index row size exceeds the maximum', $error->getMessage());
         } finally {
             $database->deleteCollection($collection);
         }

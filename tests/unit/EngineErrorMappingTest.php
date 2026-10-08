@@ -23,6 +23,8 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Character as CharacterException;
 use Utopia\Database\Exception\Contention as ContentionException;
+use Utopia\Database\Exception\Index as IndexException;
+use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Transaction as TransactionException;
@@ -157,6 +159,31 @@ final class EngineErrorMappingTest extends TestCase
         $error = self::engineError('42000', 1072, "SQLSTATE[42000]: Syntax error or access violation: 1072 Key column 'name' doesn't exist in table");
 
         $this->assertMapped($map, $error, NotFoundException::class, 'Attribute not found');
+    }
+
+    /**
+     * @param  Closure(PDOException): Throwable  $map
+     */
+    #[DataProvider('mariaDBFamilyProvider')]
+    public function testIndexKeyTooLongIsAnIndexError(Closure $map): void
+    {
+        $error = self::engineError('42000', 1071, 'SQLSTATE[42000]: Syntax error or access violation: 1071 Specified key was too long; max key length is 3072 bytes');
+
+        $this->assertMapped($map, $error, IndexException::class, 'Index key length exceeds the maximum');
+    }
+
+    public function testPostgresIndexRowTooLargeIsALimit(): void
+    {
+        $error = self::engineError('54000', 7, 'SQLSTATE[54000]: Program limit exceeded: 7 ERROR:  index row size 8016 exceeds btree version 4 maximum 2704 for index "engine_orders_by_note"');
+
+        $this->assertMapped(self::postgres(), $error, LimitException::class, 'Index row size exceeds the maximum');
+    }
+
+    public function testPostgresProgramLimitOtherThanAnIndexRowStaysRaw(): void
+    {
+        $error = self::engineError('54000', 7, 'SQLSTATE[54000]: Program limit exceeded: 7 ERROR:  tables can have at most 1600 columns');
+
+        $this->assertSame($error, self::postgres()($error));
     }
 
     public function testSQLiteUnknownColumnIsAttributeNotFound(): void

@@ -1418,10 +1418,11 @@ class Database
 
     protected function decorateDocument(Event $event, Document $collection, Document $document): Document
     {
-        if ($this->areEventsSilenced()) {
+        if ($this->decorators === [] || $this->areEventsSilenced()) {
             return $document;
         }
 
+        $collection = $this->unshared($collection);
         foreach ($this->decorators as $decorator) {
             $document = $decorator->decorate($event, $collection, $document);
         }
@@ -1435,15 +1436,21 @@ class Database
      */
     protected function decorateDocuments(Event $event, Document $collection, array $documents): array
     {
-        if (empty($this->decorators)) {
+        if ($this->decorators === [] || $this->areEventsSilenced()) {
             return $documents;
         }
 
+        $collection = $this->unshared($collection);
         foreach ($documents as $i => $document) {
             $documents[$i] = $this->decorateDocument($event, $collection, $document);
         }
 
         return $documents;
+    }
+
+    private function unshared(Document $collection): Document
+    {
+        return $collection === self::$definition ? clone $collection : $collection;
     }
 
     public function removeTransform(string $name): static

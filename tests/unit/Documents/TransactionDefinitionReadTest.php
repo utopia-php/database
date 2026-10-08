@@ -41,6 +41,60 @@ final class TransactionDefinitionReadTest extends TestCase
         $this->assertSame(2, $database->getDocument(self::COLLECTION, 'ada')->getAttribute('balance'));
     }
 
+    public function testADefinitionATransactionReadIsCachedForTheNextTransaction(): void
+    {
+        $adapter = new CountingMemory();
+        $database = $this->database($adapter);
+        $database->purgeCachedDocument(Database::METADATA, self::COLLECTION);
+        $database->withTransaction(fn (): Document => $database->updateDocument(self::COLLECTION, 'ada', new Document(['balance' => 2])));
+
+        $reads = $database->withTransaction(function () use ($database, $adapter): int {
+            $adapter->reset();
+            $database->updateDocument(self::COLLECTION, 'ada', new Document(['balance' => 3]));
+            $database->getDocument(self::COLLECTION, 'ada');
+
+            return $adapter->metadataReads;
+        });
+
+        $this->assertSame(0, $reads);
+        $this->assertSame(3, $database->getDocument(self::COLLECTION, 'ada')->getAttribute('balance'));
+    }
+
+    public function testADefinitionChangedAfterATransactionReadItIsReadAfresh(): void
+    {
+        $adapter = new CountingMemory();
+        $database = $this->database($adapter);
+        $database->purgeCachedDocument(Database::METADATA, self::COLLECTION);
+        $database->withTransaction(fn (): Collection => $database->getCollection(self::COLLECTION));
+
+        $database->updateCollection(self::COLLECTION, new CollectionUpdate(permissions: [Permission::read(Role::any()), Permission::update(Role::any())], documentSecurity: true));
+
+        $collection = $database->withTransaction(fn (): Collection => $database->getCollection(self::COLLECTION));
+
+        $this->assertTrue($collection->getAttribute('documentSecurity'));
+    }
+
+    public function testARolledBackTransactionLeavesItsDefinitionReadUncached(): void
+    {
+        $adapter = new CountingMemory();
+        $database = $this->database($adapter);
+        $database->purgeCachedDocument(Database::METADATA, self::COLLECTION);
+
+        try {
+            $database->withTransaction(function () use ($database): void {
+                $database->getCollection(self::COLLECTION);
+
+                throw new \DomainException('rolled back');
+            });
+        } catch (\DomainException) {
+        }
+
+        $adapter->reset();
+        $database->getCollection(self::COLLECTION);
+
+        $this->assertSame(1, $adapter->metadataReads);
+    }
+
     public function testASchemaChangeInsideTheTransactionIsRead(): void
     {
         $adapter = new CountingMemory();

@@ -16,16 +16,13 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
+use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Hook\Decorator;
 use Utopia\Database\Permission;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Role;
 use Utopia\Query\CursorDirection;
 
-/**
- * A single-document write reads the document it writes under the definition it resolved for the write, instead of
- * resolving that definition a second time for its locked read.
- */
 final class ResolvedCollectionReadTest extends TestCase
 {
     private const string COLLECTION = 'webhooks';
@@ -119,7 +116,7 @@ final class ResolvedCollectionReadTest extends TestCase
         $this->assertTrue($database->updateDocument(self::COLLECTION, 'missing', new Document(['name' => 'renamed']))->isEmpty());
         $this->assertFalse($database->deleteDocument(self::COLLECTION, 'missing'));
 
-        $this->expectException(\Utopia\Database\Exception\NotFound::class);
+        $this->expectException(NotFoundException::class);
         $database->increaseDocumentAttribute(self::COLLECTION, 'missing', 'count');
     }
 

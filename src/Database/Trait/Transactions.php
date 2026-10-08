@@ -16,13 +16,13 @@ use WeakMap;
  */
 trait Transactions
 {
-    /** @var array<int, array<string, string>> Collection keys of the documents written in the open invalidation scope, by coroutine id and document key. */
+    /** @var array<int, array<string, string>> */
     protected array $documentCachePurges = [];
 
-    /** @var array<int, array<string, true>> Lower-cased keys of the documents written in the open invalidation scope, by coroutine id, kept only while that scope owns the adapter's transaction. */
+    /** @var array<int, array<string, true>> */
     protected array $transactionWrites = [];
 
-    /** @var array<int, array<string, array<string, Document>>> Collection definitions read inside the transaction the open invalidation scope owns, by coroutine id, lower-cased definition key and cache field. */
+    /** @var array<int, array<string, array<string, Document>>> */
     protected array $transactionDefinitions = [];
 
     /** @var array<int, array<string, array<string, Closure(): void>>> */
@@ -30,7 +30,7 @@ trait Transactions
 
     private bool $definitionFillsFail = false;
 
-    /** @var array<int, list<Closure(): void>> Document purge events of the open invalidation scope, by coroutine id, fired once its outermost transaction has or may have committed. */
+    /** @var array<int, list<Closure(): void>> */
     protected array $documentPurgeEvents = [];
 
     /** @var WeakMap<Throwable, true>|null Failures raised after their outermost transaction committed. */
@@ -348,11 +348,6 @@ trait Transactions
     }
 
     /**
-     * Read again, now that the transaction has committed, each collection definition it had to read by SQL, so the
-     * read fills the shared cache a read inside the transaction must not: its snapshot may predate another writer's
-     * commit. Without this a definition dropped from the cache, as by a batch write, stays uncached for as long as
-     * only transactions read it. A failed read leaves the definition uncached, as it was.
-     *
      * @param  array<string, array<string, Closure(): void>>  $refills
      */
     private function cacheTransactionDefinitions(array $refills): void

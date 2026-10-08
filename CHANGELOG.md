@@ -642,6 +642,9 @@ have to make, with the 7.x and 8.0 forms side by side.
 - An index key longer than the engine allows throws `Exception\Index` (`Index key length exceeds the maximum`) on
   MariaDB and MySQL, and an index row too large throws `Exception\Limit` (`Index row size exceeds the maximum`) on
   PostgreSQL, as 7.4.1 does. Both threw a raw `PDOException`.
+- A document stored before an attribute became required, and so holding null for it, can be updated and upserted
+  without a value for that attribute, as 7.4.1 does; every write failed with `Missing required attribute`. Creating a
+  document without it, or clearing a stored value, still fails.
 - `updateAttribute()` no longer fails on MongoDB, Memory and Redis when a key or unique index covers the attribute
   (the index was compared with itself).
 - `Validator\IndexDefinition` rejects an index definition without a type, with an unknown type, or a TTL index

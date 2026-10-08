@@ -1319,6 +1319,232 @@ trait RelationshipTests
 
 
 
+    public function testCreateWithExistingNestedRelationship(): void
+    {
+        $database = $this->getDatabase();
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        foreach ([
+            [Database::RELATION_ONE_TO_ONE, true, false],
+            [Database::RELATION_ONE_TO_MANY, false, false],
+            [Database::RELATION_ONE_TO_MANY, true, false],
+            [Database::RELATION_MANY_TO_ONE, false, true],
+            [Database::RELATION_MANY_TO_ONE, true, true],
+        ] as $index => [$type, $twoWay, $inverse]) {
+            $parents = 'nestedParents' . $index;
+            $children = 'nestedChildren' . $index;
+            $details = 'nestedDetails' . $index;
+            $permissions = [Permission::read(Role::any()), Permission::update(Role::any())];
+
+            $database->createCollection($parents, documentSecurity: true);
+            $database->createCollection($children, documentSecurity: true);
+            $database->createCollection($details, documentSecurity: true);
+            $database->createAttribute($children, 'name', Database::VAR_STRING, 50, true);
+            $database->createAttribute($details, 'note', Database::VAR_STRING, 50, true);
+            $database->createRelationship(
+                $inverse ? $children : $parents,
+                $inverse ? $parents : $children,
+                $type,
+                $twoWay,
+                $inverse ? 'parent' : 'child',
+                $inverse ? 'child' : 'parent'
+            );
+            $database->createRelationship($children, $details, Database::RELATION_ONE_TO_ONE, false, 'details', 'child');
+            $database->createDocument($children, new Document([
+                '$id' => 'existing',
+                '$permissions' => $permissions,
+                'name' => 'before',
+            ]));
+
+            $child = new Document([
+                '$id' => 'existing',
+                'name' => 'after',
+                'details' => new Document([
+                    '$id' => 'newDetail',
+                    '$permissions' => $permissions,
+                    'note' => 'nested update',
+                ]),
+            ]);
+            $multiple = $type !== Database::RELATION_ONE_TO_ONE;
+            $created = $database->createDocument($parents, new Document([
+                '$id' => 'newParent',
+                '$permissions' => $permissions,
+                'child' => $multiple ? [$child] : $child,
+            ]));
+
+            if (!$inverse || $twoWay) {
+                $related = $created->getAttribute('child');
+                if ($multiple) {
+                    $this->assertCount(1, $related, $type . ' twoWay=' . (int) $twoWay);
+                }
+                $this->assertSame('existing', ($multiple ? $related[0] : $related)->getId());
+            }
+
+            $parent = $database->getDocument($parents, 'newParent');
+            $this->assertFalse($parent->isEmpty());
+            if (!$inverse || $twoWay) {
+                $related = $parent->getAttribute('child');
+                if ($multiple) {
+                    $this->assertCount(1, $related, $type . ' twoWay=' . (int) $twoWay);
+                }
+                $this->assertSame('existing', ($multiple ? $related[0] : $related)->getId());
+            }
+
+            $stored = $database->getDocument($children, 'existing');
+            $this->assertSame('after', $stored->getAttribute('name'));
+            $this->assertSame('newDetail', $stored->getAttribute('details')->getId());
+            $this->assertSame('nested update', $database->getDocument($details, 'newDetail')->getAttribute('note'));
+            if ($twoWay || $inverse) {
+                $this->assertSame('newParent', $stored->getAttribute('parent')->getId());
+            }
+
+            $database->deleteCollection($parents);
+            $database->deleteCollection($children);
+            $database->deleteCollection($details);
+        }
+    }
+
+    public function testCreateWithExistingNestedRelationshipFailure(): void
+    {
+        $database = $this->getDatabase();
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        foreach (['read', 'update', 'duplicate'] as $failure) {
+            $parents = 'nestedFailureParents' . $failure;
+            $children = 'nestedFailureChildren' . $failure;
+            $details = 'nestedFailureDetails' . $failure;
+            $permissions = [Permission::read(Role::any()), Permission::update(Role::any())];
+            $childPermissions = match ($failure) {
+                'read' => [Permission::update(Role::any())],
+                'update' => [Permission::read(Role::any())],
+                default => $permissions,
+            };
+            $database->createCollection($parents, documentSecurity: true);
+            $database->createCollection($children, documentSecurity: true);
+            $database->createCollection($details, documentSecurity: true);
+            $database->createAttribute($children, 'name', Database::VAR_STRING, 50, true);
+            $database->createAttribute($details, 'note', Database::VAR_STRING, 50, true);
+            $database->createRelationship($parents, $children, Database::RELATION_ONE_TO_ONE, true, 'child', 'parent');
+            $database->createRelationship($children, $details, Database::RELATION_ONE_TO_ONE, false, 'details', 'child');
+            $database->createDocument($children, new Document([
+                '$id' => 'existing',
+                '$permissions' => $childPermissions,
+                'name' => 'before',
+            ]));
+            if ($failure === 'duplicate') {
+                $database->createDocument($parents, new Document([
+                    '$id' => 'originalParent',
+                    '$permissions' => $permissions,
+                    'child' => 'existing',
+                ]));
+            }
+
+            $parent = [
+                '$id' => 'rejectedParent',
+                '$permissions' => $permissions,
+                'child' => [
+                    '$id' => 'existing',
+                    'name' => 'after',
+                    'details' => [
+                        '$id' => 'rejectedDetail',
+                        '$permissions' => $permissions,
+                        'note' => 'must roll back',
+                    ],
+                ],
+            ];
+            try {
+                $database->createDocument($parents, new Document($parent));
+                $this->fail('Expected nested write to reject ' . $failure);
+            } catch (AuthorizationException|DuplicateException $e) {
+                if ($failure === 'update') {
+                    $this->assertInstanceOf(AuthorizationException::class, $e);
+                } else {
+                    $this->assertInstanceOf(DuplicateException::class, $e);
+                }
+            }
+
+            $database->getAuthorization()->skip(function () use ($database, $parents, $children, $details, $failure) {
+                $this->assertTrue($database->getDocument($parents, 'rejectedParent')->isEmpty());
+                $this->assertTrue($database->getDocument($details, 'rejectedDetail')->isEmpty());
+                $stored = $database->getDocument($children, 'existing');
+                $this->assertSame('before', $stored->getAttribute('name'));
+                if ($failure === 'duplicate') {
+                    $this->assertSame('originalParent', $stored->getAttribute('parent')->getId());
+                }
+            });
+
+            if ($failure === 'update') {
+                $database->getAuthorization()->skip(fn () => $database->updateDocument($children, 'existing', new Document([
+                    '$permissions' => $permissions,
+                ])));
+
+                // A failed nested write must not leave its pending edge active.
+                $database->updateDocument($children, 'existing', new Document(['parent' => 'rejectedParent']));
+                $stored = $database->skipRelationships(fn () => $database->getDocument($children, 'existing'));
+                $this->assertNull($stored->getAttribute('parent'));
+
+                $database->createDocument($parents, new Document($parent));
+                $stored = $database->getDocument($children, 'existing');
+                $this->assertSame('rejectedParent', $stored->getAttribute('parent')->getId());
+                $this->assertSame('after', $stored->getAttribute('name'));
+                $this->assertSame('rejectedDetail', $stored->getAttribute('details')->getId());
+            }
+
+            $database->deleteCollection($parents);
+            $database->deleteCollection($children);
+            $database->deleteCollection($details);
+        }
+    }
+
+    public function testCreateWithExistingNestedRelationshipDepthPermission(): void
+    {
+        $database = $this->getDatabase();
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection('nestedDepthRoots', documentSecurity: true);
+        $database->createCollection('nestedDepthParents', documentSecurity: true);
+        $database->createCollection('nestedDepthChildren', documentSecurity: true);
+        $database->createRelationship('nestedDepthRoots', 'nestedDepthParents', Database::RELATION_ONE_TO_MANY, true, 'parents', 'root');
+        $database->createRelationship('nestedDepthParents', 'nestedDepthChildren', Database::RELATION_ONE_TO_MANY, true, 'children', 'parent');
+        $database->createDocument('nestedDepthChildren', new Document([
+            '$id' => 'existing',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $permissions = [Permission::read(Role::any()), Permission::update(Role::any())];
+
+        try {
+            $database->createDocument('nestedDepthRoots', new Document([
+                '$id' => 'root',
+                '$permissions' => $permissions,
+                'parents' => [new Document([
+                    '$id' => 'parent',
+                    '$permissions' => $permissions,
+                    'children' => [new Document(['$id' => 'existing'])],
+                ])],
+            ]));
+            $this->fail('Linking the existing child still requires update permission at the depth limit.');
+        } catch (AuthorizationException $e) {
+            $this->assertStringContainsString('update', $e->getMessage());
+        }
+
+        $this->assertTrue($database->getDocument('nestedDepthRoots', 'root')->isEmpty());
+        $this->assertTrue($database->getDocument('nestedDepthParents', 'parent')->isEmpty());
+        $this->assertNull($database->getDocument('nestedDepthChildren', 'existing')->getAttribute('parent'));
+
+        $database->deleteCollection('nestedDepthRoots');
+        $database->deleteCollection('nestedDepthParents');
+        $database->deleteCollection('nestedDepthChildren');
+    }
+
     public function testUpdateAttributeRenameRelationshipTwoWay(): void
     {
         /** @var Database $database */

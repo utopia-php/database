@@ -212,7 +212,7 @@ class Structure extends Validator
         }
 
         foreach ($attributes as $attribute) {
-            if ($attribute->required && ! isset($structure[$attribute->key])) {
+            if ($attribute->required && ! isset($structure[$attribute->key]) && ! $this->isStoredAsNull($attribute->key)) {
                 $this->message = 'Missing required attribute "'.$attribute->key.'"';
 
                 return false;
@@ -220,6 +220,14 @@ class Structure extends Validator
         }
 
         return true;
+    }
+
+    /**
+     * A document stored before the attribute became required holds null for it, and may keep it.
+     */
+    private function isStoredAsNull(string $key): bool
+    {
+        return $this->currentDocument !== null && $this->currentDocument->getAttribute($key) === null;
     }
 
     /**
@@ -281,7 +289,7 @@ class Structure extends Validator
             $signed = $attribute->signed;
             $required = $attribute->required;
 
-            if ($required === false && is_null($value)) {
+            if (is_null($value) && ($required === false || $this->isStoredAsNull($key))) {
                 continue;
             }
 

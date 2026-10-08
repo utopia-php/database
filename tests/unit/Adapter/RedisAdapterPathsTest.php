@@ -17,6 +17,7 @@ use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Transaction as TransactionException;
+use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Index;
 use Utopia\Database\Operator;
@@ -111,8 +112,8 @@ final class RedisAdapterPathsTest extends TestCase
         try {
             $adapter->createIndex(self::NOTES, Index::unique(key: 'unique_title', attributes: ['title']));
             $this->fail('A unique index over duplicate values must be refused');
-        } catch (DuplicateException $exception) {
-            $this->assertSame('Cannot create unique index: existing rows already contain duplicate values', $exception->getMessage());
+        } catch (UniqueException $exception) {
+            $this->assertSame(UniqueException::MESSAGE, $exception->getMessage());
         }
 
         $this->assertTrue($adapter->createIndex(self::NOTES, Index::key(key: 'by_title', attributes: ['title'])));

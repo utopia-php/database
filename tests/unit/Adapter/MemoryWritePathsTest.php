@@ -12,6 +12,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Index;
 use Utopia\Database\Operator;
 use Utopia\Database\Permission;
@@ -50,8 +51,8 @@ final class MemoryWritePathsTest extends TestCase
         $this->storeAddress($adapter, 'first', 'x');
         $this->storeAddress($adapter, 'second', 'x');
 
-        $this->expectException(DuplicateException::class);
-        $this->expectExceptionMessage('Cannot create unique index: existing rows already contain duplicate values');
+        $this->expectException(UniqueException::class);
+        $this->expectExceptionMessage(UniqueException::MESSAGE);
         $adapter->createIndex(self::COLLECTION, Index::unique(key: 'unique_addr', attributes: ['addr']));
     }
 

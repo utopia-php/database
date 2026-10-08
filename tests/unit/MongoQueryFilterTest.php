@@ -186,6 +186,22 @@ final class MongoQueryFilterTest extends TestCase
         $this->assertTrue($this->calls['createIndexes'][0]['unique'] ?? false);
     }
 
+    public function testUniqueIndexOnAnUntypedAttributeCoversEveryValueButNull(): void
+    {
+        $any = ['$exists' => true, '$type' => ['string', 'int', 'long', 'double', 'decimal', 'bool', 'date', 'object', 'objectId']];
+        $adapter = $this->createAdapter();
+
+        $adapter->createIndex(self::COLLECTION, Index::unique(key: 'created_unique', attributes: ['$createdAt']), ['name' => ColumnType::String->value]);
+        $adapter->createIndex(self::COLLECTION, Index::unique(key: 'free_unique', attributes: ['free']));
+        $adapter->createCollection('created', [], [Index::unique(key: 'free_name', attributes: ['free', 'name'])]);
+
+        $filters = $this->partialFilters();
+
+        $this->assertSame(['_createdAt' => $any], $filters['created_unique'] ?? null, 'An internal attribute has no declared type, so its unique index must cover every stored type');
+        $this->assertSame(['free' => $any], $filters['free_unique'] ?? null, 'A schemaless attribute has no declared type, so its unique index must cover every stored type');
+        $this->assertSame(['free' => $any, 'name' => $any], $filters['free_name'] ?? null, 'createCollection() must map an undeclared attribute as createIndex() does');
+    }
+
     public function testDottedAttributesAreRenamedAndDeletedByTheirStoredName(): void
     {
         $adapter = $this->createAdapter();

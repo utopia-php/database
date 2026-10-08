@@ -20,6 +20,7 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Character as CharacterException;
 use Utopia\Database\Exception\Contention as ContentionException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Operator as OperatorException;
@@ -536,6 +537,10 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
         try {
             return $this->executeStatement($sql, Event::IndexCreate);
         } catch (PDOException $error) {
+            if ($error->getCode() === '23000' && isset($error->errorInfo[1]) && $error->errorInfo[1] === 1062) {
+                throw new UniqueException(UniqueException::MESSAGE, $error->getCode(), $error);
+            }
+
             throw $this->processException($error);
         }
     }
@@ -1549,6 +1554,10 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
 
         if ($e->getCode() === '42000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1061) {
             return new DuplicateException('Index already exists', $e->getCode(), $e);
+        }
+
+        if ($e->getCode() === '42000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1071) {
+            return new IndexException('Index key length exceeds the maximum', $e->getCode(), $e);
         }
 
         if ($e->getCode() === '23000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1062) {

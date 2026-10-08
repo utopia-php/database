@@ -922,6 +922,10 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         try {
             return $this->executeStatement($sql, $event);
         } catch (PDOException $error) {
+            if ($error->getCode() === '23505' && isset($error->errorInfo[1]) && $error->errorInfo[1] === 7) {
+                throw new UniqueException(UniqueException::MESSAGE, $error->getCode(), $error);
+            }
+
             throw $this->processException($error);
         }
     }
@@ -1935,6 +1939,10 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
 
         if ($e->getCode() === '22008' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
             return new LimitException('Datetime field overflow', $e->getCode(), $e);
+        }
+
+        if ($e->getCode() === '54000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7 && \str_contains($e->getMessage(), 'index row')) {
+            return new LimitException('Index row size exceeds the maximum', $e->getCode(), $e);
         }
 
         if ($e->getCode() === '42P01' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {

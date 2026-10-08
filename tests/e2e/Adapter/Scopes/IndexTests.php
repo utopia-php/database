@@ -19,6 +19,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
@@ -127,6 +128,108 @@ trait IndexTests
         $database->deleteIndex('indexes', 'index1');
 
         $database->deleteCollection('indexes');
+    }
+
+    public function testCreateUniqueIndexOverDuplicates(): void
+    {
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::IndexUnique)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'uniqueOverDuplicates';
+        $objectPaths = $database->getAdapter() instanceof Postgres && $database->getAdapter()->supports(Capability::Objects);
+
+        $database->createCollection(Collection::create(id: $collection, attributes: [
+            Attribute::string(key: 'name', size: 128),
+            Attribute::integer(key: 'age'),
+            ...($objectPaths ? [Attribute::object(key: 'data')] : []),
+        ], permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ], documentSecurity: false));
+
+        try {
+            foreach (['first', 'second'] as $id) {
+                $database->createDocument($collection, new Document([
+                    '$id' => $id,
+                    'name' => 'chester',
+                    'age' => 7,
+                    ...($objectPaths ? ['data' => ['country' => 'au']] : []),
+                ]));
+            }
+
+            foreach ($objectPaths ? ['name', 'age', 'data.country'] : ['name', 'age'] as $attribute) {
+                $key = 'unique_'.\str_replace('.', '_', $attribute);
+
+                $error = null;
+                try {
+                    $database->createIndex($collection, Index::unique(key: $key, attributes: [$attribute]));
+                } catch (Throwable $caught) {
+                    $error = $caught;
+                }
+
+                $this->assertInstanceOf(UniqueException::class, $error, 'A unique index on '.$attribute.' over duplicate values must be refused as Unique');
+
+                $keys = \array_map(static fn (Index $index): string => $index->key, $database->getCollection($collection)->indexes());
+                $this->assertNotContains($key, $keys, 'A refused unique index on '.$attribute.' must leave no metadata behind');
+            }
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
+    public function testIndexKeyOverTheEngineLimitIsRefused(): void
+    {
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if (! $adapter instanceof MariaDB && ! $adapter instanceof Postgres) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'indexKeyOverLimit';
+        $database->createCollection(Collection::create(id: $collection, attributes: [
+            Attribute::string(key: 'first', size: 768),
+            Attribute::string(key: 'second', size: 768),
+            Attribute::string(key: 'note', size: 20000),
+        ], permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ], documentSecurity: false));
+
+        try {
+            $error = null;
+            if ($adapter instanceof MariaDB) {
+                try {
+                    $adapter->createIndex($collection, Index::key(key: 'wide', attributes: ['first', 'second'], lengths: [768, 768]));
+                } catch (Throwable $caught) {
+                    $error = $caught;
+                }
+
+                $this->assertInstanceOf(IndexException::class, $error, 'A key longer than the engine allows must be refused as an Index error');
+                $this->assertSame('Index key length exceeds the maximum', $error->getMessage());
+
+                return;
+            }
+
+            $database->createDocument($collection, new Document(['note' => \bin2hex(\random_bytes(8000))]));
+            try {
+                $adapter->createIndex($collection, Index::key(key: 'by_note', attributes: ['note']));
+            } catch (Throwable $caught) {
+                $error = $caught;
+            }
+
+            $this->assertInstanceOf(LimitException::class, $error, 'An index row larger than the engine allows must be refused as a Limit');
+            $this->assertSame('Index row size exceeds the maximum', $error->getMessage());
+        } finally {
+            $database->deleteCollection($collection);
+        }
     }
 
     public function testIndexLengthZero(): void
@@ -1328,6 +1431,24 @@ trait IndexTests
         $this->assertMongoUniqueIndexRejectsDuplicates($database, $collection, 'price', 9.5);
         $this->assertMongoUniqueIndexRejectsDuplicates($database, $collection, 'active', true);
         $this->assertMongoUniqueIndexRejectsDuplicates($database, $collection, 'seenAt', '2026-01-01T00:00:00.000+00:00');
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testMongoUniqueIndexOnAnUntypedAttributeIsEnforced(): void
+    {
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter() instanceof Mongo) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = $this->createMongoUniqueIndexCollection($database, []);
+        $database->createIndex($collection, Index::unique(key: 'created_unique', attributes: ['$createdAt']));
+
+        $database->withPreserveDates(true, fn () => $this->assertMongoUniqueIndexRejectsDuplicates($database, $collection, '$createdAt', '2026-01-01T00:00:00.000+00:00'));
 
         $database->deleteCollection($collection);
     }

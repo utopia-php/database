@@ -12,6 +12,7 @@ use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Attribute;
+use Utopia\Database\AttributeUpdate;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\CollectionUpdate;
@@ -338,6 +339,59 @@ trait DocumentTests
         self::$incDecFixtureDoc = $document;
 
         return $document;
+    }
+
+    public function testDocumentWithANullRequiredAttributeStaysUpdatable(): void
+    {
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::DefinedAttributes)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'storedNullRequired';
+        $database->createCollection(Collection::create(id: $collection, attributes: [
+            Attribute::string(key: 'title', size: 64),
+            Attribute::string(key: 'note', size: 64),
+        ], permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+        ], documentSecurity: false));
+
+        try {
+            $database->createDocument($collection, new Document(['$id' => 'legacy', 'note' => 'first']));
+            $database->updateAttribute($collection, 'title', new AttributeUpdate(required: true));
+
+            $updated = $database->updateDocument($collection, 'legacy', new Document(['note' => 'second']));
+            $this->assertSame('second', $updated->getAttribute('note'));
+            $this->assertNull($updated->getAttribute('title'));
+
+            if ($database->getAdapter()->hasFeature(Feature\Upserts::class)) {
+                $upserted = $database->upsertDocument($collection, new Document(['$id' => 'legacy', 'note' => 'third']));
+                $this->assertSame('third', $upserted->getAttribute('note'));
+                $this->assertNull($upserted->getAttribute('title'));
+            }
+
+            try {
+                $database->createDocument($collection, new Document(['$id' => 'fresh', 'note' => 'first']));
+                $this->fail('A new document must hold a value for a required attribute');
+            } catch (StructureException $error) {
+                $this->assertSame('Invalid document structure: Missing required attribute "title"', $error->getMessage());
+            }
+
+            $database->updateDocument($collection, 'legacy', new Document(['title' => 'named']));
+            try {
+                $database->updateDocument($collection, 'legacy', new Document(['title' => null]));
+                $this->fail('A stored value of a required attribute must not be cleared');
+            } catch (StructureException $error) {
+                $this->assertSame('Invalid document structure: Missing required attribute "title"', $error->getMessage());
+            }
+        } finally {
+            $database->deleteCollection($collection);
+        }
     }
 
     public function testBigintSequence(): void

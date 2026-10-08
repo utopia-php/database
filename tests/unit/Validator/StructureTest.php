@@ -254,6 +254,36 @@ class StructureTest extends TestCase
         $this->assertEquals('Invalid document structure: Missing required attribute "title"', $validator->getDescription());
     }
 
+    public function test_required_key_stored_as_null(): void
+    {
+        $profile = Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]);
+        $document = [
+            '$collection' => Id::custom('posts'),
+            'description' => 'Demo description',
+            'rating' => 5,
+            'price' => 1.99,
+            'published' => true,
+            'feedback' => 'team@appwrite.io',
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
+        ];
+
+        $validator = new Structure(new Document($this->collection), $profile, currentDocument: new Document(['title' => null]));
+
+        $this->assertTrue($validator->isValid(new Document($document)), $validator->getDescription());
+        $this->assertTrue($validator->isValid(new Document([...$document, 'title' => null])), $validator->getDescription());
+
+        $validator = new Structure(new Document($this->collection), $profile, currentDocument: new Document(['title' => 'My Title']));
+
+        $this->assertFalse($validator->isValid(new Document([...$document, 'title' => null])));
+        $this->assertSame('Invalid document structure: Missing required attribute "title"', $validator->getDescription());
+
+        $validator = new Structure(new Document($this->collection), $profile);
+
+        $this->assertFalse($validator->isValid(new Document($document)));
+        $this->assertSame('Invalid document structure: Missing required attribute "title"', $validator->getDescription());
+    }
+
     public function test_null_values(): void
     {
         $validator = new Structure(

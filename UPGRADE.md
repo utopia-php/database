@@ -1,6 +1,6 @@
 # Upgrading from 7.x to 8.0
 
-This guide lists the changes you may need to make when you move from utopia-php/database 7.x (last release 7.4.0)
+This guide lists the changes you may need to make when you move from utopia-php/database 7.x (last release 7.4.1)
 to 8.0. [CHANGELOG.md](CHANGELOG.md) lists everything that is new in 8.0. If you built against the unreleased
 `feat-query-lib` branch, also read [Changes since the 8.0 pre-releases](#changes-since-the-80-pre-releases).
 
@@ -1091,7 +1091,9 @@ coroutine that opened it and the coroutines it starts; see [Pools and profiling]
   (7.x: `Unique index violation`). The class and its hierarchy are unchanged: `Unique` extends `Duplicate`, and a
   conflicting document `$id` still throws a plain `Duplicate` with `Document already exists`. Match on the class,
   not the message: catch `Unique` before `Duplicate` to tell the two apart. `Exception\Unique` has no constructor of
-  its own and never rewrites the message it is given. The message is `Exception\Unique::MESSAGE`.
+  its own and never rewrites the message it is given. The message is `Exception\Unique::MESSAGE`, also when
+  `createIndex()` refuses a unique index over documents that already share a value (7.4.1: `Unique index violation`,
+  and `Cannot create unique index: existing rows already contain duplicate values` on Redis).
 - **`ignoreDuplicates()` on PostgreSQL** skips only a document whose id is stored, as in 7.x: a new id that collides
   on another unique index throws `Utopia\Database\Exception\Unique`. MariaDB, MySQL and SQLite cannot name the
   index to ignore and, as in 7.x, skip such a row without error.
@@ -1696,7 +1698,9 @@ as wildcards and a backslash as a literal character.
   whatever its type, so a unique index on an integer, big integer, float, boolean or datetime attribute covered no
   document and accepted duplicates. `createCollection()` required `int` for integers, `long` for big integers and
   `double` for floats, which left out integers past 32 bits, big integers inside 32 bits and floats stored as
-  integers. 8.0 requires every type a value of the attribute can be stored as.
+  integers. 8.0 requires every type a value of the attribute can be stored as, and any type but null for an
+  attribute without a declared type (an internal attribute such as `$createdAt`, or any attribute of a schemaless
+  collection), as 7.4.1 does.
 - Key indexes: both paths added a `$type` clause, and MongoDB uses a partial index only for queries that imply its
   filter, which a filter on a value never does for `$type`. No query used these indexes, whatever the attribute
   type. 8.0 gives a key index `{first attribute: {$exists: true}}` only, which a filter on a non-null value of that
@@ -1709,7 +1713,8 @@ database after upgrading. It covers both changes, so one rebuild is enough.
    (`Database::getCollection()`), and pick:
    - every index of type `key`, whatever its attributes' types;
    - every index of type `unique` with at least one attribute of type `integer`, `biginteger` (stored as `bigint`),
-     `float`, `double`, `boolean` or `datetime`.
+     `float`, `double`, `boolean` or `datetime`, or one without a declared type (an internal attribute, or any
+     attribute in a schemaless database).
 2. For a `unique` index, look for duplicates first, because the rebuilt index enforces uniqueness and its creation
    fails (error `11000`, `Exception\Duplicate` or `Exception\Unique`) while duplicates exist. Group the documents that
    hold a value for every attribute of the index by those attributes (and by `_tenant` under shared tables), and list
@@ -1728,8 +1733,8 @@ database after upgrading. It covers both changes, so one rebuild is enough.
    calls the collection has no such index: a unique constraint is not enforced and queries do not use it, so run the
    step when the collection takes no writes. A key index needs no duplicate check.
 
-Unique indexes whose attributes are all strings (`string`, `varchar`, `text`, `mediumtext`, `longtext`, `id`,
-`uuid7`), fulltext and TTL indexes, and the internal `_uid`, `_createdAt`, `_updatedAt` and `_permissions` indexes
+Unique indexes whose attributes are all declared strings (`string`, `varchar`, `text`, `mediumtext`, `longtext`,
+`id`, `uuid7`), fulltext and TTL indexes, and the internal `_uid`, `_createdAt`, `_updatedAt` and `_permissions` indexes
 need no rebuild. You can tell a rebuilt index by its `partialFilterExpression` (`db.<collection>.getIndexes()`): a
 key index names only its first field, with no `$type`, and a unique index on an integer attribute has
 `$type: ['int', 'long']`.

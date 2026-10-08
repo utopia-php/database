@@ -636,6 +636,20 @@ have to make, with the 7.x and 8.0 forms side by side.
 - `createIndex()` compares an index that exists in the schema but not in the metadata with the request (columns,
   prefix lengths, key, unique, fulltext or spatial) on adapters with schema index introspection: a match is adopted,
   a mismatch is dropped and recreated, as in 7.3.12.
+- `createIndex()` and `createIndexes()` refuse a unique index over documents that already share a value with
+  `Exception\Unique` and keep no metadata for it, as 7.4.1 does. The adapter's error was taken for an index already
+  in the schema, so the index was recorded without being built; SQLite threw a raw `PDOException` instead.
+- An index key longer than the engine allows throws `Exception\Index` (`Index key length exceeds the maximum`) on
+  MariaDB and MySQL, and an index row too large throws `Exception\Limit` (`Index row size exceeds the maximum`) on
+  PostgreSQL, as 7.4.1 does. Both threw a raw `PDOException`.
+- A document stored before an attribute became required, and so holding null for it, can be updated and upserted
+  without a value for that attribute, as 7.4.1 does; every write failed with `Missing required attribute`. Creating a
+  document without it, or clearing a stored value, still fails.
+- PostgreSQL: `distanceLessThan()` uses the spatial index; `ST_Distance()` alone cannot, so a radius query filtered
+  every row. It leads with `ST_DWithin()` on the geometry, or, for a distance in meters from a point to a point
+  attribute, with a degree box that holds every point in range. Lines, polygons and boxes that would reach a pole or
+  the antimeridian keep the exact comparison only, which stays in every case, so the boundary is still exclusive. 7.x
+  carries the same fix after 7.4.1.
 - `updateAttribute()` no longer fails on MongoDB, Memory and Redis when a key or unique index covers the attribute
   (the index was compared with itself).
 - `Validator\IndexDefinition` rejects an index definition without a type, with an unknown type, or a TTL index
@@ -701,7 +715,9 @@ have to make, with the 7.x and 8.0 forms side by side.
 - MongoDB: unique indexes that `createIndex()` creates on integer, big integer, float, boolean and datetime
   attributes reject duplicates; their partial filter required a string value, so they covered no document. Unique
   indexes created by `createCollection()` also cover integers past 32 bits, big integers inside 32 bits and floats
-  stored as integers. Key indexes are used by queries: their partial filter now requires only that the index's first
+  stored as integers. A unique index on an attribute without a declared type (an internal attribute such as
+  `$createdAt`, or any attribute of a schemaless collection) covers every value but null, as 7.4.1 does; it required
+  a string. Key indexes are used by queries: their partial filter now requires only that the index's first
   attribute exists. Existing indexes keep their old filter until they are rebuilt: see
   [MongoDB: rebuild key and unique indexes](UPGRADE.md#mongodb-rebuild-key-and-unique-indexes).
 - MongoDB: `containsAll()` works on `find()` (it matched nothing there, while `count()` and `sum()` worked); renaming

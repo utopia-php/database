@@ -31,6 +31,7 @@ class MySQL extends MariaDB
      *
      * @return array<Capability>
      */
+    #[\Override]
     public function capabilities(): array
     {
         $remove = [
@@ -57,6 +58,7 @@ class MySQL extends MariaDB
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function getSizeOfCollectionOnDisk(string $collection): int
     {
         $collection = $this->filter($collection);
@@ -93,6 +95,7 @@ class MySQL extends MariaDB
         return $size;
     }
 
+    #[\Override]
     protected function processException(PDOException $e): Exception
     {
         if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1366) {
@@ -121,6 +124,7 @@ class MySQL extends MariaDB
         return parent::processException($e);
     }
 
+    #[\Override]
     protected function createBuilder(): SQLBuilder
     {
         return new MySQLBuilder();
@@ -166,6 +170,7 @@ class MySQL extends MariaDB
      * @param bool $required Whether the column is NOT NULL
      * @return string
      */
+    #[\Override]
     protected function getSpatialSqlType(string $type, bool $required): string
     {
         switch ($type) {
@@ -219,6 +224,7 @@ class MySQL extends MariaDB
      * Get the spatial axis order specification string for MySQL
      * MySQL with SRID 4326 expects lat-long by default, but our data is in long-lat format
      */
+    #[\Override]
     protected function getSpatialAxisOrder(): string
     {
         return "'axis-order=long-lat'";
@@ -228,6 +234,7 @@ class MySQL extends MariaDB
      * Get SQL expression for operator
      * Override for MySQL-specific operator implementations
      */
+    #[\Override]
     protected function getOperatorSql(string $column, Operator $operator, int &$bindIndex): ?string
     {
         $quotedColumn = $this->quote($column);

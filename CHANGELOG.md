@@ -707,7 +707,9 @@ have to make, with the 7.x and 8.0 forms side by side.
 - MongoDB: unique indexes that `createIndex()` creates on integer, big integer, float, boolean and datetime
   attributes reject duplicates; their partial filter required a string value, so they covered no document. Unique
   indexes created by `createCollection()` also cover integers past 32 bits, big integers inside 32 bits and floats
-  stored as integers. Key indexes are used by queries: their partial filter now requires only that the index's first
+  stored as integers. A unique index on an attribute without a declared type (an internal attribute such as
+  `$createdAt`, or any attribute of a schemaless collection) covers every value but null, as 7.4.1 does; it required
+  a string. Key indexes are used by queries: their partial filter now requires only that the index's first
   attribute exists. Existing indexes keep their old filter until they are rebuilt: see
   [MongoDB: rebuild key and unique indexes](UPGRADE.md#mongodb-rebuild-key-and-unique-indexes).
 - MongoDB: `containsAll()` works on `find()` (it matched nothing there, while `count()` and `sum()` worked); renaming

@@ -914,7 +914,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
                 if (in_array($indexType, [IndexType::Unique, IndexType::Key])) {
                     $fields = [];
                     foreach ($index->attributes as $indexedAttribute) {
-                        $attributeType = ColumnType::String;
+                        $attributeType = null;
                         foreach ($attributes as $collectionAttribute) {
                             if ($collectionAttribute->key === $indexedAttribute) {
                                 $attributeType = $collectionAttribute->type;
@@ -3602,12 +3602,12 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         };
     }
 
-    private static function indexedColumnType(string $type): ColumnType
+    private static function indexedColumnType(string $type): ?ColumnType
     {
         try {
             return Attribute::typeFromStored($type);
         } catch (StructureException) {
-            return ColumnType::String;
+            return null;
         }
     }
 
@@ -3944,7 +3944,8 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      * never collide. A key index requires only its leading field to exist, so a filter on that field, alone or with
      * the following ones, can use it.
      *
-     * @param  non-empty-array<string, ColumnType>  $fields  stored field name => attribute type, in index order
+     * @param  non-empty-array<string, ColumnType|null>  $fields  stored field name => attribute type (null when
+     *                                                         unknown), in index order
      * @return array<string, array<string, mixed>>
      */
     private function getPartialFilterExpression(IndexType $type, array $fields): array
@@ -3963,13 +3964,15 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
 
     /**
      * The BSON types a stored value of the column type can have. PHP integers are written as int
-     * or long by magnitude, and a float attribute also accepts integers.
+     * or long by magnitude, and a float attribute also accepts integers. A value of unknown type
+     * (a schemaless or internal attribute) may have any type but null.
      *
      * @return string|list<string>
      */
-    private function getMongoTypeCode(ColumnType $type): string|array
+    private function getMongoTypeCode(?ColumnType $type): string|array
     {
         return match ($type) {
+            null => ['string', 'int', 'long', 'double', 'decimal', 'bool', 'date', 'object', 'objectId'],
             ColumnType::String,
             ColumnType::Varchar,
             ColumnType::Text,

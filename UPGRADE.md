@@ -1696,7 +1696,9 @@ as wildcards and a backslash as a literal character.
   whatever its type, so a unique index on an integer, big integer, float, boolean or datetime attribute covered no
   document and accepted duplicates. `createCollection()` required `int` for integers, `long` for big integers and
   `double` for floats, which left out integers past 32 bits, big integers inside 32 bits and floats stored as
-  integers. 8.0 requires every type a value of the attribute can be stored as.
+  integers. 8.0 requires every type a value of the attribute can be stored as, and any type but null for an
+  attribute without a declared type (an internal attribute such as `$createdAt`, or any attribute of a schemaless
+  collection), as 7.4.1 does.
 - Key indexes: both paths added a `$type` clause, and MongoDB uses a partial index only for queries that imply its
   filter, which a filter on a value never does for `$type`. No query used these indexes, whatever the attribute
   type. 8.0 gives a key index `{first attribute: {$exists: true}}` only, which a filter on a non-null value of that
@@ -1709,7 +1711,8 @@ database after upgrading. It covers both changes, so one rebuild is enough.
    (`Database::getCollection()`), and pick:
    - every index of type `key`, whatever its attributes' types;
    - every index of type `unique` with at least one attribute of type `integer`, `biginteger` (stored as `bigint`),
-     `float`, `double`, `boolean` or `datetime`.
+     `float`, `double`, `boolean` or `datetime`, or one without a declared type (an internal attribute, or any
+     attribute in a schemaless database).
 2. For a `unique` index, look for duplicates first, because the rebuilt index enforces uniqueness and its creation
    fails (error `11000`, `Exception\Duplicate` or `Exception\Unique`) while duplicates exist. Group the documents that
    hold a value for every attribute of the index by those attributes (and by `_tenant` under shared tables), and list
@@ -1728,8 +1731,8 @@ database after upgrading. It covers both changes, so one rebuild is enough.
    calls the collection has no such index: a unique constraint is not enforced and queries do not use it, so run the
    step when the collection takes no writes. A key index needs no duplicate check.
 
-Unique indexes whose attributes are all strings (`string`, `varchar`, `text`, `mediumtext`, `longtext`, `id`,
-`uuid7`), fulltext and TTL indexes, and the internal `_uid`, `_createdAt`, `_updatedAt` and `_permissions` indexes
+Unique indexes whose attributes are all declared strings (`string`, `varchar`, `text`, `mediumtext`, `longtext`,
+`id`, `uuid7`), fulltext and TTL indexes, and the internal `_uid`, `_createdAt`, `_updatedAt` and `_permissions` indexes
 need no rebuild. You can tell a rebuilt index by its `partialFilterExpression` (`db.<collection>.getIndexes()`): a
 key index names only its first field, with no `$type`, and a unique index on an integer attribute has
 `$type: ['int', 'long']`.

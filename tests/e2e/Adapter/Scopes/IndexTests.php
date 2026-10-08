@@ -1435,6 +1435,24 @@ trait IndexTests
         $database->deleteCollection($collection);
     }
 
+    public function testMongoUniqueIndexOnAnUntypedAttributeIsEnforced(): void
+    {
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter() instanceof Mongo) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = $this->createMongoUniqueIndexCollection($database, []);
+        $database->createIndex($collection, Index::unique(key: 'created_unique', attributes: ['$createdAt']));
+
+        $database->withPreserveDates(true, fn () => $this->assertMongoUniqueIndexRejectsDuplicates($database, $collection, '$createdAt', '2026-01-01T00:00:00.000+00:00'));
+
+        $database->deleteCollection($collection);
+    }
+
     public function testMongoKeyIndexesServeEqualityFilters(): void
     {
         $database = $this->getDatabase();

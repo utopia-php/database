@@ -33,6 +33,13 @@ class Postgres extends SQL
     public const MAX_IDENTIFIER_NAME = 63;
 
     /**
+     * Text search configuration for fulltext indexes and search queries.
+     * Matches the default_text_search_config of the official images, which
+     * search relied on implicitly before.
+     */
+    public const FULLTEXT_CONFIG = 'english';
+
+    /**
      * @inheritDoc
      */
     public function rollbackTransaction(): bool
@@ -912,6 +919,11 @@ class Postgres extends SQL
             Database::INDEX_HNSW_COSINE => " USING HNSW ({$attributes} vector_cosine_ops)",
             Database::INDEX_HNSW_DOT => " USING HNSW ({$attributes} vector_ip_ops)",
             Database::INDEX_OBJECT => " USING GIN ({$attributes})",
+            Database::INDEX_FULLTEXT =>
+                " USING GIN (" . implode(', ', array_map(
+                    fn ($attr) => $this->getFulltextVector(trim($attr)),
+                    explode(',', $attributes)
+                )) . ")",
             Database::INDEX_TRIGRAM =>
                 " USING GIN (" . implode(', ', array_map(
                     fn ($attr) => "$attr gin_trgm_ops",
@@ -1741,7 +1753,7 @@ class Postgres extends SQL
                     return '0 = 1';
                 }
                 $binds[":{$placeholder}_0"] = $fulltextValue;
-                return "to_tsvector(regexp_replace({$attribute}, '[^\w]+',' ','g')) @@ websearch_to_tsquery(:{$placeholder}_0)";
+                return "{$this->getFulltextVector($attribute)} @@ websearch_to_tsquery('" . self::FULLTEXT_CONFIG . "', :{$placeholder}_0)";
 
             case Query::TYPE_NOT_SEARCH:
                 $fulltextValue = $this->getFulltextValue($query->getValue());
@@ -1749,7 +1761,7 @@ class Postgres extends SQL
                     return '1 = 1';
                 }
                 $binds[":{$placeholder}_0"] = $fulltextValue;
-                return "NOT (to_tsvector(regexp_replace({$attribute}, '[^\w]+',' ','g')) @@ websearch_to_tsquery(:{$placeholder}_0))";
+                return "NOT ({$this->getFulltextVector($attribute)} @@ websearch_to_tsquery('" . self::FULLTEXT_CONFIG . "', :{$placeholder}_0))";
 
             case Query::TYPE_VECTOR_DOT:
             case Query::TYPE_VECTOR_COSINE:
@@ -1906,6 +1918,19 @@ class Postgres extends SQL
         }
 
         return '(' . \implode(' OR ', $permissions) . ')';
+    }
+
+    /**
+     * Build the tsvector expression used by both fulltext indexes and search queries.
+     * The text search configuration must be explicit so the expression is IMMUTABLE
+     * and can be indexed; both sides must produce the exact same expression.
+     *
+     * @param string $attribute Quoted column name
+     * @return string
+     */
+    protected function getFulltextVector(string $attribute): string
+    {
+        return "to_tsvector('" . self::FULLTEXT_CONFIG . "', regexp_replace({$attribute}, '[^\w]+',' ','g'))";
     }
 
     /**

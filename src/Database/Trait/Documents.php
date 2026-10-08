@@ -27,13 +27,13 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
-use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Order as OrderException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
+use Utopia\Database\Exception\Schema as SchemaException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Type as TypeException;
@@ -546,6 +546,7 @@ trait Documents
         $fillDefinition = $cacheable && $definition && ! $inTransaction;
         $cached = null;
         $collectionEpoch = null;
+        $cacheFailed = false;
         try {
             if ($cacheable && $definition) {
                 $entry = $this->loadCachedDefinition($documentKey, $field);
@@ -557,6 +558,7 @@ trait Documents
                 $cached = $this->loadCachedDocument($documentKey, $field, $epoch);
             }
         } catch (Exception $e) {
+            $cacheFailed = true;
             Console::warning('Warning: Failed to get document from cache: '.$e->getMessage());
         }
 
@@ -727,6 +729,9 @@ trait Documents
 
         if ($transactionDefinition) {
             $this->transactionDefinitions[$this->getEventContext()][$transactionDefinitionKey][$field] = clone $document;
+            if (! $cacheFailed) {
+                $this->queueDefinitionRefill($transactionDefinitionKey, $field, $id);
+            }
         }
 
         $document = $this->decorateDocument(Event::DocumentRead, $collection, $document);
@@ -834,7 +839,7 @@ trait Documents
             try {
                 $kept->attributes();
                 $kept->indexes();
-            } catch (StructureException|IndexException) {
+            } catch (SchemaException) {
                 // Models that do not build fail where a clone's are read, as they would unbuilt.
             }
         }
@@ -902,7 +907,15 @@ trait Documents
             self::DOCUMENT_CACHE_VALUE => $document,
         ], $field, $generation);
 
-        if ($saved !== false && $generation === '0' && $isCurrent !== null && ! $isCurrent()) {
+        if ($saved === false) {
+            $this->definitionFillsFail = $this->cache->getGeneration($documentKey) === $generation;
+
+            return;
+        }
+
+        $this->definitionFillsFail = false;
+
+        if ($generation === '0' && $isCurrent !== null && ! $isCurrent()) {
             $this->cache->purge($documentKey);
         }
     }
@@ -2955,7 +2968,10 @@ trait Documents
         }
         if (isset($this->transactionWrites[$context])) {
             $this->transactionWrites[$context][\strtolower($documentKey)] = true;
-            unset($this->transactionDefinitions[$context][\strtolower($documentKey)]);
+            unset(
+                $this->transactionDefinitions[$context][\strtolower($documentKey)],
+                $this->definitionRefills[$context][\strtolower($documentKey)],
+            );
         }
 
         $this->cache->purge($documentKey);

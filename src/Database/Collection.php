@@ -3,6 +3,7 @@
 namespace Utopia\Database;
 
 use Utopia\Database\Exception\Index as IndexException;
+use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Structure as StructureException;
 
 class Collection extends Document
@@ -135,6 +136,7 @@ class Collection extends Document
      * @return list<Attribute>
      *
      * @throws StructureException
+     * @throws RelationshipException
      */
     public function attributes(): array
     {

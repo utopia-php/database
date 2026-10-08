@@ -3,6 +3,7 @@ includes:
 
 parameters:
     level: max
+    checkMissingOverrideMethodAttribute: true
     paths:
         - src
         - tests

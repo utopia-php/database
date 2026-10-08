@@ -21,14 +21,9 @@ use Utopia\Query\Builder\JoinType;
 use Utopia\Query\Builder\SQL as SQLBuilder;
 use Utopia\Query\Schema\ColumnType;
 
-/**
- * Database adapter for MySQL, extending MariaDB with MySQL-specific behavior and overrides.
- */
 class MySQL extends MariaDB
 {
     /**
-     * Get the list of capabilities supported by the MySQL adapter.
-     *
      * @return array<Capability>
      */
     #[\Override]
@@ -54,8 +49,6 @@ class MySQL extends MariaDB
     }
 
     /**
-     * Get size of collection on disk
-     *
      * @throws DatabaseException
      */
     #[\Override]
@@ -102,7 +95,6 @@ class MySQL extends MariaDB
             return new CharacterException('Invalid character', $e->getCode(), $e);
         }
 
-        // Timeout
         if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 3024) {
             return new TimeoutException('Query timed out', $e->getCode(), $e);
         }
@@ -163,13 +155,6 @@ class MySQL extends MariaDB
         };
     }
 
-    /**
-     * Get the MySQL SQL type definition for spatial column types with SRID support.
-     *
-     * @param string $type The spatial type (point, linestring, polygon)
-     * @param bool $required Whether the column is NOT NULL
-     * @return string
-     */
     #[\Override]
     protected function getSpatialSqlType(string $type, bool $required): string
     {
@@ -221,7 +206,6 @@ class MySQL extends MariaDB
     }
 
     /**
-     * Get the spatial axis order specification string for MySQL
      * MySQL with SRID 4326 expects lat-long by default, but our data is in long-lat format
      */
     #[\Override]
@@ -230,10 +214,6 @@ class MySQL extends MariaDB
         return "'axis-order=long-lat'";
     }
 
-    /**
-     * Get SQL expression for operator
-     * Override for MySQL-specific operator implementations
-     */
     #[\Override]
     protected function getOperatorSql(string $column, Operator $operator, int &$bindIndex): ?string
     {
@@ -264,7 +244,6 @@ class MySQL extends MariaDB
                 ), JSON_ARRAY())";
         }
 
-        // For all other operators, use parent implementation
         return parent::getOperatorSql($column, $operator, $bindIndex);
     }
 }

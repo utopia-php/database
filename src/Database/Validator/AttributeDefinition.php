@@ -89,9 +89,6 @@ class AttributeDefinition extends Validator
         return $this->message;
     }
 
-    /**
-     * Function will return true if object is array.
-     */
     #[\Override]
     public function isArray(): bool
     {

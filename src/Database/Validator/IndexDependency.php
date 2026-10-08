@@ -68,9 +68,6 @@ class IndexDependency extends Validator
         return true;
     }
 
-    /**
-     * Function will return true if object is array.
-     */
     #[\Override]
     public function isArray(): bool
     {

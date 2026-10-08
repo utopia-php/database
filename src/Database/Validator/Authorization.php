@@ -213,9 +213,6 @@ class Authorization extends Validator
         $this->status->set($this->defaultStatus);
     }
 
-    /**
-     * Function will return true if object is array.
-     */
     #[\Override]
     public function isArray(): bool
     {

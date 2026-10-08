@@ -358,9 +358,6 @@ class Base extends Validator
         return $joins;
     }
 
-    /**
-     * Function will return true if object is array.
-     */
     #[\Override]
     public function isArray(): bool
     {

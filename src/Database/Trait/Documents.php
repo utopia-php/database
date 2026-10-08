@@ -693,9 +693,12 @@ trait Documents
             return $this->newDocument($collection->getId(), []);
         }
 
-        $collectionState = $cacheable && $definition
-            ? $this->loadDocumentCacheState($this->getCacheBaseKeys($id)[0])
-            : new Epoch();
+        $describedKey = '';
+        $collectionState = new Epoch();
+        if ($cacheable && $definition) {
+            $describedKey = $this->getCacheBaseKeys($id)[0];
+            $collectionState = $this->loadDocumentCacheState($describedKey);
+        }
 
         $document = $this->castAfterDocument($collection, $document);
 
@@ -744,7 +747,7 @@ trait Documents
                         self::DOCUMENT_CACHE_CHECKED_AT => \time(),
                     ],
                     $generation,
-                    fn (): bool => $this->loadDocumentCacheState($this->getCacheBaseKeys($id)[0])->value === $collectionState->value,
+                    fn (): bool => $this->loadDocumentCacheState($describedKey)->value === $collectionState->value,
                 );
             }
         } catch (Exception $e) {

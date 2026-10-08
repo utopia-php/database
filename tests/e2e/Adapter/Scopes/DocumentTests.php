@@ -5782,7 +5782,7 @@ trait DocumentTests
             ]));
             $this->fail('Failed to throw exception');
         } catch (AuthorizationException $e) {
-            $this->assertStringStartsWith('Missing "update" permission for role "user:asd".', $e->getMessage());
+            $this->assertSame('Missing "update" permission for roles ["any"]. Only ["user:asd"] roles are allowed.', $e->getMessage());
         }
 
         // Check document level permissions

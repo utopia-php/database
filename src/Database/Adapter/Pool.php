@@ -58,6 +58,15 @@ class Pool extends Adapter
     private static \WeakMap $capabilities;
 
     /**
+     * Attribute support each connection had when the pool first handed it
+     * out. A connection keeps whatever its last holder set, so a handle that
+     * never set it is given this back on checkout instead.
+     *
+     * @var \WeakMap<Adapter, bool>
+     */
+    private static \WeakMap $defaultSupportForAttributes;
+
+    /**
      * Attribute support this handle asked for, replayed on every checkout so
      * each connection runs with the value the getter reports.
      */
@@ -80,6 +89,12 @@ class Pool extends Adapter
             /** @var \WeakMap<UtopiaPool<covariant Adapter>, array<string, mixed>> $capabilities */
             $capabilities = new \WeakMap();
             self::$capabilities = $capabilities;
+        }
+
+        if (!isset(self::$defaultSupportForAttributes)) {
+            /** @var \WeakMap<Adapter, bool> $defaults */
+            $defaults = new \WeakMap();
+            self::$defaultSupportForAttributes = $defaults;
         }
     }
 
@@ -111,9 +126,8 @@ class Pool extends Adapter
             $adapter->setSharedTables($this->getSharedTables());
             $adapter->setTenant($this->getTenant());
             $adapter->setAuthorization($this->authorization);
-            if ($this->supportForAttributes !== null) {
-                $adapter->setSupportForAttributes($this->supportForAttributes);
-            }
+            self::$defaultSupportForAttributes[$adapter] ??= $adapter->getSupportForAttributes();
+            $adapter->setSupportForAttributes($this->supportForAttributes ?? self::$defaultSupportForAttributes[$adapter]);
 
             $this->syncTimeouts($adapter);
             $adapter->resetDebug();
@@ -351,9 +365,8 @@ class Pool extends Adapter
             $adapter->setSharedTables($this->getSharedTables());
             $adapter->setTenant($this->getTenant());
             $adapter->setAuthorization($this->authorization);
-            if ($this->supportForAttributes !== null) {
-                $adapter->setSupportForAttributes($this->supportForAttributes);
-            }
+            self::$defaultSupportForAttributes[$adapter] ??= $adapter->getSupportForAttributes();
+            $adapter->setSupportForAttributes($this->supportForAttributes ?? self::$defaultSupportForAttributes[$adapter]);
 
             $this->syncTimeouts($adapter);
             $adapter->resetDebug();

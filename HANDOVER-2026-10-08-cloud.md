@@ -9,7 +9,7 @@ older context. Everything listed here is pushed to `utopia-php/database`.
 | branch | head | what |
 |---|---|---|
 | `qlt-fix/api-w7` | `4c67e22f5` | **Checkpoint C candidate.** `ws-api-redesign` (`ee1936f2c`) + W7-1 + W7-2 docs + BENCH-B fixes. CI dispatched (below). |
-| `ws-api-redesign` = `qlt-fix/api-redesign` | `ee1936f2c` | Unchanged (waves 1-6, CI green). Fast-forward it to the checkpoint-C head once CI and the W7 review are green. |
+| `ws-api-redesign` = `qlt-fix/api-redesign` | `a6dae3be9` | Fast-forwarded to the green W7 + BENCH-B head (see UPDATE). Fast-forward again after the cache work = checkpoint C. |
 | `ws-api-redesign-w7-1` | `096a61fb1` | W7-1 finished (merged into `qlt-fix/api-w7`). |
 | `ws-api-redesign-w7-2` | `af6959fa7` | W7-2 docs (merged into `qlt-fix/api-w7`, then updated there). |
 | `qlt-fix/api-bench-b` | `fef489d49` | BENCH-B fix-forward (merged into `qlt-fix/api-w7`). |
@@ -191,3 +191,5 @@ The probe scripts are in the cloud scratchpad only and are lost with the contain
   - If this session ends before it reports, check `origin/qlt-fix/api-cache`. Re-check its statement/round-trip counts
     against 7.4.0, review it, merge it into `qlt-fix/api-w7`, run CI, and that head is checkpoint C. Then
     fast-forward `ws-api-redesign`.
+- **CI on `a6dae3be9` GREEN** (Tests 37733921911, Linter 37733923663, CodeQL 37733925925). `ws-api-redesign` =
+  `qlt-fix/api-redesign` were fast-forwarded to `a6dae3be9`.

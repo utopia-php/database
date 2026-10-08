@@ -4,6 +4,7 @@ namespace Utopia\Database\Trait;
 
 use Closure;
 use Throwable;
+use Utopia\Console;
 use Utopia\Database\Capability;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
@@ -340,8 +341,8 @@ trait Transactions
 
             try {
                 $this->silent(fn (): Document => $this->getDocument(self::METADATA, $definition->getId()));
-            } catch (Throwable) {
-                // The definition stays uncached; the next read outside a transaction fills it.
+            } catch (Throwable $error) {
+                Console::warning('Warning: Failed to cache collection definition after commit: '.$error->getMessage());
             }
         }
     }

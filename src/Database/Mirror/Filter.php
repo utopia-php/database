@@ -12,11 +12,7 @@ use Utopia\Database\Query;
 abstract class Filter
 {
     /**
-     * Called before any action is executed, when the filter is constructed.
-     *
-     * @param Database $source The source database instance
-     * @param Database|null $destination The destination database instance, or null if unavailable
-     * @return void
+     * A setup hook for whoever owns the filter. Mirror does not call it.
      */
     public function initialize(
         Database $source,
@@ -25,11 +21,7 @@ abstract class Filter
     }
 
     /**
-     * Called after all actions are executed, when the filter is destructed.
-     *
-     * @param Database $source The source database instance
-     * @param Database|null $destination The destination database instance, or null if unavailable
-     * @return void
+     * A teardown hook for whoever owns the filter. Mirror does not call it.
      */
     public function shutdown(
         Database $source,

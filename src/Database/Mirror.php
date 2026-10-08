@@ -231,9 +231,6 @@ class Mirror extends Database
         return $sourceResult;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function setDatabase(string $name): static
     {
         parent::setDatabase($name);
@@ -243,9 +240,6 @@ class Mirror extends Database
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function setNamespace(string $namespace): static
     {
         parent::setNamespace($namespace);
@@ -255,9 +249,6 @@ class Mirror extends Database
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function setSharedTables(bool $sharedTables): static
     {
         parent::setSharedTables($sharedTables);
@@ -267,9 +258,6 @@ class Mirror extends Database
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function setTenant(int|string|null $tenant): static
     {
         parent::setTenant($tenant);
@@ -279,9 +267,6 @@ class Mirror extends Database
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function setMaxQueryValues(int $max): static
     {
         parent::setMaxQueryValues($max);
@@ -291,9 +276,6 @@ class Mirror extends Database
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function setCache(Cache $cache): static
     {
         parent::setCache($cache);
@@ -305,8 +287,6 @@ class Mirror extends Database
 
     /**
      * The query cache is attached to the mirror last, so it takes its name and writer timeout from the mirror.
-     *
-     * {@inheritdoc}
      */
     public function setQueryCache(?ResultCache $queryCache): static
     {
@@ -316,9 +296,6 @@ class Mirror extends Database
         return parent::setQueryCache($queryCache);
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function setCacheName(string $name): static
     {
         parent::setCacheName($name);
@@ -328,9 +305,6 @@ class Mirror extends Database
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function setCacheWriterTimeout(int $seconds): static
     {
         parent::setCacheWriterTimeout($seconds);
@@ -340,9 +314,6 @@ class Mirror extends Database
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function setTenantPerDocument(bool $enabled): static
     {
         parent::setTenantPerDocument($enabled);
@@ -355,8 +326,6 @@ class Mirror extends Database
     /**
      * A destination that cannot apply the timeout is reported through onError(), like a
      * failed destination write: MariaDB applies it on the destination's connection.
-     *
-     * {@inheritdoc}
      */
     public function setTimeout(int $milliseconds, Event $event = Event::All): static
     {
@@ -365,17 +334,11 @@ class Mirror extends Database
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function clearTimeout(Event $event = Event::All): void
     {
         $this->delegateInOrder(__FUNCTION__, \func_get_args());
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function setGlobalCollections(array $collections): static
     {
         parent::setGlobalCollections($collections);
@@ -385,9 +348,6 @@ class Mirror extends Database
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function resetGlobalCollections(): void
     {
         parent::resetGlobalCollections();
@@ -395,9 +355,6 @@ class Mirror extends Database
         $this->destination?->resetGlobalCollections();
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function setMetadata(string $key, mixed $value): static
     {
         parent::setMetadata($key, $value);
@@ -407,9 +364,6 @@ class Mirror extends Database
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function resetMetadata(): void
     {
         parent::resetMetadata();
@@ -428,9 +382,6 @@ class Mirror extends Database
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function setMigrating(bool $migrating): static
     {
         parent::setMigrating($migrating);
@@ -440,9 +391,6 @@ class Mirror extends Database
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function setFilters(Registry $filters): static
     {
         parent::setFilters($filters);
@@ -454,8 +402,6 @@ class Mirror extends Database
 
     /**
      * A destination that cannot apply the setting is reported through onError(), like setTimeout().
-     *
-     * {@inheritdoc}
      */
     public function setLocks(bool $locks): static
     {
@@ -465,9 +411,6 @@ class Mirror extends Database
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function setFiltering(bool $filtering): static
     {
         parent::setFiltering($filtering);
@@ -479,8 +422,6 @@ class Mirror extends Database
 
     /**
      * Opens the scope on the mirror, its source and its destination.
-     *
-     * {@inheritdoc}
      */
     public function withFiltering(bool $filtering, callable $callback, ?array $filters = null): mixed
     {
@@ -496,8 +437,6 @@ class Mirror extends Database
 
     /**
      * The mirror queries through its source's adapter, so it reports to the source's profiler.
-     *
-     * {@inheritdoc}
      */
     public function setProfiling(bool $profiling): static
     {
@@ -508,9 +447,6 @@ class Mirror extends Database
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function setDropUnknownAttributes(bool $drop): static
     {
         $this->delegate(__FUNCTION__, \func_get_args());
@@ -520,9 +456,6 @@ class Mirror extends Database
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function setPreserveDates(bool $preserve): static
     {
         $this->delegate(__FUNCTION__, \func_get_args());
@@ -530,9 +463,6 @@ class Mirror extends Database
         return parent::setPreserveDates($preserve);
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function setPreserveSequence(bool $preserve): static
     {
         $this->delegate(__FUNCTION__, \func_get_args());
@@ -540,9 +470,6 @@ class Mirror extends Database
         return parent::setPreserveSequence($preserve);
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function setValidation(bool $validation): static
     {
         $this->delegate(__FUNCTION__, \func_get_args());
@@ -552,8 +479,6 @@ class Mirror extends Database
 
     /**
      * Opens the scope on the mirror, its source and its destination.
-     *
-     * {@inheritdoc}
      */
     public function withValidation(bool $validation, callable $callback): mixed
     {
@@ -566,8 +491,6 @@ class Mirror extends Database
     /**
      * Opens the scope on the mirror, its source and its destination, so the writes the mirror replicates before
      * returning use the tenant too; the replications it queues carry it (see replicate()).
-     *
-     * {@inheritdoc}
      */
     public function withTenant(int|string|null $tenant, callable $callback): mixed
     {
@@ -579,8 +502,6 @@ class Mirror extends Database
 
     /**
      * Opens the scope on the mirror, its source and its destination.
-     *
-     * {@inheritdoc}
      */
     public function withPreserveDates(bool $preserve, callable $callback): mixed
     {
@@ -592,8 +513,6 @@ class Mirror extends Database
 
     /**
      * Opens the scope on the mirror, its source and its destination.
-     *
-     * {@inheritdoc}
      */
     public function withPreserveSequence(bool $preserve, callable $callback): mixed
     {
@@ -603,17 +522,11 @@ class Mirror extends Database
         return parent::withPreserveSequence($preserve, fn (): mixed => $this->source->withPreserveSequence($preserve, $scoped));
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function skipRelationships(callable $callback): mixed
     {
         return parent::skipRelationships(fn (): mixed => $this->source->skipRelationships($callback));
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function skipRelationshipsExistCheck(callable $callback): mixed
     {
         return parent::skipRelationshipsExistCheck(fn (): mixed => $this->source->skipRelationshipsExistCheck($callback));
@@ -669,8 +582,6 @@ class Mirror extends Database
     /**
      * Silences the source, where lifecycle hooks are registered, and the mirror itself,
      * where decorators are.
-     *
-     * {@inheritdoc}
      */
     public function silent(callable $callback, ?array $hooks = null): mixed
     {
@@ -680,8 +591,6 @@ class Mirror extends Database
     /**
      * Scoped to the mirror and its source only: the source checks the timestamp, and the destination applies
      * what the source accepted.
-     *
-     * {@inheritdoc}
      */
     public function withRequestTimestamp(?DateTime $requestTimestamp, callable $callback): mixed
     {
@@ -725,9 +634,6 @@ class Mirror extends Database
         return $result;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function create(?string $database = null): bool
     {
         $result = $this->source->create($database);
@@ -740,9 +646,6 @@ class Mirror extends Database
         return $result;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function delete(?string $database = null): bool
     {
         /** @var bool $result */
@@ -750,9 +653,6 @@ class Mirror extends Database
         return $result;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function listCollections(int $limit = 25, int $offset = 0): array
     {
         $result = $this->silent(fn () => $this->source->find(self::METADATA, [
@@ -774,9 +674,6 @@ class Mirror extends Database
         return $collections;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function createCollection(Collection $collection): Collection
     {
         $collectionId = $collection->getId();
@@ -1090,9 +987,6 @@ class Mirror extends Database
         return $result;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function deleteIndex(string $collection, string $key): void
     {
         $this->source->deleteIndex($collection, $key);
@@ -1165,9 +1059,6 @@ class Mirror extends Database
         );
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function createDocument(string $collection, Document $document): Document
     {
         $document = $this->source->createDocument($collection, $document);
@@ -1215,9 +1106,6 @@ class Mirror extends Database
         return $this->decorate(Event::DocumentCreate, $collection, $document);
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function createDocuments(
         string $collection,
         array $documents,
@@ -1281,9 +1169,6 @@ class Mirror extends Database
         return $modified;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function updateDocument(string $collection, string $id, Document $document): Document
     {
         $document = $this->source->updateDocument($collection, $id, $document);
@@ -1332,9 +1217,6 @@ class Mirror extends Database
         return $this->decorate(Event::DocumentUpdate, $collection, $document);
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function updateDocuments(
         string $collection,
         Document $updates,
@@ -1401,9 +1283,6 @@ class Mirror extends Database
         return $modified;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function upsertDocument(string $collection, Document $document): Document
     {
         $upserted = $this->source->upsertDocument($collection, $document);
@@ -1448,9 +1327,6 @@ class Mirror extends Database
         return $this->decorate(Event::DocumentUpsert, $collection, $upserted);
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function upsertDocuments(
         string $collection,
         array $documents,
@@ -1520,9 +1396,6 @@ class Mirror extends Database
         return $modified;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function deleteDocument(string $collection, string $id): bool
     {
         $result = $this->source->deleteDocument($collection, $id);
@@ -1565,9 +1438,6 @@ class Mirror extends Database
         return $result;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function deleteDocuments(
         string $collection,
         array $queries = [],
@@ -1628,9 +1498,6 @@ class Mirror extends Database
         $this->delegateInOrder(__FUNCTION__, \func_get_args());
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function createRelationship(string $collection, Relationship $relationship): Relationship
     {
         /** @var Relationship $result */
@@ -1638,9 +1505,6 @@ class Mirror extends Database
         return $result;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function updateRelationship(string $collection, string $key, RelationshipUpdate $update): Relationship
     {
         /** @var Relationship $result */
@@ -1648,25 +1512,16 @@ class Mirror extends Database
         return $result;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function deleteRelationship(string $collection, string $key): void
     {
         $this->delegateInOrder(__FUNCTION__, \func_get_args());
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function renameIndex(string $collection, string $old, string $new): void
     {
         $this->delegateInOrder(__FUNCTION__, \func_get_args());
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float|string $value = 1, int|float|string|null $max = null): Document
     {
         /** @var Document $result */
@@ -1674,9 +1529,6 @@ class Mirror extends Database
         return $result;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function decreaseDocumentAttribute(string $collection, string $id, string $attribute, int|float|string $value = 1, int|float|string|null $min = null): Document
     {
         /** @var Document $result */
@@ -1899,9 +1751,6 @@ class Mirror extends Database
         };
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function setAuthorization(Authorization $authorization): static
     {
         parent::setAuthorization($authorization);
@@ -1990,9 +1839,6 @@ class Mirror extends Database
         parent::clearDocumentType($collection);
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function clearDocumentTypes(): void
     {
         $this->delegate(__FUNCTION__);

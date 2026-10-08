@@ -22,6 +22,49 @@ abstract class SQL extends Adapter
 {
     protected const VECTOR_DISTANCE_COLUMN = '_distance';
 
+    /**
+     * Name of the unique index that keeps a permissions table free of duplicate
+     * grants. It always covers _column.
+     */
+    protected const PERMISSIONS_INDEX = '_unique';
+
+    /**
+     * What that index was called before it covered _column.
+     *
+     * Nothing here creates or rebuilds it -- a table still carrying this name is one
+     * the column-permissions migration has not reached yet, and the migration is what
+     * moves it. It is named only so a duplicate-key error raised on such a table is
+     * still recognised as a permission collision.
+     */
+    protected const PERMISSIONS_INDEX_LEGACY = '_index1';
+
+    /**
+     * Index over _documentInternalId.
+     *
+     * Groundwork. Permissions correlate on _document today -- a VARCHAR(255), which is
+     * 1020 bytes of the unique index and the comparison every correlated EXISTS makes
+     * per outer row. _documentInternalId is the same fact as an 8-byte integer, so the
+     * intended redesign repoints that correlation at it. The column ships unpopulated
+     * and this index is created alongside it so the fleet-wide index build happens once
+     * rather than twice.
+     *
+     * Shaped like PERMISSIONS_INDEX so the probe stays index-only once it is used: the
+     * correlated EXISTS reads _type, _permission and _column too, and an index on the
+     * id alone would seek and then fetch the row for each of those. Deliberately NOT
+     * unique -- every row holds the default 0 until the backfill, so uniqueness would
+     * collide on the second document.
+     */
+    protected const PERMISSIONS_INDEX_DOCUMENT = '_document_internal';
+
+    /**
+     * Width of _column on a permissions table.
+     *
+     * InnoDB allows 3072 bytes per index, and the unique index already spends 2092 on
+     * _document, _tenant, _type and _permission. What is left is 980 bytes, which in
+     * utf8mb4 is 245 characters; 244 keeps a byte in hand.
+     */
+    protected const PERMISSIONS_COLUMN_LENGTH = 244;
+
     protected mixed $pdo;
 
     /**
@@ -1106,8 +1149,11 @@ abstract class SQL extends Adapter
     /**
      * Returns a suffix for the permissions INSERT statement when ignoring duplicates.
      * Override in adapter subclasses for DB-specific syntax.
+     *
+     * @param string $name Collection name, already filtered. Adapters that have to
+     *                     inspect the permissions table need it to resolve the table.
      */
-    protected function getInsertPermissionsSuffix(): string
+    protected function getInsertPermissionsSuffix(string $name): string
     {
         return '';
     }
@@ -2546,7 +2592,7 @@ abstract class SQL extends Adapter
                 $sqlPermissions = "
                     {$this->getInsertKeyword()} {$this->getSQLTable($name . '_perms')} (_type, _permission, _document {$tenantColumn})
                     VALUES {$permissions}
-                    {$this->getInsertPermissionsSuffix()}
+                    {$this->getInsertPermissionsSuffix($name)}
                 ";
 
                 $stmtPermissions = $this->getPDO()->prepare($sqlPermissions);

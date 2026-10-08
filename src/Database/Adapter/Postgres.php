@@ -256,25 +256,39 @@ class Postgres extends SQL
                 _tenant INTEGER DEFAULT NULL,
                 _type VARCHAR(12) NOT NULL,
                 _permission VARCHAR(255) NOT NULL,
-                _document VARCHAR(255) NOT NULL
+                -- Structure only; nothing reads or writes either column yet. An empty
+                -- _column is the sentinel for \"every column\", which is what every grant
+                -- means today, and NOT NULL keeps the unique index below able to tell
+                -- two grants apart by column (SQL considers NULLs distinct).
+                _column VARCHAR(" . static::PERMISSIONS_COLUMN_LENGTH . ") NOT NULL DEFAULT '',
+                _document VARCHAR(255) NOT NULL,
+                -- Quoted: Postgres folds an unquoted identifier to lower case, and every
+                -- read of this column quotes it the same way.
+                \"_documentInternalId\" BIGINT NOT NULL DEFAULT 0
             );
         ";
 
         if ($this->sharedTables) {
             $uniquePermissionIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_ukey");
             $permissionIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_permission");
+            $documentIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_docint");
             $permissions .= "
                 CREATE UNIQUE INDEX \"{$uniquePermissionIndex}\" 
-                    ON {$this->getSQLTable($id . '_perms')} USING btree (_tenant,_document,_type,_permission);
+                    ON {$this->getSQLTable($id . '_perms')} USING btree (_tenant,_document,_type,_permission,_column);
+                CREATE INDEX \"{$documentIndex}\" 
+                    ON {$this->getSQLTable($id . '_perms')} USING btree (\"_documentInternalId\",_tenant,_type,_permission,_column);
                 CREATE INDEX \"{$permissionIndex}\" 
                     ON {$this->getSQLTable($id . '_perms')} USING btree (_tenant,_permission,_type); 
             ";
         } else {
             $uniquePermissionIndex = $this->getShortKey("{$namespace}_{$id}_ukey");
             $permissionIndex = $this->getShortKey("{$namespace}_{$id}_permission");
+            $documentIndex = $this->getShortKey("{$namespace}_{$id}_docint");
             $permissions .= "
                 CREATE UNIQUE INDEX \"{$uniquePermissionIndex}\" 
-                    ON {$this->getSQLTable($id . '_perms')} USING btree (_document COLLATE utf8_ci_ai,_type,_permission);
+                    ON {$this->getSQLTable($id . '_perms')} USING btree (_document COLLATE utf8_ci_ai,_type,_permission,_column);
+                CREATE INDEX \"{$documentIndex}\" 
+                    ON {$this->getSQLTable($id . '_perms')} USING btree (\"_documentInternalId\",_type,_permission,_column);
                 CREATE INDEX \"{$permissionIndex}\" 
                     ON {$this->getSQLTable($id . '_perms')} USING btree (_permission,_type); 
             ";
@@ -2413,17 +2427,84 @@ class Postgres extends SQL
         return "ON CONFLICT {$conflictTarget} DO NOTHING";
     }
 
-    protected function getInsertPermissionsSuffix(): string
+    protected function getInsertPermissionsSuffix(string $name): string
     {
         if (!$this->skipDuplicates) {
             return '';
         }
 
-        $conflictTarget = $this->sharedTables
-            ? '("_type", "_permission", "_document", "_tenant")'
-            : '("_type", "_permission", "_document")';
+        // Postgres infers which index to arbitrate on by matching these columns against
+        // one exactly (as a set -- order is irrelevant), so the target has to describe
+        // the index this particular table actually has. Tables created from here carry
+        // _column in the permissions index; tables created before it, and ones the
+        // migration has not reached, do not. Naming the wrong shape raises 42P10 and the
+        // statement fails, so the shape is read rather than assumed.
+        //
+        // Deliberately not a bare ON CONFLICT DO NOTHING, which would sidestep the
+        // question: with no target Postgres infers every unique constraint including the
+        // primary key on _id, so a sequence desync would silently drop a permission row
+        // instead of raising.
+        $columns = ['"_type"', '"_permission"', '"_document"'];
+
+        if ($this->sharedTables) {
+            $columns[] = '"_tenant"';
+        }
+
+        if ($this->permissionsIndexHasColumn($name)) {
+            $columns[] = '"_column"';
+        }
+
+        $conflictTarget = '(' . \implode(', ', $columns) . ')';
 
         return "ON CONFLICT {$conflictTarget} DO NOTHING";
+    }
+
+    /**
+     * Does this collection's permissions table carry _column in its unique index?
+     *
+     * Read fresh every time, on purpose. Caching it would mean a process could hold a
+     * stale answer while the migration reshapes the table underneath, and a stale answer
+     * here is a failed write, not a slow one -- so the migration would have to keep both
+     * index shapes alive until every cache drained. Reading the catalog instead costs one
+     * round trip and lets the index change whenever it likes.
+     *
+     * The cost is only paid when duplicates are being skipped, which is imports and
+     * mirroring rather than ordinary document writes, and it is one probe per batch.
+     *
+     * @param string $name Collection name, already filtered.
+     * @return bool
+     * @throws DatabaseException
+     */
+    protected function permissionsIndexHasColumn(string $name): bool
+    {
+        // Resolved through to_regclass on the same qualified name the INSERT builds,
+        // rather than by reconstructing the table name here. Postgres truncates
+        // identifiers at 63 bytes, so a long namespace and collection name together
+        // produce a table whose real name is shorter than the one it was created with --
+        // and a lookup by the untruncated name finds nothing, reports the index as narrow
+        // and sends a narrow target at a wide index. to_regclass performs the same
+        // truncation as every other statement, so it cannot disagree with the insert.
+        //
+        // indisunique excludes the index over _documentInternalId, which also covers
+        // _column but can never arbitrate a conflict. The primary key on _id is unique
+        // but does not cover _column, so it drops out on its own.
+        $stmt = $this->getPDO()->prepare("
+            SELECT 1
+            FROM pg_index i
+            JOIN pg_attribute a
+              ON a.attrelid = i.indrelid
+             AND a.attnum = ANY(i.indkey)
+            WHERE i.indrelid = to_regclass(:table)
+              AND i.indisunique
+              AND a.attname = '_column'
+            LIMIT 1
+        ");
+
+        $stmt->bindValue(':table', $this->getSQLTable($name . '_perms'));
+
+        $this->execute($stmt);
+
+        return $stmt->fetchColumn() !== false;
     }
 
     public function decodePoint(string $wkb): array

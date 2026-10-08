@@ -36,6 +36,12 @@ use Utopia\Database\Query;
  */
 class SQLite extends MariaDB
 {
+    /**
+     * SQLite spelled the pre-_column permissions index with an underscore, so the
+     * legacy name it has to recognise differs from its parent's.
+     */
+    protected const PERMISSIONS_INDEX_LEGACY = '_index_1';
+
     /** Suffix appended to every FTS5 virtual table name created by this adapter. */
     private const FTS_TABLE_SUFFIX = '_fts';
 
@@ -421,7 +427,9 @@ class SQLite extends MariaDB
 				{$tenantQuery}
 				`_type` VARCHAR(12) NOT NULL,
 				`_permission` VARCHAR(255) NOT NULL,
-				`_document` VARCHAR(255) NOT NULL
+				`_document` VARCHAR(255) NOT NULL,
+				`_column` VARCHAR(" . static::PERMISSIONS_COLUMN_LENGTH . ") NOT NULL DEFAULT '',
+				`_documentInternalId` BIGINT NOT NULL DEFAULT 0
 			)
 		";
 
@@ -440,7 +448,8 @@ class SQLite extends MariaDB
             $this->createIndex($id, '_created_at', Database::INDEX_KEY, [ '_createdAt'], [], []);
             $this->createIndex($id, '_updated_at', Database::INDEX_KEY, [ '_updatedAt'], [], []);
 
-            $this->createIndex("{$id}_perms", '_index_1', Database::INDEX_UNIQUE, ['_document', '_type', '_permission'], [], []);
+            $this->createIndex("{$id}_perms", static::PERMISSIONS_INDEX, Database::INDEX_UNIQUE, ['_document', '_type', '_permission', '_column'], [], []);
+            $this->createIndex("{$id}_perms", static::PERMISSIONS_INDEX_DOCUMENT, Database::INDEX_KEY, ['_documentInternalId', '_type', '_permission', '_column'], [], []);
             $this->createIndex("{$id}_perms", '_index_2', Database::INDEX_KEY, ['_permission', '_type'], [], []);
 
             if ($this->sharedTables) {

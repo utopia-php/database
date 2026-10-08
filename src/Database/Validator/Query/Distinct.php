@@ -12,6 +12,7 @@ class Distinct extends Base
      *
      * @return string
      */
+    #[\Override]
     public function getMethodType(): string
     {
         return self::METHOD_TYPE_DISTINCT;

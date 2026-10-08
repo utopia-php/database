@@ -12,11 +12,13 @@ class ObjectPath extends Validator
 {
     public const string KEY_PATTERN = '/^[a-zA-Z0-9_\-]+$/D';
 
+    #[\Override]
     public function getDescription(): string
     {
         return 'Object path keys must be non-empty and contain only a-z, A-Z, 0-9, underscore and hyphen';
     }
 
+    #[\Override]
     public function isValid(mixed $value): bool
     {
         if (! \is_string($value)) {
@@ -32,11 +34,13 @@ class ObjectPath extends Validator
         return true;
     }
 
+    #[\Override]
     public function isArray(): bool
     {
         return false;
     }
 
+    #[\Override]
     public function getType(): string
     {
         return self::TYPE_STRING;

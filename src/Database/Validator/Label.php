@@ -23,6 +23,7 @@ class Label extends Key
         $this->message = 'Value must be a valid string between 1 and '.$this->maxLength.' chars containing only alphanumeric chars';
     }
 
+    #[\Override]
     public function isValid(mixed $value): bool
     {
         if (! parent::isValid($value)) {

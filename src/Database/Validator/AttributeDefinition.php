@@ -77,11 +77,13 @@ class AttributeDefinition extends Validator
         }
     }
 
+    #[\Override]
     public function getType(): string
     {
         return self::TYPE_OBJECT;
     }
 
+    #[\Override]
     public function getDescription(): string
     {
         return $this->message;
@@ -90,6 +92,7 @@ class AttributeDefinition extends Validator
     /**
      * Function will return true if object is array.
      */
+    #[\Override]
     public function isArray(): bool
     {
         return false;
@@ -104,6 +107,7 @@ class AttributeDefinition extends Validator
      * @throws DuplicateException
      * @throws LimitException
      */
+    #[\Override]
     public function isValid(mixed $value): bool
     {
         if ($value instanceof Document) {

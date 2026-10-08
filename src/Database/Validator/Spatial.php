@@ -166,6 +166,7 @@ class Spatial extends Validator
      *
      * @return string
      */
+    #[\Override]
     public function getDescription(): string
     {
         return 'Value must be a valid '.$this->spatialType.": {$this->message}";
@@ -174,6 +175,7 @@ class Spatial extends Validator
     /**
      * @return bool
      */
+    #[\Override]
     public function isArray(): bool
     {
         return false;
@@ -184,6 +186,7 @@ class Spatial extends Validator
      *
      * @return string
      */
+    #[\Override]
     public function getType(): string
     {
         return self::TYPE_ARRAY;
@@ -205,6 +208,7 @@ class Spatial extends Validator
      * @param mixed $value The spatial data to validate
      * @return bool
      */
+    #[\Override]
     public function isValid(mixed $value): bool
     {
         if (is_null($value)) {

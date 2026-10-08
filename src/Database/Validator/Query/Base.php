@@ -34,6 +34,7 @@ abstract class Base extends Validator
 
     protected string $message = 'Invalid query';
 
+    #[\Override]
     public function getDescription(): string
     {
         return $this->message;
@@ -42,11 +43,13 @@ abstract class Base extends Validator
     /**
      * Function will return true if object is array.
      */
+    #[\Override]
     public function isArray(): bool
     {
         return false;
     }
 
+    #[\Override]
     public function getType(): string
     {
         return self::TYPE_OBJECT;
@@ -61,6 +64,7 @@ abstract class Base extends Validator
      *
      * @param  mixed  $value
      */
+    #[\Override]
     public function isValid(mixed $value): bool
     {
         if (! $value instanceof Query) {

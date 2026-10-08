@@ -17,6 +17,7 @@ class UID extends Key
         parent::__construct(false, $maxLength);
     }
 
+    #[\Override]
     public function getDescription(): string
     {
         return 'UID must contain at most '.$this->maxLength.' chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a leading period, hyphen, or underscore';

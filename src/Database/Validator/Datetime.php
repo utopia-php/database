@@ -39,6 +39,7 @@ class Datetime extends Validator
     /**
      * Validator Description.
      */
+    #[\Override]
     public function getDescription(): string
     {
         $message = 'Value must be valid date';
@@ -64,6 +65,7 @@ class Datetime extends Validator
     /**
      * @param  mixed  $value
      */
+    #[\Override]
     public function isValid(mixed $value): bool
     {
         if (empty($value) || ! is_string($value)) {
@@ -126,11 +128,13 @@ class Datetime extends Validator
     /**
      * Function will return true if object is array.
      */
+    #[\Override]
     public function isArray(): bool
     {
         return false;
     }
 
+    #[\Override]
     public function getType(): string
     {
         return self::TYPE_STRING;

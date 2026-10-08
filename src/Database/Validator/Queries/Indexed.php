@@ -118,6 +118,7 @@ class Indexed extends Base
      *
      * @throws Exception
      */
+    #[\Override]
     public function isValid(mixed $value): bool
     {
         /** @var array<Query|string> $value */

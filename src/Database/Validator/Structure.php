@@ -134,11 +134,13 @@ class Structure extends Validator
         unset(self::$formats[$name]);
     }
 
+    #[\Override]
     public function getDescription(): string
     {
         return 'Invalid document structure: '.$this->message;
     }
 
+    #[\Override]
     public function isValid(mixed $value): bool
     {
         if (! $value instanceof Document) {
@@ -442,11 +444,13 @@ class Structure extends Validator
     /**
      * Function will return true if object is array.
      */
+    #[\Override]
     public function isArray(): bool
     {
         return false;
     }
 
+    #[\Override]
     public function getType(): string
     {
         return self::TYPE_ARRAY;

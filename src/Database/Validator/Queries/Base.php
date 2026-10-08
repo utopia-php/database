@@ -47,6 +47,7 @@ class Base extends Validator
         $this->length = $length;
     }
 
+    #[\Override]
     public function getDescription(): string
     {
         return $this->message;
@@ -79,6 +80,7 @@ class Base extends Validator
      *
      * @param  mixed  $value  Array of Query objects or query strings
      */
+    #[\Override]
     public function isValid(mixed $value): bool
     {
         if (! \is_array($value)) {
@@ -359,11 +361,13 @@ class Base extends Validator
     /**
      * Function will return true if object is array.
      */
+    #[\Override]
     public function isArray(): bool
     {
         return true;
     }
 
+    #[\Override]
     public function getType(): string
     {
         return self::TYPE_OBJECT;

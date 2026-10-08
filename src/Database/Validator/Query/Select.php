@@ -90,6 +90,7 @@ class Select extends Base
      *
      * @param  mixed  $value
      */
+    #[\Override]
     public function isValid(mixed $value): bool
     {
         if (! $value instanceof Query) {
@@ -232,6 +233,7 @@ class Select extends Base
             && ! isset($this->joinAliases[$key]);
     }
 
+    #[\Override]
     protected function acceptsMainAttribute(string $attribute): bool
     {
         return isset($this->schema[$attribute]) || \in_array($attribute, $this->internalKeys(), true);
@@ -256,6 +258,7 @@ class Select extends Base
      *
      * @return string
      */
+    #[\Override]
     public function getMethodType(): string
     {
         return self::METHOD_TYPE_SELECT;

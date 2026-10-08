@@ -61,6 +61,7 @@ class Document extends Base
      *
      * @param  mixed  $value
      */
+    #[\Override]
     public function isValid(mixed $value): bool
     {
         if (! parent::isValid($value)) {

@@ -29,6 +29,7 @@ class Cursor extends Base
      *
      * @param  mixed  $value
      */
+    #[\Override]
     public function isValid(mixed $value): bool
     {
         if (! $value instanceof Query) {
@@ -65,6 +66,7 @@ class Cursor extends Base
      *
      * @return string
      */
+    #[\Override]
     public function getMethodType(): string
     {
         return self::METHOD_TYPE_CURSOR;

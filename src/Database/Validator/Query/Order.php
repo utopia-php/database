@@ -108,6 +108,7 @@ class Order extends Base
      *
      * @param  mixed  $value
      */
+    #[\Override]
     public function isValid(mixed $value): bool
     {
         if (! $value instanceof Query) {
@@ -134,6 +135,7 @@ class Order extends Base
         return false;
     }
 
+    #[\Override]
     protected function acceptsMainAttribute(string $attribute): bool
     {
         return isset($this->schema[$attribute]);
@@ -208,6 +210,7 @@ class Order extends Base
      *
      * @return string
      */
+    #[\Override]
     public function getMethodType(): string
     {
         return self::METHOD_TYPE_ORDER;

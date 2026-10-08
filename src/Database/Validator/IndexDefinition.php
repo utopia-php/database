@@ -69,11 +69,13 @@ class IndexDefinition extends Validator
         }
     }
 
+    #[\Override]
     public function getType(): string
     {
         return self::TYPE_OBJECT;
     }
 
+    #[\Override]
     public function getDescription(): string
     {
         return $this->message;
@@ -82,6 +84,7 @@ class IndexDefinition extends Validator
     /**
      * Function will return true if object is array.
      */
+    #[\Override]
     public function isArray(): bool
     {
         return false;
@@ -95,6 +98,7 @@ class IndexDefinition extends Validator
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function isValid(mixed $value): bool
     {
         if ($value instanceof Document) {

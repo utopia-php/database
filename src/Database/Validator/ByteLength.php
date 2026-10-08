@@ -23,21 +23,25 @@ class ByteLength extends Validator
         $this->max = $max;
     }
 
+    #[\Override]
     public function getDescription(): string
     {
         return 'Value must be a valid string no longer than ' . $this->max . ' bytes';
     }
 
+    #[\Override]
     public function isArray(): bool
     {
         return false;
     }
 
+    #[\Override]
     public function getType(): string
     {
         return self::TYPE_STRING;
     }
 
+    #[\Override]
     public function isValid(mixed $value): bool
     {
         if (!\is_string($value)) {

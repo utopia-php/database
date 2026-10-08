@@ -145,6 +145,7 @@ class Join extends Base
      *
      * @return string
      */
+    #[\Override]
     public function getMethodType(): string
     {
         return self::METHOD_TYPE_JOIN;
@@ -169,6 +170,7 @@ class Join extends Base
     /**
      * Validate a join query names a table, and that its conditions compare columns the tables have.
      */
+    #[\Override]
     protected function isValidQuery(Query $query): bool
     {
         if ($query->getMethod() === Method::NaturalJoin) {

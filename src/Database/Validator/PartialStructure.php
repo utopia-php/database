@@ -10,6 +10,7 @@ use Utopia\Database\Document;
  */
 class PartialStructure extends Structure
 {
+    #[\Override]
     public function isValid(mixed $value): bool
     {
         if (! $value instanceof Document) {

@@ -190,11 +190,13 @@ class Operator extends Validator
         return true;
     }
 
+    #[\Override]
     public function getDescription(): string
     {
         return $this->message;
     }
 
+    #[\Override]
     public function isValid(mixed $value): bool
     {
         if (! $value instanceof DatabaseOperator) {
@@ -639,11 +641,13 @@ class Operator extends Validator
     /**
      * Function will return true if object is array.
      */
+    #[\Override]
     public function isArray(): bool
     {
         return false;
     }
 
+    #[\Override]
     public function getType(): string
     {
         return self::TYPE_OBJECT;

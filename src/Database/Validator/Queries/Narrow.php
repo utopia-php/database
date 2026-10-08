@@ -84,6 +84,7 @@ final class Narrow extends Base
      *
      * @param  mixed  $value
      */
+    #[\Override]
     public function isValid(mixed $value): bool
     {
         if (! \is_array($value) || ! self::accepts($value)) {

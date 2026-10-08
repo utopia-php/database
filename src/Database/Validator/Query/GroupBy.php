@@ -46,11 +46,13 @@ class GroupBy extends Base
         $this->columns = Collection::columns($attributes);
     }
 
+    #[\Override]
     public function getMethodType(): string
     {
         return self::METHOD_TYPE_GROUP_BY;
     }
 
+    #[\Override]
     protected function isValidQuery(Query $query): bool
     {
         $columns = $query->getValues();
@@ -86,6 +88,7 @@ class GroupBy extends Base
         return true;
     }
 
+    #[\Override]
     protected function acceptsMainAttribute(string $attribute): bool
     {
         return isset($this->schema[$attribute]);

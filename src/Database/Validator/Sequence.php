@@ -21,6 +21,7 @@ class Sequence extends Validator
      *
      * @return string
      */
+    #[\Override]
     public function getDescription(): string
     {
         return 'Invalid sequence value';
@@ -38,6 +39,7 @@ class Sequence extends Validator
     /**
      * @return bool
      */
+    #[\Override]
     public function isArray(): bool
     {
         return false;
@@ -48,6 +50,7 @@ class Sequence extends Validator
      *
      * @return string
      */
+    #[\Override]
     public function getType(): string
     {
         return self::TYPE_STRING;
@@ -59,6 +62,7 @@ class Sequence extends Validator
      * @param mixed $value The value to validate
      * @return bool
      */
+    #[\Override]
     public function isValid(mixed $value): bool
     {
         if ($this->primary && empty($value)) {

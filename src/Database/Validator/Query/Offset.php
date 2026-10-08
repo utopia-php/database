@@ -30,6 +30,7 @@ class Offset extends Base
      * @param mixed $value The query to validate
      * @return bool
      */
+    #[\Override]
     public function isValid(mixed $value): bool
     {
         if (! $value instanceof Query) {
@@ -68,6 +69,7 @@ class Offset extends Base
      *
      * @return string
      */
+    #[\Override]
     public function getMethodType(): string
     {
         return self::METHOD_TYPE_OFFSET;

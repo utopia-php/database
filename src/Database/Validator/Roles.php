@@ -142,11 +142,13 @@ class Roles extends Validator
         $this->allowed = $allowed;
     }
 
+    #[\Override]
     public function getDescription(): string
     {
         return $this->message;
     }
 
+    #[\Override]
     public function isValid(mixed $value): bool
     {
         if (! \is_array($value)) {
@@ -214,11 +216,13 @@ class Roles extends Validator
     /**
      * Function will return true if object is array.
      */
+    #[\Override]
     public function isArray(): bool
     {
         return false;
     }
 
+    #[\Override]
     public function getType(): string
     {
         return self::TYPE_ARRAY;

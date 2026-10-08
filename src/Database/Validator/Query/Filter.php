@@ -483,6 +483,7 @@ class Filter extends Base
      *
      * @param  Query  $value
      */
+    #[\Override]
     public function isValid(mixed $value): bool
     {
         $method = $value->getMethod();
@@ -751,6 +752,7 @@ class Filter extends Base
         return true;
     }
 
+    #[\Override]
     protected function acceptsMainAttribute(string $attribute): bool
     {
         return isset($this->schema[$attribute]);
@@ -767,6 +769,7 @@ class Filter extends Base
     /**
      * Get the method type this validator handles.
      */
+    #[\Override]
     public function getMethodType(): string
     {
         return self::METHOD_TYPE_FILTER;

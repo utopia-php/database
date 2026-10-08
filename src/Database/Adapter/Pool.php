@@ -39,6 +39,11 @@ class Pool extends Adapter implements Feature\Timeouts
     use Timeout;
 
     /**
+     * The key of the DefinedAttributes answer of connections that have no schemaless mode, so always answer alike.
+     */
+    private const int FIXED_SCHEMA = -1;
+
+    /**
      * @var UtopiaPool<covariant Adapter>
      */
     protected UtopiaPool $pool;
@@ -221,7 +226,8 @@ class Pool extends Adapter implements Feature\Timeouts
      * Answered from the capabilities the pool's connections reported when first asked, except
      * DefinedAttributes: it reflects the schema mode a connection is in. Once this handle has set
      * that mode, every connection it borrows is put in it first, so the answer is kept per pool
-     * and mode; before that, a connection keeps its own mode and is asked every time.
+     * and mode; before that, a connection with a schemaless mode keeps its own and is asked every
+     * time, while connections without one always answer alike, so theirs is kept per pool too.
      */
     #[\Override]
     public function supports(Capability $capability): bool
@@ -236,14 +242,15 @@ class Pool extends Adapter implements Feature\Timeouts
     private function supportsDefinedAttributes(): bool
     {
         $mode = $this->schemaless;
-        if ($mode === null) {
+        if ($mode === null && $this->hasFeature(Feature\Schemaless::class)) {
             /** @var bool $result */
             $result = $this->delegate('supports', [Capability::DefinedAttributes]);
 
             return $result;
         }
 
-        $known = self::$definedAttributes[$this->pool][(int) $mode] ?? null;
+        $mode = $mode === null ? self::FIXED_SCHEMA : (int) $mode;
+        $known = self::$definedAttributes[$this->pool][$mode] ?? null;
         if ($known !== null) {
             return $known;
         }
@@ -252,7 +259,7 @@ class Pool extends Adapter implements Feature\Timeouts
         $result = $this->delegate('supports', [Capability::DefinedAttributes]);
         self::$definedAttributes ??= new \WeakMap();
         $answers = self::$definedAttributes[$this->pool] ?? [];
-        $answers[(int) $mode] = $result;
+        $answers[$mode] = $result;
         self::$definedAttributes[$this->pool] = $answers;
 
         return $result;

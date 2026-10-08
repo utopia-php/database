@@ -1539,6 +1539,8 @@ mode.
   key such state by `getTenant()` instead.
 - Write hooks and the tenant hook are registered by the library. `hasTenantHook()` and `hasPermissionHook()` are
   removed; `getTenantHook()` and `getWriteHooks()` are internal. `removeWriteHook()` also takes an instance.
+- An adapter's `getDocument()` must not change the `$collection` it is given: for `Database::METADATA` it is one
+  definition shared by the whole process.
 
 ### Methods an adapter no longer has
 

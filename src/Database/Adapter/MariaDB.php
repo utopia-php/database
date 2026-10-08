@@ -2,7 +2,6 @@
 
 namespace Utopia\Database\Adapter;
 
-use Utopia\Database\Adapter\SQL\Expression;
 use Exception;
 use PDO;
 use PDOException;

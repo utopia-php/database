@@ -32,38 +32,26 @@ class Permissions extends Roles
         $this->allowed = \array_map(fn (PermissionType $p) => $p->value, $allowed);
     }
 
-    /**
-     * Get Description.
-     *
-     * Returns validator description
-     */
     public function getDescription(): string
     {
         return $this->message;
     }
 
-    /**
-     * Is valid.
-     *
-     * Returns true if valid or false if not.
-     *
-     * @param  mixed  $permissions
-     */
-    public function isValid(mixed $permissions): bool
+    public function isValid(mixed $value): bool
     {
-        if (! \is_array($permissions)) {
+        if (! \is_array($value)) {
             $this->message = 'Permissions must be an array of strings.';
 
             return false;
         }
 
-        if ($this->length && \count($permissions) > $this->length) {
+        if ($this->length && \count($value) > $this->length) {
             $this->message = 'You can only provide up to '.$this->length.' permissions.';
 
             return false;
         }
 
-        foreach ($permissions as $permission) {
+        foreach ($value as $permission) {
             if (! \is_string($permission)) {
                 $this->message = 'Every permission must be of type string.';
 
@@ -116,8 +104,6 @@ class Permissions extends Roles
     }
 
     /**
-     * Is array
-     *
      * Function will return true if object is array.
      */
     public function isArray(): bool
@@ -125,11 +111,6 @@ class Permissions extends Roles
         return false;
     }
 
-    /**
-     * Get Type
-     *
-     * Returns validator type.
-     */
     public function getType(): string
     {
         return self::TYPE_ARRAY;

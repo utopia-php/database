@@ -477,8 +477,6 @@ class Filter extends Base
     }
 
     /**
-     * Is valid.
-     *
      * Returns true if method is a filter method, attribute exists, and value matches attribute type
      *
      * Otherwise, returns false

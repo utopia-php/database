@@ -84,8 +84,6 @@ class Select extends Base
     }
 
     /**
-     * Is valid.
-     *
      * Returns true if method is TYPE_SELECT selections are valid
      *
      * Otherwise, returns false

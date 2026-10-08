@@ -13,11 +13,6 @@ class Key extends Validator
 {
     protected string $message;
 
-    /**
-     * Get Description.
-     *
-     * Returns validator description
-     */
     public function getDescription(): string
     {
         return $this->message;
@@ -33,11 +28,6 @@ class Key extends Validator
         $this->message = 'Parameter must contain at most '.$this->maxLength.' chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char';
     }
 
-    /**
-     * Is valid.
-     *
-     * Returns true if valid or false if not.
-     */
     public function isValid(mixed $value): bool
     {
         if (! \is_string($value)) {
@@ -81,8 +71,6 @@ class Key extends Validator
     }
 
     /**
-     * Is array
-     *
      * Function will return true if object is array.
      */
     public function isArray(): bool
@@ -90,11 +78,6 @@ class Key extends Validator
         return false;
     }
 
-    /**
-     * Get Type
-     *
-     * Returns validator type.
-     */
     public function getType(): string
     {
         return self::TYPE_STRING;

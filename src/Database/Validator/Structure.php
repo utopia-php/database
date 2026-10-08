@@ -109,7 +109,6 @@ class Structure extends Validator
     /**
      * Get a Format array to create Validator
      *
-     *
      * @return array{callback: callable, type: string}
      *
      * @throws Exception
@@ -135,32 +134,20 @@ class Structure extends Validator
         unset(self::$formats[$name]);
     }
 
-    /**
-     * Get Description.
-     *
-     * Returns validator description
-     */
     public function getDescription(): string
     {
         return 'Invalid document structure: '.$this->message;
     }
 
-    /**
-     * Is valid.
-     *
-     * Returns true if valid or false if not.
-     *
-     * @param  mixed  $document
-     */
-    public function isValid(mixed $document): bool
+    public function isValid(mixed $value): bool
     {
-        if (! $document instanceof Document) {
+        if (! $value instanceof Document) {
             $this->message = 'Value must be an instance of Document';
 
             return false;
         }
 
-        if (empty($document->getCollection())) {
+        if (empty($value->getCollection())) {
             $this->message = 'Missing collection attribute '.Document::COLLECTION;
 
             return false;
@@ -172,7 +159,7 @@ class Structure extends Validator
             return false;
         }
 
-        $structure = $document->getArrayCopy();
+        $structure = $value->getArrayCopy();
         $definitions = $this->definitions();
 
         if (! $this->checkForAllRequiredValues($structure, $definitions)) {
@@ -183,7 +170,7 @@ class Structure extends Validator
             return false;
         }
 
-        if (! $this->checkForInvalidAttributeValues($document, $structure, $definitions)) {
+        if (! $this->checkForInvalidAttributeValues($value, $structure, $definitions)) {
             return false;
         }
 
@@ -453,8 +440,6 @@ class Structure extends Validator
     }
 
     /**
-     * Is array
-     *
      * Function will return true if object is array.
      */
     public function isArray(): bool
@@ -462,11 +447,6 @@ class Structure extends Validator
         return false;
     }
 
-    /**
-     * Get Type
-     *
-     * Returns validator type.
-     */
     public function getType(): string
     {
         return self::TYPE_ARRAY;

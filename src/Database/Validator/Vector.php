@@ -21,19 +21,12 @@ class Vector extends Validator
         $this->size = $size;
     }
 
-    /**
-     * Get Description
-     *
-     * Returns validator description
-     */
     public function getDescription(): string
     {
         return "Value must be an array of {$this->size} numeric values";
     }
 
     /**
-     * Is valid
-     *
      * Validation will pass when $value is a valid vector array or JSON string
      */
     public function isValid(mixed $value): bool
@@ -69,8 +62,6 @@ class Vector extends Validator
     }
 
     /**
-     * Is array
-     *
      * Function will return true if object is array.
      */
     public function isArray(): bool
@@ -78,11 +69,6 @@ class Vector extends Validator
         return false;
     }
 
-    /**
-     * Get Type
-     *
-     * Returns validator type.
-     */
     public function getType(): string
     {
         return self::TYPE_ARRAY;

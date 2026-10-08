@@ -49,32 +49,24 @@ class Authorization extends Validator
         $this->roles = new Value($this->roles->get(), $group);
     }
 
-    /**
-     * Get Description.
-     *
-     * Returns validator description
-     */
     public function getDescription(): string
     {
         return $this->message;
     }
 
     /**
-     * Validate that the given input has the required permissions for the current roles.
-     *
-     * @param mixed $input Authorization\Input instance containing action and permissions
-     * @return bool
+     * Validate that the given Authorization\Input has the required permissions for the current roles.
      */
-    public function isValid(mixed $input): bool
+    public function isValid(mixed $value): bool
     {
-        if (! ($input instanceof Input)) {
+        if (! ($value instanceof Input)) {
             $this->message = 'Invalid input provided';
 
             return false;
         }
 
-        $permissions = $input->getPermissions();
-        $action = $input->getAction();
+        $permissions = $value->getPermissions();
+        $action = $value->getAction();
 
         if (! $this->status->get()) {
             return true;
@@ -220,8 +212,6 @@ class Authorization extends Validator
     }
 
     /**
-     * Is array
-     *
      * Function will return true if object is array.
      */
     public function isArray(): bool
@@ -229,11 +219,6 @@ class Authorization extends Validator
         return false;
     }
 
-    /**
-     * Get Type
-     *
-     * Returns validator type.
-     */
     public function getType(): string
     {
         return self::TYPE_ARRAY;

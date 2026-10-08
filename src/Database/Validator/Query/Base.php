@@ -34,19 +34,12 @@ abstract class Base extends Validator
 
     protected string $message = 'Invalid query';
 
-    /**
-     * Get Description.
-     *
-     * Returns validator description
-     */
     public function getDescription(): string
     {
         return $this->message;
     }
 
     /**
-     * Is array
-     *
      * Function will return true if object is array.
      */
     public function isArray(): bool
@@ -54,11 +47,6 @@ abstract class Base extends Validator
         return false;
     }
 
-    /**
-     * Get Type
-     *
-     * Returns validator type.
-     */
     public function getType(): string
     {
         return self::TYPE_OBJECT;

@@ -2,8 +2,6 @@
 
 namespace Utopia\Database\Adapter;
 
-use Utopia\Database\Adapter\SQL\JoinAlias;
-use Utopia\Database\Adapter\SQL\Expression;
 use Exception;
 use Override;
 use PDO;
@@ -12,7 +10,9 @@ use PDOStatement;
 use Swoole\Database\PDOProxy;
 use Swoole\Database\PDOStatementProxy;
 use Throwable;
+use Utopia\Database\Adapter\SQL\Expression;
 use Utopia\Database\Adapter\SQL\Hook\Permission;
+use Utopia\Database\Adapter\SQL\JoinAlias;
 use Utopia\Database\Attribute;
 use Utopia\Database\Builder\SQLite as SQLiteBuilder;
 use Utopia\Database\Capability;

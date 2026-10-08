@@ -10,12 +10,9 @@ use Utopia\Database\Document;
  */
 class PartialStructure extends Structure
 {
-    /**
-     * @param  mixed  $document
-     */
-    public function isValid(mixed $document): bool
+    public function isValid(mixed $value): bool
     {
-        if (! $document instanceof Document) {
+        if (! $value instanceof Document) {
             $this->message = 'Value must be an instance of Document';
 
             return false;
@@ -27,12 +24,12 @@ class PartialStructure extends Structure
             return false;
         }
 
-        $structure = $document->getArrayCopy();
+        $structure = $value->getArrayCopy();
         $definitions = $this->definitions();
 
         $required = [];
         foreach (self::internalAttributes() as $attribute) {
-            if ($attribute->required && $document->offsetExists($attribute->key)) {
+            if ($attribute->required && $value->offsetExists($attribute->key)) {
                 $required[] = $attribute;
             }
         }
@@ -44,7 +41,7 @@ class PartialStructure extends Structure
             return false;
         }
 
-        if (! $this->checkForInvalidAttributeValues($document, $structure, $definitions)) {
+        if (! $this->checkForInvalidAttributeValues($value, $structure, $definitions)) {
             return false;
         }
 

@@ -23,8 +23,6 @@ class Limit extends Base
     }
 
     /**
-     * Is valid.
-     *
      * Returns true if method is limit values are within range.
      *
      * @param  mixed  $value

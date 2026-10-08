@@ -636,7 +636,6 @@ class Database
     /**
      * Set database to use for current scope
      *
-     *
      * @throws DatabaseException
      */
     public function setDatabase(string $name): static
@@ -647,8 +646,6 @@ class Database
     }
 
     /**
-     * Get Database.
-     *
      * Get Database from current scope
      *
      * @throws DatabaseException
@@ -659,10 +656,7 @@ class Database
     }
 
     /**
-     * Set Namespace.
-     *
      * Set namespace to divide different scope of data sets
-     *
      *
      * @return $this
      *
@@ -676,8 +670,6 @@ class Database
     }
 
     /**
-     * Get Namespace.
-     *
      * Get namespace of current set scope
      */
     public function getNamespace(): string
@@ -947,7 +939,6 @@ class Database
     /**
      * Set the cache instance
      *
-     *
      * @return $this
      */
     public function setCache(Cache $cache): static
@@ -1007,8 +998,6 @@ class Database
     }
 
     /**
-     * Set Tenant
-     *
      * Set tenant to use if tables are shared
      */
     public function setTenant(int|string|null $tenant): static
@@ -1019,8 +1008,6 @@ class Database
     }
 
     /**
-     * Get Tenant
-     *
      * Get tenant to use if tables are shared
      */
     public function getTenant(): int|string|null
@@ -1029,8 +1016,6 @@ class Database
     }
 
     /**
-     * With Tenant
-     *
      * Execute a callback with a specific tenant. Scoped to the calling coroutine and the coroutines it starts.
      *
      * @template T
@@ -1072,9 +1057,6 @@ class Database
         return $this;
     }
 
-    /**
-     * Get Authorization
-     */
     public function getAuthorization(): Authorization
     {
         return $this->authorization;
@@ -2322,8 +2304,6 @@ class Database
     }
 
     /**
-     * Get metadata
-     *
      * @return array<string, mixed>
      */
     public function getMetadata(): array
@@ -3169,11 +3149,8 @@ class Database
     }
 
     /**
-     * Encode Attribute
-     *
      * Passes the attribute $value, and $document context to a predefined filter
      * that allow you to manipulate the input format of the given attribute.
-     *
      *
      * @throws DatabaseException
      */
@@ -3196,8 +3173,6 @@ class Database
     }
 
     /**
-     * Decode Attribute
-     *
      * Passes the attribute $value, and $document context to a predefined filter
      *  that allow you to manipulate the output format of the given attribute.
      *

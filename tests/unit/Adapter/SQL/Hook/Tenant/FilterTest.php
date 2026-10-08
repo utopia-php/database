@@ -62,7 +62,6 @@ final class FilterTest extends TestCase
         $hook = new Filter(7);
         $result = $hook->filterJoin('j0', JoinType::Left);
 
-        $this->assertNotNull($result);
         $this->assertSame(Placement::On, $result->placement);
         $this->assertSame('`j0`.'.Storage::TENANT.' IN (?)', $result->condition->expression);
         $this->assertSame([7], $result->condition->bindings);
@@ -73,7 +72,6 @@ final class FilterTest extends TestCase
         $hook = new Filter(7);
         $result = $hook->filterJoin('j0', JoinType::Right);
 
-        $this->assertNotNull($result);
         $this->assertSame(Placement::Where, $result->placement);
         $this->assertSame('`j0`.'.Storage::TENANT.' IN (?)', $result->condition->expression);
         $this->assertSame([7], $result->condition->bindings);
@@ -84,7 +82,6 @@ final class FilterTest extends TestCase
         $hook = new Filter(7);
         $result = $hook->filterJoin('j0', JoinType::FullOuter);
 
-        $this->assertNotNull($result);
         $this->assertSame(Placement::Where, $result->placement);
         $this->assertStringContainsString('`j0`.'.Storage::TENANT.' IN (?)', $result->condition->expression);
         $this->assertStringContainsString('IS NULL', $result->condition->expression);
@@ -96,7 +93,6 @@ final class FilterTest extends TestCase
         $hook = new Filter(7);
         $result = $hook->filterJoin('j0', JoinType::Inner);
 
-        $this->assertNotNull($result);
         $this->assertSame(Placement::On, $result->placement);
         $this->assertSame('`j0`.'.Storage::TENANT.' IN (?)', $result->condition->expression);
     }
@@ -106,7 +102,6 @@ final class FilterTest extends TestCase
         $hook = new Filter(7);
         $result = $hook->filterJoin('j0', JoinType::Cross);
 
-        $this->assertNotNull($result);
         $this->assertSame(Placement::Where, $result->placement);
         $this->assertSame('`j0`.'.Storage::TENANT.' IN (?)', $result->condition->expression);
     }

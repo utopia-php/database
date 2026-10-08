@@ -62,9 +62,6 @@ class Datetime extends Validator
     }
 
     /**
-     * Is valid.
-     * Returns true if valid or false if not.
-     *
      * @param  mixed  $value
      */
     public function isValid(mixed $value): bool
@@ -127,8 +124,6 @@ class Datetime extends Validator
     }
 
     /**
-     * Is array
-     *
      * Function will return true if object is array.
      */
     public function isArray(): bool
@@ -136,11 +131,6 @@ class Datetime extends Validator
         return false;
     }
 
-    /**
-     * Get Type
-     *
-     * Returns validator type.
-     */
     public function getType(): string
     {
         return self::TYPE_STRING;

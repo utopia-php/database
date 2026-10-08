@@ -142,38 +142,26 @@ class Roles extends Validator
         $this->allowed = $allowed;
     }
 
-    /**
-     * Get Description.
-     *
-     * Returns validator description
-     */
     public function getDescription(): string
     {
         return $this->message;
     }
 
-    /**
-     * Is valid.
-     *
-     * Returns true if valid or false if not.
-     *
-     * @param  mixed  $roles
-     */
-    public function isValid(mixed $roles): bool
+    public function isValid(mixed $value): bool
     {
-        if (! \is_array($roles)) {
+        if (! \is_array($value)) {
             $this->message = 'Roles must be an array of strings.';
 
             return false;
         }
 
-        if ($this->length && \count($roles) > $this->length) {
+        if ($this->length && \count($value) > $this->length) {
             $this->message = 'You can only provide up to '.$this->length.' roles.';
 
             return false;
         }
 
-        foreach ($roles as $role) {
+        foreach ($value as $role) {
             if (! \is_string($role)) {
                 $this->message = 'Every role must be of type string.';
 
@@ -224,8 +212,6 @@ class Roles extends Validator
     }
 
     /**
-     * Is array
-     *
      * Function will return true if object is array.
      */
     public function isArray(): bool
@@ -233,11 +219,6 @@ class Roles extends Validator
         return false;
     }
 
-    /**
-     * Get Type
-     *
-     * Returns validator type.
-     */
     public function getType(): string
     {
         return self::TYPE_ARRAY;

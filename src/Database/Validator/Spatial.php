@@ -172,8 +172,6 @@ class Spatial extends Validator
     }
 
     /**
-     * Is array.
-     *
      * @return bool
      */
     public function isArray(): bool

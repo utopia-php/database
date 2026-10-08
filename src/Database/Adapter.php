@@ -158,8 +158,6 @@ abstract class Adapter
     }
 
     /**
-     * Get Database.
-     *
      * Get Database from current scope
      */
     public function getDatabase(): string
@@ -168,10 +166,7 @@ abstract class Adapter
     }
 
     /**
-     * Set Namespace.
-     *
      * Set namespace to divide different scope of data sets
-     *
      *
      * @return $this
      *
@@ -185,8 +180,6 @@ abstract class Adapter
     }
 
     /**
-     * Get Namespace.
-     *
      * Get namespace of current set scope
      */
     public function getNamespace(): string
@@ -195,8 +188,6 @@ abstract class Adapter
     }
 
     /**
-     * Set Hostname.
-     *
      * @return $this
      */
     public function setHostname(string $hostname): static
@@ -235,8 +226,6 @@ abstract class Adapter
     }
 
     /**
-     * Get Tenant.
-     *
      * Get tenant to use for shared tables.
      *
      * `_tenant` is an INT UNSIGNED column, so the engine reads "001" and "1"
@@ -318,8 +307,6 @@ abstract class Adapter
     }
 
     /**
-     * Get metadata
-     *
      * @return array<string, mixed>
      */
     public function getMetadata(): array
@@ -658,16 +645,12 @@ abstract class Adapter
     abstract public function analyzeCollection(string $collection): bool;
 
     /**
-     * Create Attribute
-     *
      * @throws TimeoutException
      * @throws DuplicateException
      */
     abstract public function createAttribute(string $collection, Attribute $attribute): bool;
 
     /**
-     * Create Attributes
-     *
      * @param  list<Attribute>  $attributes
      *
      * @throws TimeoutException
@@ -740,9 +723,6 @@ abstract class Adapter
 
     abstract public function renameIndex(string $collection, string $old, string $new): bool;
 
-    /**
-     * Create Document
-     */
     abstract public function createDocument(Document $collection, Document $document): Document;
 
     /**
@@ -756,20 +736,13 @@ abstract class Adapter
     abstract public function createDocuments(Document $collection, array $documents): array;
 
     /**
-     * Get Document
-     *
      * @param  array<Query>  $queries
      */
     abstract public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document;
 
-    /**
-     * Update Document
-     */
     abstract public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document;
 
     /**
-     * Update documents
-     *
      * Updates all documents which match the given query.
      *
      * @param  array<Document>  $documents

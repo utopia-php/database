@@ -190,21 +190,11 @@ class Operator extends Validator
         return true;
     }
 
-    /**
-     * Get Description
-     *
-     * Returns validator description
-     */
     public function getDescription(): string
     {
         return $this->message;
     }
 
-    /**
-     * Is valid
-     *
-     * Returns true if valid or false if not.
-     */
     public function isValid(mixed $value): bool
     {
         if (! $value instanceof DatabaseOperator) {
@@ -647,8 +637,6 @@ class Operator extends Validator
     }
 
     /**
-     * Is array
-     *
      * Function will return true if object is array.
      */
     public function isArray(): bool
@@ -656,11 +644,6 @@ class Operator extends Validator
         return false;
     }
 
-    /**
-     * Get Type
-     *
-     * Returns validator type.
-     */
     public function getType(): string
     {
         return self::TYPE_OBJECT;

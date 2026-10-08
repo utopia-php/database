@@ -86,7 +86,6 @@ final class JoinAliasQuotingTest extends TestCase
 
         $result = $filter->filterJoin(self::ALIAS, $joinType);
 
-        $this->assertNotNull($result);
         $this->assertSame(
             $this->quoted(match ($joinType) {
                 JoinType::Inner, JoinType::Left => '"Book"._tenant IN (?)',

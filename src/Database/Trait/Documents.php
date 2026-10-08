@@ -447,8 +447,6 @@ trait Documents
     }
 
     /**
-     * Get Document
-     *
      * @param  string  $collection  The collection identifier
      * @param  string  $id  The document identifier
      * @param  array<Query>  $queries  Optional select/filter queries
@@ -1000,8 +998,6 @@ trait Documents
     }
 
     /**
-     * Create Document
-     *
      * @param  string  $collection  The collection identifier
      * @param  Document  $document  The document to create
      * @return Document The created document with generated ID and timestamps
@@ -1369,8 +1365,6 @@ trait Documents
     }
 
     /**
-     * Update Document
-     *
      * @param  string  $collection  The collection identifier
      * @param  string  $id  The document identifier
      * @param  Document  $document  The document with updated fields
@@ -1675,8 +1669,6 @@ trait Documents
     }
 
     /**
-     * Update documents
-     *
      * Updates all documents which match the given queries.
      *
      * @param  string  $collection  The collection identifier
@@ -2635,8 +2627,6 @@ trait Documents
     }
 
     /**
-     * Delete Document
-     *
      * Also fires Event::DocumentUpdate for each document on the other side of a two-way
      * relationship that the delete changed, after Event::DocumentDelete. See
      * Hook\Relationships::beforeDocumentDelete() for which documents those are, their shape
@@ -2751,8 +2741,6 @@ trait Documents
     }
 
     /**
-     * Delete Documents
-     *
      * Deletes all documents which match the given queries, respecting relationship onDelete options.
      *
      * @param  string  $collection  The collection identifier

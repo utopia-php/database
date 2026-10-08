@@ -2,13 +2,13 @@
 
 namespace Utopia\Database\Adapter;
 
-use Utopia\Database\Adapter\SQL\Expression;
 use Exception;
 use PDO;
 use PDOException;
 use PDOStatement;
 use Swoole\Database\PDOStatementProxy;
 use Throwable;
+use Utopia\Database\Adapter\SQL\Expression;
 use Utopia\Database\Adapter\SQL\Hook\Permission;
 use Utopia\Database\Adapter\SQL\Wkt;
 use Utopia\Database\Attribute;

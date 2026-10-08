@@ -33,17 +33,12 @@ class IndexDependency extends Validator
         }
     }
 
-    /**
-     * Returns validator description
-     */
     public function getDescription(): string
     {
         return $this->message;
     }
 
     /**
-     * Is valid.
-     *
      * @param  Attribute|Document  $value
      */
     public function isValid(mixed $value): bool
@@ -72,8 +67,6 @@ class IndexDependency extends Validator
     }
 
     /**
-     * Is array
-     *
      * Function will return true if object is array.
      */
     public function isArray(): bool
@@ -81,11 +74,6 @@ class IndexDependency extends Validator
         return false;
     }
 
-    /**
-     * Get Type
-     *
-     * Returns validator type.
-     */
     public function getType(): string
     {
         return self::TYPE_OBJECT;

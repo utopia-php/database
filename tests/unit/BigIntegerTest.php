@@ -2,7 +2,6 @@
 
 namespace Tests\Unit;
 
-use Utopia\Database\Adapter\SQL\Expression;
 use Closure;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
@@ -14,6 +13,7 @@ use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\Redis as RedisAdapter;
+use Utopia\Database\Adapter\SQL\Expression;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Database;

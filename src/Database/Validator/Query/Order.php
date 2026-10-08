@@ -102,8 +102,6 @@ class Order extends Base
     }
 
     /**
-     * Is valid.
-     *
      * Returns true if method is ORDER_ASC or ORDER_DESC and attributes are valid
      *
      * Otherwise, returns false

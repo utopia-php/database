@@ -90,7 +90,6 @@ final class OuterJoinTest extends TestCase
     {
         $result = (new Filter(7))->filterJoin(self::ALIAS, JoinType::FullOuter);
 
-        $this->assertNotNull($result);
         $this->assertSame(Placement::Where, $result->placement);
         $this->assertSame(
             '(`j0`._tenant IN (?) OR `j0`.`_uid` IS NULL)',

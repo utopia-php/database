@@ -111,7 +111,6 @@ final class OuterJoinTest extends TestCase
             ->filterJoin(self::ALIAS, $joinType);
 
         $this->assertNotNull($permission);
-        $this->assertNotNull($tenant);
         $this->assertSame($tenant->placement, $permission->placement);
         $this->assertSame(
             \str_contains($tenant->condition->expression, '`j0`.`_uid` IS NULL'),

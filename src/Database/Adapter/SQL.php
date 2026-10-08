@@ -2,8 +2,6 @@
 
 namespace Utopia\Database\Adapter;
 
-use Utopia\Database\Adapter\SQL\JoinAlias;
-use Utopia\Database\Adapter\SQL\Expression;
 use Exception;
 use PDO;
 use PDOException;
@@ -14,10 +12,12 @@ use Throwable;
 use Utopia\Console;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\SQL\BoundedPage;
+use Utopia\Database\Adapter\SQL\Expression;
 use Utopia\Database\Adapter\SQL\Hook\Join;
 use Utopia\Database\Adapter\SQL\Hook\Permission;
 use Utopia\Database\Adapter\SQL\Hook\Tenant;
 use Utopia\Database\Adapter\SQL\Hook\WriteContext;
+use Utopia\Database\Adapter\SQL\JoinAlias;
 use Utopia\Database\Attribute;
 use Utopia\Database\Builder\Filtering;
 use Utopia\Database\Capability;

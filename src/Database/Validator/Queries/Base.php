@@ -47,11 +47,6 @@ class Base extends Validator
         $this->length = $length;
     }
 
-    /**
-     * Get Description.
-     *
-     * Returns validator description
-     */
     public function getDescription(): string
     {
         return $this->message;
@@ -362,8 +357,6 @@ class Base extends Validator
     }
 
     /**
-     * Is array
-     *
      * Function will return true if object is array.
      */
     public function isArray(): bool
@@ -371,11 +364,6 @@ class Base extends Validator
         return true;
     }
 
-    /**
-     * Get Type
-     *
-     * Returns validator type.
-     */
     public function getType(): string
     {
         return self::TYPE_OBJECT;

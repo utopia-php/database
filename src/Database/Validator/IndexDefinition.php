@@ -69,27 +69,17 @@ class IndexDefinition extends Validator
         }
     }
 
-    /**
-     * Get Type
-     *
-     * Returns validator type.
-     */
     public function getType(): string
     {
         return self::TYPE_OBJECT;
     }
 
-    /**
-     * Returns validator description
-     */
     public function getDescription(): string
     {
         return $this->message;
     }
 
     /**
-     * Is array
-     *
      * Function will return true if object is array.
      */
     public function isArray(): bool

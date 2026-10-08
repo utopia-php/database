@@ -1059,7 +1059,7 @@ trait Documents
                 $document = $this->adapter->createDocument($collection, $document);
                 $this->withDocumentTenant(
                     $document,
-                    fn () => $this->purgeWrittenDocument($collection->getId(), $document->getId())
+                    fn () => $this->purgeCachedDocumentInternal($collection->getId(), $document->getId())
                 );
 
                 return $document;
@@ -1142,7 +1142,7 @@ trait Documents
                 $document = $this->adapter->createDocument($collection, $document);
                 $this->withDocumentTenant(
                     $document,
-                    fn () => $this->purgeWrittenDocument($collection->getId(), $document->getId())
+                    fn () => $this->purgeCachedDocumentInternal($collection->getId(), $document->getId())
                 );
             }
         });
@@ -1652,7 +1652,7 @@ trait Documents
             $purgedIds = \array_values(\array_unique([$id, $old->getId(), $document->getId()]));
 
             foreach ($purgedIds as $purgedId) {
-                $this->purgeWrittenDocument($collection->getId(), $purgedId);
+                $this->purgeCachedDocumentInternal($collection->getId(), $purgedId);
             }
 
             foreach ($purgedIds as $purgedId) {
@@ -2516,7 +2516,7 @@ trait Documents
                 max: $max
             );
 
-            $this->purgeWrittenDocument($collection->getId(), $id);
+            $this->purgeCachedDocumentInternal($collection->getId(), $id);
             $this->queueDocumentPurge($collection->getId(), $id);
 
             return $document->setAttribute($attribute, $result);
@@ -2640,7 +2640,7 @@ trait Documents
                 min: $min
             );
 
-            $this->purgeWrittenDocument($collection->getId(), $id);
+            $this->purgeCachedDocumentInternal($collection->getId(), $id);
             $this->queueDocumentPurge($collection->getId(), $id);
 
             return $document->setAttribute($attribute, $result);
@@ -2717,7 +2717,7 @@ trait Documents
 
             $result = $this->authorization->skip(fn () => $this->adapter->deleteDocument($collection, $id));
 
-            $this->purgeWrittenDocument($collection->getId(), $id);
+            $this->purgeCachedDocumentInternal($collection->getId(), $id);
 
             if ($result) {
                 $this->queueDocumentPurge($collection->getId(), $id);
@@ -2963,44 +2963,6 @@ trait Documents
             return true;
         }
 
-        $this->cache->purge($this->trackDocumentPurge($collectionId, $id));
-
-        return true;
-    }
-
-    /**
-     * Purge the cache slot of a document the open write changed once that write's invalidation scope ends, after its
-     * outermost transaction has committed or rolled back; without an open scope, purge it now. Until the commit a
-     * reader outside the transaction reads the stored row, which the slot still holds, and whatever it fills from
-     * the row is purged with the slot after the commit.
-     *
-     * A collection definition is purged inside the transaction as well: it has no epoch to retire when the purge
-     * after the commit fails, so a schema change whose purge fails inside the transaction is rolled back instead.
-     *
-     * @throws Exception
-     */
-    private function purgeWrittenDocument(string $collectionId, ?string $id): bool
-    {
-        if ($id === null) {
-            return true;
-        }
-
-        $documentKey = $this->trackDocumentPurge($collectionId, $id);
-        if ($collectionId === self::METADATA || ! isset($this->documentCachePurges[$this->getEventContext()])) {
-            $this->cache->purge($documentKey);
-        }
-
-        return true;
-    }
-
-    /**
-     * Record a purged document for the open invalidation scope, which purges it once more when it ends, and as
-     * written by the transaction that scope owns.
-     *
-     * @return string The document's cache key
-     */
-    private function trackDocumentPurge(string $collectionId, string $id): string
-    {
         [$collectionKey, $documentKey] = $this->getCacheBaseKeys($collectionId, $id);
 
         $context = $this->getEventContext();
@@ -3015,7 +2977,9 @@ trait Documents
             unset($this->transactionDefinitions[$context][\strtolower($documentKey)]);
         }
 
-        return $documentKey;
+        $this->cache->purge($documentKey);
+
+        return true;
     }
 
     /**
@@ -3025,7 +2989,7 @@ trait Documents
     private function advanceCollectionCacheEpoch(string $collectionId, string $documentId): bool
     {
         if ($collectionId === self::METADATA) {
-            return $this->purgeWrittenDocument(self::METADATA, $documentId);
+            return $this->purgeCachedDocumentInternal(self::METADATA, $documentId);
         }
 
         [$collectionKey] = $this->getCacheBaseKeys($collectionId);

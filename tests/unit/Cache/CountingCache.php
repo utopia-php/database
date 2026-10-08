@@ -13,9 +13,6 @@ final class CountingCache implements CacheAdapter, Leasable
     private int $operations = 0;
 
     /** @var array<string, int> */
-    private array $purges = [];
-
-    /** @var array<string, int> */
     private array $loads = [];
 
     public function __construct(
@@ -56,7 +53,6 @@ final class CountingCache implements CacheAdapter, Leasable
     public function purge(string $key, string $hash = ''): bool
     {
         $this->operations++;
-        $this->purges[$key] = ($this->purges[$key] ?? 0) + 1;
 
         return $this->cache->purge($key, $hash);
     }
@@ -107,16 +103,6 @@ final class CountingCache implements CacheAdapter, Leasable
     }
 
     /**
-     * How often each key was purged since the last reset.
-     *
-     * @return array<string, int>
-     */
-    public function getPurges(): array
-    {
-        return $this->purges;
-    }
-
-    /**
      * How often each key was loaded since the last reset.
      *
      * @return array<string, int>
@@ -129,7 +115,6 @@ final class CountingCache implements CacheAdapter, Leasable
     public function resetOperations(): void
     {
         $this->operations = 0;
-        $this->purges = [];
         $this->loads = [];
     }
 }

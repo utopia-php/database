@@ -165,7 +165,7 @@ final class DocumentCacheInvalidationTest extends TestCase
         $this->assertTrue($database->getCollection('logs')->getAttribute('documentSecurity'), 'The written definition must be read again');
     }
 
-    public function testAFailedPurgeAfterTheCommitReachesTheCallerAndServesTheWrittenDocument(): void
+    public function testAFailedPurgeInsideTheTransactionRollsTheWriteBack(): void
     {
         /** @var bool $refusing */
         $refusing = false;
@@ -188,55 +188,9 @@ final class DocumentCacheInvalidationTest extends TestCase
             $failure = $error->getMessage();
         }
 
-        $this->assertSame(self::PURGE_FAILURE, $failure, 'A failed purge after the commit must reach the caller');
-        $this->assertSame('renamed', $database->getDocument('webhooks', 'hook')->getAttribute('name'), 'The committed write must be served, never the copy cached before it');
-    }
+        $this->assertSame(self::PURGE_FAILURE, $failure, 'A failed purge inside the transaction must reach the caller');
 
-    public function testAReaderOutsideTheTransactionReadsTheStoredDocumentUntilTheCommit(): void
-    {
-        $this->withSharedSQLite(function (PausedSQLite $adapter, Database $writer, Database $reader): void {
-            $writer->createDocument('webhooks', $this->hook('cached'));
-            $writer->createDocument('webhooks', $this->hook('uncached'));
-            $this->assertSame('hook', $reader->getDocument('webhooks', 'cached')->getAttribute('name'));
-
-            $duringCommit = [];
-            $adapter->pauseNextCommit(function () use ($reader, &$duringCommit): void {
-                $duringCommit = [
-                    $reader->getDocument('webhooks', 'cached')->getAttribute('name'),
-                    $reader->getDocument('webhooks', 'uncached')->getAttribute('name'),
-                ];
-            });
-
-            $writer->withTransaction(function () use ($writer): void {
-                $writer->updateDocument('webhooks', 'cached', new Document(['name' => 'renamed']));
-                $writer->updateDocument('webhooks', 'uncached', new Document(['name' => 'renamed']));
-            });
-
-            $this->assertSame(['hook', 'hook'], $duringCommit, 'Until the commit a reader outside the transaction reads the stored document');
-            $this->assertSame('renamed', $reader->getDocument('webhooks', 'cached')->getAttribute('name'), 'The copy cached before the write must be purged after the commit');
-            $this->assertSame('renamed', $reader->getDocument('webhooks', 'uncached')->getAttribute('name'), 'A copy filled during the transaction must be purged after the commit');
-        });
-    }
-
-    public function testARolledBackWriteLeavesTheCachedDocumentServed(): void
-    {
-        $this->withSharedSQLite(function (PausedSQLite $adapter, Database $writer, Database $reader): void {
-            $writer->createDocument('webhooks', $this->hook('hook'));
-            $this->assertSame('hook', $reader->getDocument('webhooks', 'hook')->getAttribute('name'));
-
-            try {
-                $writer->withTransaction(function () use ($writer, $reader): void {
-                    $writer->updateDocument('webhooks', 'hook', new Document(['name' => 'renamed']));
-                    $this->assertSame('hook', $reader->getDocument('webhooks', 'hook')->getAttribute('name'));
-
-                    throw new RuntimeException('rollback');
-                });
-            } catch (RuntimeException) {
-            }
-
-            $this->assertSame('hook', $reader->getDocument('webhooks', 'hook')->getAttribute('name'));
-            $this->assertSame('hook', $writer->getDocument('webhooks', 'hook')->getAttribute('name'));
-        });
+        $this->assertSame('hook', $database->getDocument('webhooks', 'hook')->getAttribute('name'), 'A write whose document could not be purged must roll back');
     }
 
     public function testAFailedPostCommitPurgeNeverServesAPreCommitFill(): void
@@ -340,48 +294,6 @@ final class DocumentCacheInvalidationTest extends TestCase
 
         $this->assertLessThanOrEqual($keys + $churned, \count($cache->keys()), 'A purge keeps at most one generation-only key per document id ever written');
         $this->assertLessThanOrEqual($values, $cache->countValues(), 'A churned document must leave no cached value behind');
-    }
-
-    /**
-     * Run the callback with a writer and a reader that share one cache and one SQLite file over two connections, so
-     * the reader sees only what the writer committed.
-     *
-     * @param  Closure(PausedSQLite, Database, Database): void  $callback
-     */
-    private function withSharedSQLite(Closure $callback): void
-    {
-        $path = \tempnam(\sys_get_temp_dir(), 'document-cache-invalidation-');
-        if ($path === false) {
-            throw new RuntimeException('Failed to create SQLite test database');
-        }
-
-        try {
-            $attributes = [
-                \PDO::ATTR_PERSISTENT => false,
-                \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
-                \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
-                \PDO::ATTR_EMULATE_PREPARES => true,
-                \PDO::ATTR_STRINGIFY_FETCHES => true,
-            ];
-            $writerConnection = new \PDO('sqlite:'.$path, null, null, $attributes);
-            $readerConnection = new \PDO('sqlite:'.$path, null, null, $attributes);
-            $writerConnection->exec('PRAGMA journal_mode = WAL');
-            $writerConnection->exec('PRAGMA busy_timeout = 1000');
-            $readerConnection->exec('PRAGMA busy_timeout = 1000');
-
-            $cache = new RedisLeasableCache();
-            $adapter = new PausedSQLite($writerConnection);
-            $writer = $this->createDatabase($adapter, $cache, 'shared_invalidation_'.\uniqid());
-            $reader = $this->configure(new Database(new SQLite($readerConnection), new Cache($cache)), $writer->getNamespace());
-
-            $callback($adapter, $writer, $reader);
-        } finally {
-            foreach ([$path, $path.'-wal', $path.'-shm'] as $file) {
-                if (\is_file($file)) {
-                    \unlink($file);
-                }
-            }
-        }
     }
 
     private function hook(string $id): Document

@@ -935,7 +935,7 @@ trait Documents
         ], $field, $generation);
 
         if ($saved === false) {
-            $this->definitionFillsFail = $this->cache->getGeneration($documentKey) === $generation;
+            $this->definitionFillsFail = $generation === '0' && $this->cache->getGeneration($documentKey) === '0';
 
             return;
         }

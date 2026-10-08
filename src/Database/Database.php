@@ -48,9 +48,6 @@ use Utopia\Database\Validator\BigInt;
 use Utopia\Query\Method;
 use Utopia\Query\Schema\ColumnType;
 
-/**
- * High-level database interface providing CRUD operations for documents, collections, attributes, indexes, and relationships with built-in caching, filtering, validation, and authorization.
- */
 class Database
 {
     use Trait\Attributes;
@@ -633,8 +630,6 @@ class Database
     }
 
     /**
-     * Set database to use for current scope
-     *
      * @throws DatabaseException
      */
     public function setDatabase(string $name): static
@@ -645,8 +640,6 @@ class Database
     }
 
     /**
-     * Get Database from current scope
-     *
      * @throws DatabaseException
      */
     public function getDatabase(): string
@@ -655,8 +648,6 @@ class Database
     }
 
     /**
-     * Set namespace to divide different scope of data sets
-     *
      * @return $this
      *
      * @throws DatabaseException
@@ -668,9 +659,6 @@ class Database
         return $this;
     }
 
-    /**
-     * Get namespace of current set scope
-     */
     public function getNamespace(): string
     {
         return $this->adapter->getNamespace();
@@ -736,9 +724,6 @@ class Database
         $this->documentsValidatorCache = [];
     }
 
-    /**
-     * Get Database Adapter
-     */
     public function getAdapter(): Adapter
     {
         return $this->adapter;
@@ -789,9 +774,6 @@ class Database
         return $builder;
     }
 
-    /**
-     * Get a utopia-php/query Schema builder for DDL operations.
-     */
     public function schema(): \Utopia\Query\Schema
     {
         if (! $this->adapterHasFeature(Feature\QueryBuilder::class)) {
@@ -936,8 +918,6 @@ class Database
     }
 
     /**
-     * Set the cache instance
-     *
      * @return $this
      */
     public function setCache(Cache $cache): static
@@ -947,17 +927,12 @@ class Database
         return $this;
     }
 
-    /**
-     * Get the cache instance
-     */
     public function getCache(): Cache
     {
         return $this->cache;
     }
 
     /**
-     * Set the name to use for cache
-     *
      * @return $this
      */
     public function setCacheName(string $name): static
@@ -967,19 +942,11 @@ class Database
         return $this;
     }
 
-    /**
-     * Get the cache name
-     */
     public function getCacheName(): string
     {
         return $this->cacheName;
     }
 
-    /**
-     * Set shard tables
-     *
-     * Set whether to share tables between tenants
-     */
     public function setSharedTables(bool $sharedTables): static
     {
         $this->adapter->setSharedTables($sharedTables);
@@ -996,9 +963,6 @@ class Database
         return $this->adapter->hasSharedTables();
     }
 
-    /**
-     * Set tenant to use if tables are shared
-     */
     public function setTenant(int|string|null $tenant): static
     {
         $this->adapter->setTenant($tenant);
@@ -1006,9 +970,6 @@ class Database
         return $this;
     }
 
-    /**
-     * Get tenant to use if tables are shared
-     */
     public function getTenant(): int|string|null
     {
         return $this->adapter->getTenant();
@@ -1027,9 +988,6 @@ class Database
         return $this->adapter->withTenant($tenant, $callback);
     }
 
-    /**
-     * Set whether to allow creating documents with tenant set per document.
-     */
     public function setTenantPerDocument(bool $enabled): static
     {
         $this->adapter->setTenantPerDocument($enabled);
@@ -1045,9 +1003,6 @@ class Database
         return $this->adapter->isTenantPerDocument();
     }
 
-    /**
-     * Sets instance of authorization for permission checks
-     */
     public function setAuthorization(Authorization $authorization): static
     {
         $this->adapter->setAuthorization($authorization);
@@ -1062,8 +1017,6 @@ class Database
     }
 
     /**
-     * Set maximum query execution time
-     *
      * @throws Exception
      */
     public function setTimeout(int $milliseconds, Event $event = Event::All): static
@@ -1077,9 +1030,6 @@ class Database
         return $this;
     }
 
-    /**
-     * Clear maximum query execution time
-     */
     public function clearTimeout(Event $event = Event::All): void
     {
         if (! $this->adapterHasFeature(Feature\Timeouts::class)) {
@@ -1100,7 +1050,6 @@ class Database
     /**
      * Set whether to preserve original date values instead of overwriting with current timestamps.
      *
-     * @param bool $preserve True to preserve dates on write operations.
      * @return $this
      */
     public function setPreserveDates(bool $preserve): static
@@ -1164,7 +1113,6 @@ class Database
     /**
      * Set whether to preserve original sequence values instead of auto-generating them.
      *
-     * @param bool $preserve True to preserve sequence values on write operations.
      * @return $this
      */
     public function setPreserveSequence(bool $preserve): static
@@ -1195,7 +1143,6 @@ class Database
     /**
      * Set the migration mode flag, which relaxes certain constraints during data migrations.
      *
-     * @param bool $migrating True to enable migration mode.
      * @return $this
      */
     public function setMigrating(bool $migrating): static
@@ -1206,11 +1153,6 @@ class Database
         return $this;
     }
 
-    /**
-     * Check whether the database is currently in migration mode.
-     *
-     * @return bool True if migration mode is active.
-     */
     public function isMigrating(): bool
     {
         return $this->migrating;
@@ -1219,7 +1161,6 @@ class Database
     /**
      * Set the maximum number of values allowed in a single query (e.g., IN clauses).
      *
-     * @param int $max The maximum number of query values.
      * @return $this
      */
     public function setMaxQueryValues(int $max): static
@@ -1236,19 +1177,12 @@ class Database
         return $this;
     }
 
-    /**
-     * Get the maximum number of values allowed in a single query.
-     *
-     * @return int The current maximum query values limit.
-     */
     public function getMaxQueryValues(): int
     {
         return $this->maxQueryValues;
     }
 
     /**
-     * Set list of collections which are globally accessible
-     *
      * @param  array<string>  $collections
      * @return $this
      */
@@ -1262,8 +1196,6 @@ class Database
     }
 
     /**
-     * Get list of collections which are globally accessible
-     *
      * @return array<string>
      */
     public function getGlobalCollections(): array
@@ -1271,18 +1203,12 @@ class Database
         return \array_keys($this->globalCollections);
     }
 
-    /**
-     * Clear global collections
-     */
     public function resetGlobalCollections(): void
     {
         $this->globalCollections = [];
     }
 
     /**
-     * Set custom document class for a collection
-     *
-     * @param  string  $collection  Collection ID
      * @param  string  $className  Fully qualified class name that extends Document
      *
      * @throws DatabaseException
@@ -1303,9 +1229,6 @@ class Database
     }
 
     /**
-     * Get custom document class for a collection
-     *
-     * @param  string  $collection  Collection ID
      * @return class-string<Document>|null
      */
     public function getDocumentType(string $collection): ?string
@@ -1313,11 +1236,6 @@ class Database
         return $this->documentTypes[$collection] ?? null;
     }
 
-    /**
-     * Clear document type mapping for a collection
-     *
-     * @param  string  $collection  Collection ID
-     */
     public function clearDocumentType(string $collection): void
     {
         unset($this->documentTypes[$collection]);
@@ -1498,9 +1416,6 @@ class Database
         $this->lifecycleHooks[] = $hook;
     }
 
-    /**
-     * Apply all registered decorators to a single document.
-     */
     protected function decorateDocument(Event $event, Document $collection, Document $document): Document
     {
         if ($this->areEventsSilenced()) {
@@ -1515,8 +1430,6 @@ class Database
     }
 
     /**
-     * Apply all registered document decorators to an array of documents.
-     *
      * @param  array<Document>  $documents
      * @return array<Document>
      */
@@ -1533,10 +1446,6 @@ class Database
         return $documents;
     }
 
-
-    /**
-     * Remove a query transform hook from the adapter.
-     */
     public function removeTransform(string $name): static
     {
         $this->adapter->removeTransform($name);
@@ -1855,8 +1764,6 @@ class Database
     }
 
     /**
-     * Encode Document
-     *
      * @param  bool  $applyDefaults  Whether to apply default values to null attributes
      *
      * @throws DatabaseException
@@ -1889,12 +1796,10 @@ class Database
                 continue;
             }
 
-            // Skip encoding for Operator objects
             if ($value instanceof Operator) {
                 continue;
             }
 
-            // Assign default when no value is provided or the value is explicitly null
             if ($value === null && $default !== null) {
                 // Skip applying defaults during updates to avoid resetting unspecified attributes
                 if (! $applyDefaults) {
@@ -1978,8 +1883,6 @@ class Database
     }
 
     /**
-     * Decode Document
-     *
      * @param  array<string>  $selections
      *
      * @throws DatabaseException
@@ -2312,9 +2215,6 @@ class Database
         return $this->adapter->getMetadata();
     }
 
-    /**
-     * Clear metadata
-     */
     public function resetMetadata(): void
     {
         $this->adapter->resetMetadata();
@@ -2564,10 +2464,6 @@ class Database
     }
 
     /**
-     * @param  Document  $collection
-     * @param  Query  $query
-     * @return Query
-     *
      * @throws QueryException
      * @throws \Utopia\Database\Exception
      */
@@ -2582,7 +2478,6 @@ class Database
 
     /**
      * @param array<string, Attribute> $attributesById
-     * @return Query
      * @throws QueryException
      * @throws \Utopia\Database\Exception
      */
@@ -3102,7 +2997,6 @@ class Database
      * cache. Non-string permissions are dropped, as Document::fromStorage() does, instead of failing
      * the read; a mapped type is kept.
      *
-     * @param  string  $collection  Collection ID
      * @param  array<string, mixed>  $data  Document data
      */
     protected function newDocument(string $collection, array $data): Document
@@ -3158,9 +3052,6 @@ class Database
     }
 
     /**
-     * Passes the attribute $value, and $document context to a predefined filter
-     * that allow you to manipulate the input format of the given attribute.
-     *
      * @throws DatabaseException
      */
     protected function encodeAttribute(string $name, mixed $value, Document $document): mixed
@@ -3182,9 +3073,6 @@ class Database
     }
 
     /**
-     * Passes the attribute $value, and $document context to a predefined filter
-     *  that allow you to manipulate the output format of the given attribute.
-     *
      * @throws NotFoundException
      */
     protected function decodeAttribute(string $filter, mixed $value, Document $document, string $attribute): mixed
@@ -3217,7 +3105,6 @@ class Database
                 return false;
             }
 
-            // Check associative array (hashmap) or nested structure
             if (empty($value)) {
                 continue;
             }
@@ -3239,12 +3126,6 @@ class Database
 
     /**
      * Retry a callable with exponential backoff
-     *
-     * @param  callable  $operation  The operation to retry
-     * @param  int  $maxAttempts  Maximum number of retry attempts
-     * @param  int  $initialDelayMs  Initial delay in milliseconds
-     * @param  float  $multiplier  Backoff multiplier
-     * @return void The result of the operation
      *
      * @throws Throwable The last exception if all retries fail
      */
@@ -3306,10 +3187,7 @@ class Database
     /**
      * Generic cleanup operation with retry logic
      *
-     * @param  callable  $operation  The cleanup operation to execute
      * @param  string  $resourceType  Type of resource being cleaned up (e.g., 'attribute', 'index')
-     * @param  string  $resourceId  ID of the resource being cleaned up
-     * @param  int  $maxAttempts  Maximum retry attempts
      *
      * @throws DatabaseException If cleanup fails after all retries
      */
@@ -3330,15 +3208,9 @@ class Database
     /**
      * Persist metadata with automatic rollback on failure
      *
-     * Centralizes the common pattern of:
-     * 1. Attempting to persist metadata with retry
-     * 2. Rolling back database operations if metadata persistence fails
-     * 3. Providing detailed error messages for both success and failure scenarios
-     *
      * A failure raised after the metadata write committed (its cache invalidation or events), or a commit that
      * could not be confirmed, is rethrown unchanged and rolls nothing back: the definition it reports on may be stored.
      *
-     * @param  Document  $collection  The collection document to persist
      * @param  callable|null  $rollbackOperation  Cleanup operation to run if persistence fails (null if no cleanup needed)
      * @param  bool  $shouldRollback  Whether rollback should be attempted (e.g., false for duplicates in shared tables)
      * @param  string  $operationDescription  Description of the operation for error messages

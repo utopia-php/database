@@ -14,17 +14,13 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Structure as StructureException;
+use Utopia\Database\Filter;
 use Utopia\Database\Schema\Column;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Validator;
 
-/**
- * Validates database attribute definitions including type, size, format, and default values.
- */
 class AttributeDefinition extends Validator
 {
-    private const string JSON_FILTER = 'json';
-
     private const array STRING_TYPES = [
         ColumnType::String,
         ColumnType::Varchar,
@@ -96,10 +92,6 @@ class AttributeDefinition extends Validator
     }
 
     /**
-     * Returns true if attribute is valid.
-     *
-     * @param  mixed  $value
-     *
      * @throws DatabaseException
      * @throws DuplicateException
      * @throws LimitException
@@ -148,8 +140,6 @@ class AttributeDefinition extends Validator
     }
 
     /**
-     * Check for duplicate attribute ID in collection metadata
-     *
      * @throws DuplicateException
      */
     public function checkDuplicateId(Attribute $attribute): bool
@@ -167,8 +157,6 @@ class AttributeDefinition extends Validator
     }
 
     /**
-     * Check for duplicate attribute ID in schema
-     *
      * @throws DuplicateException
      */
     public function checkDuplicateInSchema(Attribute $attribute): bool
@@ -195,8 +183,6 @@ class AttributeDefinition extends Validator
     }
 
     /**
-     * Check if required filters are present for the attribute type
-     *
      * @throws DatabaseException
      */
     public function checkRequiredFilters(Attribute $attribute): bool
@@ -211,21 +197,17 @@ class AttributeDefinition extends Validator
     }
 
     /**
-     * Get the list of required filters for each data type
-     *
      * @return array<string>
      */
     protected function getRequiredFilters(ColumnType $type): array
     {
         return match ($type) {
-            ColumnType::Datetime => ['datetime'],
+            ColumnType::Datetime => [Filter::Datetime->value],
             default => [],
         };
     }
 
     /**
-     * Check if format is valid for the attribute type
-     *
      * @throws DatabaseException
      */
     public function checkFormat(Attribute $attribute): bool
@@ -240,8 +222,6 @@ class AttributeDefinition extends Validator
     }
 
     /**
-     * Check attribute limits (count and width)
-     *
      * @throws LimitException
      */
     public function checkAttributeLimits(Attribute $attribute): bool
@@ -270,8 +250,6 @@ class AttributeDefinition extends Validator
     }
 
     /**
-     * Check attribute type and type-specific constraints
-     *
      * @throws DatabaseException
      */
     public function checkType(Attribute $attribute): bool
@@ -417,8 +395,6 @@ class AttributeDefinition extends Validator
     }
 
     /**
-     * Check default value constraints and type matching
-     *
      * @throws DatabaseException
      */
     public function checkDefaultValue(Attribute $attribute): bool
@@ -461,7 +437,7 @@ class AttributeDefinition extends Validator
     {
         $default = $attribute->default;
 
-        return \in_array(self::JSON_FILTER, $attribute->filters, true)
+        return \in_array(Filter::Json->value, $attribute->filters, true)
             && ! $attribute->array
             && \in_array($attribute->type, self::STRING_TYPES, true)
             && (\is_array($default) || $default instanceof stdClass || $default instanceof Document);
@@ -481,11 +457,6 @@ class AttributeDefinition extends Validator
     }
 
     /**
-     * Function to validate if the default value of an attribute matches its attribute type
-     *
-     * @param  ColumnType  $type  Type of the attribute
-     * @param  mixed  $default  Default value of the attribute
-     *
      * @throws DatabaseException
      */
     protected function validateDefaultTypes(ColumnType $type, mixed $default, bool $signed = true): void
@@ -493,7 +464,6 @@ class AttributeDefinition extends Validator
         $defaultType = \gettype($default);
 
         if ($defaultType === 'NULL') {
-            // Disable null. No validation required
             return;
         }
 
@@ -556,7 +526,6 @@ class AttributeDefinition extends Validator
                 }
                 break;
             case ColumnType::Vector:
-                // When validating individual vector components (from recursion), they should be numeric
                 if ($defaultType !== 'double' && $defaultType !== 'integer') {
                     $this->message = 'Vector components must be numeric values (float or integer)';
                     throw new DatabaseException($this->message);

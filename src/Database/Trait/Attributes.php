@@ -33,9 +33,6 @@ use Utopia\Database\Validator\Structure;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 
-/**
- * Provides CRUD operations for collection attributes including creation, update, rename, and deletion.
- */
 trait Attributes
 {
     /**
@@ -691,8 +688,6 @@ trait Attributes
     }
 
     /**
-     * Function to validate if the default value of an attribute matches its attribute type
-     *
      * @throws DatabaseException
      */
     protected function validateDefaultTypes(ColumnType $type, mixed $default, bool $signed = true): void

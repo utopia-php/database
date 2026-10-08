@@ -27,9 +27,6 @@ use Utopia\Database\Validator\Permissions;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 
-/**
- * Provides CRUD operations for database collections including creation, listing, sizing, and deletion.
- */
 trait Collections
 {
     /**

@@ -8,9 +8,6 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 
-/**
- * Provides database-level operations including creation, existence checks, listing, renaming and deletion.
- */
 trait Databases
 {
     /**

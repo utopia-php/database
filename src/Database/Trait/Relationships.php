@@ -25,14 +25,9 @@ use Utopia\Database\RelationshipType;
 use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\SetType;
 
-/**
- * Provides relationship attribute management including creation, update, deletion, and traversal control.
- */
 trait Relationships
 {
     /**
-     * Skip relationships for all the calls inside the callback
-     *
      * @template T
      *
      * @param  callable(): T  $callback
@@ -48,8 +43,6 @@ trait Relationships
     }
 
     /**
-     * Skip relationship existence checks for all calls inside the callback.
-     *
      * @template T
      *
      * @param  callable(): T  $callback

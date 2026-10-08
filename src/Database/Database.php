@@ -61,44 +61,43 @@ class Database
     use Trait\Relationships;
     use Trait\Transactions;
 
-    public const MAX_INT = 2147483647;
+    public const int MAX_INT = 2147483647;
 
-    public const MAX_BIG_INT = PHP_INT_MAX;
+    public const int MAX_BIG_INT = PHP_INT_MAX;
 
-    public const MAX_DOUBLE = PHP_FLOAT_MAX;
+    public const float MAX_DOUBLE = PHP_FLOAT_MAX;
 
-    public const MAX_VECTOR_DIMENSIONS = 16000;
+    public const int MAX_VECTOR_DIMENSIONS = 16000;
 
     public const string VECTOR_DISTANCE = Document::DISTANCE;
 
-    public const MAX_ARRAY_INDEX_LENGTH = 255;
+    public const int MAX_ARRAY_INDEX_LENGTH = 255;
 
-    public const MAX_UID_DEFAULT_LENGTH = 36;
+    public const int MAX_UID_DEFAULT_LENGTH = 36;
 
-    public const MAX_TEXT_BYTES = 65535;
+    public const int MAX_TEXT_BYTES = 65535;
 
-    public const MAX_MEDIUMTEXT_BYTES = 16777215;
+    public const int MAX_MEDIUMTEXT_BYTES = 16777215;
 
-    public const MAX_LONGTEXT_BYTES = 4294967295;
+    public const int MAX_LONGTEXT_BYTES = 4294967295;
 
-    public const MIN_INT = -2147483648;
+    public const int MIN_INT = -2147483648;
 
-    // Global SRID for geographic coordinates (WGS84)
-    public const DEFAULT_SRID = 4326;
+    public const int DEFAULT_SRID = 4326;
 
-    public const EARTH_RADIUS = 6371000;
+    public const int EARTH_RADIUS = 6371000;
 
-    public const RELATION_MAX_DEPTH = 3;
+    public const int RELATION_MAX_DEPTH = 3;
 
-    public const RELATION_QUERY_CHUNK_SIZE = 5000;
+    public const int RELATION_QUERY_CHUNK_SIZE = 5000;
 
     public const string METADATA = '_metadata';
 
-    public const LENGTH_KEY = 255;
+    public const int LENGTH_KEY = 255;
 
-    public const TTL = 60 * 60 * 24;
+    public const int TTL = 60 * 60 * 24;
 
-    private const CACHE_EMPTY_MARKER = '$empty';
+    private const string CACHE_EMPTY_MARKER = '$empty';
 
     /**
      * Failures that fail the same way on every attempt, so withRetries() rethrows them at once: every typed failure
@@ -145,14 +144,14 @@ class Database
         ColumnType::Object->value,
     ];
 
-    public const INTERNAL_ATTRIBUTE_KEYS = [
+    public const array INTERNAL_ATTRIBUTE_KEYS = [
         Storage::UID,
         Storage::CREATED_AT,
         Storage::UPDATED_AT,
         Storage::PERMISSIONS,
     ];
 
-    public const INTERNAL_INDEXES = [
+    public const array INTERNAL_INDEXES = [
         Storage::SEQUENCE,
         Storage::UID,
         Storage::CREATED_AT,

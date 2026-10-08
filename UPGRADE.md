@@ -1978,7 +1978,7 @@ from those builds changed before 8.0.0; none of them exists in 7.x.
 | `Database::enableProfiling()`, `disableProfiling()`, `Profiler\QueryProfiler`, `Profiler\QueryLog` | `setProfiling(bool)`, `Utopia\Database\Profiler`, `Profiler\Log` |
 | `Database::setTypeRegistry()`, `Type\Custom`, `Type\TypeRegistry`, an associative constructor `$filters` | `setFilters()`, `Filter\Codec`, `Filter\Registry`, a list of `Filter\Codec` |
 | `Cache\QueryCache` with `$cacheName` and `writerTimeout` arguments | `Cache\Query`, which uses those of the `Database` calling it |
-| `Authorization::withStatus()` | `skip()`, or `setStatus()` inside `skip()` |
+| `Authorization::withStatus()` | `skip()`, or `setStatus()` inside any `with*()` scope |
 | `Hook\Lifecycle::handle(Event $event, mixed $data)` | `handle(Event\Domain $event)` |
 | `Event\Documents\Created`, `Updated`, `Deleted` | `Event\Document\BatchCreated`, `BatchUpdated`, `BatchDeleted` |
 | `Event\Domain::$occurredAt` | Removed |

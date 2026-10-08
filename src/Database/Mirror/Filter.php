@@ -11,26 +11,12 @@ use Utopia\Database\Query;
  */
 abstract class Filter
 {
-    /**
-     * Called before any action is executed, when the filter is constructed.
-     *
-     * @param Database $source The source database instance
-     * @param Database|null $destination The destination database instance, or null if unavailable
-     * @return void
-     */
     public function initialize(
         Database $source,
         ?Database $destination,
     ): void {
     }
 
-    /**
-     * Called after all actions are executed, when the filter is destructed.
-     *
-     * @param Database $source The source database instance
-     * @param Database|null $destination The destination database instance, or null if unavailable
-     * @return void
-     */
     public function shutdown(
         Database $source,
         ?Database $destination,

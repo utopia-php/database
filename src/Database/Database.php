@@ -8873,9 +8873,9 @@ class Database
 
         if (!empty($cursor)) {
             foreach ($orderAttributes as $order) {
-                if ($cursor->getAttribute($order) === null) {
+                if (!$cursor->offsetExists($order)) {
                     throw new OrderException(
-                        message: "Order attribute '{$order}' is empty",
+                        message: "Order attribute '{$order}' is missing from the cursor",
                         attribute: $order
                     );
                 }

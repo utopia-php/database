@@ -2055,6 +2055,11 @@ class Postgres extends SQL
         return 'RANDOM()';
     }
 
+    protected function getNullOrder(): string
+    {
+        return Database::ORDER_DESC;
+    }
+
     /**
      * Size of POINT spatial type
      *

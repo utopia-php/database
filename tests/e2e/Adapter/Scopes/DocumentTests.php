@@ -3794,6 +3794,71 @@ trait DocumentTests
 
         $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
     }
+
+    public function testFindCursorWithNullOrderValues(): void
+    {
+        $database = $this->getDatabase();
+        $collection = __FUNCTION__;
+        $database->createCollection($collection);
+        $database->createAttribute($collection, 'value', Database::VAR_INTEGER, 4, false);
+        $database->createAttribute($collection, 'rank', Database::VAR_INTEGER, 4, false);
+
+        foreach ([[4, 2], [1, null], [2, 1], [null, 2], [null, null], [-1, 0], [0, -1], [2, null], [null, -1]] as [$value, $rank]) {
+            $database->createDocument($collection, new Document([
+                '$id' => ID::unique(),
+                '$permissions' => [Permission::read(Role::any())],
+                'value' => $value,
+                'rank' => $rank,
+            ]));
+        }
+
+        foreach ([
+            [Query::orderAsc('value')],
+            [Query::orderDesc('value')],
+            [Query::orderAsc('value'), Query::orderDesc('rank')],
+            [Query::orderDesc('value'), Query::orderAsc('rank')],
+        ] as $order) {
+            // Preserve each adapter's native null ordering and compare cursor
+            // pages against the same query without pagination.
+            $documents = $database->find($collection, $order);
+            $ids = \array_map(fn (Document $document) => $document->getId(), $documents);
+            $this->assertCount(9, $ids);
+
+            foreach ($documents as $index => $cursor) {
+                $after = $database->find($collection, [...$order, Query::cursorAfter($cursor)]);
+                $this->assertSame(
+                    \array_slice($ids, $index + 1),
+                    \array_map(fn (Document $document) => $document->getId(), $after)
+                );
+
+                $before = $database->find($collection, [...$order, Query::cursorBefore($cursor)]);
+                $this->assertSame(
+                    \array_slice($ids, 0, $index),
+                    \array_map(fn (Document $document) => $document->getId(), $before)
+                );
+            }
+
+            $paged = [];
+            $cursor = null;
+            do {
+                $queries = [...$order, Query::limit(2)];
+                if ($cursor !== null) {
+                    $queries[] = Query::cursorAfter($cursor);
+                }
+                $page = $database->find($collection, $queries);
+                foreach ($page as $document) {
+                    $paged[] = $document->getId();
+                }
+                $this->assertLessThanOrEqual(\count($ids), \count($paged));
+                $cursor = empty($page) ? null : $page[\count($page) - 1];
+            } while ($cursor !== null);
+
+            $this->assertSame($ids, $paged);
+        }
+
+        $database->deleteCollection($collection);
+    }
+
     public function testFindOrderByIdAndCursor(): void
     {
         /** @var Database $database */

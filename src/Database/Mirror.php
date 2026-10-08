@@ -34,8 +34,6 @@ class Mirror extends Database
     protected ?Database $destination = null;
 
     /**
-     * Filters to apply to documents before writing to the destination database
-     *
      * @var array<Filter>
      */
     protected array $writeFilters = [];
@@ -45,10 +43,7 @@ class Mirror extends Database
      */
     protected array $errorCallbacks = [];
 
-    /**
-     * Collections that should only be present in the source database
-     */
-    protected const SOURCE_ONLY_COLLECTIONS = [
+    protected const array SOURCE_ONLY_COLLECTIONS = [
         'upgrades',
     ];
 
@@ -91,11 +86,6 @@ class Mirror extends Database
         parent::setAuthorization($source->getAuthorization());
     }
 
-    /**
-     * Get the source database instance.
-     *
-     * @return Database
-     */
     public function getSource(): Database
     {
         return $this->source;
@@ -146,19 +136,12 @@ class Mirror extends Database
         return $this->source->findCollection($collection);
     }
 
-    /**
-     * Get the destination database instance, if configured.
-     *
-     * @return Database|null
-     */
     public function getDestination(): ?Database
     {
         return $this->destination;
     }
 
     /**
-     * Run the callback with every change the destination fails to apply.
-     *
      * @param  callable(Failure $failure): void  $callback
      */
     public function onError(callable $callback): static

@@ -54,6 +54,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
      *
      * @return array<Capability>
      */
+    #[\Override]
     public function capabilities(): array
     {
         return array_merge(parent::capabilities(), [
@@ -68,6 +69,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
         ]);
     }
 
+    #[\Override]
     public function id(): string
     {
         $result = $this->createBuilder()->fromNone()->selectRaw('CONNECTION_ID()')->build();
@@ -88,6 +90,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
      * @throws Exception
      * @throws PDOException
      */
+    #[\Override]
     public function create(string $name): bool
     {
         $name = $this->filter($name);
@@ -110,6 +113,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function update(string $name, string $new): bool
     {
         if ($this->hasSharedTables()) {
@@ -197,6 +201,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
      * @throws Exception
      * @throws PDOException
      */
+    #[\Override]
     public function createCollection(string $collection, array $attributes = [], array $indexes = []): bool
     {
         $id = $this->filter($collection);
@@ -308,6 +313,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
      * @throws Exception
      * @throws PDOException
      */
+    #[\Override]
     public function deleteCollection(string $collection): bool
     {
         $id = $this->filter($collection);
@@ -333,6 +339,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function analyzeCollection(string $collection): bool
     {
         $name = $this->filter($collection);
@@ -348,6 +355,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function getSizeOfCollectionOnDisk(string $collection): int
     {
         $collection = $this->filter($collection);
@@ -398,6 +406,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function getSizeOfCollection(string $collection): int
     {
         $collection = $this->filter($collection);
@@ -449,6 +458,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function updateAttribute(string $collection, string $key, Attribute $attribute): bool
     {
         $name = $this->filter($collection);
@@ -486,6 +496,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function createIndex(string $collection, Index $index, array $indexAttributeTypes = [], array $collation = []): bool
     {
         $metadataCollection = new Document([Document::ID => Database::METADATA]);
@@ -574,6 +585,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
      * @throws Exception
      * @throws PDOException
      */
+    #[\Override]
     public function deleteIndex(string $collection, string $key): bool
     {
         $name = $this->filter($collection);
@@ -600,6 +612,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
      *
      * @throws Exception
      */
+    #[\Override]
     public function renameIndex(string $collection, string $old, string $new): bool
     {
         $collection = $this->filter($collection);
@@ -620,6 +633,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
      * @throws DuplicateException
      * @throws \Throwable
      */
+    #[\Override]
     public function createDocument(Document $collection, Document $document): Document
     {
         try {
@@ -711,6 +725,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
      * @throws DuplicateException
      * @throws \Throwable
      */
+    #[\Override]
     public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
     {
         try {
@@ -784,6 +799,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function setTimeout(int $milliseconds, Event $event = Event::All): void
     {
         if ($milliseconds <= 0) {
@@ -797,6 +813,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
         $this->setTimeoutState($milliseconds, $event);
     }
 
+    #[\Override]
     public function clearTimeout(Event $event = Event::All): void
     {
         if ($event === Event::All) {
@@ -809,12 +826,14 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
     /**
      * Size of POINT spatial type
      */
+    #[\Override]
     protected function getMaxPointSize(): int
     {
         // https://dev.mysql.com/doc/refman/8.4/en/gis-data-formats.html#gis-internal-format
         return 25;
     }
 
+    #[\Override]
     public function encode(mixed $value, ColumnType $type): string
     {
         return Wkt::encode($value, $type);
@@ -823,6 +842,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
     /**
      * @return array<mixed>
      */
+    #[\Override]
     public function decode(string $value, ColumnType $type): array
     {
         return match ($type) {
@@ -1068,6 +1088,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
     /**
      * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $statement
      */
+    #[\Override]
     protected function execute(mixed $statement, ?Event $event = null): bool
     {
         $event ??= $this->getStatementEvent($statement);
@@ -1134,6 +1155,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
         return $driver instanceof PDOProxy ? $driver->getRound() : 0;
     }
 
+    #[\Override]
     protected function getConflictTenantExpression(string $column): string
     {
         $quoted = $this->quote($this->filter($column));
@@ -1142,6 +1164,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
         return "IF({$tenant} = VALUES({$tenant}), VALUES({$quoted}), {$quoted})";
     }
 
+    #[\Override]
     protected function getConflictIncrementExpression(string $column): string
     {
         $quoted = $this->quote($this->filter($column));
@@ -1149,6 +1172,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
         return "{$quoted} + VALUES({$quoted})";
     }
 
+    #[\Override]
     protected function getConflictTenantIncrementExpression(string $column): string
     {
         $quoted = $this->quote($this->filter($column));
@@ -1157,6 +1181,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
         return "IF({$tenant} = VALUES({$tenant}), {$quoted} + VALUES({$quoted}), {$quoted})";
     }
 
+    #[\Override]
     protected function createBuilder(): SQLBuilder
     {
         return new MariaDBBuilder();
@@ -1179,6 +1204,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function getSchemaAttributes(string $collection): array
     {
         $schema = $this->getDatabase();
@@ -1228,6 +1254,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
      *
      * @throws DatabaseException
      */
+    #[\Override]
     protected function getColumnNames(string $collection): array
     {
         return \array_map(
@@ -1240,6 +1267,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
      * Get operator SQL
      * Override to handle MariaDB/MySQL-specific operators
      */
+    #[\Override]
     protected function getOperatorSql(string $column, Operator $operator, int &$bindIndex): ?string
     {
         $quotedColumn = $this->quote($column);
@@ -1483,6 +1511,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
      *
      * @throws DatabaseException
      */
+    #[\Override]
     public function getSchemaIndexes(string $collection): array
     {
         $schema = $this->getDatabase();
@@ -1544,6 +1573,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
         return $indexes;
     }
 
+    #[\Override]
     protected function processException(PDOException $e): Exception
     {
         if ($e->getCode() === '22007' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1366) {

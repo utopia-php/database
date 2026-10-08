@@ -1898,21 +1898,35 @@ class Postgres extends SQL
 
         $column = "{$this->quote($alias)}.{$this->quote('_permissions')}";
 
-        // One ?| for all roles; a @> per role adds to the row estimate until the planner gives
-        // up on the GIN index. ?? is PDO's escape for a literal ?, which emulated prepares only
-        // accept while no named placeholder appears twice in the statement, so the queries this
-        // condition joins bind each value under its own name. jsonb_exists_any would avoid the
-        // ? but is not indexable.
-        $permissions = \array_map(
-            fn ($role) => $this->getPDO()->quote("{$type}(\"{$role}\")"),
-            $roles
-        );
+        $conditions = [];
 
-        if ($permissions === []) {
+        // A lone ?| is priced like a single equality, so the planner checks it first on every
+        // row. Matching "any" on its own makes the check cost two conditions, and the reader's
+        // own filters run before it.
+        if (\in_array('any', $roles, true)) {
+            $conditions[] = "{$column} @> " . $this->getPDO()->quote(\json_encode(["{$type}(\"any\")"])) . '::jsonb';
+            $roles = \array_values(\array_diff($roles, ['any']));
+        }
+
+        // One ?| for the other roles; a @> per role adds to the row estimate until the planner
+        // gives up on the GIN index. ?? is PDO's escape for a literal ?, which emulated prepares
+        // only accept while no named placeholder appears twice in the statement, so the queries
+        // this condition joins bind each value under its own name. jsonb_exists_any would avoid
+        // the ? but is not indexable.
+        if ($roles !== []) {
+            $permissions = \array_map(
+                fn ($role) => $this->getPDO()->quote("{$type}(\"{$role}\")"),
+                $roles
+            );
+
+            $conditions[] = "{$column} ??| ARRAY[" . \implode(', ', $permissions) . ']::text[]';
+        }
+
+        if ($conditions === []) {
             return 'FALSE';
         }
 
-        return "{$column} ??| ARRAY[" . \implode(', ', $permissions) . ']::text[]';
+        return '(' . \implode(' OR ', $conditions) . ')';
     }
 
     /**

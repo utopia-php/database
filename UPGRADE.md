@@ -1055,12 +1055,10 @@ Work that can outlive the coroutine that started it loses that coroutine's scope
 scopes it needs itself, inside the child. `Hook\Relationships::withEnabled()` and `withCheckExist()` scope the hook's
 own flags the same way as the database scopes.
 
-`Database::snapshot()` returns the calling coroutine's state as a `State\Snapshot`: the authorization status and
-roles, the relationship, silence and filter state, the tenant, the validation, preserve-dates, preserve-sequence and
-ignore-duplicates toggles, and the request timestamp; a snapshot does not carry a transaction.
-`Database::withSnapshot()` and `Hook\Relationships::withSnapshot()`, which run a callback under a snapshot, are
-`@internal`: `Mirror` and the relationship hook use them to carry the caller's state into the coroutines they start.
-They are not part of the public API.
+`Database::snapshot()`, `Database::withSnapshot()` and `Hook\Relationships::withSnapshot()` are `@internal`:
+`Mirror` and the relationship hook use them to carry the caller's state (the authorization status and roles, the
+relationship, silence and filter state, the tenant, the toggles and the request timestamp, but not a transaction) into
+the coroutines they start. They are not part of the public API.
 
 Relationship population reads its chunks of related ids concurrently only on `Adapter\Pool`, inside a coroutine and
 outside `withTransaction()`, and only as many at once as `Hook\Relationships::READ_CONCURRENCY` (4) and

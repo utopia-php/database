@@ -132,7 +132,7 @@ class Role
      * @param string $status The user status dimension (e.g. 'verified')
      * @return Role
      */
-    public static function user(string $identifier, string $status = ''): \Utopia\Database\Role
+    public static function user(string $identifier, string $status = ''): self
     {
         return new self('user', $identifier, $status);
     }
@@ -176,9 +176,9 @@ class Role
      *
      * @return Role
      */
-    public static function any(): \Utopia\Database\Role
+    public static function any(): self
     {
-        return new \Utopia\Database\Role('any');
+        return new self('any');
     }
 
     /**

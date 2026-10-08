@@ -275,9 +275,8 @@ have to make, with the 7.x and 8.0 forms side by side.
 - `Query::exists()` and `Query::notExists()` run on the SQL adapters. Each value names an attribute of the
   collection that holds a column, or an `alias.attribute` of a join; other names throw `Exception\Query`.
 - `Authorization::withRoles()` and `Adapter::withTenant()` scope the roles and the tenant to the calling coroutine,
-  and `Database::snapshot()` returns the calling coroutine's authorization, relationship, silence, tenant and toggle
-  state. `Hook\Relationships::withEnabled()` and `withCheckExist()` scope the hook's flags the same way.
-  `Database::withSnapshot()` and `Hook\Relationships::withSnapshot()` are `@internal`.
+  and `Hook\Relationships::withEnabled()` and `withCheckExist()` scope the hook's flags the same way.
+  `Database::snapshot()`, `Database::withSnapshot()` and `Hook\Relationships::withSnapshot()` are `@internal`.
 - Scoped toggles take their value: `withValidation()`, `withFiltering()`, `withPreserveDates()` and
   `withPreserveSequence()`.
 - `Database::setCacheWriterTimeout()` bounds how long an unfinished invalidation keeps a collection's document and

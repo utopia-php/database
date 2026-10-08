@@ -1609,6 +1609,8 @@ class Database
     /**
      * Capture the authorization status and roles, relationship, silence, tenant and toggle state the calling
      * coroutine sees, so work started elsewhere can run under it with withSnapshot().
+     *
+     * @internal
      */
     public function snapshot(): Snapshot
     {

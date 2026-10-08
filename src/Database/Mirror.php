@@ -235,9 +235,6 @@ class Mirror extends Database
         return $sourceResult;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function setDatabase(string $name): static
     {
@@ -248,9 +245,6 @@ class Mirror extends Database
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function setNamespace(string $namespace): static
     {
@@ -261,9 +255,6 @@ class Mirror extends Database
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function setSharedTables(bool $sharedTables): static
     {
@@ -274,9 +265,6 @@ class Mirror extends Database
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function setTenant(int|string|null $tenant): static
     {
@@ -287,9 +275,6 @@ class Mirror extends Database
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function setMaxQueryValues(int $max): static
     {
@@ -300,9 +285,6 @@ class Mirror extends Database
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function setCache(Cache $cache): static
     {
@@ -315,8 +297,6 @@ class Mirror extends Database
 
     /**
      * The query cache is attached to the mirror last, so it takes its name and writer timeout from the mirror.
-     *
-     * {@inheritdoc}
      */
     #[\Override]
     public function setQueryCache(?ResultCache $queryCache): static
@@ -327,9 +307,6 @@ class Mirror extends Database
         return parent::setQueryCache($queryCache);
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function setCacheName(string $name): static
     {
@@ -340,9 +317,6 @@ class Mirror extends Database
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function setCacheWriterTimeout(int $seconds): static
     {
@@ -353,9 +327,6 @@ class Mirror extends Database
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function setTenantPerDocument(bool $enabled): static
     {
@@ -369,8 +340,6 @@ class Mirror extends Database
     /**
      * A destination that cannot apply the timeout is reported through onError(), like a
      * failed destination write: MariaDB applies it on the destination's connection.
-     *
-     * {@inheritdoc}
      */
     #[\Override]
     public function setTimeout(int $milliseconds, Event $event = Event::All): static
@@ -380,18 +349,12 @@ class Mirror extends Database
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function clearTimeout(Event $event = Event::All): void
     {
         $this->delegateInOrder(__FUNCTION__, \func_get_args());
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function setGlobalCollections(array $collections): static
     {
@@ -402,9 +365,6 @@ class Mirror extends Database
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function resetGlobalCollections(): void
     {
@@ -413,9 +373,6 @@ class Mirror extends Database
         $this->destination?->resetGlobalCollections();
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function setMetadata(string $key, mixed $value): static
     {
@@ -426,9 +383,6 @@ class Mirror extends Database
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function resetMetadata(): void
     {
@@ -449,9 +403,6 @@ class Mirror extends Database
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function setMigrating(bool $migrating): static
     {
@@ -462,9 +413,6 @@ class Mirror extends Database
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function setFilters(Registry $filters): static
     {
@@ -477,8 +425,6 @@ class Mirror extends Database
 
     /**
      * A destination that cannot apply the setting is reported through onError(), like setTimeout().
-     *
-     * {@inheritdoc}
      */
     #[\Override]
     public function setLocks(bool $locks): static
@@ -489,9 +435,6 @@ class Mirror extends Database
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function setFiltering(bool $filtering): static
     {
@@ -502,11 +445,6 @@ class Mirror extends Database
         return $this;
     }
 
-    /**
-     * Opens the scope on the mirror, its source and its destination.
-     *
-     * {@inheritdoc}
-     */
     #[\Override]
     public function withFiltering(bool $filtering, callable $callback, ?array $filters = null): mixed
     {
@@ -522,8 +460,6 @@ class Mirror extends Database
 
     /**
      * The mirror queries through its source's adapter, so it reports to the source's profiler.
-     *
-     * {@inheritdoc}
      */
     #[\Override]
     public function setProfiling(bool $profiling): static
@@ -535,9 +471,6 @@ class Mirror extends Database
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function setDropUnknownAttributes(bool $drop): static
     {
@@ -548,9 +481,6 @@ class Mirror extends Database
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function setPreserveDates(bool $preserve): static
     {
@@ -559,9 +489,6 @@ class Mirror extends Database
         return parent::setPreserveDates($preserve);
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function setPreserveSequence(bool $preserve): static
     {
@@ -570,9 +497,6 @@ class Mirror extends Database
         return parent::setPreserveSequence($preserve);
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function setValidation(bool $validation): static
     {
@@ -581,11 +505,6 @@ class Mirror extends Database
         return parent::setValidation($validation);
     }
 
-    /**
-     * Opens the scope on the mirror, its source and its destination.
-     *
-     * {@inheritdoc}
-     */
     #[\Override]
     public function withValidation(bool $validation, callable $callback): mixed
     {
@@ -598,8 +517,6 @@ class Mirror extends Database
     /**
      * Opens the scope on the mirror, its source and its destination, so the writes the mirror replicates before
      * returning use the tenant too; the replications it queues carry it (see replicate()).
-     *
-     * {@inheritdoc}
      */
     #[\Override]
     public function withTenant(int|string|null $tenant, callable $callback): mixed
@@ -610,11 +527,6 @@ class Mirror extends Database
         return parent::withTenant($tenant, fn (): mixed => $this->source->withTenant($tenant, $scoped));
     }
 
-    /**
-     * Opens the scope on the mirror, its source and its destination.
-     *
-     * {@inheritdoc}
-     */
     #[\Override]
     public function withPreserveDates(bool $preserve, callable $callback): mixed
     {
@@ -624,11 +536,6 @@ class Mirror extends Database
         return parent::withPreserveDates($preserve, fn (): mixed => $this->source->withPreserveDates($preserve, $scoped));
     }
 
-    /**
-     * Opens the scope on the mirror, its source and its destination.
-     *
-     * {@inheritdoc}
-     */
     #[\Override]
     public function withPreserveSequence(bool $preserve, callable $callback): mixed
     {
@@ -638,18 +545,12 @@ class Mirror extends Database
         return parent::withPreserveSequence($preserve, fn (): mixed => $this->source->withPreserveSequence($preserve, $scoped));
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function skipRelationships(callable $callback): mixed
     {
         return parent::skipRelationships(fn (): mixed => $this->source->skipRelationships($callback));
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function skipRelationshipsExistCheck(callable $callback): mixed
     {
@@ -707,12 +608,6 @@ class Mirror extends Database
         $this->source->dispatchPropagating($event, $listeners);
     }
 
-    /**
-     * Silences the source, where lifecycle hooks are registered, and the mirror itself,
-     * where decorators are.
-     *
-     * {@inheritdoc}
-     */
     #[\Override]
     public function silent(callable $callback, ?array $hooks = null): mixed
     {
@@ -722,8 +617,6 @@ class Mirror extends Database
     /**
      * Scoped to the mirror and its source only: the source checks the timestamp, and the destination applies
      * what the source accepted.
-     *
-     * {@inheritdoc}
      */
     #[\Override]
     public function withRequestTimestamp(?DateTime $requestTimestamp, callable $callback): mixed
@@ -771,9 +664,6 @@ class Mirror extends Database
         return $result;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function create(?string $database = null): bool
     {
@@ -787,9 +677,6 @@ class Mirror extends Database
         return $result;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function delete(?string $database = null): bool
     {
@@ -798,9 +685,6 @@ class Mirror extends Database
         return $result;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function listCollections(int $limit = 25, int $offset = 0): array
     {
@@ -823,9 +707,6 @@ class Mirror extends Database
         return $collections;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function createCollection(Collection $collection): Collection
     {
@@ -1148,9 +1029,6 @@ class Mirror extends Database
         return $result;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function deleteIndex(string $collection, string $key): void
     {
@@ -1224,9 +1102,6 @@ class Mirror extends Database
         );
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function createDocument(string $collection, Document $document): Document
     {
@@ -1275,9 +1150,6 @@ class Mirror extends Database
         return $this->decorate(Event::DocumentCreate, $collection, $document);
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function createDocuments(
         string $collection,
@@ -1342,9 +1214,6 @@ class Mirror extends Database
         return $modified;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function updateDocument(string $collection, string $id, Document $document): Document
     {
@@ -1394,9 +1263,6 @@ class Mirror extends Database
         return $this->decorate(Event::DocumentUpdate, $collection, $document);
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function updateDocuments(
         string $collection,
@@ -1464,9 +1330,6 @@ class Mirror extends Database
         return $modified;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function upsertDocument(string $collection, Document $document): Document
     {
@@ -1512,9 +1375,6 @@ class Mirror extends Database
         return $this->decorate(Event::DocumentUpsert, $collection, $upserted);
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function upsertDocuments(
         string $collection,
@@ -1585,9 +1445,6 @@ class Mirror extends Database
         return $modified;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function deleteDocument(string $collection, string $id): bool
     {
@@ -1631,9 +1488,6 @@ class Mirror extends Database
         return $result;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function deleteDocuments(
         string $collection,
@@ -1696,9 +1550,6 @@ class Mirror extends Database
         $this->delegateInOrder(__FUNCTION__, \func_get_args());
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function createRelationship(string $collection, Relationship $relationship): Relationship
     {
@@ -1707,9 +1558,6 @@ class Mirror extends Database
         return $result;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function updateRelationship(string $collection, string $key, RelationshipUpdate $update): Relationship
     {
@@ -1718,27 +1566,18 @@ class Mirror extends Database
         return $result;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function deleteRelationship(string $collection, string $key): void
     {
         $this->delegateInOrder(__FUNCTION__, \func_get_args());
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function renameIndex(string $collection, string $old, string $new): void
     {
         $this->delegateInOrder(__FUNCTION__, \func_get_args());
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float|string $value = 1, int|float|string|null $max = null): Document
     {
@@ -1747,9 +1586,6 @@ class Mirror extends Database
         return $result;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function decreaseDocumentAttribute(string $collection, string $id, string $attribute, int|float|string $value = 1, int|float|string|null $min = null): Document
     {
@@ -1973,9 +1809,6 @@ class Mirror extends Database
         };
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function setAuthorization(Authorization $authorization): static
     {
@@ -2069,9 +1902,6 @@ class Mirror extends Database
         parent::clearDocumentType($collection);
     }
 
-    /**
-     * {@inheritdoc}
-     */
     #[\Override]
     public function clearDocumentTypes(): void
     {

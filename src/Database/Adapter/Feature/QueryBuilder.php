@@ -5,9 +5,6 @@ namespace Utopia\Database\Adapter\Feature;
 use Utopia\Query\Builder;
 use Utopia\Query\Schema;
 
-/**
- * Provides access to the query builder and schema for a database adapter.
- */
 interface QueryBuilder
 {
     /**

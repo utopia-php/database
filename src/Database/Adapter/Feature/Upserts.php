@@ -5,9 +5,6 @@ namespace Utopia\Database\Adapter\Feature;
 use Utopia\Database\Change;
 use Utopia\Database\Document;
 
-/**
- * Defines upsert (insert-or-update) operations for a database adapter.
- */
 interface Upserts
 {
     /**

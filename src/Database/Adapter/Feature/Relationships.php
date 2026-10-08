@@ -7,8 +7,6 @@ use Utopia\Database\RelationshipSide;
 use Utopia\Database\RelationshipUpdate;
 
 /**
- * Defines relationship management operations for a database adapter.
- *
  * Every relationship is given from the side of $collection, with both keys resolved.
  */
 interface Relationships

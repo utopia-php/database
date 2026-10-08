@@ -546,6 +546,7 @@ trait Documents
         $fillDefinition = $cacheable && $definition && ! $inTransaction;
         $cached = null;
         $collectionEpoch = null;
+        $cacheFailed = false;
         try {
             if ($cacheable && $definition) {
                 $entry = $this->loadCachedDefinition($documentKey, $field);
@@ -557,6 +558,7 @@ trait Documents
                 $cached = $this->loadCachedDocument($documentKey, $field, $epoch);
             }
         } catch (Exception $e) {
+            $cacheFailed = true;
             Console::warning('Warning: Failed to get document from cache: '.$e->getMessage());
         }
 
@@ -727,7 +729,9 @@ trait Documents
 
         if ($transactionDefinition) {
             $this->transactionDefinitions[$this->getEventContext()][$transactionDefinitionKey][$field] = clone $document;
-            $this->queueDefinitionRefill($transactionDefinitionKey, $field, $id);
+            if (! $cacheFailed) {
+                $this->queueDefinitionRefill($transactionDefinitionKey, $field, $id);
+            }
         }
 
         $document = $this->decorateDocument(Event::DocumentRead, $collection, $document);
@@ -903,7 +907,15 @@ trait Documents
             self::DOCUMENT_CACHE_VALUE => $document,
         ], $field, $generation);
 
-        if ($saved !== false && $generation === '0' && $isCurrent !== null && ! $isCurrent()) {
+        if ($saved === false) {
+            $this->definitionFillsFail = $this->cache->getGeneration($documentKey) === $generation;
+
+            return;
+        }
+
+        $this->definitionFillsFail = false;
+
+        if ($generation === '0' && $isCurrent !== null && ! $isCurrent()) {
             $this->cache->purge($documentKey);
         }
     }

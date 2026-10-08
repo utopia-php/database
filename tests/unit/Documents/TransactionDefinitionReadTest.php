@@ -4,11 +4,16 @@ namespace Tests\Unit\Documents;
 
 use PDO;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 use Tests\Unit\Cache\RedisLeasableCache;
 use Tests\Unit\Support\CountingMemory;
+use Utopia\Cache\Adapter\Memory as MemoryCache;
+use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
+use Utopia\Database\Adapter\ReadWritePool;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
@@ -17,6 +22,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Permission;
 use Utopia\Database\Role;
+use Utopia\Pools\Pool as UtopiaPool;
 
 final class TransactionDefinitionReadTest extends TestCase
 {
@@ -72,6 +78,113 @@ final class TransactionDefinitionReadTest extends TestCase
         $collection = $database->withTransaction(fn (): Collection => $database->getCollection(self::COLLECTION));
 
         $this->assertTrue($collection->getAttribute('documentSecurity'));
+    }
+
+    public function testATransactionWithoutAUsableCacheReadsItsDefinitionOnce(): void
+    {
+        $adapter = new CountingMemory();
+        $database = $this->database($adapter, new Cache(new NoCache()));
+
+        $this->assertSame(1, $this->transactionReads($database, $adapter, fn (): Document => $database->updateDocument(self::COLLECTION, 'ada', new Document(['balance' => 2]))));
+        $this->assertSame(1, $this->transactionReads($database, $adapter, fn (): Document => $database->updateDocument(self::COLLECTION, 'ada', new Document(['balance' => 3]))));
+
+        $adapter->reset();
+        $database->updateDocument(self::COLLECTION, 'ada', new Document(['balance' => 4]));
+
+        $this->assertSame(2, $adapter->metadataReads);
+        $this->assertSame(4, $database->getDocument(self::COLLECTION, 'ada')->getAttribute('balance'));
+    }
+
+    public function testACacheThatFailsDefinitionReadsAddsNoDefinitionRead(): void
+    {
+        $adapter = new CountingMemory();
+        $database = $this->database($adapter, new Cache(new class () extends MemoryCache {
+            #[\Override]
+            public function load(string $key, int $ttl, string $hash = ''): mixed
+            {
+                if (\str_contains($key, ':'.Database::METADATA.':')) {
+                    throw new RuntimeException('cache unreachable');
+                }
+
+                return parent::load($key, $ttl, $hash);
+            }
+
+            /**
+             * @param  array<int|string, mixed>|string  $data
+             * @return bool|string|array<int|string, mixed>
+             */
+            #[\Override]
+            public function save(string $key, array|string $data, string $hash = '', int $ttl = 0): bool|string|array
+            {
+                if (\str_contains($key, ':'.Database::METADATA.':')) {
+                    throw new RuntimeException('cache unreachable');
+                }
+
+                return parent::save($key, $data, $hash);
+            }
+        }));
+
+        $reads = $this->transactionReads($database, $adapter, fn (): Document => $database->updateDocument(self::COLLECTION, 'ada', new Document(['balance' => 2])));
+
+        $this->assertSame(1, $reads);
+        $this->assertSame(2, $database->getDocument(self::COLLECTION, 'ada')->getAttribute('balance'));
+    }
+
+    public function testACacheThatRefusedADefinitionIsFilledByTransactionsOnceItAcceptsAgain(): void
+    {
+        $adapter = new CountingMemory();
+        $cache = new class () extends MemoryCache {
+            public bool $refusing = false;
+
+            /**
+             * @param  array<int|string, mixed>|string  $data
+             * @return bool|string|array<int|string, mixed>
+             */
+            #[\Override]
+            public function save(string $key, array|string $data, string $hash = '', int $ttl = 0): bool|string|array
+            {
+                if ($this->refusing && \str_contains($key, ':'.Database::METADATA.':')) {
+                    return false;
+                }
+
+                return parent::save($key, $data, $hash);
+            }
+        };
+        $database = $this->database($adapter, new Cache($cache));
+        $update = fn (): Document => $database->updateDocument(self::COLLECTION, 'ada', new Document(['balance' => 2]));
+
+        $cache->refusing = true;
+        $database->purgeCachedDocument(Database::METADATA, self::COLLECTION);
+        $this->assertSame(2, $this->transactionReads($database, $adapter, $update));
+        $this->assertSame(1, $this->transactionReads($database, $adapter, $update));
+        $this->assertSame(1, $this->transactionReads($database, $adapter, $update));
+
+        $cache->refusing = false;
+        $database->getCollection(self::COLLECTION);
+        $database->purgeCachedDocument(Database::METADATA, self::COLLECTION);
+        $this->assertSame(2, $this->transactionReads($database, $adapter, $update));
+        $this->assertSame(0, $this->transactionReads($database, $adapter, $update), 'the transaction did not cache its definition');
+    }
+
+    public function testATransactionOnAReplicaReadPoolReadsItsDefinitionOnce(): void
+    {
+        $primary = new CountingMemory();
+        $replica = new CountingMemory();
+        foreach ([$primary, $replica] as $adapter) {
+            $this->database($adapter, new Cache(new NoCache()), 'replicated');
+        }
+        $pool = new ReadWritePool($this->connections($primary), $this->connections($replica));
+        $pool->setSticky(false);
+        $database = new Database($pool, new Cache(new RedisLeasableCache()));
+        $database->setDatabase('transactions')->setNamespace('replicated');
+        $update = fn (): Document => $database->updateDocument(self::COLLECTION, 'ada', new Document(['balance' => 2]));
+
+        $database->withTransaction($update);
+        $primary->reset();
+        $replica->reset();
+        $database->withTransaction($update);
+
+        $this->assertSame(1, $primary->metadataReads + $replica->metadataReads);
     }
 
     public function testATransactionUnderAnotherTenantCachesThatTenantsDefinition(): void
@@ -260,10 +373,24 @@ final class TransactionDefinitionReadTest extends TestCase
         return $adapter->metadataReads;
     }
 
-    private function database(Adapter $adapter): Database
+    /**
+     * @return UtopiaPool<Adapter>
+     */
+    private function connections(Adapter $adapter): UtopiaPool
     {
-        $database = new Database($adapter, new Cache(new RedisLeasableCache()));
-        $database->setDatabase('transactions')->setNamespace('transactions_'.\uniqid());
+        /** @var UtopiaPool<Adapter>&Stub $connections */
+        $connections = self::createStub(UtopiaPool::class);
+        $connections->method('use')->willReturnCallback(
+            static fn (callable $callback): mixed => $callback($adapter),
+        );
+
+        return $connections;
+    }
+
+    private function database(Adapter $adapter, ?Cache $cache = null, ?string $namespace = null): Database
+    {
+        $database = new Database($adapter, $cache ?? new Cache(new RedisLeasableCache()));
+        $database->setDatabase('transactions')->setNamespace($namespace ?? 'transactions_'.\uniqid());
         $database->create();
         $this->createAccounts($database);
         $database->getDocument(self::COLLECTION, 'ada');

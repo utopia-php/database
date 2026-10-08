@@ -27,6 +27,9 @@ trait Transactions
     /** @var array<int, array<string, array<string, Closure(): void>>> Reads that fill the shared cache with the collection definitions the transaction the open invalidation scope owns read by SQL, under the tenant and filters each was read with, by coroutine id, lower-cased definition key and cache field. */
     protected array $definitionRefills = [];
 
+    /** Whether the latest fill of a collection definition could not land: the cache refused it, or a replica served the read. Transactions leave their definitions uncached until a fill lands again. */
+    private bool $definitionFillsFail = false;
+
     /** @var array<int, list<Closure(): void>> Document purge events of the open invalidation scope, by coroutine id, fired once its outermost transaction has or may have committed. */
     protected array $documentPurgeEvents = [];
 
@@ -352,7 +355,8 @@ trait Transactions
      * Read again, now that the transaction has committed, each collection definition it had to read by SQL, so the
      * read fills the shared cache a read inside the transaction must not: its snapshot may predate another writer's
      * commit. Without this a definition dropped from the cache, as by a batch write, stays uncached for as long as
-     * only transactions read it. A failed read leaves the definition uncached, as it was.
+     * only transactions read it. A failed read leaves the definition uncached, as it was, and once a fill cannot
+     * land the remaining definitions stay uncached too.
      *
      * @param  array<string, array<string, Closure(): void>>  $refills  Reads by lower-cased definition key and cache field
      */
@@ -360,10 +364,18 @@ trait Transactions
     {
         foreach ($refills as $fields) {
             foreach ($fields as $refill) {
+                if ($this->definitionFillsFail) {
+                    return;
+                }
+
                 try {
                     $refill();
                 } catch (Throwable) {
                     // The definition stays uncached; the next read outside a transaction fills it.
+                }
+
+                if ($this->isReadFromReplica()) {
+                    $this->definitionFillsFail = true;
                 }
             }
         }

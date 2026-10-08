@@ -2974,6 +2974,9 @@ trait Documents
      * reader outside the transaction reads the stored row, which the slot still holds, and whatever it fills from
      * the row is purged with the slot after the commit.
      *
+     * A collection definition is purged inside the transaction as well: it has no epoch to retire when the purge
+     * after the commit fails, so a schema change whose purge fails inside the transaction is rolled back instead.
+     *
      * @throws Exception
      */
     private function purgeWrittenDocument(string $collectionId, ?string $id): bool
@@ -2983,7 +2986,7 @@ trait Documents
         }
 
         $documentKey = $this->trackDocumentPurge($collectionId, $id);
-        if (! isset($this->documentCachePurges[$this->getEventContext()])) {
+        if ($collectionId === self::METADATA || ! isset($this->documentCachePurges[$this->getEventContext()])) {
             $this->cache->purge($documentKey);
         }
 

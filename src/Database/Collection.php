@@ -91,6 +91,7 @@ class Collection extends Document
      * @throws StructureException
      * @throws IndexException
      */
+    #[\Override]
     public static function fromArray(array $data): self
     {
         $id = $data[self::ID] ?? '';
@@ -269,6 +270,7 @@ class Collection extends Document
         return $this->offsetExists(self::PERMISSIONS) ? $this->getPermissions() : null;
     }
 
+    #[\Override]
     public function __clone()
     {
         $attributes = $this->attributeModels !== null && $this->getAttribute(self::ATTRIBUTES) === $this->attributeSource
@@ -294,12 +296,14 @@ class Collection extends Document
         $this->fingerprint = $fingerprint;
     }
 
+    #[\Override]
     public function offsetSet(mixed $key, mixed $value): void
     {
         parent::offsetSet($key, $value);
         $this->forget($key);
     }
 
+    #[\Override]
     public function offsetUnset(mixed $key): void
     {
         parent::offsetUnset($key);
@@ -310,6 +314,7 @@ class Collection extends Document
      * @param  array<string, mixed>|object  $array
      * @return array<mixed>
      */
+    #[\Override]
     public function exchangeArray(array|object $array): array
     {
         $previous = parent::exchangeArray($array);

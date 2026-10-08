@@ -471,7 +471,31 @@ trait Documents
             return $this->newDocument($collection, []);
         }
 
-        $collection = $this->silent(fn () => $this->getCollection($collection));
+        $definition = $collection === self::METADATA && ($this->decorators === [] || $this->areEventsSilenced())
+            ? self::sharedDefinition()
+            : $this->silent(fn () => $this->getCollection($collection));
+
+        return $this->readDocument($definition, $id, $queries, $forUpdate);
+    }
+
+    /**
+     * getDocument() under a definition the caller already resolved, as a write locking the row it writes does: the
+     * row is cast and decoded under the definition the write validates and encodes with.
+     *
+     * @param  array<Query>  $queries
+     *
+     * @throws DatabaseException
+     * @throws QueryException
+     */
+    private function readDocument(Collection $collection, string $id, array $queries = [], bool $forUpdate = false): Document
+    {
+        if ($collection->getId() === self::METADATA && $id === self::METADATA) {
+            return self::collectionDefinition();
+        }
+
+        if (empty($id)) {
+            return $this->newDocument($collection->getId(), []);
+        }
 
         $attributes = $collection->attributes();
 
@@ -669,9 +693,12 @@ trait Documents
             return $this->newDocument($collection->getId(), []);
         }
 
-        $collectionState = $cacheable && $definition
-            ? $this->loadDocumentCacheState($this->getCacheBaseKeys($id)[0])
-            : new Epoch();
+        $describedKey = '';
+        $collectionState = new Epoch();
+        if ($cacheable && $definition) {
+            $describedKey = $this->getCacheBaseKeys($id)[0];
+            $collectionState = $this->loadDocumentCacheState($describedKey);
+        }
 
         $document = $this->castAfterDocument($collection, $document);
 
@@ -720,7 +747,7 @@ trait Documents
                         self::DOCUMENT_CACHE_CHECKED_AT => \time(),
                     ],
                     $generation,
-                    fn (): bool => $this->loadDocumentCacheState($this->getCacheBaseKeys($id)[0])->value === $collectionState->value,
+                    fn (): bool => $this->loadDocumentCacheState($describedKey)->value === $collectionState->value,
                 );
             }
         } catch (Exception $e) {
@@ -1412,7 +1439,7 @@ trait Documents
             : $collection->getId();
         $document = $this->withMutation(Event::DocumentUpdate, $cacheTarget, function () use ($collection, $id, $document, $newUpdatedAt, &$hasOperators) {
             $old = $this->authorization->skip(fn () => $this->silent(
-                fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
+                fn () => $this->readDocument($collection, $id, forUpdate: true)
             ));
             if ($old->isEmpty()) {
                 return new Document();
@@ -1823,10 +1850,11 @@ trait Documents
                 $new[] = Query::cursorAfter($last);
             }
 
-            $batch = $this->silent(fn () => $this->find(
-                $collection->getId(),
+            $batch = $this->silent(fn () => $this->fetch(
+                $collection,
                 array_merge($new, $queries),
-                forPermission: PermissionType::Update
+                PermissionType::Update,
+                false,
             ));
 
             if (empty($batch)) {
@@ -2451,7 +2479,7 @@ trait Documents
             : $collection->getId();
         $document = $this->withMutation(Event::DocumentIncrease, $cacheTarget, function () use ($collection, $id, $attribute, $value, $max, $numericAttribute) {
             /** @var Document $document */
-            $document = $this->authorization->skip(fn () => $this->silent(fn () => $this->getDocument($collection->getId(), $id, forUpdate: true))); // Skip ensures user does not need read permission for this
+            $document = $this->authorization->skip(fn () => $this->silent(fn () => $this->readDocument($collection, $id, forUpdate: true))); // Skip ensures user does not need read permission for this
 
             if ($document->isEmpty()) {
                 throw new NotFoundException('Document not found');
@@ -2575,7 +2603,7 @@ trait Documents
             : $collection->getId();
         $document = $this->withMutation(Event::DocumentDecrease, $cacheTarget, function () use ($collection, $id, $attribute, $value, $min, $numericAttribute) {
             /** @var Document $document */
-            $document = $this->authorization->skip(fn () => $this->silent(fn () => $this->getDocument($collection->getId(), $id, forUpdate: true))); // Skip ensures user does not need read permission for this
+            $document = $this->authorization->skip(fn () => $this->silent(fn () => $this->readDocument($collection, $id, forUpdate: true))); // Skip ensures user does not need read permission for this
 
             if ($document->isEmpty()) {
                 throw new NotFoundException('Document not found');
@@ -2676,7 +2704,7 @@ trait Documents
         $deleted = $this->withMutation(Event::DocumentDelete, $cacheTarget, function () use ($collection, $id, $report, &$changed): ?Document {
             $changed = [];
             $document = $this->authorization->skip(fn () => $this->silent(
-                fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
+                fn () => $this->readDocument($collection, $id, forUpdate: true)
             ));
 
             if ($document->isEmpty()) {
@@ -2844,10 +2872,11 @@ trait Documents
             /**
              * @var array<Document> $batch
              */
-            $batch = $this->silent(fn () => $this->find(
-                $collection->getId(),
+            $batch = $this->silent(fn () => $this->fetch(
+                $collection,
                 array_merge($new, $queries),
-                forPermission: PermissionType::Delete
+                PermissionType::Delete,
+                false,
             ));
 
             if (empty($batch)) {
@@ -3701,7 +3730,7 @@ trait Documents
      */
     public function find(string $collection, array $queries = [], PermissionType $forPermission = PermissionType::Read): array
     {
-        return $this->fetch($collection, $queries, $forPermission, false);
+        return $this->fetch($this->silent(fn () => $this->getCollection($collection)), $queries, $forPermission, false);
     }
 
     /**
@@ -3714,11 +3743,9 @@ trait Documents
      * @throws TimeoutException
      * @throws Exception
      */
-    private function fetch(string $collection, array $queries, PermissionType $forPermission, bool $aggregate): array
+    private function fetch(Collection $collection, array $queries, PermissionType $forPermission, bool $aggregate): array
     {
         $queryCacheQueries = $queries;
-
-        $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $this->checkQueryTypes($queries);
 
@@ -4449,7 +4476,7 @@ trait Documents
     public function aggregate(string $collection, array $queries): array
     {
         $rows = [];
-        foreach ($this->fetch($collection, self::aliasAggregates($queries), PermissionType::Read, true) as $row) {
+        foreach ($this->fetch($this->silent(fn () => $this->getCollection($collection)), self::aliasAggregates($queries), PermissionType::Read, true) as $row) {
             $rows[] = $row->getArrayCopy();
         }
 

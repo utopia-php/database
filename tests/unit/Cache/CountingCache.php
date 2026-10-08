@@ -12,6 +12,9 @@ final class CountingCache implements CacheAdapter, Leasable
 {
     private int $operations = 0;
 
+    /** @var array<string, int> */
+    private array $loads = [];
+
     public function __construct(
         private readonly CacheAdapter&Leasable $cache,
     ) {
@@ -21,6 +24,7 @@ final class CountingCache implements CacheAdapter, Leasable
     public function load(string $key, int $ttl, string $hash = ''): mixed
     {
         $this->operations++;
+        $this->loads[$key] = ($this->loads[$key] ?? 0) + 1;
 
         return $this->cache->load($key, $ttl, $hash);
     }
@@ -109,8 +113,19 @@ final class CountingCache implements CacheAdapter, Leasable
         return $this->operations;
     }
 
+    /**
+     * How often each key was loaded since the last reset.
+     *
+     * @return array<string, int>
+     */
+    public function getLoads(): array
+    {
+        return $this->loads;
+    }
+
     public function resetOperations(): void
     {
         $this->operations = 0;
+        $this->loads = [];
     }
 }

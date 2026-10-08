@@ -95,8 +95,9 @@ final class TransactionDefinitionReadTest extends TestCase
 
         $adapter->reset();
         $database->updateDocument(self::COLLECTION, 'ada', new Document(['balance' => 4]));
+        $database->getCollection(self::COLLECTION);
 
-        $this->assertSame(2, $adapter->metadataReads);
+        $this->assertSame(2, $adapter->metadataReads, 'Outside a transaction every call reads the definition again');
         $this->assertSame(4, $database->getDocument(self::COLLECTION, 'ada')->getAttribute('balance'));
     }
 

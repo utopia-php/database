@@ -23,7 +23,7 @@ use Utopia\Database\Role;
  */
 final class MetadataTenantInvalidationTest extends TestCase
 {
-    private const TENANT = 7;
+    private const int TENANT = 7;
 
     public function testCreatingACollectionClearsAMissCachedUnderTheAdapterTenant(): void
     {

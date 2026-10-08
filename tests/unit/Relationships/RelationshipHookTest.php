@@ -39,7 +39,7 @@ use Utopia\Query\CursorDirection;
 
 final class RelationshipHookTest extends TestCase
 {
-    private const ADMIN = 'user:admin';
+    private const string ADMIN = 'user:admin';
 
     /**
      * @return iterable<string, array{Closure(): Adapter}>

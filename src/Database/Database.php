@@ -2635,8 +2635,17 @@ class Database
      */
     public static function collectionDefinition(): Collection
     {
+        return clone self::sharedDefinition();
+    }
+
+    /**
+     * The one instance collectionDefinition() copies; whoever is handed it must not let it reach code that may
+     * change it.
+     */
+    private static function sharedDefinition(): Collection
+    {
         if (self::$definition !== null) {
-            return clone self::$definition;
+            return self::$definition;
         }
 
         $definition = Collection::create(
@@ -2654,7 +2663,7 @@ class Database
         $definition->attributes();
         $definition->indexes();
 
-        return clone (self::$definition = $definition);
+        return self::$definition = $definition;
     }
 
     /**

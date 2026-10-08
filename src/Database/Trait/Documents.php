@@ -471,7 +471,11 @@ trait Documents
             return $this->newDocument($collection, []);
         }
 
-        return $this->readDocument($this->silent(fn () => $this->getCollection($collection)), $id, $queries, $forUpdate);
+        $definition = $collection === self::METADATA && ($this->decorators === [] || $this->areEventsSilenced())
+            ? self::sharedDefinition()
+            : $this->silent(fn () => $this->getCollection($collection));
+
+        return $this->readDocument($definition, $id, $queries, $forUpdate);
     }
 
     /**

@@ -12,21 +12,21 @@ use Utopia\Validator;
 class Roles extends Validator
 {
     // Roles
-    public const ROLE_ANY = 'any';
+    public const string ROLE_ANY = 'any';
 
-    public const ROLE_GUESTS = 'guests';
+    public const string ROLE_GUESTS = 'guests';
 
-    public const ROLE_USERS = 'users';
+    public const string ROLE_USERS = 'users';
 
-    public const ROLE_USER = 'user';
+    public const string ROLE_USER = 'user';
 
-    public const ROLE_TEAM = 'team';
+    public const string ROLE_TEAM = 'team';
 
-    public const ROLE_MEMBER = 'member';
+    public const string ROLE_MEMBER = 'member';
 
-    public const ROLE_LABEL = 'label';
+    public const string ROLE_LABEL = 'label';
 
-    public const ROLES = [
+    public const array ROLES = [
         self::ROLE_ANY,
         self::ROLE_GUESTS,
         self::ROLE_USERS,
@@ -45,7 +45,7 @@ class Roles extends Validator
 
     protected int $length;
 
-    public const CONFIG = [
+    public const array CONFIG = [
         self::ROLE_ANY => [
             'identifier' => [
                 'allowed' => false,
@@ -121,11 +121,11 @@ class Roles extends Validator
     ];
 
     // Dimensions
-    public const DIMENSION_VERIFIED = 'verified';
+    public const string DIMENSION_VERIFIED = 'verified';
 
-    public const DIMENSION_UNVERIFIED = 'unverified';
+    public const string DIMENSION_UNVERIFIED = 'unverified';
 
-    public const USER_DIMENSIONS = [
+    public const array USER_DIMENSIONS = [
         self::DIMENSION_VERIFIED,
         self::DIMENSION_UNVERIFIED,
     ];

@@ -11,15 +11,15 @@ use Utopia\Validator;
  */
 class Datetime extends Validator
 {
-    public const PRECISION_DAYS = 'days';
+    public const string PRECISION_DAYS = 'days';
 
-    public const PRECISION_HOURS = 'hours';
+    public const string PRECISION_HOURS = 'hours';
 
-    public const PRECISION_MINUTES = 'minutes';
+    public const string PRECISION_MINUTES = 'minutes';
 
-    public const PRECISION_SECONDS = 'seconds';
+    public const string PRECISION_SECONDS = 'seconds';
 
-    public const PRECISION_ANY = 'any';
+    public const string PRECISION_ANY = 'any';
 
     /**
      * @throws Exception

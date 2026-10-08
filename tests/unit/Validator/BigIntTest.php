@@ -108,4 +108,32 @@ final class BigIntTest extends TestCase
         $this->assertSame(BigInt::UNSIGNED_MAX.'0', BigInt::power(-2, 66));
         $this->assertSame(BigInt::UNSIGNED_MAX.'0', BigInt::power(2, '99999999999999999999'));
     }
+
+    public function testNativeIntegerArithmeticAtTheSignedLimits(): void
+    {
+        $this->assertSame(BigInt::SIGNED_MAX, (string) BigInt::add(\PHP_INT_MAX - 1, 1));
+        $this->assertSame('9223372036854775808', BigInt::add(\PHP_INT_MAX, 1));
+        $this->assertSame('-9223372036854775809', BigInt::add(\PHP_INT_MIN, -1));
+        $this->assertSame(\PHP_INT_MIN, BigInt::subtract(\PHP_INT_MIN + 1, 1));
+        $this->assertSame('-9223372036854775809', BigInt::subtract(\PHP_INT_MIN, 1));
+        $this->assertSame('9223372036854775808', BigInt::negate(\PHP_INT_MIN));
+        $this->assertSame(-\PHP_INT_MAX, BigInt::negate(\PHP_INT_MAX));
+        $this->assertSame(0, BigInt::add(5, -5));
+    }
+
+    public function testComparingNativeAndStringIntegersAgrees(): void
+    {
+        $this->assertSame(-1, BigInt::compare(-2, 1));
+        $this->assertSame(0, BigInt::compare(7, '7'));
+        $this->assertSame(1, BigInt::compare(\PHP_INT_MAX, \PHP_INT_MIN));
+        $this->assertSame(-1, BigInt::compare(\PHP_INT_MAX, BigInt::UNSIGNED_MAX));
+    }
+
+    public function testNativeIntegersNormalizeToTheirDigits(): void
+    {
+        $this->assertSame('-42', BigInt::normalizeInteger(-42));
+        $this->assertSame('0', BigInt::normalizeInteger(0));
+        $this->assertSame(\PHP_INT_MIN, BigInt::toNative(\PHP_INT_MIN));
+        $this->assertSame(12, BigInt::toNative(12));
+    }
 }

@@ -134,10 +134,10 @@ trait Documents
                 && ! $this->adapter->supports(Capability::UnsignedBigInt)) {
                 throw new TypeException('Unsigned 64-bit arithmetic is not supported by this adapter.');
             }
-            if ((! \is_int($current) && ! \is_string($current)) || ! BigInt::isIntegerString((string) $current)) {
+            if (! \is_int($current) && (! \is_string($current) || ! BigInt::isIntegerString($current))) {
                 throw new TypeException('Attribute value must be an integer.');
             }
-            if ((! \is_int($value) && ! \is_string($value)) || ! BigInt::isIntegerString((string) $value)) {
+            if (! \is_int($value) && (! \is_string($value) || ! BigInt::isIntegerString($value))) {
                 throw new TypeException('Change value must be an integer.');
             }
 
@@ -274,7 +274,7 @@ trait Documents
 
     private function assertIntegerChange(int|float|string $value): void
     {
-        if ((! \is_int($value) && ! \is_string($value)) || ! BigInt::isIntegerString((string) $value)) {
+        if (! \is_int($value) && (! \is_string($value) || ! BigInt::isIntegerString($value))) {
             throw new TypeException('Change value must be an integer.');
         }
     }

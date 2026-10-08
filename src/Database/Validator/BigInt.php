@@ -126,6 +126,9 @@ class BigInt extends Validator
 
     public static function normalizeInteger(mixed $value): string
     {
+        if (\is_int($value)) {
+            return (string) $value;
+        }
         if (\is_float($value)) {
             if (! \is_finite($value) || \floor($value) !== $value || $value < \PHP_INT_MIN || $value > \PHP_INT_MAX) {
                 throw new InvalidArgumentException('Value must be an integer.');
@@ -148,6 +151,10 @@ class BigInt extends Validator
 
     public static function toNative(mixed $value): int|string
     {
+        if (\is_int($value)) {
+            return $value;
+        }
+
         $value = self::normalizeInteger($value);
 
         return self::fitsPhpInt($value) ? (int) $value : $value;
@@ -155,6 +162,10 @@ class BigInt extends Validator
 
     public static function compare(int|float|string $a, int|float|string $b): int
     {
+        if (\is_int($a) && \is_int($b)) {
+            return $a <=> $b;
+        }
+
         $a = self::normalizeInteger($a);
         $b = self::normalizeInteger($b);
         $aNegative = \str_starts_with($a, '-');
@@ -171,6 +182,10 @@ class BigInt extends Validator
 
     public static function add(int|float|string $a, int|float|string $b): int|string
     {
+        if (\is_int($a) && \is_int($b) && ($b >= 0 ? $a <= \PHP_INT_MAX - $b : $a >= \PHP_INT_MIN - $b)) {
+            return $a + $b;
+        }
+
         $a = self::normalizeInteger($a);
         $b = self::normalizeInteger($b);
         $aNegative = \str_starts_with($a, '-');
@@ -211,6 +226,10 @@ class BigInt extends Validator
 
     public static function negate(int|float|string $value): int|string
     {
+        if (\is_int($value) && $value !== \PHP_INT_MIN) {
+            return -$value;
+        }
+
         $value = self::normalizeInteger($value);
         if ($value === '0') {
             return 0;

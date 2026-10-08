@@ -1843,10 +1843,11 @@ trait Documents
                 $new[] = Query::cursorAfter($last);
             }
 
-            $batch = $this->silent(fn () => $this->find(
-                $collection->getId(),
+            $batch = $this->silent(fn () => $this->fetch(
+                $collection,
                 array_merge($new, $queries),
-                forPermission: PermissionType::Update
+                PermissionType::Update,
+                false,
             ));
 
             if (empty($batch)) {
@@ -2864,10 +2865,11 @@ trait Documents
             /**
              * @var array<Document> $batch
              */
-            $batch = $this->silent(fn () => $this->find(
-                $collection->getId(),
+            $batch = $this->silent(fn () => $this->fetch(
+                $collection,
                 array_merge($new, $queries),
-                forPermission: PermissionType::Delete
+                PermissionType::Delete,
+                false,
             ));
 
             if (empty($batch)) {
@@ -3721,7 +3723,7 @@ trait Documents
      */
     public function find(string $collection, array $queries = [], PermissionType $forPermission = PermissionType::Read): array
     {
-        return $this->fetch($collection, $queries, $forPermission, false);
+        return $this->fetch($this->silent(fn () => $this->getCollection($collection)), $queries, $forPermission, false);
     }
 
     /**
@@ -3734,11 +3736,9 @@ trait Documents
      * @throws TimeoutException
      * @throws Exception
      */
-    private function fetch(string $collection, array $queries, PermissionType $forPermission, bool $aggregate): array
+    private function fetch(Collection $collection, array $queries, PermissionType $forPermission, bool $aggregate): array
     {
         $queryCacheQueries = $queries;
-
-        $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $this->checkQueryTypes($queries);
 
@@ -4469,7 +4469,7 @@ trait Documents
     public function aggregate(string $collection, array $queries): array
     {
         $rows = [];
-        foreach ($this->fetch($collection, self::aliasAggregates($queries), PermissionType::Read, true) as $row) {
+        foreach ($this->fetch($this->silent(fn () => $this->getCollection($collection)), self::aliasAggregates($queries), PermissionType::Read, true) as $row) {
             $rows[] = $row->getArrayCopy();
         }
 

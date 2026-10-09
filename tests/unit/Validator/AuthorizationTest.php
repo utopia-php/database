@@ -127,4 +127,32 @@ class AuthorizationTest extends TestCase
 
         $this->assertEquals(true, $this->authorization->getStatus());
     }
+
+    public function test_custom_action_granted(): void
+    {
+        $this->authorization->addRole(Role::user(Id::custom('123'))->toString());
+
+        $this->assertTrue($this->authorization->isValid(new Input('execute', [Role::user(Id::custom('123'))->toString()])));
+        $this->assertTrue($this->authorization->isValid(new Input('subscribe', [Role::any()->toString()])));
+    }
+
+    public function test_custom_action_denied(): void
+    {
+        $input = new Input('execute', [Role::user(Id::custom('456'))->toString()]);
+
+        $this->assertSame('execute', $input->getAction());
+        $this->assertFalse($this->authorization->isValid($input));
+        $this->assertStringContainsString('Missing "execute" permission', $this->authorization->getDescription());
+
+        $this->assertFalse($this->authorization->isValid(new Input('execute', [])));
+        $this->assertSame("No permissions provided for action 'execute'", $this->authorization->getDescription());
+    }
+
+    public function test_set_action_accepts_custom_string_and_enum(): void
+    {
+        $input = new Input(PermissionType::Read, []);
+
+        $this->assertSame('subscribe', $input->setAction('subscribe')->getAction());
+        $this->assertSame('update', $input->setAction(PermissionType::Update)->getAction());
+    }
 }

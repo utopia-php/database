@@ -983,7 +983,7 @@ scoped form takes the value and a callback. Setters return `static` and `reset`/
 | Adapter `enableAlterLocks(bool $enable)` | `Database::setLocks(bool $locks)` |
 | `Authorization::setDefaultStatus(bool $status)` | `new Authorization(defaultStatus: $status)` |
 | `Authorization::addRole()`, `removeRole()`, `cleanRoles()`, `setStatus()`, `enable()`, `disable()` returned `void` | Return `static` |
-| `new Authorization\Input(string $action, array $permissions)` | `new Authorization\Input(PermissionType $action, array $permissions)` |
+| `new Authorization\Input(string $action, array $permissions)` | `new Authorization\Input(PermissionType\|string $action, array $permissions)`: pass a `PermissionType` case for the built-in actions; an action of your own, such as `execute` or `subscribe`, stays a string |
 
 `setProfiling(bool)` and `isProfiling()` turn the query profiler on and off (see
 [Pools and profiling](#pools-and-profiling)).
@@ -1946,7 +1946,8 @@ $validator = new IndexDefinition($attributes, $indexes, $database->profile());
   after the 7.x parameter (`$permissions` on `Permissions`, `$roles` on `Roles`, `$document` on `Structure` and
   `PartialStructure`, `$input` on `Authorization`) passes `value:` instead.
 - `Validator\Permissions` and `Permission::aggregate()` take their allowed permission types as `PermissionType`
-  cases; a list of strings throws a `TypeError`. `Validator\Authorization\Input` takes a `PermissionType` case.
+  cases; a list of strings throws a `TypeError`. `Validator\Authorization\Input` takes a `PermissionType` case, or
+  the string of an action of your own such as `execute`.
 - `Validator\Authorization`'s status is no longer a `protected bool $status` property; subclasses read and change it
   through `getStatus()`, `setStatus()` and `skip()`. `skip()` is scoped to the calling coroutine and the coroutines
   it starts; `setStatus()`, `enable()`, `disable()` and `reset()` change the shared status unless called inside

@@ -17,12 +17,13 @@ class Input
     protected string $action;
 
     /**
+     * @param  PermissionType|string  $action  A built-in permission type, or a consumer-defined action such as 'execute'
      * @param  array<string>  $permissions  The permissions that grant the action
      */
-    public function __construct(PermissionType $action, array $permissions)
+    public function __construct(PermissionType|string $action, array $permissions)
     {
         $this->permissions = $permissions;
-        $this->action = $action->value;
+        $this->action = $action instanceof PermissionType ? $action->value : $action;
     }
 
     /**
@@ -35,9 +36,9 @@ class Input
         return $this;
     }
 
-    public function setAction(PermissionType $action): static
+    public function setAction(PermissionType|string $action): static
     {
-        $this->action = $action->value;
+        $this->action = $action instanceof PermissionType ? $action->value : $action;
 
         return $this;
     }

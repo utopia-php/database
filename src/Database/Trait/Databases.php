@@ -123,7 +123,7 @@ trait Databases
 
         $listeners = $this->listens(Event::DatabaseDelete);
         if ($listeners !== []) {
-            $this->dispatch(new Event\Database\Deleted($database, true), $listeners);
+            $this->dispatch(new Event\Database\Deleted($database), $listeners);
         }
 
         return true;

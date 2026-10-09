@@ -627,7 +627,7 @@ Each event's payload is a typed property; 7.x passed arrays, strings, `false` an
 
 | Event | Class | Properties |
 |---|---|---|
-| `database_create`, `database_update`, `database_delete`, `database_list` | `Event\Database\Created`, `Updated`, `Deleted`, `Listed` | `database`; `new` (update); `deleted` (delete); `databases` (list) |
+| `database_create`, `database_update`, `database_delete`, `database_list` | `Event\Database\Created`, `Updated`, `Deleted`, `Listed` | `database`; `new` (update); `databases` (list) |
 | `collection_create`, `collection_read`, `collection_update`, `collection_delete` | `Event\Collection\Created`, `Read`, `Updated`, `Deleted` | `collection`, `definition` (`Collection`) |
 | `collection_list` | `Event\Collection\Listed` | `collections` |
 | `attribute_create`, `attribute_update`, `attribute_delete` | `Event\Attribute\Created`, `Updated`, `Deleted` | `collection`, `attribute` (`Attribute`) |
@@ -1176,10 +1176,8 @@ coroutine that opened it and the coroutines it starts; see [Pools and profiling]
   database`, `Failed to delete database`, `Failed to create collection` and `Failed to delete collection`. A refused
   rename or relationship update has one message naming its keys: `Failed to rename attribute 'a' to 'b'`, `Failed to
   rename index 'a' to 'b'`, `Failed to rename database 'a' to 'b'` and `Failed to update relationship 'k'`.
-  `update()` and `delete()` therefore return `true` whenever they return, and `Event\Database\Deleted::$deleted`
-  is always `true`. An adapter still answers `true` for a state that already holds, such as a database that exists
-  or is already gone. 7.x wrapped those three
-  refusals in the message it uses for an adapter error (`Failed to rename attribute 'a' to 'b': Failed to rename
+  `update()` and `delete()` therefore return `true` whenever they return. An adapter still answers `true` for a
+  state that already holds, such as a database that exists or is already gone. 7.x wrapped those three refusals in the message it uses for an adapter error (`Failed to rename attribute 'a' to 'b': Failed to rename
   attribute`), so a refusal looked like an engine failure. An error the adapter raises reaches the caller as itself,
   except from `renameAttribute()`, `renameIndex()` and `updateRelationship()`: there an `Exception\Duplicate` or
   `Exception\NotFound` (such as MariaDB/MySQL 1054 for a missing column) still reaches the caller as itself, and any

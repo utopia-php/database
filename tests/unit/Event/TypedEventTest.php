@@ -69,7 +69,7 @@ final class TypedEventTest extends TestCase
         $this->assertInstanceOf(Event\Database\Updated::class, $updated);
         $this->assertSame(['hooks', 'renamed'], [$updated->database, $updated->new]);
         $this->assertInstanceOf(Event\Database\Deleted::class, $deleted);
-        $this->assertSame(['renamed', true], [$deleted->database, $deleted->deleted]);
+        $this->assertSame('renamed', $deleted->database);
     }
 
     public function testCollectionEvents(): void

@@ -14,6 +14,7 @@ use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\ReadWritePool;
 use Utopia\Database\Attribute;
+use Utopia\Database\Builder\SQLite as SQLiteBuilder;
 use Utopia\Database\Cache\Query as ResultCache;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
@@ -45,7 +46,7 @@ final class ReadWritePoolMetadataTest extends TestCase
             'getAttributeWidth' => [new Document()],
             'getCountOfAttributes' => [new Document()],
             'getCountOfIndexes' => [new Document()],
-            'builder' => ['posts'],
+            'builder' => [],
             'schema' => [],
             'getColumnType' => [Attribute::string(key: 'title', size: 255)],
             'encode' => [[1, 2], ColumnType::Point],
@@ -90,7 +91,10 @@ final class ReadWritePoolMetadataTest extends TestCase
         $replica = $this->createMock(CastingAdapterStub::class);
         $pool = $this->createPool($primary, $replica);
 
-        $replica->expects($this->once())->method($method);
+        $answer = $replica->expects($this->once())->method($method);
+        if ($method === 'builder') {
+            $answer->willReturn(new SQLiteBuilder());
+        }
         $primary->expects($this->never())->method($method);
         $replica->expects($this->once())->method('ping')->willReturn(true);
         $primary->expects($this->never())->method('ping');

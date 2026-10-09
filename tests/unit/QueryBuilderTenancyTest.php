@@ -297,9 +297,9 @@ final class QueryBuilderTenancyTest extends TestCase
         $authors = $quoted($raw(self::AUTHORS));
 
         $builder = $adapter->builder()->from(self::AUTHORS)
-            ->crossJoin($raw(self::EXTRAS), 'Extra')
-            ->rightJoin($raw(self::REVIEWS), 'Extra.authorId', 'Review.authorId', '=', 'Review')
-            ->joinWhere($raw(self::BOOKS), static function (JoinBuilder $join): void {
+            ->crossJoin(self::EXTRAS, 'Extra')
+            ->rightJoin(self::REVIEWS, 'Extra.authorId', 'Review.authorId', '=', 'Review')
+            ->joinWhere(self::BOOKS, static function (JoinBuilder $join): void {
                 $join->on('Review.authorId', 'Book.authorId');
             }, JoinType::FullOuter, 'Book')
             ->select([$raw(self::AUTHORS).'.name', 'Book.pages']);
@@ -349,7 +349,7 @@ final class QueryBuilderTenancyTest extends TestCase
         $authors = $quoted($raw(self::AUTHORS));
 
         $sql = $adapter->builder()->from(self::AUTHORS)
-            ->rightJoin($raw(self::REVIEWS), $raw(self::AUTHORS).'.authorId', '9x.authorId', '=', '9x')
+            ->rightJoin(self::REVIEWS, $raw(self::AUTHORS).'.authorId', '9x.authorId', '=', '9x')
             ->select([$raw(self::AUTHORS).'.name'])
             ->build()
             ->query;
@@ -371,7 +371,7 @@ final class QueryBuilderTenancyTest extends TestCase
         $adapter->setTenant(7);
 
         $builder = $adapter->builder()->from(self::AUTHORS)
-            ->rightJoin($this->rawTable($adapter, self::REVIEWS), $this->rawTable($adapter, self::AUTHORS).'.authorId', 'Review.authorId', '=', 'Review');
+            ->rightJoin(self::REVIEWS, $this->rawTable($adapter, self::AUTHORS).'.authorId', 'Review.authorId', '=', 'Review');
 
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('Invalid column name: '.$this->rawTable($adapter, self::AUTHORS).'._uid');
@@ -388,7 +388,7 @@ final class QueryBuilderTenancyTest extends TestCase
         $adapter->setTenant(7);
 
         $builder = $adapter->builder()->from(self::AUTHORS)
-            ->rightJoin($this->rawTable($adapter, self::REVIEWS), $this->rawTable($adapter, self::AUTHORS).'.authorId', 'x y.authorId', '=', 'x y');
+            ->rightJoin(self::REVIEWS, $this->rawTable($adapter, self::AUTHORS).'.authorId', 'x y.authorId', '=', 'x y');
 
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('Invalid column name: x y._uid');
@@ -605,7 +605,7 @@ final class QueryBuilderTenancyTest extends TestCase
 
     private function join(SQLBuilder $builder, JoinType $type, string $collection, string $on): void
     {
-        $table = self::table($collection);
+        $table = $collection;
         $alias = self::ALIASES[$collection];
         $column = $alias.'.authorId';
 

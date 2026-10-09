@@ -156,7 +156,7 @@ trait Relationships
             }
         }
 
-        $created = $this->createRelationshipInSchema($adapter, $collectionId, $relationship, $junctionCollection);
+        $created = $this->createRelationshipInSchema($collectionId, $relationship, $junctionCollection);
 
         $collection->setAttribute(self::COLLECTION_ATTRIBUTES, $parent->toDocument(), SetType::Append);
         $relatedCollection->setAttribute(self::COLLECTION_ATTRIBUTES, $child->toDocument(), SetType::Append);
@@ -475,7 +475,7 @@ trait Relationships
         $collection->setAttribute(self::COLLECTION_ATTRIBUTES, $collectionAttributes);
         $relatedCollection->setAttribute(self::COLLECTION_ATTRIBUTES, $relatedCollectionAttributes);
 
-        $shouldRollback = $this->deleteRelationshipFromSchema($adapter, $collection->getId(), $relationship, $side);
+        $shouldRollback = $this->deleteRelationshipFromSchema($collection->getId(), $relationship, $side);
 
         try {
             $this->withRetries(function () use ($collection, $relatedCollection) {
@@ -522,10 +522,16 @@ trait Relationships
     /**
      * @return bool True when this call created the relationship, false when the schema already held it
      *
+     * @throws DatabaseException When the adapter does not support relationships
      * @throws RefusedException When the adapter does not create the relationship; its junction collection is dropped
      */
-    private function createRelationshipInSchema(Feature\Relationships $adapter, string $collection, Relationship $relationship, ?string $junctionCollection): bool
+    private function createRelationshipInSchema(string $collection, Relationship $relationship, ?string $junctionCollection): bool
     {
+        if (! $this->adapterHasFeature(Feature\Relationships::class)) {
+            throw new DatabaseException('Adapter does not support relationships');
+        }
+        $adapter = $this->adapter;
+
         try {
             $created = $adapter->createRelationship($collection, $relationship);
         } catch (DuplicateException) {
@@ -552,10 +558,16 @@ trait Relationships
     /**
      * @return bool True when this call dropped the relationship, false when the schema no longer held it
      *
+     * @throws DatabaseException When the adapter does not support relationships
      * @throws RefusedException When the adapter does not drop the relationship
      */
-    private function deleteRelationshipFromSchema(Feature\Relationships $adapter, string $collection, Relationship $relationship, RelationshipSide $side): bool
+    private function deleteRelationshipFromSchema(string $collection, Relationship $relationship, RelationshipSide $side): bool
     {
+        if (! $this->adapterHasFeature(Feature\Relationships::class)) {
+            throw new DatabaseException('Adapter does not support relationships');
+        }
+        $adapter = $this->adapter;
+
         try {
             $deleted = $adapter->deleteRelationship($collection, $relationship, $side);
         } catch (NotFoundException) {

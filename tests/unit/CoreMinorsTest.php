@@ -545,7 +545,7 @@ final class CoreMinorsTest extends TestCase
             $error = $this->attempt($violation);
 
             $this->assertInstanceOf(UniqueException::class, $error, $name);
-            $this->assertSame('Document with the requested unique attributes already exists', $error->getMessage(), $name);
+            $this->assertSame('Unique index violation', $error->getMessage(), $name);
         }
     }
 

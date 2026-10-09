@@ -1092,14 +1092,13 @@ coroutine that opened it and the coroutines it starts; see [Pools and profiling]
   `public readonly ?string $state`; a numeric string is also the integer code. `Exception\Order::__construct(string
   $message, ?string $attribute = null, int|string $code = 0, ?\Throwable $previous = null)` takes the attribute
   second.
-- **Unique index violations.** Every adapter now reports a unique index violation as
-  `Utopia\Database\Exception\Unique` with the message `Document with the requested unique attributes already exists`
-  (7.x: `Unique index violation`). The class and its hierarchy are unchanged: `Unique` extends `Duplicate`, and a
-  conflicting document `$id` still throws a plain `Duplicate` with `Document already exists`. Match on the class,
-  not the message: catch `Unique` before `Duplicate` to tell the two apart. `Exception\Unique` has no constructor of
-  its own and never rewrites the message it is given. The message is `Exception\Unique::MESSAGE`, also when
-  `createIndex()` refuses a unique index over documents that already share a value (7.4.1: `Unique index violation`,
-  and `Cannot create unique index: existing rows already contain duplicate values` on Redis).
+- **Unique index violations.** Every adapter reports a unique index violation as
+  `Utopia\Database\Exception\Unique` with the 7.x message `Unique index violation`. The class and its hierarchy are
+  unchanged: `Unique` extends `Duplicate`, and a conflicting document `$id` still throws a plain `Duplicate` with
+  `Document already exists`. Match on the class, not the message: catch `Unique` before `Duplicate` to tell the two
+  apart. `Exception\Unique` has no constructor of its own and never rewrites the message it is given. The message is
+  `Exception\Unique::MESSAGE`, also when `createIndex()` refuses a unique index over documents that already share a
+  value (7.4.1 Redis: `Cannot create unique index: existing rows already contain duplicate values`).
 - **`ignoreDuplicates()` on PostgreSQL** skips only a document whose id is stored, as in 7.x: a new id that collides
   on another unique index throws `Utopia\Database\Exception\Unique`. MariaDB, MySQL and SQLite cannot name the
   index to ignore and, as in 7.x, skip such a row without error.

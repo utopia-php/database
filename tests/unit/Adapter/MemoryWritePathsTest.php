@@ -246,7 +246,7 @@ final class MemoryWritePathsTest extends TestCase
         try {
             $write();
         } catch (DuplicateException $exception) {
-            $this->assertSame('Document with the requested unique attributes already exists', $exception->getMessage());
+            $this->assertSame('Unique index violation', $exception->getMessage());
 
             return;
         }

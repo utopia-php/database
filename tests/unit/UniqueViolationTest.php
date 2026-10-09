@@ -435,6 +435,6 @@ final class UniqueViolationTest extends TestCase
     private function assertUnique(Throwable $exception): void
     {
         $this->assertInstanceOf(UniqueException::class, $exception, $exception->getMessage());
-        $this->assertSame('Document with the requested unique attributes already exists', $exception->getMessage());
+        $this->assertSame('Unique index violation', $exception->getMessage());
     }
 }

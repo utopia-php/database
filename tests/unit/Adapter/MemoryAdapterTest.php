@@ -114,7 +114,7 @@ final class MemoryAdapterTest extends TestCase
             $database->createDocument('users', new Document(['$id' => 'copy', 'email' => 'a@example.test']));
             $this->fail('The renamed document must still hold its unique value');
         } catch (UniqueException $exception) {
-            $this->assertSame('Document with the requested unique attributes already exists', $exception->getMessage());
+            $this->assertSame('Unique index violation', $exception->getMessage());
         }
 
         $database->createDocument('users', new Document(['$id' => 'reuse', 'email' => 'c@example.test']));

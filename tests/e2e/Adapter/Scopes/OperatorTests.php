@@ -5230,19 +5230,13 @@ trait OperatorTests
             $this->assertSame(PHP_INT_MAX - 5, $updated->getAttribute('counter'));
             $this->assertSame(PHP_INT_MAX - 5, $database->getDocument($collectionId, 'doc')->getAttribute('counter'));
 
-            try {
-                $database->updateDocument($collectionId, 'doc', new Document([
-                    'count' => Operator::increment(5, 102.4),
-                ]));
-                $this->fail('A fractional limit on an integer attribute must be refused');
-            } catch (StructureException $exception) {
-                $this->assertSame(
-                    "Invalid document structure: Cannot apply increment operator: max/min limit must be a whole number for integer attribute 'count', got 102.4",
-                    $exception->getMessage(),
-                );
-            }
+            $past = $database->updateDocument($collectionId, 'doc', new Document(['count' => Operator::increment(5, 102.4)]));
+            $this->assertSame($database->getDocument($collectionId, 'doc')->getAttribute('count'), $past->getAttribute('count'));
 
-            $this->assertSame(100, $database->getDocument($collectionId, 'doc')->getAttribute('count'));
+            if ($this->engineFamily($database) !== null) {
+                $this->assertSame(100, $past->getAttribute('count'));
+                $this->assertSame(102, $database->updateDocument($collectionId, 'doc', new Document(['count' => Operator::increment(2, 102.4)]))->getAttribute('count'));
+            }
         } finally {
             $database->deleteCollection($collectionId);
         }
@@ -5292,5 +5286,67 @@ trait OperatorTests
         } finally {
             $database->deleteCollection($collectionId);
         }
+    }
+
+    public function testFractionalNumericOperatorsOnAnIntegerReachTheEngineAs7xDid(): void
+    {
+        $database = static::getDatabase();
+        $family = $this->engineFamily($database);
+
+        if (! $database->getAdapter()->supports(Capability::Operators) || $family === null) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collectionId = 'operator_fractional_changes';
+        $database->createCollection(Collection::create(id: $collectionId, permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())], documentSecurity: false));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'count'));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'nums', array: true));
+
+        try {
+            $changes = [
+                'increment' => [Operator::increment(1.5), ['mariadb' => 6, 'mongo' => 6]],
+                'multiply' => [Operator::multiply(1.5), ['mariadb' => 8, 'mongo' => 7]],
+                'divide' => [Operator::divide(0.5), ['mariadb' => 10, 'mongo' => 10]],
+            ];
+            foreach ($changes as $id => [$operator, $expected]) {
+                $database->createDocument($collectionId, new Document(['$id' => $id, 'count' => 5, 'nums' => [1]]));
+
+                if ($family === 'postgres') {
+                    try {
+                        $database->updateDocument($collectionId, $id, new Document(['count' => $operator]));
+                        $this->fail("PostgreSQL stored a fractional {$id} of an integer");
+                    } catch (\PDOException) {
+                    }
+                    $this->assertSame(5, $database->getDocument($collectionId, $id)->getAttribute('count'), $id);
+
+                    continue;
+                }
+
+                $this->assertSame($expected[$family], $database->updateDocument($collectionId, $id, new Document(['count' => $operator]))->getAttribute('count'), $id);
+                $this->assertSame($expected[$family], $database->getDocument($collectionId, $id)->getAttribute('count'), $id);
+            }
+
+            $database->createDocument($collectionId, new Document(['$id' => 'append', 'count' => 5, 'nums' => [1]]));
+            $this->assertSame([1, 1], $database->updateDocument($collectionId, 'append', new Document(['nums' => Operator::arrayAppend([1.5])]))->getAttribute('nums'));
+        } finally {
+            $database->deleteCollection($collectionId);
+        }
+    }
+
+    /**
+     * The engine a 7.x comparison is pinned for: MariaDB and MySQL, PostgreSQL or MongoDB.
+     */
+    private function engineFamily(Database $database): ?string
+    {
+        $adapter = $database->getAdapter();
+
+        return match (true) {
+            $adapter instanceof \Utopia\Database\Adapter\MariaDB => 'mariadb',
+            $adapter instanceof \Utopia\Database\Adapter\Postgres => 'postgres',
+            $adapter instanceof \Utopia\Database\Adapter\Mongo => 'mongo',
+            default => null,
+        };
     }
 }

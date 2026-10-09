@@ -314,6 +314,9 @@ trait Relationships
         $newTwoWayKey = $update->twoWayKey ?? $oldTwoWayKey;
         $altering = $newKey !== $key || $newTwoWayKey !== $oldTwoWayKey;
         $renamed = $updated->apply(new RelationshipUpdate(key: $newKey, twoWayKey: $newTwoWayKey));
+        $junction = $current->type === RelationshipType::ManyToMany
+            ? $this->getJunctionCollection($collection, $relatedCollection, $side)
+            : null;
 
         $adapterUpdated = false;
         if ($altering) {
@@ -325,7 +328,8 @@ trait Relationships
                     new RelationshipUpdate(key: $newKey, twoWayKey: $newTwoWayKey, twoWay: $updated->twoWay),
                 );
             } catch (Throwable $error) {
-                if (! $this->adapter->supports(Capability::SchemaIntrospection) || ! $this->hasSchemaColumn($collectionId, $newKey)) {
+                $columnRenames = self::relationshipIndexRenames($current->type, $side, $updated->twoWay, $collectionId, $relatedCollectionId, $junction, $key, $newKey, $oldTwoWayKey, $newTwoWayKey);
+                if (! $this->relationshipColumnsRenamed($columnRenames)) {
                     if ($error instanceof DuplicateException || $error instanceof NotFoundException) {
                         throw $error;
                     }
@@ -343,9 +347,6 @@ trait Relationships
 
         $parentAfter = Attribute::relationship($newKey, $renamed, $side);
         $inverseAfter = Attribute::relationship($newTwoWayKey, $renamed->inverse($collectionId), $inverse->side);
-        $junction = $current->type === RelationshipType::ManyToMany
-            ? $this->getJunctionCollection($collection, $relatedCollection, $side)
-            : null;
 
         /** @var list<array{string, Attribute}> $updatedAttributes */
         $updatedAttributes = [];
@@ -845,9 +846,26 @@ trait Relationships
     }
 
     /**
-     * Whether the engine's schema of $collection already holds a column named $key, as a rename that completed
-     * before a prior partial failure leaves it.
+     * Whether an earlier attempt already renamed every relationship column: each column is in the engine's schema
+     * under its new name and no longer under its old one.
+     *
+     * @param  list<array{string, string, string}>  $renames
      */
+    private function relationshipColumnsRenamed(array $renames): bool
+    {
+        if ($renames === [] || ! $this->adapter->supports(Capability::SchemaIntrospection)) {
+            return false;
+        }
+
+        foreach ($renames as [$renamedCollection, $from, $to]) {
+            if (! $this->hasSchemaColumn($renamedCollection, $to) || $this->hasSchemaColumn($renamedCollection, $from)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private function hasSchemaColumn(string $collection, string $key): bool
     {
         $filtered = \strtolower($this->adapter->filter($key));

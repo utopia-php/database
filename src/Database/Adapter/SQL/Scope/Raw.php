@@ -39,6 +39,12 @@ final readonly class Raw implements Scope
     }
 
     #[\Override]
+    public function joinTable(string $table): string
+    {
+        return $this->table($table);
+    }
+
+    #[\Override]
     public function bind(Builder $builder, string $collection, string $table, string $alias): void
     {
         $builder->addHook($this->attributes);

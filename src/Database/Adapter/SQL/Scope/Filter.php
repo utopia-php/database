@@ -41,6 +41,15 @@ final readonly class Filter implements Scope
         return ($this->table)($collection);
     }
 
+    /**
+     * The adapter's reads join tables by the names they are stored under.
+     */
+    #[\Override]
+    public function joinTable(string $table): string
+    {
+        return $table;
+    }
+
     #[\Override]
     public function bind(Builder $builder, string $collection, string $table, string $alias): void
     {

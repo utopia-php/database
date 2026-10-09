@@ -16,6 +16,11 @@ interface Scope
     public function table(string $collection): string;
 
     /**
+     * The name a builder that read a collection through this scope joins $table under.
+     */
+    public function joinTable(string $table): string;
+
+    /**
      * Registers the hooks for statements over the collection, stored as $table and named $alias in them when
      * one is given.
      */

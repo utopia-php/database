@@ -106,11 +106,10 @@ final class BuilderStatementTest extends TestCase
     public function testARightJoinPairsWithTheAliasFromNamesTheCollectionUnder(string $class, bool $shared): void
     {
         $adapter = $this->adapter($class, $shared);
-        $reviews = $this->raw($adapter, 'reviews');
 
         $statement = $adapter->builder()
             ->from('authors', 'author')
-            ->rightJoin($reviews, 'author._uid', 'review.authorId', '=', 'review')
+            ->rightJoin('reviews', 'author._uid', 'review.authorId', '=', 'review')
             ->select(['author.name', 'review.stars'])
             ->build();
 
@@ -196,8 +195,6 @@ final class BuilderStatementTest extends TestCase
     {
         $adapter = $this->adapter($class, $shared);
         $authors = $this->raw($adapter, 'authors');
-        $books = $this->raw($adapter, 'books');
-        $reviews = $this->raw($adapter, 'reviews');
         $result = [];
         $from = static fn (string $collection): SQLBuilder => $adapter->builder()->from($collection);
 
@@ -209,8 +206,8 @@ final class BuilderStatementTest extends TestCase
             ->offset(2)
             ->build());
         $result['join'] = $this->compile(static fn () => $from('authors')
-            ->join($books, $authors.'._uid', 'book.authorId', '=', 'book')
-            ->leftJoin($reviews, $authors.'._uid', 'review.authorId', '=', 'review')
+            ->join('books', $authors.'._uid', 'book.authorId', '=', 'book')
+            ->leftJoin('reviews', $authors.'._uid', 'review.authorId', '=', 'review')
             ->select([$authors.'.name', 'book.pages', 'review.stars'])
             ->filter([Query::greaterThan('book.pages', 10)])
             ->sortAsc($authors.'.name')
@@ -228,12 +225,12 @@ final class BuilderStatementTest extends TestCase
             ->select([Storage::PERMISSIONS_PERMISSION])
             ->build());
         $result['rightJoin'] = $this->compile(static fn () => $from('authors')
-            ->rightJoin($reviews, $authors.'._uid', 'review.authorId', '=', 'review')
+            ->rightJoin('reviews', $authors.'._uid', 'review.authorId', '=', 'review')
             ->select([$authors.'.name', 'review.stars'])
             ->build());
         if ($from('authors') instanceof FullOuterJoins) {
             $result['fullOuterJoin'] = $this->compile(static fn () => $from('authors')
-                ->fullOuterJoin($reviews, $authors.'._uid', 'review.authorId', '=', 'review')
+                ->fullOuterJoin('reviews', $authors.'._uid', 'review.authorId', '=', 'review')
                 ->select([$authors.'.name', 'review.stars'])
                 ->build());
         }
@@ -347,10 +344,15 @@ final class BuilderStatementTest extends TestCase
             $statement->method('execute')->willReturn(true);
             $statement->method('fetchAll')->willReturn([]);
             $statement->method('fetch')->willReturn(false);
-            $statement->method('fetchColumn')->willReturn(false);
+            $statement->method('fetchColumn')->willReturn(\str_contains($query, 'dbstat') ? '0' : false);
             $statement->method('rowCount')->willReturn(1);
             $statement->method('closeCursor')->willReturn(true);
             $statement->method('bindValue')->willReturnCallback(function (int|string $position, mixed $value) use ($index): bool {
+                $this->statements[$index][1][] = [$position, $value];
+
+                return true;
+            });
+            $statement->method('bindParam')->willReturnCallback(function (int|string $position, mixed &$value) use ($index): bool {
                 $this->statements[$index][1][] = [$position, $value];
 
                 return true;

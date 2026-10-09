@@ -759,10 +759,14 @@ class Database
      * what that covers). Another tenant's rows are read by selecting that tenant, with setTenant()
      * or withTenant().
      *
+     * $alias names the collection's table in the statement, and is the name its tenant condition and a right
+     * or full outer join pair with. The builder reads this collection only, and its join methods take
+     * collection ids too.
+     *
      * @throws AuthorizationException While authorization is enabled
-     * @throws DatabaseException When the adapter has no query builder
+     * @throws DatabaseException When the adapter has no query builder, or hands out one with no scope
      */
-    public function from(string $collection): \Utopia\Query\Builder
+    public function from(string $collection, string $alias = ''): \Utopia\Query\Builder
     {
         $this->requireSkippedAuthorization();
 
@@ -770,7 +774,11 @@ class Database
             throw new DatabaseException('Query builder is not supported by this adapter');
         }
 
-        $builder = $this->adapter->builder()->from($collection);
+        $builder = $this->adapter->builder();
+        if (! $builder->isScoped()) {
+            throw new DatabaseException('The adapter handed out a query builder with no scope');
+        }
+        $builder->from($collection, $alias);
         $builder->setExecutor($this->runStatement(...));
 
         return $builder;

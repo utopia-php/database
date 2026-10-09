@@ -26,6 +26,12 @@ class Postgres extends Base implements Filtering, Scoping
 
     private const float METERS_PER_EQUATORIAL_LONGITUDE_DEGREE = 111319;
 
+    #[\Override]
+    public function fullOuterJoin(string $table, string $left, string $right, string $operator = '=', string $alias = ''): static
+    {
+        return parent::fullOuterJoin($this->joinedTable($table), $left, $right, $operator, $alias);
+    }
+
     /**
      * @throws QueryException
      */

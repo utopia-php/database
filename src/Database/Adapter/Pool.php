@@ -6,6 +6,7 @@ use Throwable;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\SQL\Wkt;
 use Utopia\Database\Attribute;
+use Utopia\Database\Builder\Scoping;
 use Utopia\Database\Capability;
 use Utopia\Database\Change;
 use Utopia\Database\Document;
@@ -1097,9 +1098,9 @@ class Pool extends Adapter implements Feature\Timeouts
         return $result;
     }
 
-    public function builder(): Builder
+    public function builder(): Builder&Scoping
     {
-        /** @var Builder $result */
+        /** @var Builder&Scoping $result */
         $result = $this->delegateFeature(Feature\QueryBuilder::class, __FUNCTION__, \func_get_args());
         return $result;
     }

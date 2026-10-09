@@ -821,7 +821,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         $shared = $this->hasSharedTables() || $collection === Database::METADATA;
 
         if (! $this->inTransaction && $shared && $this->collectionExists($this->getDatabase(), $collection)) {
-            return $this->createCollectionIndexes($id, $attributes, $indexes);
+            return $this->adoptCollection($id, $attributes, $indexes);
         }
 
         try {
@@ -832,7 +832,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
                 ? new DuplicateException('Collection already exists', previous: $error)
                 : $this->processException($error);
             if ($error instanceof DuplicateException && $shared) {
-                return $this->createCollectionIndexes($id, $attributes, $indexes);
+                return $this->adoptCollection($id, $attributes, $indexes, $error);
             }
             throw $error;
         }
@@ -854,6 +854,25 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         }
 
         return $indexed;
+    }
+
+    /**
+     * Give a shared or metadata collection another creator made the indexes it is declared with, then report it as
+     * existing, so the caller treats it as a collection it did not create and never drops it.
+     *
+     * @param  list<Attribute>  $attributes
+     * @param  list<Index>  $indexes
+     * @return false When an index could not be created
+     *
+     * @throws DuplicateException Once the indexes exist
+     */
+    private function adoptCollection(string $id, array $attributes, array $indexes, ?DuplicateException $exists = null): bool
+    {
+        if (! $this->createCollectionIndexes($id, $attributes, $indexes)) {
+            return false;
+        }
+
+        throw $exists ?? new DuplicateException('Collection already exists');
     }
 
     /**

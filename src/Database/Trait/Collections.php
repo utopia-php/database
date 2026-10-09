@@ -133,7 +133,7 @@ trait Collections
                 throw $error;
             }
 
-            if ($created) {
+            if ($created && ! $this->adapter->hasSharedTables()) {
                 try {
                     $this->cleanupCollection($id);
                 } catch (Throwable $cleanupError) {

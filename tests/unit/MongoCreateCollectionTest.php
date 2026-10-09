@@ -33,11 +33,16 @@ final class MongoCreateCollectionTest extends TestCase
     }
 
     #[DataProvider('sharedCollectionProvider')]
-    public function testCreatingAnExistingSharedCollectionCreatesItsIndexes(MongoException $error, string $name, bool $sharedTables): void
+    public function testAnExistingSharedCollectionGetsItsIndexesAndIsReportedAsExisting(MongoException $error, string $name, bool $sharedTables): void
     {
         $adapter = $this->adapter($error, $sharedTables, $client);
 
-        $this->assertTrue($adapter->createCollection($name, [Attribute::string(key: 'title', size: 64)], [Index::key(key: 'title', attributes: ['title'])]));
+        try {
+            $adapter->createCollection($name, [Attribute::string(key: 'title', size: 64)], [Index::key(key: 'title', attributes: ['title'])]);
+            $this->fail('An adopted collection must be reported as existing, so its creator alone may drop it');
+        } catch (DuplicateException) {
+        }
+
         $this->assertSame(2, $client->indexCalls, 'A shared collection another creator left without its indexes must get them');
     }
 

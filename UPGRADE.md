@@ -1163,11 +1163,18 @@ coroutine that opened it and the coroutines it starts; see [Pools and profiling]
   stored, and `Exception\NotFound` when it was.
 - **Adapter refusals.** When an adapter returns `false` from a schema change instead of raising an error, the call
   throws `Utopia\Database\Exception\Refused`, a subclass of `Utopia\Database\Exception`, whose `getPrevious()` is
-  `null`. This covers `createAttribute()`, `createAttributes()`, `updateAttribute()`, `deleteAttribute()`,
-  `renameAttribute()`, `createIndex()`, `createIndexes()`, `deleteIndex()`, `renameIndex()`, `createRelationship()`,
-  `updateRelationship()` and `deleteRelationship()`. Most keep their 7.x message (`Failed to create attribute`), but
-  a refused rename or relationship update now has one message naming its keys: `Failed to rename attribute 'a' to
-  'b'`, `Failed to rename index 'a' to 'b'` and `Failed to update relationship 'k'`. 7.x wrapped those three
+  `null`. This covers `create()`, `update()`, `delete()`, `createCollection()`, `deleteCollection()`,
+  `createAttribute()`, `createAttributes()`, `updateAttribute()`, `deleteAttribute()`, `renameAttribute()`,
+  `createIndex()`, `createIndexes()`, `deleteIndex()`, `renameIndex()`, `createRelationship()`,
+  `updateRelationship()` and `deleteRelationship()`, and nothing is written to the metadata or the caches after a
+  refusal. Most keep their 7.x message (`Failed to create attribute`), and the database and collection calls, which
+  ignored a `false` in 7.x (a refused `createCollection()` stored its definition anyway), say `Failed to create
+  database`, `Failed to delete database`, `Failed to create collection` and `Failed to delete collection`. A refused
+  rename or relationship update has one message naming its keys: `Failed to rename attribute 'a' to 'b'`, `Failed to
+  rename index 'a' to 'b'`, `Failed to rename database 'a' to 'b'` and `Failed to update relationship 'k'`.
+  `update()` and `delete()` therefore return `true` whenever they return, and `Event\Database\Deleted::$deleted`
+  is always `true`. An adapter still answers `true` for a state that already holds, such as a database that exists
+  or is already gone. 7.x wrapped those three
   refusals in the message it uses for an adapter error (`Failed to rename attribute 'a' to 'b': Failed to rename
   attribute`), so a refusal looked like an engine failure. An error the adapter raises reaches the caller as itself,
   except from `renameAttribute()`, `renameIndex()` and `updateRelationship()`: there an `Exception\Duplicate` or
@@ -1178,7 +1185,13 @@ coroutine that opened it and the coroutines it starts; see [Pools and profiling]
   `Exception\Refused` to tell a refusal apart instead of matching the message or the nesting of causes. A refused `renameIndex()` no longer renames back and forth to complete an
   earlier rename: an adapter returns `false` only when the index is under neither name. When `createAttributes()`
   falls back to creating the columns one at a time, a column the adapter does not create is refused too; 7.x stored
-  it in the metadata as created.
+  it in the metadata as created. On MongoDB, `createCollection()` drops a collection it created but could not give
+  its indexes, so a later create no longer adopts it without them.
+- **`deleteRelationship()` whose drop fails.** The relationship's indexes, or its junction collection's definition,
+  are removed before the adapter drops its columns or junction tables, because SQLite cannot drop an indexed column
+  and the engines disagree on what a column drop does to its indexes. When the adapter refuses the drop or raises an
+  error, the indexes and the junction definition are now recreated and the failure is rethrown unchanged; 7.x left
+  them dropped while the relationship stayed.
 - **Engine errors mapped to library exceptions.**
 
   | Engine condition | Exception |

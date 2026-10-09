@@ -2546,14 +2546,14 @@ trait Documents
     }
 
     /**
-     * @throws TypeException
+     * @throws \InvalidArgumentException
      */
     private function assertPositiveChange(int|float|string $value): void
     {
         if (! \is_numeric($value) || (\is_string($value) && BigInt::isIntegerString($value)
             ? BigInt::compare($value, 0) <= 0
             : (float) $value <= 0)) {
-            throw new TypeException('Value must be numeric and greater than 0');
+            throw new \InvalidArgumentException('Value must be numeric and greater than 0');
         }
     }
 
@@ -2569,7 +2569,7 @@ trait Documents
      *
      * @throws AuthorizationException
      * @throws DatabaseException
-     * @throws TypeException When $value is not a number greater than 0
+     * @throws \InvalidArgumentException When $value is not a number greater than 0
      */
     public function decreaseDocumentAttribute(
         string $collection,

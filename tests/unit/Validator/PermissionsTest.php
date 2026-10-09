@@ -348,4 +348,12 @@ class PermissionsTest extends TestCase
             'delete("user:'.$user.'")',
         ], $permissions);
     }
+
+    public function test_custom_type_rejected_as_in_7_4(): void
+    {
+        $object = new Permissions();
+
+        $this->assertFalse($object->isValid(['execute("any")']));
+        $this->assertSame('Permission "execute("any")" is not allowed. Must be one of: create, read, update, delete, write.', $object->getDescription());
+    }
 }

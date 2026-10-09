@@ -289,6 +289,16 @@ class PermissionTest extends TestCase
         }
     }
 
+    public function test_custom_type_rejected_as_in_7_4(): void
+    {
+        try {
+            Permission::parse('execute("any")');
+            $this->fail('Failed to throw Exception');
+        } catch (\Exception $e) {
+            $this->assertSame('Invalid permission type: "execute".', $e->getMessage());
+        }
+    }
+
     /**
      * @throws \Exception
      */

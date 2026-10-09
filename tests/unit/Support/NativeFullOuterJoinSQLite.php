@@ -18,11 +18,11 @@ use Utopia\Query\Builder\Trait\FullOuterJoins as FullOuterJoinsTrait;
 final class NativeFullOuterJoinSQLite extends SQLite
 {
     #[Override]
-    public function builder(): SQLBuilder&Scoping
+    protected function dialectBuilder(): SQLBuilder&Scoping
     {
-        return (new class () extends SQLiteBuilder implements FullOuterJoins, Scoping {
+        return new class () extends SQLiteBuilder implements FullOuterJoins, Scoping {
             use FullOuterJoinsTrait;
             use ScopesCollections;
-        })->scope($this->scope());
+        };
     }
 }

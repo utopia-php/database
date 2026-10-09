@@ -118,9 +118,9 @@ class MySQL extends MariaDB
     }
 
     #[\Override]
-    public function builder(): SQLBuilder&Scoping
+    protected function dialectBuilder(): SQLBuilder&Scoping
     {
-        return (new MySQLBuilder())->scope($this->scope());
+        return new MySQLBuilder();
     }
 
     #[\Override]

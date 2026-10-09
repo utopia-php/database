@@ -68,7 +68,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
     #[\Override]
     public function id(): string
     {
-        $result = $this->builder()->fromNone()->selectRaw('CONNECTION_ID()')->build();
+        $result = $this->dialectBuilder()->fromNone()->selectRaw('CONNECTION_ID()')->build();
         $statement = $this->prepareStatement($result->query);
 
         if (! $statement->execute()) {
@@ -159,7 +159,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
      */
     private function getTables(string $database): array
     {
-        $result = $this->builder()
+        $result = $this->dialectBuilder()
             ->fromTable('INFORMATION_SCHEMA.TABLES')
             ->selectRaw('TABLE_NAME')
             ->filter([BaseQuery::equal('TABLE_SCHEMA', [$database])])
@@ -352,7 +352,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
         $name = $database.'/'.$collection;
         $permissions = $database.'/'.Storage::permissionsTable($collection);
 
-        $builder = $this->builder();
+        $builder = $this->dialectBuilder();
 
         $collectionResult = $builder
             ->fromTable('INFORMATION_SCHEMA.INNODB_SYS_TABLESPACES')
@@ -400,7 +400,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
         $database = $this->getDatabase();
         $permissions = Storage::permissionsTable($collection);
 
-        $result = $this->builder()
+        $result = $this->dialectBuilder()
             ->fromNone()
             ->selectRaw(
                 'SUM(size) FROM (
@@ -629,7 +629,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
             $attributes[Storage::PERMISSIONS] = \json_encode($document->getPermissions());
             $name = $this->filter($collection);
 
-            $builder = $this->builder()->into($this->getTableRaw($name));
+            $builder = $this->dialectBuilder()->into($this->getTableRaw($name));
             $row = [Storage::UID => $document->getId()];
 
             if (! empty($document->getSequence())) {
@@ -1152,9 +1152,9 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     #[\Override]
-    public function builder(): SQLBuilder&Scoping
+    protected function dialectBuilder(): SQLBuilder&Scoping
     {
-        return (new MariaDBBuilder())->scope($this->scope());
+        return new MariaDBBuilder();
     }
 
     #[\Override]

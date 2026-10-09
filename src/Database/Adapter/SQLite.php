@@ -1203,7 +1203,7 @@ class SQLite extends SQL
 
             $name = $this->filter($collection);
 
-            $builder = $this->builder()->into($this->getTableRaw($name));
+            $builder = $this->dialectBuilder()->into($this->getTableRaw($name));
             $row = [Storage::UID => $document->getId()];
 
             if (! empty($document->getSequence())) {
@@ -1476,9 +1476,9 @@ class SQLite extends SQL
     }
 
     #[\Override]
-    public function builder(): SQLBuilder&Scoping
+    protected function dialectBuilder(): SQLBuilder&Scoping
     {
-        return (new SQLiteBuilder())->scope($this->scope());
+        return new SQLiteBuilder();
     }
 
     #[Override]

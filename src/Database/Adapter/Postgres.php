@@ -92,7 +92,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     #[\Override]
     public function id(): string
     {
-        $result = $this->builder()->fromNone()->selectRaw('pg_backend_pid()')->build();
+        $result = $this->dialectBuilder()->fromNone()->selectRaw('pg_backend_pid()')->build();
         $statement = $this->prepareStatement($result->query);
         if (! $statement->execute()) {
             return '';
@@ -367,7 +367,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         $name = $this->getTable($collection);
         $permissions = $this->getTable(Storage::permissionsTable($collection));
 
-        $builder = $this->builder();
+        $builder = $this->dialectBuilder();
 
         $collectionResult = $builder->fromNone()->selectRaw('pg_total_relation_size(?)', [$name])->build();
         $permissionsResult = $builder->reset()->fromNone()->selectRaw('pg_total_relation_size(?)', [$permissions])->build();
@@ -405,7 +405,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         $name = $this->getTable($collection);
         $permissions = $this->getTable(Storage::permissionsTable($collection));
 
-        $builder = $this->builder();
+        $builder = $this->dialectBuilder();
 
         $collectionResult = $builder->fromNone()->selectRaw('pg_relation_size(?)', [$name])->build();
         $permissionsResult = $builder->reset()->fromNone()->selectRaw('pg_relation_size(?)', [$permissions])->build();
@@ -1063,7 +1063,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
 
             $name = $this->filter($collection);
 
-            $builder = $this->builder()->into($this->getTableRaw($name));
+            $builder = $this->dialectBuilder()->into($this->getTableRaw($name));
 
             $row = [Storage::UID => $document->getId()];
             if (! empty($document->getSequence())) {
@@ -1754,9 +1754,9 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     #[\Override]
-    public function builder(): SQLBuilder&Scoping
+    protected function dialectBuilder(): SQLBuilder&Scoping
     {
-        return (new PostgresBuilder())->scope($this->scope());
+        return new PostgresBuilder();
     }
 
     #[\Override]

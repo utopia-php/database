@@ -243,7 +243,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     #[\Override]
     public function ping(): bool
     {
-        $result = $this->builder()->fromNone()->selectRaw('1')->build();
+        $result = $this->dialectBuilder()->fromNone()->selectRaw('1')->build();
 
         return $this->prepareStatement($result->query)->execute();
     }
@@ -378,7 +378,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     #[\Override]
     public function exists(string $database): bool
     {
-        $result = $this->builder()
+        $result = $this->dialectBuilder()
             ->fromTable('INFORMATION_SCHEMA.SCHEMATA')
             ->selectRaw('SCHEMA_NAME')
             ->filter([BaseQuery::equal('SCHEMA_NAME', [$this->filter($database)])])
@@ -393,7 +393,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     #[\Override]
     public function collectionExists(string $database, string $collection): bool
     {
-        $result = $this->builder()
+        $result = $this->dialectBuilder()
             ->fromTable('INFORMATION_SCHEMA.TABLES')
             ->selectRaw('TABLE_NAME')
             ->filter([
@@ -849,7 +849,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             $attributeKeys[] = Storage::SEQUENCE;
         }
 
-        $builder = $this->builder()->into($this->getTableRaw($name));
+        $builder = $this->dialectBuilder()->into($this->getTableRaw($name));
 
         $spatialMap = \array_fill_keys($spatialAttributes, true);
 
@@ -1581,7 +1581,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 ??= $this->qualifyOrderAttribute($attribute, $joinAliases);
         };
 
-        $emulatesFullOuterJoin = $this->needsFullOuterJoinEmulation($this->builder(), $queries);
+        $emulatesFullOuterJoin = $this->needsFullOuterJoinEmulation($this->dialectBuilder(), $queries);
 
         if ($emulatesFullOuterJoin && $hasAggregation) {
             $results = $this->findFullOuterJoinAggregate(
@@ -2035,7 +2035,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             }
         }
 
-        if ($this->needsFullOuterJoinEmulation($this->builder(), $queries)) {
+        if ($this->needsFullOuterJoinEmulation($this->dialectBuilder(), $queries)) {
             [$leftQueries, $rightQueries] = $this->emulateFullOuterJoin($queries, $alias);
             $leftPreserving = $this->keepsUnmatchedRows($leftQueries);
 
@@ -2170,7 +2170,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
     private function executeWrappedCount(SQLBuilder $innerBuilder, string $collection): int
     {
-        $outerBuilder = $this->builder();
+        $outerBuilder = $this->dialectBuilder();
         $outerBuilder->fromSub($innerBuilder, 'table_count');
         $outerBuilder->count('1', 'sum');
 
@@ -2179,7 +2179,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
     private function executeWrappedSum(SQLBuilder $innerBuilder, string $attribute, string $collection): int|float
     {
-        $outerBuilder = $this->builder();
+        $outerBuilder = $this->dialectBuilder();
         $outerBuilder->fromSub($innerBuilder, 'table_count');
         $outerBuilder->sum($attribute, 'sum');
 
@@ -3301,7 +3301,16 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * selects no table, inserts into() a table or reads one fromTable(), as the adapter's own statements do.
      */
     #[\Override]
-    abstract public function builder(): SQLBuilder&Scoping;
+    final public function builder(): SQLBuilder&Scoping
+    {
+        return $this->dialectBuilder()->scope($this->scope());
+    }
+
+    /**
+     * A builder in the adapter's dialect with no scope yet. builder() scopes it, and the adapter's own
+     * statements scope it with the tenants they read, or use it as it is where they name no collection.
+     */
+    abstract protected function dialectBuilder(): SQLBuilder&Scoping;
 
     #[\Override]
     public function schema(): MySQLSchema|PostgresSchema
@@ -3336,7 +3345,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      */
     protected function newBuilder(string $table, string $alias = '', bool $allowNullTenant = false, array $tenants = [], array $unindexed = []): SQLBuilder&Scoping
     {
-        return $this->builder()
+        return $this->dialectBuilder()
             ->scope($this->filterScope($tenants === [] ? $this->currentTenant() : $tenants, $allowNullTenant, $unindexed))
             ->from($table, $alias);
     }
@@ -3473,7 +3482,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     protected function writeContext(array $skipPermissions = []): WriteContext
     {
         return new WriteContext(
-            builder: fn (): SQLBuilder&Scoping => $this->builder()->scope($this->filterScope($this->currentTenant())),
+            builder: fn (): SQLBuilder&Scoping => $this->dialectBuilder()->scope($this->filterScope($this->currentTenant())),
             rawTable: $this->getTableRaw(...),
             prepare: fn (Statement $statement, Event $event): object => $this->executeResult($statement, $event),
             execute: fn (object $statement): bool => $this->execute($statement),
@@ -3675,7 +3684,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         array $attributeDefaults,
         bool $hasOperators
     ): void {
-        $builder = $this->builder()->into($this->getTableRaw($name));
+        $builder = $this->dialectBuilder()->into($this->getTableRaw($name));
 
         foreach ($spatialAttributes as $spatialColumn) {
             $builder->insertColumnExpression($spatialColumn, $this->getSpatialGeometryFromText('?'));
@@ -5077,7 +5086,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         }
 
         $joinAliases = \array_column($joinTablePrefixes, 'alias');
-        $aggregation = $this->builder();
+        $aggregation = $this->dialectBuilder();
         // The halves carry every tenant and permission condition of the read. The aggregation reads only
         // their rows, so it takes none of the permission filters configureFindBuilder() gives a builder
         // that reads the tables.
@@ -5876,7 +5885,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 foreach (\array_keys($orderAttributes) as $i) {
                     $orderType = $orderTypes[$i] ?? OrderDirection::Asc;
                     if ($orderType === OrderDirection::Random) {
-                        $orderParts[] = $this->builder()->compileOrder(BaseQuery::orderRandom());
+                        $orderParts[] = $this->dialectBuilder()->compileOrder(BaseQuery::orderRandom());
                         $sql = 'SELECT * FROM ('.$result->query.') AS '.$quote.self::FOJ_ROWS_ALIAS.$quote;
 
                         continue;

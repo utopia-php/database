@@ -168,9 +168,9 @@ final class FilteredAggregateStatementTest extends TestCase
             public int $built = 0;
 
             #[\Override]
-            public function builder(): SQLBuilder&Scoping
+            protected function dialectBuilder(): SQLBuilder&Scoping
             {
-                return parent::builder()->beforeBuild(function (): void {
+                return parent::dialectBuilder()->beforeBuild(function (): void {
                     $this->built++;
                 });
             }

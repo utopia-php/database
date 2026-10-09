@@ -6,6 +6,7 @@ use Closure;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
+use Tests\Unit\Support\StderrCapture;
 use Tests\Unit\Support\VerdictMemory;
 use Throwable;
 use Utopia\Cache\Adapter\None;
@@ -14,6 +15,7 @@ use Utopia\Database\Attribute;
 use Utopia\Database\AttributeUpdate;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Refused as RefusedException;
 use Utopia\Database\Hook\Relationships;
@@ -197,6 +199,23 @@ final class RefusedSchemaChangeTest extends TestCase
         $this->assertInstanceOf(RefusedException::class, $error);
         $this->assertCount(1, $dropped, 'The column created before the refusal must be dropped');
         $this->assertNotContains('summary', \array_map(static fn (Attribute $attribute): string => $attribute->key, $database->getCollection('books')->attributes()));
+    }
+
+    public function testAColumnTheFallbackCannotDropIsLogged(): void
+    {
+        [$database, $adapter] = $this->database();
+        $adapter->verdicts['createAttributes'] = static fn (): never => throw new DuplicateException('Attribute already exists');
+        $calls = 0;
+        $adapter->verdicts['createAttribute'] = static function () use (&$calls): ?bool {
+            return ++$calls === 1 ? null : false;
+        };
+        $adapter->verdicts['deleteAttribute'] = static fn (): never => throw new DatabaseException('the engine is read-only');
+
+        $log = StderrCapture::during(function () use ($database): void {
+            $this->assertInstanceOf(RefusedException::class, $this->attempt($database, static fn (Database $database): array => $database->createAttributes('books', [Attribute::string(key: 'summary', size: 64), Attribute::integer(key: 'pages')])));
+        });
+
+        $this->assertStringContainsString('the engine is read-only', $log);
     }
 
     /**

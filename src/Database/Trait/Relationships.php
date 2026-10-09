@@ -329,15 +329,28 @@ trait Relationships
                 );
             } catch (Throwable $error) {
                 $columnRenames = self::relationshipIndexRenames($current->type, $side, $updated->twoWay, $collectionId, $relatedCollectionId, $junction, $key, $newKey, $oldTwoWayKey, $newTwoWayKey);
-                if (! $this->relationshipColumnsRenamed($columnRenames)) {
-                    if ($error instanceof DuplicateException || $error instanceof NotFoundException) {
+                $remaining = $this->relationshipColumnsLeft($columnRenames);
+                try {
+                    if ($remaining === null || \count($remaining) === \count($columnRenames)) {
                         throw $error;
                     }
 
-                    throw new DatabaseException("Failed to update relationship '{$key}': ".$error->getMessage(), previous: $error);
-                }
+                    $adapterUpdated = $remaining === [] || $adapter->updateRelationship(
+                        $collectionId,
+                        $current->apply(new RelationshipUpdate(
+                            key: self::renameLeft($remaining, $junction ?? $collectionId, $key, $newKey) ? $key : $newKey,
+                            twoWayKey: self::renameLeft($remaining, $junction ?? $relatedCollectionId, $oldTwoWayKey, $newTwoWayKey) ? $oldTwoWayKey : $newTwoWayKey,
+                        )),
+                        $side,
+                        new RelationshipUpdate(key: $newKey, twoWayKey: $newTwoWayKey, twoWay: $updated->twoWay),
+                    );
+                } catch (Throwable $failure) {
+                    if ($failure instanceof DuplicateException || $failure instanceof NotFoundException) {
+                        throw $failure;
+                    }
 
-                $adapterUpdated = true;
+                    throw new DatabaseException("Failed to update relationship '{$key}': ".$failure->getMessage(), previous: $failure);
+                }
             }
 
             if (! $adapterUpdated) {
@@ -846,24 +859,40 @@ trait Relationships
     }
 
     /**
-     * Whether an earlier attempt already renamed every relationship column: each column is in the engine's schema
-     * under its new name and no longer under its old one.
+     * The relationship columns an earlier attempt left under their old names, when each other column is in the
+     * engine's schema under its new name and no longer under its old one, so a retry renames only what is left;
+     * null when a column is under both names or neither, or the schema cannot be read.
      *
      * @param  list<array{string, string, string}>  $renames
+     * @return list<array{string, string, string}>|null
      */
-    private function relationshipColumnsRenamed(array $renames): bool
+    private function relationshipColumnsLeft(array $renames): ?array
     {
         if ($renames === [] || ! $this->adapter->supports(Capability::SchemaIntrospection)) {
-            return false;
+            return null;
         }
 
-        foreach ($renames as [$renamedCollection, $from, $to]) {
-            if (! $this->hasSchemaColumn($renamedCollection, $to) || $this->hasSchemaColumn($renamedCollection, $from)) {
-                return false;
+        $left = [];
+        foreach ($renames as $rename) {
+            [$renamedCollection, $from, $to] = $rename;
+            $moved = $this->hasSchemaColumn($renamedCollection, $to);
+            if ($moved === $this->hasSchemaColumn($renamedCollection, $from)) {
+                return null;
+            }
+            if (! $moved) {
+                $left[] = $rename;
             }
         }
 
-        return true;
+        return $left;
+    }
+
+    /**
+     * @param  list<array{string, string, string}>  $left
+     */
+    private static function renameLeft(array $left, string $collection, string $from, string $to): bool
+    {
+        return \in_array([$collection, $from, $to], $left, true);
     }
 
     private function hasSchemaColumn(string $collection, string $key): bool

@@ -46,7 +46,7 @@ final class RelationshipRenameRecoveryTest extends TestCase
             $this->database->createCollection(Collection::create(
                 id: $collection,
                 attributes: [Attribute::string('name', size: 64)],
-                permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+                permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())],
                 documentSecurity: false,
             ));
         }
@@ -75,6 +75,30 @@ final class RelationshipRenameRecoveryTest extends TestCase
         $this->assertRenameFails('books', 'author', new RelationshipUpdate(twoWayKey: 'novel'));
 
         $this->assertSame(['book', 'name'], $this->attributeKeys('authors'));
+    }
+
+    public function testARetryCompletesARenameThatMovedOnlyOneOfItsColumns(): void
+    {
+        $this->database->createRelationship('books', Relationship::oneToOne(relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'book'));
+        $this->database->createDocument('authors', new Document(['$id' => 'herbert', 'name' => 'Herbert']));
+        $this->database->createDocument('books', new Document(['$id' => 'dune', 'name' => 'Dune', 'author' => 'herbert']));
+        $this->addColumn('authors', 'novel');
+        $update = new RelationshipUpdate(key: 'writer', twoWayKey: 'novel');
+
+        $this->assertRenameFails('books', 'author', $update);
+        $this->assertSame(['author', 'name'], $this->attributeKeys('books'));
+
+        $this->pdo->exec('ALTER TABLE `'.self::NAMESPACE.'_authors` DROP COLUMN `novel`');
+        $this->database->updateRelationship('books', 'author', $update);
+
+        $this->assertSame(['name', 'writer'], $this->attributeKeys('books'));
+        $this->assertSame(['name', 'novel'], $this->attributeKeys('authors'));
+        $writer = $this->database->getDocument('books', 'dune')->getAttribute('writer');
+        $this->assertInstanceOf(Document::class, $writer);
+        $this->assertSame('herbert', $writer->getId());
+        $novel = $this->database->getDocument('authors', 'herbert')->getAttribute('novel');
+        $this->assertInstanceOf(Document::class, $novel);
+        $this->assertSame('dune', $novel->getId());
     }
 
     private function addColumn(string $collection, string $column): void

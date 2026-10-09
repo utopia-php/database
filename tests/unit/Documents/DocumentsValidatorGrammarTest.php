@@ -42,10 +42,10 @@ class DocumentsValidatorGrammarTest extends TestCase
         $validator = (new DocumentsValidatorDatabase(new Memory(), new Cache(new None())))->documentsValidator($this->orders);
 
         $this->assertFalse($validator->isValid([Query::join('customers', 'j0', [Query::on('$id', 'customerId')])]));
-        $this->assertSame('Invalid query method: join', $validator->getDescription());
+        $this->assertSame('Invalid query: Invalid query method: join', $validator->getDescription());
 
         $this->assertFalse($validator->isValid([Query::sum('amount', 'total')]));
-        $this->assertSame('Invalid query method: sum', $validator->getDescription());
+        $this->assertSame('Invalid query: Invalid query method: sum', $validator->getDescription());
     }
 
     public function testAdaptersWithJoinsAndAggregationsAcceptThem(): void
@@ -56,12 +56,12 @@ class DocumentsValidatorGrammarTest extends TestCase
         $this->assertTrue($validator->isValid([Query::sum('amount', 'total')]), $validator->getDescription());
     }
 
-    public function testTheCachedValidatorFollowsTheProfile(): void
+    public function testTheCachedValidatorLetsTheTenantThroughWithAndWithoutSharedTables(): void
     {
         $database = new DocumentsValidatorDatabase(new Memory(), new Cache(new None()));
         $queries = [Query::select(['$tenant'])];
 
-        $this->assertFalse($database->documentsValidator($this->orders)->isValid($queries));
+        $this->assertTrue($database->documentsValidator($this->orders)->isValid($queries));
 
         $database->setSharedTables(true);
 

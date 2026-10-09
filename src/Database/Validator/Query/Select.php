@@ -161,7 +161,8 @@ class Select extends Base
                 $attribute = $alias;
             }
 
-            if (\in_array($attribute, $internalKeys)) {
+            // 7.x let `$tenant` through without shared tables too, and the read refused it with "Cannot select attributes".
+            if (\in_array($attribute, $internalKeys) || $attribute === Document::TENANT) {
                 continue;
             }
 

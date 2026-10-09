@@ -19,6 +19,61 @@ use Utopia\Validator;
 
 class Base extends Validator
 {
+    /**
+     * The methods 7.x parsed. Any other method was a parse failure there, so when no validator takes it,
+     * its message keeps the "Invalid query: " prefix clients saw for it.
+     */
+    private const array LEGACY_METHODS = [
+        Method::Equal,
+        Method::NotEqual,
+        Method::LessThan,
+        Method::LessThanEqual,
+        Method::GreaterThan,
+        Method::GreaterThanEqual,
+        Method::Contains,
+        Method::ContainsAny,
+        Method::NotContains,
+        Method::Search,
+        Method::NotSearch,
+        Method::IsNull,
+        Method::IsNotNull,
+        Method::Between,
+        Method::NotBetween,
+        Method::StartsWith,
+        Method::NotStartsWith,
+        Method::EndsWith,
+        Method::NotEndsWith,
+        Method::Crosses,
+        Method::NotCrosses,
+        Method::DistanceEqual,
+        Method::DistanceNotEqual,
+        Method::DistanceGreaterThan,
+        Method::DistanceLessThan,
+        Method::Intersects,
+        Method::NotIntersects,
+        Method::Overlaps,
+        Method::NotOverlaps,
+        Method::Touches,
+        Method::NotTouches,
+        Method::VectorDot,
+        Method::VectorCosine,
+        Method::VectorEuclidean,
+        Method::Exists,
+        Method::NotExists,
+        Method::Select,
+        Method::OrderDesc,
+        Method::OrderAsc,
+        Method::OrderRandom,
+        Method::Limit,
+        Method::Offset,
+        Method::CursorAfter,
+        Method::CursorBefore,
+        Method::And,
+        Method::Or,
+        Method::ContainsAll,
+        Method::ElemMatch,
+    ];
+
     protected string $message = 'Invalid queries';
 
     /**
@@ -123,14 +178,15 @@ class Base extends Validator
         $aggregationAliases = [];
         $joinAliases = [];
         $hasJoins = false;
+        $parseFailure = null;
         foreach ($value as $q) {
             if (! $q instanceof Query) {
                 try {
                     $q = Query::parse($q);
                 } catch (Throwable $e) {
-                    $this->message = 'Invalid query: '.$e->getMessage();
+                    $parseFailure = 'Invalid query: '.$e->getMessage();
 
-                    return false;
+                    break;
                 }
             }
 
@@ -191,134 +247,153 @@ class Base extends Validator
 
         $this->prepareAggregations($parsedQueries);
 
-        // Same pass: nested and/or children must keep the join aliases collected above.
-        $pending = $parsedQueries;
-        while ($pending !== []) {
-            $query = \array_shift($pending);
-
-            if ($query->isNested() && ! $this->isValidLength($query->getValues(), $query->getMethod())) {
+        foreach ($parsedQueries as $query) {
+            if (! $this->isValidQuery($query, $hasFilterValidator)) {
                 return false;
             }
+        }
 
-            if (\in_array($query->getMethod(), Query::LOGICAL_TYPES, true)) {
-                foreach ($query->getValues() as $nested) {
-                    if (! $nested instanceof Query) {
-                        if (! \is_string($nested)) {
-                            $this->message = 'Invalid query: nested query must be a string';
+        if ($parseFailure !== null) {
+            $this->message = $parseFailure;
 
-                            return false;
-                        }
-                        try {
-                            $nested = Query::parse($nested);
-                        } catch (Throwable $e) {
-                            $this->message = 'Invalid query: '.$e->getMessage();
+            return false;
+        }
 
-                            return false;
-                        }
+        return true;
+    }
+
+    /**
+     * Validate the children of a logical query before the query itself, as 7.x did, so a child's error is
+     * the one reported; a join's ON conditions come after the join.
+     */
+    private function isValidQuery(Query $query, bool $hasFilterValidator): bool
+    {
+        if ($query->isNested() && ! $this->isValidLength($query->getValues(), $query->getMethod())) {
+            return false;
+        }
+
+        if (\in_array($query->getMethod(), Query::LOGICAL_TYPES, true)) {
+            foreach ($query->getValues() as $nested) {
+                if (! $nested instanceof Query) {
+                    if (! \is_string($nested)) {
+                        $this->message = 'Invalid query: nested query must be a string';
+
+                        return false;
                     }
-                    $pending[] = $nested;
-                }
-            }
+                    try {
+                        $nested = Query::parse($nested);
+                    } catch (Throwable $e) {
+                        $this->message = 'Invalid query: '.$e->getMessage();
 
-            if ($hasFilterValidator && $query->getMethod()->isJoin() && $query->isNestedJoin()) {
-                foreach ($query->getJoinOnQueries() as $onQuery) {
-                    if ($onQuery->getMethod() === Method::On) {
-                        continue;
+                        return false;
                     }
-                    $pending[] = $onQuery;
                 }
-            }
-
-            $method = $query->getMethod();
-
-            if ($method->isAggregate()) {
-                $methodType = QueryBase::METHOD_TYPE_AGGREGATE;
-            } else {
-                $methodType = match ($method) {
-                    Method::Select => QueryBase::METHOD_TYPE_SELECT,
-                    Method::Limit => QueryBase::METHOD_TYPE_LIMIT,
-                    Method::Offset => QueryBase::METHOD_TYPE_OFFSET,
-                    Method::CursorAfter,
-                    Method::CursorBefore => QueryBase::METHOD_TYPE_CURSOR,
-                    Method::OrderAsc,
-                    Method::OrderDesc,
-                    Method::OrderRandom => QueryBase::METHOD_TYPE_ORDER,
-                    Method::Equal,
-                    Method::NotEqual,
-                    Method::LessThan,
-                    Method::LessThanEqual,
-                    Method::GreaterThan,
-                    Method::GreaterThanEqual,
-                    Method::Search,
-                    Method::NotSearch,
-                    Method::IsNull,
-                    Method::IsNotNull,
-                    Method::Between,
-                    Method::NotBetween,
-                    Method::StartsWith,
-                    Method::NotStartsWith,
-                    Method::EndsWith,
-                    Method::NotEndsWith,
-                    Method::Contains,
-                    Method::ContainsAny,
-                    Method::NotContains,
-                    Method::And,
-                    Method::Or,
-                    Method::ContainsAll,
-                    Method::ElemMatch,
-                    Method::Crosses,
-                    Method::NotCrosses,
-                    Method::DistanceEqual,
-                    Method::DistanceNotEqual,
-                    Method::DistanceGreaterThan,
-                    Method::DistanceLessThan,
-                    Method::Intersects,
-                    Method::NotIntersects,
-                    Method::Overlaps,
-                    Method::NotOverlaps,
-                    Method::Touches,
-                    Method::NotTouches,
-                    Method::Covers,
-                    Method::NotCovers,
-                    Method::SpatialEquals,
-                    Method::NotSpatialEquals,
-                    Method::VectorDot,
-                    Method::VectorCosine,
-                    Method::VectorEuclidean,
-                    Method::Regex,
-                    Method::Exists,
-                    Method::NotExists => QueryBase::METHOD_TYPE_FILTER,
-                    Method::Distinct => QueryBase::METHOD_TYPE_DISTINCT,
-                    Method::GroupBy => QueryBase::METHOD_TYPE_GROUP_BY,
-                    Method::Having => QueryBase::METHOD_TYPE_HAVING,
-                    Method::Join,
-                    Method::LeftJoin,
-                    Method::RightJoin,
-                    Method::CrossJoin,
-                    Method::FullOuterJoin,
-                    Method::NaturalJoin => QueryBase::METHOD_TYPE_JOIN,
-                    default => '',
-                };
-            }
-
-            $methodIsValid = false;
-            foreach ($this->validators as $validator) {
-                if ($validator->getMethodType() !== $methodType) {
-                    continue;
-                }
-                if (! $validator->isValid($query)) {
-                    $this->message = 'Invalid query: '.$validator->getDescription();
-
+                if (! $this->isValidQuery($nested, $hasFilterValidator)) {
                     return false;
                 }
-
-                $methodIsValid = true;
             }
+        }
 
-            if (! $methodIsValid) {
-                $this->message = 'Invalid query method: '.$method->value;
+        $method = $query->getMethod();
+
+        if ($method->isAggregate()) {
+            $methodType = QueryBase::METHOD_TYPE_AGGREGATE;
+        } else {
+            $methodType = match ($method) {
+                Method::Select => QueryBase::METHOD_TYPE_SELECT,
+                Method::Limit => QueryBase::METHOD_TYPE_LIMIT,
+                Method::Offset => QueryBase::METHOD_TYPE_OFFSET,
+                Method::CursorAfter,
+                Method::CursorBefore => QueryBase::METHOD_TYPE_CURSOR,
+                Method::OrderAsc,
+                Method::OrderDesc,
+                Method::OrderRandom => QueryBase::METHOD_TYPE_ORDER,
+                Method::Equal,
+                Method::NotEqual,
+                Method::LessThan,
+                Method::LessThanEqual,
+                Method::GreaterThan,
+                Method::GreaterThanEqual,
+                Method::Search,
+                Method::NotSearch,
+                Method::IsNull,
+                Method::IsNotNull,
+                Method::Between,
+                Method::NotBetween,
+                Method::StartsWith,
+                Method::NotStartsWith,
+                Method::EndsWith,
+                Method::NotEndsWith,
+                Method::Contains,
+                Method::ContainsAny,
+                Method::NotContains,
+                Method::And,
+                Method::Or,
+                Method::ContainsAll,
+                Method::ElemMatch,
+                Method::Crosses,
+                Method::NotCrosses,
+                Method::DistanceEqual,
+                Method::DistanceNotEqual,
+                Method::DistanceGreaterThan,
+                Method::DistanceLessThan,
+                Method::Intersects,
+                Method::NotIntersects,
+                Method::Overlaps,
+                Method::NotOverlaps,
+                Method::Touches,
+                Method::NotTouches,
+                Method::Covers,
+                Method::NotCovers,
+                Method::SpatialEquals,
+                Method::NotSpatialEquals,
+                Method::VectorDot,
+                Method::VectorCosine,
+                Method::VectorEuclidean,
+                Method::Regex,
+                Method::Exists,
+                Method::NotExists => QueryBase::METHOD_TYPE_FILTER,
+                Method::Distinct => QueryBase::METHOD_TYPE_DISTINCT,
+                Method::GroupBy => QueryBase::METHOD_TYPE_GROUP_BY,
+                Method::Having => QueryBase::METHOD_TYPE_HAVING,
+                Method::Join,
+                Method::LeftJoin,
+                Method::RightJoin,
+                Method::CrossJoin,
+                Method::FullOuterJoin,
+                Method::NaturalJoin => QueryBase::METHOD_TYPE_JOIN,
+                default => '',
+            };
+        }
+
+        $methodIsValid = false;
+        foreach ($this->validators as $validator) {
+            if ($validator->getMethodType() !== $methodType) {
+                continue;
+            }
+            if (! $validator->isValid($query)) {
+                $this->message = 'Invalid query: '.$validator->getDescription();
 
                 return false;
+            }
+
+            $methodIsValid = true;
+        }
+
+        if (! $methodIsValid) {
+            $this->message = (\in_array($method, self::LEGACY_METHODS, true) ? '' : 'Invalid query: ').'Invalid query method: '.$method->value;
+
+            return false;
+        }
+
+        if ($hasFilterValidator && $method->isJoin() && $query->isNestedJoin()) {
+            foreach ($query->getJoinOnQueries() as $onQuery) {
+                if ($onQuery->getMethod() === Method::On) {
+                    continue;
+                }
+                if (! $this->isValidQuery($onQuery, $hasFilterValidator)) {
+                    return false;
+                }
             }
         }
 

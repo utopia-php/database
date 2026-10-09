@@ -306,7 +306,7 @@ final class AggregateSelectTest extends TestCase
 
         $documents = new DocumentsValidator($attributes, [], Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::OrderRandom], idType: ColumnType::String));
         $this->assertFalse($documents->isValid($queries));
-        $this->assertSame('Invalid query method: count', $documents->getDescription());
+        $this->assertSame('Invalid query: Invalid query method: count', $documents->getDescription());
 
         $document = new DocumentValidator($attributes, Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::Joins]));
         $this->assertFalse($document->isValid($queries));

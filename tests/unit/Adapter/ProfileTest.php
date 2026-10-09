@@ -83,12 +83,12 @@ final class ProfileTest extends TestCase
         $this->assertTrue(new IndexDefinition($attributes, [], $database->profile())->isValid($index));
     }
 
-    public function testTheTenantIsSelectableOnlyAfterSharedTablesAreTurnedOn(): void
+    public function testTheTenantPassesSelectValidationWithAndWithoutSharedTables(): void
     {
         $database = $this->database(new Memory());
         $select = [Query::select(['$tenant'])];
 
-        $this->assertFalse(new Documents([], [], $database->profile())->isValid($select));
+        $this->assertTrue(new Documents([], [], $database->profile())->isValid($select));
 
         $database->setSharedTables(true);
 

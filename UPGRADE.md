@@ -1100,8 +1100,8 @@ coroutine that opened it and the coroutines it starts; see [Pools and profiling]
 - **Retries of metadata writes.** Schema calls that persist a collection definition (`createAttribute()`,
   `createIndex()`, their update, rename and delete siblings, `createRelationship()`) no longer retry a failure that
   fails the same way every time: `Authorization`, `Character`, `Conflict`, `Dependency`, `Duplicate` (and `Unique`
-  and `Mismatch`), `Index`, `Limit`, `NotFound`, `Operator`, `Order`, `Query`, `Relationship`, `Restricted`,
-  `Structure`, `Timeout`, `Truncate`, `Type` and `Unconfirmed` are thrown on the first attempt. A failure the
+  and `Mismatch`), `Index`, `Limit`, `NotFound`, `Operator`, `Order`, `Query`, `Refused`, `Relationship`,
+  `Restricted`, `Structure`, `Timeout`, `Truncate`, `Type` and `Unconfirmed` are thrown on the first attempt. A failure the
   metadata write's transaction retries itself (see [Transaction retries](#errors)) is not run again by the schema
   call, so its retries do not multiply. Other failures, such as an unavailable cache, are still attempted up to three
   times.
@@ -1161,6 +1161,22 @@ coroutine that opened it and the coroutines it starts; see [Pools and profiling]
   tables are shared. The library does not run `deleteCollection()` again, and the wrapper no longer has the
   `Unconfirmed` class, so a caller that retries on it runs the delete again: harmless when the removal was not
   stored, and `Exception\NotFound` when it was.
+- **Adapter refusals.** When an adapter returns `false` from a schema change instead of raising an error, the call
+  throws `Utopia\Database\Exception\Refused`, a subclass of `Utopia\Database\Exception`, whose `getPrevious()` is
+  `null`. This covers `createAttribute()`, `createAttributes()`, `updateAttribute()`, `deleteAttribute()`,
+  `renameAttribute()`, `createIndex()`, `createIndexes()`, `deleteIndex()`, `renameIndex()`, `createRelationship()`,
+  `updateRelationship()` and `deleteRelationship()`. Most keep their 7.x message (`Failed to create attribute`), but
+  a refused rename or relationship update now has one message naming its keys: `Failed to rename attribute 'a' to
+  'b'`, `Failed to rename index 'a' to 'b'` and `Failed to update relationship 'k'`. 7.x wrapped those three
+  refusals in the message it uses for an adapter error (`Failed to rename attribute 'a' to 'b': Failed to rename
+  attribute`), so a refusal looked like an engine failure. An error the adapter raises is unchanged: it reaches the
+  caller as itself, or, for the renames and the relationship update, wrapped in a plain `Utopia\Database\Exception`
+  (`Failed to rename attribute 'a' to 'b': <error>`) whose `getPrevious()` is the error; `renameAttribute()` still
+  rethrows `Exception\Duplicate` as it is. Catch `Exception\Refused` to tell a refusal apart instead of matching
+  the message or the nesting of causes. A refused `renameIndex()` no longer renames back and forth to complete an
+  earlier rename: an adapter returns `false` only when the index is under neither name. When `createAttributes()`
+  falls back to creating the columns one at a time, a column the adapter does not create is refused too; 7.x stored
+  it in the metadata as created.
 - **Engine errors mapped to library exceptions.**
 
   | Engine condition | Exception |

@@ -3807,6 +3807,11 @@ trait Documents
         $joinedByAlias = $this->joinedCollectionsByAlias($joins, $joinedCollectionsById);
         $joinedCollections = $isAggregation ? [] : $joinedByAlias;
 
+        // 7.x read a random order with a cursor as the random order alone, so the cursor is dropped as it was.
+        if ($orderTypes === [OrderDirection::Random]) {
+            $cursor = null;
+        }
+
         if ($joinedCollections !== [] && $cursor !== null) {
             [$orderAttributes, $cursor] = $this->qualifyJoinedOrders($collection, $orderAttributes, $cursor, $joinedCollections);
         }

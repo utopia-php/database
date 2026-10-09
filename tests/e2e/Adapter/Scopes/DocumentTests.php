@@ -2625,6 +2625,28 @@ trait DocumentTests
         $this->assertLessThanOrEqual(25, count($documents)); // Default limit is 25
     }
 
+    public function testFindOrderRandomIgnoresACursorAs7xDid(): void
+    {
+        $this->initMoviesFixture();
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::OrderRandom)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $all = $database->find($this->getMoviesCollection(), [Query::limit(100)]);
+        $cursor = $all[0];
+
+        $after = $database->find($this->getMoviesCollection(), [Query::orderRandom(), Query::cursorAfter($cursor), Query::limit(100)]);
+        $before = $database->find($this->getMoviesCollection(), [Query::orderRandom(), Query::cursorBefore($cursor), Query::limit(100)]);
+
+        $this->assertCount(\count($all), $after);
+        $this->assertCount(\count($all), $before);
+    }
+
     public function testSum(): void
     {
         $this->initMoviesFixture();

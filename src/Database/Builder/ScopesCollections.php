@@ -2,7 +2,6 @@
 
 namespace Utopia\Database\Builder;
 
-use Closure;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Query\Builder\Statement;
 use Utopia\Query\Query;
@@ -24,7 +23,9 @@ trait ScopesCollections
 
     private string $boundAlias = '';
 
-    /** @var list<Closure(): void> */
+    /**
+     * @var list<\Closure(): void>
+     */
     private array $beforeEachBuild = [];
 
     #[\Override]

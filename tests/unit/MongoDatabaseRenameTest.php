@@ -4,8 +4,8 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Adapter\Mongo;
-use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Mongo\Exception as MongoException;
 
 final class MongoDatabaseRenameTest extends TestCase

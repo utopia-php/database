@@ -1,5 +1,37 @@
 # Changelog
 
+## 8.0.1
+
+8.0.1 restores the 7.4.1 behaviour that 8.0.0 changed for callers of features 7.x already had. New 8.0 features are
+unchanged.
+
+### Fixed
+
+- Query validation reports what 7.x reported: the children of `and()`, `or()` and `elemMatch()` are validated before
+  the query itself, the first invalid query in reading order sets the message even when a later one does not parse,
+  a method 7.x could not parse that no validator takes reads `Invalid query: Invalid query method: <method>`, and a
+  raw query from a string reads `Invalid query method: raw`.
+- `select('$tenant')` passes query validation again without shared tables, and the read refuses it with `Cannot
+  select attributes: $tenant`, as in 7.x.
+- The `UID` validator description is the 7.x text again, also inside `Invalid cursor: …`.
+- On PostgreSQL an exact search (`"foo bar"`) matches every word in any order again, not the adjacent phrase.
+- `containsAll()` on an attribute that is not an array matches each value as a whole-value `LIKE` (`ILIKE` on
+  PostgreSQL) pattern, any of them, on MariaDB, MySQL and PostgreSQL, as in 7.x.
+- A read whose orders include `orderRandom()` ignores its cursor instead of failing with `Order attribute '' is
+  empty`.
+- `document_purge` fires inside the write's outermost transaction, just before it commits, so a listener that throws
+  rolls the write back and its failure reaches the caller, as in 7.x.
+- `increaseDocumentAttribute()` and `decreaseDocumentAttribute()` pass a fractional change, `max` or `min` on an
+  integer attribute to the engine again and return the exact sum, and refuse a change that is not above zero with
+  `\InvalidArgumentException`, as in 7.x.
+- Numeric operators on integer and double attributes are checked as in 7.x: a fractional change or limit, or a
+  fractional item appended to an integer array, is no longer refused.
+- A mismatched attribute default reads `Default value x does not match given type <type>` (and `is not a valid
+  integer string for type bigint`) without JSON quoting, as in 7.x.
+- `Index::fromArray()` refuses an unknown index type with `Exception\Index` (`Unknown index type: …`) instead of
+  creating a key index.
+- `Exception\Unique::MESSAGE` is `Unique index violation` again.
+
 ## 8.0.0 (unreleased)
 
 8.0 is a major release. Read [UPGRADE.md](UPGRADE.md) before you upgrade from 7.x: it lists every change you may

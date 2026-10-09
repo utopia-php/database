@@ -223,9 +223,12 @@ $permissions = [Permission::read(Role::user(Id::unique()))];
 - A filter on a path into an object attribute (`meta.address.city`) takes keys of `a-z`, `A-Z`, `0-9`, `_` and `-`
   only. The query validator refuses any other key with `Utopia\Database\Exception\Query` on every adapter (7.x
   refused such keys on PostgreSQL only), and on PostgreSQL the query is refused also when validation is skipped.
-- On PostgreSQL, an exact search (`search('title', '"foo bar"')`) matches the words as an adjacent phrase, as on
-  MariaDB, MySQL and SQLite, and `notSearch()` with an exact term excludes only that phrase. In 7.4.0 PostgreSQL
-  matched both words in any order. To match both words in any order, pass a `search()` for each word.
+- On PostgreSQL, an exact search (`search('title', '"foo bar"')`) matches documents holding every word in any order,
+  as in 7.x, where MariaDB, MySQL and SQLite match the adjacent phrase.
+- `containsAll()` on an attribute that is not an array matches as in 7.x: on MariaDB, MySQL and PostgreSQL each value
+  is a `LIKE` (`ILIKE`) pattern on the whole value and a document matching any of them is returned; on MongoDB it is
+  `$all`. Use `containsString()` for substrings.
+- A read whose orders include `orderRandom()` ignores its cursor, as in 7.x.
 
 ## Schema: value objects
 
@@ -866,27 +869,20 @@ method as a no-op, so a hook overrides only what it needs:
   counted and emitted it). Of a batch that repeats an id, only the first copy is written. Permissions are written
   only for inserted documents: in 7.x the skipped copy's permissions were added to the stored document on MariaDB,
   MySQL and SQLite, so `find()`, `count()` and `sum()` could return it to roles its own permissions do not grant.
-- **Fractional numbers on integer attributes.** `increaseDocumentAttribute()` and `decreaseDocumentAttribute()`
-  throw `Utopia\Database\Exception\Type` before anything is written, on every adapter and also on schemaless
-  collections that declare the attribute as an integer:
-  - for a fractional change value (`Change value must be an integer.`). 7.x passed it to the engine, which rounded
-    it on MariaDB and MySQL, failed on PostgreSQL, and stored a float in the integer attribute on SQLite, MongoDB,
-    Memory and Redis. Pass an integer change value, or use a float attribute for fractional counters.
-  - for a fractional `max` or `min` (`Max must be an integer.`, `Min must be an integer.`). Integer bounds are
-    compared with exact integer arithmetic, so 64-bit and unsigned values never pass through a float. The bound
-    accepts the same whole numbers as an operator limit: an integer, an integer string, a string with only zero
-    decimals such as `'102.0'`, or a float without a fractional part such as `102.0`, each converted exactly. Pass
-    a whole bound, for example `floor($max)` or `ceil($min)`, which admits the same integer values.
-
-  Change values and bounds on float and double attributes may still be fractional.
-- **Operator limits on integer attributes.** The `max` or `min` limit of `Operator::increment()`, `decrement()`,
-  `multiply()`, `divide()` and `power()` on an integer or big integer attribute has to be a whole number: an
-  integer, an integer string, or a float without a fractional part such as `9.0e18`. A fractional limit such as
-  `102.4` is refused before anything is written with `Utopia\Database\Exception\Structure`
-  (`Cannot apply <operator> operator: max/min limit must be a whole number for integer attribute '<key>', got
-  <limit>`). With validation skipped that check does not run, and Memory and Redis refuse such a limit with
-  `Utopia\Database\Exception\Operator` when the result leaves PHP's integer range. Limits on float and double
-  attributes are unchanged.
+- **Fractional numbers on integer attributes.** As in 7.x, `increaseDocumentAttribute()` and
+  `decreaseDocumentAttribute()` pass a fractional change value, `max` or `min` on an integer attribute to the
+  engine and return the document with the exact sum: MariaDB and MySQL store it rounded, MongoDB stores it and reads
+  it back truncated, and PostgreSQL fails. A whole float such as `2.0` is bound as the integer. A whole change value
+  and whole bounds are compared with exact integer arithmetic, so 64-bit and unsigned values never pass through a
+  float. A change value that is not a number greater than 0 throws `\InvalidArgumentException`
+  (`Value must be numeric and greater than 0`), as in 7.x.
+- **Operator limits on integer attributes.** As in 7.x, the change and the `max` or `min` limit of
+  `Operator::increment()`, `decrement()`, `multiply()`, `divide()` and `power()` on an integer or double attribute
+  only have to be numeric and finite: a fractional change or limit on an integer reaches the engine, which stores
+  the result as for a fractional counter. Without a limit, a result predicted outside the attribute's range is
+  refused with `Utopia\Database\Exception\Structure` (`Cannot apply <operator> operator: would overflow maximum value
+  of <max>`). On a big integer attribute the limit has to be a whole number in the attribute's range (`Cannot apply
+  <operator> operator: max/min limit must be a whole number for integer attribute '<key>', got <limit>`).
 - **Operators on upserts that create a document.** An upsert that creates a document applies every operator to the
   attribute's default, as it does for an existing document: `dateAddDays()` and `dateSubDays()` shift the date,
   `arrayFilter()` filters the array, and the maximum or minimum of increment, decrement, multiply, divide and power
@@ -2186,7 +2182,8 @@ $database->find('reviews', [
   `Utopia\Database\Exception\Query` with `Join queries are not supported for bulk updates` or
   `Join queries are not supported for bulk deletes`.
 - On adapters without joins or aggregations (Memory, MongoDB, Redis), `find()`, `aggregate()`, `count()` and
-  `sum()` reject those queries during validation with `Invalid query method: <method>`.
+  `sum()` reject those queries during validation with `Invalid query: Invalid query method: <method>`, the message
+  7.x gave for a method it could not parse.
 - MariaDB, MySQL and SQLite run a full outer join as two queries joined by `UNION ALL`. They accept one full outer
   join per query, and a right join after it has to join on a table joined before the full outer join or on the full
   outer joined table (directly or through other joins); other chains throw `Utopia\Database\Exception\Query`.

@@ -7,6 +7,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use Throwable;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\Memory;
+use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\Redis;
 use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Adapter\SQLite;
@@ -2980,6 +2981,34 @@ trait AttributeTests
             }
 
             $this->assertSame(['byAge'], $this->getIndexKeys($database, $collection));
+        });
+    }
+
+    public function testSharedTablesRenameOfAnIndexOnlyAnotherTenantHasFails(): void
+    {
+        $this->runSharedRename(function (Database $database, string $collection, int|string $first, int|string $second): void {
+            if (! $database->getAdapter() instanceof Postgres) {
+                $this->expectNotToPerformAssertions();
+
+                return;
+            }
+
+            foreach ([$first, $second] as $tenant) {
+                $database->setTenant($tenant);
+                $database->createIndex($collection, Index::key(key: 'byName', attributes: ['name']));
+            }
+
+            $database->setTenant($first);
+            $database->getAdapter()->deleteIndex($collection, 'byName');
+
+            try {
+                $database->renameIndex($collection, 'byName', 'nameIndex');
+                $this->fail('A rename backed only by another tenant\'s index must fail');
+            } catch (DatabaseException $error) {
+                $this->assertStringStartsWith("Failed to rename index 'byName' to 'nameIndex'", $error->getMessage());
+            }
+
+            $this->assertContains('byName', $this->getIndexKeys($database, $collection));
         });
     }
 

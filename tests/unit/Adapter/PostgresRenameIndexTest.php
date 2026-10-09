@@ -14,7 +14,7 @@ final class PostgresRenameIndexTest extends TestCase
     /** @var list<string> */
     private array $indexes = [];
 
-    /** @var list<string> */
+    /** @var list<string> The tenants of the collection's definitions, in the order they were stored */
     private array $tenants = [];
 
     /** @var list<string> */
@@ -80,6 +80,15 @@ final class PostgresRenameIndexTest extends TestCase
         $this->assertSame(['namespace_1_users_byName'], $this->indexes);
     }
 
+    public function testSharedTablesReportARenameOnlyANonCreatingTenantsIndexBacks(): void
+    {
+        $this->indexes = ['namespace_1_users_byAge'];
+        $this->tenants = ['2', '1'];
+
+        $this->assertFalse($this->adapter(shared: true)->renameIndex('users', 'byAge', 'byYears'));
+        $this->assertSame(['namespace_1_users_byAge'], $this->indexes);
+    }
+
     private function adapter(bool $shared): Postgres
     {
         $pdo = $this->createStub(PDO::class);
@@ -113,8 +122,9 @@ final class PostgresRenameIndexTest extends TestCase
                     return $schema === 'database' ? \array_values(\array_intersect($names, $this->indexes)) : [];
                 }
 
-                return \str_contains($query, '_metadata') ? $this->tenants : [];
+                return [];
             });
+            $statement->method('fetchColumn')->willReturnCallback(fn (): string|false => \str_contains($query, '_metadata') ? ($this->tenants[0] ?? false) : false);
 
             return $statement;
         });

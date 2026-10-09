@@ -977,10 +977,9 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         $this->executeStatement($sql, Event::IndexRename);
 
         $names = [$newIndexName];
-        if ($this->sharedTables) {
-            foreach ($this->getCollectionTenants($collection) as $tenant) {
-                \array_push($names, $this->getIndexName($name, $old, $tenant), $this->getIndexName($name, $new, $tenant));
-            }
+        $creator = $this->sharedTables ? $this->getCollectionCreator($collection) : null;
+        if ($creator !== null && $creator !== (string) $this->currentTenant()) {
+            \array_push($names, $this->getIndexName($name, $old, $creator), $this->getIndexName($name, $new, $creator));
         }
 
         return $this->anyIndexExists($names);
@@ -992,28 +991,28 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     /**
-     * @return list<string>
+     * The tenant whose definition of a shared collection was stored first: the one that created its table and the
+     * indexes declared with it, which back the same indexes of every later tenant.
      *
      * @throws DatabaseException
      */
-    private function getCollectionTenants(string $collection): array
+    private function getCollectionCreator(string $collection): ?string
     {
         $statement = $this->prepareStatement(
-            'SELECT DISTINCT '.$this->quote(Storage::TENANT).' FROM '.$this->getTable(Database::METADATA).' WHERE '.$this->quote(Storage::UID).' = ?',
+            'SELECT '.$this->quote(Storage::TENANT).' FROM '.$this->getTable(Database::METADATA).' WHERE '.$this->quote(Storage::UID).' = ? ORDER BY '.$this->quote(Storage::SEQUENCE).' ASC LIMIT 1',
             Event::IndexRename,
         );
         $statement->bindValue(1, $collection);
 
         try {
             $this->execute($statement);
-            /** @var list<string> $tenants */
-            $tenants = $statement->fetchAll(PDO::FETCH_COLUMN);
+            $tenant = $statement->fetchColumn();
             $statement->closeCursor();
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
 
-        return $tenants;
+        return $tenant === false || $tenant === null ? null : (string) $tenant;
     }
 
     /**

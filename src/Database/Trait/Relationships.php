@@ -17,6 +17,7 @@ use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Refused as RefusedException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Index;
 use Utopia\Database\Relationship;
@@ -283,6 +284,7 @@ trait Relationships
      * @throws DatabaseException
      * @throws DuplicateException
      * @throws NotFoundException
+     * @throws RefusedException When the adapter does not rename the relationship's columns
      */
     public function updateRelationship(string $collection, string $key, RelationshipUpdate $update): Relationship
     {
@@ -339,16 +341,16 @@ trait Relationships
                     $side,
                     new RelationshipUpdate(key: $newKey, twoWayKey: $newTwoWayKey, twoWay: $updated->twoWay),
                 );
-
-                if (! $adapterUpdated) {
-                    throw new DatabaseException('Failed to update relationship');
-                }
             } catch (Throwable $error) {
                 if (! $this->adapter->supports(Capability::SchemaIntrospection) || ! $this->hasSchemaColumn($collectionId, $newKey)) {
                     throw new DatabaseException("Failed to update relationship '{$key}': ".$error->getMessage(), previous: $error);
                 }
 
                 $adapterUpdated = true;
+            }
+
+            if (! $adapterUpdated) {
+                throw new RefusedException("Failed to update relationship '{$key}'");
             }
         }
 

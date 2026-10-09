@@ -20,6 +20,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Refused as RefusedException;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Index;
 use Utopia\Database\Permission;
@@ -376,16 +377,36 @@ final class RelationshipSchemaTest extends TestCase
      * @param  Closure(): Adapter  $adapter
      */
     #[DataProvider('adapters')]
-    public function testAnAdapterThatDoesNotUpdateTheRelationshipFailsTheUpdate(Closure $adapter): void
+    public function testAnAdapterThatDoesNotUpdateTheRelationshipRefusesTheUpdate(Closure $adapter): void
     {
         $database = $this->database($this->refusingUpdates($adapter()));
         $database->createRelationship('books', Relationship::manyToOne(relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books'));
 
         try {
             $database->updateRelationship('books', 'author', new RelationshipUpdate(key: 'writer'));
-            $this->fail('an adapter that does not update the relationship must fail the update');
+            $this->fail('an adapter that does not update the relationship must refuse the update');
+        } catch (RefusedException $error) {
+            $this->assertSame("Failed to update relationship 'author'", $error->getMessage());
+            $this->assertNull($error->getPrevious());
+        }
+
+        $this->assertContains('author', $this->attributeKeys($database, 'books'));
+        $this->assertNotContains('writer', $this->attributeKeys($database, 'books'));
+    }
+
+    public function testAnUpdateTheAdapterFailsIsWrappedWithItsCause(): void
+    {
+        $cause = new RuntimeException('the engine failed the rename');
+        $database = $this->database($this->memory(['updateRelationship' => static fn (): never => throw $cause]));
+        $database->createRelationship('books', Relationship::manyToOne(relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books'));
+
+        try {
+            $database->updateRelationship('books', 'author', new RelationshipUpdate(key: 'writer'));
+            $this->fail('an update the adapter fails must be reported');
         } catch (DatabaseException $error) {
-            $this->assertSame("Failed to update relationship 'author': Failed to update relationship", $error->getMessage());
+            $this->assertNotInstanceOf(RefusedException::class, $error);
+            $this->assertSame("Failed to update relationship 'author': the engine failed the rename", $error->getMessage());
+            $this->assertSame($cause, $error->getPrevious());
         }
 
         $this->assertContains('author', $this->attributeKeys($database, 'books'));

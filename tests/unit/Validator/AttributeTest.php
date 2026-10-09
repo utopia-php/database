@@ -389,7 +389,7 @@ class AttributeTest extends TestCase
         ]);
 
         $this->expectException(DatabaseException::class);
-        $this->expectExceptionMessage('Default value "not_an_integer" does not match given type integer');
+        $this->expectExceptionMessage('Default value not_an_integer does not match given type integer');
         $validator->isValid($attribute);
     }
 
@@ -933,7 +933,7 @@ class AttributeTest extends TestCase
         ]);
 
         $this->expectException(DatabaseException::class);
-        $this->expectExceptionMessage('Default value "not_a_float" does not match given type double');
+        $this->expectExceptionMessage('Default value not_a_float does not match given type double');
         $validator->isValid($attribute);
     }
 
@@ -957,7 +957,7 @@ class AttributeTest extends TestCase
         ]);
 
         $this->expectException(DatabaseException::class);
-        $this->expectExceptionMessage('Default value "not_a_boolean" does not match given type boolean');
+        $this->expectExceptionMessage('Default value not_a_boolean does not match given type boolean');
         $validator->isValid($attribute);
     }
 
@@ -1976,7 +1976,7 @@ class AttributeTest extends TestCase
         $validator = new AttributeDefinition(attributes: [], profile: Profiles::of());
 
         $this->expectException(DatabaseException::class);
-        $this->expectExceptionMessage('does not match given type bigint');
+        $this->expectExceptionMessage('Default value not_a_bigint is not a valid integer string for type bigint');
         $validator->isValid(Attribute::bigInteger(
             key: 'counter',
             default: 'not_a_bigint',

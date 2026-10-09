@@ -780,6 +780,10 @@ trait Attributes
 
         $value = \is_scalar($default) ? (string) $default : '[non-scalar]';
 
+        if ($type === ColumnType::BigInteger && \is_string($default) && ! BigInt::isIntegerString($default, $signed)) {
+            throw new DatabaseException('Default value '.$value.' is not a valid integer string for type bigint');
+        }
+
         throw new DatabaseException('Default value '.$value.' does not match given type '.Attribute::storedType($type));
     }
 

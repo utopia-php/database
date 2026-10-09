@@ -478,7 +478,7 @@ final class CoreMinorsTest extends TestCase
         $error = $this->attempt(fn (): bool => $validator->isValid(Attribute::bigInteger(key: 'total', default: 'many')));
 
         $this->assertInstanceOf(DatabaseException::class, $error);
-        $this->assertSame('Default value "many" does not match given type bigint', $error->getMessage());
+        $this->assertSame('Default value many is not a valid integer string for type bigint', $error->getMessage());
 
         $database = $this->interceptingMetadataWrites(static function (): void {
         });
@@ -488,7 +488,7 @@ final class CoreMinorsTest extends TestCase
         $error = $this->attempt(fn (): Attribute => $database->updateAttribute('logs', 'total', new AttributeUpdate(default: 'many')));
 
         $this->assertInstanceOf(DatabaseException::class, $error);
-        $this->assertSame('Default value many does not match given type bigint', $error->getMessage());
+        $this->assertSame('Default value many is not a valid integer string for type bigint', $error->getMessage());
 
         $error = $this->attempt(fn (): bool => $validator->isValid(Attribute::fromArray(['key' => 'value', 'type' => ColumnType::Timestamp])));
 

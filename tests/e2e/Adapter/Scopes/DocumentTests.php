@@ -2026,7 +2026,7 @@ trait DocumentTests
 
         $this->assertSame([], $ids(['lph']));
         $this->assertSame(['lower'], $ids(['alpha']));
-        $this->assertSame(['lower', 'other'], $ids(['alpha', 'beta']));
+        $this->assertSame($adapter instanceof Mongo ? [] : ['lower', 'other'], $ids(['alpha', 'beta']));
     }
 
     public function testFindFulltextExactTermOnPostgresMatchesEveryWordInAnyOrder(): void

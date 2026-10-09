@@ -1160,11 +1160,17 @@ coroutine that opened it and the coroutines it starts; see [Pools and profiling]
   columns before they remove the definition. When that removal fails, also after its commit or with an
   `Exception\Unconfirmed` commit, they recreate the table or columns empty and throw a `Utopia\Database\Exception`
   whose `getPrevious()` is the failure. If the removal was stored, this leaves an empty table or column without a
-  definition: `createRelationship()` with the same key reuses the columns, and on MongoDB `createCollection()` with
-  the same id reuses the collection as it is, while on the SQL adapters it throws `Exception\Duplicate` unless
-  tables are shared. The library does not run `deleteCollection()` again, and the wrapper no longer has the
+  definition: `createRelationship()` with the same key reuses the columns, and `createCollection()` with the same id
+  throws `Exception\Duplicate` unless tables are shared, where it reuses the table (on MongoDB recreating the
+  collection's indexes). The library does not run `deleteCollection()` again, and the wrapper no longer has the
   `Unconfirmed` class, so a caller that retries on it runs the delete again: harmless when the removal was not
   stored, and `Exception\NotFound` when it was.
+- **`deleteCollection()` deletes the relationships first.** It deletes each of the collection's relationships, with
+  their columns, junction collections and the related collections' two-way attributes, before it drops the
+  collection's own table. When the table drop or the definition removal then fails, the relationships stay deleted
+  while the collection remains. Running `deleteCollection()` again converges: it finds no relationships left and
+  drops the rest. A `Mirror` forwards the delete to its destination only after the source succeeds, so until the
+  retry the source has lost the relationships the destination still has.
 - **Adapter refusals.** When an adapter returns `false` from a schema change instead of raising an error, the call
   throws `Utopia\Database\Exception\Refused`, a subclass of `Utopia\Database\Exception`, whose `getPrevious()` is
   `null`. This covers `create()`, `update()`, `delete()`, `createCollection()`, `deleteCollection()`,
@@ -1187,8 +1193,10 @@ coroutine that opened it and the coroutines it starts; see [Pools and profiling]
   `Exception\Refused` to tell a refusal apart instead of matching the message or the nesting of causes. A refused `renameIndex()` no longer renames back and forth to complete an
   earlier rename: an adapter returns `false` only when the index is under neither name. When `createAttributes()`
   falls back to creating the columns one at a time, a column the adapter does not create is refused too; 7.x stored
-  it in the metadata as created. On MongoDB, `createCollection()` drops a collection it created but could not give
-  its indexes, so a later create no longer adopts it without them.
+  it in the metadata as created, and drops the columns it had already created. On MongoDB, `createCollection()` of
+  a collection that already exists throws `Exception\Duplicate` unless tables are shared or it is the metadata
+  collection, which it reuses after creating its indexes again, and it drops a collection it created but could not
+  give its indexes, so a later create no longer adopts it without them.
 - **`deleteRelationship()` whose drop fails.** The relationship's indexes, or its junction collection's definition,
   are removed before the adapter drops its columns or junction tables, because SQLite cannot drop an indexed column
   and the engines disagree on what a column drop does to its indexes. When the adapter refuses the drop or raises an

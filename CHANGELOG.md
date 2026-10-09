@@ -493,8 +493,16 @@ have to make, with the 7.x and 8.0 forms side by side.
 
 - `deleteRelationship()` recreates the relationship's indexes, or its junction collection's definition, when the
   adapter refuses or fails to drop the relationship, instead of leaving them dropped while the relationship stays.
-- On MongoDB, `createCollection()` drops a collection it created but could not give its indexes, instead of leaving
-  it for a later create to adopt without them, and a refused `createCollection()` stores no definition.
+- On MongoDB, `createCollection()` of an existing collection throws `Exception\Duplicate`, as on the SQL adapters,
+  instead of adopting it without its indexes, unless tables are shared or it is the metadata collection, which it
+  reuses after creating its indexes again. A collection it created but could not give its indexes is dropped,
+  outside a transaction and unless tables are shared, and a refused `createCollection()` stores no definition.
+- `createAttributes()` drops the columns it created one at a time before a later column failed, instead of leaving
+  them in the schema without a definition.
+- `updateRelationship()` completes an earlier attempt only when every column it renames is already under its new
+  name and no longer under its old one, instead of adopting any column under the new key.
+- On PostgreSQL with shared tables, `renameIndex()` no longer reports a rename done because another tenant's copy
+  of the index has either name; only the tenant's own index, or the one created with the shared table, counts.
 - `updateDocument()` no longer fails with `Exception\Structure` (`Unknown attribute`) when a schema change commits
   between its collection definition lookup and its locked read of the document.
 - `Mirror::clearDocumentTypes()` keeps the metadata collection's `Collection` type, so the mirror's

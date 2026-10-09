@@ -467,9 +467,14 @@ class AttributeDefinition extends Validator
         }
 
         $filters = $declaration->getAttribute(self::FILTERS, []);
+        if (! \is_array($filters)) {
+            return [];
+        }
 
-        /** @var list<string> */
-        return \is_array($filters) ? \array_values($filters) : [];
+        /** @var list<Filter|string> $filters */
+        $filters = \array_values($filters);
+
+        return Filter::names($filters);
     }
 
     /**

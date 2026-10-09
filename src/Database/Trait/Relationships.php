@@ -17,6 +17,7 @@ use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Refused as RefusedException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Index;
 use Utopia\Database\Relationship;
@@ -90,6 +91,7 @@ trait Relationships
      * @throws DuplicateException
      * @throws LimitException
      * @throws NotFoundException
+     * @throws RefusedException When the adapter does not create the relationship
      * @throws StructureException
      */
     public function createRelationship(string $collection, Relationship $relationship): Relationship
@@ -154,25 +156,7 @@ trait Relationships
             }
         }
 
-        $created = false;
-
-        try {
-            $created = $adapter->createRelationship($collectionId, $relationship);
-
-            if (! $created) {
-                if ($junctionCollection !== null) {
-                    try {
-                        $this->silent(fn () => $this->cleanupCollection($junctionCollection));
-                    } catch (Throwable $error) {
-                        Console::error("Failed to cleanup junction collection '{$junctionCollection}': ".$error->getMessage());
-                    }
-                }
-                throw new DatabaseException('Failed to create relationship');
-            }
-        } catch (DuplicateException) {
-            // The metadata checks above found no such relationship, so the schema holds an orphan of a prior partial
-            // failure: keep it and write the metadata.
-        }
+        $created = $this->createRelationshipInSchema($collectionId, $relationship, $junctionCollection);
 
         $collection->setAttribute(self::COLLECTION_ATTRIBUTES, $parent->toDocument(), SetType::Append);
         $relatedCollection->setAttribute(self::COLLECTION_ATTRIBUTES, $child->toDocument(), SetType::Append);
@@ -283,6 +267,7 @@ trait Relationships
      * @throws DatabaseException
      * @throws DuplicateException
      * @throws NotFoundException
+     * @throws RefusedException When the adapter does not rename the relationship's columns
      */
     public function updateRelationship(string $collection, string $key, RelationshipUpdate $update): Relationship
     {
@@ -339,16 +324,20 @@ trait Relationships
                     $side,
                     new RelationshipUpdate(key: $newKey, twoWayKey: $newTwoWayKey, twoWay: $updated->twoWay),
                 );
-
-                if (! $adapterUpdated) {
-                    throw new DatabaseException('Failed to update relationship');
-                }
             } catch (Throwable $error) {
                 if (! $this->adapter->supports(Capability::SchemaIntrospection) || ! $this->hasSchemaColumn($collectionId, $newKey)) {
+                    if ($error instanceof DuplicateException || $error instanceof NotFoundException) {
+                        throw $error;
+                    }
+
                     throw new DatabaseException("Failed to update relationship '{$key}': ".$error->getMessage(), previous: $error);
                 }
 
                 $adapterUpdated = true;
+            }
+
+            if (! $adapterUpdated) {
+                throw new RefusedException("Failed to update relationship '{$key}'");
             }
         }
 
@@ -441,6 +430,7 @@ trait Relationships
      * @throws ConflictException
      * @throws DatabaseException
      * @throws NotFoundException
+     * @throws RefusedException When the adapter does not drop the relationship
      * @throws StructureException
      */
     public function deleteRelationship(string $collection, string $key): void
@@ -489,16 +479,12 @@ trait Relationships
         $collection->setAttribute(self::COLLECTION_ATTRIBUTES, $collectionAttributes);
         $relatedCollection->setAttribute(self::COLLECTION_ATTRIBUTES, $relatedCollectionAttributes);
 
-        $shouldRollback = false;
         try {
-            $deleted = $adapter->deleteRelationship($collection->getId(), $relationship, $side);
+            $shouldRollback = $this->deleteRelationshipFromSchema($collection->getId(), $relationship, $side);
+        } catch (Throwable $error) {
+            self::bestEffort($this->relationshipDefinitionRestores($deletedIndexes, $deletedJunction));
 
-            if (! $deleted) {
-                throw new DatabaseException('Failed to delete relationship');
-            }
-            $shouldRollback = true;
-        } catch (NotFoundException) {
-            // The relationship is already absent from the schema.
+            throw $error;
         }
 
         try {
@@ -518,15 +504,7 @@ trait Relationships
                     : fn () => $adapter->createRelationship($relatedCollection->getId(), $relationship->inverse($collection->getId()));
             }
 
-            foreach ($deletedIndexes as [$indexCollection, $index]) {
-                $rollbacks[] = fn () => $this->createIndex($indexCollection, $index);
-            }
-
-            if ($deletedJunction !== null && ! $deletedJunction->isEmpty()) {
-                $rollbacks[] = fn () => $this->silent(fn () => $this->createDocument(self::METADATA, $deletedJunction));
-            }
-
-            self::bestEffort($rollbacks);
+            self::bestEffort([...$rollbacks, ...$this->relationshipDefinitionRestores($deletedIndexes, $deletedJunction)]);
 
             throw new DatabaseException(
                 "Failed to persist metadata after retries for relationship deletion '{$key}': ".$error->getMessage(),
@@ -541,6 +519,90 @@ trait Relationships
         if ($listeners !== []) {
             $this->dispatch(new Event\Attribute\Deleted($collection->getId(), $attribute), $listeners);
         }
+    }
+
+    /**
+     * The steps that put back what deleteRelationship() removed before dropping the relationship: its indexes, or
+     * the definition of its junction collection.
+     *
+     * @param  list<array{string, Index}>  $deletedIndexes
+     * @return list<callable(): mixed>
+     */
+    private function relationshipDefinitionRestores(array $deletedIndexes, ?Document $deletedJunction): array
+    {
+        $restores = [];
+        foreach ($deletedIndexes as [$indexCollection, $index]) {
+            $restores[] = fn () => $this->createIndex($indexCollection, $index);
+        }
+
+        if ($deletedJunction !== null && ! $deletedJunction->isEmpty()) {
+            $restores[] = fn () => $this->silent(fn () => $this->createDocument(self::METADATA, $deletedJunction));
+        }
+
+        return $restores;
+    }
+
+    /**
+     * @return bool True when this call created the relationship, false when the schema already held it
+     *
+     * @throws DatabaseException When the adapter does not support relationships
+     * @throws RefusedException When the adapter does not create the relationship; its junction collection is dropped
+     */
+    private function createRelationshipInSchema(string $collection, Relationship $relationship, ?string $junctionCollection): bool
+    {
+        if (! $this->adapterHasFeature(Feature\Relationships::class)) {
+            throw new DatabaseException('Adapter does not support relationships');
+        }
+        $adapter = $this->adapter;
+
+        try {
+            $created = $adapter->createRelationship($collection, $relationship);
+        } catch (DuplicateException) {
+            // The metadata checks found no such relationship, so the schema holds an orphan of a prior partial
+            // failure: keep it and write the metadata.
+            return false;
+        }
+
+        if ($created) {
+            return true;
+        }
+
+        if ($junctionCollection !== null) {
+            try {
+                $this->silent(fn () => $this->cleanupCollection($junctionCollection));
+            } catch (Throwable $error) {
+                Console::error("Failed to cleanup junction collection '{$junctionCollection}': ".$error->getMessage());
+            }
+        }
+
+        throw new RefusedException('Failed to create relationship');
+    }
+
+    /**
+     * @return bool True when this call dropped the relationship, false when the schema no longer held it
+     *
+     * @throws DatabaseException When the adapter does not support relationships
+     * @throws RefusedException When the adapter does not drop the relationship
+     */
+    private function deleteRelationshipFromSchema(string $collection, Relationship $relationship, RelationshipSide $side): bool
+    {
+        if (! $this->adapterHasFeature(Feature\Relationships::class)) {
+            throw new DatabaseException('Adapter does not support relationships');
+        }
+        $adapter = $this->adapter;
+
+        try {
+            $deleted = $adapter->deleteRelationship($collection, $relationship, $side);
+        } catch (NotFoundException) {
+            // The relationship is already absent from the schema.
+            return false;
+        }
+
+        if (! $deleted) {
+            throw new RefusedException('Failed to delete relationship');
+        }
+
+        return true;
     }
 
     private function getJunctionCollection(Document $collection, Document $relatedCollection, RelationshipSide $side): string

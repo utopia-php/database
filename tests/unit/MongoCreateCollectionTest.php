@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use Closure;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use stdClass;
@@ -79,6 +80,97 @@ final class MongoCreateCollectionTest extends TestCase
             $this->assertSame('Index already exists', $failure->getMessage());
             $this->assertSame($error, $failure->getPrevious());
         }
+    }
+
+    /**
+     * @return array<string, array{Closure(int): bool, list<Index>}>
+     */
+    public static function indexesNotCreated(): array
+    {
+        $title = [Index::key(key: 'title', attributes: ['title'])];
+
+        return [
+            'the internal indexes are not created' => [static fn (int $call): bool => false, []],
+            'the internal indexes fail' => [static fn (int $call): never => throw new MongoException('not authorized', 13), []],
+            'the declared indexes are not created' => [static fn (int $call): bool => $call === 1, $title],
+            'the declared indexes fail' => [static fn (int $call): bool => $call === 1 ? true : throw new MongoException('not authorized', 13), $title],
+            'a declared index of an unsupported type' => [static fn (int $call): bool => true, [Index::spatial(key: 'title', attribute: 'title')]],
+        ];
+    }
+
+    /**
+     * @param  Closure(int): bool  $createIndexes
+     * @param  list<Index>  $indexes
+     */
+    #[DataProvider('indexesNotCreated')]
+    public function testACollectionWhoseIndexesAreNotCreatedIsDropped(Closure $createIndexes, array $indexes): void
+    {
+        $client = new class ($createIndexes) extends Client {
+            /**
+             * @var list<string>
+             */
+            public array $dropped = [];
+
+            private int $calls = 0;
+
+            /**
+             * @param  Closure(int): bool  $createIndexes
+             */
+            public function __construct(private readonly Closure $createIndexes)
+            {
+            }
+
+            #[\Override]
+            public function connect(): self
+            {
+                return $this;
+            }
+
+            #[\Override]
+            public function close(): void
+            {
+            }
+
+            /**
+             * @param  array<mixed>  $options
+             */
+            #[\Override]
+            public function createCollection(string $name, array $options = []): bool
+            {
+                return true;
+            }
+
+            /**
+             * @param  array<mixed>  $indexes
+             * @param  array<mixed>  $options
+             */
+            #[\Override]
+            public function createIndexes(string $collection, array $indexes, array $options = []): bool
+            {
+                return ($this->createIndexes)(++$this->calls);
+            }
+
+            /**
+             * @param  array<mixed>  $options
+             */
+            #[\Override]
+            public function dropCollection(string $name, array $options = []): bool
+            {
+                $this->dropped[] = $name;
+
+                return true;
+            }
+        };
+        $adapter = new Mongo($client);
+        $adapter->setNamespace('engine');
+
+        try {
+            $this->assertFalse($adapter->createCollection('orders', [Attribute::string(key: 'title', size: 64)], $indexes));
+        } catch (Throwable) {
+            // A failure is reported as itself; the collection must be dropped either way.
+        }
+
+        $this->assertSame(['engine_orders'], $client->dropped, 'A collection this call created without its indexes must not be left behind');
     }
 
     private function createFailure(Mongo $adapter, string $name): Throwable

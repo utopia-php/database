@@ -290,11 +290,19 @@ have to make, with the 7.x and 8.0 forms side by side.
 - `Exception\Schema`, the parent of every schema violation, `Exception::$state` (a string code such as a SQLSTATE),
   `Exception\Unique::MESSAGE`, `Exception\Mismatch` (a `Duplicate` for a shared-table column of another type),
   `Exception\Contention` (a `Transaction` for a lock conflict with a concurrent transaction),
-  `Exception\Unconfirmed` (a MongoDB commit whose result could not be confirmed) and `Validator\Structure`'s
-  `storedAttributes` parameter.
+  `Exception\Unconfirmed` (a MongoDB commit whose result could not be confirmed), `Exception\Refused` (an adapter
+  that returned `false` from a schema change) and `Validator\Structure`'s `storedAttributes` parameter.
 
 ### Changed
 
+- A schema change the adapter returns `false` for throws `Exception\Refused`. A refused `renameAttribute()`,
+  `renameIndex()` or `updateRelationship()` has one message naming its keys (`Failed to rename attribute 'a' to 'b'`)
+  instead of being wrapped like an adapter error (`Failed to rename attribute 'a' to 'b': Failed to rename
+  attribute`), and a refused `renameIndex()` no longer tries to complete an earlier rename. These three also let an
+  adapter's `Exception\Duplicate` or `Exception\NotFound` through unwrapped, so `renameAttribute()` of a column the
+  table lacks throws `Exception\NotFound` on MariaDB and MySQL as documented. `create()`, `update()`, `delete()`,
+  `createCollection()` and `deleteCollection()` refuse a `false` too instead of ignoring it, so `update()` and
+  `delete()` return `true` whenever they return. See [Errors](UPGRADE.md#errors).
 - A filter on a path into an object attribute takes keys of `a-z`, `A-Z`, `0-9`, `_` and `-` only, on every adapter,
   and PostgreSQL refuses any other key also when validation is skipped. See [Queries](UPGRADE.md#queries).
 - `createAttributes()` fires `attribute_create` once per attribute and then `attributes_create` once with the list
@@ -481,6 +489,10 @@ have to make, with the 7.x and 8.0 forms side by side.
 
 ### Fixed
 
+- `deleteRelationship()` recreates the relationship's indexes, or its junction collection's definition, when the
+  adapter refuses or fails to drop the relationship, instead of leaving them dropped while the relationship stays.
+- On MongoDB, `createCollection()` drops a collection it created but could not give its indexes, instead of leaving
+  it for a later create to adopt without them, and a refused `createCollection()` stores no definition.
 - `updateDocument()` no longer fails with `Exception\Structure` (`Unknown attribute`) when a schema change commits
   between its collection definition lookup and its locked read of the document.
 - `Mirror::clearDocumentTypes()` keeps the metadata collection's `Collection` type, so the mirror's

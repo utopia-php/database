@@ -17,6 +17,7 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Refused as RefusedException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Index;
 use Utopia\Database\Permission;
@@ -34,6 +35,7 @@ trait Collections
      * @throws DuplicateException
      * @throws IndexException
      * @throws LimitException
+     * @throws RefusedException When the adapter does not create the table
      * @throws StructureException when the collection carries a key the metadata collection does not store
      */
     public function createCollection(Collection $collection): Collection
@@ -112,31 +114,7 @@ trait Collections
             }
         }
 
-        $created = false;
-
-        try {
-            $this->adapter->createCollection($id, $attributes, $indexes);
-            $created = true;
-        } catch (DuplicateException $error) {
-            if ($id === self::METADATA
-                || ($this->adapter->hasSharedTables()
-                    && $this->adapter->collectionExists($this->adapter->getDatabase(), $id))) {
-                // The metadata table must never be dropped during reconciliation.
-                // In shared-tables mode the physical table is reused across
-                // tenants. A DuplicateException simply means the table already
-                // exists for another tenant — not an orphan.
-            } else {
-                // The table exists and this process did not create it. It may
-                // belong to a peer that has not committed metadata yet, or it
-                // may be an orphan. Dropping it destroyed live collections
-                // during concurrent boot; attaching this caller's metadata to
-                // an unknown physical schema can invent columns that are not
-                // there. Leave the table and report Duplicate. Claiming the
-                // metadata row first is #939.
-                $this->purgeStaleCollectionCache($id);
-                throw new DuplicateException('Collection '.$id.' already exists', previous: $error);
-            }
-        }
+        $created = $this->createCollectionInSchema($id, $attributes, $indexes);
 
         if ($id === self::METADATA) {
             return self::collectionDefinition();
@@ -321,6 +299,7 @@ trait Collections
     /**
      * @throws DatabaseException
      * @throws NotFoundException
+     * @throws RefusedException When the adapter does not drop the table
      */
     public function deleteCollection(string $collection): void
     {
@@ -340,13 +319,7 @@ trait Collections
             $this->purgeCachedCollection($collection);
         }
 
-        $schemaDeleted = false;
-        try {
-            $this->adapter->deleteCollection($collection);
-            $schemaDeleted = true;
-        } catch (NotFoundException) {
-            // Already absent from the schema; the metadata is still removed below.
-        }
+        $schemaDeleted = $this->deleteCollectionFromSchema($collection);
 
         $deleted = true;
         if ($collection !== self::METADATA) {
@@ -478,6 +451,69 @@ trait Collections
     /**
      * @throws DatabaseException If cleanup fails after all retries
      */
+    /**
+     * @param  list<Attribute>  $attributes
+     * @param  list<Index>  $indexes
+     * @return bool True when this call created the table, false when it reuses the metadata table or a table shared
+     *              with other tenants
+     *
+     * @throws DuplicateException When the table exists and is neither
+     * @throws RefusedException When the adapter does not create the table
+     */
+    private function createCollectionInSchema(string $id, array $attributes, array $indexes): bool
+    {
+        try {
+            $created = $this->adapter->createCollection($id, $attributes, $indexes);
+        } catch (DuplicateException $error) {
+            if ($id === self::METADATA
+                || ($this->adapter->hasSharedTables()
+                    && $this->adapter->collectionExists($this->adapter->getDatabase(), $id))) {
+                // The metadata table must never be dropped during reconciliation.
+                // In shared-tables mode the physical table is reused across
+                // tenants. A DuplicateException simply means the table already
+                // exists for another tenant — not an orphan.
+                return false;
+            }
+
+            // The table exists and this process did not create it. It may
+            // belong to a peer that has not committed metadata yet, or it
+            // may be an orphan. Dropping it destroyed live collections
+            // during concurrent boot; attaching this caller's metadata to
+            // an unknown physical schema can invent columns that are not
+            // there. Leave the table and report Duplicate. Claiming the
+            // metadata row first is #939.
+            $this->purgeStaleCollectionCache($id);
+            throw new DuplicateException('Collection '.$id.' already exists', previous: $error);
+        }
+
+        if (! $created) {
+            throw new RefusedException('Failed to create collection');
+        }
+
+        return true;
+    }
+
+    /**
+     * @return bool True when this call dropped the table, false when the schema no longer held it
+     *
+     * @throws RefusedException When the adapter does not drop the table
+     */
+    private function deleteCollectionFromSchema(string $collection): bool
+    {
+        try {
+            $deleted = $this->adapter->deleteCollection($collection);
+        } catch (NotFoundException) {
+            // Already absent from the schema; the metadata is still removed.
+            return false;
+        }
+
+        if (! $deleted) {
+            throw new RefusedException('Failed to delete collection');
+        }
+
+        return true;
+    }
+
     private function cleanupCollection(string $collection, int $maxAttempts = 3): void
     {
         $this->cleanup(

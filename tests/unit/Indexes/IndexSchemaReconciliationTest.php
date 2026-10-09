@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Indexes;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use Utopia\Cache\Adapter\None;
@@ -13,6 +14,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Refused as RefusedException;
 use Utopia\Database\Index;
 use Utopia\Database\Permission;
 use Utopia\Database\Role;
@@ -21,23 +23,33 @@ final class IndexSchemaReconciliationTest extends TestCase
 {
     private const string COLLECTION = 'catalog';
 
-    public function testAnAdapterThatDoesNotRenameTheIndexFailsTheRename(): void
+    public function testAnAdapterThatDoesNotRenameTheIndexRefusesTheRename(): void
     {
-        $database = $this->database(new class () extends Memory {
+        $adapter = new class () extends Memory {
+            /**
+             * @var list<string>
+             */
+            public array $renames = [];
+
             #[\Override]
             public function renameIndex(string $collection, string $old, string $new): bool
             {
+                $this->renames[] = "{$old}->{$new}";
+
                 return false;
             }
-        });
+        };
+        $database = $this->database($adapter);
 
         try {
             $database->renameIndex(self::COLLECTION, 'existing', 'renamed');
-            $this->fail('an adapter that renames nothing must fail the rename');
-        } catch (DatabaseException $error) {
-            $this->assertSame("Failed to rename index 'existing' to 'renamed': Failed to rename index", $error->getMessage());
+            $this->fail('an adapter that renames nothing must refuse the rename');
+        } catch (RefusedException $error) {
+            $this->assertSame("Failed to rename index 'existing' to 'renamed'", $error->getMessage());
+            $this->assertNull($error->getPrevious());
         }
 
+        $this->assertSame(['existing->renamed'], $adapter->renames, 'a refusal is not a prior rename to complete');
         $this->assertSame(['existing'], $this->indexKeys($database));
     }
 
@@ -96,8 +108,8 @@ final class IndexSchemaReconciliationTest extends TestCase
         try {
             $database->renameIndex(self::COLLECTION, 'existing', 'renamed');
             $this->fail('a rename of an index the schema does not have must fail');
-        } catch (DatabaseException $error) {
-            $this->assertSame("Failed to rename index 'existing' to 'renamed': Failed to rename index", $error->getMessage());
+        } catch (RefusedException $error) {
+            $this->assertSame("Failed to rename index 'existing' to 'renamed'", $error->getMessage());
         }
 
         $this->assertSame(['existing'], $this->indexKeys($database));
@@ -161,6 +173,7 @@ final class IndexSchemaReconciliationTest extends TestCase
             $database->renameIndex(self::COLLECTION, 'existing', 'renamed');
             $this->fail('a rename that fails both ways must be reported');
         } catch (DatabaseException $error) {
+            $this->assertNotInstanceOf(RefusedException::class, $error);
             $this->assertSame("Failed to rename index 'existing' to 'renamed': the engine refused the rename", $error->getMessage());
             $this->assertSame($cause, $error->getPrevious());
         }
@@ -168,20 +181,30 @@ final class IndexSchemaReconciliationTest extends TestCase
         $this->assertSame(['existing'], $this->indexKeys($database));
     }
 
-    public function testARenameTheAdapterDoesNotRedoAfterReversingItFails(): void
+    public function testARenameTheAdapterDoesNotRedoAfterReversingItIsReportedWithItsCause(): void
     {
-        $adapter = new class () extends Memory {
+        $cause = new RuntimeException('the engine lost the index');
+        $adapter = new class ($cause) extends Memory {
             /**
              * @var list<string>
              */
             public array $renames = [];
+
+            public function __construct(private readonly RuntimeException $cause)
+            {
+                parent::__construct();
+            }
 
             #[\Override]
             public function renameIndex(string $collection, string $old, string $new): bool
             {
                 $this->renames[] = "{$old}->{$new}";
 
-                return \count($this->renames) === 2;
+                return match (\count($this->renames)) {
+                    1 => throw $this->cause,
+                    2 => true,
+                    default => false,
+                };
             }
         };
         $database = $this->database($adapter);
@@ -190,10 +213,49 @@ final class IndexSchemaReconciliationTest extends TestCase
             $database->renameIndex(self::COLLECTION, 'existing', 'renamed');
             $this->fail('a rename the adapter does not redo must fail');
         } catch (DatabaseException $error) {
-            $this->assertSame("Failed to rename index 'existing' to 'renamed': Failed to rename index", $error->getMessage());
+            $this->assertNotInstanceOf(RefusedException::class, $error);
+            $this->assertSame("Failed to rename index 'existing' to 'renamed': the engine lost the index", $error->getMessage());
+            $this->assertSame($cause, $error->getPrevious());
         }
 
         $this->assertSame(['existing->renamed', 'renamed->existing', 'existing->renamed'], $adapter->renames);
+        $this->assertSame(['existing'], $this->indexKeys($database));
+    }
+
+    /**
+     * @return array<string, array{\Throwable}>
+     */
+    public static function typedRenameFailures(): array
+    {
+        return [
+            'not found' => [new NotFoundException('Collection not found')],
+            'duplicate' => [new DuplicateException('Index already exists')],
+        ];
+    }
+
+    #[DataProvider('typedRenameFailures')]
+    public function testATypedFailureTheRenameCannotCompleteIsTheAdaptersOwn(\Throwable $failure): void
+    {
+        $database = $this->database(new class ($failure) extends Memory {
+            public function __construct(private readonly \Throwable $failure)
+            {
+                parent::__construct();
+            }
+
+            #[\Override]
+            public function renameIndex(string $collection, string $old, string $new): bool
+            {
+                throw $this->failure;
+            }
+        });
+
+        try {
+            $database->renameIndex(self::COLLECTION, 'existing', 'renamed');
+            $this->fail('a rename that fails both ways must be reported');
+        } catch (\Throwable $error) {
+            $this->assertSame($failure, $error);
+        }
+
         $this->assertSame(['existing'], $this->indexKeys($database));
     }
 
@@ -261,7 +323,7 @@ final class IndexSchemaReconciliationTest extends TestCase
         try {
             $operation();
             $this->fail('the operation must be refused');
-        } catch (DatabaseException $error) {
+        } catch (RefusedException $error) {
             $this->assertSame($message, $error->getMessage());
         }
     }

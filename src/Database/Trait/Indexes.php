@@ -17,6 +17,7 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Refused as RefusedException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Index;
@@ -35,6 +36,7 @@ trait Indexes
      * @throws IndexException
      * @throws LimitException
      * @throws NotFoundException
+     * @throws RefusedException When the adapter does not create the index
      * @throws StructureException
      * @throws UniqueException
      * @throws Exception
@@ -58,6 +60,7 @@ trait Indexes
      * @throws IndexException
      * @throws LimitException
      * @throws NotFoundException
+     * @throws RefusedException When the adapter does not create an index
      * @throws StructureException
      * @throws UniqueException
      * @throws Exception
@@ -84,6 +87,7 @@ trait Indexes
      * @throws DatabaseException
      * @throws DuplicateException
      * @throws NotFoundException
+     * @throws RefusedException When the adapter does not rename the index
      * @throws StructureException
      */
     public function renameIndex(string $collection, string $old, string $new): void
@@ -104,20 +108,21 @@ trait Indexes
         \array_splice($indexes, $position, 1, [$renamed]);
         $this->writeIndexList($definition, $indexes);
 
-        $renamedInSchema = false;
         try {
             $renamedInSchema = $this->adapter->renameIndex($definition->getId(), $old, $new);
-            if (! $renamedInSchema) {
-                throw new DatabaseException('Failed to rename index');
-            }
         } catch (Throwable $error) {
-            $renamedInSchema = $this->completePriorIndexRename($definition->getId(), $old, $new, $error);
+            $this->completePriorIndexRename($definition->getId(), $old, $new, $error);
+            $renamedInSchema = true;
+        }
+
+        if (! $renamedInSchema) {
+            throw new RefusedException("Failed to rename index '{$old}' to '{$new}'");
         }
 
         $this->updateMetadata(
             collection: $definition,
             rollbackOperation: fn () => $this->adapter->renameIndex($definition->getId(), $new, $old),
-            shouldRollback: $renamedInSchema,
+            shouldRollback: true,
             operationDescription: "index rename '{$old}' to '{$new}'"
         );
 
@@ -134,6 +139,7 @@ trait Indexes
      * @throws ConflictException
      * @throws DatabaseException
      * @throws NotFoundException
+     * @throws RefusedException When the adapter does not drop the index
      * @throws StructureException
      */
     public function deleteIndex(string $collection, string $key): void
@@ -148,15 +154,7 @@ trait Indexes
 
         $deleted = $indexes[$position];
 
-        $deletedInSchema = false;
-        try {
-            if (! $this->adapter->deleteIndex($definition->getId(), $key)) {
-                throw new DatabaseException('Failed to delete index');
-            }
-            $deletedInSchema = true;
-        } catch (NotFoundException) {
-            // Already absent from the schema; the metadata is still removed below.
-        }
+        $deletedInSchema = $this->deleteIndexFromSchema($definition->getId(), $key);
 
         unset($indexes[$position]);
         $this->writeIndexList($definition, \array_values($indexes));
@@ -187,6 +185,7 @@ trait Indexes
      * @throws DuplicateException
      * @throws IndexException
      * @throws LimitException
+     * @throws RefusedException When the adapter does not create an index
      * @throws UniqueException
      * @throws Exception
      */
@@ -297,6 +296,7 @@ trait Indexes
      *
      * @throws DatabaseException
      * @throws DuplicateException
+     * @throws RefusedException When the adapter does not create the index
      * @throws UniqueException When the stored documents violate a unique index
      */
     private function createIndexInSchema(string $collection, Index $index, array $attributes): bool
@@ -306,15 +306,38 @@ trait Indexes
         }
 
         try {
-            if (! $this->adapter->createIndex($collection, $index, self::indexAttributeTypes($index, $attributes))) {
-                throw new DatabaseException('Failed to create index');
-            }
+            $created = $this->adapter->createIndex($collection, $index, self::indexAttributeTypes($index, $attributes));
         } catch (UniqueException $error) {
             throw $error;
         } catch (DuplicateException) {
             // The metadata holds no index under this key, so the schema's copy is an orphan of a
             // partial failure: it is kept and the metadata written for it.
             return false;
+        }
+
+        if (! $created) {
+            throw new RefusedException('Failed to create index');
+        }
+
+        return true;
+    }
+
+    /**
+     * @return bool True when this call dropped the index, false when the schema no longer held it
+     *
+     * @throws RefusedException When the adapter does not drop the index
+     */
+    private function deleteIndexFromSchema(string $collection, string $key): bool
+    {
+        try {
+            $deleted = $this->adapter->deleteIndex($collection, $key);
+        } catch (NotFoundException) {
+            // Already absent from the schema; the metadata is still removed.
+            return false;
+        }
+
+        if (! $deleted) {
+            throw new RefusedException('Failed to delete index');
         }
 
         return true;
@@ -373,22 +396,27 @@ trait Indexes
      * update and rollback failed. Renaming back and forth again proves the schema holds the index under the
      * new name and completes the rename.
      *
-     * @throws DatabaseException
+     * @throws DuplicateException|NotFoundException When the round trip fails after the adapter raised one
+     * @throws DatabaseException When the round trip fails after any other error, wrapping it
      */
-    private function completePriorIndexRename(string $collection, string $old, string $new, Throwable $error): bool
+    private function completePriorIndexRename(string $collection, string $old, string $new, Throwable $error): void
     {
         try {
-            if (! $this->adapter->renameIndex($collection, $new, $old)) {
-                throw new DatabaseException('Failed to rename index');
-            }
-            if (! $this->adapter->renameIndex($collection, $old, $new)) {
-                throw new DatabaseException('Failed to rename index');
-            }
+            $completed = $this->adapter->renameIndex($collection, $new, $old)
+                && $this->adapter->renameIndex($collection, $old, $new);
         } catch (Throwable) {
-            throw new DatabaseException("Failed to rename index '{$old}' to '{$new}': ".$error->getMessage(), previous: $error);
+            $completed = false;
         }
 
-        return true;
+        if ($completed) {
+            return;
+        }
+
+        if ($error instanceof DuplicateException || $error instanceof NotFoundException) {
+            throw $error;
+        }
+
+        throw new DatabaseException("Failed to rename index '{$old}' to '{$new}': ".$error->getMessage(), previous: $error);
     }
 
     /**

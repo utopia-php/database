@@ -840,6 +840,30 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
             throw $error;
         }
 
+        try {
+            $indexed = $this->createCollectionIndexes($id, $attributes, $indexes);
+        } catch (Throwable $error) {
+            $this->dropCreatedCollection($id);
+
+            throw $error;
+        }
+
+        if (! $indexed) {
+            $this->dropCreatedCollection($id);
+        }
+
+        return $indexed;
+    }
+
+    /**
+     * @param  list<Attribute>  $attributes
+     * @param  list<Index>  $indexes
+     * @return bool False when an index could not be created
+     *
+     * @throws Exception
+     */
+    private function createCollectionIndexes(string $id, array $attributes, array $indexes): bool
+    {
         $internalIndex = [
             [
                 'key' => [Storage::UID => $this->getOrder(OrderDirection::Asc)],
@@ -965,6 +989,19 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         }
 
         return true;
+    }
+
+    /**
+     * Drop a collection this call created but could not finish, so a later create does not adopt it without its
+     * indexes.
+     */
+    private function dropCreatedCollection(string $id): void
+    {
+        try {
+            $this->getClient()->dropCollection($id);
+        } catch (Throwable) {
+            // Best effort: the creation's own failure is what the caller needs.
+        }
     }
 
     /**

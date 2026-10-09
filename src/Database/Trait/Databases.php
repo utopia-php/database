@@ -7,17 +7,22 @@ use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Refused as RefusedException;
 
 trait Databases
 {
     /**
      * @param  string|null  $database  Database name, defaults to the adapter's configured database
+     *
+     * @throws RefusedException When the adapter does not create the database
      */
     public function create(?string $database = null): bool
     {
         $database ??= $this->adapter->getDatabase();
 
-        $this->adapter->create($database);
+        if (! $this->adapter->create($database)) {
+            throw new RefusedException('Failed to create database');
+        }
 
         $this->silent(fn () => $this->createCollection(self::collectionDefinition()));
 
@@ -68,6 +73,7 @@ trait Databases
      * @throws DatabaseException
      * @throws DuplicateException when a database is already named $new
      * @throws NotFoundException when no database is named $database
+     * @throws RefusedException When the adapter does not rename the database
      */
     public function update(string $database, string $new): bool
     {
@@ -79,7 +85,9 @@ trait Databases
             ? $this->inDatabase($database, $this->getCollectionIds(...))
             : [];
 
-        $updated = $this->adapter->update($database, $new);
+        if (! $this->adapter->update($database, $new)) {
+            throw new RefusedException("Failed to rename database '{$database}' to '{$new}'");
+        }
 
         foreach ([$database, $new] as $name) {
             $this->inDatabase($name, fn () => $this->purgeCachedCollections($collections));
@@ -94,28 +102,31 @@ trait Databases
             $this->dispatch(new Event\Database\Updated($database, $new), $listeners);
         }
 
-        return $updated;
+        return true;
     }
 
     /**
      * @param  string|null  $database  Database name, defaults to the adapter's configured database
      *
      * @throws DatabaseException
+     * @throws RefusedException When the adapter does not drop the database
      */
     public function delete(?string $database = null): bool
     {
         $database ??= $this->adapter->getDatabase();
 
-        $deleted = $this->adapter->delete($database);
+        if (! $this->adapter->delete($database)) {
+            throw new RefusedException('Failed to delete database');
+        }
 
         $this->cache->flush();
 
         $listeners = $this->listens(Event::DatabaseDelete);
         if ($listeners !== []) {
-            $this->dispatch(new Event\Database\Deleted($database, $deleted), $listeners);
+            $this->dispatch(new Event\Database\Deleted($database, true), $listeners);
         }
 
-        return $deleted;
+        return true;
     }
 
     /**

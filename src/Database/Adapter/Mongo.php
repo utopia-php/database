@@ -818,26 +818,27 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     public function createCollection(string $collection, array $attributes = [], array $indexes = []): bool
     {
         $id = $this->getNamespace().'_'.$this->filter($collection);
+        $shared = $this->hasSharedTables() || $collection === Database::METADATA;
 
-        // In shared-tables mode or for metadata, the physical collection may
-        // already exist for another tenant. Return early to avoid a
-        // "Collection Exists" exception from the client.
-        if (! $this->inTransaction && ($this->hasSharedTables() || $collection === Database::METADATA) && $this->collectionExists($this->getDatabase(), $collection)) {
-            return true;
+        if (! $this->inTransaction && $shared && $this->collectionExists($this->getDatabase(), $collection)) {
+            return $this->createCollectionIndexes($id, $attributes, $indexes);
         }
 
         try {
             $options = $this->getTransactionOptions();
             $this->getClient()->createCollection($id, $options);
         } catch (MongoException $error) {
-            if (\str_contains($error->getMessage(), 'Collection Exists')) {
-                return true;
-            }
-            $error = $this->processException($error);
-            if ($error instanceof DuplicateException && ($this->hasSharedTables() || $collection === Database::METADATA)) {
-                return true;
+            $error = \str_contains($error->getMessage(), 'Collection Exists')
+                ? new DuplicateException('Collection already exists', previous: $error)
+                : $this->processException($error);
+            if ($error instanceof DuplicateException && $shared) {
+                return $this->createCollectionIndexes($id, $attributes, $indexes);
             }
             throw $error;
+        }
+
+        if ($shared) {
+            return $this->createCollectionIndexes($id, $attributes, $indexes);
         }
 
         try {

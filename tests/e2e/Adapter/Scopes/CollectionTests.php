@@ -1597,23 +1597,18 @@ trait CollectionTests
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
             ]));
+            $this->fail('Expected DuplicateException for a collection this process did not create');
         } catch (DuplicateException) {
-            // SQL adapters report the existing table as Duplicate. Mongo's
-            // createCollection is idempotent, so this process continues and
-            // claims metadata. Either way the physical collection must stay.
         }
 
+        $this->assertNull($database->findCollection($collection), 'A collection this process did not create was adopted');
         $this->assertSame(
             'peer',
             $database->getAdapter()->getDocument($schema, 'written')->getAttribute('name'),
             'Physical collection was dropped while metadata was still uncommitted'
         );
 
-        try {
-            $database->deleteCollection($collection);
-        } catch (\Throwable) {
-            $database->getAdapter()->deleteCollection($collection);
-        }
+        $database->getAdapter()->deleteCollection($collection);
     }
 
     public function testCollectionNotFound(): void

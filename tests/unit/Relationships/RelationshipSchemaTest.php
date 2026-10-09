@@ -7,6 +7,7 @@ use PDO;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
+use Tests\Unit\Event\RecordingLifecycle;
 use Tests\Unit\Support\StderrCapture;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
@@ -17,6 +18,7 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
@@ -539,6 +541,29 @@ final class RelationshipSchemaTest extends TestCase
         $this->assertContains('books', $this->attributeKeys($database, 'authors'));
         $this->assertSame(['author'], $this->indexAttributes($database, 'books', '_index_author'));
         $this->assertSame($schemaIndexes, $this->schemaIndexIds($database, 'books'));
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     * @param  Closure(): bool  $drop
+     * @param  class-string<\Throwable>  $expected
+     */
+    #[DataProvider('failedRelationshipDrops')]
+    public function testRestoringTheIndexesOfAFailedDropFiresNoIndexEvents(Closure $adapter, Closure $drop, string $expected): void
+    {
+        $database = $this->database($this->droppingRelationships($adapter(), $drop));
+        $database->createRelationship('books', Relationship::manyToOne(relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books'));
+        $recorder = new RecordingLifecycle();
+        $database->addHook($recorder);
+
+        try {
+            $database->deleteRelationship('books', 'author');
+            $this->fail('a drop the adapter does not make must fail the delete');
+        } catch (\Throwable $error) {
+            $this->assertInstanceOf($expected, $error);
+        }
+
+        $this->assertSame([], $recorder->received(Event::IndexCreate), 'The restore fired an index_create with no matching index_delete');
     }
 
     /**

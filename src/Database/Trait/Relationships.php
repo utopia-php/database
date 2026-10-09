@@ -533,7 +533,7 @@ trait Relationships
     {
         $restores = [];
         foreach ($deletedIndexes as [$indexCollection, $index]) {
-            $restores[] = fn () => $this->createIndex($indexCollection, $index);
+            $restores[] = fn () => $this->silent(fn () => $this->createIndex($indexCollection, $index));
         }
 
         if ($deletedJunction !== null && ! $deletedJunction->isEmpty()) {

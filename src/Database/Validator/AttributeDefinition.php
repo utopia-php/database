@@ -35,6 +35,12 @@ class AttributeDefinition extends Validator
         ColumnType::Polygon,
     ];
 
+    private const string SIZE = 'size';
+
+    private const string ARRAY = 'array';
+
+    private const string FILTERS = 'filters';
+
     protected string $message = 'Invalid attribute';
 
     /**
@@ -99,7 +105,8 @@ class AttributeDefinition extends Validator
     #[\Override]
     public function isValid(mixed $value): bool
     {
-        if ($value instanceof Document) {
+        $declaration = $value instanceof Document ? $value : null;
+        if ($declaration !== null) {
             try {
                 $value = Attribute::fromDocument($value);
             } catch (StructureException $error) {
@@ -120,13 +127,13 @@ class AttributeDefinition extends Validator
         if (! $this->checkDuplicateInSchema($value)) {
             return false;
         }
-        if (! $this->checkRequiredFilters($value)) {
+        if (! $this->checkRequiredFilters($value, self::declaredFilters($declaration))) {
             return false;
         }
         if (! $this->checkFormat($value)) {
             return false;
         }
-        if (! $this->checkType($value)) {
+        if (! $this->checkType($value, self::declaredSize($declaration), self::declaredArray($declaration))) {
             return false;
         }
         if (! $this->checkAttributeLimits($value)) {
@@ -183,12 +190,14 @@ class AttributeDefinition extends Validator
     }
 
     /**
+     * @param  list<string>|null  $filters  the declared filters, before the model adds the type filter
+     *
      * @throws DatabaseException
      */
-    public function checkRequiredFilters(Attribute $attribute): bool
+    public function checkRequiredFilters(Attribute $attribute, ?array $filters = null): bool
     {
         $requiredFilters = $this->getRequiredFilters($attribute->type);
-        if (! empty(\array_diff($requiredFilters, $attribute->filters))) {
+        if (! empty(\array_diff($requiredFilters, $filters ?? $attribute->filters))) {
             $this->message = 'Attribute of type: '.$attribute->type->value.' requires the following filters: '.implode(',', $requiredFilters);
             throw new DatabaseException($this->message);
         }
@@ -250,14 +259,17 @@ class AttributeDefinition extends Validator
     }
 
     /**
+     * The size and array checked are the declared ones when given, since the model normalises
+     * them away for types that take neither.
+     *
      * @throws DatabaseException
      */
-    public function checkType(Attribute $attribute): bool
+    public function checkType(Attribute $attribute, ?int $size = null, ?bool $array = null): bool
     {
         $type = $attribute->type;
-        $size = $attribute->size ?? 0;
+        $size ??= $attribute->size ?? 0;
         $signed = $attribute->signed;
-        $array = $attribute->array;
+        $array ??= $attribute->array;
         $default = $attribute->default;
 
         switch ($type) {
@@ -427,6 +439,37 @@ class AttributeDefinition extends Validator
         $this->validateDefaultTypes($type, $default, $signed);
 
         return true;
+    }
+
+    private static function declaredSize(?Document $declaration): ?int
+    {
+        if ($declaration === null) {
+            return null;
+        }
+
+        $size = $declaration->getAttribute(self::SIZE);
+
+        return \is_numeric($size) ? (int) $size : 0;
+    }
+
+    private static function declaredArray(?Document $declaration): ?bool
+    {
+        return $declaration === null ? null : (bool) $declaration->getAttribute(self::ARRAY, false);
+    }
+
+    /**
+     * @return list<string>|null
+     */
+    private static function declaredFilters(?Document $declaration): ?array
+    {
+        if ($declaration === null) {
+            return null;
+        }
+
+        $filters = $declaration->getAttribute(self::FILTERS, []);
+
+        /** @var list<string> */
+        return \is_array($filters) ? \array_values($filters) : [];
     }
 
     /**

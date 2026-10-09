@@ -14,6 +14,7 @@ use Utopia\Database\Adapter\SQL\Expression;
 use Utopia\Database\Adapter\SQL\Hook\Permission;
 use Utopia\Database\Adapter\SQL\JoinAlias;
 use Utopia\Database\Attribute;
+use Utopia\Database\Builder\Scoping;
 use Utopia\Database\Builder\SQLite as SQLiteBuilder;
 use Utopia\Database\Capability;
 use Utopia\Database\Change;
@@ -1202,7 +1203,7 @@ class SQLite extends SQL
 
             $name = $this->filter($collection);
 
-            $builder = $this->createBuilder()->into($this->getTableRaw($name));
+            $builder = $this->builder()->into($this->getTableRaw($name));
             $row = [Storage::UID => $document->getId()];
 
             if (! empty($document->getSequence())) {
@@ -1475,9 +1476,9 @@ class SQLite extends SQL
     }
 
     #[\Override]
-    protected function createBuilder(): SQLBuilder
+    public function builder(): SQLBuilder&Scoping
     {
-        return new SQLiteBuilder();
+        return (new SQLiteBuilder())->scope($this->scope());
     }
 
     #[Override]
@@ -1603,9 +1604,9 @@ class SQLite extends SQL
      * SQLite doesn't use database-qualified table names.
      */
     #[\Override]
-    protected function getTableRaw(string $name): string
+    protected function qualifyTable(string $database, string $namespace, string $name): string
     {
-        return $this->getNamespace().'_'.$this->filter($name);
+        return $namespace.'_'.$this->filter($name);
     }
 
     /**

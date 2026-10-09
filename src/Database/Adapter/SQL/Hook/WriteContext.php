@@ -5,6 +5,7 @@ namespace Utopia\Database\Adapter\SQL\Hook;
 use Closure;
 use PDOStatement;
 use Swoole\Database\PDOStatementProxy;
+use Utopia\Database\Builder\Scoping;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Hook\WriteContext as Context;
@@ -20,8 +21,7 @@ use Utopia\Query\Builder\Statement;
 final readonly class WriteContext implements Context
 {
     /**
-     * @param  Closure(string): Builder  $builder
-     * @param  Closure(): Builder  $rawBuilder
+     * @param  Closure(): (Builder&Scoping)  $builder
      * @param  Closure(string): string  $rawTable
      * @param  Closure(Statement, Event): (PDOStatement|DatabasePDOStatement|PDOStatementProxy)  $prepare
      * @param  Closure(PDOStatement|DatabasePDOStatement|PDOStatementProxy): bool  $execute
@@ -30,7 +30,6 @@ final readonly class WriteContext implements Context
      */
     public function __construct(
         private Closure $builder,
-        private Closure $rawBuilder,
         private Closure $rawTable,
         private Closure $prepare,
         private Closure $execute,
@@ -41,15 +40,9 @@ final readonly class WriteContext implements Context
     }
 
     #[\Override]
-    public function builder(string $table): Builder
+    public function builder(): Builder&Scoping
     {
-        return ($this->builder)($table);
-    }
-
-    #[\Override]
-    public function rawBuilder(): Builder
-    {
-        return ($this->rawBuilder)();
+        return ($this->builder)();
     }
 
     #[\Override]

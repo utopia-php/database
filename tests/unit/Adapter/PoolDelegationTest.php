@@ -37,7 +37,7 @@ final class PoolDelegationTest extends TestCase
     {
         return [
             'raw queries' => [static fn (Pool $pool): mixed => $pool->rawQuery('SELECT 1'), 'Adapter does not support raw queries'],
-            'query builder' => [static fn (Pool $pool): mixed => $pool->builder('books'), 'Adapter does not support query builder'],
+            'query builder' => [static fn (Pool $pool): mixed => $pool->builder(), 'Adapter does not support query builder'],
             'schema builder' => [static fn (Pool $pool): mixed => $pool->schema(), 'Adapter does not support query builder'],
             'spatial decoding' => [static fn (Pool $pool): mixed => $pool->decode('', ColumnType::Point), 'Adapter does not support spatial'],
             'casting before a write' => [static fn (Pool $pool): mixed => $pool->castBefore(new Document(), new Document()), 'Adapter does not support casting'],

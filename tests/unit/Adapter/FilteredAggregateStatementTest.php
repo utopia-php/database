@@ -12,6 +12,7 @@ use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Adapter\SQLite;
+use Utopia\Database\Builder\Scoping;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Exception\Query as QueryException;
@@ -167,9 +168,9 @@ final class FilteredAggregateStatementTest extends TestCase
             public int $built = 0;
 
             #[\Override]
-            protected function createBuilder(): SQLBuilder
+            public function builder(): SQLBuilder&Scoping
             {
-                return parent::createBuilder()->beforeBuild(function (): void {
+                return parent::builder()->beforeBuild(function (): void {
                     $this->built++;
                 });
             }

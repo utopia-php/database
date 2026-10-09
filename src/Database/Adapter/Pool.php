@@ -1097,7 +1097,7 @@ class Pool extends Adapter implements Feature\Timeouts
         return $result;
     }
 
-    public function builder(string $collection): Builder
+    public function builder(): Builder
     {
         /** @var Builder $result */
         $result = $this->delegateFeature(Feature\QueryBuilder::class, __FUNCTION__, \func_get_args());

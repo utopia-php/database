@@ -33,8 +33,8 @@ final class WriteContextTestRecorder extends Interceptor
         }
 
         $table = Storage::permissionsTable($collection);
-        $scoped = $context->builder($table)->sortAsc(Storage::PERMISSIONS_DOCUMENT)->build();
-        $raw = $context->rawBuilder()->from($context->rawTable($table))->sortAsc(Storage::PERMISSIONS_DOCUMENT)->build();
+        $scoped = $context->builder()->from($table)->sortAsc(Storage::PERMISSIONS_DOCUMENT)->build();
+        $raw = $context->builder()->fromTable($context->rawTable($table))->sortAsc(Storage::PERMISSIONS_DOCUMENT)->build();
 
         $this->permissionRows = [
             'scoped' => $this->rows($context->fetch($scoped, Event::PermissionsRead)),

@@ -87,7 +87,7 @@ final class BuilderTest extends TestCase
         $pool->setDatabase($database->getDatabase());
         $pool->setNamespace($database->getNamespace());
 
-        $statement = $pool->builder(self::COLLECTION)->select(['title'])->build();
+        $statement = $pool->builder()->from(self::COLLECTION)->select(['title'])->build();
         $rows = $pool->rawQuery($statement->query, $statement->bindings);
 
         $this->assertTrue($pool->hasFeature(Feature\QueryBuilder::class));

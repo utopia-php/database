@@ -34,7 +34,7 @@ class Permissions extends Interceptor
     #[\Override]
     public function afterDocumentCreate(string $collection, array $documents, WriteContext $context): void
     {
-        $permissionsBuilder = $context->rawBuilder()->into($context->rawTable(Storage::permissionsTable($collection)));
+        $permissionsBuilder = $context->builder()->into($context->rawTable(Storage::permissionsTable($collection)));
         $hasPermissions = false;
 
         foreach ($documents as $document) {
@@ -111,7 +111,7 @@ class Permissions extends Interceptor
         }
 
         $removeConditions = [];
-        $addBuilder = $context->rawBuilder()->into($context->rawTable(Storage::permissionsTable($collection)));
+        $addBuilder = $context->builder()->into($context->rawTable(Storage::permissionsTable($collection)));
         $hasAdditions = false;
 
         $eligible = [];
@@ -164,7 +164,7 @@ class Permissions extends Interceptor
         }
 
         if (! empty($removeConditions)) {
-            $removeBuilder = $context->builder(Storage::permissionsTable($collection));
+            $removeBuilder = $context->builder()->from(Storage::permissionsTable($collection));
             $removeBuilder->filter([Query::or($removeConditions)]);
             $context->run($removeBuilder->delete(), Event::PermissionsDelete);
         }
@@ -183,7 +183,7 @@ class Permissions extends Interceptor
     public function afterDocumentUpsert(string $collection, array $changes, WriteContext $context): void
     {
         $removeConditions = [];
-        $addBuilder = $context->rawBuilder()->into($context->rawTable(Storage::permissionsTable($collection)));
+        $addBuilder = $context->builder()->into($context->rawTable(Storage::permissionsTable($collection)));
         $hasAdditions = false;
 
         foreach ($changes as $change) {
@@ -223,7 +223,7 @@ class Permissions extends Interceptor
         }
 
         if (! empty($removeConditions)) {
-            $removeBuilder = $context->rawBuilder()->from($context->rawTable(Storage::permissionsTable($collection)));
+            $removeBuilder = $context->builder()->fromTable($context->rawTable(Storage::permissionsTable($collection)));
             $removeBuilder->filter([Query::or($removeConditions)]);
             $context->run($removeBuilder->delete(), Event::PermissionsDelete);
         }
@@ -235,7 +235,7 @@ class Permissions extends Interceptor
 
     /**
      * An upsert batch can hold documents of several tenants, none of them the adapter's, so its
-     * removals cannot take builder()'s filter on the adapter's tenant: each one is scoped to
+     * removals cannot take from()'s filter on the adapter's tenant: each one is scoped to
      * the tenant decorateRow() stores its own document's rows under instead.
      *
      * @return list<Query>
@@ -265,7 +265,7 @@ class Permissions extends Interceptor
             return;
         }
 
-        $permissionsBuilder = $context->builder(Storage::permissionsTable($collection));
+        $permissionsBuilder = $context->builder()->from(Storage::permissionsTable($collection));
         $permissionsBuilder->filter([Query::equal(Storage::PERMISSIONS_DOCUMENT, $documentIds)]);
 
         if (! $context->run($permissionsBuilder->delete(), Event::PermissionsDelete)) {
@@ -291,7 +291,7 @@ class Permissions extends Interceptor
             return [[], []];
         }
 
-        $readBuilder = $context->builder(Storage::permissionsTable($collection));
+        $readBuilder = $context->builder()->from(Storage::permissionsTable($collection));
         $readBuilder->select([Storage::PERMISSIONS_DOCUMENT, Storage::PERMISSIONS_TYPE, Storage::PERMISSIONS_PERMISSION]);
         $readBuilder->filter([Query::equal(Storage::PERMISSIONS_DOCUMENT, $documentIds)]);
 
@@ -457,7 +457,7 @@ class Permissions extends Interceptor
      */
     private function movePermissions(string $collection, string $previousId, Document $document, WriteContext $context): void
     {
-        $removeBuilder = $context->builder(Storage::permissionsTable($collection));
+        $removeBuilder = $context->builder()->from(Storage::permissionsTable($collection));
         $removeBuilder->filter([Query::equal(Storage::PERMISSIONS_DOCUMENT, [$previousId])]);
         $context->run($removeBuilder->delete(), Event::PermissionsDelete);
 
@@ -482,7 +482,7 @@ class Permissions extends Interceptor
             ]);
         }
 
-        $removeBuilder = $context->builder(Storage::permissionsTable($collection));
+        $removeBuilder = $context->builder()->from(Storage::permissionsTable($collection));
         $removeBuilder->filter([Query::or($removeConditions)]);
         $context->run($removeBuilder->delete(), Event::PermissionsDelete);
     }
@@ -496,7 +496,7 @@ class Permissions extends Interceptor
             return;
         }
 
-        $addBuilder = $context->rawBuilder()->into($context->rawTable(Storage::permissionsTable($collection)));
+        $addBuilder = $context->builder()->into($context->rawTable(Storage::permissionsTable($collection)));
 
         foreach ($additions as $type => $permissions) {
             foreach (\array_values(\array_unique($permissions)) as $permission) {

@@ -12,6 +12,7 @@ use Throwable;
 use Utopia\Database\Adapter\SQL\Wkt;
 use Utopia\Database\Attribute;
 use Utopia\Database\Builder\MariaDB as MariaDBBuilder;
+use Utopia\Database\Builder\Scoping;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -67,7 +68,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
     #[\Override]
     public function id(): string
     {
-        $result = $this->createBuilder()->fromNone()->selectRaw('CONNECTION_ID()')->build();
+        $result = $this->builder()->fromNone()->selectRaw('CONNECTION_ID()')->build();
         $statement = $this->prepareStatement($result->query);
 
         if (! $statement->execute()) {
@@ -158,8 +159,8 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
      */
     private function getTables(string $database): array
     {
-        $result = $this->createBuilder()
-            ->from('INFORMATION_SCHEMA.TABLES')
+        $result = $this->builder()
+            ->fromTable('INFORMATION_SCHEMA.TABLES')
             ->selectRaw('TABLE_NAME')
             ->filter([BaseQuery::equal('TABLE_SCHEMA', [$database])])
             ->build();
@@ -351,16 +352,16 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
         $name = $database.'/'.$collection;
         $permissions = $database.'/'.Storage::permissionsTable($collection);
 
-        $builder = $this->createBuilder();
+        $builder = $this->builder();
 
         $collectionResult = $builder
-            ->from('INFORMATION_SCHEMA.INNODB_SYS_TABLESPACES')
+            ->fromTable('INFORMATION_SCHEMA.INNODB_SYS_TABLESPACES')
             ->selectRaw('SUM(FS_BLOCK_SIZE + ALLOCATED_SIZE)')
             ->filter([BaseQuery::equal('NAME', [$name])])
             ->build();
 
         $permissionsResult = $builder->reset()
-            ->from('INFORMATION_SCHEMA.INNODB_SYS_TABLESPACES')
+            ->fromTable('INFORMATION_SCHEMA.INNODB_SYS_TABLESPACES')
             ->selectRaw('SUM(FS_BLOCK_SIZE + ALLOCATED_SIZE)')
             ->filter([BaseQuery::equal('NAME', [$permissions])])
             ->build();
@@ -399,7 +400,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
         $database = $this->getDatabase();
         $permissions = Storage::permissionsTable($collection);
 
-        $result = $this->createBuilder()
+        $result = $this->builder()
             ->fromNone()
             ->selectRaw(
                 'SUM(size) FROM (
@@ -628,7 +629,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
             $attributes[Storage::PERMISSIONS] = \json_encode($document->getPermissions());
             $name = $this->filter($collection);
 
-            $builder = $this->createBuilder()->into($this->getTableRaw($name));
+            $builder = $this->builder()->into($this->getTableRaw($name));
             $row = [Storage::UID => $document->getId()];
 
             if (! empty($document->getSequence())) {
@@ -1151,9 +1152,9 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     #[\Override]
-    protected function createBuilder(): SQLBuilder
+    public function builder(): SQLBuilder&Scoping
     {
-        return new MariaDBBuilder();
+        return (new MariaDBBuilder())->scope($this->scope());
     }
 
     #[\Override]

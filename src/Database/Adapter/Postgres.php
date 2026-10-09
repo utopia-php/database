@@ -13,6 +13,7 @@ use Utopia\Database\Adapter\SQL\Hook\Permission;
 use Utopia\Database\Adapter\SQL\Wkt;
 use Utopia\Database\Attribute;
 use Utopia\Database\Builder\Postgres as PostgresBuilder;
+use Utopia\Database\Builder\Scoping;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -91,7 +92,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     #[\Override]
     public function id(): string
     {
-        $result = $this->createBuilder()->fromNone()->selectRaw('pg_backend_pid()')->build();
+        $result = $this->builder()->fromNone()->selectRaw('pg_backend_pid()')->build();
         $statement = $this->prepareStatement($result->query);
         if (! $statement->execute()) {
             return '';
@@ -366,7 +367,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         $name = $this->getTable($collection);
         $permissions = $this->getTable(Storage::permissionsTable($collection));
 
-        $builder = $this->createBuilder();
+        $builder = $this->builder();
 
         $collectionResult = $builder->fromNone()->selectRaw('pg_total_relation_size(?)', [$name])->build();
         $permissionsResult = $builder->reset()->fromNone()->selectRaw('pg_total_relation_size(?)', [$permissions])->build();
@@ -404,7 +405,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         $name = $this->getTable($collection);
         $permissions = $this->getTable(Storage::permissionsTable($collection));
 
-        $builder = $this->createBuilder();
+        $builder = $this->builder();
 
         $collectionResult = $builder->fromNone()->selectRaw('pg_relation_size(?)', [$name])->build();
         $permissionsResult = $builder->reset()->fromNone()->selectRaw('pg_relation_size(?)', [$permissions])->build();
@@ -1059,7 +1060,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
 
             $name = $this->filter($collection);
 
-            $builder = $this->createBuilder()->into($this->getTableRaw($name));
+            $builder = $this->builder()->into($this->getTableRaw($name));
 
             $row = [Storage::UID => $document->getId()];
             if (! empty($document->getSequence())) {
@@ -1750,9 +1751,9 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     #[\Override]
-    protected function createBuilder(): SQLBuilder
+    public function builder(): SQLBuilder&Scoping
     {
-        return new PostgresBuilder();
+        return (new PostgresBuilder())->scope($this->scope());
     }
 
     #[\Override]
@@ -2369,9 +2370,9 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     #[\Override]
-    protected function getTableRaw(string $name): string
+    protected function qualifyTable(string $database, string $namespace, string $name): string
     {
-        return $this->getDatabase().'.'.$this->getPhysicalTableName($name);
+        return $database.'.'.$this->getShortKey("{$namespace}_{$this->filter($name)}");
     }
 
     protected function buildJsonbPath(string $path, bool $asText = false): string

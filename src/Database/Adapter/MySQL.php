@@ -6,6 +6,7 @@ use Exception;
 use PDOException;
 use Utopia\Database\Adapter\SQL\Hook\Permission;
 use Utopia\Database\Builder\MySQL as MySQLBuilder;
+use Utopia\Database\Builder\Scoping;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Event;
@@ -117,9 +118,9 @@ class MySQL extends MariaDB
     }
 
     #[\Override]
-    protected function createBuilder(): SQLBuilder
+    public function builder(): SQLBuilder&Scoping
     {
-        return new MySQLBuilder();
+        return (new MySQLBuilder())->scope($this->scope());
     }
 
     #[\Override]

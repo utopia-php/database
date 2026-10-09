@@ -768,7 +768,7 @@ class Database
             throw new DatabaseException('Query builder is not supported by this adapter');
         }
 
-        $builder = $this->adapter->builder($collection);
+        $builder = $this->adapter->builder()->from($collection);
         $builder->setExecutor($this->runStatement(...));
 
         return $builder;

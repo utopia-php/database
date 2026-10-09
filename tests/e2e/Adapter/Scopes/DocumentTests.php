@@ -9,9 +9,12 @@ use Throwable;
 use Utopia\Cache\Adapter\None as NoneCacheAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\Postgres;
+use Utopia\Database\Adapter\Redis;
 use Utopia\Database\Adapter\SQL;
+use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\AttributeUpdate;
 use Utopia\Database\Capability;
@@ -1980,6 +1983,49 @@ trait DocumentTests
         $found = $this->searchedIds($database, $collection, 'lunar_solar');
         $this->assertContains('underscore', $found);
         $this->assertNotContains('comet', $found);
+    }
+
+    public function testContainsAllOnAStringMatchesAnyWholeValueAs7xDid(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if ($adapter instanceof SQLite || $adapter instanceof Memory || $adapter instanceof Redis) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'contains_all_string';
+
+        $database->createCollection(Collection::create(id: $collection, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ]));
+        $database->createAttribute($collection, Attribute::string(key: 'name', size: 64, required: true));
+
+        foreach (['lower' => 'alpha', 'longer' => 'alphabet', 'other' => 'beta', 'unrelated' => 'gamma'] as $id => $name) {
+            $database->createDocument($collection, new Document([
+                '$id' => $id,
+                '$permissions' => [Permission::read(Role::any())],
+                'name' => $name,
+            ]));
+        }
+
+        $ids = function (array $values) use ($database, $collection): array {
+            $ids = \array_map(
+                static fn (Document $document): string => $document->getId(),
+                $database->find($collection, [Query::containsAll('name', $values)]),
+            );
+            \sort($ids);
+
+            return $ids;
+        };
+
+        $this->assertSame([], $ids(['lph']));
+        $this->assertSame(['lower'], $ids(['alpha']));
+        $this->assertSame(['lower', 'other'], $ids(['alpha', 'beta']));
     }
 
     public function testFindFulltextExactTermOnPostgresMatchesEveryWordInAnyOrder(): void

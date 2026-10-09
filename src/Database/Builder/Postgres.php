@@ -12,13 +12,14 @@ use Utopia\Query\Query;
 use Utopia\Query\Schema\ColumnType;
 
 /**
- * The PostgreSQL builder, which also compiles filters on their own, prepares and matches search terms as 7.x did,
- * writes a filter on a path into an object attribute only when every key of the path is a plain key, and lets a
- * distanceLessThan() filter use the spatial index.
+ * The PostgreSQL builder, which also compiles filters on their own, prepares and matches search terms and containsAll()
+ * as 7.x did, writes a filter on a path into an object attribute only when every key of the path is a plain key, and
+ * lets a distanceLessThan() filter use the spatial index.
  */
 class Postgres extends Base implements Filtering, Scoping
 {
     use CompilesFilters;
+    use MatchesContainsAllPatterns;
     use PreparesSearchTerms;
     use ScopesCollections;
 

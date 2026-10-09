@@ -3,6 +3,7 @@
 namespace Tests\E2E\Adapter\Scopes;
 
 use Throwable;
+use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
@@ -11,6 +12,8 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Index;
 use Utopia\Database\Permission;
+use Utopia\Database\Relationship;
+use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\Role;
 use Utopia\Database\Schema\Index as SchemaIndex;
 use Utopia\Database\Storage;
@@ -91,6 +94,59 @@ trait SchemaReconciliationTests
             $this->assertSame('kept', $database->getDocument($collection, 'one')->getAttribute('nick'));
         } finally {
             $database->deleteCollection($collection);
+        }
+    }
+
+    public function testARelationshipRenameThatFailsPartWayConvergesOnRetry(): void
+    {
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if (! $adapter->supports(Capability::SchemaIntrospection) || ! $adapter->hasFeature(Feature\Relationships::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $books = 'halfRenamedBooks';
+        $authors = 'halfRenamedAuthors';
+        foreach ([$books, $authors] as $collection) {
+            $database->createCollection(Collection::create(id: $collection, attributes: [
+                Attribute::string(key: 'name', size: 64),
+            ], permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ], documentSecurity: false));
+        }
+
+        try {
+            $database->createRelationship($books, Relationship::oneToOne(relatedCollection: $authors, twoWay: true, key: 'author', twoWayKey: 'book'));
+            $database->createDocument($authors, new Document([Document::ID => 'herbert', 'name' => 'Herbert']));
+            $database->createDocument($books, new Document([Document::ID => 'dune', 'name' => 'Dune', 'author' => 'herbert']));
+            $adapter->createAttribute($authors, Attribute::string(key: 'novel', size: 64));
+            $update = new RelationshipUpdate(key: 'writer', twoWayKey: 'novel');
+
+            try {
+                $database->updateRelationship($books, 'author', $update);
+                $this->fail('A rename whose second column the engine refuses must fail');
+            } catch (Throwable $error) {
+                $this->assertNotInstanceOf(\PHPUnit\Framework\AssertionFailedError::class, $error);
+            }
+
+            $adapter->deleteAttribute($authors, 'novel');
+            $database->updateRelationship($books, 'author', $update);
+
+            $writer = $database->getDocument($books, 'dune')->getAttribute('writer');
+            $this->assertInstanceOf(Document::class, $writer);
+            $this->assertSame('herbert', $writer->getId());
+            $novel = $database->getDocument($authors, 'herbert')->getAttribute('novel');
+            $this->assertInstanceOf(Document::class, $novel);
+            $this->assertSame('dune', $novel->getId());
+        } finally {
+            $database->deleteCollection($books);
+            $database->deleteCollection($authors);
         }
     }
 

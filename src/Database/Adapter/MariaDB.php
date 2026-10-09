@@ -1056,6 +1056,23 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
     private int $appliedRound = 0;
 
     /**
+     * MySQL and MariaDB run every statement of a multi-statement string, but report only the first one's error from
+     * execute(); a later statement's error surfaces when its result is reached. Each result is reached here, so a
+     * statement that fails after another succeeded fails the call instead of being lost.
+     */
+    #[\Override]
+    protected function executeStatement(string $sql, Event $event): bool
+    {
+        $statement = $this->prepareStatement($sql, $event);
+        $executed = $this->execute($statement);
+
+        while ($statement->nextRowset()) {
+        }
+
+        return $executed;
+    }
+
+    /**
      * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $statement
      */
     #[\Override]

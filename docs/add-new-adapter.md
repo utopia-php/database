@@ -125,7 +125,7 @@ class NewDB extends Adapter implements Feature\Connection, Feature\Upserts
 }
 ```
 
-A SQL database extends `Utopia\Database\Adapter\SQL` instead, which already implements `Feature\Connection`, `Feature\QueryBuilder`, `Feature\RawQuery`, `Feature\Relationships` and `Feature\Upserts`. It builds its statements with a utopia-php/query builder, so implement `createBuilder()` to return the builder for your dialect, plus the other abstract methods of `SQL`: `getColumnNames()`, `getMaxPointSize()`, `getOperatorSql()` and the upsert conflict expressions (`getConflictTenantExpression()`, `getConflictIncrementExpression()`, `getConflictTenantIncrementExpression()`).
+A SQL database extends `Utopia\Database\Adapter\SQL` instead, which already implements `Feature\Connection`, `Feature\QueryBuilder`, `Feature\RawQuery`, `Feature\Relationships` and `Feature\Upserts`. It builds its statements with a utopia-php/query builder, so implement `builder()` to return the builder for your dialect, plus the other abstract methods of `SQL`: `getColumnNames()`, `getMaxPointSize()`, `getOperatorSql()` and the upsert conflict expressions (`getConflictTenantExpression()`, `getConflictIncrementExpression()`, `getConflictTenantIncrementExpression()`). The builder implements `Utopia\Database\Builder\Scoping` with the `Utopia\Database\Builder\ScopesCollections` trait and is scoped with the adapter's `scope()`, so that its `from()` takes a collection id: `return (new MyBuilder())->scope($this->scope());`. Override `qualifyTable()` if your tables are stored under other names.
 
 Only include dependencies strictly necessary for the database, preferably official PHP libraries, if available.
 

@@ -296,7 +296,7 @@ final class QueryBuilderTenancyTest extends TestCase
         ));
         $authors = $quoted($raw(self::AUTHORS));
 
-        $builder = $adapter->builder(self::AUTHORS)
+        $builder = $adapter->builder()->from(self::AUTHORS)
             ->crossJoin($raw(self::EXTRAS), 'Extra')
             ->rightJoin($raw(self::REVIEWS), 'Extra.authorId', 'Review.authorId', '=', 'Review')
             ->joinWhere($raw(self::BOOKS), static function (JoinBuilder $join): void {
@@ -325,11 +325,11 @@ final class QueryBuilderTenancyTest extends TestCase
 
         $this->assertSame(
             "UPDATE {$authors} SET {$quote}name{$quote} = ? WHERE {$tenant($raw(self::AUTHORS))}",
-            $adapter->builder(self::AUTHORS)->set(['name' => 'renamed'])->update()->query,
+            $adapter->builder()->from(self::AUTHORS)->set(['name' => 'renamed'])->update()->query,
         );
         $this->assertSame(
             "DELETE FROM {$authors} WHERE {$tenant($raw(self::AUTHORS))}",
-            $adapter->builder(self::AUTHORS)->delete()->query,
+            $adapter->builder()->from(self::AUTHORS)->delete()->query,
         );
     }
 
@@ -348,7 +348,7 @@ final class QueryBuilderTenancyTest extends TestCase
         ));
         $authors = $quoted($raw(self::AUTHORS));
 
-        $sql = $adapter->builder(self::AUTHORS)
+        $sql = $adapter->builder()->from(self::AUTHORS)
             ->rightJoin($raw(self::REVIEWS), $raw(self::AUTHORS).'.authorId', '9x.authorId', '=', '9x')
             ->select([$raw(self::AUTHORS).'.name'])
             ->build()
@@ -370,7 +370,7 @@ final class QueryBuilderTenancyTest extends TestCase
         $adapter->setSharedTables(true);
         $adapter->setTenant(7);
 
-        $builder = $adapter->builder(self::AUTHORS)
+        $builder = $adapter->builder()->from(self::AUTHORS)
             ->rightJoin($this->rawTable($adapter, self::REVIEWS), $this->rawTable($adapter, self::AUTHORS).'.authorId', 'Review.authorId', '=', 'Review');
 
         $this->expectException(DatabaseException::class);
@@ -387,7 +387,7 @@ final class QueryBuilderTenancyTest extends TestCase
         $adapter->setSharedTables(true);
         $adapter->setTenant(7);
 
-        $builder = $adapter->builder(self::AUTHORS)
+        $builder = $adapter->builder()->from(self::AUTHORS)
             ->rightJoin($this->rawTable($adapter, self::REVIEWS), $this->rawTable($adapter, self::AUTHORS).'.authorId', 'x y.authorId', '=', 'x y');
 
         $this->expectException(DatabaseException::class);
@@ -550,7 +550,7 @@ final class QueryBuilderTenancyTest extends TestCase
             $documents = $database->getAuthorization()->skip(function () use ($database, $joins, $alias, $main): mixed {
                 $builder = $this->builder($database);
                 if ($alias !== '') {
-                    $builder->from(self::table(self::AUTHORS), $alias);
+                    $builder->from(self::AUTHORS, $alias);
                 }
 
                 $columns = [$main.'.name'];

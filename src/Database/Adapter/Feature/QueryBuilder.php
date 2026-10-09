@@ -8,13 +8,14 @@ use Utopia\Query\Schema;
 interface QueryBuilder
 {
     /**
-     * A query builder over the given collection's table, for Database::from().
+     * A query builder in the adapter's dialect, for Database::from(). Its from() takes a collection id.
      *
-     * It maps document attributes to columns and, under shared tables, keeps every statement to
-     * the selected tenant. It applies no permissions, and its statements bypass the document and
-     * query caches, `_perms` upkeep, validation, hooks and events.
+     * Over a collection it maps document attributes to columns and, under shared tables, keeps every
+     * statement to the tenant selected when the builder was handed out. It applies no permissions,
+     * and its statements bypass the document and query caches, `_perms` upkeep, validation, hooks and
+     * events.
      */
-    public function builder(string $collection): Builder;
+    public function builder(): Builder;
 
     /**
      * A schema builder in the adapter's dialect.

@@ -2,6 +2,7 @@
 
 namespace Utopia\Database\Hook;
 
+use Utopia\Database\Builder\Scoping;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Query\Builder;
@@ -14,15 +15,11 @@ use Utopia\Query\Builder\Statement;
 interface WriteContext
 {
     /**
-     * A builder reading or deleting the rows of the table, limited to the adapter's tenant when tables are shared.
+     * A builder on the adapter's connection. Its from() takes a table as {@see self::rawTable()} does, to read or
+     * delete its rows, limited to the adapter's tenant when tables are shared. Its into() and fromTable() take the
+     * name rawTable() returns and limit it to no tenant, for inserting into, or reaching every tenant of, the table.
      */
-    public function builder(string $table): Builder;
-
-    /**
-     * A builder over no table and limited to no tenant, for inserting into, or reaching every tenant of, a table
-     * named by {@see self::rawTable()}.
-     */
-    public function rawBuilder(): Builder;
+    public function builder(): Builder&Scoping;
 
     /**
      * The name the table is stored under.

@@ -35,7 +35,7 @@ trait BuildsAggregates
 
         $operation === 'count' ? $builder->selectRaw('1') : $builder->select(['price']);
         $builder->limit($max);
-        $outer = $this->createBuilder();
+        $outer = $this->builder();
         $outer->fromSub($builder, 'table_count');
         $operation === 'count' ? $outer->count('1', 'sum') : $outer->sum('price', 'sum');
 

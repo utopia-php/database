@@ -16,10 +16,11 @@ use Utopia\Query\Schema\ColumnType;
  * filter on a path into an object attribute only when every key of the path is a plain key, and lets a
  * distanceLessThan() filter use the spatial index.
  */
-class Postgres extends Base implements Filtering
+class Postgres extends Base implements Filtering, Scoping
 {
     use CompilesFilters;
     use PreparesSearchTerms;
+    use ScopesCollections;
 
     private const float METERS_PER_LATITUDE_DEGREE = 110574;
 

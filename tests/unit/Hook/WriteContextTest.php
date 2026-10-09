@@ -102,7 +102,7 @@ final class WriteContextTest extends TestCase
             #[\Override]
             public function afterDocumentCreate(string $collection, array $documents, WriteContext $context): void
             {
-                $builder = $context->builder(Storage::permissionsTable($collection));
+                $builder = $context->builder()->from(Storage::permissionsTable($collection));
                 $builder->filter([Query::equal(Storage::PERMISSIONS_DOCUMENT, ['first'])]);
                 $context->run($builder->delete(), Event::PermissionsDelete);
             }

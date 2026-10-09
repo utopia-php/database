@@ -204,7 +204,9 @@ have to make, with the 7.x and 8.0 forms side by side.
   returns the affected row count, and `Database::schema()` returns a schema builder. `from()`, `query()` and
   `mutate()` check no permissions, bypass the caches, run no hooks and throw `Exception\Authorization` unless
   authorization is disabled. Under shared tables every statement a `from()` builder runs stays within the tenant
-  selected when it was handed out.
+  selected when it was handed out. A SQL adapter's `builder()` (`Feature\QueryBuilder`) is the one builder it hands
+  out, to `from()` and to its own statements: its `from()` takes a collection id, and `fromTable()` reads a table by
+  its stored name.
 - **`find()` query cache.** `Database::setQueryCache(new Cache\Query($cache))` caches `find()` results per
   hostname, database, namespace, tenant and collection, and writes through the `Database` invalidate only the scopes
   they write in: under shared tables with tenant-per-document, the scope of each written document's tenant.

@@ -115,7 +115,7 @@ trait PermissionTests
         $authorization = $database->getAuthorization();
 
         $stored = $authorization->skip(static function () use ($adapter, $collection): array {
-            $statement = $adapter->builder(Storage::permissionsTable($collection))
+            $statement = $adapter->builder()->from(Storage::permissionsTable($collection))
                 ->select([Storage::PERMISSIONS_TYPE, Storage::PERMISSIONS_PERMISSION])
                 ->filter([Query::equal(Storage::PERMISSIONS_DOCUMENT, ['upserted'])])
                 ->build();
@@ -385,7 +385,7 @@ trait PermissionTests
 
         $grants = [];
         foreach ([5, 6] as $tenant) {
-            $statement = $database->withTenant($tenant, fn () => $adapter->builder(Storage::permissionsTable('notes'))
+            $statement = $database->withTenant($tenant, fn () => $adapter->builder()->from(Storage::permissionsTable('notes'))
                 ->select([Storage::PERMISSIONS_PERMISSION])
                 ->filter([
                     Query::equal(Storage::PERMISSIONS_DOCUMENT, ['note']),

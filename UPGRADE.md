@@ -782,9 +782,10 @@ method as a no-op, so a hook overrides only what it needs:
 - `afterDocumentCreate()`, `afterDocumentUpdate()`, `afterDocumentBatchUpdate()`, `afterDocumentUpsert()` and
   `afterDocumentDelete()` take a `Hook\WriteContext` as their last argument. `afterDocumentUpdate()` receives the id
   the document is stored under.
-- `Hook\WriteContext` is an interface the SQL adapters implement: `builder(string $table)`, `rawBuilder()`,
-  `rawTable(string $table)`, `run(Statement $statement, Event $event): bool`, `fetch(Statement $statement, Event
-  $event): array`, `decorateRow(array $row, Document $document)`, `skipPermissions(Document $document): bool` (the
+- `Hook\WriteContext` is an interface the SQL adapters implement: `builder()`, whose `from($table)` reads or deletes
+  the table's rows kept to the adapter's tenant and whose `into()` and `fromTable()` take the name `rawTable()`
+  returns and keep it to no tenant, `rawTable(string $table)`, `run(Statement $statement, Event $event): bool`,
+  `fetch(Statement $statement, Event $event): array`, `decorateRow(array $row, Document $document)`, `skipPermissions(Document $document): bool` (the
   update keeps that document's permissions) and `ignoreDuplicates()`.
 
 ### Subclasses of `Database`
@@ -1376,7 +1377,7 @@ The optional features:
 |---|---|---|
 | `Feature\Casting` | `castBefore(Document $collection, Document $document): Document`, `castAfter(Document $collection, array $documents): array`, `castDatetime(string $value): mixed` | MongoDB |
 | `Feature\Connection` | `ping(): bool`, `reconnect(): void`, `id(): string`, `hostname(): string` | the SQL adapters, MongoDB, Redis |
-| `Feature\QueryBuilder` | `builder(string $collection): Builder`, `schema(): Schema` | the SQL adapters |
+| `Feature\QueryBuilder` | `builder(): Builder`, whose `from()` takes a collection id, `schema(): Schema` | the SQL adapters |
 | `Feature\RawQuery` | `rawQuery(string $query, array $bindings = []): array`, `rawMutation(string $query, array $bindings = []): int` | the SQL adapters |
 | `Feature\Relationships` | `createRelationship(string $collection, Relationship $relationship): bool`, `updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, RelationshipUpdate $update): bool`, `deleteRelationship(string $collection, Relationship $relationship, RelationshipSide $side): bool` | the SQL adapters, MongoDB, Memory, Redis |
 | `Feature\Schemaless` | `setSchemaless(bool $schemaless): static`, `isSchemaless(): bool` | MongoDB |
@@ -1593,7 +1594,7 @@ and `addTransform()` when its transforms are not the same instances under the sa
 
 ### Removed adapter methods
 
-Queries now compile through the utopia-php/query builders (`builder()`, `createBuilder()`), transforms through
+Queries now compile through the utopia-php/query builders (`builder()`), transforms through
 `Hook\Transform`, and tenant and permission conditions through the hooks in `Utopia\Database\Adapter\SQL\Hook` and
 `Utopia\Database\Hook\Mongo`. The 7.x methods
 behind the old string-building path are removed. Nothing in 8.0 calls them, so an adapter subclass that overrides or
@@ -1601,7 +1602,7 @@ calls one must drop the override or the call.
 
 | Removed | Visibility in 7.x | Replacement |
 |---|---|---|
-| `SQL::getSQLConditions(array $queries, array &$binds, string $separator = 'AND', ?string $forCollection = null)` | public | The adapter's query builder (`builder()` / `createBuilder()`) |
+| `SQL::getSQLConditions(array $queries, array &$binds, string $separator = 'AND', ?string $forCollection = null)` | public | The adapter's query builder (`builder()`) |
 | `SQL::getSQLConditionsForCollection()` | protected | The same |
 | `getSQLCondition(Query $query, array &$binds, ?string $forCollection = null)` on `SQL` (abstract), `MariaDB`, `Postgres` and `SQLite` | protected | The same |
 | `SQL::getSQLOperator()` | protected | The same |
@@ -1629,14 +1630,21 @@ calls one must drop the override or the call.
 `escapeWildcards()` is kept, and so is the public helper `Query::isSpatialAttribute()`, even where nothing in the
 library calls it any more.
 
-### SQLite adapter subclasses that override `createBuilder()`
+### SQL adapter subclasses that override `builder()`
 
 The SQLite adapter builds its queries with `Utopia\Database\Builder\SQLite`, not `Utopia\Query\Builder\SQLite`. SQLite
 has no default LIKE escape character, and this builder adds `ESCAPE '\'` so that `startsWith`, `endsWith`,
 `containsString`, `containsAny`, `containsAll`, `notContains`, `notStartsWith` and `notEndsWith` match `_`, `%` and
-`\` literally, as they did in 7.x. If you subclass `Utopia\Database\Adapter\SQLite` and override `createBuilder()`,
+`\` literally, as they did in 7.x. If you subclass `Utopia\Database\Adapter\SQLite` and override `builder()`,
 return `Utopia\Database\Builder\SQLite` or a subclass of it. A plain `Utopia\Query\Builder\SQLite` treats `_` and `%`
 as wildcards and a backslash as a literal character.
+
+`builder()` is the one builder a SQL adapter hands out, to `Database::from()` and to its own statements alike. Its
+`from()` takes a collection id and reads the collection's table, mapping attributes to columns and, under shared
+tables, keeping the statement to the tenant, so a builder an override returns must implement
+`Utopia\Database\Builder\Scoping` with the `Utopia\Database\Builder\ScopesCollections` trait and be scoped with the
+adapter's `scope()`: `return (new MyBuilder())->scope($this->scope());`. The table names come from `qualifyTable()`; `getTableRaw()` is
+final, so an adapter that stores its tables under other names overrides `qualifyTable()`.
 
 ### Connections
 
@@ -2285,6 +2293,12 @@ outer join needs the main table named as `from()` names it, and a statement with
 `$tenant` included; SQL you write yourself; builders not obtained from `from()` (subqueries, unions, lateral joins);
 and the second table of a dialect's multi-table write (`updateJoin()`, `deleteJoin()`, `updateFrom()`,
 `deleteUsing()`), whose main table keeps its tenant condition.
+
+`from()` builds on the adapter's `builder()` (`Feature\QueryBuilder`), which takes no collection:
+`$adapter->builder()->from($collection)` is the builder `Database::from($collection)` hands out, without the
+`Database`'s executor. That builder's `from()` takes a collection id, and `from($collection, $alias)` names the main
+table by the alias, which is then the name a right or full outer join pairs with. A builder that names no collection
+(`fromNone()`, `into()`, or `fromTable()`, which reads a table by the name it is stored under) is kept to no tenant.
 
 ### `exists()` and `notExists()`
 

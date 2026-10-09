@@ -2,6 +2,7 @@
 
 namespace Utopia\Database\Adapter;
 
+use Closure;
 use Exception;
 use PDO;
 use PDOException;
@@ -18,8 +19,12 @@ use Utopia\Database\Adapter\SQL\Hook\Permission;
 use Utopia\Database\Adapter\SQL\Hook\Tenant;
 use Utopia\Database\Adapter\SQL\Hook\WriteContext;
 use Utopia\Database\Adapter\SQL\JoinAlias;
+use Utopia\Database\Adapter\SQL\Scope\Filter as FilterScope;
+use Utopia\Database\Adapter\SQL\Scope\Raw as RawScope;
 use Utopia\Database\Attribute;
 use Utopia\Database\Builder\Filtering;
+use Utopia\Database\Builder\Scope;
+use Utopia\Database\Builder\Scoping;
 use Utopia\Database\Capability;
 use Utopia\Database\Change;
 use Utopia\Database\Database;
@@ -124,7 +129,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     protected int $floatPrecision = 17;
 
     /**
-     * Lazily constructed AttributeMap shared by every newBuilder() call.
+     * Lazily constructed AttributeMap shared by every builder's scope.
      * AttributeMap is a readonly stateless config object, so it can safely
      * be reused across queries on the same adapter.
      */
@@ -238,7 +243,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     #[\Override]
     public function ping(): bool
     {
-        $result = $this->createBuilder()->fromNone()->selectRaw('1')->build();
+        $result = $this->builder()->fromNone()->selectRaw('1')->build();
 
         return $this->prepareStatement($result->query)->execute();
     }
@@ -373,8 +378,8 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     #[\Override]
     public function exists(string $database): bool
     {
-        $result = $this->createBuilder()
-            ->from('INFORMATION_SCHEMA.SCHEMATA')
+        $result = $this->builder()
+            ->fromTable('INFORMATION_SCHEMA.SCHEMATA')
             ->selectRaw('SCHEMA_NAME')
             ->filter([BaseQuery::equal('SCHEMA_NAME', [$this->filter($database)])])
             ->build();
@@ -388,8 +393,8 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     #[\Override]
     public function collectionExists(string $database, string $collection): bool
     {
-        $result = $this->createBuilder()
-            ->from('INFORMATION_SCHEMA.TABLES')
+        $result = $this->builder()
+            ->fromTable('INFORMATION_SCHEMA.TABLES')
             ->selectRaw('TABLE_NAME')
             ->filter([
                 BaseQuery::equal('TABLE_SCHEMA', [$this->filter($database)]),
@@ -844,7 +849,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             $attributeKeys[] = Storage::SEQUENCE;
         }
 
-        $builder = $this->createBuilder()->into($this->getTableRaw($name));
+        $builder = $this->builder()->into($this->getTableRaw($name));
 
         $spatialMap = \array_fill_keys($spatialAttributes, true);
 
@@ -1576,7 +1581,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 ??= $this->qualifyOrderAttribute($attribute, $joinAliases);
         };
 
-        $emulatesFullOuterJoin = $this->needsFullOuterJoinEmulation($this->createBuilder(), $queries);
+        $emulatesFullOuterJoin = $this->needsFullOuterJoinEmulation($this->builder(), $queries);
 
         if ($emulatesFullOuterJoin && $hasAggregation) {
             $results = $this->findFullOuterJoinAggregate(
@@ -2030,7 +2035,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             }
         }
 
-        if ($this->needsFullOuterJoinEmulation($this->createBuilder(), $queries)) {
+        if ($this->needsFullOuterJoinEmulation($this->builder(), $queries)) {
             [$leftQueries, $rightQueries] = $this->emulateFullOuterJoin($queries, $alias);
             $leftPreserving = $this->keepsUnmatchedRows($leftQueries);
 
@@ -2165,7 +2170,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
     private function executeWrappedCount(SQLBuilder $innerBuilder, string $collection): int
     {
-        $outerBuilder = $this->createBuilder();
+        $outerBuilder = $this->builder();
         $outerBuilder->fromSub($innerBuilder, 'table_count');
         $outerBuilder->count('1', 'sum');
 
@@ -2174,7 +2179,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
     private function executeWrappedSum(SQLBuilder $innerBuilder, string $attribute, string $collection): int|float
     {
-        $outerBuilder = $this->createBuilder();
+        $outerBuilder = $this->builder();
         $outerBuilder->fromSub($innerBuilder, 'table_count');
         $outerBuilder->sum($attribute, 'sum');
 
@@ -3263,21 +3268,60 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
-     * Get an unquoted qualified table name (the builder handles quoting).
+     * Get an unquoted qualified table name (the builder handles quoting). Override qualifyTable() to change
+     * it, which a builder's from() resolves a collection through too.
      *
      * @throws DatabaseException
      */
-    protected function getTableRaw(string $name): string
+    final protected function getTableRaw(string $name): string
     {
-        return $this->getDatabase().'.'.$this->getNamespace().'_'.$this->filter($name);
+        return $this->qualifyTable($this->getDatabase(), $this->getNamespace(), $name);
     }
 
-    abstract protected function createBuilder(): SQLBuilder;
+    /**
+     * The unquoted name the table is stored under in the database and namespace given.
+     *
+     * @throws DatabaseException
+     */
+    protected function qualifyTable(string $database, string $namespace, string $name): string
+    {
+        return $database.'.'.$namespace.'_'.$this->filter($name);
+    }
+
+    /**
+     * A query builder in the adapter's dialect, scoped with scope(). Its from() takes a collection id, as
+     * Database::from() hands it on: it reads the collection's table, maps document attributes to columns and
+     * applies no permissions. A subclass that returns its own builder uses ScopesCollections and scopes it the
+     * same way.
+     *
+     * Under shared tables it keeps every statement to the tenant selected when the builder was handed out:
+     * the main table and every table joined through the builder's join methods (Tenant\Raw). Not kept to the
+     * tenant: SQL the caller writes, builders that did not come from builder() (subqueries, unions, lateral
+     * joins), a dialect's multi-table updates and deletes, and a builder that names no collection: one that
+     * selects no table, inserts into() a table or reads one fromTable(), as the adapter's own statements do.
+     */
+    #[\Override]
+    abstract public function builder(): SQLBuilder&Scoping;
 
     #[\Override]
     public function schema(): MySQLSchema|PostgresSchema
     {
         return new MySQLSchema();
+    }
+
+    /**
+     * What a builder()'s from() reads a collection through, with the database, namespace, tenant and table
+     * sharing in effect now.
+     */
+    protected function scope(): Scope
+    {
+        return new RawScope(
+            $this->tables(),
+            $this->attributes(),
+            $this->sharedTables,
+            $this->currentTenant(),
+            $this->getIdentifierQuote(),
+        );
     }
 
     /**
@@ -3290,33 +3334,44 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      *
      * @throws DatabaseException
      */
-    protected function newBuilder(string $table, string $alias = '', bool $allowNullTenant = false, array $tenants = [], array $unindexed = []): SQLBuilder
+    protected function newBuilder(string $table, string $alias = '', bool $allowNullTenant = false, array $tenants = [], array $unindexed = []): SQLBuilder&Scoping
     {
-        $builder = $this->createBuilder()->from($this->getTableRaw($table), $alias);
+        return $this->builder()
+            ->scope($this->filterScope($tenants === [] ? $this->currentTenant() : $tenants, $allowNullTenant, $unindexed))
+            ->from($table, $alias);
+    }
 
-        // AttributeMap is a readonly stateless config object — share one
-        // instance across builders to avoid allocating it on every read.
-        $this->attributeMap ??= new AttributeMap(Storage::attributeMap());
-        $builder->addHook($this->attributeMap);
-        if ($this->sharedTables) {
-            $source = $alias !== '' ? $alias : $table;
-            $allowNullColumn = '';
-            if ($allowNullTenant) {
-                $allowNullColumn = $source.'.'.Storage::UID;
-            }
-            $tenantFilter = new Tenant\Filter(
-                $tenants === [] ? $this->currentTenant() : $tenants,
-                Database::METADATA,
-                $table,
-                $allowNullColumn,
-                $this->getIdentifierQuote(),
-                $unindexed,
-            );
-            $builder->addHook($tenantFilter);
-            $builder->addHook(new Tenant\OuterJoin($tenantFilter, $source));
-        }
+    /**
+     * @param  int|string|null|list<int|string|null>  $tenants
+     * @param  list<string>  $unindexed
+     */
+    private function filterScope(int|string|null|array $tenants, bool $allowNullTenant = false, array $unindexed = []): FilterScope
+    {
+        return new FilterScope(
+            $this->tables(),
+            $this->attributes(),
+            $this->sharedTables,
+            $tenants,
+            $this->getIdentifierQuote(),
+            $allowNullTenant,
+            $unindexed,
+        );
+    }
 
-        return $builder;
+    /**
+     * @return Closure(string): string
+     */
+    private function tables(): Closure
+    {
+        $database = $this->getDatabase();
+        $namespace = $this->getNamespace();
+
+        return fn (string $collection): string => $this->qualifyTable($database, $namespace, $collection);
+    }
+
+    private function attributes(): AttributeMap
+    {
+        return $this->attributeMap ??= new AttributeMap(Storage::attributeMap());
     }
 
     #[\Override]
@@ -3336,41 +3391,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         $statement->closeCursor();
 
         return $count;
-    }
-
-    /**
-     * A builder over the collection's table for Database::from(): it maps document attributes to
-     * columns and applies no permissions.
-     *
-     * Under shared tables it keeps every statement to the selected tenant: the main table and every
-     * table joined through the builder's join methods (Tenant\Raw). It does not use
-     * newBuilder()'s tenant hooks, which need a read's joins up front; the caller adds these later.
-     * Not kept to the tenant: SQL the caller writes, builders that did not come from Database::from()
-     * (subqueries, unions, lateral joins) and a dialect's multi-table updates and deletes.
-     */
-    #[\Override]
-    public function builder(string $collection): SQLBuilder
-    {
-        $name = $this->filter($collection);
-        if (! $this->sharedTables) {
-            return $this->newBuilder($name);
-        }
-
-        $table = $this->getTableRaw($name);
-        $tenants = new Tenant\Raw(
-            $this->currentTenant(),
-            $table,
-            $name === Database::METADATA || $name === Storage::permissionsTable(Database::METADATA),
-            $this->getIdentifierQuote(),
-        );
-        $this->attributeMap ??= new AttributeMap(Storage::attributeMap());
-
-        return $this->createBuilder()
-            ->from($table)
-            ->addHook($this->attributeMap)
-            ->addHook($tenants)
-            ->addHook(new Tenant\RawOuterJoin($tenants))
-            ->beforeBuild($tenants->reset(...));
     }
 
     protected function getIdentifierQuote(): string
@@ -3453,8 +3473,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     protected function writeContext(array $skipPermissions = []): WriteContext
     {
         return new WriteContext(
-            builder: fn (string $table): SQLBuilder => $this->newBuilder($table),
-            rawBuilder: $this->createBuilder(...),
+            builder: fn (): SQLBuilder&Scoping => $this->builder()->scope($this->filterScope($this->currentTenant())),
             rawTable: $this->getTableRaw(...),
             prepare: fn (Statement $statement, Event $event): object => $this->executeResult($statement, $event),
             execute: fn (object $statement): bool => $this->execute($statement),
@@ -3656,7 +3675,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         array $attributeDefaults,
         bool $hasOperators
     ): void {
-        $builder = $this->createBuilder()->into($this->getTableRaw($name));
+        $builder = $this->builder()->into($this->getTableRaw($name));
 
         foreach ($spatialAttributes as $spatialColumn) {
             $builder->insertColumnExpression($spatialColumn, $this->getSpatialGeometryFromText('?'));
@@ -5058,7 +5077,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         }
 
         $joinAliases = \array_column($joinTablePrefixes, 'alias');
-        $aggregation = $this->createBuilder();
+        $aggregation = $this->builder();
         // The halves carry every tenant and permission condition of the read. The aggregation reads only
         // their rows, so it takes none of the permission filters configureFindBuilder() gives a builder
         // that reads the tables.
@@ -5857,7 +5876,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 foreach (\array_keys($orderAttributes) as $i) {
                     $orderType = $orderTypes[$i] ?? OrderDirection::Asc;
                     if ($orderType === OrderDirection::Random) {
-                        $orderParts[] = $this->createBuilder()->compileOrder(BaseQuery::orderRandom());
+                        $orderParts[] = $this->builder()->compileOrder(BaseQuery::orderRandom());
                         $sql = 'SELECT * FROM ('.$result->query.') AS '.$quote.self::FOJ_ROWS_ALIAS.$quote;
 
                         continue;

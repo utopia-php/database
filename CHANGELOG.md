@@ -207,9 +207,10 @@ have to make, with the 7.x and 8.0 forms side by side.
   `mutate()` check no permissions, bypass the caches, run no hooks and throw `Exception\Authorization` unless
   authorization is disabled. Under shared tables every statement a `from()` builder runs stays within the tenant
   selected when it was handed out. `from($collection, $alias)` names the main table by the alias. A SQL adapter's
-  `builder()` (`Feature\QueryBuilder`) is the builder `from()` builds on: its `from()` and, once it has read a
-  collection, its join methods take collection ids, it reads that one collection only, and `fromTable()` reads a
-  table by its stored name before any `from()`.
+  `builder()` (`Feature\QueryBuilder`) is the builder `from()` builds on: its `from()` and its joins take collection
+  ids, and once it has read a collection it reads that one only, refusing `fromTable()`, `into()`, another alias
+  and the multi-table writes (`updateJoin()`, `deleteJoin()`, `updateFrom()`, `deleteUsing()`), whose second table
+  its tenant scope does not reach.
 - **`find()` query cache.** `Database::setQueryCache(new Cache\Query($cache))` caches `find()` results per
   hostname, database, namespace, tenant and collection, and writes through the `Database` invalidate only the scopes
   they write in: under shared tables with tenant-per-document, the scope of each written document's tenant.

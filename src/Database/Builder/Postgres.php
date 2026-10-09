@@ -26,10 +26,26 @@ class Postgres extends Base implements Filtering, Scoping
 
     private const float METERS_PER_EQUATORIAL_LONGITUDE_DEGREE = 111319;
 
+    /**
+     * @throws QueryException On a builder that read a collection, whose tenant scope does not reach the second table
+     */
     #[\Override]
-    public function fullOuterJoin(string $table, string $left, string $right, string $operator = '=', string $alias = ''): static
+    public function updateFrom(string $table, string $alias = ''): static
     {
-        return parent::fullOuterJoin($this->joinedTable($table), $left, $right, $operator, $alias);
+        $this->requireUnbound("update from table '{$table}'");
+
+        return parent::updateFrom($table, $alias);
+    }
+
+    /**
+     * @throws QueryException On a builder that read a collection, whose tenant scope does not reach the second table
+     */
+    #[\Override]
+    public function deleteUsing(string $table, string $condition, mixed ...$bindings): static
+    {
+        $this->requireUnbound("delete using table '{$table}'");
+
+        return parent::deleteUsing($table, $condition, ...$bindings);
     }
 
     /**

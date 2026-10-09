@@ -45,12 +45,12 @@ final readonly class Raw implements Scope
     }
 
     #[\Override]
-    public function bind(Builder $builder, string $collection, string $table, string $alias): void
+    public function bind(Builder $builder, string $collection, string $table, string $alias): array
     {
         $builder->addHook($this->attributes);
 
         if (! $this->sharedTables) {
-            return;
+            return [];
         }
 
         $tenants = new Tenant\Raw(
@@ -62,7 +62,8 @@ final readonly class Raw implements Scope
 
         $builder
             ->addHook($tenants)
-            ->addHook(new Tenant\RawOuterJoin($tenants))
-            ->beforeBuild($tenants->reset(...));
+            ->addHook(new Tenant\RawOuterJoin($tenants));
+
+        return [$tenants->reset(...)];
     }
 }

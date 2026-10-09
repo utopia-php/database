@@ -4,17 +4,17 @@ namespace Utopia\Database\Builder;
 
 use Closure;
 use Utopia\Database\Exception\Query as QueryException;
-use Utopia\Query\Builder\JoinBuilder;
-use Utopia\Query\Builder\JoinType;
-use Utopia\Query\Method;
+use Utopia\Query\Builder\Statement;
 use Utopia\Query\Query;
 
 /**
  * from() takes a collection id once the builder has a scope: it reads the table the scope stores the
- * collection under, and binds the scope's hooks to that collection. A bound builder reads that collection
- * only: from() of it again, under another alias or after reset(), keeps the hooks, while from() of another
- * collection, fromTable() and scope() throw, since the hooks would keep naming the first. A bound builder
- * names the tables it joins as its scope joins them: by collection id on the builder SQL::builder() hands out.
+ * collection under, and binds the scope's hooks to that collection and alias. A bound builder reads that
+ * collection only, under that alias: from() of it again keeps the hooks (after reset(), say), while from() of
+ * another collection or under another alias, fromTable(), into(), scope() and a dialect's multi-table writes
+ * throw, since the hooks would keep naming the first table or not reach the second. Every join of a bound
+ * builder names its table as the scope joins it, whenever the join was added: by collection id on the builder
+ * SQL::builder() hands out.
  */
 trait ScopesCollections
 {
@@ -22,13 +22,15 @@ trait ScopesCollections
 
     private ?string $boundCollection = null;
 
+    private string $boundAlias = '';
+
+    /** @var list<Closure(): void> */
+    private array $beforeEachBuild = [];
+
     #[\Override]
     public function scope(Scope $scope): static
     {
-        if ($this->boundCollection !== null) {
-            throw new QueryException("The builder reads collection '{$this->boundCollection}' through its scope already");
-        }
-
+        $this->requireUnbound('take another scope');
         $this->scope = $scope;
 
         return $this;
@@ -48,8 +50,8 @@ trait ScopesCollections
         }
 
         if ($this->boundCollection !== null) {
-            if ($table !== $this->boundCollection) {
-                throw new QueryException("The builder reads collection '{$this->boundCollection}', not '{$table}': start another builder");
+            if ($table !== $this->boundCollection || $alias !== $this->boundAlias) {
+                throw new QueryException("The builder reads collection '{$this->boundCollection}'".($this->boundAlias !== '' ? " as '{$this->boundAlias}'" : '').", not '{$table}'".($alias !== '' ? " as '{$alias}'" : '').': start another builder');
             }
 
             return parent::from($this->scope->table($table), $alias);
@@ -59,7 +61,8 @@ trait ScopesCollections
         parent::from($stored, $alias);
 
         $this->boundCollection = $table;
-        $this->scope->bind($this, $table, $stored, $alias);
+        $this->boundAlias = $alias;
+        $this->beforeEachBuild = $this->scope->bind($this, $table, $stored, $alias);
 
         return $this;
     }
@@ -67,83 +70,57 @@ trait ScopesCollections
     #[\Override]
     public function fromTable(string $table, string $alias = ''): static
     {
-        if ($this->boundCollection !== null) {
-            throw new QueryException("The builder reads collection '{$this->boundCollection}', not table '{$table}': start another builder");
-        }
+        $this->requireUnbound("read table '{$table}'");
 
         return parent::from($table, $alias);
     }
 
     #[\Override]
-    public function join(string $table, string $left, string $right, string $operator = '=', string $alias = ''): static
+    public function into(string $table): static
     {
-        return parent::join($this->joinedTable($table), $left, $right, $operator, $alias);
+        $this->requireUnbound("insert into table '{$table}'");
+
+        return parent::into($table);
     }
 
     #[\Override]
-    public function leftJoin(string $table, string $left, string $right, string $operator = '=', string $alias = ''): static
+    public function build(): Statement
     {
-        return parent::leftJoin($this->joinedTable($table), $left, $right, $operator, $alias);
-    }
+        if ($this->scope === null || $this->boundCollection === null) {
+            return parent::build();
+        }
 
-    #[\Override]
-    public function rightJoin(string $table, string $left, string $right, string $operator = '=', string $alias = ''): static
-    {
-        return parent::rightJoin($this->joinedTable($table), $left, $right, $operator, $alias);
+        foreach ($this->beforeEachBuild as $callback) {
+            $callback();
+        }
+
+        $written = $this->pendingQueries;
+        $this->pendingQueries = \array_map($this->scopeJoin(...), $written);
+
+        try {
+            return parent::build();
+        } finally {
+            $this->pendingQueries = $written;
+        }
     }
 
     /**
-     * @param  Closure(JoinBuilder): void  $callback
+     * @throws QueryException Once from() has read a collection through the scope
      */
-    #[\Override]
-    public function joinWhere(string $table, Closure $callback, JoinType $type = JoinType::Inner, string $alias = ''): static
+    private function requireUnbound(string $action): void
     {
-        return parent::joinWhere($this->joinedTable($table), $callback, $type, $alias);
-    }
-
-    #[\Override]
-    public function crossJoin(string $table, string $alias = ''): static
-    {
-        return parent::crossJoin($this->joinedTable($table), $alias);
-    }
-
-    #[\Override]
-    public function naturalJoin(string $table, string $alias = ''): static
-    {
-        return parent::naturalJoin($this->joinedTable($table), $alias);
-    }
-
-    /**
-     * @param  array<Query>  $queries
-     */
-    #[\Override]
-    public function filter(array $queries): static
-    {
-        return parent::filter(\array_map($this->scopeJoin(...), $queries));
-    }
-
-    /**
-     * @param  array<Query>  $queries
-     */
-    #[\Override]
-    public function queries(array $queries): static
-    {
-        return parent::queries(\array_map($this->scopeJoin(...), $queries));
-    }
-
-    private function joinedTable(string $table): string
-    {
-        return $this->scope === null || $this->boundCollection === null ? $table : $this->scope->joinTable($table);
+        if ($this->boundCollection !== null) {
+            throw new QueryException("The builder reads collection '{$this->boundCollection}' and cannot {$action}: start another builder");
+        }
     }
 
     private function scopeJoin(Query $query): Query
     {
-        $joins = [Method::Join, Method::LeftJoin, Method::RightJoin, Method::CrossJoin, Method::FullOuterJoin, Method::NaturalJoin];
-        if (! \in_array($query->getMethod(), $joins, true)) {
+        if ($this->scope === null || ! $query->getMethod()->isJoin()) {
             return $query;
         }
 
-        $table = $this->joinedTable($query->getAttribute());
+        $table = $this->scope->joinTable($query->getAttribute());
 
         return $table === $query->getAttribute() ? $query : new Query($query->getMethod(), $table, $query->getValues(), $query->getAlias());
     }

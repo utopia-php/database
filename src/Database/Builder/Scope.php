@@ -2,6 +2,7 @@
 
 namespace Utopia\Database\Builder;
 
+use Closure;
 use Utopia\Query\Builder;
 
 /**
@@ -23,6 +24,9 @@ interface Scope
     /**
      * Registers the hooks for statements over the collection, stored as $table and named $alias in them when
      * one is given.
+     *
+     * @return list<Closure(): void> What the builder runs before each statement it builds, which reset() does not
+     *                               clear
      */
-    public function bind(Builder $builder, string $collection, string $table, string $alias): void;
+    public function bind(Builder $builder, string $collection, string $table, string $alias): array;
 }

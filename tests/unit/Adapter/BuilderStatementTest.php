@@ -84,7 +84,7 @@ final class BuilderStatementTest extends TestCase
         $internal = $this->internal($class, true);
         $adapter = $this->adapter($class, true);
         $authors = $this->quoted($adapter, $this->raw($adapter, 'authors'));
-        $aliased = $adapter->builder()->from('authors')->from('authors', 'author')->select(['name'])->build()->query;
+        $aliased = $adapter->builder()->from('authors', 'author')->select(['name'])->build()->query;
 
         $this->assertSame([$authors], $this->tenantConditions($reads['select'][0]));
         $this->assertSame([$authors], $this->tenantConditions($reads['aggregate'][0]));
@@ -245,7 +245,7 @@ final class BuilderStatementTest extends TestCase
         $result['delete'] = $this->compile(static fn () => $from('authors')
             ->filter([Query::equal('$id', ['a1'])])
             ->delete());
-        $result['insert'] = $this->compile(static fn () => $from('authors')
+        $result['insert'] = $this->compile(static fn () => $adapter->builder()
             ->into($authors)
             ->set(['_uid' => 'a9', 'name' => 'new'])
             ->insert());

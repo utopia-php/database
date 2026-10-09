@@ -11,5 +11,6 @@ class MariaDB extends Base implements Filtering, Scoping
 {
     use CompilesFilters;
     use PreparesSearchTerms;
+    use RefusesJoinedWrites;
     use ScopesCollections;
 }

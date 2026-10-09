@@ -786,8 +786,8 @@ method as a no-op, so a hook overrides only what it needs:
   `afterDocumentDelete()` take a `Hook\WriteContext` as their last argument. `afterDocumentUpdate()` receives the id
   the document is stored under.
 - `Hook\WriteContext` is an interface the SQL adapters implement: `builder()`, whose `from($table)` reads or deletes
-  the table's rows kept to the adapter's tenant (the builder then reads that table only) and whose `into()` and,
-  before a `from()`, `fromTable()` take the name `rawTable()` returns and keep it to no tenant;
+  the table's rows kept to the adapter's tenant (the builder then reads that table only) and whose `into()` and
+  `fromTable()`, before any `from()`, take the name `rawTable()` returns and keep it to no tenant;
   `rawTable(string $table)`; `run(Statement $statement, Event $event): bool`; `fetch(Statement $statement, Event
   $event): array`; `decorateRow(array $row, Document $document)`; `skipPermissions(Document $document): bool` (the
   update keeps that document's permissions); and `ignoreDuplicates()`.
@@ -2330,19 +2330,30 @@ Skipping authorization does not skip tenancy for `from()`. Under shared tables a
 `update()` or `delete()` is kept to the tenant on its main table; the builder's join methods do not apply to them.
 To read another tenant, select it with `setTenant()` or `withTenant()`; there is no other opt-out. A right or full
 outer join needs the main table named as `from()` names it, and a statement without a main table is refused
-(`Utopia\Database\Exception\Query`). Not scoped for you: `insert()`, which writes exactly the columns you give it,
-`$tenant` included; SQL you write yourself; builders not obtained from `from()` (subqueries, unions, lateral joins);
-and the second table of a dialect's multi-table write (`updateJoin()`, `deleteJoin()`, `updateFrom()`,
-`deleteUsing()`), whose main table keeps its tenant condition.
+(`Utopia\Database\Exception\Query`). Not scoped for you: SQL you write yourself, and builders not obtained from
+`from()` (subqueries, unions, lateral joins).
 
 `from()` builds on the adapter's `builder()` (`Feature\QueryBuilder`), which takes no collection:
 `$adapter->builder()->from($collection, $alias)` is the builder `Database::from($collection, $alias)` hands out,
 without the `Database`'s executor. Its `from()` takes a collection id, and the alias names the main table, which is
-then the name the tenant condition and a right or full outer join pair with. Once it has read a collection, its join
-methods (and joins given to `filter()` or `queries()`) take collection ids too, and it reads that collection only:
-`from()` of another collection, `fromTable()` and `scope()` throw `Utopia\Database\Exception\Query`; start another
-builder instead. A builder that names no collection (`fromNone()`, `into()`, or `fromTable()` before any `from()`,
-which reads a table by the name it is stored under, as do its joins) is kept to no tenant.
+then the name the tenant condition and a right or full outer join pair with. Its joins take collection ids too,
+whether they were added before or after `from()` and through the join methods, `filter()` or `queries()`.
+
+It reads that one collection under that alias. `from()` of it again (after `reset()`, say) keeps its tenant scope,
+and everything that would leave the scope behind throws `Utopia\Database\Exception\Query`; start another builder
+instead:
+
+- `from()` of another collection, or of the same collection under another alias
+- `fromTable()` and `into()`
+- `scope()`
+- a dialect's multi-table write, whose second table the tenant scope does not reach: `updateJoin()` and
+  `deleteJoin()` on MySQL and MariaDB, `updateFrom()` and `deleteUsing()` on PostgreSQL
+
+A builder that names no collection is kept to no tenant: `fromNone()`, `fromTable()`, which reads a table by the
+name it is stored under (as do its joins), and `into()`. An insert goes through such a builder, run with
+`mutate()`, and writes exactly the columns you give it, `$tenant` included:
+`$database->mutate($adapter->builder()->into($table)->set([...])->insert())`, with `$table` the name the table is
+stored under.
 
 ### `exists()` and `notExists()`
 

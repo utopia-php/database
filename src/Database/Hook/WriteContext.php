@@ -17,7 +17,7 @@ interface WriteContext
     /**
      * A builder on the adapter's connection. Its from() takes a table as {@see self::rawTable()} does, to read or
      * delete its rows, limited to the adapter's tenant when tables are shared, and the builder then reads that table
-     * only. Its into() and, on a builder whose from() has named no table, fromTable() take the name rawTable()
+     * only. Its into() and fromTable(), on a builder whose from() has named no table, take the name rawTable()
      * returns and limit it to no tenant, for inserting into, or reaching every tenant of, the table.
      */
     public function builder(): Builder&Scoping;

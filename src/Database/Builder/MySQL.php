@@ -11,5 +11,6 @@ class MySQL extends Base implements Filtering, Scoping
 {
     use CompilesFilters;
     use PreparesSearchTerms;
+    use RefusesJoinedWrites;
     use ScopesCollections;
 }

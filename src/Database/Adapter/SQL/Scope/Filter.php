@@ -51,12 +51,12 @@ final readonly class Filter implements Scope
     }
 
     #[\Override]
-    public function bind(Builder $builder, string $collection, string $table, string $alias): void
+    public function bind(Builder $builder, string $collection, string $table, string $alias): array
     {
         $builder->addHook($this->attributes);
 
         if (! $this->sharedTables) {
-            return;
+            return [];
         }
 
         $source = $alias !== '' ? $alias : $collection;
@@ -72,5 +72,7 @@ final readonly class Filter implements Scope
         $builder
             ->addHook($filter)
             ->addHook(new Tenant\OuterJoin($filter, $source));
+
+        return [];
     }
 }

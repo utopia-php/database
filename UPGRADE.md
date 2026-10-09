@@ -1162,8 +1162,8 @@ coroutine that opened it and the coroutines it starts; see [Pools and profiling]
   `Exception\Unconfirmed` commit, they recreate the table or columns empty and throw a `Utopia\Database\Exception`
   whose `getPrevious()` is the failure. If the removal was stored, this leaves an empty table or column without a
   definition: `createRelationship()` with the same key reuses the columns, and `createCollection()` with the same id
-  throws `Exception\Duplicate` unless tables are shared, where it reuses the table (on MongoDB recreating the
-  collection's indexes). The library does not run `deleteCollection()` again, and the wrapper no longer has the
+  throws `Exception\Duplicate` unless tables are shared, where it reuses the table (on MongoDB creating the
+  collection's indexes again). The library does not run `deleteCollection()` again, and the wrapper no longer has the
   `Unconfirmed` class, so a caller that retries on it runs the delete again: harmless when the removal was not
   stored, and `Exception\NotFound` when it was.
 - **`deleteCollection()` deletes the relationships first.** It deletes each of the collection's relationships, with
@@ -1184,20 +1184,20 @@ coroutine that opened it and the coroutines it starts; see [Pools and profiling]
   rename or relationship update has one message naming its keys: `Failed to rename attribute 'a' to 'b'`, `Failed to
   rename index 'a' to 'b'`, `Failed to rename database 'a' to 'b'` and `Failed to update relationship 'k'`.
   `update()` and `delete()` therefore return `true` whenever they return. An adapter still answers `true` for a
-  state that already holds, such as a database that exists or is already gone. 7.x wrapped those three refusals in the message it uses for an adapter error (`Failed to rename attribute 'a' to 'b': Failed to rename
-  attribute`), so a refusal looked like an engine failure. An error the adapter raises reaches the caller as itself,
+  state that already holds, such as a database that exists or is already gone. 7.x wrapped those three refusals in
+  the message it uses for an adapter error (`Failed to rename attribute 'a' to 'b': Failed to rename attribute`),
+  so a refusal looked like an engine failure. An error the adapter raises reaches the caller as itself,
   except from `renameAttribute()`, `renameIndex()` and `updateRelationship()`: there an `Exception\Duplicate` or
   `Exception\NotFound` (such as MariaDB/MySQL 1054 for a missing column) still reaches the caller as itself, and any
   other error is wrapped in a plain `Utopia\Database\Exception` (`Failed to rename attribute 'a' to 'b': <error>`)
   whose `getPrevious()` is the error. `renameIndex()` and `updateRelationship()` first check whether an earlier
   attempt already made the change, and complete it when it did. 7.x wrapped `Duplicate` and `NotFound` too. Catch
-  `Exception\Refused` to tell a refusal apart instead of matching the message or the nesting of causes. A refused `renameIndex()` no longer renames back and forth to complete an
-  earlier rename: an adapter returns `false` only when the index is under neither name. When `createAttributes()`
+  `Exception\Refused` to tell a refusal apart instead of matching the message or the nesting of causes. A refused
+  `renameIndex()` no longer renames back and forth to complete an earlier rename: an adapter returns `false` only when the index is under neither name. When `createAttributes()`
   falls back to creating the columns one at a time, a column the adapter does not create is refused too; 7.x stored
-  it in the metadata as created, and drops the columns it had already created. On MongoDB, `createCollection()` of
-  a collection that already exists throws `Exception\Duplicate` unless tables are shared or it is the metadata
-  collection, which it reuses after creating its indexes again, and it drops a collection it created but could not
-  give its indexes, so a later create no longer adopts it without them.
+  it in the metadata as created, and drops the columns it had already created. On MongoDB, `createCollection()`
+  drops a collection it created but could not give its indexes, so a later create no longer adopts it without
+  them; see [MongoDB: collections](#mongodb-collections).
 - **`deleteRelationship()` whose drop fails.** The relationship's indexes, or its junction collection's definition,
   are removed before the adapter drops its columns or junction tables, because SQLite cannot drop an indexed column
   and the engines disagree on what a column drop does to its indexes. When the adapter refuses the drop or raises an
@@ -1792,10 +1792,17 @@ key index names only its first field, with no `$type`, and a unique index on an 
 
 ### MongoDB: collections
 
-`Adapter\Mongo::createCollection()` is idempotent: creating a collection that already exists returns `true` instead
-of throwing `Exception\Duplicate`, unless the server itself reports the collection as created concurrently (code 48)
-outside shared tables. `Database::createCollection()` still throws `Duplicate` for a collection whose metadata
-exists.
+`Adapter\Mongo::createCollection()` of a collection that already exists throws `Exception\Duplicate`, as the SQL
+adapters do for an existing table. Under shared tables, and for the metadata collection, it first creates the
+collection's indexes on the existing collection, so a collection another tenant or process created without them gets
+them, and then throws `Duplicate`; `Database::createCollection()` adopts such a collection and stores its definition.
+Outside shared tables `Database::createCollection()` reports the existing collection as `Duplicate` and leaves it as
+it is. A collection whose indexes conflict with ones it already has under the same name (code 85) throws
+`Exception\Index` instead of `Duplicate`. Under shared tables every tenant's collection of an id shares one set of
+indexes, so a tenant that declares an index under a name another tenant uses with other fields fails with the
+server's index-spec conflict (code 86). A collection the create made but could not give its indexes is dropped,
+except inside a transaction, whose abort discards it, and under shared tables, where another tenant may already use
+it; a failed create never drops a shared collection.
 
 `Adapter\Mongo::exists()` reports a database only when the server lists it; it returned `true` for every name.
 `collectionExists()` looks in the database it is given.

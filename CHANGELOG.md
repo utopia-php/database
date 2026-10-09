@@ -495,10 +495,13 @@ have to make, with the 7.x and 8.0 forms side by side.
 
 - `deleteRelationship()` recreates the relationship's indexes, or its junction collection's definition, when the
   adapter refuses or fails to drop the relationship, instead of leaving them dropped while the relationship stays.
-- On MongoDB, `createCollection()` of an existing collection throws `Exception\Duplicate`, as on the SQL adapters,
-  instead of adopting it without its indexes, unless tables are shared or it is the metadata collection, which it
-  reuses after creating its indexes again. A collection it created but could not give its indexes is dropped,
+- On MongoDB, `Adapter\Mongo::createCollection()` of an existing collection throws `Exception\Duplicate`, as on the
+  SQL adapters, instead of adopting it without its indexes; under shared tables and for the metadata collection it
+  first creates the collection's indexes, and `Database::createCollection()` adopts the collection. An index
+  conflict (code 85) throws `Exception\Index`. A collection it created but could not give its indexes is dropped,
   outside a transaction and unless tables are shared, and a refused `createCollection()` stores no definition.
+- Under shared tables, `createCollection()` no longer drops the table when storing the definition fails: another
+  tenant may already have adopted it, and the drop removed every tenant's documents.
 - `createAttributes()` drops the columns it created one at a time before a later column failed, instead of leaving
   them in the schema without a definition.
 - `updateRelationship()` completes an earlier attempt only when every column it renames is already under its new
@@ -758,7 +761,7 @@ have to make, with the 7.x and 8.0 forms side by side.
   or deleting an attribute whose key contains a dot acts on its stored values; `sum()` filters on and sums attributes
   whose key contains a dot; a stored `null` tenant reads back as `$tenant`. `contains`, `notContains`, `notSearch`,
   `notStartsWith` and `notEndsWith` match values containing `$` followed by letters (such as `$USD`) instead of
-  throwing. `Adapter\Mongo::createCollection()` returns `true` for a collection that already exists.
+  throwing.
 - On an adapter without `Capability::OrderRandom` (MongoDB), `orderRandom()` fails validation with `Exception\Query`
   (`Random order is not supported by this adapter`). MongoDB threw a generic `Exception` from the adapter.
 - `find()` refuses `Query::distinct()` on adapters without aggregation support (Memory, Redis, MongoDB) with

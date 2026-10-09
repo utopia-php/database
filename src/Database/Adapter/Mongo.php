@@ -21,6 +21,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
@@ -919,7 +920,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
             $options = $this->getTransactionOptions();
             $indexesCreated = $this->client->createIndexes($id, $internalIndex, $options);
         } catch (Exception $error) {
-            throw $this->processException($error);
+            throw $this->indexCreationError($error);
         }
 
         if (! $indexesCreated) {
@@ -1000,7 +1001,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
                 $options = $this->getTransactionOptions();
                 $indexesCreated = $this->getClient()->createIndexes($id, \array_values($newIndexes), $options);
             } catch (Exception $error) {
-                throw $this->processException($error);
+                throw $this->indexCreationError($error);
             }
 
             if (! $indexesCreated) {
@@ -1009,6 +1010,19 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         }
 
         return true;
+    }
+
+    /**
+     * An index the collection's indexes conflict with, such as one under the same name with other options (code
+     * 85), is an index error of the create, not the collection already existing.
+     */
+    private function indexCreationError(Exception $error): Throwable
+    {
+        $mapped = $this->processException($error);
+
+        return $mapped instanceof DuplicateException
+            ? new IndexException($mapped->getMessage(), previous: $error)
+            : $mapped;
     }
 
     /**

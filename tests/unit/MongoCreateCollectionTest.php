@@ -11,6 +11,7 @@ use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Attribute;
 use Utopia\Database\Database;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Index;
 use Utopia\Mongo\Client;
@@ -86,7 +87,7 @@ final class MongoCreateCollectionTest extends TestCase
         $this->assertSame($error, $failure->getPrevious());
     }
 
-    public function testAFailureCreatingTheDeclaredIndexesIsMapped(): void
+    public function testAConflictCreatingTheDeclaredIndexesIsAnIndexError(): void
     {
         $error = new MongoException('Index with name: title already exists with different options', 85);
         $adapter = $this->indexFailingAdapter($error, failingCall: 2);
@@ -94,7 +95,7 @@ final class MongoCreateCollectionTest extends TestCase
         try {
             $adapter->createCollection('orders', [Attribute::string(key: 'title', size: 64)], [Index::key(key: 'title', attributes: ['title'])]);
             $this->fail('The collection was created');
-        } catch (DuplicateException $failure) {
+        } catch (IndexException $failure) {
             $this->assertSame('Index already exists', $failure->getMessage());
             $this->assertSame($error, $failure->getPrevious());
         }

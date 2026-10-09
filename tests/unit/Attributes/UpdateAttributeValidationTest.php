@@ -476,7 +476,12 @@ final class UpdateAttributeValidationTest extends TestCase
         });
         $before = $this->definitions($database);
 
-        $this->assertRefused('Failed to update attribute', fn (): mixed => $database->updateAttribute(self::COLLECTION, 'label', new AttributeUpdate(size: 128)));
+        try {
+            $database->updateAttribute(self::COLLECTION, 'label', new AttributeUpdate(size: 128));
+            $this->fail('an update the adapter does not apply must be refused');
+        } catch (RefusedException $error) {
+            $this->assertSame('Failed to update attribute', $error->getMessage());
+        }
         $this->assertSame($before, $this->definitions($database));
     }
 

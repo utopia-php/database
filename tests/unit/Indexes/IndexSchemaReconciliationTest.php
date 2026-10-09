@@ -285,7 +285,7 @@ final class IndexSchemaReconciliationTest extends TestCase
         try {
             $operation();
             $this->fail('the operation must be refused');
-        } catch (DatabaseException $error) {
+        } catch (RefusedException $error) {
             $this->assertSame($message, $error->getMessage());
         }
     }

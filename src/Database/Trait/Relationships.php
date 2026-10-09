@@ -91,6 +91,7 @@ trait Relationships
      * @throws DuplicateException
      * @throws LimitException
      * @throws NotFoundException
+     * @throws RefusedException When the adapter does not create the relationship
      * @throws StructureException
      */
     public function createRelationship(string $collection, Relationship $relationship): Relationship
@@ -155,25 +156,7 @@ trait Relationships
             }
         }
 
-        $created = false;
-
-        try {
-            $created = $adapter->createRelationship($collectionId, $relationship);
-
-            if (! $created) {
-                if ($junctionCollection !== null) {
-                    try {
-                        $this->silent(fn () => $this->cleanupCollection($junctionCollection));
-                    } catch (Throwable $error) {
-                        Console::error("Failed to cleanup junction collection '{$junctionCollection}': ".$error->getMessage());
-                    }
-                }
-                throw new DatabaseException('Failed to create relationship');
-            }
-        } catch (DuplicateException) {
-            // The metadata checks above found no such relationship, so the schema holds an orphan of a prior partial
-            // failure: keep it and write the metadata.
-        }
+        $created = $this->createRelationshipInSchema($adapter, $collectionId, $relationship, $junctionCollection);
 
         $collection->setAttribute(self::COLLECTION_ATTRIBUTES, $parent->toDocument(), SetType::Append);
         $relatedCollection->setAttribute(self::COLLECTION_ATTRIBUTES, $child->toDocument(), SetType::Append);
@@ -443,6 +426,7 @@ trait Relationships
      * @throws ConflictException
      * @throws DatabaseException
      * @throws NotFoundException
+     * @throws RefusedException When the adapter does not drop the relationship
      * @throws StructureException
      */
     public function deleteRelationship(string $collection, string $key): void
@@ -491,17 +475,7 @@ trait Relationships
         $collection->setAttribute(self::COLLECTION_ATTRIBUTES, $collectionAttributes);
         $relatedCollection->setAttribute(self::COLLECTION_ATTRIBUTES, $relatedCollectionAttributes);
 
-        $shouldRollback = false;
-        try {
-            $deleted = $adapter->deleteRelationship($collection->getId(), $relationship, $side);
-
-            if (! $deleted) {
-                throw new DatabaseException('Failed to delete relationship');
-            }
-            $shouldRollback = true;
-        } catch (NotFoundException) {
-            // The relationship is already absent from the schema.
-        }
+        $shouldRollback = $this->deleteRelationshipFromSchema($adapter, $collection->getId(), $relationship, $side);
 
         try {
             $this->withRetries(function () use ($collection, $relatedCollection) {
@@ -543,6 +517,57 @@ trait Relationships
         if ($listeners !== []) {
             $this->dispatch(new Event\Attribute\Deleted($collection->getId(), $attribute), $listeners);
         }
+    }
+
+    /**
+     * @return bool True when this call created the relationship, false when the schema already held it
+     *
+     * @throws RefusedException When the adapter does not create the relationship; its junction collection is dropped
+     */
+    private function createRelationshipInSchema(Feature\Relationships $adapter, string $collection, Relationship $relationship, ?string $junctionCollection): bool
+    {
+        try {
+            $created = $adapter->createRelationship($collection, $relationship);
+        } catch (DuplicateException) {
+            // The metadata checks found no such relationship, so the schema holds an orphan of a prior partial
+            // failure: keep it and write the metadata.
+            return false;
+        }
+
+        if ($created) {
+            return true;
+        }
+
+        if ($junctionCollection !== null) {
+            try {
+                $this->silent(fn () => $this->cleanupCollection($junctionCollection));
+            } catch (Throwable $error) {
+                Console::error("Failed to cleanup junction collection '{$junctionCollection}': ".$error->getMessage());
+            }
+        }
+
+        throw new RefusedException('Failed to create relationship');
+    }
+
+    /**
+     * @return bool True when this call dropped the relationship, false when the schema no longer held it
+     *
+     * @throws RefusedException When the adapter does not drop the relationship
+     */
+    private function deleteRelationshipFromSchema(Feature\Relationships $adapter, string $collection, Relationship $relationship, RelationshipSide $side): bool
+    {
+        try {
+            $deleted = $adapter->deleteRelationship($collection, $relationship, $side);
+        } catch (NotFoundException) {
+            // The relationship is already absent from the schema.
+            return false;
+        }
+
+        if (! $deleted) {
+            throw new RefusedException('Failed to delete relationship');
+        }
+
+        return true;
     }
 
     private function getJunctionCollection(Document $collection, Document $relatedCollection, RelationshipSide $side): string

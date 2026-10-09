@@ -43,6 +43,7 @@ trait Attributes
      * @throws DuplicateException
      * @throws LimitException
      * @throws NotFoundException
+     * @throws RefusedException When the adapter does not create the column
      * @throws Exception
      */
     public function createAttribute(string $collection, Attribute $attribute): Attribute
@@ -60,22 +61,7 @@ trait Attributes
             $existsInSchema = $this->reconcileSchemaOnlyColumn($definition, $attribute, $schemaAttributes, $error);
         }
 
-        $created = false;
-
-        if (! $existsInSchema) {
-            try {
-                $created = $this->adapter->createAttribute($definition->getId(), $attribute);
-
-                if (! $created) {
-                    throw new DatabaseException('Failed to create attribute');
-                }
-            } catch (MismatchException $error) {
-                throw $error;
-            } catch (DuplicateException) {
-                // The column exists only in the physical schema (the metadata check above passed),
-                // so the metadata is written for it.
-            }
-        }
+        $created = ! $existsInSchema && $this->createAttributeInSchema($definition->getId(), $attribute);
 
         $definition->setAttribute(self::COLLECTION_ATTRIBUTES, $attribute->toDocument(), SetType::Append);
 
@@ -106,6 +92,7 @@ trait Attributes
      * @throws DuplicateException
      * @throws LimitException
      * @throws NotFoundException
+     * @throws RefusedException When the adapter does not create the columns
      * @throws StructureException
      * @throws Exception
      */
@@ -141,31 +128,7 @@ trait Attributes
             }
         }
 
-        $created = [];
-
-        if ($toCreate !== []) {
-            try {
-                if (! $this->adapter->createAttributes($definition->getId(), $toCreate)) {
-                    throw new DatabaseException('Failed to create attributes');
-                }
-                $created = $toCreate;
-            } catch (MismatchException $error) {
-                throw $error;
-            } catch (DuplicateException) {
-                // At least one column already exists, so each is created on its own and the
-                // duplicates are skipped.
-                foreach ($toCreate as $attribute) {
-                    try {
-                        $this->adapter->createAttribute($definition->getId(), $attribute);
-                        $created[] = $attribute;
-                    } catch (MismatchException $error) {
-                        throw $error;
-                    } catch (DuplicateException) {
-                        // Already in the schema.
-                    }
-                }
-            }
-        }
+        $created = $toCreate === [] ? [] : $this->createAttributesInSchema($definition->getId(), $toCreate);
 
         foreach ($stored as $attribute) {
             $definition->setAttribute(self::COLLECTION_ATTRIBUTES, $attribute->toDocument(), SetType::Append);
@@ -209,6 +172,7 @@ trait Attributes
      * @throws IndexException
      * @throws LimitException
      * @throws NotFoundException
+     * @throws RefusedException When the adapter does not alter the column
      * @throws StructureException
      * @throws Exception
      */
@@ -309,11 +273,11 @@ trait Attributes
             $updatedInSchema = $this->adapter->updateAttribute($definition->getId(), $key, $updated);
 
             if (! $updatedInSchema) {
-                throw new DatabaseException('Failed to update attribute');
+                throw new RefusedException('Failed to update attribute');
             }
         } elseif ($stored->required && ! $updated->required) {
             if (! $this->adapter->relaxAttributeRequired($definition->getId(), $key)) {
-                throw new DatabaseException('Failed to update attribute');
+                throw new RefusedException('Failed to update attribute');
             }
         }
 
@@ -377,6 +341,7 @@ trait Attributes
      * @throws DatabaseException
      * @throws DependencyException
      * @throws NotFoundException
+     * @throws RefusedException When the adapter does not drop the column
      */
     public function deleteAttribute(string $collection, string $key): void
     {
@@ -411,15 +376,7 @@ trait Attributes
         $this->writeAttributes($definition, \array_values($attributes));
         $this->writeIndexes($definition, self::withoutIndexedAttribute($indexes, $key));
 
-        $deletedInSchema = false;
-        try {
-            if (! $this->adapter->deleteAttribute($definition->getId(), $key)) {
-                throw new DatabaseException('Failed to delete attribute');
-            }
-            $deletedInSchema = true;
-        } catch (NotFoundException) {
-            // Already absent from the schema; the metadata is still removed below.
-        }
+        $deletedInSchema = $this->deleteAttributeFromSchema($definition->getId(), $key);
 
         $this->updateMetadata(
             collection: $definition,
@@ -505,6 +462,84 @@ trait Attributes
         if ($listeners !== []) {
             $this->dispatch(new Event\Attribute\Renamed($definition->getId(), $old, $renamed), $listeners);
         }
+    }
+
+    /**
+     * @return bool True when this call created the column, false when the schema already held it
+     *
+     * @throws MismatchException When the schema holds the column with another type
+     * @throws RefusedException When the adapter does not create the column
+     */
+    private function createAttributeInSchema(string $collection, Attribute $attribute): bool
+    {
+        try {
+            $created = $this->adapter->createAttribute($collection, $attribute);
+        } catch (MismatchException $error) {
+            throw $error;
+        } catch (DuplicateException) {
+            // The column exists only in the physical schema (the metadata check passed), so the metadata is
+            // written for it.
+            return false;
+        }
+
+        if (! $created) {
+            throw new RefusedException('Failed to create attribute');
+        }
+
+        return true;
+    }
+
+    /**
+     * @param  non-empty-list<Attribute>  $attributes
+     * @return list<Attribute> The attributes this call created, without those the schema already held
+     *
+     * @throws MismatchException When the schema holds one of the columns with another type
+     * @throws RefusedException When the adapter does not create the columns
+     */
+    private function createAttributesInSchema(string $collection, array $attributes): array
+    {
+        try {
+            $created = $this->adapter->createAttributes($collection, $attributes);
+        } catch (MismatchException $error) {
+            throw $error;
+        } catch (DuplicateException) {
+            // At least one column already exists, so each is created on its own and the duplicates are skipped.
+            $created = [];
+            foreach ($attributes as $attribute) {
+                if ($this->createAttributeInSchema($collection, $attribute)) {
+                    $created[] = $attribute;
+                }
+            }
+
+            return $created;
+        }
+
+        if (! $created) {
+            throw new RefusedException('Failed to create attributes');
+        }
+
+        return $attributes;
+    }
+
+    /**
+     * @return bool True when this call dropped the column, false when the schema no longer held it
+     *
+     * @throws RefusedException When the adapter does not drop the column
+     */
+    private function deleteAttributeFromSchema(string $collection, string $key): bool
+    {
+        try {
+            $deleted = $this->adapter->deleteAttribute($collection, $key);
+        } catch (NotFoundException) {
+            // Already absent from the schema; the metadata is still removed.
+            return false;
+        }
+
+        if (! $deleted) {
+            throw new RefusedException('Failed to delete attribute');
+        }
+
+        return true;
     }
 
     /**

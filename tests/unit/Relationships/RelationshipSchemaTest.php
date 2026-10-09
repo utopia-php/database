@@ -210,7 +210,7 @@ final class RelationshipSchemaTest extends TestCase
             }
         });
 
-        $this->assertInstanceOf(DatabaseException::class, $error);
+        $this->assertInstanceOf(RefusedException::class, $error);
         $this->assertSame('Failed to create relationship', $error->getMessage());
         $this->assertStringContainsString('Failed to cleanup junction collection', $log);
         $this->assertNotContains('writers', $this->attributeKeys($database, 'books'));
@@ -480,7 +480,7 @@ final class RelationshipSchemaTest extends TestCase
         try {
             $database->deleteRelationship('books', 'author');
             $this->fail('an adapter that does not drop the relationship must fail the delete');
-        } catch (DatabaseException $error) {
+        } catch (RefusedException $error) {
             $this->assertSame('Failed to delete relationship', $error->getMessage());
         }
 

@@ -10,9 +10,9 @@ use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
-use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Mismatch as MismatchException;
+use Utopia\Database\Exception\Refused as RefusedException;
 use Utopia\Database\Validator\Authorization;
 
 /**
@@ -29,7 +29,7 @@ final class AdapterRefusalTest extends TestCase
         try {
             $database->createAttribute(self::COLLECTION, Attribute::string(key: 'title', size: 64));
             $this->fail('An attribute the adapter did not create must be an error');
-        } catch (DatabaseException $error) {
+        } catch (RefusedException $error) {
             $this->assertSame('Failed to create attribute', $error->getMessage());
         }
 
@@ -43,8 +43,25 @@ final class AdapterRefusalTest extends TestCase
         try {
             $database->createAttributes(self::COLLECTION, [Attribute::string(key: 'title', size: 64), Attribute::integer(key: 'age')]);
             $this->fail('A batch the adapter did not create must be an error');
-        } catch (DatabaseException $error) {
+        } catch (RefusedException $error) {
             $this->assertSame('Failed to create attributes', $error->getMessage());
+        }
+
+        $this->assertSame([], $database->getCollection(self::COLLECTION)->attributes());
+    }
+
+    public function testAColumnTheAdapterDidNotCreateWhileCreatingADuplicateBatchOneByOneIsRefused(): void
+    {
+        $database = $this->database(
+            createAttribute: static fn (Attribute $attribute): bool => $attribute->key !== 'age',
+            createAttributes: static fn (): bool => throw new DuplicateException('Attribute already exists'),
+        );
+
+        try {
+            $database->createAttributes(self::COLLECTION, [Attribute::string(key: 'title', size: 64), Attribute::integer(key: 'age')]);
+            $this->fail('A column the adapter did not create must not be stored as created');
+        } catch (RefusedException $error) {
+            $this->assertSame('Failed to create attribute', $error->getMessage());
         }
 
         $this->assertSame([], $database->getCollection(self::COLLECTION)->attributes());

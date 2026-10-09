@@ -17,6 +17,7 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Refused as RefusedException;
 use Utopia\Database\Permission;
 use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
@@ -56,7 +57,7 @@ final class RelaxRequiredTest extends TestCase
         try {
             $database->updateAttribute('items', 'name', new AttributeUpdate(required: false));
             $this->fail('Expected the unconfirmed relax to surface');
-        } catch (DatabaseException $error) {
+        } catch (RefusedException $error) {
             $this->assertSame('Failed to update attribute', $error->getMessage());
         }
 

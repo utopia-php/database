@@ -36,6 +36,7 @@ trait Indexes
      * @throws IndexException
      * @throws LimitException
      * @throws NotFoundException
+     * @throws RefusedException When the adapter does not create the index
      * @throws StructureException
      * @throws UniqueException
      * @throws Exception
@@ -59,6 +60,7 @@ trait Indexes
      * @throws IndexException
      * @throws LimitException
      * @throws NotFoundException
+     * @throws RefusedException When the adapter does not create an index
      * @throws StructureException
      * @throws UniqueException
      * @throws Exception
@@ -137,6 +139,7 @@ trait Indexes
      * @throws ConflictException
      * @throws DatabaseException
      * @throws NotFoundException
+     * @throws RefusedException When the adapter does not drop the index
      * @throws StructureException
      */
     public function deleteIndex(string $collection, string $key): void
@@ -151,15 +154,7 @@ trait Indexes
 
         $deleted = $indexes[$position];
 
-        $deletedInSchema = false;
-        try {
-            if (! $this->adapter->deleteIndex($definition->getId(), $key)) {
-                throw new DatabaseException('Failed to delete index');
-            }
-            $deletedInSchema = true;
-        } catch (NotFoundException) {
-            // Already absent from the schema; the metadata is still removed below.
-        }
+        $deletedInSchema = $this->deleteIndexFromSchema($definition->getId(), $key);
 
         unset($indexes[$position]);
         $this->writeIndexList($definition, \array_values($indexes));
@@ -190,6 +185,7 @@ trait Indexes
      * @throws DuplicateException
      * @throws IndexException
      * @throws LimitException
+     * @throws RefusedException When the adapter does not create an index
      * @throws UniqueException
      * @throws Exception
      */
@@ -300,6 +296,7 @@ trait Indexes
      *
      * @throws DatabaseException
      * @throws DuplicateException
+     * @throws RefusedException When the adapter does not create the index
      * @throws UniqueException When the stored documents violate a unique index
      */
     private function createIndexInSchema(string $collection, Index $index, array $attributes): bool
@@ -309,15 +306,38 @@ trait Indexes
         }
 
         try {
-            if (! $this->adapter->createIndex($collection, $index, self::indexAttributeTypes($index, $attributes))) {
-                throw new DatabaseException('Failed to create index');
-            }
+            $created = $this->adapter->createIndex($collection, $index, self::indexAttributeTypes($index, $attributes));
         } catch (UniqueException $error) {
             throw $error;
         } catch (DuplicateException) {
             // The metadata holds no index under this key, so the schema's copy is an orphan of a
             // partial failure: it is kept and the metadata written for it.
             return false;
+        }
+
+        if (! $created) {
+            throw new RefusedException('Failed to create index');
+        }
+
+        return true;
+    }
+
+    /**
+     * @return bool True when this call dropped the index, false when the schema no longer held it
+     *
+     * @throws RefusedException When the adapter does not drop the index
+     */
+    private function deleteIndexFromSchema(string $collection, string $key): bool
+    {
+        try {
+            $deleted = $this->adapter->deleteIndex($collection, $key);
+        } catch (NotFoundException) {
+            // Already absent from the schema; the metadata is still removed.
+            return false;
+        }
+
+        if (! $deleted) {
+            throw new RefusedException('Failed to delete index');
         }
 
         return true;

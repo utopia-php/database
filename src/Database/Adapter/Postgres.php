@@ -977,9 +977,10 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         $this->executeStatement($sql, Event::IndexRename);
 
         $names = [$newIndexName];
-        $creator = $this->sharedTables ? $this->getCollectionCreator($collection) : null;
-        if ($creator !== null && $creator !== (string) $this->currentTenant()) {
-            \array_push($names, $this->getIndexName($name, $old, $creator), $this->getIndexName($name, $new, $creator));
+        if ($this->sharedTables) {
+            foreach ($this->getCollectionCreators($collection) as $creator) {
+                \array_push($names, $this->getIndexName($name, $old, $creator), $this->getIndexName($name, $new, $creator));
+            }
         }
 
         return $this->anyIndexExists($names);
@@ -991,12 +992,15 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     /**
-     * The tenant whose definition of a shared collection was stored first: the one that created its table and the
-     * indexes declared with it, which back the same indexes of every later tenant.
+     * The tenant whose definition of a shared collection was stored first, null for a tenantless one: the one that
+     * created its table and the indexes declared with it, which back the same indexes of every later tenant. Empty
+     * when the collection has no definition, so a tenantless creator is told apart from none.
+     *
+     * @return list<int|string|null>
      *
      * @throws DatabaseException
      */
-    private function getCollectionCreator(string $collection): ?string
+    private function getCollectionCreators(string $collection): array
     {
         $statement = $this->prepareStatement(
             'SELECT '.$this->quote(Storage::TENANT).' FROM '.$this->getTable(Database::METADATA).' WHERE '.$this->quote(Storage::UID).' = ? ORDER BY '.$this->quote(Storage::SEQUENCE).' ASC LIMIT 1',
@@ -1006,17 +1010,19 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
 
         try {
             $this->execute($statement);
-            $tenant = $statement->fetchColumn();
+            $row = $statement->fetch(PDO::FETCH_NUM);
             $statement->closeCursor();
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
 
-        return match (true) {
-            \is_int($tenant) => (string) $tenant,
-            \is_string($tenant) => $tenant,
-            default => null,
-        };
+        if (! \is_array($row)) {
+            return [];
+        }
+
+        $tenant = $row[0] ?? null;
+
+        return [\is_int($tenant) || \is_string($tenant) ? $tenant : null];
     }
 
     /**

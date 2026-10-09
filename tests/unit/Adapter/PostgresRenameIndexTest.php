@@ -14,7 +14,7 @@ final class PostgresRenameIndexTest extends TestCase
     /** @var list<string> */
     private array $indexes = [];
 
-    /** @var list<string> The tenants of the collection's definitions, in the order they were stored */
+    /** @var list<string|null> The tenants of the collection's definitions, in the order they were stored */
     private array $tenants = [];
 
     /** @var list<string> */
@@ -89,6 +89,21 @@ final class PostgresRenameIndexTest extends TestCase
         $this->assertSame(['namespace_1_users_byAge'], $this->indexes);
     }
 
+    public function testSharedTablesCompleteARenameFromTheIndexATenantlessCreatorMade(): void
+    {
+        $this->indexes = ['namespace__users_byAge'];
+        $this->tenants = [null, '2'];
+
+        $this->assertTrue($this->adapter(shared: true)->renameIndex('users', 'byAge', 'byYears'));
+    }
+
+    public function testSharedTablesReportARenameOfACollectionWithNoDefinitionOnlyFromTheTenantsIndex(): void
+    {
+        $this->indexes = ['namespace__users_byAge'];
+
+        $this->assertFalse($this->adapter(shared: true)->renameIndex('users', 'byAge', 'byYears'));
+    }
+
     private function adapter(bool $shared): Postgres
     {
         $pdo = $this->createStub(PDO::class);
@@ -124,7 +139,7 @@ final class PostgresRenameIndexTest extends TestCase
 
                 return [];
             });
-            $statement->method('fetchColumn')->willReturnCallback(fn (): string|false => \str_contains($query, '_metadata') ? ($this->tenants[0] ?? false) : false);
+            $statement->method('fetch')->willReturnCallback(fn (): array|false => \str_contains($query, '_metadata') && $this->tenants !== [] ? [$this->tenants[0]] : false);
 
             return $statement;
         });

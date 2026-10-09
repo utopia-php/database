@@ -18,6 +18,7 @@ use Utopia\Database\Exception\NotFound;
 use Utopia\Database\Exception\Operator;
 use Utopia\Database\Exception\Order;
 use Utopia\Database\Exception\Query;
+use Utopia\Database\Exception\Refused;
 use Utopia\Database\Exception\Relationship;
 use Utopia\Database\Exception\Restricted;
 use Utopia\Database\Exception\Schema;
@@ -60,6 +61,7 @@ final class HierarchyTest extends TestCase
             'conflict' => [Conflict::class, Exception::class],
             'not found' => [NotFound::class, Exception::class],
             'restricted' => [Restricted::class, Exception::class],
+            'refused' => [Refused::class, Exception::class],
         ];
     }
 
@@ -81,6 +83,7 @@ final class HierarchyTest extends TestCase
         return [
             'timeout' => [Timeout::class],
             'unconfirmed' => [Unconfirmed::class],
+            'refused' => [Refused::class],
         ];
     }
 

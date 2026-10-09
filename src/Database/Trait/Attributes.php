@@ -20,6 +20,7 @@ use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Mismatch as MismatchException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Refused as RefusedException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Index;
 use Utopia\Database\Schema;
@@ -443,6 +444,7 @@ trait Attributes
      * @throws DependencyException
      * @throws DuplicateException
      * @throws NotFoundException
+     * @throws RefusedException When the adapter does not rename the column
      * @throws StructureException
      */
     public function renameAttribute(string $collection, string $old, string $new): void
@@ -476,13 +478,15 @@ trait Attributes
         $attributes = self::replacing($attributes, $old, $renamed);
 
         try {
-            if (! $this->adapter->renameAttribute($definition->getId(), $old, $new)) {
-                throw new DatabaseException('Failed to rename attribute');
-            }
+            $renamedInSchema = $this->adapter->renameAttribute($definition->getId(), $old, $new);
         } catch (DuplicateException $error) {
             throw $error;
         } catch (Throwable $error) {
             throw new DatabaseException("Failed to rename attribute '{$old}' to '{$new}': ".$error->getMessage(), previous: $error);
+        }
+
+        if (! $renamedInSchema) {
+            throw new RefusedException("Failed to rename attribute '{$old}' to '{$new}'");
         }
 
         $this->writeAttributes($definition, $attributes);

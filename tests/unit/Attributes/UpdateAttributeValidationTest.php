@@ -6,6 +6,7 @@ use PDO;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
+use Throwable;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
@@ -19,8 +20,10 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Refused as RefusedException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Format;
 use Utopia\Database\Permission;
@@ -477,7 +480,7 @@ final class UpdateAttributeValidationTest extends TestCase
         $this->assertSame($before, $this->definitions($database));
     }
 
-    public function testARenameTheAdapterDoesNotApplyIsReportedWithBothNames(): void
+    public function testARenameTheAdapterDoesNotApplyIsRefusedWithBothNames(): void
     {
         $database = $this->database(new class () extends Memory {
             #[\Override]
@@ -488,18 +491,73 @@ final class UpdateAttributeValidationTest extends TestCase
         });
         $before = $this->definitions($database);
 
-        $this->assertRefused(
-            "Failed to rename attribute 'label' to 'caption': Failed to rename attribute",
-            fn () => $database->renameAttribute(self::COLLECTION, 'label', 'caption'),
-        );
+        try {
+            $database->renameAttribute(self::COLLECTION, 'label', 'caption');
+            $this->fail('a rename the adapter does not apply must be refused');
+        } catch (RefusedException $error) {
+            $this->assertSame("Failed to rename attribute 'label' to 'caption'", $error->getMessage());
+            $this->assertNull($error->getPrevious());
+        }
+
         $this->assertSame($before, $this->definitions($database));
     }
 
     public function testARenameFailureOnASchemaIntrospectingAdapterIsWrappedWithTheCause(): void
     {
         $cause = new RuntimeException('the engine refused the rename');
-        $database = $this->database(new class (new PDO('sqlite::memory:'), $cause) extends SQLite {
-            public function __construct(object $pdo, private readonly RuntimeException $cause)
+        $database = $this->database($this->renameFailingSQLite($cause));
+        $before = $this->definitions($database);
+
+        try {
+            $database->renameAttribute(self::COLLECTION, 'label', 'caption');
+            $this->fail('a failed rename must be reported');
+        } catch (DatabaseException $error) {
+            $this->assertNotInstanceOf(RefusedException::class, $error);
+            $this->assertSame("Failed to rename attribute 'label' to 'caption': the engine refused the rename", $error->getMessage());
+            $this->assertSame($cause, $error->getPrevious());
+        }
+
+        $this->assertSame($before, $this->definitions($database));
+    }
+
+    public function testARenameTheEngineFailsWithALibraryErrorIsWrappedAndNotARefusal(): void
+    {
+        $cause = new DatabaseException('SQLSTATE[HY000]: General error');
+        $database = $this->database($this->renameFailingSQLite($cause));
+        $before = $this->definitions($database);
+
+        try {
+            $database->renameAttribute(self::COLLECTION, 'label', 'caption');
+            $this->fail('a failed rename must be reported');
+        } catch (DatabaseException $error) {
+            $this->assertNotInstanceOf(RefusedException::class, $error);
+            $this->assertSame("Failed to rename attribute 'label' to 'caption': SQLSTATE[HY000]: General error", $error->getMessage());
+            $this->assertSame($cause, $error->getPrevious());
+        }
+
+        $this->assertSame($before, $this->definitions($database));
+    }
+
+    public function testARenameOntoAColumnTheSchemaHoldsIsTheAdaptersDuplicate(): void
+    {
+        $duplicate = new DuplicateException('Attribute already exists');
+        $database = $this->database($this->renameFailingSQLite($duplicate));
+        $before = $this->definitions($database);
+
+        try {
+            $database->renameAttribute(self::COLLECTION, 'label', 'caption');
+            $this->fail('a rename onto an existing column must be a duplicate');
+        } catch (DuplicateException $error) {
+            $this->assertSame($duplicate, $error);
+        }
+
+        $this->assertSame($before, $this->definitions($database));
+    }
+
+    private function renameFailingSQLite(Throwable $failure): SQLite
+    {
+        return new class (new PDO('sqlite::memory:'), $failure) extends SQLite {
+            public function __construct(object $pdo, private readonly Throwable $failure)
             {
                 parent::__construct($pdo);
             }
@@ -507,20 +565,9 @@ final class UpdateAttributeValidationTest extends TestCase
             #[\Override]
             public function renameAttribute(string $collection, string $old, string $new): bool
             {
-                throw $this->cause;
+                throw $this->failure;
             }
-        });
-        $before = $this->definitions($database);
-
-        try {
-            $database->renameAttribute(self::COLLECTION, 'label', 'caption');
-            $this->fail('a failed rename must be reported');
-        } catch (DatabaseException $error) {
-            $this->assertSame("Failed to rename attribute 'label' to 'caption': the engine refused the rename", $error->getMessage());
-            $this->assertSame($cause, $error->getPrevious());
-        }
-
-        $this->assertSame($before, $this->definitions($database));
+        };
     }
 
     public function testAValidVectorUpdateIsStored(): void

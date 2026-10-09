@@ -31,7 +31,7 @@ class AttributeTest extends TestCase
         ]));
 
         $this->assertSame(ColumnType::BigInteger, $attribute->type);
-        $this->assertSame(8, $attribute->size);
+        $this->assertNull($attribute->size);
         $this->assertSame('bigint', $attribute->toDocument()->getAttribute('type'));
 
         $arrayAttribute = Attribute::fromArray([
@@ -41,7 +41,7 @@ class AttributeTest extends TestCase
         ]);
 
         $this->assertSame(ColumnType::BigInteger, $arrayAttribute->type);
-        $this->assertSame(64, $arrayAttribute->size);
+        $this->assertNull($arrayAttribute->size);
     }
 
     public function testBigIntegerDefaultsSupportNativeAndStringBoundaries(): void

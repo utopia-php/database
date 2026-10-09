@@ -786,10 +786,11 @@ method as a no-op, so a hook overrides only what it needs:
   `afterDocumentDelete()` take a `Hook\WriteContext` as their last argument. `afterDocumentUpdate()` receives the id
   the document is stored under.
 - `Hook\WriteContext` is an interface the SQL adapters implement: `builder()`, whose `from($table)` reads or deletes
-  the table's rows kept to the adapter's tenant and whose `into()` and `fromTable()` take the name `rawTable()`
-  returns and keep it to no tenant, `rawTable(string $table)`, `run(Statement $statement, Event $event): bool`,
-  `fetch(Statement $statement, Event $event): array`, `decorateRow(array $row, Document $document)`, `skipPermissions(Document $document): bool` (the
-  update keeps that document's permissions) and `ignoreDuplicates()`.
+  the table's rows kept to the adapter's tenant (the builder then reads that table only) and whose `into()` and,
+  before a `from()`, `fromTable()` take the name `rawTable()` returns and keep it to no tenant;
+  `rawTable(string $table)`; `run(Statement $statement, Event $event): bool`; `fetch(Statement $statement, Event
+  $event): array`; `decorateRow(array $row, Document $document)`; `skipPermissions(Document $document): bool` (the
+  update keeps that document's permissions); and `ignoreDuplicates()`.
 
 ### Subclasses of `Database`
 
@@ -1536,7 +1537,7 @@ mode.
 
   | 7.x | 8.0 |
   |---|---|
-  | `getSQLTable()`, `getSQLTableRaw()` | `getTable()`, `getTableRaw()` |
+  | `getSQLTable()`, `getSQLTableRaw()` | `qualifyTable(string $database, string $namespace, string $name)`: `getTable()` and `getTableRaw()` are final and both derive from it |
   | `getSQLType()`, `getSQLIndex()`, `getSpatialSQLType()`, `getOperatorSQL()`, `getPDOType()`, `getSQLReadableDistance()`, `getFTS5Value()` | `getSqlType()`, `getSqlIndex()`, `getSpatialSqlType()` (protected on MySQL too), `getOperatorSql()`, `getPdoType()`, `getSqlReadableDistance()`, `getFts5Value()` |
   | `convertArrayToWKT()`, `isExtendedISODatetime()`, `convertUTCDateToString()` | `convertArrayToWkt()`, `isExtendedIsoDatetime(string $value)`, `convertUtcDateToString()` |
   | `bindOperatorParams()`, `getIdentifierQuoteChar()` | `bindOperatorParameters()`, `getIdentifierQuote()` |
@@ -1634,10 +1635,9 @@ and `addTransform()` when its transforms are not the same instances under the sa
 
 ### Removed adapter methods
 
-Queries now compile through the utopia-php/query builders (`builder()`), transforms through
-`Hook\Transform`, and tenant and permission conditions through the hooks in `Utopia\Database\Adapter\SQL\Hook` and
-`Utopia\Database\Hook\Mongo`. The 7.x methods
-behind the old string-building path are removed. Nothing in 8.0 calls them, so an adapter subclass that overrides or
+Queries now compile through the utopia-php/query builders (`builder()`), transforms through `Hook\Transform`, and
+tenant and permission conditions through the hooks in `Utopia\Database\Adapter\SQL\Hook` and
+`Utopia\Database\Hook\Mongo`. The 7.x methods behind the old string-building path are removed. Nothing in 8.0 calls them, so an adapter subclass that overrides or
 calls one must drop the override or the call.
 
 | Removed | Visibility in 7.x | Replacement |
@@ -1670,21 +1670,22 @@ calls one must drop the override or the call.
 `escapeWildcards()` is kept, and so is the public helper `Query::isSpatialAttribute()`, even where nothing in the
 library calls it any more.
 
-### SQL adapter subclasses that override `builder()`
+### SQL adapter subclasses that override `dialectBuilder()`
 
 The SQLite adapter builds its queries with `Utopia\Database\Builder\SQLite`, not `Utopia\Query\Builder\SQLite`. SQLite
 has no default LIKE escape character, and this builder adds `ESCAPE '\'` so that `startsWith`, `endsWith`,
 `containsString`, `containsAny`, `containsAll`, `notContains`, `notStartsWith` and `notEndsWith` match `_`, `%` and
-`\` literally, as they did in 7.x. If you subclass `Utopia\Database\Adapter\SQLite` and override `builder()`,
+`\` literally, as they did in 7.x. If you subclass `Utopia\Database\Adapter\SQLite` and override `dialectBuilder()`,
 return `Utopia\Database\Builder\SQLite` or a subclass of it. A plain `Utopia\Query\Builder\SQLite` treats `_` and `%`
 as wildcards and a backslash as a literal character.
 
-`builder()` is the one builder a SQL adapter hands out, to `Database::from()` and to its own statements alike. Its
-`from()` takes a collection id and reads the collection's table, mapping attributes to columns and, under shared
-tables, keeping the statement to the tenant, so a builder an override returns must implement
-`Utopia\Database\Builder\Scoping` with the `Utopia\Database\Builder\ScopesCollections` trait and be scoped with the
-adapter's `scope()`: `return (new MyBuilder())->scope($this->scope());`. The table names come from `qualifyTable()`; `getTableRaw()` is
-final, so an adapter that stores its tables under other names overrides `qualifyTable()`.
+The protected `dialectBuilder()` returns the builder a SQL adapter builds every statement with, unscoped. The final
+`builder()` scopes it with the adapter's `scope()` for `Database::from()`, and the adapter's own statements scope it
+with the tenants they read. Its `from()` takes a collection id and reads the collection's table, mapping attributes to
+columns and, under shared tables, keeping the statement to the tenant, so the builder must implement
+`Utopia\Database\Builder\Scoping` with the `Utopia\Database\Builder\ScopesCollections` trait:
+`return new MyBuilder();`. The table names come from `qualifyTable()`; `getTable()` and `getTableRaw()` are final, so
+an adapter that stores its tables under other names overrides `qualifyTable()`.
 
 ### Connections
 
@@ -2335,10 +2336,13 @@ and the second table of a dialect's multi-table write (`updateJoin()`, `deleteJo
 `deleteUsing()`), whose main table keeps its tenant condition.
 
 `from()` builds on the adapter's `builder()` (`Feature\QueryBuilder`), which takes no collection:
-`$adapter->builder()->from($collection)` is the builder `Database::from($collection)` hands out, without the
-`Database`'s executor. That builder's `from()` takes a collection id, and `from($collection, $alias)` names the main
-table by the alias, which is then the name a right or full outer join pairs with. A builder that names no collection
-(`fromNone()`, `into()`, or `fromTable()`, which reads a table by the name it is stored under) is kept to no tenant.
+`$adapter->builder()->from($collection, $alias)` is the builder `Database::from($collection, $alias)` hands out,
+without the `Database`'s executor. Its `from()` takes a collection id, and the alias names the main table, which is
+then the name the tenant condition and a right or full outer join pair with. Once it has read a collection, its join
+methods (and joins given to `filter()` or `queries()`) take collection ids too, and it reads that collection only:
+`from()` of another collection, `fromTable()` and `scope()` throw `Utopia\Database\Exception\Query`; start another
+builder instead. A builder that names no collection (`fromNone()`, `into()`, or `fromTable()` before any `from()`,
+which reads a table by the name it is stored under, as do its joins) is kept to no tenant.
 
 ### `exists()` and `notExists()`
 

@@ -4,6 +4,7 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Adapter\Mongo;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Mongo\Exception as MongoException;
 
@@ -81,7 +82,11 @@ final class MongoDatabaseRenameTest extends TestCase
         $adapter->setDatabase('library');
         $adapter->setSharedTables(true);
 
-        $this->assertTrue($adapter->createCollection('books'));
+        try {
+            $adapter->createCollection('books');
+            $this->fail('A shared collection the adapter\'s database already has must be reported as existing');
+        } catch (DuplicateException) {
+        }
 
         $this->assertSame(['library' => ['ns_books'], 'archive' => []], $client->databases);
     }

@@ -62,7 +62,9 @@ final class RelationshipRenameRecoveryTest extends TestCase
         $this->assertRenameFails('books', 'author', new RelationshipUpdate(key: 'writer'));
 
         $this->assertSame(['author', 'name'], $this->attributeKeys('books'));
-        $this->assertSame('herbert', $this->database->getDocument('books', 'dune')->getAttribute('author')?->getId());
+        $author = $this->database->getDocument('books', 'dune')->getAttribute('author');
+        $this->assertInstanceOf(Document::class, $author);
+        $this->assertSame('herbert', $author->getId());
     }
 
     public function testATwoWayKeyRenameTheRelatedTableRejectsIsNotTakenForAnEarlierRename(): void

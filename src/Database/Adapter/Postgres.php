@@ -1012,7 +1012,11 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
             throw $this->processException($e);
         }
 
-        return $tenant === false || $tenant === null ? null : (string) $tenant;
+        return match (true) {
+            \is_int($tenant) => (string) $tenant,
+            \is_string($tenant) => $tenant,
+            default => null,
+        };
     }
 
     /**

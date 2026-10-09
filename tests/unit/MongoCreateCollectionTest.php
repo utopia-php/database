@@ -121,12 +121,20 @@ final class MongoCreateCollectionTest extends TestCase
         $this->assertSame(['engine_orders'], $this->droppedAfterAFailedCreate($createIndexes, $indexes), 'A collection this call created without its indexes must not be left behind');
     }
 
+    /**
+     * @param  Closure(int): bool  $createIndexes
+     * @param  list<Index>  $indexes
+     */
     #[DataProvider('indexesNotCreated')]
     public function testASharedCollectionWhoseIndexesAreNotCreatedIsKept(Closure $createIndexes, array $indexes): void
     {
         $this->assertSame([], $this->droppedAfterAFailedCreate($createIndexes, $indexes, sharedTables: true), 'Another tenant may already use a shared collection; the next create gives it its indexes');
     }
 
+    /**
+     * @param  Closure(int): bool  $createIndexes
+     * @param  list<Index>  $indexes
+     */
     #[DataProvider('indexesNotCreated')]
     public function testACollectionCreatedInATransactionIsLeftToItsAbort(Closure $createIndexes, array $indexes): void
     {

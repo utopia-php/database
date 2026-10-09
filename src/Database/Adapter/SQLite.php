@@ -1594,12 +1594,6 @@ class SQLite extends SQL
         return "CREATE {$sqlType} {$key} ON `{$this->getNamespace()}_{$collection}` ({$attributes})";
     }
 
-    #[\Override]
-    protected function getTable(string $name): string
-    {
-        return $this->quote("{$this->getNamespace()}_{$this->filter($name)}");
-    }
-
     /**
      * SQLite doesn't use database-qualified table names.
      */

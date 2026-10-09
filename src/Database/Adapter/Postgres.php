@@ -185,7 +185,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     {
         $statement = $this->prepareStatement('SELECT "table_name" FROM information_schema.tables WHERE "table_schema" = ? AND "table_name" = ?', Event::CollectionRead);
         $statement->bindValue(1, $this->filter($database));
-        $statement->bindValue(2, $this->getPhysicalTableName($collection));
+        $statement->bindValue(2, $this->tableName($this->getNamespace(), $collection));
 
         return $this->returnsRows($statement);
     }
@@ -2361,21 +2361,15 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         return substr($hash, 0, self::MAX_IDENTIFIER_NAME);
     }
 
-    protected function getPhysicalTableName(string $name): string
-    {
-        return $this->getShortKey("{$this->getNamespace()}_{$this->filter($name)}");
-    }
-
-    #[\Override]
-    protected function getTable(string $name): string
-    {
-        return "{$this->quote($this->getDatabase())}.{$this->quote($this->getPhysicalTableName($name))}";
-    }
-
     #[\Override]
     protected function qualifyTable(string $database, string $namespace, string $name): string
     {
-        return $database.'.'.$this->getShortKey("{$namespace}_{$this->filter($name)}");
+        return $database.'.'.$this->tableName($namespace, $name);
+    }
+
+    private function tableName(string $namespace, string $name): string
+    {
+        return $this->getShortKey("{$namespace}_{$this->filter($name)}");
     }
 
     protected function buildJsonbPath(string $path, bool $asText = false): string

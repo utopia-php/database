@@ -3262,9 +3262,9 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     /**
      * @throws DatabaseException
      */
-    protected function getTable(string $name): string
+    final protected function getTable(string $name): string
     {
-        return "{$this->quote($this->getDatabase())}.{$this->quote($this->getNamespace().'_'.$this->filter($name))}";
+        return \implode('.', \array_map($this->quote(...), \explode('.', $this->getTableRaw($name), 2)));
     }
 
     /**

@@ -147,7 +147,7 @@ These methods take or return enum cases where 7.x used the constants' strings:
 | `Database::setTimeout()`, `clearTimeout()` | `Event $event = Event::All` |
 | `Database::getIdAttributeType()` | returns a `ColumnType` case (was a string) |
 | `Document::setAttribute()` | `SetType $type = SetType::Assign` |
-| `Document::getPermissionsByType()` | `PermissionType $type` |
+| `Document::getPermissionsByType()` | `PermissionType\|string $type`: a string reads a type of your own, such as `execute` |
 | `Query::getMethod()` | returns a `Method` case (see [Queries](#queries)) |
 | `Operator::__construct()`, `setMethod()` | `OperatorType $method` |
 | `Operator::getMethod()` | returns an `OperatorType` case |
@@ -854,7 +854,7 @@ method as a no-op, so a hook overrides only what it needs:
   blocks updates of other attributes. Writing such a value still fails. Collection definitions are always validated
   in full.
 - `Document::setAttribute()` takes a `SetType` case, and `Document::getPermissionsByType()` takes a
-  `PermissionType` case.
+  `PermissionType` case or, for a permission type of your own, its string.
 - **`createDocuments()` under `ignoreDuplicates()`** (7.x `skipDuplicates()`) returns and counts only the documents it inserted, and hands only
   those to `onNext`. A document skipped because its id is already stored is neither counted nor emitted (7.x
   counted and emitted it). Of a batch that repeats an id, only the first copy is written. Permissions are written

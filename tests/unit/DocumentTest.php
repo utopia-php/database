@@ -179,6 +179,23 @@ class DocumentTest extends TestCase
         $this->assertEquals([], $this->empty->getPermissionsByType(PermissionType::Delete));
     }
 
+    public function test_get_permissions_by_custom_type(): void
+    {
+        $document = new Document([
+            '$permissions' => [
+                'execute("any")',
+                'execute("user:runner")',
+                Permission::read(Role::any()),
+            ],
+        ]);
+
+        $this->assertSame(['any', 'user:runner'], $document->getPermissionsByType('execute'));
+        $this->assertSame(['any'], $document->getPermissionsByType('read'));
+        $this->assertSame(['any'], $document->getPermissionsByType(PermissionType::Read));
+        $this->assertSame([], $document->getPermissionsByType('subscribe'));
+        $this->assertSame([], $document->getPermissionsByType('exec'));
+    }
+
     public function test_get_permissions(): void
     {
         $this->assertEquals([

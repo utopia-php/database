@@ -265,14 +265,16 @@ class Document extends ArrayObject
     /**
      * Get roles for a specific permission type from this document's permissions.
      *
-     * @param PermissionType $type The permission type.
+     * @param PermissionType|string $type A built-in permission type, or a consumer-defined type such as 'execute'
      * @return list<string>
      *
      * @throws StructureException When the stored permissions are not an array of strings
      */
-    public function getPermissionsByType(PermissionType $type): array
+    public function getPermissionsByType(PermissionType|string $type): array
     {
-        return $this->parsePermissions()['roles'][$type->value] ?? [];
+        $type = $type instanceof PermissionType ? $type->value : $type;
+
+        return $this->parsePermissions()['roles'][$type] ?? [];
     }
 
     /**
@@ -292,12 +294,12 @@ class Document extends ArrayObject
 
         $roles = [];
         foreach ($permissions as $permission) {
-            foreach (PermissionType::cases() as $type) {
-                if (\str_starts_with($permission, $type->value)) {
-                    $roles[$type->value][] = \str_replace([$type->value.'(', ')', '"', ' '], '', $permission);
-                    break;
-                }
+            $open = \strpos($permission, '(');
+            if ($open === false) {
+                continue;
             }
+            $type = \trim(\substr($permission, 0, $open));
+            $roles[$type][] = \str_replace([')', '"', ' '], '', \substr($permission, $open + 1));
         }
 
         return $this->parsedPermissions = [

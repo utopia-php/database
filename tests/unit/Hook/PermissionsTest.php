@@ -33,7 +33,7 @@ final class PermissionsTest extends TestCase
             public int $calls = 0;
 
             #[\Override]
-            public function getPermissionsByType(PermissionType $type): array
+            public function getPermissionsByType(PermissionType|string $type): array
             {
                 $this->calls++;
 
@@ -107,7 +107,7 @@ final class PermissionsTest extends TestCase
             ],
         ]) extends Document {
             #[\Override]
-            public function getPermissionsByType(PermissionType $type): array
+            public function getPermissionsByType(PermissionType|string $type): array
             {
                 if ($type === PermissionType::Create) {
                     return ['any', 'guests', 'guests'];
@@ -176,7 +176,7 @@ final class PermissionsTest extends TestCase
             ],
         ]) extends Document {
             #[\Override]
-            public function getPermissionsByType(PermissionType $type): array
+            public function getPermissionsByType(PermissionType|string $type): array
             {
                 if ($type === PermissionType::Create) {
                     return ['any', 'guests', 'guests'];

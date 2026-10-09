@@ -140,7 +140,7 @@ final class PermissionsBatchSkipTest extends TestCase
             public int $calls = 0;
 
             #[\Override]
-            public function getPermissionsByType(PermissionType $type): array
+            public function getPermissionsByType(PermissionType|string $type): array
             {
                 $this->calls++;
 

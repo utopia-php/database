@@ -10,6 +10,7 @@ use Utopia\Cache\Adapter\None as NoneCacheAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\Mongo;
+use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Attribute;
 use Utopia\Database\AttributeUpdate;
@@ -1979,6 +1980,42 @@ trait DocumentTests
         $found = $this->searchedIds($database, $collection, 'lunar_solar');
         $this->assertContains('underscore', $found);
         $this->assertNotContains('comet', $found);
+    }
+
+    public function testFindFulltextExactTermOnPostgresMatchesEveryWordInAnyOrder(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter() instanceof Postgres) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'full_text_exact_words';
+        $database->createCollection(Collection::create(id: $collection, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ]));
+        $database->createAttribute($collection, Attribute::string(key: 'text', size: 128, required: true));
+        $database->createIndex($collection, Index::fulltext(key: 'text-ft', attributes: ['text']));
+
+        foreach (['phrase' => 'donald trump', 'reversed' => 'trump donald', 'apart' => 'donald j trump', 'one' => 'donald duck'] as $id => $text) {
+            $database->createDocument($collection, new Document([
+                '$id' => $id,
+                '$permissions' => [Permission::read(Role::any())],
+                'text' => $text,
+            ]));
+        }
+
+        $this->assertSame(['apart', 'phrase', 'reversed'], $this->searchedIds($database, $collection, '"donald trump"'));
+
+        $excluded = \array_map(
+            static fn (Document $document): string => $document->getId(),
+            $database->find($collection, [Query::notSearch('text', '"donald trump"')]),
+        );
+        $this->assertSame(['one'], $excluded);
     }
 
     /**

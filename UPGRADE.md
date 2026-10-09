@@ -344,10 +344,12 @@ $database->createAttribute('movies', Attribute::integer(
 - **Library fields only.** `status` and `options` are not attribute fields any more: `fromDocument()` ignores both,
   except a relationship's options, which become `relationship` and `side`. Keep application fields such as a
   `status` in your own documents.
-- **Normalised values.** The factories, `apply()` and `withFilters()` keep each type's invariants: a type's own
-  filter is always kept, `size` is `null` where the factory takes no size, and spatial, object and vector attributes
-  are never arrays. A spatial attribute stored with a size or an array flag is read without them. Stored values
-  are normalised per type:
+- **Normalised values.** The factories, `apply()`, `withFilters()`, `fromDocument()` and `fromArray()` keep each
+  type's invariants: a type's own filter is always kept, `size` is `null` where the factory takes no size, and
+  spatial, object and vector attributes are never arrays. A stored 7.x attribute reads as the attribute its factory
+  builds: a datetime stored `signed: true` reads unsigned, an integer stored with size 4 reads as `Bits32` with no
+  size, and a spatial attribute stored with a size or an array flag is read without them. Stored values are
+  normalised per type:
 
   | Factory | Stored values |
   |---|---|
@@ -361,7 +363,8 @@ $database->createAttribute('movies', Attribute::integer(
   | `relationship()` | the 7.x `options` shape plus `side` |
 
   Code that compares stored attribute documents field by field (for example to detect drift) has to compare these
-  normalised values.
+  normalised values: compare the attributes `fromDocument()` reads, not the raw documents, which keep the 7.x
+  values until the collection's attributes are next written.
 - **64-bit integers.** `bounds()` gives a `Bits64` integer the bounds `[PHP_INT_MIN, PHP_INT_MAX]` signed and
   `[0, PHP_INT_MAX]` unsigned; 7.x applied the 32-bit range. `increaseDocumentAttribute()`,
   `decreaseDocumentAttribute()` and the numeric operators on a size-8 integer accept values past 2147483647.
@@ -389,8 +392,8 @@ $database->createIndex('movies', Index::ttl('expiry', 'expiresAt', 3600));
   return a changed copy.
 - `OrderDirection::Random` and a `ttl` below 1 throw `Exception\Index`.
 - Fulltext and TTL indexes store no `orders`, fulltext indexes store no `lengths`, and an index other than TTL no
-  longer stores `ttl: 1`. `Index::fromDocument()` reads both shapes, the 7.x `'asc'`/`'desc'` orders, and the legacy
-  type `index` as a key index.
+  longer stores `ttl: 1`. `Index::fromDocument()` reads both shapes, dropping the `lengths` and `orders` a 7.x
+  fulltext or TTL index stored, the 7.x `'asc'`/`'desc'` orders, and the legacy type `index` as a key index.
 
 ### `Relationship`
 

@@ -21,6 +21,40 @@ final class VerdictMemory extends Memory
     public array $verdicts = [];
 
     #[\Override]
+    public function create(string $name): bool
+    {
+        return $this->verdict(__FUNCTION__) ?? parent::create($name);
+    }
+
+    #[\Override]
+    public function update(string $name, string $new): bool
+    {
+        return $this->verdict(__FUNCTION__) ?? parent::update($name, $new);
+    }
+
+    #[\Override]
+    public function delete(string $name): bool
+    {
+        return $this->verdict(__FUNCTION__) ?? parent::delete($name);
+    }
+
+    /**
+     * @param  list<Attribute>  $attributes
+     * @param  list<Index>  $indexes
+     */
+    #[\Override]
+    public function createCollection(string $collection, array $attributes = [], array $indexes = []): bool
+    {
+        return $this->verdict(__FUNCTION__) ?? parent::createCollection($collection, $attributes, $indexes);
+    }
+
+    #[\Override]
+    public function deleteCollection(string $collection): bool
+    {
+        return $this->verdict(__FUNCTION__) ?? parent::deleteCollection($collection);
+    }
+
+    #[\Override]
     public function createAttribute(string $collection, Attribute $attribute): bool
     {
         return $this->verdict(__FUNCTION__) ?? parent::createAttribute($collection, $attribute);

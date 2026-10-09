@@ -35,6 +35,31 @@ final class RefusedSchemaChangeTest extends TestCase
     public static function operations(): array
     {
         return [
+            'create' => [
+                'create',
+                static fn (Database $database): bool => $database->create('archive'),
+                'Failed to create database',
+            ],
+            'update' => [
+                'update',
+                static fn (Database $database): bool => $database->update('refused', 'renamed'),
+                "Failed to rename database 'refused' to 'renamed'",
+            ],
+            'delete' => [
+                'delete',
+                static fn (Database $database): bool => $database->delete('refused'),
+                'Failed to delete database',
+            ],
+            'createCollection' => [
+                'createCollection',
+                static fn (Database $database): Collection => $database->createCollection(Collection::create(id: 'drafts')),
+                'Failed to create collection',
+            ],
+            'deleteCollection' => [
+                'deleteCollection',
+                static fn (Database $database) => $database->deleteCollection('notes'),
+                'Failed to delete collection',
+            ],
             'createAttribute' => [
                 'createAttribute',
                 static fn (Database $database): Attribute => $database->createAttribute('books', Attribute::string(key: 'summary', size: 64)),
@@ -133,6 +158,24 @@ final class RefusedSchemaChangeTest extends TestCase
         );
     }
 
+    public function testARefusedCollectionStoresNoDefinition(): void
+    {
+        [$database, $adapter] = $this->database();
+        $adapter->verdicts['createCollection'] = static fn (): bool => false;
+
+        $this->assertInstanceOf(RefusedException::class, $this->attempt($database, static fn (Database $database): Collection => $database->createCollection(Collection::create(id: 'drafts'))));
+        $this->assertNull($database->findCollection('drafts'));
+    }
+
+    public function testARefusedCollectionDropKeepsItsDefinition(): void
+    {
+        [$database, $adapter] = $this->database();
+        $adapter->verdicts['deleteCollection'] = static fn (): bool => false;
+
+        $this->assertInstanceOf(RefusedException::class, $this->attempt($database, static fn (Database $database) => $database->deleteCollection('notes')));
+        $this->assertNotNull($database->findCollection('notes'));
+    }
+
     /**
      * @param  Closure(Database): mixed  $operation
      */
@@ -175,6 +218,7 @@ final class RefusedSchemaChangeTest extends TestCase
             permissions: $permissions,
         ));
         $database->createCollection(Collection::create(id: 'authors', attributes: [Attribute::string(key: 'name', size: 64)], permissions: $permissions));
+        $database->createCollection(Collection::create(id: 'notes', permissions: $permissions));
         $database->createRelationship('books', Relationship::manyToOne(relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books'));
 
         return [$database, $adapter];

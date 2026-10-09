@@ -6,31 +6,36 @@ use Redis;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory;
+use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Unique as UniqueException;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Index;
+use Utopia\Database\Permission;
 use Utopia\Database\Query;
+use Utopia\Database\Role;
 
 /**
  * E2E tests for the in-memory adapter. Inherits the standard adapter scopes
  * from Base so it is exercised against the same scenarios as MariaDB/MySQL/
  * Postgres. Scope tests that depend on features Memory does not implement
- * (relationships, operators, vectors, spatial, fulltext, schemaless,
- * object attributes) self-skip via the adapter's getSupportFor* flags.
+ * (upserts, operators, vectors, spatial, fulltext, schemaless, object
+ * attributes) self-skip via Feature instanceof / Capability checks. Memory
+ * implements relationships.
  *
  * The test methods declared directly on this class are Memory-specific
  * regressions for behaviour that is not exercised — or not exercised in the
- * same way — by the inherited scopes (transaction nesting semantics, raw
- * adapter store layout after attribute operations, tenancy on the in-process
- * map, etc.).
+ * same way — by the inherited scopes (transaction nesting semantics, the
+ * cascades an attribute rename or drop leaves behind, tenancy on the
+ * in-process map, etc.).
  */
 class MemoryTest extends Base
 {
     public static ?Database $database = null;
+    #[\Override]
     protected static string $namespace;
 
     public static function getAdapterName(): string
@@ -38,6 +43,7 @@ class MemoryTest extends Base
         return 'memory';
     }
 
+    #[\Override]
     public function getDatabase(): Database
     {
         if (!is_null(self::$database)) {
@@ -50,9 +56,10 @@ class MemoryTest extends Base
         $cache = new Cache(new RedisAdapter($redis));
 
         $database = new Database(new Memory(), $cache);
+        $authorization = self::$authorization ?? throw new \RuntimeException('Authorization not initialised');
         $database
-            ->setAuthorization(self::$authorization)
-            ->setDatabase('utopiaTests')
+            ->setAuthorization($authorization)
+            ->setDatabase($this->testDatabase)
             ->setNamespace(static::$namespace = 'memory_' . uniqid());
 
         if ($database->exists()) {
@@ -64,6 +71,7 @@ class MemoryTest extends Base
         return self::$database = $database;
     }
 
+    #[\Override]
     protected function deleteColumn(string $collection, string $column): bool
     {
         // Memory has no out-of-band schema mutation path; tests that exercise
@@ -71,6 +79,7 @@ class MemoryTest extends Base
         return true;
     }
 
+    #[\Override]
     protected function deleteIndex(string $collection, string $index): bool
     {
         return true;
@@ -88,18 +97,20 @@ class MemoryTest extends Base
         $cache = new Cache(new RedisAdapter($redis));
 
         $database = new Database(new Memory(), $cache);
+        $authorization = self::$authorization ?? throw new \RuntimeException('Authorization not initialised');
         $database
-            ->setAuthorization(self::$authorization)
-            ->setDatabase('utopiaTests')
+            ->setAuthorization($authorization)
+            ->setDatabase($this->testDatabase)
             ->setNamespace('memory_iso_' . uniqid());
         $database->create();
         return $database;
     }
 
     /**
-     * The inherited scope test does not gate on getSupportForUpserts(); skip
-     * here because Memory throws on upsert by design.
+     * The inherited scope test does not gate on instanceof Feature\Upserts;
+     * skip here because Memory throws on upsert by design.
      */
+    #[\Override]
     public function testUpsertWithJSONFilters(): void
     {
         $this->markTestSkipped('Memory adapter does not implement upserts.');
@@ -107,53 +118,31 @@ class MemoryTest extends Base
 
     /**
      * Operator scope tests that combine upserts with operators only gate on
-     * getSupportForOperators() — Memory doesn't implement upserts, so we
+     * Capability::Operators — Memory doesn't implement Feature\Upserts, so we
      * skip the upsert variants explicitly.
      */
+    #[\Override]
     public function testBulkUpsertWithOperatorsCallbackReceivesFreshData(): void
     {
         $this->markTestSkipped('Memory adapter does not implement upserts.');
     }
 
+    #[\Override]
     public function testSingleUpsertWithOperators(): void
     {
         $this->markTestSkipped('Memory adapter does not implement upserts.');
     }
 
+    #[\Override]
     public function testUpsertOperatorsOnNewDocuments(): void
     {
         $this->markTestSkipped('Memory adapter does not implement upserts.');
     }
 
+    #[\Override]
     public function testUpsertDocumentsWithAllOperators(): void
     {
         $this->markTestSkipped('Memory adapter does not implement upserts.');
-    }
-
-    /**
-     * Inherited test creates a self-relationship; Memory has no relationships.
-     */
-    public function testAttributeNamesWithDots(): void
-    {
-        $this->markTestSkipped('Memory adapter does not implement relationships.');
-    }
-
-    /**
-     * Inherited test asserts permission cascade through a relationship.
-     *
-     * @return array<mixed>
-     */
-    public function testCollectionPermissionsRelationships(): array
-    {
-        $this->markTestSkipped('Memory adapter does not implement relationships.');
-    }
-
-    /**
-     * Inherited test asserts cursor ordering across a relationship join.
-     */
-    public function testOrderAndCursorWithRelationshipQueries(): void
-    {
-        $this->markTestSkipped('Memory adapter does not implement relationships.');
     }
 
     /**
@@ -161,6 +150,7 @@ class MemoryTest extends Base
      * INTEGER column is altered to VARCHAR. Memory keeps native PHP scalars,
      * so the historical int payload remains an int after the type change.
      */
+    #[\Override]
     public function testUpdateAttributeStructure(): void
     {
         $this->markTestSkipped(
@@ -173,6 +163,7 @@ class MemoryTest extends Base
      * Inherited test exercises VARCHAR truncation when shrinking a column
      * that holds oversize data. Memory does not enforce string sizes on disk.
      */
+    #[\Override]
     public function testUpdateAttributeSize(): void
     {
         $this->markTestSkipped(
@@ -185,6 +176,7 @@ class MemoryTest extends Base
      * Memory has no reserved keyword list; the inherited test then has no
      * keywords to iterate over and is flagged risky.
      */
+    #[\Override]
     public function testKeywords(): void
     {
         $this->markTestSkipped('Memory has no reserved keywords.');
@@ -192,14 +184,12 @@ class MemoryTest extends Base
 
     /**
      * Memory does not implement upserts. Inherited scope tests that rely on
-     * upserts skip themselves via getSupportForUpserts().
+     * upserts skip themselves via instanceof Feature\Upserts.
      */
     public function testUpsertIsNotImplemented(): void
     {
-        $collection = new Document(['$id' => 'any']);
-
         $this->expectException(\Utopia\Database\Exception::class);
-        $this->freshDatabase()->getAdapter()->upsertDocuments($collection, '', []);
+        $this->freshDatabase()->upsertDocuments('any', []);
     }
 
     /**
@@ -210,20 +200,12 @@ class MemoryTest extends Base
     {
         $database = $this->freshDatabase();
 
-        $database->createCollection('nested', [
-            new Document([
-                '$id' => 'name',
-                'type' => Database::VAR_STRING,
-                'size' => 64,
-                'required' => true,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ]),
-        ], [], [
+        $database->createCollection(Collection::create(id: 'nested', attributes: [
+            Attribute::string(key: 'name', size: 64, required: true),
+        ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
-        ]);
+        ]));
 
         $adapter = $database->getAdapter();
         $adapter->startTransaction();
@@ -256,20 +238,12 @@ class MemoryTest extends Base
     {
         $database = $this->freshDatabase();
 
-        $database->createCollection('lists', [
-            new Document([
-                '$id' => 'tags',
-                'type' => Database::VAR_STRING,
-                'size' => 64,
-                'required' => false,
-                'signed' => true,
-                'array' => true,
-                'filters' => [],
-            ]),
-        ], [], [
+        $database->createCollection(Collection::create(id: 'lists', attributes: [
+            Attribute::string(key: 'tags', size: 64, array: true),
+        ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
-        ]);
+        ]));
 
         $database->createDocument('lists', new Document([
             '$id' => 'l1',
@@ -281,11 +255,6 @@ class MemoryTest extends Base
         $this->assertSame(['php', 'memory', 'adapter'], $fetched->getAttribute('tags'));
     }
 
-    /**
-     * Regression: CREATE UNIQUE INDEX on a collection that already contains
-     * duplicate values must surface UniqueException at the adapter layer
-     * (matches MariaDB errno 1062).
-     */
     public function testCreateUniqueIndexRejectsExistingDuplicates(): void
     {
         $adapter = new Memory();
@@ -301,7 +270,8 @@ class MemoryTest extends Base
         );
 
         $this->expectException(UniqueException::class);
-        $adapter->createIndex('emails', 'unique_addr', Database::INDEX_UNIQUE, ['addr'], [], []);
+        $this->expectExceptionMessage(UniqueException::MESSAGE);
+        $adapter->createIndex('emails', Index::unique(key: 'unique_addr', attributes: ['addr']));
     }
 
     /**
@@ -312,26 +282,14 @@ class MemoryTest extends Base
     {
         $database = $this->freshDatabase();
 
-        $database->createCollection('optional', [
-            new Document([
-                '$id' => 'token',
-                'type' => Database::VAR_STRING,
-                'size' => 64,
-                'required' => false,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ]),
-        ], [
-            new Document([
-                '$id' => 'unique_token',
-                'type' => Database::INDEX_UNIQUE,
-                'attributes' => ['token'],
-            ]),
-        ], [
+        $database->createCollection(Collection::create(id: 'optional', attributes: [
+            Attribute::string(key: 'token', size: 64),
+        ], indexes: [
+            Index::unique(key: 'unique_token', attributes: ['token']),
+        ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
-        ]);
+        ]));
 
         $database->createDocument('optional', new Document([
             '$id' => 'a',
@@ -348,65 +306,125 @@ class MemoryTest extends Base
     }
 
     /**
-     * Regression: updateAttribute applies metadata after a rename — the new
-     * key carries the new size, the old key is gone.
+     * Regression: updateAttribute given a new key renames the attribute, so
+     * the stored values answer to the new key and no longer to the old one.
      */
-    public function testUpdateAttributeAppliesMetadataAfterRename(): void
+    public function testUpdateAttributeMovesStoredValuesToTheNewKey(): void
     {
         $adapter = new Memory();
         $adapter->setNamespace('rename_' . \uniqid());
         $adapter->createCollection('renames', [], []);
-        $adapter->createAttribute('renames', 'old', Database::VAR_STRING, 64);
+        $adapter->createAttribute('renames', Attribute::string(key: 'old', size: 64));
 
-        $adapter->updateAttribute('renames', 'old', Database::VAR_STRING, 256, true, false, 'fresh');
+        $collection = new Document(['$id' => 'renames']);
+        $adapter->createDocument($collection, new Document([
+            '$id' => 'row',
+            '$permissions' => [],
+            'old' => 'value',
+        ]));
 
-        $store = (new \ReflectionClass($adapter))->getProperty('data')->getValue($adapter);
-        $key = $adapter->getDatabase() . '.' . $adapter->getNamespace() . '_renames';
+        $adapter->updateAttribute('renames', 'old', Attribute::string(key: 'fresh', size: 256));
 
-        $this->assertArrayHasKey('fresh', $store[$key]['attributes']);
-        $this->assertArrayNotHasKey('old', $store[$key]['attributes']);
-        $this->assertEquals(256, $store[$key]['attributes']['fresh']['size']);
+        $renamed = $adapter->getDocument($collection, 'row');
+        $this->assertSame('value', $renamed->getAttribute('fresh'));
+        $this->assertNull($renamed->getAttribute('old'));
     }
 
     /**
-     * Regression: renameAttribute cascades the rename into any indexes that
-     * referenced the old name.
+     * Regression: renameAttribute carries the values, the indexes and the
+     * attribute's own registration onto the new name. An index left pointing
+     * at the old key reads null out of every row, and a null component drops
+     * the row out of the unique signature — the index silently stops
+     * rejecting duplicates. A registration left on the old key makes the new
+     * key undeletable: deleteAttribute is a no-op for a key the adapter never
+     * registered, so the stored field survives the drop.
      */
-    public function testRenameAttributeUpdatesIndexReferences(): void
+    public function testRenameAttributeCarriesValuesIndexesAndRegistration(): void
     {
         $adapter = new Memory();
         $adapter->setNamespace('idxrn_' . \uniqid());
         $adapter->createCollection('indexed', [], []);
-        $adapter->createAttribute('indexed', 'name', Database::VAR_STRING, 64);
-        $adapter->createIndex('indexed', 'idx_name', Database::INDEX_KEY, ['name'], [], []);
+        $adapter->createAttribute('indexed', Attribute::string(key: 'name', size: 64));
+        $adapter->createIndex('indexed', Index::unique(key: 'unique_name', attributes: ['name']));
+
+        $collection = new Document(['$id' => 'indexed']);
+        $adapter->createDocument($collection, new Document([
+            '$id' => 'first',
+            '$permissions' => [],
+            'name' => 'taken',
+        ]));
 
         $adapter->renameAttribute('indexed', 'name', 'title');
 
-        $store = (new \ReflectionClass($adapter))->getProperty('data')->getValue($adapter);
-        $key = $adapter->getDatabase() . '.' . $adapter->getNamespace() . '_indexed';
+        $stored = $adapter->getDocument($collection, 'first');
+        $this->assertSame('taken', $stored->getAttribute('title'));
+        $this->assertNull($stored->getAttribute('name'));
 
-        $this->assertEquals(['title'], $store[$key]['indexes']['idx_name']['attributes']);
+        $adapter->createDocument($collection, new Document([
+            '$id' => 'free',
+            '$permissions' => [],
+            'title' => 'available',
+        ]));
+
+        $threw = false;
+        try {
+            $adapter->createDocument($collection, new Document([
+                '$id' => 'second',
+                '$permissions' => [],
+                'title' => 'taken',
+            ]));
+        } catch (DuplicateException) {
+            $threw = true;
+        }
+
+        $this->assertTrue($threw, 'the unique index should still reject a duplicate under the new name');
+
+        $adapter->deleteAttribute('indexed', 'title');
+
+        $this->assertNull($adapter->getDocument($collection, 'first')->getAttribute('title'));
     }
 
     /**
-     * Regression: deleteAttribute strips the attribute from any composite
-     * index that referenced it.
+     * Regression: deleteAttribute strips the dropped key out of the composite
+     * indexes that referenced it, so a two-column unique index narrows to the
+     * column that is left. An index still naming the dropped key reads null
+     * for it and stops rejecting duplicates altogether.
      */
-    public function testDeleteAttributeRemovesFromIndex(): void
+    public function testDeleteAttributeNarrowsCompositeUniqueIndex(): void
     {
         $adapter = new Memory();
         $adapter->setNamespace('idxdrop_' . \uniqid());
         $adapter->createCollection('drops', [], []);
-        $adapter->createAttribute('drops', 'a', Database::VAR_STRING, 64);
-        $adapter->createAttribute('drops', 'b', Database::VAR_STRING, 64);
-        $adapter->createIndex('drops', 'idx_ab', Database::INDEX_KEY, ['a', 'b'], [], []);
+        $adapter->createAttribute('drops', Attribute::string(key: 'a', size: 64));
+        $adapter->createAttribute('drops', Attribute::string(key: 'b', size: 64));
+        $adapter->createIndex('drops', Index::unique(key: 'unique_ab', attributes: ['a', 'b']));
+
+        $collection = new Document(['$id' => 'drops']);
+        $adapter->createDocument($collection, new Document([
+            '$id' => 'existing',
+            '$permissions' => [],
+            'a' => 'one',
+            'b' => 'kept',
+        ]));
 
         $adapter->deleteAttribute('drops', 'a');
 
-        $store = (new \ReflectionClass($adapter))->getProperty('data')->getValue($adapter);
-        $key = $adapter->getDatabase() . '.' . $adapter->getNamespace() . '_drops';
+        $stored = $adapter->getDocument($collection, 'existing');
+        $this->assertNull($stored->getAttribute('a'));
+        $this->assertSame('kept', $stored->getAttribute('b'));
 
-        $this->assertEquals(['b'], $store[$key]['indexes']['idx_ab']['attributes']);
+        $adapter->createDocument($collection, new Document([
+            '$id' => 'first',
+            '$permissions' => [],
+            'b' => 'shared',
+        ]));
+
+        $this->expectException(DuplicateException::class);
+        $adapter->createDocument($collection, new Document([
+            '$id' => 'second',
+            '$permissions' => [],
+            'b' => 'shared',
+        ]));
     }
 
     /**
@@ -417,27 +435,15 @@ class MemoryTest extends Base
     {
         $database = $this->freshDatabase();
 
-        $database->createCollection('handles', [
-            new Document([
-                '$id' => 'handle',
-                'type' => Database::VAR_STRING,
-                'size' => 64,
-                'required' => true,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ]),
-        ], [
-            new Document([
-                '$id' => 'unique_handle',
-                'type' => Database::INDEX_UNIQUE,
-                'attributes' => ['handle'],
-            ]),
-        ], [
+        $database->createCollection(Collection::create(id: 'handles', attributes: [
+            Attribute::string(key: 'handle', size: 64, required: true),
+        ], indexes: [
+            Index::unique(key: 'unique_handle', attributes: ['handle']),
+        ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
             Permission::update(Role::any()),
-        ]);
+        ]));
 
         $database->createDocument('handles', new Document([
             '$id' => 'h1',
@@ -474,27 +480,15 @@ class MemoryTest extends Base
     {
         $database = $this->freshDatabase();
 
-        $database->createCollection('siblings', [
-            new Document([
-                '$id' => 'handle',
-                'type' => Database::VAR_STRING,
-                'size' => 64,
-                'required' => true,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ]),
-        ], [
-            new Document([
-                '$id' => 'unique_handle',
-                'type' => Database::INDEX_UNIQUE,
-                'attributes' => ['handle'],
-            ]),
-        ], [
+        $database->createCollection(Collection::create(id: 'siblings', attributes: [
+            Attribute::string(key: 'handle', size: 64, required: true),
+        ], indexes: [
+            Index::unique(key: 'unique_handle', attributes: ['handle']),
+        ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
             Permission::update(Role::any()),
-        ]);
+        ]));
 
         $database->createDocument('siblings', new Document([
             '$id' => 's1',
@@ -522,27 +516,21 @@ class MemoryTest extends Base
     }
 
     /**
-     * Regression: bulk delete clears the in-memory permissions index for the
-     * affected collection.
+     * Regression: bulk delete clears the permission entries of the rows it
+     * removed. Entries left behind keep granting access under the deleted
+     * document's id, so re-using that id inherits the grant it never asked
+     * for.
      */
     public function testBulkDeleteRemovesPermissions(): void
     {
         $database = $this->freshDatabase();
 
-        $database->createCollection('cleanup', [
-            new Document([
-                '$id' => 'name',
-                'type' => Database::VAR_STRING,
-                'size' => 64,
-                'required' => true,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ]),
-        ], [], [
+        $database->createCollection(Collection::create(id: 'cleanup', attributes: [
+            Attribute::string(key: 'name', size: 64, required: true),
+        ], permissions: [
             Permission::create(Role::any()),
             Permission::delete(Role::any()),
-        ]);
+        ]));
 
         for ($i = 0; $i < 3; $i++) {
             $database->createDocument('cleanup', new Document([
@@ -552,13 +540,19 @@ class MemoryTest extends Base
             ]));
         }
 
+        $this->assertCount(3, $database->find('cleanup'));
+
         $database->deleteDocuments('cleanup');
 
-        $adapter = $database->getAdapter();
-        $permissions = (new \ReflectionClass($adapter))->getProperty('permissions')->getValue($adapter);
-        $key = $database->getDatabase() . '.' . $database->getNamespace() . '_cleanup';
+        $this->assertCount(0, $database->find('cleanup'));
 
-        $this->assertEmpty($permissions[$key] ?? []);
+        $database->createDocument('cleanup', new Document([
+            '$id' => 'c0',
+            '$permissions' => [Permission::delete(Role::any())],
+            'name' => 'restricted',
+        ]));
+
+        $this->assertCount(0, $database->find('cleanup'));
     }
 
     /**
@@ -604,12 +598,13 @@ class MemoryTest extends Base
      * millisecond between the two writes to keep the inherited
      * assertion honest without changing semantics for slower adapters.
      */
+    #[\Override]
     public function testSingleDocumentDateOperations(): void
     {
         $database = $this->getDatabase();
         $collection = 'single_date_operations_memory';
-        $database->createCollection($collection);
-        $database->createAttribute($collection, 'string', Database::VAR_STRING, 128, false);
+        $database->createCollection(Collection::create(id: $collection));
+        $database->createAttribute($collection, Attribute::string(key: 'string', size: 128));
 
         $database->setPreserveDates(true);
         $created = $database->createDocument($collection, new Document([
@@ -644,8 +639,8 @@ class MemoryTest extends Base
         $adapter->setSharedTables(true);
         $adapter->setTenant(1);
         $adapter->createCollection('emails', [], []);
-        $adapter->createAttribute('emails', 'addr', Database::VAR_STRING, 128, true, false, true);
-        $adapter->createIndex('emails', 'unique_addr', Database::INDEX_UNIQUE, ['addr'], [], []);
+        $adapter->createAttribute('emails', Attribute::string(key: 'addr', size: 128, required: true));
+        $adapter->createIndex('emails', Index::unique(key: 'unique_addr', attributes: ['addr']));
 
         $collection = new Document(['$id' => 'emails']);
 
@@ -709,7 +704,7 @@ class MemoryTest extends Base
         $adapter->setNamespace('missing_' . \uniqid());
 
         $this->expectException(NotFoundException::class);
-        $adapter->deleteDocument('ghost', 'x');
+        $adapter->deleteDocument(new Document(['$id' => 'ghost']), 'x');
     }
 
     public function testDeleteDocumentReturnsFalseForMissingDoc(): void
@@ -719,7 +714,7 @@ class MemoryTest extends Base
         $adapter->createCollection('here', [], []);
 
         // Collection exists, document does not — mirrors MariaDB rowCount() == 0.
-        $this->assertFalse($adapter->deleteDocument('here', 'never-created'));
+        $this->assertFalse($adapter->deleteDocument(new Document(['$id' => 'here']), 'never-created'));
     }
 
     public function testDeleteDocumentsThrowsWhenCollectionMissing(): void
@@ -728,7 +723,7 @@ class MemoryTest extends Base
         $adapter->setNamespace('missing_' . \uniqid());
 
         $this->expectException(NotFoundException::class);
-        $adapter->deleteDocuments('ghost', [], []);
+        $adapter->deleteDocuments(new Document(['$id' => 'ghost']), [], []);
     }
 
     public function testDeleteDocumentsHonoursTenantBoundary(): void
@@ -755,7 +750,7 @@ class MemoryTest extends Base
         ]));
 
         $adapter->setTenant(1);
-        $deleted = $adapter->deleteDocuments('box', ['1'], []);
+        $deleted = $adapter->deleteDocuments($collection, ['1'], []);
 
         $this->assertEquals(1, $deleted);
 
@@ -792,7 +787,7 @@ class MemoryTest extends Base
         // empty — this assertion would fail. The discriminating signal is
         // that the doc resolves *against* the current adapter tenant.
         $probe = new Document(['$id' => 'tenant1-only', '$tenant' => 1]);
-        [$result] = $adapter->getSequences('box', [$probe]);
+        [$result] = $adapter->getSequences($collection, [$probe]);
         $this->assertSame((string) $tenant1Doc->getSequence(), $result->getSequence());
     }
 
@@ -805,26 +800,14 @@ class MemoryTest extends Base
     {
         $database = $this->freshDatabase();
 
-        $database->createCollection('flags', [
-            new Document([
-                '$id' => 'active',
-                'type' => Database::VAR_BOOLEAN,
-                'size' => 0,
-                'required' => true,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ]),
-        ], [
-            new Document([
-                '$id' => 'unique_active',
-                'type' => Database::INDEX_UNIQUE,
-                'attributes' => ['active'],
-            ]),
-        ], [
+        $database->createCollection(Collection::create(id: 'flags', attributes: [
+            Attribute::boolean(key: 'active', required: true),
+        ], indexes: [
+            Index::unique(key: 'unique_active', attributes: ['active']),
+        ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
-        ]);
+        ]));
 
         $database->createDocument('flags', new Document([
             '$id' => 'first',
@@ -851,8 +834,8 @@ class MemoryTest extends Base
         $adapter = new Memory();
         $adapter->setNamespace('numstr_' . \uniqid());
         $adapter->createCollection('codes', [], []);
-        $adapter->createAttribute('codes', 'code', Database::VAR_STRING, 16, true, false, true);
-        $adapter->createIndex('codes', 'unique_code', Database::INDEX_UNIQUE, ['code'], [], []);
+        $adapter->createAttribute('codes', Attribute::string(key: 'code', size: 16, required: true));
+        $adapter->createIndex('codes', Index::unique(key: 'unique_code', attributes: ['code']));
 
         $collection = new Document(['$id' => 'codes']);
 
@@ -880,35 +863,16 @@ class MemoryTest extends Base
     {
         $database = $this->freshDatabase();
 
-        $database->createCollection('nullable', [
-            new Document([
-                '$id' => 'name',
-                'type' => Database::VAR_STRING,
-                'size' => 64,
-                'required' => false,
-            ]),
-            new Document([
-                '$id' => 'score',
-                'type' => Database::VAR_INTEGER,
-                'size' => 0,
-                'required' => false,
-            ]),
-            new Document([
-                '$id' => 'bio',
-                'type' => Database::VAR_STRING,
-                'size' => 1024,
-                'required' => false,
-            ]),
-        ], [
-            new Document([
-                '$id' => 'bio_ft',
-                'type' => Database::INDEX_FULLTEXT,
-                'attributes' => ['bio'],
-            ]),
-        ], [
+        $database->createCollection(Collection::create(id: 'nullable', attributes: [
+            Attribute::string(key: 'name', size: 64),
+            Attribute::integer(key: 'score'),
+            Attribute::string(key: 'bio', size: 1024),
+        ], indexes: [
+            Index::fulltext(key: 'bio_ft', attributes: ['bio']),
+        ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
-        ]);
+        ]));
 
         $database->createDocument('nullable', new Document([
             '$id' => 'with_value',
@@ -927,7 +891,7 @@ class MemoryTest extends Base
         ]));
 
         $assertOnlyValueRow = function (string $operator, array $results) {
-            $ids = \array_map(fn (Document $d) => $d->getId(), $results);
+            $ids = \array_map(fn (mixed $d): string => $d instanceof Document ? $d->getId() : '', $results);
             $this->assertSame(['with_value'], $ids, $operator . ' should exclude null-valued rows');
         };
 

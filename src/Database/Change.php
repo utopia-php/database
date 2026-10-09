@@ -2,31 +2,14 @@
 
 namespace Utopia\Database;
 
-class Change
+/**
+ * A document write: the stored document it replaces, empty when it creates one, and the document to write.
+ */
+final readonly class Change
 {
     public function __construct(
-        protected Document $old,
-        protected Document $new,
+        public Document $old,
+        public Document $new,
     ) {
-    }
-
-    public function getOld(): Document
-    {
-        return $this->old;
-    }
-
-    public function setOld(Document $old): void
-    {
-        $this->old = $old;
-    }
-
-    public function getNew(): Document
-    {
-        return $this->new;
-    }
-
-    public function setNew(Document $new): void
-    {
-        $this->new = $new;
     }
 }

@@ -3,22 +3,56 @@
 namespace Utopia\Database\Adapter;
 
 use Exception;
+use Override;
 use PDO;
 use PDOException;
+use PDOStatement;
+use Swoole\Database\PDOProxy;
+use Swoole\Database\PDOStatementProxy;
+use Throwable;
+use Utopia\Database\Adapter\SQL\Expression;
+use Utopia\Database\Adapter\SQL\Hook\Permission;
+use Utopia\Database\Adapter\SQL\JoinAlias;
+use Utopia\Database\Attribute;
+use Utopia\Database\Builder\Scoping;
+use Utopia\Database\Builder\SQLite as SQLiteBuilder;
+use Utopia\Database\Capability;
+use Utopia\Database\Change;
 use Utopia\Database\Database;
+use Utopia\Database\DateTime as DatabaseDateTime;
 use Utopia\Database\Document;
+use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Contention as ContentionException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Operator as OperatorException;
-use Utopia\Database\Exception\Timeout as TimeoutException;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Exception\Unique as UniqueException;
-use Utopia\Database\Helpers\ID;
+use Utopia\Database\Index;
 use Utopia\Database\Operator;
+use Utopia\Database\OperatorType;
+use Utopia\Database\PDO as DatabasePDO;
+use Utopia\Database\PDOStatement as DatabasePDOStatement;
+use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
+use Utopia\Database\Relationship;
+use Utopia\Database\RelationshipSide;
+use Utopia\Database\RelationshipType;
+use Utopia\Database\RelationshipUpdate;
+use Utopia\Database\Schema\Column as SchemaColumn;
+use Utopia\Database\Schema\Index as SchemaIndex;
+use Utopia\Database\Storage;
+use Utopia\Database\Validator\BigInt;
+use Utopia\Query\Builder\SQL as SQLBuilder;
+use Utopia\Query\CursorDirection;
+use Utopia\Query\Method;
+use Utopia\Query\Query as BaseQuery;
+use Utopia\Query\Schema\ColumnType;
+use Utopia\Query\Schema\IndexType;
 
 /**
  * Main differences from MariaDB and MySQL:
@@ -34,23 +68,53 @@ use Utopia\Database\Query;
  * 9. MODIFY COLUMN is not supported
  * 10. Can't rename an index directly
  */
-class SQLite extends MariaDB
+class SQLite extends SQL
 {
     /** Suffix appended to every FTS5 virtual table name created by this adapter. */
-    private const FTS_TABLE_SUFFIX = '_fts';
+    private const string FTS_TABLE_SUFFIX = '_fts';
 
     /** AFTER INSERT trigger suffix on the parent collection. */
-    private const FTS_TRIGGER_INSERT = 'ai';
+    private const string FTS_TRIGGER_INSERT = 'ai';
 
     /** AFTER DELETE trigger suffix on the parent collection. */
-    private const FTS_TRIGGER_DELETE = 'ad';
+    private const string FTS_TRIGGER_DELETE = 'ad';
 
     /** AFTER UPDATE trigger suffix on the parent collection. */
-    private const FTS_TRIGGER_UPDATE = 'au';
+    private const string FTS_TRIGGER_UPDATE = 'au';
+
+    private const string INDEX_1 = '_index_1';
+
+    private const string INDEX_2 = '_index_2';
 
     /**
-     * Per-collection attribute → FTS5 table memo. Populated in one pass
-     * so multi-attribute SEARCH batches don't issue PRAGMA per attribute.
+     * Reject patterns over this size to bound ReDoS exposure — the UDF runs
+     * once per candidate row, so a pathological pattern is amplified by
+     * table cardinality.
+     */
+    private const int REGEXP_MAX_PATTERN_LENGTH = 512;
+
+    /**
+     * Cap on cached delimited patterns. Long-lived adapters processing many
+     * distinct user patterns would otherwise grow this map without bound.
+     */
+    private const int REGEXP_PATTERN_CACHE_LIMIT = 256;
+
+    private const array MISSING_AGGREGATES = [
+        Method::Stddev,
+        Method::StddevPop,
+        Method::StddevSamp,
+        Method::Variance,
+        Method::VarPop,
+        Method::VarSamp,
+        Method::BitAnd,
+        Method::BitOr,
+        Method::BitXor,
+    ];
+
+    /**
+     * Attribute → FTS5 table memo per FTS table prefix, which names the
+     * tenant under sharedTables. Populated in one pass so multi-attribute
+     * SEARCH batches don't issue PRAGMA per attribute.
      *
      * @var array<string, array<string, ?string>>
      */
@@ -58,56 +122,101 @@ class SQLite extends MariaDB
 
     /**
      * When enabled, the adapter reports MariaDB-shaped column metadata,
-     * advertises MariaDB-only capabilities (upserts, attribute resizing,
-     * PCRE regex via the registered UDF), and declares schema-internal
+     * advertises MariaDB-only capabilities (attribute resizing), and declares schema-internal
      * columns (e.g. `_tenant`) using MariaDB-style types so callers that
      * inspect INFORMATION_SCHEMA-style results behave identically across
      * both adapters. Off by default — vanilla SQLite stays vanilla.
      */
     protected bool $emulateMySQL = false;
 
-    /**
-     * Whether the REGEXP UDF actually wired up. Pool/proxy PDOs may not
-     * expose sqliteCreateFunction.
-     */
-    private bool $pcreRegistered = false;
-
-    public function __construct(mixed $pdo)
+    public function __construct(object $pdo)
     {
         parent::__construct($pdo);
 
         $this->registerUserFunctions();
     }
 
-    /**
-     * Toggle MariaDB/MySQL emulation. See $emulateMySQL for what this
-     * actually changes.
-     */
-    public function setEmulateMySQL(bool $emulate): static
+    #[Override]
+    public function reconnect(): void
     {
-        $this->emulateMySQL = $emulate;
+        parent::reconnect();
+
+        $this->registerUserFunctions();
+    }
+
+    /**
+     * SQLite has no server-side connection id, so the handle's object id names the connection: unique only within
+     * the process and only while the handle lives.
+     */
+    #[\Override]
+    public function id(): string
+    {
+        return (string) \spl_object_id($this->getDriver());
+    }
+
+    /**
+     * Prepare a statement and reject drivers that return false or another
+     * non-statement value before a method is called on it.
+     *
+     * @return PDOStatement|DatabasePDOStatement|PDOStatementProxy
+     */
+    private function prepare(
+        string $query,
+        string $message = 'Failed to prepare SQLite statement',
+        ?Event $event = null,
+    ): object {
+        try {
+            return parent::prepareStatement($query, $event);
+        } catch (DatabaseException $error) {
+            if ($error->getMessage() !== 'Failed to prepare SQL statement') {
+                throw $error;
+            }
+
+            throw new DatabaseException($message, $error->getCode(), $error);
+        }
+    }
+
+    /**
+     * @return array<Capability>
+     */
+    #[\Override]
+    public function capabilities(): array
+    {
+        $remove = [
+            Capability::Schemas,
+            Capability::UpdateLock,
+            Capability::UpsertOnUniqueIndex,
+        ];
+
+        if (! $this->emulateMySQL) {
+            $remove[] = Capability::AttributeResizing;
+        }
+
+        return array_merge(
+            array_values(array_filter(
+                parent::capabilities(),
+                fn (Capability $c) => ! in_array($c, $remove, true)
+            )),
+            [
+                Capability::IntegerBooleans,
+                Capability::SchemaIntrospection,
+            ]
+        );
+    }
+
+    #[\Override]
+    public function setTenant(int|string|null $tenant): static
+    {
+        $changed = $this->currentTenant() !== $tenant;
+        parent::setTenant($tenant);
+        if ($changed) {
+            $this->ftsTableCache = [];
+        }
 
         return $this;
     }
 
-    public function getEmulateMySQL(): bool
-    {
-        return $this->emulateMySQL;
-    }
-
-    public function setTenant(int|string|null $tenant): bool
-    {
-        $changed = $this->tenant !== $tenant;
-        $result = parent::setTenant($tenant);
-        if ($changed) {
-            // Invalidate after the parent setter so a validation failure
-            // doesn't leave us with a cleared cache against the prior tenant.
-            $this->ftsTableCache = [];
-        }
-
-        return $result;
-    }
-
+    #[\Override]
     public function setNamespace(string $namespace): static
     {
         // Invalidate after the parent setter so a thrown validation
@@ -118,29 +227,30 @@ class SQLite extends MariaDB
         return $this;
     }
 
-    public function setSharedTables(bool $sharedTables): bool
+    #[\Override]
+    public function setSharedTables(bool $sharedTables): static
     {
         $changed = $this->sharedTables !== $sharedTables;
-        $result = parent::setSharedTables($sharedTables);
+        parent::setSharedTables($sharedTables);
         if ($changed) {
             $this->ftsTableCache = [];
         }
 
-        return $result;
+        return $this;
     }
 
-    /**
-     * Reject patterns over this size to bound ReDoS exposure — the UDF runs
-     * once per candidate row, so a pathological pattern is amplified by
-     * table cardinality.
-     */
-    private const REGEXP_MAX_PATTERN_LENGTH = 512;
+    #[Override]
+    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read): array
+    {
+        foreach ($queries as $query) {
+            $method = $query->getMethod();
+            if (\in_array($method, self::MISSING_AGGREGATES, true)) {
+                throw new QueryException('Aggregate '.$method->value.' is not supported by this adapter');
+            }
+        }
 
-    /**
-     * Cap on cached delimited patterns. Long-lived adapters processing many
-     * distinct user patterns would otherwise grow this map without bound.
-     */
-    private const REGEXP_PATTERN_CACHE_LIMIT = 256;
+        return parent::find($collection, $queries, $limit, $offset, $orderAttributes, $orderTypes, $cursor, $cursorDirection, $forPermission);
+    }
 
     /**
      * Register a preg_match-backed REGEXP UDF so the inherited REGEXP
@@ -180,15 +290,27 @@ class SQLite extends MariaDB
         };
 
         try {
-            $this->getPDO()->sqliteCreateFunction('REGEXP', $pcre, 2);
-            $this->pcreRegistered = true;
+            $pdo = $this->getDriver();
+
+            if ($pdo instanceof DatabasePDO) {
+                $pdo->__call('createFunction', ['REGEXP', $pcre, 2]);
+            } elseif (\method_exists($pdo, 'createFunction')) {
+                $pdo->createFunction('REGEXP', $pcre, 2);
+            }
         } catch (\Throwable) {
         }
     }
 
     /**
-     * @inheritDoc
-     *
+     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $statement
+     */
+    #[\Override]
+    protected function execute(mixed $statement, ?Event $event = null): bool
+    {
+        return $this->executeAndProfile($statement);
+    }
+
+    /**
      * SQLite serialises writers through a single file lock. PDO's default
      * `BEGIN` is `DEFERRED`, which acquires the writer lock lazily on the
      * first write — if two transactions both started as readers and try to
@@ -197,29 +319,30 @@ class SQLite extends MariaDB
      * `BEGIN IMMEDIATE` reserves the writer slot up-front so concurrent
      * writers queue behind it under busy_timeout instead.
      */
+    #[\Override]
     public function startTransaction(): bool
     {
         try {
             if ($this->inTransaction === 0) {
-                if ($this->getPDO()->inTransaction()) {
-                    $this->getPDO()
+                if ($this->getDriver()->inTransaction()) {
+                    $this
                         ->prepare('ROLLBACK')
                         ->execute();
                 }
 
-                $result = $this->getPDO()
+                $result = $this
                     ->prepare('BEGIN IMMEDIATE')
                     ->execute();
             } else {
-                $result = $this->getPDO()
-                    ->prepare('SAVEPOINT transaction' . $this->inTransaction)
+                $result = $this
+                    ->prepare('SAVEPOINT transaction'.$this->inTransaction)
                     ->execute();
             }
         } catch (PDOException $e) {
-            throw new TransactionException('Failed to start transaction: ' . $e->getMessage(), $e->getCode(), $e);
+            throw new TransactionException('Failed to start transaction: '.$e->getMessage(), $e->getCode(), $e);
         }
 
-        if (!$result) {
+        if (! $result) {
             throw new TransactionException('Failed to start transaction');
         }
 
@@ -229,14 +352,13 @@ class SQLite extends MariaDB
     }
 
     /**
-     * @inheritDoc
-     *
      * Overrides the inherited PDO-driven commit because startTransaction
      * issues a raw `BEGIN IMMEDIATE` (rather than PDO::beginTransaction),
      * so PDO's internal in-transaction flag is never set and PDO::commit()
      * would throw "no active transaction". Mirrors that with a raw COMMIT
      * and SAVEPOINT release for nested levels.
      */
+    #[\Override]
     public function commitTransaction(): bool
     {
         if ($this->inTransaction === 0) {
@@ -245,14 +367,14 @@ class SQLite extends MariaDB
 
         try {
             if ($this->inTransaction > 1) {
-                $result = $this->getPDO()
+                $result = $this
                     ->prepare('RELEASE SAVEPOINT transaction' . ($this->inTransaction - 1))
                     ->execute();
                 $this->inTransaction--;
                 return $result;
             }
 
-            $result = $this->getPDO()
+            $result = $this
                 ->prepare('COMMIT')
                 ->execute();
             $this->inTransaction = 0;
@@ -264,11 +386,10 @@ class SQLite extends MariaDB
     }
 
     /**
-     * @inheritDoc
-     *
      * Counterpart to commitTransaction — uses a raw ROLLBACK for the same
      * reason (raw BEGIN IMMEDIATE bypasses PDO's transaction tracking).
      */
+    #[\Override]
     public function rollbackTransaction(): bool
     {
         if ($this->inTransaction === 0) {
@@ -277,12 +398,12 @@ class SQLite extends MariaDB
 
         try {
             if ($this->inTransaction > 1) {
-                $this->getPDO()
+                $this
                     ->prepare('ROLLBACK TO transaction' . ($this->inTransaction - 1))
                     ->execute();
                 $this->inTransaction--;
             } else {
-                $this->getPDO()
+                $this
                     ->prepare('ROLLBACK')
                     ->execute();
                 $this->inTransaction = 0;
@@ -296,207 +417,216 @@ class SQLite extends MariaDB
     }
 
     /**
-     * Check if Database exists
-     * Optionally check if collection exists in Database
-     *
-     * @param string $database
-     * @param string|null $collection
-     * @return bool
-     * @throws DatabaseException
-     */
-    public function exists(string $database, ?string $collection = null): bool
-    {
-        $database = $this->filter($database);
-
-        if (\is_null($collection)) {
-            return false;
-        }
-
-        $collection = $this->filter($collection);
-
-        $sql = "
-			SELECT name FROM sqlite_master 
-			WHERE type='table' AND name = :table
-		";
-
-        $sql = $this->trigger(Database::EVENT_DATABASE_CREATE, $sql);
-
-        $stmt = $this->getPDO()->prepare($sql);
-
-        $stmt->bindValue(':table', "{$this->getNamespace()}_{$collection}", PDO::PARAM_STR);
-
-        $stmt->execute();
-
-        $document = $stmt->fetchAll();
-        $stmt->closeCursor();
-        if (!empty($document)) {
-            $document = $document[0];
-        }
-
-        return (($document['name'] ?? '') === "{$this->getNamespace()}_{$collection}");
-    }
-
-    /**
-     * Create Database
-     *
-     * @param string $name
-     * @return bool
      * @throws Exception
      * @throws PDOException
      */
+    #[\Override]
     public function create(string $name): bool
     {
         return true;
     }
 
     /**
-     * Delete Database
-     *
-     * @param string $name
-     * @return bool
+     * SQLite keeps no database name in storage, so no database is reported to exist, unlike every other adapter:
+     * the tables of the file are reached under any name. Ask collectionExists() for what a database holds.
+     */
+    #[Override]
+    public function exists(string $database): bool
+    {
+        return false;
+    }
+
+    /**
+     * SQLite keeps no database name in storage: every name addresses the same tables, so a rename moves nothing
+     * and succeeds without checking either name, unlike every other adapter, which refuses a missing source or an
+     * existing target.
+     */
+    #[\Override]
+    public function update(string $name, string $new): bool
+    {
+        return true;
+    }
+
+    /**
+     * @throws DatabaseException
+     */
+    #[Override]
+    public function collectionExists(string $database, string $collection): bool
+    {
+        $collection = $this->filter($collection);
+
+        $sql = "
+			SELECT name FROM sqlite_master
+			WHERE type='table' AND name = :table
+		";
+
+        $statement = $this->prepare($sql, 'Failed to prepare collection existence query', Event::CollectionRead);
+
+        $statement->bindValue(':table', "{$this->getNamespace()}_{$collection}", PDO::PARAM_STR);
+
+        $this->execute($statement);
+
+        $document = $statement->fetchAll();
+        $statement->closeCursor();
+        if (! empty($document)) {
+            /** @var array<string, mixed> $firstDoc */
+            $firstDoc = $document[0];
+            $docName = $firstDoc['name'] ?? '';
+
+            return (\is_string($docName) ? $docName : '') === "{$this->getNamespace()}_{$collection}";
+        }
+
+        return false;
+    }
+
+    /**
      * @throws Exception
      * @throws PDOException
      */
+    #[\Override]
     public function delete(string $name): bool
     {
         return true;
     }
 
     /**
-     * Create Collection
+     * @param  list<Attribute>  $attributes
+     * @param  list<Index>  $indexes
      *
-     * @param string $name
-     * @param array<Document> $attributes
-     * @param array<Document> $indexes
-     * @return bool
      * @throws Exception
      * @throws PDOException
      */
-    public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
+    #[\Override]
+    public function createCollection(string $collection, array $attributes = [], array $indexes = []): bool
     {
-        $id = $this->filter($name);
+        $id = $this->filter($collection);
 
         /** @var array<string> $attributeStrings */
         $attributeStrings = [];
 
         foreach ($attributes as $key => $attribute) {
-            $attrId = $this->filter($attribute->getId());
-
-            $attrType = $this->getSQLType(
-                $attribute->getAttribute('type'),
-                $attribute->getAttribute('size', 0),
-                $attribute->getAttribute('signed', true),
-                $attribute->getAttribute('array', false),
-                $attribute->getAttribute('required', false)
-            );
-
-            $attributeStrings[$key] = "`{$attrId}` {$attrType}, ";
+            $attributeStrings[$key] = '`'.$this->filter($attribute->key).'` '.$this->getAttributeSqlType($attribute).', ';
         }
 
-        // SQLite stores integers regardless of declared type, but
-        // testSchemaAttributes asserts the columnType reads back as
-        // `int(11) unsigned` to match MariaDB. Quote the declaration so
-        // PRAGMA table_info echoes the exact string under emulation;
-        // otherwise use INTEGER, the affinity-correct vanilla form.
+        // Under MySQL emulation the tenant column reads back with the type MariaDB reports: SQLite keeps a quoted
+        // declaration verbatim, where INTEGER is the affinity-correct form otherwise.
         $tenantType = $this->emulateMySQL ? '"INT(11) UNSIGNED"' : 'INTEGER';
-        $tenantQuery = $this->sharedTables ? "`_tenant` {$tenantType} DEFAULT NULL," : '';
+        $tenantQuery = $this->sharedTables ? "{$this->quote(Storage::TENANT)} {$tenantType} DEFAULT NULL," : '';
 
-        $collection = "
-			CREATE TABLE {$this->getSQLTable($id)} (
-				`_id` INTEGER PRIMARY KEY AUTOINCREMENT,
-				`_uid` VARCHAR(36) NOT NULL,
+        $table = "
+			CREATE TABLE {$this->getTable($id)} (
+				{$this->quote(Storage::SEQUENCE)} INTEGER PRIMARY KEY AUTOINCREMENT,
+				{$this->quote(Storage::UID)} VARCHAR(36) NOT NULL,
 				{$tenantQuery}
-				`_createdAt` DATETIME(3) DEFAULT NULL,
-				`_updatedAt` DATETIME(3) DEFAULT NULL,
-				`_permissions` MEDIUMTEXT DEFAULT NULL".(!empty($attributes) ? ',' : '')."
-				" . \substr(\implode(' ', $attributeStrings), 0, -2) . "
+				{$this->quote(Storage::CREATED_AT)} DATETIME(3) DEFAULT NULL,
+				{$this->quote(Storage::UPDATED_AT)} DATETIME(3) DEFAULT NULL,
+				{$this->quote(Storage::PERMISSIONS)} MEDIUMTEXT DEFAULT NULL".(! empty($attributes) ? ',' : '').'
+				'.\substr(\implode(' ', $attributeStrings), 0, -2).'
 			)
-		";
-
-        $collection = $this->trigger(Database::EVENT_COLLECTION_CREATE, $collection);
+		';
 
         $permissions = "
-			CREATE TABLE {$this->getSQLTable($id . '_perms')} (
-				`_id` INTEGER PRIMARY KEY AUTOINCREMENT,
+			CREATE TABLE {$this->getTable(Storage::permissionsTable($id))} (
+				{$this->quote(Storage::SEQUENCE)} INTEGER PRIMARY KEY AUTOINCREMENT,
 				{$tenantQuery}
-				`_type` VARCHAR(12) NOT NULL,
-				`_permission` VARCHAR(255) NOT NULL,
-				`_document` VARCHAR(255) NOT NULL
+				{$this->quote(Storage::PERMISSIONS_TYPE)} VARCHAR(12) NOT NULL,
+				{$this->quote(Storage::PERMISSIONS_PERMISSION)} VARCHAR(255) NOT NULL,
+				{$this->quote(Storage::PERMISSIONS_DOCUMENT)} VARCHAR(255) NOT NULL
 			)
 		";
 
-        $permissions = $this->trigger(Database::EVENT_COLLECTION_CREATE, $permissions);
+        $created = false;
 
         try {
-            $this->getPDO()
-                ->prepare($collection)
-                ->execute();
+            $this->execute($this->prepare($table, event: Event::CollectionCreate));
+            $created = true;
 
-            $this->getPDO()
-                ->prepare($permissions)
-                ->execute();
+            $this->execute($this->prepare($permissions, event: Event::CollectionCreate));
 
-            $this->createIndex($id, '_index1', Database::INDEX_UNIQUE, ['_uid'], [], []);
-            $this->createIndex($id, '_created_at', Database::INDEX_KEY, [ '_createdAt'], [], []);
-            $this->createIndex($id, '_updated_at', Database::INDEX_KEY, [ '_updatedAt'], [], []);
+            $this->createIndex($id, Index::unique(key: Storage::INDEX_1, attributes: [Storage::UID]), event: Event::CollectionCreate);
+            $this->createIndex($id, Index::key(key: Storage::INDEX_CREATED_AT, attributes: [Storage::CREATED_AT]), event: Event::CollectionCreate);
+            $this->createIndex($id, Index::key(key: Storage::INDEX_UPDATED_AT, attributes: [Storage::UPDATED_AT]), event: Event::CollectionCreate);
 
-            $this->createIndex("{$id}_perms", '_index_1', Database::INDEX_UNIQUE, ['_document', '_type', '_permission'], [], []);
-            $this->createIndex("{$id}_perms", '_index_2', Database::INDEX_KEY, ['_permission', '_type'], [], []);
+            $this->createIndex(Storage::permissionsTable($id), Index::unique(key: self::INDEX_1, attributes: [Storage::PERMISSIONS_DOCUMENT, Storage::PERMISSIONS_TYPE, Storage::PERMISSIONS_PERMISSION]), event: Event::CollectionCreate);
+            $this->createIndex(Storage::permissionsTable($id), Index::key(key: self::INDEX_2, attributes: [Storage::PERMISSIONS_PERMISSION, Storage::PERMISSIONS_TYPE]), event: Event::CollectionCreate);
 
             if ($this->sharedTables) {
-                $this->createIndex($id, '_tenant_id', Database::INDEX_KEY, [ '_id'], [], []);
+                $this->createIndex($id, Index::key(key: Storage::INDEX_TENANT_ID, attributes: [Storage::SEQUENCE]), event: Event::CollectionCreate);
             }
 
             foreach ($indexes as $index) {
-                $indexId = $this->filter($index->getId());
-                $indexType = $index->getAttribute('type');
-                $indexAttributes = $index->getAttribute('attributes', []);
-                $indexLengths = $index->getAttribute('lengths', []);
-                $indexOrders = $index->getAttribute('orders', []);
-                $indexTtl = $index->getAttribute('ttl', 0);
+                $this->createIndex($id, $index->withKey($this->filter($index->key)), event: Event::CollectionCreate);
+            }
+        } catch (Throwable $error) {
+            if ($error instanceof PDOException) {
+                $error = $this->processException($error);
+            }
 
-                $this->createIndex($id, $indexId, $indexType, $indexAttributes, $indexLengths, $indexOrders, [], [], $indexTtl);
+            if ($created && ! $error instanceof DuplicateException) {
+                $this->discardCreatedCollection($id);
+            }
+
+            throw $error;
+        }
+
+        return true;
+    }
+
+    /**
+     * Record planner statistics (sqlite_stat1) for a collection's table and its permissions table.
+     *
+     * @throws DatabaseException
+     */
+    #[\Override]
+    public function analyzeCollection(string $collection): bool
+    {
+        $name = $this->filter($collection);
+
+        try {
+            foreach ([$name, Storage::permissionsTable($name)] as $table) {
+                $this->executeStatement('ANALYZE '.$this->getTable($table), Event::CollectionUpdate);
             }
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
+
         return true;
     }
 
-
     /**
-     * Get Collection Size of raw data
-     * @param string $collection
-     * @return int
      * @throws DatabaseException
-     *
      */
+    #[\Override]
     public function getSizeOfCollection(string $collection): int
     {
         $collection = $this->filter($collection);
         $namespace = $this->getNamespace();
         $name = $namespace . '_' . $collection;
-        $permissions = $namespace . '_' . $collection . '_perms';
+        $permissions = $namespace . '_' . Storage::permissionsTable($collection);
         $ftsPrefix = $this->getFulltextTablePrefix($collection);
 
         // FTS5 storage lives in `<vtable>_data|_idx|_docsize|_config`
         // shadow tables; sum (pgsize - unused) over all of them.
         $ftsPattern = $this->escapeLikePattern($ftsPrefix) . '%' . $this->escapeLikePattern(self::FTS_TABLE_SUFFIX) . '%';
 
-        $stmt = $this->getPDO()->prepare("
+        $statement = $this->prepare("
              SELECT COALESCE(SUM(\"pgsize\" - \"unused\"), 0)
              FROM \"dbstat\"
              WHERE name = :name OR name = :perms OR name LIKE :fts_pattern ESCAPE '\\';
-        ");
+        ", event: Event::CollectionRead);
 
-        $stmt->bindParam(':name', $name);
-        $stmt->bindParam(':perms', $permissions);
-        $stmt->bindParam(':fts_pattern', $ftsPattern);
+        $statement->bindParam(':name', $name);
+        $statement->bindParam(':perms', $permissions);
+        $statement->bindParam(':fts_pattern', $ftsPattern);
 
         try {
-            $stmt->execute();
-            $size = (int) $stmt->fetchColumn();
-            $stmt->closeCursor();
+            $this->execute($statement);
+            $result = $statement->fetchColumn();
+            if (! \is_int($result) && (! \is_string($result) || ! \is_numeric($result))) {
+                throw new DatabaseException('Failed to get collection size: invalid database result');
+            }
+            $size = (int) $result;
+            $statement->closeCursor();
         } catch (PDOException $e) {
             throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
         }
@@ -505,83 +635,57 @@ class SQLite extends MariaDB
     }
 
     /**
-     * Get Collection Size on disk
-     * @param string $collection
-     * @return int
      * @throws DatabaseException
      */
+    #[\Override]
     public function getSizeOfCollectionOnDisk(string $collection): int
     {
         return $this->getSizeOfCollection($collection);
     }
 
+    #[Override]
+    protected function dropCreatedCollection(string $id): void
+    {
+        $this->deleteCollection($id);
+    }
+
     /**
-     * Delete Collection
-     * @param string $id
-     * @return bool
      * @throws Exception
      * @throws PDOException
      */
-    public function deleteCollection(string $id): bool
+    #[\Override]
+    public function deleteCollection(string $collection): bool
     {
-        $id = $this->filter($id);
+        $id = $this->filter($collection);
 
         // FTS5 shadow tables don't drop with the parent.
         foreach ($this->findFulltextTables($id) as $ftsTable) {
             $sql = "DROP TABLE IF EXISTS `{$ftsTable}`";
-            $sql = $this->trigger(Database::EVENT_COLLECTION_DELETE, $sql);
-            $this->getPDO()->prepare($sql)->execute();
+            $this->execute($this->prepare($sql, event: Event::CollectionDelete));
         }
 
-        $sql = "DROP TABLE IF EXISTS {$this->getSQLTable($id)}";
-        $sql = $this->trigger(Database::EVENT_COLLECTION_DELETE, $sql);
+        $sql = "DROP TABLE IF EXISTS {$this->getTable($id)}";
 
-        $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        $this->execute($this->prepare($sql, event: Event::CollectionDelete));
 
-        $sql = "DROP TABLE IF EXISTS {$this->getSQLTable($id . '_perms')}";
-        $sql = $this->trigger(Database::EVENT_COLLECTION_DELETE, $sql);
+        $sql = "DROP TABLE IF EXISTS {$this->getTable(Storage::permissionsTable($id))}";
 
-        $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        $this->execute($this->prepare($sql, event: Event::CollectionDelete));
 
-        unset($this->ftsTableCache[$id]);
+        unset($this->ftsTableCache[$this->getFulltextTablePrefix($id)]);
 
         return true;
     }
 
     /**
-     * Analyze a collection updating it's metadata on the database engine
-     *
-     * @param string $collection
-     * @return bool
-     */
-    public function analyzeCollection(string $collection): bool
-    {
-        return false;
-    }
-
-    /**
-     * Update Attribute
-     *
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param int $size
-     * @param bool $signed
-     * @param bool $array
-     * @param string|null $newKey
-     * @param bool $required
-     * @return bool
      * @throws Exception
      * @throws PDOException
      */
-    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null, bool $required = false): bool
+    #[\Override]
+    public function updateAttribute(string $collection, string $key, Attribute $attribute): bool
     {
-        if (!empty($newKey) && $newKey !== $id) {
-            return $this->renameAttribute($collection, $id, $newKey);
+        if ($attribute->key !== $key) {
+            return $this->renameAttribute($collection, $key, $attribute->key);
         }
 
         // SQLite is dynamically typed — `ALTER TABLE ... MODIFY COLUMN` is
@@ -590,32 +694,33 @@ class SQLite extends MariaDB
         // raise the same TruncateException MariaDB throws. Off-
         // emulation the declared size is metadata-only, so skip the
         // scan and let the rename branch (if any) handle the rest.
-        if ($this->emulateMySQL && $type === Database::VAR_STRING && $size > 0 && !$array) {
+        $size = $attribute->size ?? 0;
+        if ($this->emulateMySQL && $attribute->type === ColumnType::String && $size > 0 && ! $attribute->array) {
             $name = $this->filter($collection);
-            $column = $this->filter($id);
+            $column = $this->filter($attribute->key);
 
             // Under shared tables the underlying table is shared across
             // tenants; scoping the scan by `_tenant` keeps tenant A's
             // resize from being blocked (and tenant A's metadata from
             // leaking) by an oversized value owned by tenant B.
-            $tenantClause = $this->sharedTables ? ' AND `_tenant` = :_tenant' : '';
-            $sql = "SELECT 1 FROM {$this->getSQLTable($name)} WHERE LENGTH(`{$column}`) > :max{$tenantClause} LIMIT 1";
+            $tenantClause = $this->sharedTables ? ' AND '.$this->quote(Storage::TENANT).' = :'.Storage::TENANT : '';
+            $sql = "SELECT 1 FROM {$this->getTable($name)} WHERE LENGTH(`{$column}`) > :max{$tenantClause} LIMIT 1";
 
-            $stmt = $this->getPDO()->prepare($sql);
-            $stmt->bindValue(':max', $size, PDO::PARAM_INT);
+            $statement = $this->prepare($sql, event: Event::AttributeUpdate);
+            $statement->bindValue(':max', $size, PDO::PARAM_INT);
             if ($this->sharedTables) {
-                $stmt->bindValue(':_tenant', $this->tenant, \is_int($this->tenant) ? PDO::PARAM_INT : PDO::PARAM_STR);
+                $statement->bindValue(':'.Storage::TENANT, $this->currentTenant(), \is_int($this->currentTenant()) ? PDO::PARAM_INT : PDO::PARAM_STR);
             }
 
             try {
-                $stmt->execute();
-                $exceeds = $stmt->fetchColumn() !== false;
+                $this->execute($statement);
+                $exceeds = $statement->fetchColumn() !== false;
             } finally {
-                $stmt->closeCursor();
+                $statement->closeCursor();
             }
 
             if ($exceeds) {
-                throw new TruncateException("Attribute '{$id}' has values exceeding new size {$size}");
+                throw new TruncateException("Attribute '{$attribute->key}' has values exceeding new size {$size}");
             }
         }
 
@@ -623,49 +728,40 @@ class SQLite extends MariaDB
     }
 
     /**
-     * Delete Attribute
-     *
-     * @param string $collection
-     * @param string $id
-     * @param bool $array
-     * @return bool
      * @throws Exception
      * @throws PDOException
      */
-    public function deleteAttribute(string $collection, string $id, bool $array = false): bool
+    #[\Override]
+    public function deleteAttribute(string $collection, string $key): bool
     {
         $name = $this->filter($collection);
-        $id = $this->filter($id);
-        $metadataCollection = new Document(['$id' => Database::METADATA]);
+        $id = $this->filter($key);
+        $metadataCollection = new Document([Document::ID => Database::METADATA]);
         $collection = $this->getDocument($metadataCollection, $name);
 
         if ($collection->isEmpty()) {
             throw new NotFoundException('Collection not found');
         }
 
-        $indexes = $collection->getAttribute('indexes', []);
-        if (\is_string($indexes)) {
-            $indexes = \json_decode($indexes, true) ?? [];
-        }
-
-        foreach ($indexes as $index) {
-            $attributes = $index['attributes'];
-            if ($attributes === [$id]) {
-                $this->deleteIndex($name, $index['$id']);
-            } elseif (\in_array($id, $attributes)) {
-                $this->deleteIndex($name, $index['$id']);
-                $this->createIndex($name, $index['$id'], $index['type'], \array_diff($attributes, [$id]), $index['lengths'], $index['orders']);
+        foreach (self::collectionIndexes($collection) as $index) {
+            if ($index->attributes === [$id]) {
+                $this->deleteIndex($name, $index->key, Event::AttributeDelete);
+            } elseif (\in_array($id, $index->attributes, true)) {
+                $this->deleteIndex($name, $index->key, Event::AttributeDelete);
+                $this->createIndex($name, Index::fromArray([
+                    'key' => $index->key,
+                    'type' => $index->type,
+                    'attributes' => \array_values(\array_filter($index->attributes, fn (string $attribute): bool => $attribute !== $id)),
+                    'lengths' => $index->lengths,
+                    'orders' => $index->orders,
+                ]), event: Event::AttributeDelete);
             }
         }
 
-        $sql = "ALTER TABLE {$this->getSQLTable($name)} DROP COLUMN `{$id}`";
-
-        $sql = $this->trigger(Database::EVENT_COLLECTION_DELETE, $sql);
+        $sql = "ALTER TABLE {$this->getTable($name)} DROP COLUMN `{$id}`";
 
         try {
-            return $this->getPDO()
-                ->prepare($sql)
-                ->execute();
+            return $this->execute($this->prepare($sql, event: Event::AttributeDelete));
         } catch (PDOException $e) {
             if (str_contains($e->getMessage(), 'no such column')) {
                 return true;
@@ -676,101 +772,48 @@ class SQLite extends MariaDB
     }
 
     /**
-     * Rename Index
+     * @param  array<string,string>  $indexAttributeTypes
+     * @param  array<string, mixed>  $collation
      *
-     * @param string $collection
-     * @param string $old
-     * @param string $new
-     * @return bool
      * @throws Exception
      * @throws PDOException
      */
-    public function renameIndex(string $collection, string $old, string $new): bool
-    {
-        $metadataCollection = new Document(['$id' => Database::METADATA]);
-        $collection = $this->getDocument($metadataCollection, $collection);
-
-        if ($collection->isEmpty()) {
-            throw new NotFoundException('Collection not found');
-        }
-
-        $old = $this->filter($old);
-        $new = $this->filter($new);
-        $indexes = $collection->getAttribute('indexes', []);
-        if (\is_string($indexes)) {
-            $indexes = \json_decode($indexes, true) ?? [];
-        }
-        $index = null;
-
-        foreach ($indexes as $node) {
-            if ($node['key'] === $old) {
-                $index = $node;
-                break;
-            }
-        }
-
-        if ($index
-            && $this->deleteIndex($collection->getId(), $old)
-            && $this->createIndex(
-                $collection->getId(),
-                $new,
-                $index['type'],
-                $index['attributes'],
-                $index['lengths'],
-                $index['orders'],
-            )) {
-            return true;
-        }
-
-        return false;
-    }
-
-    /**
-     * Create Index
-     *
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param array<string> $attributes
-     * @param array<int> $lengths
-     * @param array<string> $orders
-     * @param array<string,string> $indexAttributeTypes
-     * @return bool
-     * @throws Exception
-     * @throws PDOException
-     */
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = [], array $collation = [], int $ttl = 1): bool
-    {
+    #[\Override]
+    public function createIndex(
+        string $collection,
+        Index $index,
+        array $indexAttributeTypes = [],
+        array $collation = [],
+        Event $event = Event::IndexCreate,
+    ): bool {
         $name = $this->filter($collection);
-        $id = $this->filter($id);
+        $id = $this->filter($index->key);
+        $type = $index->type;
+        $attributes = $index->attributes;
 
-        if ($type === Database::INDEX_FULLTEXT) {
-            return $this->createFulltextIndex($name, $id, $attributes);
+        if ($type === IndexType::Fulltext) {
+            return $this->createFulltextIndex($name, $id, $attributes, $event);
         }
 
         // Workaround for no support for CREATE INDEX IF NOT EXISTS
-        $stmt = $this->getPDO()->prepare("
+        $statement = $this->prepare("
 			SELECT name
 			FROM sqlite_master
 			WHERE type='index' AND name=:_index;
-		");
-        $stmt->bindValue(':_index', "{$this->getNamespace()}_{$this->getTenantSegment()}_{$name}_{$id}");
-        $stmt->execute();
-        $index = $stmt->fetch();
-        if (!empty($index)) {
+			", event: $event);
+        $statement->bindValue(':_index', "{$this->getNamespace()}_{$this->getTenantSegment()}_{$name}_{$id}");
+        $this->execute($statement);
+        $existingIndex = $statement->fetch();
+        if (! empty($existingIndex)) {
             return true;
         }
 
-        $sql = $this->getSQLIndex($name, $id, $type, $attributes);
-
-        $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
+        $sql = $this->getSqlIndex($name, $id, $type, $attributes);
 
         try {
-            return $this->getPDO()
-                ->prepare($sql)
-                ->execute();
-        } catch (PDOException $e) {
-            throw $this->processException($e);
+            return $this->execute($this->prepare($sql, event: $event));
+        } catch (PDOException $error) {
+            throw $this->processException($error);
         }
     }
 
@@ -781,7 +824,7 @@ class SQLite extends MariaDB
      * @param array<string> $attributes
      * @throws PDOException
      */
-    protected function createFulltextIndex(string $collection, string $id, array $attributes): bool
+    protected function createFulltextIndex(string $collection, string $id, array $attributes, Event $event = Event::IndexCreate): bool
     {
         if (empty($attributes)) {
             throw new DatabaseException('Fulltext index requires at least one attribute');
@@ -791,15 +834,15 @@ class SQLite extends MariaDB
         $ftsTable = $this->getFulltextTableName($collection, $attributes);
         $parentTable = "{$this->getNamespace()}_{$collection}";
 
-        $stmt = $this->getPDO()->prepare("
+        $statement = $this->prepare("
             SELECT name
             FROM sqlite_master
             WHERE type='table' AND name=:_table;
-        ");
-        $stmt->bindValue(':_table', $ftsTable);
-        $stmt->execute();
-        $exists = !empty($stmt->fetch());
-        $stmt->closeCursor();
+        ", event: $event);
+        $statement->bindValue(':_table', $ftsTable);
+        $this->execute($statement);
+        $exists = !empty($statement->fetch());
+        $statement->closeCursor();
         if ($exists) {
             return true;
         }
@@ -815,47 +858,46 @@ class SQLite extends MariaDB
         // literal — otherwise tenant A's vtable accumulates tenant B's
         // tokenized content. The same applies to the initial backfill.
         $tenantLiteral = $this->sharedTables ? $this->getTenantSqlLiteral() : null;
-        $insertWhen = $tenantLiteral !== null ? " WHEN NEW.`_tenant` IS {$tenantLiteral}" : '';
-        $deleteWhen = $tenantLiteral !== null ? " WHEN OLD.`_tenant` IS {$tenantLiteral}" : '';
+        $insertWhen = $tenantLiteral !== null ? " WHEN NEW.{$this->quote(Storage::TENANT)} IS {$tenantLiteral}" : '';
+        $deleteWhen = $tenantLiteral !== null ? " WHEN OLD.{$this->quote(Storage::TENANT)} IS {$tenantLiteral}" : '';
         $updateWhen = $tenantLiteral !== null
-            ? " WHEN OLD.`_tenant` IS {$tenantLiteral} OR NEW.`_tenant` IS {$tenantLiteral}"
+            ? " WHEN OLD.{$this->quote(Storage::TENANT)} IS {$tenantLiteral} OR NEW.{$this->quote(Storage::TENANT)} IS {$tenantLiteral}"
             : '';
-        $backfillWhere = $tenantLiteral !== null ? " WHERE `_tenant` IS {$tenantLiteral}" : '';
+        $backfillWhere = $tenantLiteral !== null ? " WHERE {$this->quote(Storage::TENANT)} IS {$tenantLiteral}" : '';
 
         $this->startTransaction();
         try {
-            $createSql = "CREATE VIRTUAL TABLE `{$ftsTable}` USING fts5({$ftsColumnList}, content=\"{$parentTable}\", content_rowid=\"_id\")";
-            $createSql = $this->trigger(Database::EVENT_INDEX_CREATE, $createSql);
-            $this->getPDO()->prepare($createSql)->execute();
+            $createSql = "CREATE VIRTUAL TABLE `{$ftsTable}` USING fts5({$ftsColumnList}, content=\"{$parentTable}\", content_rowid=\"".Storage::SEQUENCE.'")';
+            $this->execute($this->prepare($createSql, event: $event));
 
             $insertSuffix = self::FTS_TRIGGER_INSERT;
             $insertTrigger = "
                 CREATE TRIGGER `{$ftsTable}_{$insertSuffix}` AFTER INSERT ON `{$parentTable}`{$insertWhen} BEGIN
-                    INSERT INTO `{$ftsTable}` (rowid, {$columnList}) VALUES (NEW.`_id`, {$newColumnList});
+                    INSERT INTO `{$ftsTable}` (rowid, {$columnList}) VALUES (NEW.{$this->quote(Storage::SEQUENCE)}, {$newColumnList});
                 END
             ";
-            $this->getPDO()->prepare($insertTrigger)->execute();
+            $this->execute($this->prepare($insertTrigger, event: $event));
 
             $deleteSuffix = self::FTS_TRIGGER_DELETE;
             $deleteTrigger = "
                 CREATE TRIGGER `{$ftsTable}_{$deleteSuffix}` AFTER DELETE ON `{$parentTable}`{$deleteWhen} BEGIN
-                    INSERT INTO `{$ftsTable}` (`{$ftsTable}`, rowid, {$columnList}) VALUES ('delete', OLD.`_id`, {$oldColumnList});
+                    INSERT INTO `{$ftsTable}` (`{$ftsTable}`, rowid, {$columnList}) VALUES ('delete', OLD.{$this->quote(Storage::SEQUENCE)}, {$oldColumnList});
                 END
             ";
-            $this->getPDO()->prepare($deleteTrigger)->execute();
+            $this->execute($this->prepare($deleteTrigger, event: $event));
 
             $updateSuffix = self::FTS_TRIGGER_UPDATE;
             // OF <cols>: skip re-tokenise when only timestamps/permissions change.
             $updateTrigger = "
                 CREATE TRIGGER `{$ftsTable}_{$updateSuffix}` AFTER UPDATE OF {$columnList} ON `{$parentTable}`{$updateWhen} BEGIN
-                    INSERT INTO `{$ftsTable}` (`{$ftsTable}`, rowid, {$columnList}) VALUES ('delete', OLD.`_id`, {$oldColumnList});
-                    INSERT INTO `{$ftsTable}` (rowid, {$columnList}) VALUES (NEW.`_id`, {$newColumnList});
+                    INSERT INTO `{$ftsTable}` (`{$ftsTable}`, rowid, {$columnList}) VALUES ('delete', OLD.{$this->quote(Storage::SEQUENCE)}, {$oldColumnList});
+                    INSERT INTO `{$ftsTable}` (rowid, {$columnList}) VALUES (NEW.{$this->quote(Storage::SEQUENCE)}, {$newColumnList});
                 END
             ";
-            $this->getPDO()->prepare($updateTrigger)->execute();
+            $this->execute($this->prepare($updateTrigger, event: $event));
 
-            $backfill = "INSERT INTO `{$ftsTable}` (rowid, {$columnList}) SELECT `_id`, {$columnList} FROM `{$parentTable}`{$backfillWhere}";
-            $this->getPDO()->prepare($backfill)->execute();
+            $backfill = "INSERT INTO `{$ftsTable}` (rowid, {$columnList}) SELECT {$this->quote(Storage::SEQUENCE)}, {$columnList} FROM `{$parentTable}`{$backfillWhere}";
+            $this->execute($this->prepare($backfill, event: $event));
 
             $this->commitTransaction();
         } catch (\Throwable $e) {
@@ -869,7 +911,7 @@ class SQLite extends MariaDB
             throw $e;
         }
 
-        unset($this->ftsTableCache[$collection]);
+        unset($this->ftsTableCache[$this->getFulltextTablePrefix($collection)]);
 
         return true;
     }
@@ -882,10 +924,9 @@ class SQLite extends MariaDB
      */
     protected function getFulltextTableName(string $collection, array|string $attributes): string
     {
-        $attrs = \is_array($attributes) ? $attributes : [$attributes];
-        $attrs = \array_map(fn (string $attr) => $this->filter($attr), $attrs);
-        \sort($attrs);
-        $key = \substr(\hash('sha1', \implode("\0", $attrs)), 0, 16);
+        $names = \array_map($this->filter(...), \is_array($attributes) ? $attributes : [$attributes]);
+        \sort($names);
+        $key = \substr(\hash('sha1', \implode("\0", $names)), 0, 16);
 
         return $this->getFulltextTablePrefix($collection) . $key . self::FTS_TABLE_SUFFIX;
     }
@@ -909,7 +950,7 @@ class SQLite extends MariaDB
      */
     private function getTenantSegment(): string
     {
-        return $this->filter((string) ($this->tenant ?? ''));
+        return $this->filter((string) ($this->currentTenant() ?? ''));
     }
 
     /**
@@ -918,58 +959,59 @@ class SQLite extends MariaDB
      */
     private function getTenantSqlLiteral(): string
     {
-        if ($this->tenant === null) {
+        if ($this->currentTenant() === null) {
             return 'NULL';
         }
-        if (\is_int($this->tenant)) {
-            return (string) $this->tenant;
+        if (\is_int($this->currentTenant())) {
+            return (string) $this->currentTenant();
         }
 
-        return $this->getPDO()->quote((string) $this->tenant);
+        $pdo = $this->getDriver();
+        $quoted = $pdo instanceof PDOProxy
+            ? $pdo->__call('quote', [(string) $this->currentTenant()])
+            : $pdo->quote((string) $this->currentTenant());
+        if (! \is_string($quoted)) {
+            throw new DatabaseException('Failed to quote SQLite tenant');
+        }
+
+        return $quoted;
     }
 
     /**
-     * Delete Index
-     *
-     * @param string $collection
-     * @param string $id
-     * @return bool
      * @throws Exception
      * @throws PDOException
      */
-    public function deleteIndex(string $collection, string $id): bool
+    #[\Override]
+    public function deleteIndex(string $collection, string $key, Event $event = Event::IndexDelete): bool
     {
         $name = $this->filter($collection);
-        $id = $this->filter($id);
+        $id = $this->filter($key);
 
         // If a regular SQLite index with this id exists, take the normal
         // DROP INDEX path. Otherwise the index is either an FTS5 virtual
         // table (whose name is keyed off attributes, not the id) or
         // already absent — try the FTS5 path before erroring.
         $regularIndex = "{$this->getNamespace()}_{$this->getTenantSegment()}_{$name}_{$id}";
-        $stmt = $this->getPDO()->prepare("
+        $statement = $this->prepare("
             SELECT name FROM sqlite_master WHERE type='index' AND name=:_index
-        ");
-        $stmt->bindValue(':_index', $regularIndex);
-        $stmt->execute();
-        $hasRegular = $stmt->fetchColumn() !== false;
+        ", event: $event);
+        $statement->bindValue(':_index', $regularIndex);
+        $this->execute($statement);
+        $hasRegular = $statement->fetchColumn() !== false;
         // Free the read cursor before issuing DDL — SQLite holds a SHARED
         // lock on the database while a statement has unfetched rows, and
         // any subsequent DROP INDEX / ALTER TABLE under emulated prepares
         // will trip "database table is locked".
-        $stmt->closeCursor();
+        $statement->closeCursor();
 
-        if (!$hasRegular && $this->dropFulltextIndexById($name, $id)) {
+        if (! $hasRegular && $this->dropFulltextIndexById($name, $id, $event)) {
             return true;
         }
 
         $sql = "DROP INDEX `{$regularIndex}`";
-        $sql = $this->trigger(Database::EVENT_INDEX_DELETE, $sql);
 
         try {
-            return $this->getPDO()
-                ->prepare($sql)
-                ->execute();
+            return $this->execute($this->prepare($sql, event: $event));
         } catch (PDOException $e) {
             if (str_contains($e->getMessage(), 'no such index')) {
                 return true;
@@ -980,10 +1022,43 @@ class SQLite extends MariaDB
     }
 
     /**
+     * @throws Exception
+     * @throws PDOException
+     */
+    #[\Override]
+    public function renameIndex(string $collection, string $old, string $new): bool
+    {
+        $metadataCollection = new Document([Document::ID => Database::METADATA]);
+        $collection = $this->getDocument($metadataCollection, $collection);
+
+        if ($collection->isEmpty()) {
+            throw new NotFoundException('Collection not found');
+        }
+
+        $old = $this->filter($old);
+        $new = $this->filter($new);
+        $index = null;
+        foreach (self::collectionIndexes($collection) as $stored) {
+            if ($stored->key === $old) {
+                $index = $stored;
+                break;
+            }
+        }
+
+        if ($index !== null
+            && $this->deleteIndex($collection->getId(), $old, Event::IndexRename)
+            && $this->createIndex($collection->getId(), $index->withKey($new), event: Event::IndexRename)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Drop the FTS5 vtable backing index `$id` on `$collection`. Returns
      * false when no FTS5 table exists; throws when ambiguous.
      */
-    protected function dropFulltextIndexById(string $collection, string $id): bool
+    protected function dropFulltextIndexById(string $collection, string $id, Event $event = Event::IndexDelete): bool
     {
         $tables = $this->findFulltextTables($collection);
 
@@ -1021,11 +1096,10 @@ class SQLite extends MariaDB
         $this->startTransaction();
         try {
             foreach ($triggerSuffixes as $suffix) {
-                $this->getPDO()->prepare("DROP TRIGGER IF EXISTS `{$ftsTable}_{$suffix}`")->execute();
+                $this->execute($this->prepare("DROP TRIGGER IF EXISTS `{$ftsTable}_{$suffix}`", event: $event));
             }
             $sql = "DROP TABLE IF EXISTS `{$ftsTable}`";
-            $sql = $this->trigger(Database::EVENT_INDEX_DELETE, $sql);
-            $this->getPDO()->prepare($sql)->execute();
+            $this->execute($this->prepare($sql, event: $event));
             $this->commitTransaction();
         } catch (\Throwable $e) {
             try {
@@ -1035,11 +1109,10 @@ class SQLite extends MariaDB
             throw $e;
         }
 
-        unset($this->ftsTableCache[$collection]);
+        unset($this->ftsTableCache[$this->getFulltextTablePrefix($collection)]);
 
         return true;
     }
-
 
     /**
      * Resolve the FTS5 table for index `$id` via metadata. Returns null
@@ -1049,82 +1122,56 @@ class SQLite extends MariaDB
      */
     protected function resolveFulltextTableById(string $collection, string $id, array $candidates): ?string
     {
-        try {
-            $metadataCollection = new Document(['$id' => Database::METADATA]);
-            $collectionDoc = $this->getDocument($metadataCollection, $collection);
-        } catch (NotFoundException) {
-            // Metadata not yet seeded (collection drop during bootstrap).
-            // Anything else surfaces — masking PDO errors here would silently
-            // fall through to the single-candidate drop path and tear down
-            // the wrong table.
-            return null;
-        }
+        $table = $this->getFulltextTablesByIndexId($collection)[$this->filter($id)] ?? null;
 
-        if ($collectionDoc->isEmpty()) {
-            return null;
-        }
-
-        $indexes = $collectionDoc->getAttribute('indexes', []);
-        $filteredId = $this->filter($id);
-
-        foreach ($indexes as $index) {
-            $indexId = $index instanceof Document
-                ? $index->getId()
-                : (\is_array($index) ? ($index['$id'] ?? null) : null);
-
-            if ($indexId === null) {
-                continue;
-            }
-            if ($this->filter((string) $indexId) !== $filteredId) {
-                continue;
-            }
-
-            $type = $index instanceof Document
-                ? $index->getAttribute('type')
-                : ($index['type'] ?? null);
-
-            if ($type !== Database::INDEX_FULLTEXT) {
-                return null;
-            }
-
-            $attributes = $index instanceof Document
-                ? $index->getAttribute('attributes', [])
-                : ($index['attributes'] ?? []);
-
-            $internal = \array_map(
-                fn (string $a) => $this->getInternalKeyForAttribute($a),
-                (array) $attributes
-            );
-            $candidate = $this->getFulltextTableName($collection, $internal);
-
-            return \in_array($candidate, $candidates, true) ? $candidate : null;
-        }
-
-        return null;
+        return \in_array($table, $candidates, true) ? $table : null;
     }
 
     /**
-     * Every FTS5 vtable on `$collection`.
-     *
+     * @return array<string, string> The FTS5 table of each fulltext index in the stored metadata, by index id
+     */
+    private function getFulltextTablesByIndexId(string $collection): array
+    {
+        try {
+            $metadata = $this->getDocument(new Document([Document::ID => Database::METADATA]), $collection);
+        } catch (NotFoundException) {
+            // Metadata not yet seeded (collection drop during bootstrap).
+            return [];
+        }
+
+        $tables = [];
+        foreach (self::collectionIndexes($metadata) as $index) {
+            if ($index->type !== IndexType::Fulltext) {
+                continue;
+            }
+
+            $internal = \array_map($this->getInternalKeyForAttribute(...), $index->attributes);
+            $tables[$this->filter($index->key)] = $this->getFulltextTableName($collection, $internal);
+        }
+
+        return $tables;
+    }
+
+    /**
      * @return array<string>
      */
     protected function findFulltextTables(string $collection): array
     {
         // ESCAPE '\\' so the literal `_` separators in the prefix don't
         // act as LIKE wildcards (e.g. `db_users_` matching `db_usersA_`).
-        $stmt = $this->getPDO()->prepare("
+        $statement = $this->prepare("
             SELECT name FROM sqlite_master
             WHERE type='table'
               AND name LIKE :_prefix ESCAPE '\\'
               AND name LIKE :_suffix ESCAPE '\\'
         ");
-        $stmt->bindValue(':_prefix', $this->escapeLikePattern($this->getFulltextTablePrefix($collection)) . '%');
-        $stmt->bindValue(':_suffix', '%' . $this->escapeLikePattern(self::FTS_TABLE_SUFFIX));
-        $stmt->execute();
-        $tables = $stmt->fetchAll(PDO::FETCH_COLUMN);
-        $stmt->closeCursor();
+        $statement->bindValue(':_prefix', $this->escapeLikePattern($this->getFulltextTablePrefix($collection)) . '%');
+        $statement->bindValue(':_suffix', '%' . $this->escapeLikePattern(self::FTS_TABLE_SUFFIX));
+        $statement->execute();
+        $tables = $statement->fetchAll(PDO::FETCH_COLUMN);
+        $statement->closeCursor();
 
-        return $tables;
+        return \array_map(fn (mixed $t): string => \is_string($t) ? $t : '', $tables);
     }
 
     /**
@@ -1138,276 +1185,130 @@ class SQLite extends MariaDB
     }
 
     /**
-     * Create Document
-     *
-     * @param Document $collection
-     * @param Document $document
-     * @return Document
      * @throws Exception
      * @throws PDOException
      * @throws DuplicateException
      */
+    #[\Override]
     public function createDocument(Document $collection, Document $document): Document
     {
-        $collection = $collection->getId();
-        $attributes = $document->getAttributes();
-        $attributes['_createdAt'] = $document->getCreatedAt();
-        $attributes['_updatedAt'] = $document->getUpdatedAt();
-        $attributes['_permissions'] = json_encode($document->getPermissions());
-
-        if ($this->sharedTables) {
-            $attributes['_tenant'] = $this->tenant;
-        }
-
-        $name = $this->filter($collection);
-        $columns = ['_uid'];
-        $values = ['_uid'];
-
-        /**
-         * Insert Attributes
-         */
-        $bindIndex = 0;
-        foreach ($attributes as $attribute => $value) { // Parse statement
-            $column = $this->filter($attribute);
-            $values[] = 'value_' . $bindIndex;
-            $columns[] = "`{$column}`";
-            $bindIndex++;
-        }
-
-        // Insert manual id if set
-        if (!empty($document->getSequence())) {
-            $values[] = '_id';
-            $columns[] = "_id";
-        }
-
-        $sql = "
-			INSERT INTO `{$this->getNamespace()}_{$name}` (".\implode(', ', $columns).") 
-			VALUES (:".\implode(', :', $values).");
-		";
-
-        $sql = $this->trigger(Database::EVENT_DOCUMENT_CREATE, $sql);
-
-        $stmt = $this->getPDO()->prepare($sql);
-
-        $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
-
-        // Bind internal id if set
-        if (!empty($document->getSequence())) {
-            $stmt->bindValue(':_id', $document->getSequence(), PDO::PARAM_STR);
-        }
-
-        $attributeIndex = 0;
-        foreach ($attributes as $attribute => $value) {
-            if (is_array($value)) { // arrays & objects should be saved as strings
-                $value = json_encode($value);
-            }
-
-            $bindKey = 'value_' . $attributeIndex;
-            $attribute = $this->filter($attribute);
-            $value = (is_bool($value)) ? (int)$value : $value;
-            $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
-            $attributeIndex++;
-        }
-
-        $permissions = [];
-        foreach (Database::PERMISSIONS as $type) {
-            foreach ($document->getPermissionsByType($type) as $permission) {
-                $permission = \str_replace('"', '', $permission);
-                $tenantQuery = $this->sharedTables ? ', :_tenant' : '';
-                $permissions[] = "('{$type}', '{$permission}', '{$document->getId()}' {$tenantQuery})";
-            }
-        }
-
-        if (!empty($permissions)) {
-            $tenantQuery = $this->sharedTables ? ', _tenant' : '';
-
-            $queryPermissions = "
-				INSERT INTO `{$this->getNamespace()}_{$name}_perms` (_type, _permission, _document {$tenantQuery})
-				VALUES " . \implode(', ', $permissions);
-
-            $queryPermissions = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $queryPermissions);
-
-            $stmtPermissions = $this->getPDO()->prepare($queryPermissions);
-
-            if ($this->sharedTables) {
-                $stmtPermissions->bindValue(':_tenant', $this->tenant);
-            }
-        }
-
         try {
-            $stmt->execute();
+            $this->syncWriteHooks();
 
-            $document['$sequence'] = (int) $this->getPDO()->lastInsertId();
+            $collection = $collection->getId();
+            $attributes = $document->getAttributes();
+            $attributes[Storage::CREATED_AT] = $document->getCreatedAt();
+            $attributes[Storage::UPDATED_AT] = $document->getUpdatedAt();
+            $attributes[Storage::PERMISSIONS] = json_encode($document->getPermissions());
 
-            if (isset($stmtPermissions)) {
-                $stmtPermissions->execute();
+            $name = $this->filter($collection);
+
+            $builder = $this->dialectBuilder()->into($this->getTableRaw($name));
+            $row = [Storage::UID => $document->getId()];
+
+            if (! empty($document->getSequence())) {
+                $row[Storage::SEQUENCE] = $document->getSequence();
             }
+
+            foreach ($attributes as $attr => $value) {
+                $column = $this->filter($attr);
+
+                if (is_array($value)) {
+                    $value = json_encode($value);
+                }
+                $value = (is_bool($value)) ? (int) $value : $value;
+                $row[$column] = $value;
+            }
+
+            $row = $this->decorateRow($row, $document);
+            $builder->set($row);
+            $result = $builder->insert();
+            $statement = $this->executeResult($result, Event::DocumentCreate);
+
+            $this->execute($statement);
+
+            $document[Document::SEQUENCE] = $this->getDriver()->lastInsertId();
+
+            if (empty($document[Document::SEQUENCE])) {
+                throw new DatabaseException('Error creating document empty "'.Document::SEQUENCE.'"');
+            }
+
+            $context = $this->writeContext();
+            $this->runWriteHooks(fn ($hook) => $hook->afterDocumentCreate($name, [$document], $context));
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
-
 
         return $document;
     }
 
     /**
-     * Update Document
-     *
-     * @param Document $collection
-     * @param string $id
-     * @param Document $document
-     * @param bool $skipPermissions
-     * @return Document
      * @throws Exception
      * @throws PDOException
      * @throws DuplicateException
      */
+    #[\Override]
     public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
     {
-        $spatialAttributes = $this->getSpatialAttributes($collection);
-        $collection = $collection->getId();
-        $attributes = $document->getAttributes();
-        $attributes['_createdAt'] = $document->getCreatedAt();
-        $attributes['_updatedAt'] = $document->getUpdatedAt();
-        $attributes['_permissions'] = json_encode($document->getPermissions());
-        $attributes['_uid'] = $document->getId();
-
-        if ($this->sharedTables) {
-            $attributes['_tenant'] = $document->getTenant();
-        }
-
-        $name = $this->filter($collection);
-        $columns = '';
-
-        if (!$skipPermissions) {
-            $newUid = $document->offsetExists('$id') ? $document->getId() : $id;
-
-            $sql = "
-			DELETE FROM `{$this->getNamespace()}_{$name}_perms`
-			WHERE _document = :_uid
-			{$this->getTenantQuery($collection)}
-		";
-
-            $sql = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $sql);
-
-            $stmtRemovePermissions = $this->getPDO()->prepare($sql);
-            $stmtRemovePermissions->bindValue(':_uid', $id);
-            if ($this->sharedTables) {
-                $stmtRemovePermissions->bindValue(':_tenant', $document->getTenant());
-            }
-
-            $values = [];
-            $binds = [];
-            foreach (Database::PERMISSIONS as $type) {
-                foreach ($document->getPermissionsByType($type) as $i => $permission) {
-                    $tenantQuery = $this->sharedTables ? ', :_tenant' : '';
-                    $values[] = "(:_uid, '{$type}', :_add_{$type}_{$i} {$tenantQuery})";
-                    $binds[":_add_{$type}_{$i}"] = $permission;
-                }
-            }
-
-            if (!empty($values)) {
-                $tenantQuery = $this->sharedTables ? ', _tenant' : '';
-
-                $sql = "
-			   INSERT INTO `{$this->getNamespace()}_{$name}_perms` (_document, _type, _permission {$tenantQuery})
-			   VALUES " . \implode(', ', $values);
-
-                $sql = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sql);
-
-                $stmtAddPermissions = $this->getPDO()->prepare($sql);
-                $stmtAddPermissions->bindValue(":_uid", $newUid);
-                if ($this->sharedTables) {
-                    $stmtAddPermissions->bindValue(":_tenant", $document->getTenant());
-                }
-
-                foreach ($binds as $key => $permission) {
-                    $stmtAddPermissions->bindValue($key, $permission);
-                }
-            }
-        }
-
-        /**
-         * Update Attributes
-         */
-        $keyIndex = 0;
-        $operatorBinds = [];
-
-        foreach ($attributes as $attribute => $value) {
-            $column = $this->filter($attribute);
-
-            // Check if this is an operator, spatial attribute, or regular attribute
-            if (Operator::isOperator($value)) {
-                $operatorSQL = $this->getOperatorSQL($column, $value, $operatorBinds);
-                $columns .= $operatorSQL;
-            } elseif ($this->getSupportForSpatialAttributes() && \in_array($attribute, $spatialAttributes, true)) {
-                $bindKey = 'key_' . $keyIndex;
-                $columns .= "`{$column}` = " . $this->getSpatialGeomFromText(':' . $bindKey);
-                $keyIndex++;
-            } else {
-                $bindKey = 'key_' . $keyIndex;
-                $columns .= "`{$column}`" . '=:' . $bindKey;
-                $keyIndex++;
-            }
-
-            $columns .= ',';
-        }
-
-        // Remove trailing comma
-        $columns = rtrim($columns, ',');
-
-        $sql = "
-			UPDATE `{$this->getNamespace()}_{$name}`
-			SET {$columns}
-			WHERE _uid = :_existingUid
-			{$this->getTenantQuery($collection)}
-		";
-
-        $sql = $this->trigger(Database::EVENT_DOCUMENT_UPDATE, $sql);
-
-        $stmt = $this->getPDO()->prepare($sql);
-
-        $stmt->bindValue(':_existingUid', $id);
-
-        if ($this->sharedTables) {
-            $stmt->bindValue(':_tenant', $this->tenant);
-        }
-
-        // Bind values for non-operator attributes and operator parameters
-        $keyIndex = 0;
-        foreach ($attributes as $attribute => $value) {
-            // Handle operators separately
-            if (Operator::isOperator($value)) {
-                continue;
-            }
-
-            // Convert spatial arrays to WKT, json_encode non-spatial arrays
-            if (\in_array($attribute, $spatialAttributes, true)) {
-                if (\is_array($value)) {
-                    $value = $this->convertArrayToWKT($value);
-                }
-            } elseif (is_array($value)) { // arrays & objects should be saved as strings
-                $value = json_encode($value);
-            }
-
-            $bindKey = 'key_' . $keyIndex;
-            $value = (is_bool($value)) ? (int)$value : $value;
-            $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
-            $keyIndex++;
-        }
-
-        foreach ($operatorBinds as $bindKey => $bindValue) {
-            $stmt->bindValue($bindKey, $bindValue, $this->getPDOType($bindValue));
-        }
-
         try {
-            $stmt->execute();
-            if (isset($stmtRemovePermissions)) {
-                $stmtRemovePermissions->execute();
+            $this->syncWriteHooks();
+
+            $spatialAttributes = $this->getSpatialAttributes($collection);
+            $collection = $collection->getId();
+            $attributes = $document->getAttributes();
+            $attributes[Storage::CREATED_AT] = $document->getCreatedAt();
+            $attributes[Storage::UPDATED_AT] = $document->getUpdatedAt();
+            $attributes[Storage::PERMISSIONS] = json_encode($document->getPermissions());
+
+            $name = $this->filter($collection);
+
+            $operators = [];
+            foreach ($attributes as $attribute => $value) {
+                if (Operator::isOperator($value)) {
+                    $operators[$attribute] = $value;
+                }
             }
-            if (isset($stmtAddPermissions)) {
-                $stmtAddPermissions->execute();
+
+            $builder = $this->newBuilder($name);
+            $regularRow = [];
+            if ($document->getId() !== $id) {
+                $regularRow[Storage::UID] = $document->getId();
             }
+
+            foreach ($attributes as $attribute => $value) {
+                $column = $this->filter($attribute);
+
+                if (isset($operators[$attribute])) {
+                    $operation = $operators[$attribute];
+                    if ($operation instanceof Operator) {
+                        $expression = $this->getOperatorBuilderExpression($column, $operation);
+                        $builder->setRaw($column, $expression->sql, $expression->bindings);
+                    }
+                } elseif ($this instanceof Feature\Spatial && \in_array($attribute, $spatialAttributes, true)) {
+                    if (\is_array($value)) {
+                        $value = $this->convertArrayToWkt($value);
+                    }
+                    $value = (is_bool($value)) ? (int) $value : $value;
+                    $builder->setRaw($column, $this->getSpatialGeometryFromText('?'), [$value]);
+                } else {
+                    if (is_array($value)) {
+                        $value = json_encode($value);
+                    }
+                    $value = (is_bool($value)) ? (int) $value : $value;
+                    $regularRow[$column] = $value;
+                }
+            }
+
+            $builder->set($regularRow);
+            $filters = [BaseQuery::equal(Storage::UID, [$id])];
+            $builder->filter($filters);
+            $result = $builder->update();
+            $statement = $this->executeResult($result, Event::DocumentUpdate);
+
+            $this->execute($statement);
+
+            $context = $this->writeContext($skipPermissions ? [$document->getId() => true] : []);
+            $this->runWriteHooks(fn ($hook) => $hook->afterDocumentUpdate($name, $id, $document, $context));
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -1415,298 +1316,13 @@ class SQLite extends MariaDB
         return $document;
     }
 
-
-
     /**
-     * Is schemas supported?
+     * The keywords of https://www.sqlite.org/lang_keywords.html
      *
-     * @return bool
+     * @return list<string>
      */
-    public function getSupportForSchemas(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForQueryContains(): bool
-    {
-        return false;
-    }
-
-    /**
-     * Is fulltext index supported?
-     *
-     * @return bool
-     */
-    public function getSupportForFulltextIndex(): bool
-    {
-        return true;
-    }
-
-    /**
-     * Is fulltext Wildcard index supported?
-     *
-     * @return bool
-     */
-    public function getSupportForFulltextWildcardIndex(): bool
-    {
-        // FTS5's unicode61 tokenizer strips characters like `@` and `.`
-        // before indexing, so a search for "al@ba.io" applied as a prefix
-        // wildcard ("al ba io*") matches a doc containing "al@ba.io" the
-        // same way the non-wildcard branch does. The upstream test gates
-        // its expectations on this flag and the false branch matches
-        // SQLite's actual tokenisation behaviour; flagging as true would
-        // claim a behavioural distinction we don't deliver.
-        return false;
-    }
-
-    /**
-     * Are timeouts supported?
-     *
-     * @return bool
-     */
-    public function getSupportForTimeouts(): bool
-    {
-        // The adapter does no per-query timeout enforcement and therefore
-        // can't translate a tripped budget into Utopia\Database\Exception\Timeout
-        // the way MariaDB/Postgres do. Stay false rather than mislead callers
-        // that rely on Database::setTimeout() actually firing.
-        return false;
-    }
-
-    public function getSupportForRelationships(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForUpdateLock(): bool
-    {
-        // SQLite has no row-level locking. The parser accepts FOR UPDATE
-        // as syntactic sugar but the planner still escalates to a
-        // RESERVED/EXCLUSIVE lock on the database, which deadlocks
-        // subsequent DDL like DROP INDEX inside the same transaction.
-        // Stay false so the SELECT path doesn't append the clause.
-        return false;
-    }
-
-    /**
-     * Is attribute resizing supported?
-     *
-     * @return bool
-     */
-    public function getSupportForAttributeResizing(): bool
-    {
-        // SQLite is dynamically typed with no MODIFY COLUMN. When
-        // emulating MySQL, updateAttribute scans the column on
-        // resize-down and raises TruncateException to match MariaDB's
-        // contract. Off-emulation, declared sizes are metadata-only.
-        return $this->emulateMySQL;
-    }
-
-    /**
-     * Is get connection id supported?
-     *
-     * @return bool
-     */
-    public function getSupportForGetConnectionId(): bool
-    {
-        return false;
-    }
-
-    /**
-     * Is get schema attributes supported?
-     *
-     * @return bool
-     */
-    public function getSupportForSchemaAttributes(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForSchemaIndexes(): bool
-    {
-        return true;
-    }
-
-    /**
-     * Is upsert supported?
-     *
-     * @return bool
-     */
-    public function getSupportForUpserts(): bool
-    {
-        // ON CONFLICT DO UPDATE is native SQLite, not MariaDB emulation.
-        return true;
-    }
-
-    /**
-     * SQLite has no JSON_OVERLAPS — fall back to the LIKE-based default
-     * inherited from MariaDB::getSQLCondition for CONTAINS queries on arrays.
-     */
-    public function getSupportForJSONOverlaps(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForUpsertOnUniqueIndex(): bool
-    {
-        return false;
-    }
-
-    /**
-     * Is hostname supported?
-     *
-     * @return bool
-     */
-    public function getSupportForHostname(): bool
-    {
-        return false;
-    }
-
-    /**
-     * Is batch create attributes supported?
-     *
-     * @return bool
-     */
-    public function getSupportForBatchCreateAttributes(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForSpatialAttributes(): bool
-    {
-        return false; // SQLite doesn't have native spatial support
-    }
-
-    public function getSupportForObject(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForUnsignedBigInt(): bool
-    {
-        return false;
-    }
-
-    /**
-     * Are object (JSON) indexes supported?
-     *
-     * @return bool
-     */
-    public function getSupportForObjectIndexes(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForSpatialIndexNull(): bool
-    {
-        return false; // SQLite doesn't have native spatial support
-    }
-
-    /**
-     * Override getSpatialGeomFromText to return placeholder unchanged for SQLite
-     * SQLite does not support ST_GeomFromText, so we return the raw placeholder
-     *
-     * @param string $wktPlaceholder
-     * @param int|null $srid
-     * @return string
-     */
-    protected function getSpatialGeomFromText(string $wktPlaceholder, ?int $srid = null): string
-    {
-        return $wktPlaceholder;
-    }
-
-    /**
-     * Get SQL Index Type
-     *
-     * @param string $type
-     * @return string
-     * @throws Exception
-     */
-    protected function getSQLIndexType(string $type): string
-    {
-        switch ($type) {
-            case Database::INDEX_KEY:
-                return 'INDEX';
-
-            case Database::INDEX_UNIQUE:
-                return 'UNIQUE INDEX';
-
-            case Database::INDEX_FULLTEXT:
-                // Fulltext is handled via FTS5 virtual tables in
-                // createFulltextIndex; reaching this codepath means a
-                // caller bypassed that route and would emit invalid SQL.
-                throw new DatabaseException('Fulltext indexes use createFulltextIndex(), not getSQLIndexType');
-
-            default:
-                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT);
-        }
-    }
-
-    /**
-     * Get SQL Index
-     *
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param array<string> $attributes
-     * @return string
-     * @throws Exception
-     */
-    protected function getSQLIndex(string $collection, string $id, string $type, array $attributes): string
-    {
-        $postfix = '';
-
-        switch ($type) {
-            case Database::INDEX_KEY:
-                $type = 'INDEX';
-                break;
-
-            case Database::INDEX_UNIQUE:
-                $type = 'UNIQUE INDEX';
-                $postfix = 'COLLATE NOCASE';
-
-                break;
-
-            default:
-                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT);
-        }
-
-        $attributes = \array_map(fn ($attribute) => $this->getInternalKeyForAttribute($attribute), $attributes);
-
-        foreach ($attributes as $key => $attribute) {
-            $attribute = $this->filter($attribute);
-
-            $attributes[$key] = "`{$attribute}` {$postfix}";
-        }
-
-        $key = "`{$this->getNamespace()}_{$this->getTenantSegment()}_{$collection}_{$id}`";
-        $attributes = implode(', ', $attributes);
-
-        if ($this->sharedTables) {
-            $attributes = "`_tenant` {$postfix}, {$attributes}";
-        }
-
-        return "CREATE {$type} {$key} ON `{$this->getNamespace()}_{$collection}` ({$attributes})";
-    }
-
-    /**
-     * Get SQL table
-     *
-     * @param string $name
-     * @return string
-     */
-    protected function getSQLTable(string $name): string
-    {
-        return $this->quote("{$this->getNamespace()}_{$this->filter($name)}");
-    }
-
-    /**
-     * Get list of keywords that cannot be used
-     *  Refference: https://www.sqlite.org/lang_keywords.html
-     *
-     * @return array<string>
-     */
-    public function getKeywords(): array
+    #[\Override]
+    protected function getKeywords(): array
     {
         return [
             'ABORT',
@@ -1859,21 +1475,244 @@ class SQLite extends MariaDB
         ];
     }
 
-    protected function processException(PDOException $e): \Exception
+    #[\Override]
+    protected function dialectBuilder(): SQLBuilder&Scoping
     {
-        // Timeout
-        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 3024) {
-            return new TimeoutException('Query timed out', $e->getCode(), $e);
+        return new SQLiteBuilder();
+    }
+
+    #[Override]
+    protected function collateDocumentId(string $column): string
+    {
+        return $column.' COLLATE '.SQLiteBuilder::COLLATION;
+    }
+
+    /**
+     * @param  array<string>  $roles
+     */
+    #[Override]
+    protected function newPermissionHook(string $collection, array $roles, string $type = PermissionType::Read->value, string $documentColumn = Storage::UID): Permission\Filter
+    {
+        return parent::newPermissionHook($collection, $roles, $type, $documentColumn)->collate(SQLiteBuilder::COLLATION);
+    }
+
+    #[\Override]
+    protected function getSqlType(ColumnType $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
+    {
+        if (in_array($type, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon], true)) {
+            return '';
+        }
+        if ($array === true) {
+            return 'JSON';
         }
 
-        // Table/index already exists (SQLITE_ERROR with "already exists" message)
+        if ($type === ColumnType::String) {
+            if ($size > 16777215) {
+                return 'LONGTEXT';
+            }
+            if ($size > 65535) {
+                return 'MEDIUMTEXT';
+            }
+            if ($size > $this->limits()->varchar) {
+                return 'TEXT';
+            }
+
+            return "VARCHAR({$size})";
+        }
+
+        if ($type === ColumnType::Varchar) {
+            $this->assertVarcharSize($size);
+
+            return "VARCHAR({$size})";
+        }
+
+        if (\in_array($type, [ColumnType::Integer, ColumnType::BigInteger], true)) {
+            $suffix = $signed ? '' : ' UNSIGNED';
+
+            return ($type === ColumnType::Integer && $size < 8 ? 'INT' : 'BIGINT').$suffix;
+        }
+
+        if ($type === ColumnType::Float || $type === ColumnType::Double) {
+            return 'DOUBLE'.($signed ? '' : ' UNSIGNED');
+        }
+
+        return match ($type) {
+            ColumnType::Id => 'BIGINT UNSIGNED',
+            ColumnType::Text => 'TEXT',
+            ColumnType::MediumText => 'MEDIUMTEXT',
+            ColumnType::LongText => 'LONGTEXT',
+            ColumnType::Boolean => 'TINYINT(1)',
+            ColumnType::Relationship => 'VARCHAR(255)',
+            ColumnType::Datetime => 'DATETIME(3)',
+            default => throw new DatabaseException('Unknown type: '.$type->value.'. Must be one of '.ColumnType::String->value.', '.ColumnType::Varchar->value.', '.ColumnType::Text->value.', '.ColumnType::MediumText->value.', '.ColumnType::LongText->value.', '.ColumnType::Integer->value.', '.ColumnType::Double->value.', '.ColumnType::Boolean->value.', '.ColumnType::Datetime->value.', '.ColumnType::Relationship->value),
+        };
+    }
+
+    #[\Override]
+    protected function getMaxPointSize(): int
+    {
+        return 0;
+    }
+
+    /**
+     * SQLite does not support ST_GeomFromText, so we return the raw placeholder
+     */
+    #[\Override]
+    protected function getSpatialGeometryFromText(string $wktPlaceholder, ?int $srid = null): string
+    {
+        return $wktPlaceholder;
+    }
+
+    /**
+     * @param  array<string>  $attributes
+     *
+     * @throws Exception
+     */
+    protected function getSqlIndex(string $collection, string $id, IndexType $type, array $attributes): string
+    {
+        [$sqlType, $postfix] = match ($type) {
+            IndexType::Key => ['INDEX', ''],
+            IndexType::Unique => ['UNIQUE INDEX', 'COLLATE '.SQLiteBuilder::COLLATION],
+            default => throw new DatabaseException('Unknown index type: '.$type->value.'. Must be one of '.IndexType::Key->value.', '.IndexType::Unique->value.', '.IndexType::Fulltext->value),
+        };
+
+        $attributes = \array_map($this->getInternalKeyForAttribute(...), $attributes);
+
+        foreach ($attributes as $key => $attribute) {
+            $attribute = $this->filter($attribute);
+
+            $attributes[$key] = "`{$attribute}` {$postfix}";
+        }
+
+        $key = "`{$this->getNamespace()}_{$this->getTenantSegment()}_{$collection}_{$id}`";
+        $attributes = implode(', ', $attributes);
+
+        if ($this->sharedTables) {
+            $attributes = "{$this->quote(Storage::TENANT)}, {$attributes}";
+        }
+
+        return "CREATE {$sqlType} {$key} ON `{$this->getNamespace()}_{$collection}` ({$attributes})";
+    }
+
+    /**
+     * SQLite doesn't use database-qualified table names.
+     */
+    #[\Override]
+    protected function qualifyTable(string $database, string $namespace, string $name): string
+    {
+        return $namespace.'_'.$this->filter($name);
+    }
+
+    /**
+     * SQLite must be compiled with -DSQLITE_ENABLE_MATH_FUNCTIONS
+     */
+    private function getSupportForMathFunctions(): bool
+    {
+        static $available = null;
+
+        if ($available !== null) {
+            return (bool) $available;
+        }
+
+        try {
+            $pdo = $this->getDriver();
+            $statement = $pdo instanceof PDOProxy
+                ? $pdo->__call('query', ['SELECT POWER(2, 3) as test'])
+                : $pdo->query('SELECT POWER(2, 3) as test');
+            if (! $statement instanceof PDOStatement && ! $statement instanceof PDOStatementProxy) {
+                $available = false;
+
+                return false;
+            }
+            $result = $statement->fetch();
+            /** @var array<string, mixed>|false $result */
+            $testVal = \is_array($result) ? ($result['test'] ?? null) : null;
+            $available = ($testVal == 8);
+
+            return $available;
+        } catch (PDOException $e) {
+            $available = false;
+
+            return false;
+        }
+    }
+
+    #[\Override]
+    protected function isAdapterFilterQuery(Query $query): bool
+    {
+        $method = $query->getMethod();
+
+        return $method === Method::Search || $method === Method::NotSearch;
+    }
+
+    /**
+     * Compile a Search/NotSearch query into FTS5 SQL with positional bindings.
+     * Falls back to a LIKE expression when no FTS5 table covers the attribute.
+     *
+     * @param  list<JoinAlias>  $joins
+     */
+    #[\Override]
+    protected function compileAdapterFilter(Query $query, string $collection, string $alias, array $joins = []): ?Expression
+    {
+        $method = $query->getMethod();
+        if ($method !== Method::Search && $method !== Method::NotSearch) {
+            return null;
+        }
+
+        $rawAttribute = $query->getAttribute();
+        [$quotedAlias, $quotedAttribute] = $this->quoteSearchAttribute($rawAttribute, $alias);
+
+        $rawValue = '';
+        $queryValue = $query->getValue();
+        if (\is_scalar($queryValue)) {
+            $rawValue = (string) $queryValue;
+        }
+        $ftsValue = $this->getFts5Value($rawValue);
+
+        if ($ftsValue === '') {
+            return new Expression(
+                $method === Method::Search ? '1 = 0' : '1 = 1',
+                [],
+            );
+        }
+
+        $ftsTable = $this->findSearchFulltextTable($rawAttribute, $collection, $joins);
+
+        if ($ftsTable === null) {
+            $likeExpr = "{$quotedAlias}.{$quotedAttribute} LIKE ? ESCAPE '\\'";
+            $likeBinding = '%' . $this->escapeWildcards($rawValue) . '%';
+
+            return new Expression(
+                $method === Method::Search ? $likeExpr : "NOT ({$likeExpr})",
+                [$likeBinding],
+            );
+        }
+
+        $subquery = "{$quotedAlias}.{$this->quote(Storage::SEQUENCE)} IN (SELECT rowid FROM `{$ftsTable}` WHERE `{$ftsTable}` MATCH ?)";
+
+        return new Expression(
+            $method === Method::Search ? $subquery : "NOT ({$subquery})",
+            [$ftsValue],
+        );
+    }
+
+    #[\Override]
+    protected function processException(PDOException $e): Exception
+    {
         if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1 && stripos($e->getMessage(), 'already exists') !== false) {
             return new DuplicateException('Collection already exists', $e->getCode(), $e);
         }
 
-        // Table not found (SQLITE_ERROR with "no such table" message)
         if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1 && stripos($e->getMessage(), 'no such table') !== false) {
             return new NotFoundException('Collection not found', $e->getCode(), $e);
+        }
+
+        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1 && stripos($e->getMessage(), 'no such column') !== false) {
+            return new NotFoundException('Attribute not found', $e->getCode(), $e);
+        }
+
+        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1 && stripos($e->getMessage(), 'duplicate column name') !== false) {
+            return new DuplicateException('Attribute already exists', $e->getCode(), $e);
         }
 
         // Duplicate - SQLite uses various error codes for constraint violations:
@@ -1892,27 +1731,27 @@ class SQLite extends MariaDB
                 stripos($message, 'duplicate') !== false
             ) {
                 $columns = $this->getViolatedColumns($message);
-                if ($columns !== null && $columns !== ['_uid'] && $columns !== ['_tenant', '_uid']) {
-                    return new UniqueException('Unique index violation', $e->getCode(), $e);
+                if ($columns !== null && $columns !== [Storage::UID] && $columns !== [Storage::TENANT, Storage::UID]) {
+                    return new UniqueException(UniqueException::MESSAGE, $e->getCode(), $e);
                 }
+
                 return new DuplicateException('Document already exists', $e->getCode(), $e);
             }
         }
 
-        // String or BLOB exceeds size limit
         if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 18) {
             return new LimitException('Value too large', $e->getCode(), $e);
+        }
+
+        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 5) {
+            return new ContentionException('Database is locked', $e->getCode(), $e);
         }
 
         return $e;
     }
 
     /**
-     * Extract the violated columns from a constraint error, e.g.
-     * "UNIQUE constraint failed: movies._tenant, movies._uid" resolves to
-     * ['_tenant', '_uid']. Returns null when the message cannot be parsed.
-     *
-     * @return array<string>|null
+     * @return list<string>|null
      */
     protected function getViolatedColumns(string $message): ?array
     {
@@ -1934,87 +1773,99 @@ class SQLite extends MariaDB
         return $columns;
     }
 
-    public function getSupportForSpatialIndexOrder(): bool
-    {
-        return false;
-    }
-    public function getSupportForBoundaryInclusiveContains(): bool
-    {
-        return false;
-    }
-
     /**
-     * Does the adapter support calculating distance(in meters) between multidimension geometry(line, polygon,etc)?
+     * Toggle, DateSetNow and ArrayUnique bind nothing: getOperatorSql() writes them without placeholders and
+     * advances $bindIndex itself. ArrayFilter binds its comparison value only.
      *
-     * @return bool
+     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $statement
      */
-    public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool
+    #[Override]
+    protected function bindOperatorParameters(object $statement, Operator $operator, int &$bindIndex): void
     {
-        return false;
-    }
+        $method = $operator->getMethod();
 
-    /**
-     * Does the adapter support spatial axis order specification?
-     *
-     * @return bool
-     */
-    public function getSupportForSpatialAxisOrder(): bool
-    {
-        return false;
-    }
-
-    /**
-     * Adapter supports optional spatial attributes with existing rows.
-     *
-     * @return bool
-     */
-    public function getSupportForOptionalSpatialAttributeWithExistingRows(): bool
-    {
-        return true;
-    }
-
-    /**
-     * Get the SQL function for random ordering
-     *
-     * @return string
-     */
-    protected function getRandomOrder(): string
-    {
-        return 'RANDOM()';
-    }
-
-    /**
-     * Check if SQLite math functions (like POWER) are available
-     * SQLite must be compiled with -DSQLITE_ENABLE_MATH_FUNCTIONS
-     *
-     * @return bool
-     */
-    private function getSupportForMathFunctions(): bool
-    {
-        static $available = null;
-
-        if ($available !== null) {
-            return $available;
+        if (in_array($method, [OperatorType::Toggle, OperatorType::DateSetNow, OperatorType::ArrayUnique])) {
+            return;
         }
 
-        try {
-            // Test if POWER function exists by attempting to use it
-            $stmt = $this->getPDO()->query('SELECT POWER(2, 3) as test');
-            $result = $stmt->fetch();
-            $available = ($result['test'] == 8);
-            return $available;
-        } catch (PDOException $e) {
-            // Function doesn't exist
-            $available = false;
-            return false;
+        if ($method === OperatorType::ArrayFilter) {
+            $values = $operator->getValues();
+            if (! empty($values) && count($values) >= 2) {
+                $filterType = $values[0];
+                $filterValue = $values[1];
+
+                $comparisonTypes = ['equal', 'notEqual', 'greaterThan', 'greaterThanEqual', 'lessThan', 'lessThanEqual'];
+                if (in_array($filterType, $comparisonTypes)) {
+                    $bindKey = "op_{$bindIndex}";
+                    $value = (is_bool($filterValue)) ? (int) $filterValue : $filterValue;
+                    $statement->bindValue(":{$bindKey}", $value, $this->getPdoType($value));
+                    $bindIndex++;
+                }
+            }
+
+            return;
         }
+
+        parent::bindOperatorParameters($statement, $operator, $bindIndex);
+    }
+
+    #[\Override]
+    protected function getOperatorBuilderExpression(string $column, Operator $operator): Expression
+    {
+        if ($operator->getMethod() === OperatorType::ArrayFilter) {
+            $bindIndex = 0;
+            $fullExpression = $this->getOperatorSql($column, $operator, $bindIndex);
+
+            if ($fullExpression === null) {
+                throw new DatabaseException('Operator cannot be expressed in SQL: '.$operator->getMethod()->value);
+            }
+
+            $quotedColumn = $this->quote($column);
+            $prefix = $quotedColumn.' = ';
+            $expression = $fullExpression;
+            if (str_starts_with($expression, $prefix)) {
+                $expression = substr($expression, strlen($prefix));
+            }
+
+            // SQLite ArrayFilter only uses one binding (the filter value), not the condition string
+            $values = $operator->getValues();
+            $namedBindings = [];
+            if (count($values) >= 2) {
+                $filterType = $values[0];
+                $comparisonTypes = ['equal', 'notEqual', 'greaterThan', 'greaterThanEqual', 'lessThan', 'lessThanEqual'];
+                if (in_array($filterType, $comparisonTypes)) {
+                    $namedBindings['op_0'] = $values[1];
+                }
+            }
+
+            $positionalBindings = [];
+            $replacements = [];
+            foreach (array_keys($namedBindings) as $key) {
+                $search = ':'.$key;
+                $offset = 0;
+                while (($pos = strpos($expression, $search, $offset)) !== false) {
+                    $replacements[] = ['pos' => $pos, 'len' => strlen($search), 'key' => $key];
+                    $offset = $pos + strlen($search);
+                }
+            }
+            usort($replacements, fn ($a, $b) => $a['pos'] - $b['pos']);
+            $result = $expression;
+            for ($i = count($replacements) - 1; $i >= 0; $i--) {
+                $r = $replacements[$i];
+                $result = substr_replace($result, '?', $r['pos'], $r['len']);
+            }
+            foreach ($replacements as $r) {
+                $positionalBindings[] = $namedBindings[$r['key']] ?? null;
+            }
+
+            return new Expression($result, $positionalBindings);
+        }
+
+        return parent::getOperatorBuilderExpression($column, $operator);
     }
 
     /**
-     * Get SQL expression for operator
-     *
      * IMPORTANT: SQLite JSON Limitations
-     * -----------------------------------
      * Array operators using json_each() and json_group_array() have type conversion behavior:
      * - Numbers are preserved but may lose precision (e.g., 1.0 becomes 1)
      * - Booleans become integers (true→1, false→0)
@@ -2023,152 +1874,149 @@ class SQLite extends MariaDB
      *
      * This is inherent to SQLite's JSON implementation and affects: ARRAY_APPEND, ARRAY_PREPEND,
      * ARRAY_UNIQUE, ARRAY_INTERSECT, ARRAY_DIFF, ARRAY_INSERT, and ARRAY_REMOVE.
-     *
-     * @param string $column
-     * @param Operator $operator
-     * @param array<string, mixed> $binds
-     * @return ?string
      */
-    protected function getOperatorSQL(string $column, Operator $operator, array &$binds): ?string
+    #[\Override]
+    protected function getOperatorSql(string $column, Operator $operator, int &$bindIndex): ?string
     {
         $quotedColumn = $this->quote($column);
         $method = $operator->getMethod();
+        $values = $operator->getValues();
 
         switch ($method) {
-            // Numeric operators
-            case Operator::TYPE_INCREMENT:
-                $values = $operator->getValues();
-                $bindKey = $this->registerOperatorBind($binds, $values[0] ?? 1);
+            case OperatorType::Increment:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
 
                 if (isset($values[1])) {
-                    $maxKey = $this->registerOperatorBind($binds, $values[1]);
+                    $maxKey = "op_{$bindIndex}";
+                    $bindIndex++;
+
                     return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) + :$bindKey > :$maxKey THEN COALESCE({$quotedColumn}, 0)
+                        WHEN COALESCE({$quotedColumn}, 0) > :$maxKey - :$bindKey THEN COALESCE({$quotedColumn}, 0)
                         ELSE COALESCE({$quotedColumn}, 0) + :$bindKey
                     END";
                 }
+
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) + :$bindKey";
 
-            case Operator::TYPE_DECREMENT:
-                $values = $operator->getValues();
-                $bindKey = $this->registerOperatorBind($binds, $values[0] ?? 1);
+            case OperatorType::Decrement:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
 
                 if (isset($values[1])) {
-                    $minKey = $this->registerOperatorBind($binds, $values[1]);
+                    $minKey = "op_{$bindIndex}";
+                    $bindIndex++;
+
                     return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) - :$bindKey < :$minKey THEN COALESCE({$quotedColumn}, 0)
+                        WHEN COALESCE({$quotedColumn}, 0) < :$minKey + :$bindKey THEN COALESCE({$quotedColumn}, 0)
                         ELSE COALESCE({$quotedColumn}, 0) - :$bindKey
                     END";
                 }
+
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) - :$bindKey";
 
-            case Operator::TYPE_MULTIPLY:
-                $values = $operator->getValues();
-                $bindKey = $this->registerOperatorBind($binds, $values[0] ?? 1);
+            case OperatorType::Multiply:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
 
                 if (isset($values[1])) {
-                    $maxKey = $this->registerOperatorBind($binds, $values[1]);
+                    $maxKey = "op_{$bindIndex}";
+                    $bindIndex++;
+
                     return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) * :$bindKey > :$maxKey THEN COALESCE({$quotedColumn}, 0)
+                        WHEN :$bindKey > 0 AND COALESCE({$quotedColumn}, 0) > :$maxKey / :$bindKey THEN COALESCE({$quotedColumn}, 0)
+                        WHEN :$bindKey < 0 AND COALESCE({$quotedColumn}, 0) < :$maxKey / :$bindKey THEN COALESCE({$quotedColumn}, 0)
                         ELSE COALESCE({$quotedColumn}, 0) * :$bindKey
                     END";
                 }
+
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) * :$bindKey";
 
-            case Operator::TYPE_DIVIDE:
-                $values = $operator->getValues();
-                $bindKey = $this->registerOperatorBind($binds, $values[0] ?? 1);
+            case OperatorType::Divide:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
 
                 if (isset($values[1])) {
-                    $minKey = $this->registerOperatorBind($binds, $values[1]);
+                    $minKey = "op_{$bindIndex}";
+                    $bindIndex++;
+
                     return "{$quotedColumn} = CASE
                         WHEN :$bindKey != 0 AND COALESCE({$quotedColumn}, 0) / :$bindKey < :$minKey THEN COALESCE({$quotedColumn}, 0)
                         ELSE COALESCE({$quotedColumn}, 0) / :$bindKey
                     END";
                 }
+
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) / :$bindKey";
 
-            case Operator::TYPE_MODULO:
-                $values = $operator->getValues();
-                $bindKey = $this->registerOperatorBind($binds, $values[0] ?? 1);
+            case OperatorType::Modulo:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) % :$bindKey";
 
-            case Operator::TYPE_POWER:
-                if (!$this->getSupportForMathFunctions()) {
+            case OperatorType::Power:
+                if (! $this->getSupportForMathFunctions()) {
                     throw new DatabaseException(
-                        'SQLite POWER operator requires math functions. ' .
+                        'SQLite POWER operator requires math functions. '.
                         'Compile SQLite with -DSQLITE_ENABLE_MATH_FUNCTIONS or use multiply operators instead.'
                     );
                 }
 
-                $values = $operator->getValues();
                 $exponent = $values[0] ?? 1;
-                $bindKey = $this->registerOperatorBind($binds, $exponent);
+                if (! \is_int($exponent) && ! \is_float($exponent)) {
+                    throw new OperatorException('Power exponent must be numeric');
+                }
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
 
                 if (isset($values[1])) {
-                    $maxKey = $this->registerOperatorBind($binds, $values[1]);
-                    $col = "COALESCE({$quotedColumn}, 0)";
+                    $maxKey = "op_{$bindIndex}";
+                    $bindIndex++;
 
-                    // Leave the value unchanged only for undefined inputs, then apply the power if
-                    // the result stays within the max. The exponent is constant, so only the
-                    // undefined guard its value can actually trigger is emitted.
+                    $columnValue = "COALESCE({$quotedColumn}, 0)";
                     $oddInteger = \floor($exponent) == $exponent && ((int) $exponent) % 2 !== 0;
+                    $guards = [];
 
-                    $whens = [];
                     if ($exponent < 0) {
-                        // 0 to a negative power is undefined.
-                        $whens[] = "WHEN {$col} = 0 THEN {$col}";
+                        $guards[] = "WHEN {$columnValue} = 0 THEN {$columnValue}";
                     }
                     if (\floor($exponent) != $exponent) {
-                        // A negative base to a fractional exponent is not a real number.
-                        $whens[] = "WHEN {$col} < 0 THEN {$col}";
+                        $guards[] = "WHEN {$columnValue} < 0 THEN {$columnValue}";
                     }
-                    // Cap by magnitude via logarithms so POWER() never runs on a value that would
-                    // overflow (base^exp > max  <=>  exp * LN(base) > LN(max)).
                     if ($exponent == 0) {
-                        // Every base to the zeroth power is 1 (including 0^0), which the magnitude
-                        // check below can't see for a base of 0. The result 1 exceeds the max when
-                        // max < 1, i.e. LN(max) < 0 (LN also coerces the bound value numerically).
-                        $whens[] = "WHEN LN(:$maxKey) < 0 THEN {$col}";
+                        $guards[] = "WHEN LN(:$maxKey) < 0 THEN {$columnValue}";
                     } elseif ($oddInteger) {
-                        // An odd exponent keeps a negative base negative, and a negative result is
-                        // always within a positive max, so only cap positive bases; negative bases
-                        // fall through to POWER() and their (negative) result is applied.
-                        $whens[] = "WHEN {$col} > 0 AND :$bindKey * LN({$col}) > LN(:$maxKey) THEN {$col}";
+                        $guards[] = "WHEN {$columnValue} > 0 AND :$bindKey * LN({$columnValue}) > LN(:$maxKey) THEN {$columnValue}";
                     } else {
-                        // Otherwise the result is non-negative, so its magnitude equals its value —
-                        // cap either sign. ABS() keeps LN() defined for a negative even-power base.
-                        $whens[] = "WHEN {$col} <> 0 AND :$bindKey * LN(ABS({$col})) > LN(:$maxKey) THEN {$col}";
+                        $guards[] = "WHEN {$columnValue} <> 0 AND :$bindKey * LN(ABS({$columnValue})) > LN(:$maxKey) THEN {$columnValue}";
                     }
 
-                    $whenSql = \implode(' ', $whens);
-                    return "{$quotedColumn} = CASE {$whenSql} ELSE POWER({$col}, :$bindKey) END";
+                    return "{$quotedColumn} = CASE ".\implode(' ', $guards)." ELSE POWER({$columnValue}, :$bindKey) END";
                 }
+
                 return "{$quotedColumn} = POWER(COALESCE({$quotedColumn}, 0), :$bindKey)";
 
-                // String operators
-            case Operator::TYPE_STRING_CONCAT:
-                $values = $operator->getValues();
-                $bindKey = $this->registerOperatorBind($binds, $values[0] ?? '');
+            case OperatorType::StringConcat:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+
                 return "{$quotedColumn} = IFNULL({$quotedColumn}, '') || :$bindKey";
 
-            case Operator::TYPE_STRING_REPLACE:
-                $values = $operator->getValues();
-                $searchKey = $this->registerOperatorBind($binds, $values[0] ?? '');
-                $replaceKey = $this->registerOperatorBind($binds, $values[1] ?? '');
+            case OperatorType::StringReplace:
+                $searchKey = "op_{$bindIndex}";
+                $bindIndex++;
+                $replaceKey = "op_{$bindIndex}";
+                $bindIndex++;
+
                 return "{$quotedColumn} = REPLACE({$quotedColumn}, :$searchKey, :$replaceKey)";
 
-                // Boolean operators
-            case Operator::TYPE_TOGGLE:
-                // SQLite: toggle boolean (0 or 1), treat NULL as 0
+            case OperatorType::Toggle:
                 return "{$quotedColumn} = CASE WHEN COALESCE({$quotedColumn}, 0) = 0 THEN 1 ELSE 0 END";
 
-                // Array operators
-            case Operator::TYPE_ARRAY_APPEND:
-                $values = $operator->getValues();
-                $bindKey = $this->registerOperatorBind($binds, json_encode($values));
-                // SQLite: merge arrays by using json_group_array on extracted elements
-                // We use json_each to extract elements from both arrays and combine them
+            case OperatorType::ArrayAppend:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+
                 return "{$quotedColumn} = (
                     SELECT json_group_array(value)
                     FROM (
@@ -2178,10 +2026,10 @@ class SQLite extends MariaDB
                     )
                 )";
 
-            case Operator::TYPE_ARRAY_PREPEND:
-                $values = $operator->getValues();
-                $bindKey = $this->registerOperatorBind($binds, json_encode($values));
-                // SQLite: prepend by extracting and recombining with new elements first
+            case OperatorType::ArrayPrepend:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+
                 return "{$quotedColumn} = (
                     SELECT json_group_array(value)
                     FROM (
@@ -2191,36 +2039,29 @@ class SQLite extends MariaDB
                     )
                 )";
 
-            case Operator::TYPE_ARRAY_UNIQUE:
-                // SQLite: get distinct values from JSON array
+            case OperatorType::ArrayUnique:
                 return "{$quotedColumn} = (
                     SELECT json_group_array(DISTINCT value)
                     FROM json_each(IFNULL({$quotedColumn}, '[]'))
                 )";
 
-            case Operator::TYPE_ARRAY_REMOVE:
-                $values = $operator->getValues();
-                $removeValue = $values[0] ?? null;
-                // Cast scalars to string so the value binds as PDO::PARAM_STR, preserving the
-                // pre-refactor behavior (it was bound with an explicit PARAM_STR). Without the
-                // cast, getPDOType() would bind a number as PARAM_INT. Do not drop it.
-                $removeValue = is_array($removeValue) ? json_encode($removeValue) : (string)$removeValue;
-                $bindKey = $this->registerOperatorBind($binds, $removeValue);
-                // SQLite: remove specific value from array
+            case OperatorType::ArrayRemove:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                $removed = \is_float($values[0] ?? null) ? "CAST(:$bindKey AS REAL)" : ":$bindKey";
+
                 return "{$quotedColumn} = (
                     SELECT json_group_array(value)
                     FROM json_each(IFNULL({$quotedColumn}, '[]'))
-                    WHERE value != :$bindKey
+                    WHERE value != {$removed}
                 )";
 
-            case Operator::TYPE_ARRAY_INSERT:
-                $values = $operator->getValues();
-                $indexKey = $this->registerOperatorBind($binds, $values[0] ?? 0);
-                $valueKey = $this->registerOperatorBind($binds, json_encode($values[1] ?? null));
-                // SQLite: Insert element at specific index by:
-                // 1. Take elements before index (0 to index-1)
-                // 2. Add new element
-                // 3. Take elements from index to end
+            case OperatorType::ArrayInsert:
+                $indexKey = "op_{$bindIndex}";
+                $bindIndex++;
+                $valueKey = "op_{$bindIndex}";
+                $bindIndex++;
+
                 // The bound value is JSON-encoded by parent, json() parses it back to a value,
                 // then we wrap it in json_array() and extract to get the same format as json_each()
                 return "{$quotedColumn} = (
@@ -2246,30 +2087,29 @@ class SQLite extends MariaDB
                     )
                 )";
 
-            case Operator::TYPE_ARRAY_INTERSECT:
-                $values = $operator->getValues();
-                $bindKey = $this->registerOperatorBind($binds, json_encode($values));
-                // SQLite: keep only values that exist in both arrays
+            case OperatorType::ArrayIntersect:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+
                 return "{$quotedColumn} = (
                     SELECT json_group_array(value)
                     FROM json_each(IFNULL({$quotedColumn}, '[]'))
                     WHERE value IN (SELECT value FROM json_each(:$bindKey))
                 )";
 
-            case Operator::TYPE_ARRAY_DIFF:
-                $values = $operator->getValues();
-                $bindKey = $this->registerOperatorBind($binds, json_encode($values));
-                // SQLite: remove values that exist in the comparison array
+            case OperatorType::ArrayDiff:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+
                 return "{$quotedColumn} = (
                     SELECT json_group_array(value)
                     FROM json_each(IFNULL({$quotedColumn}, '[]'))
                     WHERE value NOT IN (SELECT value FROM json_each(:$bindKey))
                 )";
 
-            case Operator::TYPE_ARRAY_FILTER:
+            case OperatorType::ArrayFilter:
                 $values = $operator->getValues();
                 if (empty($values)) {
-                    // No filter criteria, return array unchanged
                     return "{$quotedColumn} = {$quotedColumn}";
                 }
 
@@ -2302,9 +2142,8 @@ class SQLite extends MariaDB
                             return "{$quotedColumn} = {$quotedColumn}";
                         }
 
-                        $filterValue = $values[1];
-                        $filterValue = (is_bool($filterValue)) ? (int)$filterValue : $filterValue;
-                        $bindKey = $this->registerOperatorBind($binds, $filterValue);
+                        $bindKey = "op_{$bindIndex}";
+                        $bindIndex++;
 
                         $operator = match ($filterType) {
                             'equal' => '=',
@@ -2313,7 +2152,7 @@ class SQLite extends MariaDB
                             'greaterThanEqual' => '>=',
                             'lessThan' => '<',
                             'lessThanEqual' => '<=',
-                            default => throw new OperatorException('Unsupported filter type: ' . $filterType),
+                            default => throw new OperatorException('Unsupported filter type: '.(\is_scalar($filterType) ? (string) $filterType : 'unknown')),
                         };
 
                         // For numeric comparisons, cast to REAL; for equal/notEqual, use text comparison
@@ -2337,50 +2176,173 @@ class SQLite extends MariaDB
                         return "{$quotedColumn} = {$quotedColumn}";
                 }
 
-                // Date operators
                 // no break
-            case Operator::TYPE_DATE_ADD_DAYS:
-                $values = $operator->getValues();
-                $bindKey = $this->registerOperatorBind($binds, $values[0] ?? 0);
+            case OperatorType::DateAddDays:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
 
                 return "{$quotedColumn} = datetime({$quotedColumn}, :$bindKey || ' days')";
 
-            case Operator::TYPE_DATE_SUB_DAYS:
-                $values = $operator->getValues();
-                $bindKey = $this->registerOperatorBind($binds, $values[0] ?? 0);
+            case OperatorType::DateSubDays:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
 
                 return "{$quotedColumn} = datetime({$quotedColumn}, '-' || abs(:$bindKey) || ' days')";
 
-            case Operator::TYPE_DATE_SET_NOW:
+            case OperatorType::DateSetNow:
                 return "{$quotedColumn} = datetime('now')";
 
             default:
-                // Fall back to parent implementation for other operators
-                return parent::getOperatorSQL($column, $operator, $binds);
+                return null;
         }
     }
 
+    #[\Override]
+    protected function getConflictTenantExpression(string $column): string
+    {
+        $quoted = $this->quote($this->filter($column));
+
+        return 'CASE WHEN '.Storage::TENANT.' = excluded.'.Storage::TENANT." THEN excluded.{$quoted} ELSE {$quoted} END";
+    }
+
+    #[\Override]
+    protected function getConflictIncrementExpression(string $column): string
+    {
+        $quoted = $this->quote($this->filter($column));
+
+        return "{$quoted} + excluded.{$quoted}";
+    }
+
+    #[\Override]
+    protected function getConflictTenantIncrementExpression(string $column): string
+    {
+        $quoted = $this->quote($this->filter($column));
+
+        return 'CASE WHEN '.Storage::TENANT.' = excluded.'.Storage::TENANT." THEN {$quoted} + excluded.{$quoted} ELSE {$quoted} END";
+    }
+
     /**
-     * Override getUpsertStatement to use SQLite's ON CONFLICT syntax instead of MariaDB's ON DUPLICATE KEY UPDATE
+     * Override executeUpsertBatch because SQLite uses ON CONFLICT syntax which
+     * is not supported by the MySQL query builder that SQLite inherits.
      *
-     * @param string $tableName
-     * @param string $columns
-     * @param array<string> $batchKeys
-     * @param array<string> $attributes
-     * @param array<mixed> $bindValues
-     * @param string $attribute
-     * @param array<string, Operator> $operators
-     * @return mixed
+     * @param  string  $name  The filtered collection name
+     * @param  array<Change>  $changes  The changes to upsert
+     * @param  array<string>  $spatialAttributes  Spatial column names
+     * @param  string  $attribute  Increment attribute name (empty if none)
+     * @param  array<string, Operator>  $operators  Operator map keyed by attribute name
+     * @param  array<string, mixed>  $attributeDefaults  Attribute default values
+     *
+     * @throws DatabaseException
      */
-    public function getUpsertStatement(
-        string $tableName,
-        string $columns,
-        array $batchKeys,
-        array $attributes,
-        array $bindValues,
-        string $attribute = '',
-        array $operators = [],
-    ): mixed {
+    #[\Override]
+    protected function executeUpsertBatch(
+        string $name,
+        array $changes,
+        array $spatialAttributes,
+        string $attribute,
+        array $operators,
+        array $attributeDefaults,
+        bool $hasOperators
+    ): void {
+        $bindIndex = 0;
+        $batchKeys = [];
+        $bindValues = [];
+        $allColumnNames = [];
+        $documentsData = [];
+
+        foreach ($changes as $change) {
+            $document = $change->new;
+
+            if ($hasOperators) {
+                $extracted = Operator::extractOperators($document->getAttributes());
+                $currentRegularAttributes = $extracted['updates'];
+                $extractedOperators = $extracted['operators'];
+
+                if ($change->old->isEmpty() && ! empty($extractedOperators)) {
+                    foreach ($extractedOperators as $operatorKey => $operator) {
+                        $default = $attributeDefaults[$operatorKey] ?? null;
+                        $value = $this->applyOperatorToValue($operator, $default);
+                        if ($operator->getMethod()->isNumeric() && \is_string($value) && ! BigInt::fitsPhpInt($value)) {
+                            throw new LimitException('Value out of range');
+                        }
+                        $currentRegularAttributes[$operatorKey] = $value;
+                    }
+                }
+
+                $currentRegularAttributes[Storage::UID] = $document->getId();
+                $currentRegularAttributes[Storage::CREATED_AT] = $document->getCreatedAt() ? $document->getCreatedAt() : null;
+                $currentRegularAttributes[Storage::UPDATED_AT] = $document->getUpdatedAt() ? $document->getUpdatedAt() : null;
+            } else {
+                $currentRegularAttributes = $document->getAttributes();
+                $currentRegularAttributes[Storage::UID] = $document->getId();
+                $currentRegularAttributes[Storage::CREATED_AT] = $document->getCreatedAt() ? DatabaseDateTime::setTimezone($document->getCreatedAt()) : null;
+                $currentRegularAttributes[Storage::UPDATED_AT] = $document->getUpdatedAt() ? DatabaseDateTime::setTimezone($document->getUpdatedAt()) : null;
+            }
+
+            $currentRegularAttributes[Storage::PERMISSIONS] = \json_encode($document->getPermissions());
+
+            if (! empty($document->getSequence())) {
+                $currentRegularAttributes[Storage::SEQUENCE] = $document->getSequence();
+            }
+
+            $currentRegularAttributes = $this->decorateRow($currentRegularAttributes, $document);
+
+            foreach (\array_keys($currentRegularAttributes) as $colName) {
+                $allColumnNames[$colName] = true;
+            }
+
+            $documentsData[] = ['regularAttributes' => $currentRegularAttributes];
+        }
+
+        foreach (\array_keys($operators) as $colName) {
+            $allColumnNames[$colName] = true;
+        }
+
+        $allColumnNames = \array_keys($allColumnNames);
+        \sort($allColumnNames);
+
+        $columnsArray = [];
+        foreach ($allColumnNames as $attr) {
+            $columnsArray[] = "{$this->quote($this->filter($attr))}";
+        }
+        $columns = '('.\implode(', ', $columnsArray).')';
+
+        foreach ($documentsData as $docData) {
+            $currentRegularAttributes = $docData['regularAttributes'];
+            $bindKeys = [];
+
+            foreach ($allColumnNames as $attributeKey) {
+                $attrValue = $currentRegularAttributes[$attributeKey] ?? null;
+
+                if (\is_array($attrValue)) {
+                    $attrValue = \json_encode($attrValue);
+                }
+
+                if (in_array($attributeKey, $spatialAttributes) && $attrValue !== null) {
+                    $bindKey = 'key_'.$bindIndex;
+                    $bindKeys[] = $this->getSpatialGeometryFromText(':'.$bindKey);
+                } else {
+                    if ($this->supports(Capability::IntegerBooleans)) {
+                        $attrValue = (\is_bool($attrValue)) ? (int) $attrValue : $attrValue;
+                    }
+                    $bindKey = 'key_'.$bindIndex;
+                    $bindKeys[] = ':'.$bindKey;
+                }
+                $bindValues[$bindKey] = $attrValue;
+                $bindIndex++;
+            }
+
+            $batchKeys[] = '('.\implode(', ', $bindKeys).')';
+        }
+
+        $regularAttributes = [];
+        foreach ($allColumnNames as $colName) {
+            $regularAttributes[$colName] = null;
+        }
+        foreach ($documentsData[0]['regularAttributes'] as $key => $value) {
+            $regularAttributes[$key] = $value;
+        }
+
         $getUpdateClause = function (string $attribute, bool $increment = false): string {
             $attribute = $this->quote($this->filter($attribute));
             if ($increment) {
@@ -2390,110 +2352,67 @@ class SQLite extends MariaDB
             }
 
             if ($this->sharedTables) {
-                return "{$attribute} = CASE WHEN _tenant = excluded._tenant THEN {$new} ELSE {$attribute} END";
+                return "{$attribute} = CASE WHEN ".Storage::TENANT.' = excluded.'.Storage::TENANT." THEN {$new} ELSE {$attribute} END";
             }
 
             return "{$attribute} = {$new}";
         };
 
         $updateColumns = [];
-        $operatorBinds = [];
+        $bindIndex = 0;
 
-        if (!empty($attribute)) {
-            // Increment specific column by its new value in place
+        if (! empty($attribute)) {
             $updateColumns = [
                 $getUpdateClause($attribute, increment: true),
-                $getUpdateClause('_updatedAt'),
+                $getUpdateClause(Storage::UPDATED_AT),
             ];
         } else {
-            // Update all columns, handling operators separately
-            foreach (\array_keys($attributes) as $attr) {
-                /**
-                 * @var string $attr
-                 */
+            foreach (\array_keys($regularAttributes) as $attr) {
+                /** @var string $attr */
                 $filteredAttr = $this->filter($attr);
 
-                // Check if this attribute has an operator
                 if (isset($operators[$attr])) {
-                    $operatorSQL = $this->getOperatorSQL($filteredAttr, $operators[$attr], $operatorBinds);
+                    $operatorSQL = $this->getOperatorSql($filteredAttr, $operators[$attr], $bindIndex);
                     if ($operatorSQL !== null) {
                         $updateColumns[] = $operatorSQL;
                     }
                 } else {
-                    if (!in_array($attr, ['_uid', '_id', '_createdAt', '_tenant'])) {
+                    if (! in_array($attr, [Storage::UID, Storage::SEQUENCE, Storage::CREATED_AT, Storage::TENANT])) {
                         $updateColumns[] = $getUpdateClause($filteredAttr);
                     }
                 }
             }
         }
 
-        // getSQLIndex prepends `_tenant` to every index column list
+        // getSqlIndex prepends `_tenant` to every index column list
         // under shared tables, so the actual UNIQUE on the documents
         // table is (_tenant, _uid). SQLite's ON CONFLICT clause needs
         // the same column order to match a UNIQUE constraint.
-        $conflictKeys = $this->sharedTables ? '(_tenant, _uid)' : '(_uid)';
+        $conflictKeys = $this->sharedTables
+            ? '('.Storage::TENANT.', '.Storage::UID.')'
+            : '('.Storage::UID.')';
 
-        $stmt = $this->getPDO()->prepare(
-            "
-            INSERT INTO {$this->getSQLTable($tableName)} {$columns}
-            VALUES " . \implode(', ', $batchKeys) . "
+        $statement = $this->prepare(
+            "INSERT INTO {$this->getTable($name)} {$columns}
+            VALUES ".\implode(', ', $batchKeys)."
             ON CONFLICT {$conflictKeys} DO UPDATE
-                SET " . \implode(', ', $updateColumns)
+                SET ".\implode(', ', $updateColumns),
+            event: Event::DocumentsUpsert
         );
 
-        // Bind regular attribute values
         foreach ($bindValues as $key => $binding) {
-            $stmt->bindValue($key, $binding, $this->getPDOType($binding));
+            $statement->bindValue($key, $binding, $this->getPdoType($binding));
         }
 
-        foreach ($operatorBinds as $bindKey => $bindValue) {
-            $stmt->bindValue($bindKey, $bindValue, $this->getPDOType($bindValue));
+        $opIndexForBinding = 0;
+        foreach (array_keys($regularAttributes) as $attr) {
+            if (isset($operators[$attr])) {
+                $this->bindOperatorParameters($statement, $operators[$attr], $opIndexForBinding);
+            }
         }
 
-        return $stmt;
-    }
-
-    public function getSupportForAlterLocks(): bool
-    {
-        return false;
-    }
-
-    public function getSupportNonUtfCharacters(): bool
-    {
-        return false;
-    }
-
-    /**
-     * Is PCRE regex supported?
-     * SQLite does not have native REGEXP support - it requires compile-time option or user-defined function
-     *
-     * @return bool
-     */
-    public function getSupportForPCRERegex(): bool
-    {
-        return $this->pcreRegistered;
-    }
-
-    /**
-     * Is POSIX regex supported?
-     * SQLite does not have native REGEXP support - it requires compile-time option or user-defined function
-     *
-     * @return bool
-     */
-    public function getSupportForPOSIXRegex(): bool
-    {
-        // The PHP-implemented REGEXP UDF runs preg_match (PCRE), not POSIX.
-        return false;
-    }
-
-    public function getSupportForTTLIndexes(): bool
-    {
-        return false;
-    }
-
-    protected function getInsertKeyword(): string
-    {
-        return $this->skipDuplicates ? 'INSERT OR IGNORE INTO' : 'INSERT INTO';
+        $this->execute($statement);
+        $statement->closeCursor();
     }
 
     /**
@@ -2501,8 +2420,9 @@ class SQLite extends MariaDB
      * shared SQL implementation that joins many ADD COLUMN clauses with
      * commas doesn't parse here. Loop over createAttribute instead.
      *
-     * @param array<array<string, mixed>> $attributes
+     * @param list<Attribute> $attributes
      */
+    #[\Override]
     public function createAttributes(string $collection, array $attributes): bool
     {
         // The flag advertises atomic batch creation. SQLite has no
@@ -2512,15 +2432,7 @@ class SQLite extends MariaDB
         $this->startTransaction();
         try {
             foreach ($attributes as $attribute) {
-                $this->createAttribute(
-                    $collection,
-                    $attribute['$id'],
-                    $attribute['type'],
-                    $attribute['size'] ?? 0,
-                    $attribute['signed'] ?? true,
-                    $attribute['array'] ?? false,
-                    $attribute['required'] ?? false,
-                );
+                $this->createAttributeWithEvent($collection, $attribute, Event::AttributesCreate);
             }
             $this->commitTransaction();
         } catch (\Throwable $e) {
@@ -2535,308 +2447,268 @@ class SQLite extends MariaDB
     }
 
     /**
-     * MariaDB::createRelationship concatenates multiple ALTER TABLE
-     * statements with `;` and runs them through a single prepare/execute,
-     * which only works because MySQL accepts multi-statement queries.
-     * SQLite's PDO driver runs the first statement and silently drops the
-     * rest, so re-implement the dispatch with one statement per call.
+     * SQL::createRelationship concatenates multiple ALTER TABLE statements
+     * with `;` and runs them through a single prepare/execute, which only
+     * works because MySQL accepts multi-statement queries. SQLite's PDO
+     * driver runs the first statement and silently drops the rest, so
+     * re-implement the dispatch with one statement per call.
      */
-    public function createRelationship(
-        string $collection,
-        string $relatedCollection,
-        string $type,
-        bool $twoWay = false,
-        string $id = '',
-        string $twoWayKey = ''
-    ): bool {
-        $name = $this->filter($collection);
-        $relatedName = $this->filter($relatedCollection);
-        $table = $this->getSQLTable($name);
-        $relatedTable = $this->getSQLTable($relatedName);
-        $id = $this->filter($id);
-        $twoWayKey = $this->filter($twoWayKey);
-        $sqlType = $this->getSQLType(Database::VAR_RELATIONSHIP, 0, false, false, false);
+    #[\Override]
+    public function createRelationship(string $collection, Relationship $relationship): bool
+    {
+        $table = $this->getTable($this->filter($collection));
+        $relatedTable = $this->getTable($this->filter($relationship->relatedCollection));
+        $key = $this->filter($relationship->key ?? '');
+        $twoWayKey = $this->filter($relationship->twoWayKey ?? '');
+        $sqlType = $this->getSqlType(ColumnType::Relationship, 0, false, false, false);
 
-        $statements = match ($type) {
-            Database::RELATION_ONE_TO_ONE => $twoWay
+        $statements = match ($relationship->type) {
+            RelationshipType::OneToOne => $relationship->twoWay
                 ? [
-                    "ALTER TABLE {$table} ADD COLUMN `{$id}` {$sqlType} DEFAULT NULL",
+                    "ALTER TABLE {$table} ADD COLUMN `{$key}` {$sqlType} DEFAULT NULL",
                     "ALTER TABLE {$relatedTable} ADD COLUMN `{$twoWayKey}` {$sqlType} DEFAULT NULL",
                 ]
-                : ["ALTER TABLE {$table} ADD COLUMN `{$id}` {$sqlType} DEFAULT NULL"],
-            Database::RELATION_ONE_TO_MANY => ["ALTER TABLE {$relatedTable} ADD COLUMN `{$twoWayKey}` {$sqlType} DEFAULT NULL"],
-            Database::RELATION_MANY_TO_ONE => ["ALTER TABLE {$table} ADD COLUMN `{$id}` {$sqlType} DEFAULT NULL"],
-            Database::RELATION_MANY_TO_MANY => [],
-            default => throw new DatabaseException('Invalid relationship type'),
+                : ["ALTER TABLE {$table} ADD COLUMN `{$key}` {$sqlType} DEFAULT NULL"],
+            RelationshipType::OneToMany => ["ALTER TABLE {$relatedTable} ADD COLUMN `{$twoWayKey}` {$sqlType} DEFAULT NULL"],
+            RelationshipType::ManyToOne => ["ALTER TABLE {$table} ADD COLUMN `{$key}` {$sqlType} DEFAULT NULL"],
+            RelationshipType::ManyToMany => [],
         };
 
-        foreach ($statements as $stmt) {
-            $stmt = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $stmt);
-            $this->getPDO()->prepare($stmt)->execute();
+        foreach ($statements as $statement) {
+            $this->execute($this->prepare($statement, event: Event::AttributeCreate));
         }
 
         return true;
     }
 
-    public function updateRelationship(
-        string $collection,
-        string $relatedCollection,
-        string $type,
-        bool $twoWay,
-        string $key,
-        string $twoWayKey,
-        string $side,
-        ?string $newKey = null,
-        ?string $newTwoWayKey = null,
-    ): bool {
-        $name = $this->filter($collection);
-        $relatedName = $this->filter($relatedCollection);
-        $table = $this->getSQLTable($name);
-        $relatedTable = $this->getSQLTable($relatedName);
-        $key = $this->filter($key);
-        $twoWayKey = $this->filter($twoWayKey);
-
-        if (!\is_null($newKey)) {
-            $newKey = $this->filter($newKey);
-        }
-        if (!\is_null($newTwoWayKey)) {
-            $newTwoWayKey = $this->filter($newTwoWayKey);
-        }
+    #[\Override]
+    public function updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, RelationshipUpdate $update): bool
+    {
+        $table = $this->getTable($this->filter($collection));
+        $relatedTable = $this->getTable($this->filter($relationship->relatedCollection));
+        $key = $this->filter($relationship->key ?? '');
+        $twoWayKey = $this->filter($relationship->twoWayKey ?? '');
+        $twoWay = $update->twoWay ?? $relationship->twoWay;
+        $newKey = $update->key === null ? null : $this->filter($update->key);
+        $newTwoWayKey = $update->twoWayKey === null ? null : $this->filter($update->twoWayKey);
 
         $statements = [];
 
-        switch ($type) {
-            case Database::RELATION_ONE_TO_ONE:
-                if (!\is_null($newKey) && $key !== $newKey) {
+        switch ($relationship->type) {
+            case RelationshipType::OneToOne:
+                if (($twoWay || $side === RelationshipSide::Parent) && $newKey !== null && $key !== $newKey) {
                     $statements[] = "ALTER TABLE {$table} RENAME COLUMN `{$key}` TO `{$newKey}`";
                 }
-                if ($twoWay && !\is_null($newTwoWayKey) && $twoWayKey !== $newTwoWayKey) {
+                if (($twoWay || $side === RelationshipSide::Child) && $newTwoWayKey !== null && $twoWayKey !== $newTwoWayKey) {
                     $statements[] = "ALTER TABLE {$relatedTable} RENAME COLUMN `{$twoWayKey}` TO `{$newTwoWayKey}`";
                 }
                 break;
-            case Database::RELATION_ONE_TO_MANY:
-                if ($side === Database::RELATION_SIDE_PARENT) {
-                    if (!\is_null($newTwoWayKey) && $twoWayKey !== $newTwoWayKey) {
+            case RelationshipType::OneToMany:
+                if ($side === RelationshipSide::Parent) {
+                    if ($newTwoWayKey !== null && $twoWayKey !== $newTwoWayKey) {
                         $statements[] = "ALTER TABLE {$relatedTable} RENAME COLUMN `{$twoWayKey}` TO `{$newTwoWayKey}`";
                     }
-                } else {
-                    if (!\is_null($newKey) && $key !== $newKey) {
-                        $statements[] = "ALTER TABLE {$table} RENAME COLUMN `{$key}` TO `{$newKey}`";
-                    }
+                } elseif ($newKey !== null && $key !== $newKey) {
+                    $statements[] = "ALTER TABLE {$table} RENAME COLUMN `{$key}` TO `{$newKey}`";
                 }
                 break;
-            case Database::RELATION_MANY_TO_ONE:
-                if ($side === Database::RELATION_SIDE_CHILD) {
-                    if (!\is_null($newTwoWayKey) && $twoWayKey !== $newTwoWayKey) {
+            case RelationshipType::ManyToOne:
+                if ($side === RelationshipSide::Child) {
+                    if ($newTwoWayKey !== null && $twoWayKey !== $newTwoWayKey) {
                         $statements[] = "ALTER TABLE {$relatedTable} RENAME COLUMN `{$twoWayKey}` TO `{$newTwoWayKey}`";
                     }
-                } else {
-                    if (!\is_null($newKey) && $key !== $newKey) {
-                        $statements[] = "ALTER TABLE {$table} RENAME COLUMN `{$key}` TO `{$newKey}`";
-                    }
+                } elseif ($newKey !== null && $key !== $newKey) {
+                    $statements[] = "ALTER TABLE {$table} RENAME COLUMN `{$key}` TO `{$newKey}`";
                 }
                 break;
-            case Database::RELATION_MANY_TO_MANY:
-                $metadataCollection = new Document(['$id' => Database::METADATA]);
-                $collection = $this->getDocument($metadataCollection, $collection);
-                $relatedCollection = $this->getDocument($metadataCollection, $relatedCollection);
+            case RelationshipType::ManyToMany:
+                $junction = $this->getTable($this->getJunctionName($collection, $relationship->relatedCollection, $side));
 
-                $junction = $this->getSQLTable('_' . $collection->getSequence() . '_' . $relatedCollection->getSequence());
-
-                if (!\is_null($newKey)) {
+                if ($newKey !== null && $key !== $newKey) {
                     $statements[] = "ALTER TABLE {$junction} RENAME COLUMN `{$key}` TO `{$newKey}`";
                 }
-                if ($twoWay && !\is_null($newTwoWayKey)) {
+                if ($newTwoWayKey !== null && $twoWayKey !== $newTwoWayKey) {
                     $statements[] = "ALTER TABLE {$junction} RENAME COLUMN `{$twoWayKey}` TO `{$newTwoWayKey}`";
                 }
                 break;
-            default:
-                throw new DatabaseException('Invalid relationship type');
         }
 
-        foreach ($statements as $stmt) {
-            $stmt = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $stmt);
-            $this->getPDO()->prepare($stmt)->execute();
+        foreach ($statements as $statement) {
+            $this->execute($this->prepare($statement, event: Event::AttributeUpdate));
         }
 
         return true;
     }
 
-    public function deleteRelationship(
-        string $collection,
-        string $relatedCollection,
-        string $type,
-        bool $twoWay,
-        string $key,
-        string $twoWayKey,
-        string $side
-    ): bool {
-        $name = $this->filter($collection);
-        $relatedName = $this->filter($relatedCollection);
-        $table = $this->getSQLTable($name);
-        $relatedTable = $this->getSQLTable($relatedName);
-        $key = $this->filter($key);
-        $twoWayKey = $this->filter($twoWayKey);
+    #[\Override]
+    public function deleteRelationship(string $collection, Relationship $relationship, RelationshipSide $side): bool
+    {
+        $table = $this->getTable($this->filter($collection));
+        $relatedTable = $this->getTable($this->filter($relationship->relatedCollection));
+        $key = $this->filter($relationship->key ?? '');
+        $twoWayKey = $this->filter($relationship->twoWayKey ?? '');
+        $twoWay = $relationship->twoWay;
 
         $statements = [];
 
-        switch ($type) {
-            case Database::RELATION_ONE_TO_ONE:
-                if ($side === Database::RELATION_SIDE_PARENT) {
+        switch ($relationship->type) {
+            case RelationshipType::OneToOne:
+                if ($side === RelationshipSide::Parent) {
                     $statements[] = "ALTER TABLE {$table} DROP COLUMN `{$key}`";
                     if ($twoWay) {
                         $statements[] = "ALTER TABLE {$relatedTable} DROP COLUMN `{$twoWayKey}`";
                     }
-                } elseif ($side === Database::RELATION_SIDE_CHILD) {
+                } else {
                     $statements[] = "ALTER TABLE {$relatedTable} DROP COLUMN `{$twoWayKey}`";
                     if ($twoWay) {
                         $statements[] = "ALTER TABLE {$table} DROP COLUMN `{$key}`";
                     }
                 }
                 break;
-            case Database::RELATION_ONE_TO_MANY:
-                $statements[] = $side === Database::RELATION_SIDE_PARENT
+            case RelationshipType::OneToMany:
+                $statements[] = $side === RelationshipSide::Parent
                     ? "ALTER TABLE {$relatedTable} DROP COLUMN `{$twoWayKey}`"
                     : "ALTER TABLE {$table} DROP COLUMN `{$key}`";
                 break;
-            case Database::RELATION_MANY_TO_ONE:
-                $statements[] = $side === Database::RELATION_SIDE_PARENT
+            case RelationshipType::ManyToOne:
+                $statements[] = $side === RelationshipSide::Parent
                     ? "ALTER TABLE {$table} DROP COLUMN `{$key}`"
                     : "ALTER TABLE {$relatedTable} DROP COLUMN `{$twoWayKey}`";
                 break;
-            case Database::RELATION_MANY_TO_MANY:
-                $metadataCollection = new Document(['$id' => Database::METADATA]);
-                $collection = $this->getDocument($metadataCollection, $collection);
-                $relatedCollection = $this->getDocument($metadataCollection, $relatedCollection);
+            case RelationshipType::ManyToMany:
+                $junctionBase = $this->getJunctionName($collection, $relationship->relatedCollection, $side);
 
-                $junctionBase = $side === Database::RELATION_SIDE_PARENT
-                    ? '_' . $collection->getSequence() . '_' . $relatedCollection->getSequence()
-                    : '_' . $relatedCollection->getSequence() . '_' . $collection->getSequence();
-
-                $statements[] = "DROP TABLE {$this->getSQLTable($junctionBase)}";
-                $statements[] = "DROP TABLE {$this->getSQLTable($junctionBase . '_perms')}";
+                $statements[] = "DROP TABLE {$this->getTable($junctionBase)}";
+                $statements[] = "DROP TABLE {$this->getTable(Storage::permissionsTable($junctionBase))}";
                 break;
-            default:
-                throw new DatabaseException('Invalid relationship type');
         }
 
-        foreach ($statements as $stmt) {
-            $stmt = $this->trigger(Database::EVENT_ATTRIBUTE_DELETE, $stmt);
-            $this->getPDO()->prepare($stmt)->execute();
+        foreach ($statements as $statement) {
+            $this->execute($this->prepare($statement, event: Event::AttributeDelete));
         }
 
         return true;
     }
 
     /**
-     * Introspect a collection's columns via PRAGMA table_info instead of
-     * MariaDB's INFORMATION_SCHEMA.COLUMNS, which doesn't exist in SQLite.
-     * Returned shape matches the MariaDB result enough that
-     * Database::analyzeCollection() doesn't have to special-case the
-     * adapter.
-     *
-     * @return array<Document>
+     * @return list<SchemaColumn>
      */
+    #[\Override]
     public function getSchemaAttributes(string $collection): array
     {
         $table = "{$this->getNamespace()}_{$this->filter($collection)}";
 
-        $stmt = $this->getPDO()->prepare("PRAGMA table_info(`{$table}`)");
-        $stmt->execute();
-        $rows = $stmt->fetchAll();
-        $stmt->closeCursor();
+        $statement = $this->prepare("PRAGMA table_info(`{$table}`)", event: Event::CollectionRead);
+        $this->execute($statement);
+        $rows = $statement->fetchAll();
+        $statement->closeCursor();
 
-        $results = [];
+        $columns = [];
         foreach ($rows as $row) {
-            $rawType = (string) ($row['type'] ?? '');
-            $parsed = $this->parseSqliteColumnType($rawType);
-
-            $results[] = new Document([
-                '$id' => $row['name'],
-                'columnDefault' => $row['dflt_value'] ?? null,
-                'isNullable' => empty($row['notnull']) ? 'YES' : 'NO',
-                'dataType' => $parsed['dataType'],
-                'characterMaximumLength' => $parsed['characterMaximumLength'],
-                'numericPrecision' => $parsed['numericPrecision'],
-                'numericScale' => $parsed['numericScale'],
-                'datetimePrecision' => $parsed['datetimePrecision'],
-                'columnType' => \strtolower($rawType),
-                'columnKey' => !empty($row['pk']) ? 'PRI' : '',
-                'extra' => '',
-            ]);
-        }
-
-        return $results;
-    }
-
-    /**
-     * Introspect a collection's indexes via PRAGMA index_list +
-     * PRAGMA index_info. Returns one Document per index with a `columns`
-     * array, matching the grouped shape MariaDB::getSchemaIndexes returns
-     * so Database::createIndex can compare `columns` against the requested
-     * attributes without special-casing the adapter.
-     *
-     * @return array<Document>
-     */
-    public function getSchemaIndexes(string $collection): array
-    {
-        $table = "{$this->getNamespace()}_{$this->filter($collection)}";
-
-        $stmt = $this->getPDO()->prepare("PRAGMA index_list(`{$table}`)");
-        $stmt->execute();
-        $indexes = $stmt->fetchAll();
-        $stmt->closeCursor();
-
-        $results = [];
-        foreach ($indexes as $index) {
-            $name = $index['name'];
-            $unique = !empty($index['unique']);
-
-            $colStmt = $this->getPDO()->prepare("PRAGMA index_info(`{$name}`)");
-            $colStmt->execute();
-            $cols = $colStmt->fetchAll();
-            $colStmt->closeCursor();
-
-            \usort($cols, fn ($a, $b) => ((int) $a['seqno']) <=> ((int) $b['seqno']));
-
-            $columns = [];
-            $lengths = [];
-            foreach ($cols as $col) {
-                $columns[] = $col['name'];
-                $lengths[] = null;
+            if (! \is_array($row) || ! \is_scalar($row['name'] ?? null)) {
+                continue;
             }
 
-            $results[] = new Document([
-                '$id' => $name,
-                'indexName' => $name,
-                'indexType' => 'BTREE',
-                'nonUnique' => $unique ? 0 : 1,
-                'columns' => $columns,
-                'lengths' => $lengths,
-            ]);
+            $type = \is_scalar($row['type'] ?? null) ? (string) $row['type'] : '';
+            $columns[] = new SchemaColumn(
+                name: (string) $row['name'],
+                type: $this->canonicalColumnType($type),
+                length: $this->getCharacterLength($type),
+                nullable: empty($row['notnull']),
+            );
         }
 
-        // PRAGMA index_list misses FTS5 vtables.
-        foreach ($this->getFulltextSchemaIndexes($collection) as $entry) {
-            $results[] = new Document($entry);
-        }
-
-        return $results;
+        return $columns;
     }
 
     /**
-     * Schema-index entries for FTS5 fulltext tables on `$collection`.
-     * Maps each back to a metadata index id when possible.
+     * @return array<string>
+     */
+    #[\Override]
+    protected function getColumnNames(string $collection): array
+    {
+        return \array_map(
+            static fn (SchemaColumn $column): string => $column->name,
+            $this->getSchemaAttributes($collection),
+        );
+    }
+
+    /**
+     * Index names are global in SQLite, so each carries the namespace, tenant and collection; an index is reported
+     * under its key, the current tenant's copy before another's. PRAGMA index_list misses the FTS5 tables fulltext
+     * indexes are kept in, so those are added.
      *
-     * Each entry has keys:
-     * - `$id`: string
-     * - `indexName`: string
-     * - `indexType`: string
-     * - `nonUnique`: int
-     * - `columns`: array<string>
-     * - `lengths`: array<null>
+     * @return list<SchemaIndex>
+     */
+    #[\Override]
+    public function getSchemaIndexes(string $collection): array
+    {
+        $filtered = $this->filter($collection);
+        $table = "{$this->getNamespace()}_{$filtered}";
+        $own = "{$this->getNamespace()}_{$this->getTenantSegment()}_{$filtered}_";
+        $anyTenant = '/^'.\preg_quote($this->getNamespace(), '/').'_[A-Za-z0-9_-]*?_'.\preg_quote($filtered, '/').'_(.+)$/';
+
+        $statement = $this->prepare("PRAGMA index_list(`{$table}`)", event: Event::CollectionRead);
+        $this->execute($statement);
+        $rows = $statement->fetchAll();
+        $statement->closeCursor();
+
+        $indexes = [];
+        foreach ($rows as $row) {
+            if (! \is_array($row)) {
+                continue;
+            }
+            $name = \is_scalar($row['name'] ?? null) ? (string) $row['name'] : '';
+
+            $owned = \str_starts_with($name, $own);
+            $key = match (true) {
+                $owned => \substr($name, \strlen($own)),
+                \preg_match($anyTenant, $name, $matches) === 1 => $matches[1],
+                default => $name,
+            };
+            if (! $owned && isset($indexes[$key])) {
+                continue;
+            }
+
+            $columns = $this->getIndexColumns($name);
+            $indexes[$key] = new SchemaIndex(
+                name: $key,
+                type: empty($row['unique']) ? IndexType::Key : IndexType::Unique,
+                columns: $columns,
+                lengths: \array_fill(0, \count($columns), null),
+            );
+        }
+
+        return [...\array_values($indexes), ...$this->getFulltextSchemaIndexes($collection)];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function getIndexColumns(string $index): array
+    {
+        $statement = $this->prepare("PRAGMA index_info(`{$index}`)", event: Event::CollectionRead);
+        $this->execute($statement);
+        $rows = $statement->fetchAll();
+        $statement->closeCursor();
+
+        $columns = [];
+        foreach ($rows as $row) {
+            if (! \is_array($row)) {
+                continue;
+            }
+            $position = \is_scalar($row['seqno'] ?? null) ? (int) $row['seqno'] : \count($columns);
+            $columns[$position] = \is_scalar($row['name'] ?? null) ? (string) $row['name'] : '';
+        }
+        \ksort($columns);
+
+        return \array_values($columns);
+    }
+
+    /**
+     * The FTS5 tables of $collection's fulltext indexes, each under the key of the index it serves when known.
      *
-     * @return array<array<string, mixed>>
+     * @return list<SchemaIndex>
      */
     protected function getFulltextSchemaIndexes(string $collection): array
     {
@@ -2846,337 +2718,74 @@ class SQLite extends MariaDB
             return [];
         }
 
-        $hashToId = [];
-        try {
-            $metadataCollection = new Document(['$id' => Database::METADATA]);
-            $collectionDoc = $this->getDocument($metadataCollection, $collection);
-            if (!$collectionDoc->isEmpty()) {
-                foreach ($collectionDoc->getAttribute('indexes', []) as $index) {
-                    $indexId = $index instanceof Document
-                        ? $index->getId()
-                        : (\is_array($index) ? ($index['$id'] ?? null) : null);
-                    $type = $index instanceof Document
-                        ? $index->getAttribute('type')
-                        : (\is_array($index) ? ($index['type'] ?? null) : null);
+        $keys = \array_flip($this->getFulltextTablesByIndexId($collection));
 
-                    if ($indexId === null || $type !== Database::INDEX_FULLTEXT) {
-                        continue;
-                    }
-
-                    $attributes = $index instanceof Document
-                        ? $index->getAttribute('attributes', [])
-                        : ($index['attributes'] ?? []);
-
-                    $internal = \array_map(
-                        fn (string $a) => $this->getInternalKeyForAttribute($a),
-                        (array) $attributes
-                    );
-                    $hashToId[$this->getFulltextTableName($collection, $internal)] = $this->filter((string) $indexId);
-                }
-            }
-        } catch (\Throwable) {
-        }
-
-        $entries = [];
-        foreach ($tables as $ftsTable) {
-            $info = $this->getPDO()->prepare("PRAGMA table_info(`{$ftsTable}`)");
-            $info->execute();
-            $cols = $info->fetchAll(PDO::FETCH_ASSOC);
-            $info->closeCursor();
+        $indexes = [];
+        foreach ($tables as $fulltextTable) {
+            $statement = $this->prepare("PRAGMA table_info(`{$fulltextTable}`)");
+            $statement->execute();
+            $rows = $statement->fetchAll(PDO::FETCH_ASSOC);
+            $statement->closeCursor();
 
             $columns = [];
-            foreach ($cols as $col) {
-                $name = (string) ($col['name'] ?? '');
-                if ($name === '') {
+            foreach ($rows as $row) {
+                if (! \is_array($row) || ! \is_scalar($row['name'] ?? null) || $row['name'] === '') {
                     continue;
                 }
-                $columns[] = $name;
+                $columns[] = (string) $row['name'];
             }
 
-            $id = $hashToId[$ftsTable] ?? $ftsTable;
-
-            $entries[] = [
-                '$id' => $id,
-                'indexName' => $id,
-                'indexType' => 'FULLTEXT',
-                'nonUnique' => 1,
-                'columns' => $columns,
-                'lengths' => \array_fill(0, \count($columns), null),
-            ];
+            $indexes[] = new SchemaIndex(
+                name: (string) ($keys[$fulltextTable] ?? $fulltextTable),
+                type: IndexType::Fulltext,
+                columns: $columns,
+                lengths: \array_fill(0, \count($columns), null),
+            );
         }
 
-        return $entries;
+        return $indexes;
     }
 
     /**
-     * Parse a SQLite type declaration like `VARCHAR(36)` into the column-info
-     * shape exposed by getSchemaAttributes. Mirrors what MariaDB returns from
-     * INFORMATION_SCHEMA.COLUMNS so callers don't have to special-case the
-     * adapter — TEXT family types report their MariaDB byte ceilings,
-     * VARCHAR/CHAR thread the parenthesised size into characterMaximumLength,
-     * DATETIME's parenthesised value routes to datetimePrecision, and
-     * integer types fall back to MariaDB's default precision values.
-     *
-     * @return array{
-     *     dataType: string,
-     *     characterMaximumLength: ?string,
-     *     numericPrecision: ?string,
-     *     numericScale: ?string,
-     *     datetimePrecision: ?string,
-     * }
+     * The character length of a declared type: the size of a VARCHAR or CHAR, and under MySQL emulation the byte
+     * ceilings MariaDB reports for the TEXT family.
      */
-    private function parseSqliteColumnType(string $declaration): array
+    private function getCharacterLength(string $declaration): ?int
     {
-        $declaration = \trim(\preg_replace('/\s+/', ' ', $declaration) ?? '');
-
-        $base = $declaration;
-        $argument = null;
-        $secondArgument = null;
-        if (\preg_match('/^([A-Za-z]+)\s*\((\d+)(?:\s*,\s*(\d+))?\s*\)/', $declaration, $matches) === 1) {
-            $base = $matches[1];
-            $argument = (int) $matches[2];
-            if (isset($matches[3]) && $matches[3] !== '') {
-                $secondArgument = (int) $matches[3];
-            }
+        if (\preg_match('/^\s*(VARCHAR|CHAR)\s*\(\s*(\d+)\s*\)/i', $declaration, $matches) === 1) {
+            return (int) $matches[2];
         }
 
-        $dataType = \strtolower($base);
-        // SQLite spells INT and INTEGER interchangeably for declared types.
-        // Under emulation, canonicalise to MariaDB's reported `int` so
-        // getSchemaAttributes matches that adapter's contract; otherwise
-        // keep the verbatim form the user declared.
-        if ($this->emulateMySQL && $dataType === 'integer') {
-            $dataType = 'int';
+        if (! $this->emulateMySQL) {
+            return null;
         }
 
-        $result = [
-            'dataType' => $dataType,
-            'characterMaximumLength' => null,
-            'numericPrecision' => null,
-            'numericScale' => null,
-            'datetimePrecision' => null,
-        ];
-
-        // VARCHAR / CHAR / DATETIME(n) / DECIMAL(p,s) length+precision
-        // come straight from the declaration — that's true for vanilla
-        // SQLite too. The MariaDB byte ceilings (TEXT/MEDIUMTEXT/etc.)
-        // and the integer/float precision defaults are MariaDB-specific
-        // INFORMATION_SCHEMA conventions, so report them only under
-        // emulation.
-        switch ($dataType) {
-            case 'varchar':
-            case 'char':
-                if ($argument !== null) {
-                    $result['characterMaximumLength'] = (string) $argument;
-                }
-                break;
-
-            case 'datetime':
-            case 'timestamp':
-            case 'time':
-                if ($argument !== null) {
-                    $result['datetimePrecision'] = (string) $argument;
-                }
-                break;
-
-            case 'decimal':
-            case 'numeric':
-                if ($argument !== null) {
-                    $result['numericPrecision'] = (string) $argument;
-                }
-                if ($secondArgument !== null) {
-                    $result['numericScale'] = (string) $secondArgument;
-                } elseif ($this->emulateMySQL && $argument !== null) {
-                    $result['numericScale'] = '0';
-                }
-                break;
-        }
-
-        /**
-         * MariaDB byte ceilings for TEXT-family types, mirrored so PRAGMA-based
-         * introspection produces the same characterMaximumLength values that
-         * INFORMATION_SCHEMA.COLUMNS would on MariaDB.
-         */
-
-        if ($this->emulateMySQL) {
-            switch ($dataType) {
-                case 'text':
-                    $result['characterMaximumLength'] = '' .  Database::MAX_TEXT_BYTES;
-                    break;
-
-                case 'mediumtext':
-                    $result['characterMaximumLength'] = '' . Database::MAX_MEDIUMTEXT_BYTES;
-                    break;
-
-                case 'longtext':
-                case 'json':
-                    $result['characterMaximumLength'] = '' .  Database::MAX_LONGTEXT_BYTES;
-                    break;
-
-                case 'tinyint':
-                    $result['numericPrecision'] = '3';
-                    break;
-
-                case 'smallint':
-                    $result['numericPrecision'] = '5';
-                    break;
-
-                case 'mediumint':
-                    $result['numericPrecision'] = '7';
-                    break;
-
-                case 'int':
-                case 'integer':
-                    $result['numericPrecision'] = '10';
-                    break;
-
-                case 'bigint':
-                    $result['numericPrecision'] = '19';
-                    break;
-
-                case 'decimal':
-                case 'numeric':
-                    if ($result['numericPrecision'] === null) {
-                        $result['numericPrecision'] = '10';
-                    }
-                    break;
-
-                case 'float':
-                    $result['numericPrecision'] = '12';
-                    break;
-
-                case 'double':
-                    $result['numericPrecision'] = '22';
-                    break;
-            }
-        }
-
-        return $result;
+        return match (\strtolower(\trim($declaration))) {
+            'text' => Database::MAX_TEXT_BYTES,
+            'mediumtext' => Database::MAX_MEDIUMTEXT_BYTES,
+            'longtext', 'json' => Database::MAX_LONGTEXT_BYTES,
+            default => null,
+        };
     }
 
     /**
-     * SQLite has no MATCH ... AGAINST. Route SEARCH/NOT_SEARCH through the
-     * collection's FTS5 virtual table; for LIKE-using comparisons append
-     * an explicit ESCAPE clause because SQLite — unlike MariaDB — does
-     * not honour `\` as a default escape and the inherited
-     * escapeWildcards() emits backslash escapes on every wildcard.
-     * Everything else falls through to the MariaDB implementation.
+     * @param  list<JoinAlias>  $joins
      */
-    protected function getSQLCondition(Query $query, array &$binds, ?string $forCollection = null): string
+    private function findSearchFulltextTable(string $attribute, string $collection, array $joins): ?string
     {
-        $method = $query->getMethod();
+        $dot = \strpos($attribute, '.');
+        if ($dot === false) {
+            return $this->findFulltextTableForAttribute($collection, $attribute);
+        }
 
-        $likeMethods = [
-            Query::TYPE_STARTS_WITH,
-            Query::TYPE_NOT_STARTS_WITH,
-            Query::TYPE_ENDS_WITH,
-            Query::TYPE_NOT_ENDS_WITH,
-            Query::TYPE_CONTAINS,
-            Query::TYPE_CONTAINS_ANY,
-            Query::TYPE_NOT_CONTAINS,
-        ];
-
-        if (\in_array($method, $likeMethods, true)) {
-            // Array CONTAINS via json_each — exact element match without
-            // LIKE substring false positives (`%2%` matching `[12, 200]`).
-            $arrayContainsMethods = [
-                Query::TYPE_CONTAINS,
-                Query::TYPE_CONTAINS_ANY,
-                Query::TYPE_NOT_CONTAINS,
-            ];
-            if ($query->onArray() && \in_array($method, $arrayContainsMethods, true)) {
-                return $this->buildArrayContainsCondition($query, $binds);
+        $prefix = \substr($attribute, 0, $dot);
+        foreach ($joins as $join) {
+            if ($join->alias === $prefix) {
+                return $this->findFulltextTableForAttribute($join->table, \substr($attribute, $dot + 1));
             }
-
-            return $this->getLikeCondition($query, $binds);
         }
 
-        if ($method !== Query::TYPE_SEARCH && $method !== Query::TYPE_NOT_SEARCH) {
-            return parent::getSQLCondition($query, $binds, $forCollection);
-        }
-
-        $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
-        $attribute = $this->filter($query->getAttribute());
-        $alias = $this->quote(Query::DEFAULT_ALIAS);
-        $placeholder = ID::unique();
-
-        $rawValue = (string) $query->getValue();
-        $ftsValue = $this->getFTS5Value($rawValue);
-
-        if ($ftsValue === '') {
-            // Empty term — FTS5 syntax-errors on the empty string.
-            return $method === Query::TYPE_SEARCH ? '1 = 0' : '1 = 1';
-        }
-
-        $ftsTable = $forCollection === null
-            ? null
-            : $this->findFulltextTableForAttribute($forCollection, $attribute);
-
-        if ($ftsTable === null) {
-            // LIKE on the raw value — the FTS5-formatted form embeds
-            // `OR`/`*` that LIKE would treat as literal.
-            return $this->buildSearchLikeFallback($attribute, $rawValue, $alias, $placeholder, $method, $binds);
-        }
-
-        $binds[":{$placeholder}_0"] = $ftsValue;
-
-        $subquery = "{$alias}.`_id` IN (SELECT rowid FROM `{$ftsTable}` WHERE `{$ftsTable}` MATCH :{$placeholder}_0)";
-
-        return $method === Query::TYPE_SEARCH ? $subquery : "NOT ({$subquery})";
-    }
-
-    /**
-     * SEARCH fallback to LIKE when no FTS5 table covers the attribute.
-     *
-     * @param array<string,mixed> $binds
-     */
-    private function buildSearchLikeFallback(
-        string $attribute,
-        string $value,
-        string $alias,
-        string $placeholder,
-        string $method,
-        array &$binds,
-    ): string {
-        $binds[":{$placeholder}_0"] = '%' . $this->escapeWildcards($value) . '%';
-        $sql = "{$alias}.{$this->quote($attribute)} LIKE :{$placeholder}_0 ESCAPE '\\'";
-
-        return $method === Query::TYPE_SEARCH ? $sql : "NOT ({$sql})";
-    }
-
-    /**
-     * Array CONTAINS / CONTAINS_ANY / NOT_CONTAINS via json_each. Exact
-     * element match — avoids the LIKE substring false positives where
-     * `%2%` matches `[12, 200]` and `%"apple"%` matches `["pineapple"]`.
-     *
-     * @param array<string,mixed> $binds
-     */
-    private function buildArrayContainsCondition(Query $query, array &$binds): string
-    {
-        $method = $query->getMethod();
-        $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
-
-        $attribute = $this->quote($this->filter($query->getAttribute()));
-        $alias = $this->quote(Query::DEFAULT_ALIAS);
-        $placeholder = ID::unique();
-
-        $values = $query->getValues();
-        if (empty($values)) {
-            return '';
-        }
-
-        $params = [];
-        foreach ($values as $key => $value) {
-            $param = ":{$placeholder}_{$key}";
-            $binds[$param] = $value;
-            $params[] = $param;
-        }
-
-        $expression = "EXISTS (SELECT 1 FROM json_each({$alias}.{$attribute}) WHERE value IN ("
-            . \implode(', ', $params)
-            . '))';
-
-        return $method === Query::TYPE_NOT_CONTAINS ? "NOT {$expression}" : $expression;
+        return null;
     }
 
     /**
@@ -3186,11 +2795,19 @@ class SQLite extends MariaDB
      */
     protected function findFulltextTableForAttribute(string $collection, string $attribute): ?string
     {
-        if (!\array_key_exists($collection, $this->ftsTableCache)) {
-            $this->ftsTableCache[$collection] = $this->buildFulltextAttributeMap($collection);
+        $dot = \strpos($attribute, '.');
+        if ($dot !== false) {
+            return null;
         }
 
-        return $this->ftsTableCache[$collection][$attribute] ?? null;
+        $attribute = $this->filter($this->getInternalKeyForAttribute($attribute));
+
+        $prefix = $this->getFulltextTablePrefix($collection);
+        if (!\array_key_exists($prefix, $this->ftsTableCache)) {
+            $this->ftsTableCache[$prefix] = $this->buildFulltextAttributeMap($collection);
+        }
+
+        return $this->ftsTableCache[$prefix][$attribute] ?? null;
     }
 
     /**
@@ -3200,11 +2817,14 @@ class SQLite extends MariaDB
     {
         $map = [];
         foreach ($this->findFulltextTables($collection) as $table) {
-            $info = $this->getPDO()->prepare("PRAGMA table_info(`{$table}`)");
+            $info = $this->prepare("PRAGMA table_info(`{$table}`)");
             $info->execute();
             $cols = $info->fetchAll(PDO::FETCH_ASSOC);
             $info->closeCursor();
             foreach ($cols as $col) {
+                if (! \is_array($col)) {
+                    continue;
+                }
                 $name = $col['name'] ?? null;
                 if (\is_string($name) && $name !== '') {
                     $map[$name] = $table;
@@ -3216,51 +2836,10 @@ class SQLite extends MariaDB
     }
 
     /**
-     * Compile STARTS_WITH / ENDS_WITH / CONTAINS (and NOT variants) into
-     * LIKE with an explicit ESCAPE clause — SQLite needs it to honour
-     * the backslash escapes escapeWildcards() inserts.
-     *
-     * @param array<string,mixed> $binds
-     */
-    protected function getLikeCondition(Query $query, array &$binds): string
-    {
-        $method = $query->getMethod();
-        $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
-
-        $attribute = $this->quote($this->filter($query->getAttribute()));
-        $alias = $this->quote(Query::DEFAULT_ALIAS);
-        $placeholder = ID::unique();
-
-        $isNotQuery = \in_array($method, [
-            Query::TYPE_NOT_STARTS_WITH,
-            Query::TYPE_NOT_ENDS_WITH,
-            Query::TYPE_NOT_CONTAINS,
-        ], true);
-
-        $conditions = [];
-        foreach ($query->getValues() as $key => $value) {
-            $bound = match ($method) {
-                Query::TYPE_STARTS_WITH, Query::TYPE_NOT_STARTS_WITH => $this->escapeWildcards($value) . '%',
-                Query::TYPE_ENDS_WITH, Query::TYPE_NOT_ENDS_WITH => '%' . $this->escapeWildcards($value),
-                Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY, Query::TYPE_NOT_CONTAINS => '%' . $this->escapeWildcards($value) . '%',
-                default => $value,
-            };
-
-            $binds[":{$placeholder}_{$key}"] = $bound;
-            $operator = $isNotQuery ? 'NOT LIKE' : 'LIKE';
-            $conditions[] = "{$alias}.{$attribute} {$operator} :{$placeholder}_{$key} ESCAPE '\\'";
-        }
-
-        $separator = $isNotQuery ? ' AND ' : ' OR ';
-
-        return empty($conditions) ? '' : '(' . \implode($separator, $conditions) . ')';
-    }
-
-    /**
      * Format a SEARCH term as MariaDB BOOLEAN MODE: OR-joined tokens with
      * the trailing token prefix-matched. Empty when no token survives.
      */
-    protected function getFTS5Value(string $value): string
+    protected function getFts5Value(string $value): string
     {
         // Balanced wrapping `"..."` triggers exact-phrase mode.
         $exact = \strlen($value) >= 2
@@ -3289,7 +2868,7 @@ class SQLite extends MariaDB
             return $token;
         }, $tokens);
         $last = \array_pop($tokens);
-        if ($last !== null && !\str_starts_with($last, '"')) {
+        if (! \str_starts_with($last, '"')) {
             $last .= '*';
         }
         $tokens[] = $last;

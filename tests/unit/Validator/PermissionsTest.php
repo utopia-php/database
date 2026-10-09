@@ -5,42 +5,44 @@ namespace Tests\Unit\Validator;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Helpers\ID;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Id;
+use Utopia\Database\Permission;
+use Utopia\Database\Role;
 use Utopia\Database\Validator\Permissions;
 use Utopia\Database\Validator\Roles;
 
 class PermissionsTest extends TestCase
 {
-    public function setUp(): void
+    #[\Override]
+    protected function setUp(): void
     {
     }
 
-    public function tearDown(): void
+    #[\Override]
+    protected function tearDown(): void
     {
     }
 
     /**
      * @throws DatabaseException
      */
-    public function testSingleMethodSingleValue(): void
+    public function test_single_method_single_value(): void
     {
         $object = new Permissions();
 
         $document = new Document([
-            '$id' => ID::unique(),
-            '$collection' => ID::unique(),
+            '$id' => Id::unique(),
+            '$collection' => Id::unique(),
             '$permissions' => [Permission::create(Role::any())],
         ]);
         $this->assertTrue($object->isValid($document->getPermissions()));
         $document['$permissions'] = [Permission::create(Role::users())];
         $this->assertTrue($object->isValid($document->getPermissions()));
-        $document['$permissions'] = [Permission::create(Role::user(ID::custom('123abc')))];
+        $document['$permissions'] = [Permission::create(Role::user(Id::custom('123abc')))];
         $this->assertTrue($object->isValid($document->getPermissions()));
-        $document['$permissions'] = [Permission::create(Role::team(ID::custom('123abc')))];
+        $document['$permissions'] = [Permission::create(Role::team(Id::custom('123abc')))];
         $this->assertTrue($object->isValid($document->getPermissions()));
-        $document['$permissions'] = [Permission::create(Role::team(ID::custom('123abc'), 'edit'))];
+        $document['$permissions'] = [Permission::create(Role::team(Id::custom('123abc'), 'edit'))];
         $this->assertTrue($object->isValid($document->getPermissions()));
         $document['$permissions'] = [Permission::create(Role::guests())];
         $this->assertTrue($object->isValid($document->getPermissions()));
@@ -51,11 +53,11 @@ class PermissionsTest extends TestCase
         $this->assertTrue($object->isValid($document->getPermissions()));
         $document['$permissions'] = [Permission::read(Role::users())];
         $this->assertTrue($object->isValid($document->getPermissions()));
-        $document['$permissions'] = [Permission::read(Role::user(ID::custom('123abc')))];
+        $document['$permissions'] = [Permission::read(Role::user(Id::custom('123abc')))];
         $this->assertTrue($object->isValid($document->getPermissions()));
-        $document['$permissions'] = [Permission::read(Role::team(ID::custom('123abc')))];
+        $document['$permissions'] = [Permission::read(Role::team(Id::custom('123abc')))];
         $this->assertTrue($object->isValid($document->getPermissions()));
-        $document['$permissions'] = [Permission::read(Role::team(ID::custom('123abc'), 'viewer'))];
+        $document['$permissions'] = [Permission::read(Role::team(Id::custom('123abc'), 'viewer'))];
         $this->assertTrue($object->isValid($document->getPermissions()));
         $document['$permissions'] = [Permission::read(Role::guests())];
         $this->assertTrue($object->isValid($document->getPermissions()));
@@ -66,11 +68,11 @@ class PermissionsTest extends TestCase
         $this->assertTrue($object->isValid($document->getPermissions()));
         $document['$permissions'] = [Permission::update(Role::users())];
         $this->assertTrue($object->isValid($document->getPermissions()));
-        $document['$permissions'] = [Permission::update(Role::user(ID::custom('123abc')))];
+        $document['$permissions'] = [Permission::update(Role::user(Id::custom('123abc')))];
         $this->assertTrue($object->isValid($document->getPermissions()));
-        $document['$permissions'] = [Permission::update(Role::team(ID::custom('123abc')))];
+        $document['$permissions'] = [Permission::update(Role::team(Id::custom('123abc')))];
         $this->assertTrue($object->isValid($document->getPermissions()));
-        $document['$permissions'] = [Permission::update(Role::team(ID::custom('123abc'), 'edit'))];
+        $document['$permissions'] = [Permission::update(Role::team(Id::custom('123abc'), 'edit'))];
         $this->assertTrue($object->isValid($document->getPermissions()));
         $document['$permissions'] = [Permission::update(Role::guests())];
         $this->assertTrue($object->isValid($document->getPermissions()));
@@ -81,11 +83,11 @@ class PermissionsTest extends TestCase
         $this->assertTrue($object->isValid($document->getPermissions()));
         $document['$permissions'] = [Permission::delete(Role::users())];
         $this->assertTrue($object->isValid($document->getPermissions()));
-        $document['$permissions'] = [Permission::delete(Role::user(ID::custom('123abc')))];
+        $document['$permissions'] = [Permission::delete(Role::user(Id::custom('123abc')))];
         $this->assertTrue($object->isValid($document->getPermissions()));
-        $document['$permissions'] = [Permission::delete(Role::team(ID::custom('123abc')))];
+        $document['$permissions'] = [Permission::delete(Role::team(Id::custom('123abc')))];
         $this->assertTrue($object->isValid($document->getPermissions()));
-        $document['$permissions'] = [Permission::delete(Role::team(ID::custom('123abc'), 'edit'))];
+        $document['$permissions'] = [Permission::delete(Role::team(Id::custom('123abc'), 'edit'))];
         $this->assertTrue($object->isValid($document->getPermissions()));
         $document['$permissions'] = [Permission::delete(Role::guests())];
         $this->assertTrue($object->isValid($document->getPermissions()));
@@ -95,13 +97,13 @@ class PermissionsTest extends TestCase
         $this->assertTrue($object->isValid($document->getPermissions()));
     }
 
-    public function testMultipleMethodSingleValue(): void
+    public function test_multiple_method_single_value(): void
     {
         $object = new Permissions();
 
         $document = new Document([
-            '$id' => ID::unique(),
-            '$collection' => ID::unique(),
+            '$id' => Id::unique(),
+            '$collection' => Id::unique(),
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
@@ -118,23 +120,23 @@ class PermissionsTest extends TestCase
         $this->assertTrue($object->isValid($document->getPermissions()));
 
         $document['$permissions'] = [
-            Permission::read(Role::user(ID::custom('123abc'))),
-            Permission::create(Role::user(ID::custom('123abc'))),
-            Permission::update(Role::user(ID::custom('123abc')))
+            Permission::read(Role::user(Id::custom('123abc'))),
+            Permission::create(Role::user(Id::custom('123abc'))),
+            Permission::update(Role::user(Id::custom('123abc'))),
         ];
         $this->assertTrue($object->isValid($document->getPermissions()));
 
         $document['$permissions'] = [
-            Permission::read(Role::team(ID::custom('123abc'))),
-            Permission::create(Role::team(ID::custom('123abc'))),
-            Permission::update(Role::team(ID::custom('123abc')))
+            Permission::read(Role::team(Id::custom('123abc'))),
+            Permission::create(Role::team(Id::custom('123abc'))),
+            Permission::update(Role::team(Id::custom('123abc'))),
         ];
         $this->assertTrue($object->isValid($document->getPermissions()));
 
         $document['$permissions'] = [
-            Permission::read(Role::team(ID::custom('123abc'), 'viewer')),
-            Permission::create(Role::team(ID::custom('123abc'), 'viewer')),
-            Permission::update(Role::team(ID::custom('123abc'), 'viewer'))
+            Permission::read(Role::team(Id::custom('123abc'), 'viewer')),
+            Permission::create(Role::team(Id::custom('123abc'), 'viewer')),
+            Permission::update(Role::team(Id::custom('123abc'), 'viewer')),
         ];
         $this->assertTrue($object->isValid($document->getPermissions()));
 
@@ -153,43 +155,43 @@ class PermissionsTest extends TestCase
         $this->assertTrue($object->isValid($document->getPermissions()));
     }
 
-    public function testMultipleMethodMultipleValues(): void
+    public function test_multiple_method_multiple_values(): void
     {
         $object = new Permissions();
 
         $document = new Document([
-            '$id' => ID::unique(),
-            '$collection' => ID::unique(),
+            '$id' => Id::unique(),
+            '$collection' => Id::unique(),
             '$permissions' => [
                 Permission::read(Role::users()),
-                Permission::create(Role::user(ID::custom('123abc'))),
-                Permission::create(Role::team(ID::custom('123abc'))),
-                Permission::update(Role::user(ID::custom('123abc'))),
-                Permission::update(Role::team(ID::custom('123abc'))),
-                Permission::delete(Role::user(ID::custom('123abc'))),
+                Permission::create(Role::user(Id::custom('123abc'))),
+                Permission::create(Role::team(Id::custom('123abc'))),
+                Permission::update(Role::user(Id::custom('123abc'))),
+                Permission::update(Role::team(Id::custom('123abc'))),
+                Permission::delete(Role::user(Id::custom('123abc'))),
             ],
         ]);
         $this->assertTrue($object->isValid($document->getPermissions()));
         $document['$permissions'] = [
-            Permission::read(Role::user(ID::custom('123abc'))),
-            Permission::read(Role::team(ID::custom('123abc'))),
-            Permission::create(Role::user(ID::custom('123abc'))),
-            Permission::create(Role::team(ID::custom('123abc'))),
-            Permission::update(Role::user(ID::custom('123abc'))),
-            Permission::update(Role::team(ID::custom('123abc'))),
-            Permission::delete(Role::user(ID::custom('123abc')))
+            Permission::read(Role::user(Id::custom('123abc'))),
+            Permission::read(Role::team(Id::custom('123abc'))),
+            Permission::create(Role::user(Id::custom('123abc'))),
+            Permission::create(Role::team(Id::custom('123abc'))),
+            Permission::update(Role::user(Id::custom('123abc'))),
+            Permission::update(Role::team(Id::custom('123abc'))),
+            Permission::delete(Role::user(Id::custom('123abc'))),
         ];
         $this->assertTrue($object->isValid($document->getPermissions()));
         $document['$permissions'] = [
             Permission::read(Role::any()),
             Permission::create(Role::guests()),
-            Permission::update(Role::team(ID::custom('123abc'), 'edit')),
-            Permission::delete(Role::team(ID::custom('123abc'), 'edit'))
+            Permission::update(Role::team(Id::custom('123abc'), 'edit')),
+            Permission::delete(Role::team(Id::custom('123abc'), 'edit')),
         ];
         $this->assertTrue($object->isValid($document->getPermissions()));
     }
 
-    public function testInvalidPermissions(): void
+    public function test_invalid_permissions(): void
     {
         $object = new Permissions();
 
@@ -239,11 +241,11 @@ class PermissionsTest extends TestCase
 
         // Permission role:$value must be one of: all, guest, member
         $this->assertFalse($object->isValid(['read("anyy")']));
-        $this->assertEquals('Role "anyy" is not allowed. Must be one of: ' . \implode(', ', Roles::ROLES) . '.', $object->getDescription());
+        $this->assertEquals('Role "anyy" is not allowed. Must be one of: '.\implode(', ', Roles::ROLES).'.', $object->getDescription());
         $this->assertFalse($object->isValid(['read("gguest")']));
-        $this->assertEquals('Role "gguest" is not allowed. Must be one of: ' . \implode(', ', Roles::ROLES) . '.', $object->getDescription());
+        $this->assertEquals('Role "gguest" is not allowed. Must be one of: '.\implode(', ', Roles::ROLES).'.', $object->getDescription());
         $this->assertFalse($object->isValid(['read("memer:123abc")']));
-        $this->assertEquals('Role "memer" is not allowed. Must be one of: ' . \implode(', ', Roles::ROLES) . '.', $object->getDescription());
+        $this->assertEquals('Role "memer" is not allowed. Must be one of: '.\implode(', ', Roles::ROLES).'.', $object->getDescription());
 
         // team:$value, member:$value and user:$value must have valid Key for $value
         // No leading special chars
@@ -264,36 +266,36 @@ class PermissionsTest extends TestCase
 
         // Shorter than 36 chars
 
-        $this->assertTrue($object->isValid([Permission::read(Role::user(ID::custom(str_repeat('a', 36))))]));
-        $this->assertFalse($object->isValid([Permission::read(Role::user(ID::custom(str_repeat('a', 256))))]));
+        $this->assertTrue($object->isValid([Permission::read(Role::user(Id::custom(str_repeat('a', 36))))]));
+        $this->assertFalse($object->isValid([Permission::read(Role::user(Id::custom(str_repeat('a', 256))))]));
         $this->assertEquals('Role "user" identifier value is invalid: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
 
         // Permission role must begin with one of: member, role, team, user
         $this->assertFalse($object->isValid(['update("memmber:1234")']));
-        $this->assertEquals('Role "memmber" is not allowed. Must be one of: ' . \implode(', ', Roles::ROLES) . '.', $object->getDescription());
+        $this->assertEquals('Role "memmber" is not allowed. Must be one of: '.\implode(', ', Roles::ROLES).'.', $object->getDescription());
         $this->assertFalse($object->isValid(['update("tteam:1234")']));
-        $this->assertEquals('Role "tteam" is not allowed. Must be one of: ' . \implode(', ', Roles::ROLES) . '.', $object->getDescription());
+        $this->assertEquals('Role "tteam" is not allowed. Must be one of: '.\implode(', ', Roles::ROLES).'.', $object->getDescription());
         $this->assertFalse($object->isValid(['update("userr:1234")']));
-        $this->assertEquals('Role "userr" is not allowed. Must be one of: ' . \implode(', ', Roles::ROLES) . '.', $object->getDescription());
+        $this->assertEquals('Role "userr" is not allowed. Must be one of: '.\implode(', ', Roles::ROLES).'.', $object->getDescription());
 
         // Team permission
-        $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom('_abcd')))]));
+        $this->assertFalse($object->isValid([Permission::read(Role::team(Id::custom('_abcd')))]));
         $this->assertEquals('Role "team" identifier value is invalid: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
-        $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom('abcd/')))]));
+        $this->assertFalse($object->isValid([Permission::read(Role::team(Id::custom('abcd/')))]));
         $this->assertEquals('Dimension must not be empty', $object->getDescription());
-        $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom(''), 'abcd'))]));
+        $this->assertFalse($object->isValid([Permission::read(Role::team(Id::custom(''), 'abcd'))]));
         $this->assertEquals('Role "team" must have an ID value.', $object->getDescription());
-        $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom('abcd'), '/efgh'))]));
+        $this->assertFalse($object->isValid([Permission::read(Role::team(Id::custom('abcd'), '/efgh'))]));
         $this->assertEquals('Only one dimension can be provided', $object->getDescription());
-        $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom('abcd'), 'e/fgh'))]));
+        $this->assertFalse($object->isValid([Permission::read(Role::team(Id::custom('abcd'), 'e/fgh'))]));
         $this->assertEquals('Only one dimension can be provided', $object->getDescription());
-        $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom('ab&cd3'), 'efgh'))]));
+        $this->assertFalse($object->isValid([Permission::read(Role::team(Id::custom('ab&cd3'), 'efgh'))]));
         $this->assertEquals('Role "team" identifier value is invalid: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
-        $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom(str_repeat('a', 37)), 'efgh'))]));
+        $this->assertFalse($object->isValid([Permission::read(Role::team(Id::custom(str_repeat('a', 37)), 'efgh'))]));
         $this->assertEquals('Role "team" identifier value is invalid: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
-        $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom('abcd'), 'ef*gh'))]));
+        $this->assertFalse($object->isValid([Permission::read(Role::team(Id::custom('abcd'), 'ef*gh'))]));
         $this->assertEquals('Role "team" dimension value is invalid: Parameter must contain at most 81 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
-        $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom('abcd'), str_repeat('a', 82)))]));
+        $this->assertFalse($object->isValid([Permission::read(Role::team(Id::custom('abcd'), str_repeat('a', 82)))]));
         $this->assertEquals('Role "team" dimension value is invalid: Parameter must contain at most 81 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
 
         // Permission-list length must be valid
@@ -308,11 +310,11 @@ class PermissionsTest extends TestCase
     /*
      *  Test for checking duplicate methods input. The getPermissions should return an a list array
       */
-    public function testDuplicateMethods(): void
+    public function test_duplicate_methods(): void
     {
         $validator = new Permissions();
 
-        $user = ID::unique();
+        $user = Id::unique();
 
         $document = new Document([
             '$id' => uniqid(),
@@ -327,23 +329,31 @@ class PermissionsTest extends TestCase
             ],
             'title' => 'This is a test.',
             'list' => [
-                'one'
+                'one',
             ],
             'children' => [
                 new Document(['name' => 'x']),
                 new Document(['name' => 'y']),
                 new Document(['name' => 'z']),
-            ]
+            ],
         ]);
         $this->assertTrue($validator->isValid($document->getPermissions()));
         $permissions = $document->getPermissions();
         $this->assertEquals(5, count($permissions));
         $this->assertEquals([
             'read("any")',
-            'read("user:' . $user . '")',
-            'write("user:' . $user . '")',
-            'update("user:' . $user . '")',
-            'delete("user:' . $user . '")',
+            'read("user:'.$user.'")',
+            'write("user:'.$user.'")',
+            'update("user:'.$user.'")',
+            'delete("user:'.$user.'")',
         ], $permissions);
+    }
+
+    public function test_custom_type_rejected_as_in_7_4(): void
+    {
+        $object = new Permissions();
+
+        $this->assertFalse($object->isValid(['execute("any")']));
+        $this->assertSame('Permission "execute("any")" is not allowed. Must be one of: create, read, update, delete, write.', $object->getDescription());
     }
 }

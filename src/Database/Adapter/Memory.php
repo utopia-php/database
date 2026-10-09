@@ -3,6 +3,8 @@
 namespace Utopia\Database\Adapter;
 
 use Utopia\Database\Adapter;
+use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
@@ -12,8 +14,22 @@ use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Unique as UniqueException;
+use Utopia\Database\Index;
 use Utopia\Database\Operator;
+use Utopia\Database\OperatorType;
+use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
+use Utopia\Database\Relationship;
+use Utopia\Database\RelationshipSide;
+use Utopia\Database\RelationshipType;
+use Utopia\Database\RelationshipUpdate;
+use Utopia\Database\Storage;
+use Utopia\Database\Validator\BigInt;
+use Utopia\Query\CursorDirection;
+use Utopia\Query\Method;
+use Utopia\Query\OrderDirection;
+use Utopia\Query\Schema\ColumnType;
+use Utopia\Query\Schema\IndexType;
 
 /**
  * In-process drop-in for the SQL adapters that keeps all data in PHP
@@ -28,7 +44,7 @@ use Utopia\Database\Query;
  * Spatial types and vector search throw a DatabaseException — those
  * features only make sense against a real engine.
  */
-class Memory extends Adapter
+class Memory extends Adapter implements Feature\Relationships
 {
     /**
      * Map of database name to the set of collection storage keys it owns.
@@ -48,10 +64,10 @@ class Memory extends Adapter
     protected array $permissions = [];
 
     /**
-     * Inverted permission lookup: collectionKey → documentId → type → set<permissionString>.
+     * Inverted permission lookup: collectionKey → tenantBucket → documentId → type → set<permissionString>.
      * Maintained alongside `$permissions` to give O(|doc-perms|) deletion on writes.
      *
-     * @var array<string, array<string, array<string, array<string, true>>>>
+     * @var array<string, array<string, array<string, array<string, array<string, true>>>>>
      */
     protected array $permissionsByDocument = [];
 
@@ -89,16 +105,38 @@ class Memory extends Adapter
      */
     protected array $filterCache = [];
 
-    protected bool $supportForAttributes = true;
-
     public function __construct()
     {
         // No external resources to initialise
     }
 
-    public function getDriver(): mixed
+    /**
+     * The adapter holds its data itself, so it is its own driver.
+     */
+    #[\Override]
+    public function getDriver(): static
     {
-        return 'memory';
+        return $this;
+    }
+
+    /**
+     * @return array<Capability>
+     */
+    #[\Override]
+    public function capabilities(): array
+    {
+        return array_merge(parent::capabilities(), [
+            Capability::Schemas,
+            Capability::IndexFulltext,
+            Capability::AttributeResizing,
+            Capability::Objects,
+            Capability::IndexObject,
+            Capability::Operators,
+            Capability::OrderRandom,
+            Capability::DefinedAttributes,
+            Capability::TransactionNested,
+            Capability::Caching,
+        ]);
     }
 
     protected function key(string $collection): string
@@ -137,9 +175,11 @@ class Memory extends Adapter
         if ($this->sharedTables && $collectionId === Database::METADATA) {
             $lower = \strtolower($id);
             foreach ($this->data[$key]['documents'] as $storageKey => $candidate) {
+                $uid = $candidate[Storage::UID] ?? '';
                 if (
-                    \strtolower((string) ($candidate['_uid'] ?? '')) === $lower
-                    && ($candidate['_tenant'] ?? null) === null
+                    \is_string($uid)
+                    && \strtolower($uid) === $lower
+                    && ($candidate[Storage::TENANT] ?? null) === null
                 ) {
                     return [$storageKey, $candidate];
                 }
@@ -149,21 +189,7 @@ class Memory extends Adapter
         return null;
     }
 
-    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
-    {
-        // No-op: nothing to time out in-memory
-    }
-
-    public function ping(): bool
-    {
-        return true;
-    }
-
-    public function reconnect(): void
-    {
-        // No-op
-    }
-
+    #[\Override]
     public function startTransaction(): bool
     {
         $this->journals[] = [];
@@ -172,6 +198,7 @@ class Memory extends Adapter
         return true;
     }
 
+    #[\Override]
     public function commitTransaction(): bool
     {
         if ($this->inTransaction === 0) {
@@ -194,6 +221,7 @@ class Memory extends Adapter
         return true;
     }
 
+    #[\Override]
     public function rollbackTransaction(): bool
     {
         if ($this->inTransaction === 0) {
@@ -228,6 +256,7 @@ class Memory extends Adapter
      * Memoised `Adapter::filter()` — the regex pass is the hottest call in
      * the find inner loop and the inputs (attribute names) are bounded.
      */
+    #[\Override]
     public function filter(string $value): string
     {
         if (isset($this->filterCache[$value])) {
@@ -239,6 +268,7 @@ class Memory extends Adapter
         return $filtered;
     }
 
+    #[\Override]
     public function create(string $name): bool
     {
         if (! isset($this->databases[$name])) {
@@ -251,19 +281,91 @@ class Memory extends Adapter
         return true;
     }
 
-    public function exists(string $database, ?string $collection = null): bool
+    /**
+     * Shared tables refuse the rename: other tenants' documents share the database.
+     *
+     * @throws DatabaseException
+     */
+    #[\Override]
+    public function update(string $name, string $new): bool
     {
-        if ($collection === null) {
-            return isset($this->databases[$database]);
+        if ($this->hasSharedTables()) {
+            throw new DatabaseException('Cannot rename a database while shared tables are enabled');
         }
 
-        if (! isset($this->databases[$database])) {
-            return false;
+        if (! isset($this->databases[$name])) {
+            throw new NotFoundException('Database not found');
         }
 
+        if (isset($this->databases[$new])) {
+            throw new DuplicateException('Database already exists');
+        }
+
+        $previous = $this->databases[$name];
+        $prefix = $name.'.';
+        $moved = [];
+        foreach ($previous as $slot => $collectionKey) {
+            $moved[$slot] = \str_starts_with($collectionKey, $prefix)
+                ? $new.'.'.\substr($collectionKey, \strlen($prefix))
+                : $collectionKey;
+            $this->moveCollection($collectionKey, $moved[$slot]);
+        }
+
+        unset($this->databases[$name]);
+        $this->databases[$new] = $moved;
+
+        $this->journal(function () use ($name, $new, $previous, $moved): void {
+            foreach ($previous as $slot => $collectionKey) {
+                $this->moveCollection($moved[$slot], $collectionKey);
+            }
+            unset($this->databases[$new]);
+            $this->databases[$name] = $previous;
+        });
+
+        return true;
+    }
+
+    private function moveCollection(string $from, string $to): void
+    {
+        if ($from === $to) {
+            return;
+        }
+
+        self::moveEntry($this->data, $from, $to);
+        self::moveEntry($this->permissions, $from, $to);
+        self::moveEntry($this->permissionsByDocument, $from, $to);
+        self::moveEntry($this->permissionsByPermission, $from, $to);
+        self::moveEntry($this->uniqueIndexHashes, $from, $to);
+    }
+
+    /**
+     * @template T
+     *
+     * @param  array<string, T>  $store
+     */
+    private static function moveEntry(array &$store, string $from, string $to): void
+    {
+        if (! \array_key_exists($from, $store)) {
+            return;
+        }
+
+        $store[$to] = $store[$from];
+        unset($store[$from]);
+    }
+
+    #[\Override]
+    public function exists(string $database): bool
+    {
+        return isset($this->databases[$database]);
+    }
+
+    #[\Override]
+    public function collectionExists(string $database, string $collection): bool
+    {
         return isset($this->databases[$database][$this->filter($collection)]);
     }
 
+    #[\Override]
     public function list(): array
     {
         $databases = [];
@@ -274,6 +376,7 @@ class Memory extends Adapter
         return $databases;
     }
 
+    #[\Override]
     public function delete(string $name): bool
     {
         if (! isset($this->databases[$name])) {
@@ -334,9 +437,14 @@ class Memory extends Adapter
         return true;
     }
 
-    public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
+    /**
+     * @param  list<Attribute>  $attributes
+     * @param  list<Index>  $indexes
+     */
+    #[\Override]
+    public function createCollection(string $collection, array $attributes = [], array $indexes = []): bool
     {
-        $key = $this->key($name);
+        $key = $this->key($collection);
         if (isset($this->data[$key])) {
             throw new DuplicateException('Collection already exists');
         }
@@ -355,29 +463,16 @@ class Memory extends Adapter
             if (! isset($this->databases[$database])) {
                 $this->databases[$database] = [];
             }
-            $databaseSlot = $this->filter($name);
+            $databaseSlot = $this->filter($collection);
             $this->databases[$database][$databaseSlot] = $key;
         }
 
         foreach ($attributes as $attribute) {
-            $attrId = $this->filter($attribute->getId());
-            $this->data[$key]['attributes'][$attrId] = [
-                'type' => $attribute->getAttribute('type'),
-                'size' => $attribute->getAttribute('size', 0),
-                'signed' => $attribute->getAttribute('signed', true),
-                'array' => $attribute->getAttribute('array', false),
-                'required' => $attribute->getAttribute('required', false),
-            ];
+            $this->data[$key]['attributes'][$this->filter($attribute->key)] = self::attributeEntry($attribute);
         }
 
         foreach ($indexes as $index) {
-            $indexId = $this->filter($index->getId());
-            $this->data[$key]['indexes'][$indexId] = [
-                'type' => $index->getAttribute('type'),
-                'attributes' => $index->getAttribute('attributes', []),
-                'lengths' => $index->getAttribute('lengths', []),
-                'orders' => $index->getAttribute('orders', []),
-            ];
+            $this->data[$key]['indexes'][$this->filter($index->key)] = self::indexEntry($index);
         }
 
         $this->journal(function () use ($key, $database, $databaseSlot): void {
@@ -388,7 +483,7 @@ class Memory extends Adapter
                 $this->permissionsByPermission[$key],
                 $this->uniqueIndexHashes[$key],
             );
-            if ($database !== '' && $databaseSlot !== null) {
+            if ($databaseSlot !== null) {
                 unset($this->databases[$database][$databaseSlot]);
             }
         });
@@ -396,9 +491,37 @@ class Memory extends Adapter
         return true;
     }
 
-    public function deleteCollection(string $id): bool
+    /**
+     * @return array{type: string, size: int, signed: bool, array: bool, required: bool}
+     */
+    private static function attributeEntry(Attribute $attribute): array
     {
-        $key = $this->key($id);
+        return [
+            'type' => $attribute->type->value,
+            'size' => $attribute->size ?? 0,
+            'signed' => $attribute->signed,
+            'array' => $attribute->array,
+            'required' => $attribute->required,
+        ];
+    }
+
+    /**
+     * @return array{type: string, attributes: list<string>, lengths: list<?int>, orders: list<?string>}
+     */
+    private static function indexEntry(Index $index): array
+    {
+        return [
+            'type' => $index->type->value,
+            'attributes' => $index->attributes,
+            'lengths' => $index->lengths,
+            'orders' => \array_map(static fn (?OrderDirection $order): ?string => $order?->value, $index->orders),
+        ];
+    }
+
+    #[\Override]
+    public function deleteCollection(string $collection): bool
+    {
+        $key = $this->key($collection);
         $previousData = $this->data[$key] ?? null;
         $previousPermissions = $this->permissions[$key] ?? null;
         $previousByDocument = $this->permissionsByDocument[$key] ?? null;
@@ -412,7 +535,7 @@ class Memory extends Adapter
             $this->permissionsByPermission[$key],
             $this->uniqueIndexHashes[$key],
         );
-        $filtered = $this->filter($id);
+        $filtered = $this->filter($collection);
         $databaseSlots = [];
         foreach ($this->databases as $name => $collections) {
             if (isset($collections[$filtered]) && $collections[$filtered] === $key) {
@@ -445,27 +568,23 @@ class Memory extends Adapter
         return true;
     }
 
+    #[\Override]
     public function analyzeCollection(string $collection): bool
     {
         return false;
     }
 
-    public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): bool
+    #[\Override]
+    public function createAttribute(string $collection, Attribute $attribute): bool
     {
         $key = $this->key($collection);
         if (! isset($this->data[$key])) {
             throw new NotFoundException('Collection not found');
         }
 
-        $id = $this->filter($id);
+        $id = $this->filter($attribute->key);
         $previous = $this->data[$key]['attributes'][$id] ?? null;
-        $this->data[$key]['attributes'][$id] = [
-            'type' => $type,
-            'size' => $size,
-            'signed' => $signed,
-            'array' => $array,
-            'required' => $required,
-        ];
+        $this->data[$key]['attributes'][$id] = self::attributeEntry($attribute);
 
         $this->journal(function () use ($key, $id, $previous): void {
             if ($previous === null) {
@@ -478,73 +597,65 @@ class Memory extends Adapter
         return true;
     }
 
+    /**
+     * @param  list<Attribute>  $attributes
+     */
+    #[\Override]
     public function createAttributes(string $collection, array $attributes): bool
     {
         foreach ($attributes as $attribute) {
-            $this->createAttribute(
-                $collection,
-                (string) $attribute['$id'],
-                (string) $attribute['type'],
-                (int) ($attribute['size'] ?? 0),
-                (bool) ($attribute['signed'] ?? true),
-                (bool) ($attribute['array'] ?? false),
-                (bool) ($attribute['required'] ?? false),
-            );
+            $this->createAttribute($collection, $attribute);
         }
 
         return true;
     }
 
-    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null, bool $required = false): bool
+    #[\Override]
+    public function updateAttribute(string $collection, string $key, Attribute $attribute): bool
     {
-        $key = $this->key($collection);
-        if (! isset($this->data[$key])) {
+        $collectionKey = $this->key($collection);
+        if (! isset($this->data[$collectionKey])) {
             throw new NotFoundException('Collection not found');
         }
 
-        $id = $this->filter($id);
-        if (! empty($newKey) && $newKey !== $id) {
-            $this->renameAttribute($collection, $id, $newKey);
-            $id = $this->filter($newKey);
+        $id = $this->filter($key);
+        if ($attribute->key !== $key) {
+            $this->renameAttribute($collection, $id, $attribute->key);
+            $id = $this->filter($attribute->key);
         }
 
-        $previous = $this->data[$key]['attributes'][$id] ?? null;
-        $this->data[$key]['attributes'][$id] = [
-            'type' => $type,
-            'size' => $size,
-            'signed' => $signed,
-            'array' => $array,
-            'required' => $required,
-        ];
+        $previous = $this->data[$collectionKey]['attributes'][$id] ?? null;
+        $this->data[$collectionKey]['attributes'][$id] = self::attributeEntry($attribute);
 
-        $this->journal(function () use ($key, $id, $previous): void {
+        $this->journal(function () use ($collectionKey, $id, $previous): void {
             if ($previous === null) {
-                unset($this->data[$key]['attributes'][$id]);
+                unset($this->data[$collectionKey]['attributes'][$id]);
             } else {
-                $this->data[$key]['attributes'][$id] = $previous;
+                $this->data[$collectionKey]['attributes'][$id] = $previous;
             }
         });
 
         return true;
     }
 
-    public function deleteAttribute(string $collection, string $id): bool
+    #[\Override]
+    public function deleteAttribute(string $collection, string $key): bool
     {
-        $key = $this->key($collection);
-        if (! isset($this->data[$key])) {
+        $table = $this->key($collection);
+        if (! isset($this->data[$table])) {
             return true;
         }
 
-        $id = $this->filter($id);
-        $previousAttribute = $this->data[$key]['attributes'][$id] ?? null;
+        $id = $this->filter($key);
+        $previousAttribute = $this->data[$table]['attributes'][$id] ?? null;
         if ($previousAttribute === null) {
             // Nothing to do; attribute was never registered.
             return true;
         }
 
         $previousValues = [];
-        unset($this->data[$key]['attributes'][$id]);
-        foreach ($this->data[$key]['documents'] as $storageKey => &$document) {
+        unset($this->data[$table]['attributes'][$id]);
+        foreach ($this->data[$table]['documents'] as $storageKey => &$document) {
             if (\array_key_exists($id, $document)) {
                 $previousValues[$storageKey] = $document[$id];
                 unset($document[$id]);
@@ -554,58 +665,85 @@ class Memory extends Adapter
 
         $previousIndexes = [];
         $previousUniqueHashes = [];
-        foreach ($this->data[$key]['indexes'] as $indexId => &$index) {
-            $attributes = $index['attributes'] ?? [];
+        foreach ($this->data[$table]['indexes'] as $indexId => $index) {
+            $attributes = \is_array($index['attributes'] ?? null) ? $index['attributes'] : [];
+            $indexLengths = \is_array($index['lengths'] ?? null) ? $index['lengths'] : [];
+            $indexOrders = \is_array($index['orders'] ?? null) ? $index['orders'] : [];
             $filtered = [];
             $lengths = [];
             $orders = [];
             $touched = false;
             foreach ($attributes as $i => $attribute) {
+                if (! \is_string($attribute)) {
+                    continue;
+                }
                 if ($this->filter($attribute) === $id) {
                     $touched = true;
 
                     continue;
                 }
                 $filtered[] = $attribute;
-                if (isset($index['lengths'][$i])) {
-                    $lengths[] = $index['lengths'][$i];
+                if (isset($indexLengths[$i])) {
+                    $lengths[] = $indexLengths[$i];
                 }
-                if (isset($index['orders'][$i])) {
-                    $orders[] = $index['orders'][$i];
+                if (isset($indexOrders[$i])) {
+                    $orders[] = $indexOrders[$i];
                 }
             }
             if ($touched) {
                 $previousIndexes[$indexId] = $index;
-                if (($index['type'] ?? '') === Database::INDEX_UNIQUE
-                    && isset($this->uniqueIndexHashes[$key][$indexId])) {
-                    $previousUniqueHashes[$indexId] = $this->uniqueIndexHashes[$key][$indexId];
-                    unset($this->uniqueIndexHashes[$key][$indexId]);
+                if (($index['type'] ?? '') === IndexType::Unique->value
+                    && isset($this->uniqueIndexHashes[$table][$indexId])) {
+                    $previousUniqueHashes[$indexId] = $this->uniqueIndexHashes[$table][$indexId];
+                    unset($this->uniqueIndexHashes[$table][$indexId]);
                 }
             }
             $index['attributes'] = $filtered;
             $index['lengths'] = $lengths;
             $index['orders'] = $orders;
+            $this->data[$table]['indexes'][$indexId] = $index;
         }
-        unset($index);
 
-        $this->journal(function () use ($key, $id, $previousAttribute, $previousValues, $previousIndexes, $previousUniqueHashes): void {
-            $this->data[$key]['attributes'][$id] = $previousAttribute;
+        $this->journal(function () use ($table, $id, $previousAttribute, $previousValues, $previousIndexes, $previousUniqueHashes): void {
+            if (! isset($this->data[$table])) {
+                return;
+            }
+            $this->data[$table]['attributes'][$id] = $previousAttribute;
             foreach ($previousValues as $storageKey => $value) {
-                if (isset($this->data[$key]['documents'][$storageKey])) {
-                    $this->data[$key]['documents'][$storageKey][$id] = $value;
+                if (isset($this->data[$table]['documents'][$storageKey])) {
+                    $this->data[$table]['documents'][$storageKey][$id] = $value;
                 }
             }
-            foreach ($previousIndexes as $indexId => $value) {
-                $this->data[$key]['indexes'][$indexId] = $value;
+            foreach ($previousIndexes as $indexId => $previousIndex) {
+                $this->data[$table]['indexes'][$indexId] = $previousIndex;
             }
-            foreach ($previousUniqueHashes as $indexId => $value) {
-                $this->uniqueIndexHashes[$key][$indexId] = $value;
+            foreach ($previousUniqueHashes as $indexId => $hashes) {
+                $this->uniqueIndexHashes[$table][$indexId] = $hashes;
             }
         });
 
         return true;
     }
 
+    #[\Override]
+    public function getSchemaAttributes(string $collection): array
+    {
+        return [];
+    }
+
+    #[\Override]
+    public function getSchemaIndexes(string $collection): array
+    {
+        return [];
+    }
+
+    #[\Override]
+    public function getColumnType(Attribute $attribute): ?string
+    {
+        return null;
+    }
+
+    #[\Override]
     public function renameAttribute(string $collection, string $old, string $new): bool
     {
         $key = $this->key($collection);
@@ -635,10 +773,10 @@ class Memory extends Adapter
 
         $touchedIndexes = [];
         foreach ($this->data[$key]['indexes'] as $indexId => &$index) {
-            $attributes = $index['attributes'] ?? [];
+            $attributes = \is_array($index['attributes'] ?? null) ? $index['attributes'] : [];
             $changed = false;
             foreach ($attributes as $i => $attribute) {
-                if ($this->filter($attribute) === $old) {
+                if (\is_string($attribute) && $this->filter($attribute) === $old) {
                     $attributes[$i] = $new;
                     $changed = true;
                 }
@@ -651,32 +789,40 @@ class Memory extends Adapter
         unset($index);
 
         $this->journal(function () use ($key, $old, $new, $touchedDocs, $touchedIndexes): void {
-            $this->data[$key]['attributes'][$old] = $this->data[$key]['attributes'][$new];
-            unset($this->data[$key]['attributes'][$new]);
+            if (! isset($this->data[$key])) {
+                return;
+            }
+            $entry = &$this->data[$key];
+            $entry['attributes'][$old] = $entry['attributes'][$new];
+            unset($entry['attributes'][$new]);
             foreach ($touchedDocs as $storageKey) {
-                if (! isset($this->data[$key]['documents'][$storageKey])) {
+                if (! isset($entry['documents'][$storageKey])) {
                     continue;
                 }
-                $document = &$this->data[$key]['documents'][$storageKey];
+                $document = &$entry['documents'][$storageKey];
                 $document[$old] = $document[$new];
                 unset($document[$new]);
                 unset($document);
             }
             foreach ($touchedIndexes as $indexId) {
-                $attributes = $this->data[$key]['indexes'][$indexId]['attributes'] ?? [];
+                $attributes = \is_array($entry['indexes'][$indexId]['attributes'] ?? null)
+                    ? $entry['indexes'][$indexId]['attributes']
+                    : [];
                 foreach ($attributes as $i => $attribute) {
-                    if ($this->filter($attribute) === $new) {
+                    if (\is_string($attribute) && $this->filter($attribute) === $new) {
                         $attributes[$i] = $old;
                     }
                 }
-                $this->data[$key]['indexes'][$indexId]['attributes'] = $attributes;
+                $entry['indexes'][$indexId]['attributes'] = $attributes;
             }
+            unset($entry);
         });
 
         return true;
     }
 
-    public function createRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay = false, string $id = '', string $twoWayKey = ''): bool
+    #[\Override]
+    public function createRelationship(string $collection, Relationship $relationship): bool
     {
         // Memory stores documents as flexible maps, so the relationship "column"
         // is registered on the attribute list rather than added as a physical
@@ -685,69 +831,68 @@ class Memory extends Adapter
         // which selects the column even when no rows have a value.
         // The M2M junction collection itself is created by the wrapper through
         // the standard createCollection path.
-        switch ($type) {
-            case Database::RELATION_ONE_TO_ONE:
-                $this->registerRelationshipField($collection, $id);
-                if ($twoWay) {
+        $relatedCollection = $relationship->relatedCollection;
+        $key = $relationship->key ?? '';
+        $twoWayKey = $relationship->twoWayKey ?? '';
+
+        switch ($relationship->type) {
+            case RelationshipType::OneToOne:
+                $this->registerRelationshipField($collection, $key);
+                if ($relationship->twoWay) {
                     $this->registerRelationshipField($relatedCollection, $twoWayKey);
                 }
                 break;
-            case Database::RELATION_ONE_TO_MANY:
+            case RelationshipType::OneToMany:
                 $this->registerRelationshipField($relatedCollection, $twoWayKey);
                 break;
-            case Database::RELATION_MANY_TO_ONE:
-                $this->registerRelationshipField($collection, $id);
+            case RelationshipType::ManyToOne:
+                $this->registerRelationshipField($collection, $key);
                 break;
-            case Database::RELATION_MANY_TO_MANY:
-                // Junction columns live on the junction collection, which is
-                // created with explicit attributes by the wrapper.
+            case RelationshipType::ManyToMany:
                 break;
-            default:
-                throw new DatabaseException('Invalid relationship type');
         }
 
         return true;
     }
 
-    public function updateRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, string $side, ?string $newKey = null, ?string $newTwoWayKey = null): bool
+    #[\Override]
+    public function updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, RelationshipUpdate $update): bool
     {
-        $key = $this->filter($key);
-        $twoWayKey = $this->filter($twoWayKey);
-        $newKey = $newKey !== null ? $this->filter($newKey) : null;
-        $newTwoWayKey = $newTwoWayKey !== null ? $this->filter($newTwoWayKey) : null;
+        $relatedCollection = $relationship->relatedCollection;
+        $key = $this->filter($relationship->key ?? '');
+        $twoWayKey = $this->filter($relationship->twoWayKey ?? '');
+        $newKey = $update->key === null ? null : $this->filter($update->key);
+        $newTwoWayKey = $update->twoWayKey === null ? null : $this->filter($update->twoWayKey);
+        $twoWay = $update->twoWay ?? $relationship->twoWay;
 
-        switch ($type) {
-            case Database::RELATION_ONE_TO_ONE:
-                if ($newKey !== null && $newKey !== $key) {
+        switch ($relationship->type) {
+            case RelationshipType::OneToOne:
+                if (($twoWay || $side === RelationshipSide::Parent) && $newKey !== null && $newKey !== $key) {
                     $this->renameDocumentField($collection, $key, $newKey);
                 }
-                if ($twoWay && $newTwoWayKey !== null && $newTwoWayKey !== $twoWayKey) {
+                if (($twoWay || $side === RelationshipSide::Child) && $newTwoWayKey !== null && $newTwoWayKey !== $twoWayKey) {
                     $this->renameDocumentField($relatedCollection, $twoWayKey, $newTwoWayKey);
                 }
                 break;
-            case Database::RELATION_ONE_TO_MANY:
-                if ($side === Database::RELATION_SIDE_PARENT) {
+            case RelationshipType::OneToMany:
+                if ($side === RelationshipSide::Parent) {
                     if ($newTwoWayKey !== null && $newTwoWayKey !== $twoWayKey) {
                         $this->renameDocumentField($relatedCollection, $twoWayKey, $newTwoWayKey);
                     }
-                } else {
-                    if ($newKey !== null && $newKey !== $key) {
-                        $this->renameDocumentField($collection, $key, $newKey);
-                    }
+                } elseif ($newKey !== null && $newKey !== $key) {
+                    $this->renameDocumentField($collection, $key, $newKey);
                 }
                 break;
-            case Database::RELATION_MANY_TO_ONE:
-                if ($side === Database::RELATION_SIDE_CHILD) {
+            case RelationshipType::ManyToOne:
+                if ($side === RelationshipSide::Child) {
                     if ($newTwoWayKey !== null && $newTwoWayKey !== $twoWayKey) {
                         $this->renameDocumentField($relatedCollection, $twoWayKey, $newTwoWayKey);
                     }
-                } else {
-                    if ($newKey !== null && $newKey !== $key) {
-                        $this->renameDocumentField($collection, $key, $newKey);
-                    }
+                } elseif ($newKey !== null && $newKey !== $key) {
+                    $this->renameDocumentField($collection, $key, $newKey);
                 }
                 break;
-            case Database::RELATION_MANY_TO_MANY:
+            case RelationshipType::ManyToMany:
                 $junction = $this->resolveJunctionCollection($collection, $relatedCollection, $side);
                 if ($junction !== null) {
                     if ($newKey !== null && $newKey !== $key) {
@@ -758,21 +903,22 @@ class Memory extends Adapter
                     }
                 }
                 break;
-            default:
-                throw new DatabaseException('Invalid relationship type');
         }
 
         return true;
     }
 
-    public function deleteRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, string $side): bool
+    #[\Override]
+    public function deleteRelationship(string $collection, Relationship $relationship, RelationshipSide $side): bool
     {
-        $key = $this->filter($key);
-        $twoWayKey = $this->filter($twoWayKey);
+        $relatedCollection = $relationship->relatedCollection;
+        $key = $this->filter($relationship->key ?? '');
+        $twoWayKey = $this->filter($relationship->twoWayKey ?? '');
+        $twoWay = $relationship->twoWay;
 
-        switch ($type) {
-            case Database::RELATION_ONE_TO_ONE:
-                if ($side === Database::RELATION_SIDE_PARENT) {
+        switch ($relationship->type) {
+            case RelationshipType::OneToOne:
+                if ($side === RelationshipSide::Parent) {
                     $this->dropDocumentField($collection, $key);
                     if ($twoWay) {
                         $this->dropDocumentField($relatedCollection, $twoWayKey);
@@ -784,25 +930,26 @@ class Memory extends Adapter
                     }
                 }
                 break;
-            case Database::RELATION_ONE_TO_MANY:
-                if ($side === Database::RELATION_SIDE_PARENT) {
+            case RelationshipType::OneToMany:
+                if ($side === RelationshipSide::Parent) {
                     $this->dropDocumentField($relatedCollection, $twoWayKey);
                 } else {
                     $this->dropDocumentField($collection, $key);
                 }
                 break;
-            case Database::RELATION_MANY_TO_ONE:
-                if ($side === Database::RELATION_SIDE_PARENT) {
+            case RelationshipType::ManyToOne:
+                if ($side === RelationshipSide::Parent) {
                     $this->dropDocumentField($collection, $key);
                 } else {
                     $this->dropDocumentField($relatedCollection, $twoWayKey);
                 }
                 break;
-            case Database::RELATION_MANY_TO_MANY:
-                // Junction collection is dropped by the wrapper via cleanupCollection.
+            case RelationshipType::ManyToMany:
+                $junction = $this->resolveJunctionCollection($collection, $relatedCollection, $side);
+                if ($junction !== null) {
+                    $this->deleteCollection($junction);
+                }
                 break;
-            default:
-                throw new DatabaseException('Invalid relationship type');
         }
 
         return true;
@@ -822,7 +969,7 @@ class Memory extends Adapter
         $field = $this->filter($field);
         $previous = $this->data[$key]['attributes'][$field] ?? null;
         $this->data[$key]['attributes'][$field] = [
-            'type' => Database::VAR_RELATIONSHIP,
+            'type' => ColumnType::Relationship->value,
             'size' => 0,
             'signed' => true,
             'array' => false,
@@ -835,25 +982,6 @@ class Memory extends Adapter
                 $this->data[$key]['attributes'][$field] = $previous;
             }
         });
-    }
-
-    /**
-     * Unregister a relationship field from the collection's attribute list.
-     */
-    protected function unregisterRelationshipField(string $collection, string $field): void
-    {
-        $key = $this->key($collection);
-        if (! isset($this->data[$key])) {
-            return;
-        }
-        $field = $this->filter($field);
-        $previous = $this->data[$key]['attributes'][$field] ?? null;
-        unset($this->data[$key]['attributes'][$field]);
-        if ($previous !== null) {
-            $this->journal(function () use ($key, $field, $previous): void {
-                $this->data[$key]['attributes'][$field] = $previous;
-            });
-        }
     }
 
     /**
@@ -898,9 +1026,6 @@ class Memory extends Adapter
         });
     }
 
-    /**
-     * Remove a field from every document in a collection.
-     */
     protected function dropDocumentField(string $collection, string $field): void
     {
         $key = $this->key($collection);
@@ -935,7 +1060,7 @@ class Memory extends Adapter
      * Mirrors Database::getJunctionCollection — the junction is named after
      * the parent/child sequence pair.
      */
-    protected function resolveJunctionCollection(string $collection, string $relatedCollection, string $side): ?string
+    protected function resolveJunctionCollection(string $collection, string $relatedCollection, RelationshipSide $side): ?string
     {
         $metadataKey = $this->key(Database::METADATA);
         if (! isset($this->data[$metadataKey])) {
@@ -948,17 +1073,18 @@ class Memory extends Adapter
             return null;
         }
 
-        $collectionSequence = $collectionDoc[1]['_id'] ?? null;
-        $relatedSequence = $relatedDoc[1]['_id'] ?? null;
-        if ($collectionSequence === null || $relatedSequence === null) {
+        $collectionSequence = $collectionDoc[1][Storage::SEQUENCE] ?? null;
+        $relatedSequence = $relatedDoc[1][Storage::SEQUENCE] ?? null;
+        if (! \is_scalar($collectionSequence) || ! \is_scalar($relatedSequence)) {
             return null;
         }
 
-        return $side === Database::RELATION_SIDE_PARENT
+        return $side === RelationshipSide::Parent
             ? '_'.$collectionSequence.'_'.$relatedSequence
             : '_'.$relatedSequence.'_'.$collectionSequence;
     }
 
+    #[\Override]
     public function renameIndex(string $collection, string $old, string $new): bool
     {
         $key = $this->key($collection);
@@ -970,7 +1096,7 @@ class Memory extends Adapter
         $new = $this->filter($new);
 
         if (! isset($this->data[$key]['indexes'][$old])) {
-            return true;
+            return isset($this->data[$key]['indexes'][$new]);
         }
 
         $this->data[$key]['indexes'][$new] = $this->data[$key]['indexes'][$old];
@@ -995,20 +1121,19 @@ class Memory extends Adapter
         return true;
     }
 
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = [], array $collation = [], int $ttl = 1): bool
+    #[\Override]
+    public function createIndex(string $collection, Index $index, array $indexAttributeTypes = [], array $collation = []): bool
     {
         $key = $this->key($collection);
         if (! isset($this->data[$key])) {
             throw new NotFoundException('Collection not found');
         }
 
+        $type = $index->type->value;
+        $attributes = $index->attributes;
+
         $hashTable = [];
-        if ($type === Database::INDEX_UNIQUE && ! empty($attributes)) {
-            // MariaDB rejects CREATE UNIQUE INDEX with errno 1062 when existing
-            // rows contain duplicates, which surfaces as UniqueException. Mirror
-            // that contract so Database::createIndex fails the same way.
-            // Build the hash table while we scan so we can reuse it for fast
-            // probes after the index lands — no second pass over the rows.
+        if ($type === IndexType::Unique->value && ! empty($attributes)) {
             foreach ($this->data[$key]['documents'] as $docKey => $row) {
                 $signature = [];
                 foreach ($attributes as $attribute) {
@@ -1020,31 +1145,25 @@ class Memory extends Adapter
                     continue;
                 }
                 if ($this->sharedTables) {
-                    \array_unshift($signature, $row['_tenant'] ?? null);
+                    \array_unshift($signature, $row[Storage::TENANT] ?? null);
                 }
                 $hash = \serialize($signature);
                 if (isset($hashTable[$hash])) {
-                    // Under shared tables the duplicates may be another tenant's rows
-                    throw new UniqueException('Unique index violation');
+                    throw new UniqueException(UniqueException::MESSAGE);
                 }
                 $hashTable[$hash] = $docKey;
             }
         }
 
-        $id = $this->filter($id);
-        $this->data[$key]['indexes'][$id] = [
-            'type' => $type,
-            'attributes' => $attributes,
-            'lengths' => $lengths,
-            'orders' => $orders,
-        ];
-        if ($type === Database::INDEX_UNIQUE && ! empty($attributes)) {
+        $id = $this->filter($index->key);
+        $this->data[$key]['indexes'][$id] = self::indexEntry($index);
+        if ($type === IndexType::Unique->value && ! empty($attributes)) {
             $this->uniqueIndexHashes[$key][$id] = $hashTable;
         }
 
         $this->journal(function () use ($key, $id, $type): void {
             unset($this->data[$key]['indexes'][$id]);
-            if ($type === Database::INDEX_UNIQUE) {
+            if ($type === IndexType::Unique->value) {
                 unset($this->uniqueIndexHashes[$key][$id]);
             }
         });
@@ -1052,33 +1171,35 @@ class Memory extends Adapter
         return true;
     }
 
-    public function deleteIndex(string $collection, string $id): bool
+    #[\Override]
+    public function deleteIndex(string $collection, string $key): bool
     {
-        $key = $this->key($collection);
-        if (! isset($this->data[$key])) {
+        $table = $this->key($collection);
+        if (! isset($this->data[$table])) {
             return true;
         }
 
-        $id = $this->filter($id);
-        $previousIndex = $this->data[$key]['indexes'][$id] ?? null;
-        $previousHash = $this->uniqueIndexHashes[$key][$id] ?? null;
+        $id = $this->filter($key);
+        $previousIndex = $this->data[$table]['indexes'][$id] ?? null;
+        $previousHash = $this->uniqueIndexHashes[$table][$id] ?? null;
         unset(
-            $this->data[$key]['indexes'][$id],
-            $this->uniqueIndexHashes[$key][$id],
+            $this->data[$table]['indexes'][$id],
+            $this->uniqueIndexHashes[$table][$id],
         );
 
-        $this->journal(function () use ($key, $id, $previousIndex, $previousHash): void {
+        $this->journal(function () use ($table, $id, $previousIndex, $previousHash): void {
             if ($previousIndex !== null) {
-                $this->data[$key]['indexes'][$id] = $previousIndex;
+                $this->data[$table]['indexes'][$id] = $previousIndex;
             }
             if ($previousHash !== null) {
-                $this->uniqueIndexHashes[$key][$id] = $previousHash;
+                $this->uniqueIndexHashes[$table][$id] = $previousHash;
             }
         });
 
         return true;
     }
 
+    #[\Override]
     public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
         $key = $this->key($collection->getId());
@@ -1101,7 +1222,7 @@ class Memory extends Adapter
             $row = $this->projectRow($row, $selections);
         }
 
-        return new Document($row);
+        return Document::fromStorage($row);
     }
 
     /**
@@ -1112,12 +1233,11 @@ class Memory extends Adapter
     {
         $selected = [];
         foreach ($queries as $query) {
-            if (! $query instanceof Query) {
-                continue;
-            }
-            if ($query->getMethod() === Query::TYPE_SELECT) {
+            if ($query->getMethod() === Method::Select) {
                 foreach ($query->getValues() as $value) {
-                    $selected[] = (string) $value;
+                    if (\is_string($value)) {
+                        $selected[] = $value;
+                    }
                 }
             }
         }
@@ -1154,7 +1274,16 @@ class Memory extends Adapter
         return $projected;
     }
 
+    #[\Override]
     public function createDocument(Document $collection, Document $document): Document
+    {
+        return $this->insertDocument($collection, $document) ?? $document;
+    }
+
+    /**
+     * @return Document|null The stored document, or null when ignoreDuplicates() skipped it
+     */
+    private function insertDocument(Document $collection, Document $document): ?Document
     {
         $key = $this->key($collection->getId());
         if (! isset($this->data[$key])) {
@@ -1163,13 +1292,14 @@ class Memory extends Adapter
 
         $docKey = $this->documentKey($document->getId(), $document->getTenant());
         if (isset($this->data[$key]['documents'][$docKey])) {
-            if ($this->skipDuplicates) {
+            if ($this->isIgnoringDuplicates()) {
                 // Mirrors MariaDB's `INSERT IGNORE` — duplicate primary key is
                 // silently dropped and the existing row's sequence is returned.
                 $existing = $this->data[$key]['documents'][$docKey];
-                $document['$sequence'] = (string) $existing['_id'];
+                $existingId = $existing[Storage::SEQUENCE] ?? '';
+                $document[Document::SEQUENCE] = \is_scalar($existingId) ? (string) $existingId : '';
 
-                return $document;
+                return null;
             }
             throw new DuplicateException('Document already exists');
         }
@@ -1178,28 +1308,30 @@ class Memory extends Adapter
         try {
             $this->checkUniqueSignatures($key, $signatures, $docKey);
         } catch (DuplicateException $e) {
-            if ($this->skipDuplicates) {
-                return $document;
+            if ($this->isIgnoringDuplicates()) {
+                return null;
             }
             throw $e;
         }
 
-        $sequenceBefore = $this->data[$key]['sequence'];
+        $entry = &$this->data[$key];
+        $sequenceBefore = $entry['sequence'];
         $sequence = $document->getSequence();
         if (empty($sequence)) {
-            $this->data[$key]['sequence']++;
-            $sequence = $this->data[$key]['sequence'];
+            $entry['sequence']++;
+            $sequence = $entry['sequence'];
         } else {
             $sequence = (int) $sequence;
-            if ($sequence > $this->data[$key]['sequence']) {
-                $this->data[$key]['sequence'] = $sequence;
+            if ($sequence > $entry['sequence']) {
+                $entry['sequence'] = $sequence;
             }
         }
 
         $row = $this->documentToRow($document);
-        $row['_id'] = $sequence;
+        $row[Storage::SEQUENCE] = $sequence;
 
-        $this->data[$key]['documents'][$docKey] = $row;
+        $entry['documents'][$docKey] = $row;
+        unset($entry);
         $this->journal(function () use ($key, $docKey, $sequenceBefore): void {
             unset($this->data[$key]['documents'][$docKey]);
             $this->data[$key]['sequence'] = $sequenceBefore;
@@ -1211,21 +1343,40 @@ class Memory extends Adapter
 
         $this->writePermissions($key, $document);
 
-        $document['$sequence'] = (string) $sequence;
+        $document[Document::SEQUENCE] = (string) $sequence;
 
         return $document;
     }
 
+    #[\Override]
     public function createDocuments(Document $collection, array $documents): array
     {
+        // Mirror SQL's batch-level sequence consistency check: every document
+        // in a batch must either set $sequence or omit it. SQL adapters reject
+        // mixed batches up front; Memory must match so application code that
+        // catches the resulting DatabaseException behaves the same.
+        $hasSequence = null;
+        foreach ($documents as $document) {
+            $sequenceSet = ! empty($document->getSequence());
+            if ($hasSequence === null) {
+                $hasSequence = $sequenceSet;
+            } elseif ($hasSequence !== $sequenceSet) {
+                throw new DatabaseException('All documents must have an sequence if one is set');
+            }
+        }
+
         $created = [];
         foreach ($documents as $document) {
-            $created[] = $this->createDocument($collection, $document);
+            $inserted = $this->insertDocument($collection, $document);
+            if ($inserted !== null) {
+                $created[] = $inserted;
+            }
         }
 
         return $created;
     }
 
+    #[\Override]
     public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
     {
         $key = $this->key($collection->getId());
@@ -1242,14 +1393,14 @@ class Memory extends Adapter
         // Resolve any Operator-typed attributes against the existing row before
         // computing the new payload so unique-index checks see the post-update
         // values, matching MariaDB's atomic UPDATE semantics.
-        $resolvedAttrs = $this->applyOperators($document->getAttributes(), $existing);
-        foreach ($resolvedAttrs as $attribute => $value) {
+        $resolved = $this->applyOperators($document->getAttributes(), $existing);
+        foreach ($resolved as $attribute => $value) {
             $document->setAttribute($attribute, $value);
         }
 
         $newId = $document->getId();
         $newKey = $this->documentKey($newId);
-        if ($newId !== $id && isset($this->data[$key]['documents'][$newKey])) {
+        if ($newKey !== $oldKey && isset($this->data[$key]['documents'][$newKey])) {
             throw new DuplicateException('Document already exists');
         }
 
@@ -1268,38 +1419,45 @@ class Memory extends Adapter
         $oldSignatures = $this->rowUniqueSignatures($key, $existing);
         $this->checkUniqueSignatures($key, $newSignatures, $oldKey);
 
-        $row['_id'] = $existing['_id'];
-        if ($this->sharedTables && \array_key_exists('_tenant', $existing)) {
+        $row[Storage::SEQUENCE] = $existing[Storage::SEQUENCE];
+        if ($this->sharedTables && \array_key_exists(Storage::TENANT, $existing)) {
             // Preserve the row's stored tenant — MariaDB's UPDATE statements
             // never rewrite `_tenant` and tests rely on the original tenant
             // (e.g. the metadata NULL-tenant rows) surviving an update.
-            $row['_tenant'] = $existing['_tenant'];
+            $row[Storage::TENANT] = $existing[Storage::TENANT];
         }
 
+        $tenantValue = $existing[Storage::TENANT] ?? $this->getTenant();
         $newKey = $this->sharedTables
-            ? ($existing['_tenant'] ?? $this->getTenant()).'|'.\strtolower($newId)
+            ? (\is_scalar($tenantValue) ? (string) $tenantValue : '').'|'.\strtolower($newId)
             : \strtolower($newId);
 
-        $oldKeyHadRow = isset($this->data[$key]['documents'][$oldKey]);
-        $previousAtNewKey = $this->data[$key]['documents'][$newKey] ?? null;
+        $entry = &$this->data[$key];
+        $oldKeyHadRow = isset($entry['documents'][$oldKey]);
+        $previousAtNewKey = $entry['documents'][$newKey] ?? null;
 
         if ($newId !== $id || $newKey !== $oldKey) {
-            unset($this->data[$key]['documents'][$oldKey]);
+            unset($entry['documents'][$oldKey]);
         }
-        $this->data[$key]['documents'][$newKey] = $row;
+        $entry['documents'][$newKey] = $row;
+        unset($entry);
 
         $this->journal(function () use ($key, $oldKey, $newKey, $existing, $oldKeyHadRow, $previousAtNewKey): void {
+            if (! isset($this->data[$key])) {
+                return;
+            }
+            $entry = &$this->data[$key];
             if ($oldKey !== $newKey) {
                 if ($previousAtNewKey === null) {
-                    unset($this->data[$key]['documents'][$newKey]);
+                    unset($entry['documents'][$newKey]);
                 } else {
-                    $this->data[$key]['documents'][$newKey] = $previousAtNewKey;
+                    $entry['documents'][$newKey] = $previousAtNewKey;
                 }
                 if ($oldKeyHadRow) {
-                    $this->data[$key]['documents'][$oldKey] = $existing;
+                    $entry['documents'][$oldKey] = $existing;
                 }
             } else {
-                $this->data[$key]['documents'][$oldKey] = $existing;
+                $entry['documents'][$oldKey] = $existing;
             }
         });
 
@@ -1308,16 +1466,8 @@ class Memory extends Adapter
         // post-update, register the new binding.
         $allIndexes = \array_unique([...\array_keys($oldSignatures), ...\array_keys($newSignatures)]);
         foreach ($allIndexes as $indexId) {
-            $this->probeUniqueHash(
-                $key,
-                $indexId,
-                $newSignatures[$indexId] ?? null,
-                $oldSignatures[$indexId] ?? null,
-                $newKey,
-            );
-            // Old key removal: if the docKey changed, also drop any binding
-            // pointing at the old key (the probeUniqueHash above keys against
-            // $newKey, so a stale binding under $oldKey is left untouched).
+            // A rename moves the row to $newKey: release the binding the row
+            // holds under $oldKey first, or a value it keeps reads as taken.
             if ($oldKey !== $newKey) {
                 $oldHash = $oldSignatures[$indexId] ?? null;
                 if ($oldHash !== null
@@ -1328,6 +1478,13 @@ class Memory extends Adapter
                     });
                 }
             }
+            $this->probeUniqueHash(
+                $key,
+                $indexId,
+                $newSignatures[$indexId] ?? null,
+                $oldSignatures[$indexId] ?? null,
+                $newKey,
+            );
         }
 
         if (! $skipPermissions) {
@@ -1365,7 +1522,8 @@ class Memory extends Adapter
         return $document;
     }
 
-    public function updateDocuments(Document $collection, Document $updates, array $documents): int
+    #[\Override]
+    public function updateDocuments(Document $collection, Document $updates, array $documents, array $skipPermissions = []): int
     {
         if (empty($documents)) {
             return 0;
@@ -1376,11 +1534,11 @@ class Memory extends Adapter
             throw new NotFoundException('Collection not found');
         }
 
-        $attrs = $updates->getAttributes();
+        $attributes = $updates->getAttributes();
         $hasCreatedAt = ! empty($updates->getCreatedAt());
         $hasUpdatedAt = ! empty($updates->getUpdatedAt());
-        $hasPermissions = $updates->offsetExists('$permissions');
-        if (empty($attrs) && ! $hasCreatedAt && ! $hasUpdatedAt && ! $hasPermissions) {
+        $hasPermissions = $updates->offsetExists(Document::PERMISSIONS);
+        if (empty($attributes) && ! $hasCreatedAt && ! $hasUpdatedAt && ! $hasPermissions) {
             return 0;
         }
 
@@ -1398,15 +1556,15 @@ class Memory extends Adapter
             $existingRow = $this->data[$key]['documents'][$docKey];
 
             // Resolve operators per-row — each document's existing values feed
-            // back into operator evaluation, so $attrs cannot be evaluated
+            // back into operator evaluation, so $attributes cannot be evaluated
             // once and reused.
-            $resolvedAttrs = $this->applyOperators($attrs, $existingRow);
+            $resolved = $this->applyOperators($attributes, $existingRow);
 
-            $merged = ! empty($resolvedAttrs)
-                ? new Document(\array_merge(
+            $merged = ! empty($resolved)
+                ? Document::fromStorage(\array_merge(
                     $this->rowToDocument($existingRow),
-                    $resolvedAttrs,
-                    ['$id' => $uid]
+                    $resolved,
+                    [Document::ID => $uid]
                 ))
                 : null;
 
@@ -1416,7 +1574,7 @@ class Memory extends Adapter
             $prepared[] = [
                 'uid' => $uid,
                 'docKey' => $docKey,
-                'attrs' => $resolvedAttrs,
+                'attrs' => $resolved,
                 'newSignatures' => $newSignatures,
                 'oldSignatures' => $oldSignatures,
             ];
@@ -1443,11 +1601,11 @@ class Memory extends Adapter
                         }
                     }
                     if (! $existingIsSelf) {
-                        throw new UniqueException('Unique index violation');
+                        throw new UniqueException(UniqueException::MESSAGE);
                     }
                 }
                 if (isset($pendingByIndex[$indexId][$hash]) && $pendingByIndex[$indexId][$hash] !== $docKey) {
-                    throw new UniqueException('Unique index violation');
+                    throw new UniqueException(UniqueException::MESSAGE);
                 }
                 $pendingByIndex[$indexId][$hash] = $docKey;
             }
@@ -1457,23 +1615,23 @@ class Memory extends Adapter
         foreach ($prepared as $entry) {
             $uid = $entry['uid'];
             $docKey = $entry['docKey'];
-            $resolvedAttrs = $entry['attrs'];
+            $resolved = $entry['attrs'];
 
             $previousRow = $this->data[$key]['documents'][$docKey];
 
             $row = &$this->data[$key]['documents'][$docKey];
-            foreach ($resolvedAttrs as $attribute => $value) {
+            foreach ($resolved as $attribute => $value) {
                 $row[$this->filter($attribute)] = $value;
             }
 
             if ($hasCreatedAt) {
-                $row['_createdAt'] = $updates->getCreatedAt();
+                $row[Storage::CREATED_AT] = $updates->getCreatedAt();
             }
             if ($hasUpdatedAt) {
-                $row['_updatedAt'] = $updates->getUpdatedAt();
+                $row[Storage::UPDATED_AT] = $updates->getUpdatedAt();
             }
             if ($hasPermissions) {
-                $row['_permissions'] = $updates->getPermissions();
+                $row[Storage::PERMISSIONS] = $updates->getPermissions();
             }
             unset($row);
 
@@ -1483,14 +1641,13 @@ class Memory extends Adapter
 
             if ($hasPermissions) {
                 $this->removePermissionsForDocument($key, $uid, $tenant, $this->sharedTables);
-                foreach (Database::PERMISSIONS as $type) {
+                foreach ([PermissionType::Create, PermissionType::Read, PermissionType::Update, PermissionType::Delete] as $type) {
                     foreach ($updates->getPermissionsByType($type) as $permission) {
-                        $this->addPermissionEntry($key, $uid, (string) $type, (string) $permission, $tenant);
+                        $this->addPermissionEntry($key, $uid, $type->value, (string) $permission, $tenant);
                     }
                 }
             }
 
-            // Sync unique-index hashes per-row.
             $allIndexes = \array_unique([...\array_keys($entry['oldSignatures']), ...\array_keys($entry['newSignatures'])]);
             foreach ($allIndexes as $indexId) {
                 $this->probeUniqueHash(
@@ -1506,14 +1663,10 @@ class Memory extends Adapter
         return \count($prepared);
     }
 
-    public function upsertDocuments(Document $collection, string $attribute, array $changes): array
+    #[\Override]
+    public function getSequences(Document $collection, array $documents): array
     {
-        throw new DatabaseException('Upsert is not implemented in the Memory adapter');
-    }
-
-    public function getSequences(string $collection, array $documents): array
-    {
-        $key = $this->key($collection);
+        $key = $this->key($collection->getId());
         if (! isset($this->data[$key])) {
             return $documents;
         }
@@ -1526,16 +1679,18 @@ class Memory extends Adapter
             // — the lookup must use each document's own tenant, not the adapter's current tenant.
             $existing = $this->data[$key]['documents'][$this->documentKey($doc->getId(), $doc->getTenant())] ?? null;
             if ($existing !== null) {
-                $documents[$index]->setAttribute('$sequence', (string) $existing['_id']);
+                $existingId = $existing[Storage::SEQUENCE] ?? '';
+                $documents[$index]->setAttribute(Document::SEQUENCE, \is_scalar($existingId) ? (string) $existingId : '');
             }
         }
 
         return $documents;
     }
 
-    public function deleteDocument(string $collection, string $id): bool
+    #[\Override]
+    public function deleteDocument(Document $collection, string $id): bool
     {
-        $key = $this->key($collection);
+        $key = $this->key($collection->getId());
         if (! isset($this->data[$key])) {
             // MariaDB throws when the collection itself is gone (PDO unknown
             // table → NotFoundException). A missing document inside an existing
@@ -1556,7 +1711,6 @@ class Memory extends Adapter
             $this->data[$key]['documents'][$docKey] = $existing;
         });
 
-        // Drop unique-index hash bindings for this row.
         foreach ($oldSignatures as $indexId => $hash) {
             if (($this->uniqueIndexHashes[$key][$indexId][$hash] ?? null) === $docKey) {
                 unset($this->uniqueIndexHashes[$key][$indexId][$hash]);
@@ -1566,15 +1720,16 @@ class Memory extends Adapter
             }
         }
 
-        $tenant = $this->getTenant();
-        $this->removePermissionsForDocument($key, $id, $tenant, $this->sharedTables);
+        $storedId = $existing[Storage::UID] ?? $id;
+        $this->removePermissionsForDocument($key, \is_string($storedId) ? $storedId : $id, $this->getTenant(), $this->sharedTables);
 
         return true;
     }
 
-    public function deleteDocuments(string $collection, array $sequences, array $permissionIds): int
+    #[\Override]
+    public function deleteDocuments(Document $collection, array $sequences, array $permissionIds): int
     {
-        $key = $this->key($collection);
+        $key = $this->key($collection->getId());
         if (! isset($this->data[$key])) {
             throw new NotFoundException('Collection not found');
         }
@@ -1590,11 +1745,13 @@ class Memory extends Adapter
             // With sharedTables the row map is keyed by "tenant|uid" so sequence
             // collisions across tenants are possible. Skip rows that don't belong
             // to the current tenant so we never delete another tenant's data.
-            if ($this->sharedTables && ($row['_tenant'] ?? null) !== $this->getTenant()) {
+            if ($this->sharedTables && ($row[Storage::TENANT] ?? null) !== $this->getTenant()) {
                 continue;
             }
-            if (isset($seqSet[(string) ($row['_id'] ?? '')])) {
-                $deletedIds[(string) ($row['_uid'] ?? $docKey)] = true;
+            $rowId = $row[Storage::SEQUENCE] ?? '';
+            $rowUid = $row[Storage::UID] ?? $docKey;
+            if (isset($seqSet[\is_scalar($rowId) ? (string) $rowId : ''])) {
+                $deletedIds[\is_scalar($rowUid) ? (string) $rowUid : $docKey] = true;
                 $oldSignatures = $this->rowUniqueSignatures($key, $row);
                 unset($this->data[$key]['documents'][$docKey]);
                 $this->journal(function () use ($key, $docKey, $row): void {
@@ -1632,14 +1789,15 @@ class Memory extends Adapter
         return $count;
     }
 
-    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
+    #[\Override]
+    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read): array
     {
         $key = $this->key($collection->getId());
         if (! isset($this->data[$key])) {
             throw new NotFoundException('Collection not found');
         }
 
-        $rows = $this->fusedFilter($key, $collection->getId(), $queries, $forPermission);
+        $rows = $this->fusedFilter($key, $collection->getId(), $queries, $forPermission->value);
         $rows = $this->applyOrdering($rows, $orderAttributes, $orderTypes, $cursorDirection);
         $rows = $this->applyCursor($rows, $orderAttributes, $orderTypes, $cursor, $cursorDirection);
 
@@ -1653,16 +1811,17 @@ class Memory extends Adapter
         $selections = $this->extractSelections($queries);
         $results = [];
         foreach ($rows as $row) {
-            $results[] = new Document($this->rowToDocument($row, $selections, $key));
+            $results[] = Document::fromStorage($this->rowToDocument($row, $selections, $key));
         }
 
-        if ($cursorDirection === Database::CURSOR_BEFORE) {
+        if ($cursorDirection === CursorDirection::Before) {
             $results = \array_reverse($results);
         }
 
         return $results;
     }
 
+    #[\Override]
     public function count(Document $collection, array $queries = [], ?int $max = null): int
     {
         $key = $this->key($collection->getId());
@@ -1670,7 +1829,7 @@ class Memory extends Adapter
             throw new NotFoundException('Collection not found');
         }
 
-        $rows = $this->fusedFilter($key, $collection->getId(), $queries, Database::PERMISSION_READ);
+        $rows = $this->fusedFilter($key, $collection->getId(), $queries, PermissionType::Read->value);
 
         if (! is_null($max)) {
             // MariaDB applies LIMIT :max inside the COUNT subquery — LIMIT 0
@@ -1681,6 +1840,7 @@ class Memory extends Adapter
         return \count($rows);
     }
 
+    #[\Override]
     public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): float|int
     {
         $key = $this->key($collection->getId());
@@ -1688,7 +1848,7 @@ class Memory extends Adapter
             throw new NotFoundException('Collection not found');
         }
 
-        $rows = $this->fusedFilter($key, $collection->getId(), $queries, Database::PERMISSION_READ);
+        $rows = $this->fusedFilter($key, $collection->getId(), $queries, PermissionType::Read->value);
 
         if (! is_null($max)) {
             $rows = \array_slice($rows, 0, $max);
@@ -1698,21 +1858,23 @@ class Memory extends Adapter
         $isFloat = false;
         $column = $this->filter($attribute);
         foreach ($rows as $row) {
-            if (! \array_key_exists($column, $row) || $row[$column] === null) {
+            $value = $row[$column] ?? null;
+            if ($value === null || ! \is_numeric($value)) {
                 continue;
             }
-            if (\is_float($row[$column])) {
+            if (\is_float($value)) {
                 $isFloat = true;
             }
-            $sum += $row[$column];
+            $sum += $value;
         }
 
         return $isFloat ? (float) $sum : (int) $sum;
     }
 
-    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, string $updatedAt, int|float|null $min = null, int|float|null $max = null): bool
+    #[\Override]
+    public function increaseDocumentAttribute(Document $collection, string $id, string $attribute, int|float|string $value, string $updatedAt, int|float|string|null $min = null, int|float|string|null $max = null): bool
     {
-        $key = $this->key($collection);
+        $key = $this->key($collection->getId());
         $docKey = $this->documentKey($id);
         if (! isset($this->data[$key]['documents'][$docKey])) {
             throw new NotFoundException('Document not found');
@@ -1720,9 +1882,10 @@ class Memory extends Adapter
 
         $column = $this->filter($attribute);
         $previousValue = $this->data[$key]['documents'][$docKey][$column] ?? null;
-        $previousUpdatedAt = $this->data[$key]['documents'][$docKey]['_updatedAt'] ?? null;
+        $previousUpdatedAt = $this->data[$key]['documents'][$docKey][Storage::UPDATED_AT] ?? null;
         $current = $previousValue ?? 0;
-        $current = is_numeric($current) ? $current + 0 : 0;
+        $exact = (\is_int($current) || (\is_string($current) && BigInt::isIntegerString($current)))
+            && (\is_int($value) || (\is_string($value) && BigInt::isIntegerString($value)));
 
         // MariaDB encodes the bound check as part of the WHERE clause against
         // the current column value (`attr <= :max` / `attr >= :min`); when the
@@ -1730,32 +1893,53 @@ class Memory extends Adapter
         // still returns true. Mirror that — silent no-op on bound violation.
         // The Database layer pre-subtracts $value from $max (and adds it to
         // $min), so the comparison stays against the pre-update value.
-        if (! is_null($min) && $current < $min) {
-            return true;
-        }
-        if (! is_null($max) && $current > $max) {
-            return true;
+        if ($exact) {
+            $current = BigInt::toNative($current);
+            $value = BigInt::toNative($value);
+            if (! is_null($min) && BigInt::compare($current, $min) < 0) {
+                return true;
+            }
+            if (! is_null($max) && BigInt::compare($current, $max) > 0) {
+                return true;
+            }
+            $result = BigInt::add($current, $value);
+        } else {
+            $current = $this->numericValue($current, 0) ?? 0;
+            $value = $this->numericValue($value, 0) ?? 0;
+            if (! is_null($min) && $current < $min) {
+                return true;
+            }
+            if (! is_null($max) && $current > $max) {
+                return true;
+            }
+            $result = $current + $value;
         }
 
-        $this->data[$key]['documents'][$docKey][$column] = $current + $value;
-        $this->data[$key]['documents'][$docKey]['_updatedAt'] = $updatedAt;
+        $this->data[$key]['documents'][$docKey][$column] = $result;
+        $this->data[$key]['documents'][$docKey][Storage::UPDATED_AT] = $updatedAt;
 
         $this->journal(function () use ($key, $docKey, $column, $previousValue, $previousUpdatedAt): void {
+            if (! isset($this->data[$key]['documents'][$docKey])) {
+                return;
+            }
+            $row = &$this->data[$key]['documents'][$docKey];
             if ($previousValue === null) {
-                unset($this->data[$key]['documents'][$docKey][$column]);
+                unset($row[$column]);
             } else {
-                $this->data[$key]['documents'][$docKey][$column] = $previousValue;
+                $row[$column] = $previousValue;
             }
             if ($previousUpdatedAt === null) {
-                unset($this->data[$key]['documents'][$docKey]['_updatedAt']);
+                unset($row[Storage::UPDATED_AT]);
             } else {
-                $this->data[$key]['documents'][$docKey]['_updatedAt'] = $previousUpdatedAt;
+                $row[Storage::UPDATED_AT] = $previousUpdatedAt;
             }
+            unset($row);
         });
 
         return true;
     }
 
+    #[\Override]
     public function getSizeOfCollection(string $collection): int
     {
         $key = $this->key($collection);
@@ -1766,436 +1950,56 @@ class Memory extends Adapter
         return \strlen(\serialize($this->data[$key]));
     }
 
+    #[\Override]
     public function getSizeOfCollectionOnDisk(string $collection): int
     {
         return $this->getSizeOfCollection($collection);
     }
 
-    public function getLimitForString(): int
+    /**
+     * No index is bounded by bytes here, but index validation subtracts from the index length, so it is
+     * Mongo's positive cap.
+     */
+    #[\Override]
+    public function limits(): Limits
     {
-        return 4294967295;
+        return $this->limits ??= new Limits(
+            string: 4294967295,
+            varchar: 16381,
+            integer: 4294967295,
+            bigInteger: Database::MAX_BIG_INT,
+            attributes: 1017,
+            indexes: 64,
+            defaultAttributes: \count(Database::internalAttributesFor(true)),
+            defaultIndexes: \count(Database::INTERNAL_INDEXES),
+            indexLength: 1024,
+            uidLength: 255,
+            documentSize: 0,
+            minDateTime: new \DateTime('0001-01-01 00:00:00'),
+            maxDateTime: new \DateTime(self::MAX_DATETIME),
+            idType: ColumnType::Integer,
+            keywords: [],
+            internalIndexKeys: [],
+        );
     }
 
-    public function getLimitForInt(): int
-    {
-        return 4294967295;
-    }
-
-    public function getLimitForAttributes(): int
-    {
-        return 1017;
-    }
-
-    public function getLimitForIndexes(): int
-    {
-        return 64;
-    }
-
-    public function getMaxIndexLength(): int
-    {
-        // Memory does not enforce per-index byte limits, but the Database
-        // layer expects a positive cap so callers can derive sizes via
-        // arithmetic (e.g. `getMaxIndexLength() - 68`). Match Mongo's value.
-        return 1024;
-    }
-
-    public function getMaxVarcharLength(): int
-    {
-        return 16381;
-    }
-
-    public function getMaxUIDLength(): int
-    {
-        return 255;
-    }
-
-    public function getMinDateTime(): \DateTime
-    {
-        return new \DateTime('0001-01-01 00:00:00');
-    }
-
-    public function getIdAttributeType(): string
-    {
-        return Database::VAR_INTEGER;
-    }
-
-    public function getSupportForSchemas(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForAttributes(): bool
-    {
-        return $this->supportForAttributes;
-    }
-
-    public function setSupportForAttributes(bool $support): bool
-    {
-        $this->supportForAttributes = $support;
-
-        return $this->supportForAttributes;
-    }
-
-    public function getSupportForSchemaAttributes(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForSchemaIndexes(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForIndex(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForIndexArray(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForCastIndexArray(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForUniqueIndex(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForFulltextIndex(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForFulltextWildcardIndex(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForCasting(): bool
-    {
-        // Memory stores native PHP types where possible but JSON-encodes array
-        // attributes on write. Returning true asks the Database layer's
-        // `casting` step to JSON-decode array columns and coerce scalar types
-        // — same behaviour as the SQL adapters.
-        return true;
-    }
-
-    public function getSupportForQueryContains(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForTimeouts(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForRelationships(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForUpdateLock(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForBatchOperations(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForAttributeResizing(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForGetConnectionId(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForUpserts(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForUpsertOnUniqueIndex(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForVectors(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForCacheSkipOnFailure(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForCaching(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForReconnection(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForHostname(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForBatchCreateAttributes(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForSpatialAttributes(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForObject(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForObjectIndexes(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForSpatialIndexNull(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForOperators(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForOptionalSpatialAttributeWithExistingRows(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForSpatialIndexOrder(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForSpatialAxisOrder(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForBoundaryInclusiveContains(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForMultipleFulltextIndexes(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForIdenticalIndexes(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForOrderRandom(): bool
-    {
-        return true;
-    }
-
+    #[\Override]
     public function getCountOfAttributes(Document $collection): int
     {
-        return \count($collection->getAttribute('attributes', [])) + $this->getCountOfDefaultAttributes();
+        return \count(self::collectionAttributes($collection)) + $this->limits()->defaultAttributes;
     }
 
+    #[\Override]
     public function getCountOfIndexes(Document $collection): int
     {
-        return \count($collection->getAttribute('indexes', [])) + $this->getCountOfDefaultIndexes();
+        return \count(self::collectionIndexes($collection)) + $this->limits()->defaultIndexes;
     }
 
-    public function getCountOfDefaultAttributes(): int
-    {
-        return \count(Database::INTERNAL_ATTRIBUTES);
-    }
-
-    public function getCountOfDefaultIndexes(): int
-    {
-        return \count(Database::INTERNAL_INDEXES);
-    }
-
-    public function getDocumentSizeLimit(): int
-    {
-        return 0;
-    }
-
+    #[\Override]
     public function getAttributeWidth(Document $collection): int
     {
         return 0;
     }
-
-    public function getKeywords(): array
-    {
-        return [];
-    }
-
-    protected function getAttributeProjection(array $selections, string $prefix): mixed
-    {
-        return $selections;
-    }
-
-    public function getConnectionId(): string
-    {
-        return '0';
-    }
-
-    public function getInternalIndexesKeys(): array
-    {
-        return [];
-    }
-
-    public function getSchemaAttributes(string $collection): array
-    {
-        return [];
-    }
-
-    public function getSchemaIndexes(string $collection): array
-    {
-        return [];
-    }
-
-    public function getTenantQuery(string $collection, string $alias = ''): string
-    {
-        return '';
-    }
-
-    protected function execute(mixed $stmt): bool
-    {
-        return true;
-    }
-
-    protected function quote(string $string): string
-    {
-        return '"'.$string.'"';
-    }
-
-    public function decodePoint(string $wkb): array
-    {
-        throw new DatabaseException('Spatial types are not implemented in the Memory adapter');
-    }
-
-    public function decodeLinestring(string $wkb): array
-    {
-        throw new DatabaseException('Spatial types are not implemented in the Memory adapter');
-    }
-
-    public function decodePolygon(string $wkb): array
-    {
-        throw new DatabaseException('Spatial types are not implemented in the Memory adapter');
-    }
-
-    public function castingBefore(Document $collection, Document $document): Document
-    {
-        return $document;
-    }
-
-    public function castingAfter(Document $collection, Document $document): Document
-    {
-        return $document;
-    }
-
-    /**
-     * Get max BIGINT limit
-     *
-     * @return int
-     */
-    public function getLimitForBigInt(): int
-    {
-        return Database::MAX_BIG_INT;
-    }
-
-    public function getSupportForInternalCasting(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForUTCCasting(): bool
-    {
-        return false;
-    }
-
-    public function setUTCDatetime(string $value): mixed
-    {
-        return $value;
-    }
-
-    public function getSupportForIntegerBooleans(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForAlterLocks(): bool
-    {
-        return false;
-    }
-
-    public function getSupportNonUtfCharacters(): bool
-    {
-        // Memory is a pass-through PHP array, so it does NOT actively reject
-        // non-UTF-8 byte sequences. Returning false skips the inherited
-        // non-UTF-character scope test that asserts adapter rejection.
-        return false;
-    }
-
-    public function getSupportForTrigramIndex(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForPCRERegex(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForPOSIXRegex(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForTransactionRetries(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForNestedTransactions(): bool
-    {
-        return true;
-    }
-
-    // -----------------------------------------------------------------
-    // Internal helpers
-    // -----------------------------------------------------------------
 
     /**
      * @return array<string, mixed>
@@ -2210,15 +2014,15 @@ class Memory extends Adapter
             $row[$this->filter($attribute)] = $value;
         }
 
-        $row['_uid'] = $document->getId();
-        $row['_createdAt'] = $document->getCreatedAt();
-        $row['_updatedAt'] = $document->getUpdatedAt();
-        $row['_permissions'] = $document->getPermissions();
+        $row[Storage::UID] = $document->getId();
+        $row[Storage::CREATED_AT] = $document->getCreatedAt();
+        $row[Storage::UPDATED_AT] = $document->getUpdatedAt();
+        $row[Storage::PERMISSIONS] = $document->getPermissions();
         if ($this->sharedTables) {
             // Mirror MariaDB: the row's `_tenant` follows the document's own
             // tenant — that matters in tenantPerDocument mode where the
             // adapter's current tenant is null but each document is tagged.
-            $row['_tenant'] = $document->getTenant() ?? $this->getTenant();
+            $row[Storage::TENANT] = $document->getTenant() ?? $this->getTenant();
         }
 
         return $row;
@@ -2250,23 +2054,23 @@ class Memory extends Adapter
         $document = [];
         foreach ($row as $key => $value) {
             switch ($key) {
-                case '_id':
-                    $document['$sequence'] = (string) $value;
+                case Storage::SEQUENCE:
+                    $document[Document::SEQUENCE] = \is_scalar($value) ? (string) $value : '';
                     break;
-                case '_uid':
-                    $document['$id'] = $value;
+                case Storage::UID:
+                    $document[Document::ID] = $value;
                     break;
-                case '_tenant':
-                    $document['$tenant'] = $value;
+                case Storage::TENANT:
+                    $document[Document::TENANT] = $value;
                     break;
-                case '_createdAt':
-                    $document['$createdAt'] = $value;
+                case Storage::CREATED_AT:
+                    $document[Document::CREATED_AT] = $value;
                     break;
-                case '_updatedAt':
-                    $document['$updatedAt'] = $value;
+                case Storage::UPDATED_AT:
+                    $document[Document::UPDATED_AT] = $value;
                     break;
-                case '_permissions':
-                    $document['$permissions'] = $value ?? [];
+                case Storage::PERMISSIONS:
+                    $document[Document::PERMISSIONS] = $value ?? [];
                     break;
                 default:
                     if ($allowed !== null && ! isset($allowed[$key])) {
@@ -2280,7 +2084,7 @@ class Memory extends Adapter
         // MariaDB selecting a `DEFAULT NULL` column even when no row has set it.
         if ($storageKey !== null && isset($this->data[$storageKey]['attributes'])) {
             foreach ($this->data[$storageKey]['attributes'] as $attributeId => $definition) {
-                if (($definition['type'] ?? null) !== Database::VAR_RELATIONSHIP) {
+                if (($definition['type'] ?? null) !== ColumnType::Relationship->value) {
                     continue;
                 }
                 if ($allowed !== null && ! isset($allowed[$attributeId])) {
@@ -2303,7 +2107,7 @@ class Memory extends Adapter
     {
         $selections = [];
         foreach ($queries as $query) {
-            if ($query->getMethod() === Query::TYPE_SELECT) {
+            if ($query->getMethod() === Method::Select) {
                 foreach ($query->getValues() as $value) {
                     if (\is_string($value)) {
                         $selections[] = $value;
@@ -2319,9 +2123,9 @@ class Memory extends Adapter
     {
         $uid = $document->getId();
         $tenant = $document->getTenant() ?? $this->getTenant();
-        foreach (Database::PERMISSIONS as $type) {
+        foreach ([PermissionType::Create, PermissionType::Read, PermissionType::Update, PermissionType::Delete] as $type) {
             foreach ($document->getPermissionsByType($type) as $permission) {
-                $this->addPermissionEntry($key, $uid, $type, $permission, $tenant);
+                $this->addPermissionEntry($key, $uid, $type->value, (string) $permission, $tenant);
             }
         }
     }
@@ -2340,20 +2144,15 @@ class Memory extends Adapter
             'tenant' => $tenant,
         ];
         $this->permissions[$key][] = $entry;
-        $this->permissionsByDocument[$key][$document][$type][$clean] = true;
-        $bucket = $tenant === null ? '__null__' : (string) $tenant;
+        $bucket = $this->permissionBucket($tenant);
+        $this->permissionsByDocument[$key][$bucket][$document][$type][$clean] = true;
         $this->permissionsByPermission[$key][$type][$bucket][$clean][$document] = true;
 
         $flatIndex = \array_key_last($this->permissions[$key]);
         $this->journal(function () use ($key, $flatIndex, $document, $type, $clean, $bucket): void {
             unset($this->permissions[$key][$flatIndex]);
-            unset($this->permissionsByDocument[$key][$document][$type][$clean]);
-            if (empty($this->permissionsByDocument[$key][$document][$type])) {
-                unset($this->permissionsByDocument[$key][$document][$type]);
-                if (empty($this->permissionsByDocument[$key][$document])) {
-                    unset($this->permissionsByDocument[$key][$document]);
-                }
-            }
+            unset($this->permissionsByDocument[$key][$bucket][$document][$type][$clean]);
+            $this->pruneDocumentPermissions($key, $bucket, $document, $type);
             unset($this->permissionsByPermission[$key][$type][$bucket][$clean][$document]);
             if (empty($this->permissionsByPermission[$key][$type][$bucket][$clean])) {
                 unset($this->permissionsByPermission[$key][$type][$bucket][$clean]);
@@ -2373,16 +2172,18 @@ class Memory extends Adapter
      */
     protected function removePermissionsForDocument(string $key, string $documentId, int|string|null $tenantScope, bool $sharedTablesScope): array
     {
-        $byType = $this->permissionsByDocument[$key][$documentId] ?? null;
-        if ($byType === null) {
-            return [];
-        }
-
-        $removed = [];
-        foreach ($byType as $type => $set) {
-            foreach (\array_keys($set) as $permission) {
-                $removed[] = ['document' => $documentId, 'type' => (string) $type, 'permission' => (string) $permission];
+        $buckets = $sharedTablesScope
+            ? [$this->permissionBucket($tenantScope)]
+            : \array_keys($this->permissionsByDocument[$key] ?? []);
+        $indexed = false;
+        foreach ($buckets as $bucket) {
+            if (isset($this->permissionsByDocument[$key][$bucket][$documentId])) {
+                $indexed = true;
+                break;
             }
+        }
+        if (! $indexed) {
+            return [];
         }
 
         // Walk the flat list once, dropping matching entries while respecting
@@ -2400,7 +2201,7 @@ class Memory extends Adapter
             }
             $journalEntries[$index] = $entry;
             unset($this->permissions[$key][$index]);
-            $bucket = $entry['tenant'] === null ? '__null__' : (string) $entry['tenant'];
+            $bucket = $this->permissionBucket($entry['tenant']);
             unset($this->permissionsByPermission[$key][$entry['type']][$bucket][$entry['permission']][$documentId]);
             if (empty($this->permissionsByPermission[$key][$entry['type']][$bucket][$entry['permission']])) {
                 unset($this->permissionsByPermission[$key][$entry['type']][$bucket][$entry['permission']]);
@@ -2408,25 +2209,40 @@ class Memory extends Adapter
                     unset($this->permissionsByPermission[$key][$entry['type']][$bucket]);
                 }
             }
-            unset($this->permissionsByDocument[$key][$documentId][$entry['type']][$entry['permission']]);
-            if (empty($this->permissionsByDocument[$key][$documentId][$entry['type']])) {
-                unset($this->permissionsByDocument[$key][$documentId][$entry['type']]);
-            }
-        }
-        if (empty($this->permissionsByDocument[$key][$documentId] ?? [])) {
-            unset($this->permissionsByDocument[$key][$documentId]);
+            unset($this->permissionsByDocument[$key][$bucket][$documentId][$entry['type']][$entry['permission']]);
+            $this->pruneDocumentPermissions($key, $bucket, $documentId, $entry['type']);
         }
 
         $this->journal(function () use ($key, $journalEntries): void {
             foreach ($journalEntries as $index => $entry) {
                 $this->permissions[$key][$index] = $entry;
-                $this->permissionsByDocument[$key][$entry['document']][$entry['type']][$entry['permission']] = true;
-                $bucket = $entry['tenant'] === null ? '__null__' : (string) $entry['tenant'];
+                $bucket = $this->permissionBucket($entry['tenant']);
+                $this->permissionsByDocument[$key][$bucket][$entry['document']][$entry['type']][$entry['permission']] = true;
                 $this->permissionsByPermission[$key][$entry['type']][$bucket][$entry['permission']][$entry['document']] = true;
             }
         });
 
         return \array_values($journalEntries);
+    }
+
+    protected function permissionBucket(int|string|null $tenant): string
+    {
+        return $tenant === null ? '__null__' : (string) $tenant;
+    }
+
+    protected function pruneDocumentPermissions(string $key, string $bucket, string $documentId, string $type): void
+    {
+        if (! empty($this->permissionsByDocument[$key][$bucket][$documentId][$type])) {
+            return;
+        }
+        unset($this->permissionsByDocument[$key][$bucket][$documentId][$type]);
+        if (! empty($this->permissionsByDocument[$key][$bucket][$documentId])) {
+            return;
+        }
+        unset($this->permissionsByDocument[$key][$bucket][$documentId]);
+        if (empty($this->permissionsByDocument[$key][$bucket])) {
+            unset($this->permissionsByDocument[$key][$bucket]);
+        }
     }
 
     /**
@@ -2439,7 +2255,7 @@ class Memory extends Adapter
     {
         if ($newHash !== null && isset($this->uniqueIndexHashes[$key][$indexId][$newHash])
             && $this->uniqueIndexHashes[$key][$indexId][$newHash] !== $docKey) {
-            throw new UniqueException('Unique index violation');
+            throw new UniqueException(UniqueException::MESSAGE);
         }
 
         $previousValueAtNew = $newHash !== null ? ($this->uniqueIndexHashes[$key][$indexId][$newHash] ?? null) : null;
@@ -2479,15 +2295,18 @@ class Memory extends Adapter
     {
         $result = [];
         foreach ($this->data[$key]['indexes'] ?? [] as $indexId => $index) {
-            if (($index['type'] ?? '') !== Database::INDEX_UNIQUE) {
+            if (($index['type'] ?? '') !== IndexType::Unique->value) {
                 continue;
             }
             $attributes = $index['attributes'] ?? [];
-            if (empty($attributes)) {
+            if (! \is_array($attributes) || empty($attributes)) {
                 continue;
             }
             $signature = [];
             foreach ($attributes as $attribute) {
+                if (! \is_string($attribute)) {
+                    continue;
+                }
                 $signature[] = $this->normalizeIndexValue($this->resolveAttributeValue($row, $attribute));
             }
             if (\in_array(null, $signature, true)) {
@@ -2498,7 +2317,7 @@ class Memory extends Adapter
             // tenant into the hash key so two tenants holding the same
             // value do not collide.
             if ($this->sharedTables) {
-                \array_unshift($signature, $row['_tenant'] ?? null);
+                \array_unshift($signature, $row[Storage::TENANT] ?? null);
             }
             $result[$indexId] = \serialize($signature);
         }
@@ -2515,24 +2334,30 @@ class Memory extends Adapter
     {
         $result = [];
         foreach ($this->data[$key]['indexes'] ?? [] as $indexId => $index) {
-            if (($index['type'] ?? '') !== Database::INDEX_UNIQUE) {
+            if (($index['type'] ?? '') !== IndexType::Unique->value) {
                 continue;
             }
             $attributes = $index['attributes'] ?? [];
-            if (empty($attributes)) {
+            if (! \is_array($attributes) || empty($attributes)) {
                 continue;
             }
             $signature = [];
             foreach ($attributes as $attribute) {
+                if (! \is_string($attribute)) {
+                    continue;
+                }
                 $signature[] = $this->normalizeIndexValue($this->resolveDocumentValue($document, $attribute));
             }
             if (\in_array(null, $signature, true)) {
                 continue;
             }
             // Match rowUniqueSignatures: under shared tables, scope by the
-            // current adapter tenant so cross-tenant collisions never throw.
+            // tenant the row will actually be stored under. documentToRow
+            // writes `_tenant = $document->getTenant() ?? $this->getTenant()`,
+            // so the read- and write-side signatures must agree on that
+            // fallback or duplicate detection skips across tenants.
             if ($this->sharedTables) {
-                \array_unshift($signature, $this->getTenant());
+                \array_unshift($signature, $document->getTenant() ?? $this->getTenant());
             }
             $result[$indexId] = \serialize($signature);
         }
@@ -2560,7 +2385,7 @@ class Memory extends Adapter
         $effectiveQueries = [];
         foreach ($queries as $query) {
             $method = $query->getMethod();
-            if (\in_array($method, [Query::TYPE_SELECT, Query::TYPE_ORDER_ASC, Query::TYPE_ORDER_DESC, Query::TYPE_ORDER_RANDOM, Query::TYPE_LIMIT, Query::TYPE_OFFSET, Query::TYPE_CURSOR_AFTER, Query::TYPE_CURSOR_BEFORE], true)) {
+            if (\in_array($method, [Method::Select, Method::OrderAsc, Method::OrderDesc, Method::OrderRandom, Method::Limit, Method::Offset, Method::CursorAfter, Method::CursorBefore], true)) {
                 continue;
             }
             $effectiveQueries[] = $query;
@@ -2570,20 +2395,23 @@ class Memory extends Adapter
         $tenant = $tenantCheck ? $this->getTenant() : null;
         $allowNullTenant = $tenantCheck && $collectionId === Database::METADATA;
 
-        $allowSet = $this->buildPermissionAllowSet($key, $forPermission);
+        $allowSet = $this->buildPermissionAllowSet($key, $forPermission, $tenant);
+        $tenantlessAllowSet = $allowNullTenant ? $this->buildPermissionAllowSet($key, $forPermission, null) : null;
 
         $output = [];
         foreach ($documents as $row) {
+            $rowAllowSet = $allowSet;
             if ($tenantCheck) {
-                $rowTenant = $row['_tenant'] ?? null;
+                $rowTenant = $row[Storage::TENANT] ?? null;
                 if ($allowNullTenant && $rowTenant === null) {
-                    // visible
+                    $rowAllowSet = $tenantlessAllowSet;
                 } elseif ($rowTenant !== $tenant) {
                     continue;
                 }
             }
 
-            if ($allowSet !== null && ! isset($allowSet[$row['_uid'] ?? ''])) {
+            $rowUid = $row[Storage::UID] ?? '';
+            if ($rowAllowSet !== null && (! \is_string($rowUid) || ! isset($rowAllowSet[$rowUid]))) {
                 continue;
             }
 
@@ -2611,7 +2439,7 @@ class Memory extends Adapter
     {
         $method = $query->getMethod();
 
-        if ($method === Query::TYPE_AND) {
+        if ($method === Method::And) {
             foreach ($query->getValues() as $sub) {
                 if (! ($sub instanceof Query) || ! $this->matches($row, $sub)) {
                     return false;
@@ -2621,7 +2449,7 @@ class Memory extends Adapter
             return true;
         }
 
-        if ($method === Query::TYPE_OR) {
+        if ($method === Method::Or) {
             foreach ($query->getValues() as $sub) {
                 if ($sub instanceof Query && $this->matches($row, $sub)) {
                     return true;
@@ -2641,8 +2469,17 @@ class Memory extends Adapter
         }
 
         switch ($method) {
-            case Query::TYPE_EQUAL:
+            case Method::Equal:
+                // SQL three-valued logic: `col = NULL` is unknown — null rows
+                // never match an explicit equality, even when callers pass
+                // `[null]`. Use `Query::isNull()` for that case.
+                if ($value === null) {
+                    return false;
+                }
                 foreach ($queryValues as $candidate) {
+                    if ($candidate === null) {
+                        continue;
+                    }
                     if ($this->looseEquals($value, $candidate)) {
                         return true;
                     }
@@ -2650,12 +2487,19 @@ class Memory extends Adapter
 
                 return false;
 
-            case Query::TYPE_NOT_EQUAL:
+            case Method::NotEqual:
                 // SQL: NULL != x evaluates to NULL (i.e. excluded), not true.
                 if ($value === null) {
                     return false;
                 }
                 foreach ($queryValues as $candidate) {
+                    // SQL three-valued logic: `col NOT IN (..., NULL, ...)`
+                    // is unknown for every row — exclude. Mirrors the null-
+                    // candidate handling in Method::Equal above. Use
+                    // `Query::isNotNull()` for the explicit not-null intent.
+                    if ($candidate === null) {
+                        return false;
+                    }
                     if ($this->looseEquals($value, $candidate)) {
                         return false;
                     }
@@ -2663,28 +2507,28 @@ class Memory extends Adapter
 
                 return true;
 
-            case Query::TYPE_LESSER:
+            case Method::LessThan:
                 return $value !== null && $value < $queryValues[0];
 
-            case Query::TYPE_LESSER_EQUAL:
+            case Method::LessThanEqual:
                 return $value !== null && $value <= $queryValues[0];
 
-            case Query::TYPE_GREATER:
+            case Method::GreaterThan:
                 return $value !== null && $value > $queryValues[0];
 
-            case Query::TYPE_GREATER_EQUAL:
+            case Method::GreaterThanEqual:
                 return $value !== null && $value >= $queryValues[0];
 
-            case Query::TYPE_IS_NULL:
+            case Method::IsNull:
                 return $value === null;
 
-            case Query::TYPE_IS_NOT_NULL:
+            case Method::IsNotNull:
                 return $value !== null;
 
-            case Query::TYPE_BETWEEN:
+            case Method::Between:
                 return $value !== null && $value >= $queryValues[0] && $value <= $queryValues[1];
 
-            case Query::TYPE_NOT_BETWEEN:
+            case Method::NotBetween:
                 // SQL: NULL NOT BETWEEN x AND y evaluates to NULL (excluded).
                 if ($value === null) {
                     return false;
@@ -2692,27 +2536,27 @@ class Memory extends Adapter
 
                 return $value < $queryValues[0] || $value > $queryValues[1];
 
-            case Query::TYPE_STARTS_WITH:
+            case Method::StartsWith:
                 return \is_string($value) && \is_string($queryValues[0]) && \str_starts_with($value, $queryValues[0]);
 
-            case Query::TYPE_NOT_STARTS_WITH:
+            case Method::NotStartsWith:
                 if ($value === null) {
                     return false;
                 }
 
                 return ! \is_string($value) || ! \is_string($queryValues[0]) || ! \str_starts_with($value, $queryValues[0]);
 
-            case Query::TYPE_ENDS_WITH:
+            case Method::EndsWith:
                 return \is_string($value) && \is_string($queryValues[0]) && \str_ends_with($value, $queryValues[0]);
 
-            case Query::TYPE_NOT_ENDS_WITH:
+            case Method::NotEndsWith:
                 if ($value === null) {
                     return false;
                 }
 
                 return ! \is_string($value) || ! \is_string($queryValues[0]) || ! \str_ends_with($value, $queryValues[0]);
 
-            case Query::TYPE_CONTAINS:
+            case Method::Contains:
                 $haystack = $this->decodeArrayValue($value);
                 if ($haystack === null && \is_string($value)) {
                     // Mirror MariaDB's default case-insensitive collation for
@@ -2739,16 +2583,16 @@ class Memory extends Adapter
 
                 return false;
 
-            case Query::TYPE_NOT_CONTAINS:
+            case Method::NotContains:
                 // SQL: NULL NOT LIKE '%x%' / JSON_CONTAINS(NULL, ...) evaluates
                 // to NULL — null-valued rows are excluded, not matched.
                 if ($value === null) {
                     return false;
                 }
 
-                return ! $this->matches($row, new Query(Query::TYPE_CONTAINS, $query->getAttribute(), $queryValues));
+                return ! $this->matches($row, new Query(Method::Contains, $query->getAttribute(), $queryValues));
 
-            case Query::TYPE_CONTAINS_ANY:
+            case Method::ContainsAny:
                 // containsAny behaves like contains: array attributes match
                 // any of the supplied needles, scalar string attributes fall
                 // back to a case-insensitive substring search.
@@ -2775,7 +2619,7 @@ class Memory extends Adapter
 
                 return false;
 
-            case Query::TYPE_CONTAINS_ALL:
+            case Method::ContainsAll:
                 $haystack = $this->decodeArrayValue($value);
                 if (! \is_array($haystack)) {
                     return false;
@@ -2795,18 +2639,18 @@ class Memory extends Adapter
 
                 return true;
 
-            case Query::TYPE_SEARCH:
+            case Method::Search:
                 if (! \is_string($value)) {
                     return false;
                 }
-                $needle = (string) ($queryValues[0] ?? '');
-                if ($needle === '') {
+                $searchNeedle = $queryValues[0] ?? '';
+                if (! \is_string($searchNeedle) || $searchNeedle === '') {
                     return false;
                 }
 
-                return $this->matchesFulltext($value, $needle);
+                return $this->matchesFulltext($value, $searchNeedle);
 
-            case Query::TYPE_NOT_SEARCH:
+            case Method::NotSearch:
                 // SQL: NULL NOT MATCH evaluates to NULL — null rows excluded.
                 if ($value === null) {
                     return false;
@@ -2814,23 +2658,26 @@ class Memory extends Adapter
                 if (! \is_string($value)) {
                     return true;
                 }
-                $needle = (string) ($queryValues[0] ?? '');
-                if ($needle === '') {
+                $notSearchNeedle = $queryValues[0] ?? '';
+                if (! \is_string($notSearchNeedle) || $notSearchNeedle === '') {
                     return true;
                 }
 
-                return ! $this->matchesFulltext($value, $needle);
+                return ! $this->matchesFulltext($value, $notSearchNeedle);
 
-            case Query::TYPE_REGEX:
+            case Method::Regex:
                 if (! \is_string($value)) {
                     return false;
                 }
-                $pattern = (string) ($queryValues[0] ?? '');
+                $pattern = $queryValues[0] ?? '';
+                if (! \is_string($pattern)) {
+                    return false;
+                }
 
                 return $this->matchesRegex($value, $pattern);
         }
 
-        throw new DatabaseException('Query method not implemented in the Memory adapter: '.$method);
+        throw new DatabaseException('Query method not implemented in the Memory adapter: '.$method->value);
     }
 
     /**
@@ -2912,7 +2759,11 @@ class Memory extends Adapter
             return true;
         }
         if (\is_numeric($a) && \is_numeric($b)) {
-            return $a + 0 === $b + 0;
+            // Compare numerically with `==` so cross-type pairs like
+            // ("3", "3.0") or (3, 3.0) match the way SQL `WHERE col = '3.0'`
+            // matches an int column holding 3. Strict `===` after `+0`
+            // splits int/float and silently misses parity.
+            return $a == $b;
         }
 
         return false;
@@ -2951,7 +2802,7 @@ class Memory extends Adapter
         $method = $query->getMethod();
 
         switch ($method) {
-            case Query::TYPE_EQUAL:
+            case Method::Equal:
                 if ($haystack === null) {
                     return false;
                 }
@@ -2963,7 +2814,7 @@ class Memory extends Adapter
 
                 return false;
 
-            case Query::TYPE_NOT_EQUAL:
+            case Method::NotEqual:
                 // Postgres: NOT (NULL @> x) evaluates to NULL — null/invalid
                 // JSON rows are excluded, mirroring SQL three-valued logic.
                 if ($haystack === null) {
@@ -2977,8 +2828,8 @@ class Memory extends Adapter
 
                 return true;
 
-            case Query::TYPE_CONTAINS:
-            case Query::TYPE_CONTAINS_ANY:
+            case Method::Contains:
+            case Method::ContainsAny:
                 if ($haystack === null) {
                     return false;
                 }
@@ -2990,7 +2841,7 @@ class Memory extends Adapter
 
                 return false;
 
-            case Query::TYPE_CONTAINS_ALL:
+            case Method::ContainsAll:
                 if ($haystack === null) {
                     return false;
                 }
@@ -3002,7 +2853,7 @@ class Memory extends Adapter
 
                 return true;
 
-            case Query::TYPE_NOT_CONTAINS:
+            case Method::NotContains:
                 // Postgres three-valued logic: NULL field excluded from negation.
                 if ($haystack === null) {
                     return false;
@@ -3015,32 +2866,36 @@ class Memory extends Adapter
 
                 return true;
 
-            case Query::TYPE_IS_NULL:
+            case Method::IsNull:
                 return $value === null;
 
-            case Query::TYPE_IS_NOT_NULL:
+            case Method::IsNotNull:
                 return $value !== null;
         }
 
-        throw new DatabaseException('Query method '.$method.' not supported for object attributes');
+        throw new DatabaseException('Query method '.$method->value.' not supported for object attributes');
     }
 
-    protected function decodeObjectValue(mixed $value): mixed
+    /**
+     * Return the decoded array if $value is already an array or looks like a
+     * JSON object/array literal; null otherwise. Mirrors decodeArrayValue and
+     * lets matchesObject's callers rely on a single `null === no match` guard
+     * rather than dispatching on raw scalar types.
+     *
+     * @return array<mixed>|null
+     */
+    protected function decodeObjectValue(mixed $value): ?array
     {
-        if ($value === null) {
-            return null;
-        }
         if (\is_array($value)) {
             return $value;
         }
         if (\is_string($value) && $value !== '' && ($value[0] === '{' || $value[0] === '[')) {
             $decoded = \json_decode($value, true);
-            if (\is_array($decoded)) {
-                return $decoded;
-            }
+
+            return \is_array($decoded) ? $decoded : null;
         }
 
-        return $value;
+        return null;
     }
 
     /**
@@ -3200,15 +3055,7 @@ class Memory extends Adapter
 
     protected function mapAttribute(string $attribute): string
     {
-        return match ($attribute) {
-            '$id' => '_uid',
-            '$sequence' => '_id',
-            '$tenant' => '_tenant',
-            '$createdAt' => '_createdAt',
-            '$updatedAt' => '_updatedAt',
-            '$permissions' => '_permissions',
-            default => $this->filter($attribute),
-        };
+        return $this->filter(Storage::column($attribute));
     }
 
     /**
@@ -3219,7 +3066,7 @@ class Memory extends Adapter
      *
      * @return array<string, true>|null
      */
-    protected function buildPermissionAllowSet(string $key, string $forPermission): ?array
+    protected function buildPermissionAllowSet(string $key, string $forPermission, int|string|null $tenant): ?array
     {
         if (! $this->authorization->getStatus()) {
             return null;
@@ -3231,8 +3078,7 @@ class Memory extends Adapter
             return $allowed;
         }
 
-        $tenant = $this->getTenant();
-        $tenantBucket = $tenant === null ? '__null__' : (string) $tenant;
+        $tenantBucket = $this->permissionBucket($tenant);
         $buckets = [];
         if ($this->sharedTables) {
             if (isset($this->permissionsByPermission[$key][$forPermission][$tenantBucket])) {
@@ -3258,30 +3104,30 @@ class Memory extends Adapter
     /**
      * @param  array<array<string, mixed>>  $rows
      * @param  array<string>  $orderAttributes
-     * @param  array<string>  $orderTypes
+     * @param  array<OrderDirection>  $orderTypes
      * @return array<array<string, mixed>>
      */
-    protected function applyOrdering(array $rows, array $orderAttributes, array $orderTypes, string $cursorDirection): array
+    protected function applyOrdering(array $rows, array $orderAttributes, array $orderTypes, CursorDirection $cursorDirection): array
     {
         // Random ordering must short-circuit: a non-deterministic comparator
         // breaks usort's transitivity invariant. Shuffle once and return.
         foreach ($orderTypes as $type) {
-            if ($type === Database::ORDER_RANDOM) {
+            if ($type === OrderDirection::Random) {
                 \shuffle($rows);
 
                 return $rows;
             }
         }
 
-        $reverse = $cursorDirection === Database::CURSOR_BEFORE;
+        $reverse = $cursorDirection === CursorDirection::Before;
 
         if (empty($orderAttributes)) {
             // Mirror MariaDB's clustered-index ordering when no explicit ORDER BY
             // is supplied — sort by the auto-incrementing _id ascending so
             // pagination via limit/offset is stable across calls.
             \usort($rows, function (array $a, array $b) use ($reverse) {
-                $av = $a['_id'] ?? 0;
-                $bv = $b['_id'] ?? 0;
+                $av = $a[Storage::SEQUENCE] ?? 0;
+                $bv = $b[Storage::SEQUENCE] ?? 0;
                 if ($av === $bv) {
                     return 0;
                 }
@@ -3301,11 +3147,11 @@ class Memory extends Adapter
         $directions = [];
         foreach ($orderAttributes as $i => $attribute) {
             $columns[$i] = $this->mapAttribute($attribute);
-            $direction = $orderTypes[$i] ?? Database::ORDER_ASC;
+            $direction = $orderTypes[$i] ?? OrderDirection::Asc;
             if ($reverse) {
-                $direction = $direction === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
+                $direction = $direction === OrderDirection::Asc ? OrderDirection::Desc : OrderDirection::Asc;
             }
-            $directions[$i] = $direction === Database::ORDER_ASC ? 1 : -1;
+            $directions[$i] = $direction === OrderDirection::Asc ? 1 : -1;
         }
 
         $count = \count($rows);
@@ -3349,59 +3195,56 @@ class Memory extends Adapter
     /**
      * @param  array<array<string, mixed>>  $rows
      * @param  array<string>  $orderAttributes
-     * @param  array<string>  $orderTypes
+     * @param  array<OrderDirection>  $orderTypes
      * @param  array<string, mixed>  $cursor
      * @return array<array<string, mixed>>
      */
-    protected function applyCursor(array $rows, array $orderAttributes, array $orderTypes, array $cursor, string $cursorDirection): array
+    protected function applyCursor(array $rows, array $orderAttributes, array $orderTypes, array $cursor, CursorDirection $cursorDirection): array
     {
         if (empty($cursor)) {
             return $rows;
         }
 
         if (empty($orderAttributes)) {
-            $orderAttributes = ['$sequence'];
-            $orderTypes = [Database::ORDER_ASC];
+            $orderAttributes = [Document::SEQUENCE];
+            $orderTypes = [OrderDirection::Asc];
         }
 
-        $reverse = $cursorDirection === Database::CURSOR_BEFORE;
+        $reverse = $cursorDirection === CursorDirection::Before;
         $resolved = [];
-        foreach ($orderAttributes as $i => $attribute) {
-            $direction = $orderTypes[$i] ?? Database::ORDER_ASC;
+        foreach ($orderAttributes as $index => $attribute) {
+            $direction = $orderTypes[$index] ?? OrderDirection::Asc;
             if ($reverse) {
-                $direction = $direction === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
+                $direction = $direction === OrderDirection::Asc ? OrderDirection::Desc : OrderDirection::Asc;
             }
-            $resolved[] = [
-                'column' => $this->mapAttribute($attribute),
-                'asc' => $direction === Database::ORDER_ASC,
-                'ref' => $cursor[$attribute] ?? null,
-            ];
+            $resolved[] = new CursorBoundary($this->mapAttribute($attribute), $direction, $cursor[$attribute] ?? null);
         }
 
         $output = [];
         foreach ($rows as $row) {
             foreach ($resolved as $entry) {
-                $current = $row[$entry['column']] ?? null;
-                $ref = $entry['ref'];
-                if ($current === $ref) {
+                $current = $row[$entry->field] ?? null;
+                $reference = $entry->reference;
+                $ascending = $entry->direction === OrderDirection::Asc;
+                if ($current === $reference) {
                     continue;
                 }
                 // Match applyOrdering: NULLs sort first under ASC.
                 if ($current === null) {
-                    if (! $entry['asc']) {
+                    if (! $ascending) {
                         $output[] = $row;
                     }
 
                     continue 2;
                 }
-                if ($ref === null) {
-                    if ($entry['asc']) {
+                if ($reference === null) {
+                    if ($ascending) {
                         $output[] = $row;
                     }
 
                     continue 2;
                 }
-                if ($entry['asc'] ? ($current > $ref) : ($current < $ref)) {
+                if ($ascending ? ($current > $reference) : ($current < $reference)) {
                     $output[] = $row;
                 }
 
@@ -3424,7 +3267,7 @@ class Memory extends Adapter
         foreach ($newSignatures as $indexId => $hash) {
             $existing = $this->uniqueIndexHashes[$key][$indexId][$hash] ?? null;
             if ($existing !== null && $existing !== $docKey) {
-                throw new UniqueException('Unique index violation');
+                throw new UniqueException(UniqueException::MESSAGE);
             }
         }
     }
@@ -3459,136 +3302,127 @@ class Memory extends Adapter
 
     /**
      * Apply a single Operator to a stored row value and return the new value.
-     * Mirrors the semantics implemented in MariaDB::getOperatorSQL — the SQL
+     * Mirrors the semantics implemented in MariaDB::getOperatorSql — the SQL
      * version uses CASE/JSON helpers; this is the in-PHP equivalent.
      */
     protected function applyOperator(mixed $current, Operator $operator): mixed
     {
         $values = $operator->getValues();
         $method = $operator->getMethod();
+        $exact = BigInt::calculateOutsideNative($method, $current ?? 0, $values[0] ?? 1);
+        if ($exact !== null) {
+            $bound = $values[1] ?? null;
+            if ($method === OperatorType::Modulo || ! \is_numeric($bound) || (\is_float($bound) && ! \is_finite($bound))) {
+                return $exact;
+            }
+
+            $limit = BigInt::integralValue($bound);
+            if ($limit === null) {
+                throw new OperatorException("Cannot apply {$method->value} operator: max/min limit must be a whole number, got {$bound}");
+            }
+
+            return $this->applyNumericLimit(
+                $current ?? 0,
+                $exact,
+                $limit,
+                \in_array($method, [OperatorType::Increment, OperatorType::Multiply, OperatorType::Power], true)
+            );
+        }
 
         switch ($method) {
-            case Operator::TYPE_INCREMENT:
-                $by = $values[0] ?? 1;
-                $max = $values[1] ?? null;
-                $base = \is_numeric($current) ? $current + 0 : 0;
-                if ($max !== null) {
-                    // Compare *remaining headroom* against $by so we never overflow PHP's int
-                    // range. Guard: if the RESULT would exceed the max, leave it unchanged.
-                    // Note: we must NOT short-circuit on `$base >= $max` — a negative $by moves
-                    // the value down, so an already-over-max base can still land within bound
-                    // (e.g. 52 + (-5) = 47 <= 50 must apply).
-                    if (($max - $base) < $by) {
-                        return $this->preserveNumericType($base, $base);
-                    }
-                }
+            case OperatorType::Increment:
+                $byInc = $this->numericValue($values[0] ?? null, 1);
+                $maxInc = $this->numericValue($values[1] ?? null, null);
+                $baseInc = \is_numeric($current) ? $current + 0 : 0;
 
-                return $this->preserveNumericType($base, $base + $by);
+                return $this->applyNumericLimit($baseInc, $baseInc + $byInc, $maxInc, true);
 
-            case Operator::TYPE_DECREMENT:
-                $by = $values[0] ?? 1;
-                $min = $values[1] ?? null;
-                $base = \is_numeric($current) ? $current + 0 : 0;
-                if ($min !== null) {
-                    // Guard: leave unchanged only if the RESULT would go below min. Don't
-                    // short-circuit on `$base <= $min` — a negative $by moves the value up.
-                    if (($base - $min) < $by) {
-                        return $this->preserveNumericType($base, $base);
-                    }
-                }
+            case OperatorType::Decrement:
+                $byDec = $this->numericValue($values[0] ?? null, 1);
+                $minDec = $this->numericValue($values[1] ?? null, null);
+                $baseDec = \is_numeric($current) ? $current + 0 : 0;
 
-                return $this->preserveNumericType($base, $base - $by);
+                return $this->applyNumericLimit($baseDec, $baseDec - $byDec, $minDec, false);
 
-            case Operator::TYPE_MULTIPLY:
-                $by = $values[0] ?? 1;
-                $max = $values[1] ?? null;
-                $base = \is_numeric($current) ? $current + 0 : 0;
-                $result = $base * $by;
-                if ($max !== null && $result > $max) {
-                    return $this->preserveNumericType($base, $base);
-                }
+            case OperatorType::Multiply:
+                $byMul = $this->numericValue($values[0] ?? null, 1);
+                $maxMul = $this->numericValue($values[1] ?? null, null);
+                $baseMul = \is_numeric($current) ? $current + 0 : 0;
 
-                return $this->preserveNumericType($base, $result);
+                return $this->applyNumericLimit($baseMul, $baseMul * $byMul, $maxMul, true);
 
-            case Operator::TYPE_DIVIDE:
-                $by = $values[0] ?? 1;
-                $min = $values[1] ?? null;
-                if ($by == 0) {
+            case OperatorType::Divide:
+                $byDiv = $this->numericValue($values[0] ?? null, 1);
+                $minDiv = $this->numericValue($values[1] ?? null, null);
+                if ($byDiv == 0) {
                     return $current;
                 }
-                $base = \is_numeric($current) ? $current + 0 : 0;
-                $result = $base / $by;
-                if ($min !== null && $result < $min) {
-                    return $this->preserveNumericType($base, $base);
-                }
+                $baseDiv = \is_numeric($current) ? $current + 0 : 0;
 
-                return $this->preserveNumericType($base, $result);
+                return $this->applyNumericLimit($baseDiv, $baseDiv / $byDiv, $minDiv, false);
 
-            case Operator::TYPE_MODULO:
-                $by = $values[0] ?? 1;
-                if ($by == 0) {
+            case OperatorType::Modulo:
+                $byMod = (int) $this->numericValue($values[0] ?? null, 1);
+                if ($byMod == 0) {
                     return $current;
                 }
-                $base = \is_numeric($current) ? (int) $current : 0;
+                $baseMod = \is_numeric($current) ? (int) $current : 0;
 
-                return $base % (int) $by;
+                return $baseMod % $byMod;
 
-            case Operator::TYPE_POWER:
-                $by = $values[0] ?? 1;
-                $max = $values[1] ?? null;
-                $base = \is_numeric($current) ? $current + 0 : 0;
-                if ($max !== null) {
-                    // Leave the value unchanged for undefined inputs (0 to a negative power, or a
-                    // negative base to a fractional exponent) — they produce INF/NaN, not a number.
-                    if (($base == 0 && $by < 0) || ($base < 0 && \floor($by) != $by)) {
-                        return $this->preserveNumericType($base, $base);
-                    }
-                    $result = $base ** $by;
-                    // A result that overflows (INF) or exceeds the max also leaves the value as-is.
-                    if (!\is_finite($result) || $result > $max) {
-                        return $this->preserveNumericType($base, $base);
+            case OperatorType::Power:
+                $byPow = $this->numericValue($values[0] ?? null, 1) ?? 1;
+                $maxPow = $this->numericValue($values[1] ?? null, null);
+                $basePow = \is_numeric($current) ? $current + 0 : 0;
+                if (($basePow == 0 && $byPow < 0) || ($basePow < 0 && \floor($byPow) != $byPow)) {
+                    if ($maxPow !== null) {
+                        return $basePow;
                     }
 
-                    return $this->preserveNumericType($base, $result);
-                }
-
-                // 0 to a negative power, or a negative base to a fractional exponent, is not a real
-                // number. Fail loudly with a clear exception rather than storing INF/NaN.
-                $result = $base ** $by;
-                if (!\is_finite($result)) {
                     throw new LimitException('Value out of range');
                 }
 
-                return $this->preserveNumericType($base, $result);
+                $candidate = $basePow ** $byPow;
+                if (! \is_finite((float) $candidate)) {
+                    if ($maxPow !== null) {
+                        return $basePow;
+                    }
 
-            case Operator::TYPE_STRING_CONCAT:
-                return ((string) ($current ?? '')).(string) ($values[0] ?? '');
+                    throw new LimitException('Value out of range');
+                }
 
-            case Operator::TYPE_STRING_REPLACE:
-                $search = (string) ($values[0] ?? '');
-                $replace = (string) ($values[1] ?? '');
+                return $this->applyNumericLimit($basePow, $candidate, $maxPow, true);
+
+            case OperatorType::StringConcat:
+                $appendValue = $values[0] ?? '';
+
+                return $this->stringValue($current).$this->stringValue($appendValue);
+
+            case OperatorType::StringReplace:
+                $search = $this->stringValue($values[0] ?? '');
+                $replace = $this->stringValue($values[1] ?? '');
                 if ($current === null) {
                     return null;
                 }
 
-                return \str_replace($search, $replace, (string) $current);
+                return \str_replace($search, $replace, $this->stringValue($current));
 
-            case Operator::TYPE_TOGGLE:
+            case OperatorType::Toggle:
                 return ! (bool) $current;
 
-            case Operator::TYPE_ARRAY_APPEND:
+            case OperatorType::ArrayAppend:
                 $list = $this->coerceArray($current);
 
                 return [...$list, ...\array_values($values)];
 
-            case Operator::TYPE_ARRAY_PREPEND:
+            case OperatorType::ArrayPrepend:
                 $list = $this->coerceArray($current);
 
                 return [...\array_values($values), ...$list];
 
-            case Operator::TYPE_ARRAY_INSERT:
+            case OperatorType::ArrayInsert:
                 $list = $this->coerceArray($current);
-                $index = (int) ($values[0] ?? 0);
+                $index = (int) $this->numericValue($values[0] ?? null, 0);
                 $value = $values[1] ?? null;
                 if ($index < 0) {
                     $index = 0;
@@ -3600,65 +3434,109 @@ class Memory extends Adapter
 
                 return $list;
 
-            case Operator::TYPE_ARRAY_REMOVE:
+            case OperatorType::ArrayRemove:
                 $list = $this->coerceArray($current);
                 $needle = $values[0] ?? null;
 
                 return \array_values(\array_filter($list, fn ($item) => $item !== $needle));
 
-            case Operator::TYPE_ARRAY_UNIQUE:
+            case OperatorType::ArrayUnique:
                 $list = $this->coerceArray($current);
 
                 return \array_values(\array_unique($list, SORT_REGULAR));
 
-            case Operator::TYPE_ARRAY_INTERSECT:
+            case OperatorType::ArrayIntersect:
                 $list = $this->coerceArray($current);
                 $other = \array_values($values);
 
                 return \array_values(\array_filter($list, fn ($item) => \in_array($item, $other, false)));
 
-            case Operator::TYPE_ARRAY_DIFF:
+            case OperatorType::ArrayDiff:
                 $list = $this->coerceArray($current);
                 $other = \array_values($values);
 
                 return \array_values(\array_filter($list, fn ($item) => ! \in_array($item, $other, false)));
 
-            case Operator::TYPE_ARRAY_FILTER:
+            case OperatorType::ArrayFilter:
                 $list = $this->coerceArray($current);
-                $condition = (string) ($values[0] ?? '');
+                $condition = $this->stringValue($values[0] ?? '');
                 $compare = $values[1] ?? null;
 
                 return \array_values(\array_filter($list, fn ($item) => $this->matchesArrayFilter($item, $condition, $compare)));
 
-            case Operator::TYPE_DATE_ADD_DAYS:
-                $days = (int) ($values[0] ?? 0);
+            case OperatorType::DateAddDays:
+                $days = (int) $this->numericValue($values[0] ?? null, 0);
 
                 return $this->shiftDate($current, $days * 86400);
 
-            case Operator::TYPE_DATE_SUB_DAYS:
-                $days = (int) ($values[0] ?? 0);
+            case OperatorType::DateSubDays:
+                $days = (int) $this->numericValue($values[0] ?? null, 0);
 
                 return $this->shiftDate($current, -$days * 86400);
 
-            case Operator::TYPE_DATE_SET_NOW:
+            case OperatorType::DateSetNow:
                 return DateTime::now();
         }
-
-        throw new OperatorException("Invalid operator: {$method}");
     }
 
     /**
-     * Clamp an arithmetic result against an optional bound.
+     * Coerce a mixed value to int|float, falling back to $default when the
+     * value is not numeric. Centralises the narrow-to-numeric pattern used
+     * across the operator implementations.
+     */
+    protected function numericValue(mixed $value, int|float|null $default): int|float|null
+    {
+        if (\is_int($value) || \is_float($value)) {
+            return $value;
+        }
+        if (\is_string($value) && \is_numeric($value)) {
+            return $value + 0;
+        }
+
+        return $default;
+    }
+
+    /**
+     * Coerce a mixed value to string, falling back to '' when the value is
+     * not stringable. Centralises the narrow-to-string pattern used across
+     * the string-operator implementations.
+     */
+    protected function stringValue(mixed $value): string
+    {
+        if (\is_string($value)) {
+            return $value;
+        }
+        if (\is_scalar($value) || $value === null) {
+            return (string) $value;
+        }
+
+        return '';
+    }
+
+    /**
+     * Apply an arithmetic result unless it crosses an optional bound.
      *
      * @param  bool  $isUpper  true = bound is a maximum, false = minimum
      */
-    protected function applyNumericLimit(int|float $value, int|float|null $bound, bool $isUpper): int|float
+    protected function applyNumericLimit(mixed $original, mixed $candidate, mixed $bound, bool $isUpper): int|float|string
     {
-        if ($bound === null) {
-            return $value;
+        if (BigInt::isIntegerValue($original) && BigInt::isIntegerValue($candidate) && BigInt::isIntegerValue($bound)) {
+            $crossed = $isUpper
+                ? BigInt::compare($candidate, $bound) > 0
+                : BigInt::compare($candidate, $bound) < 0;
+
+            return $crossed ? BigInt::toNative($original) : $candidate;
         }
 
-        return $isUpper ? \min($value, $bound) : \max($value, $bound);
+        $numericOriginal = \is_numeric($original) ? $original + 0 : 0;
+        $numericCandidate = \is_numeric($candidate) ? $candidate + 0 : 0;
+        $numericBound = \is_numeric($bound) ? $bound + 0 : null;
+
+        if ($numericBound !== null && (($isUpper && $numericCandidate > $numericBound) || (! $isUpper && $numericCandidate < $numericBound))) {
+            return $numericOriginal;
+        }
+
+        return $this->preserveNumericType($numericOriginal, $numericCandidate);
     }
 
     /**
@@ -3695,20 +3573,20 @@ class Memory extends Adapter
     }
 
     /**
-     * Mirror Operator::TYPE_ARRAY_FILTER's case-by-case predicate translation
+     * Mirror OperatorType::ArrayFilter's case-by-case predicate translation
      * (see MariaDB JSON_TABLE filter — `equal`, `greaterThan`, `isNull`, ...).
      */
     protected function matchesArrayFilter(mixed $item, string $condition, mixed $compare): bool
     {
         return match ($condition) {
-            Query::TYPE_EQUAL => $item == $compare,
-            Query::TYPE_NOT_EQUAL => $item != $compare,
-            Query::TYPE_GREATER => \is_numeric($item) && \is_numeric($compare) && $item + 0 > $compare + 0,
-            Query::TYPE_GREATER_EQUAL => \is_numeric($item) && \is_numeric($compare) && $item + 0 >= $compare + 0,
-            Query::TYPE_LESSER => \is_numeric($item) && \is_numeric($compare) && $item + 0 < $compare + 0,
-            Query::TYPE_LESSER_EQUAL => \is_numeric($item) && \is_numeric($compare) && $item + 0 <= $compare + 0,
-            Query::TYPE_IS_NULL => $item === null,
-            Query::TYPE_IS_NOT_NULL => $item !== null,
+            Method::Equal->value => $item == $compare,
+            Method::NotEqual->value => $item != $compare,
+            Method::GreaterThan->value => \is_numeric($item) && \is_numeric($compare) && $item + 0 > $compare + 0,
+            Method::GreaterThanEqual->value => \is_numeric($item) && \is_numeric($compare) && $item + 0 >= $compare + 0,
+            Method::LessThan->value => \is_numeric($item) && \is_numeric($compare) && $item + 0 < $compare + 0,
+            Method::LessThanEqual->value => \is_numeric($item) && \is_numeric($compare) && $item + 0 <= $compare + 0,
+            Method::IsNull->value => $item === null,
+            Method::IsNotNull->value => $item !== null,
             default => true,
         };
     }
@@ -3723,10 +3601,11 @@ class Memory extends Adapter
         if ($current === null) {
             return null;
         }
+        $stringValue = $this->stringValue($current);
         try {
-            $base = new \DateTime((string) $current);
+            $base = new \DateTime($stringValue);
         } catch (\Throwable) {
-            return $current === '' ? null : (string) $current;
+            return $stringValue === '' ? null : $stringValue;
         }
         $base->modify(($seconds >= 0 ? '+' : '').$seconds.' seconds');
 
@@ -3734,19 +3613,19 @@ class Memory extends Adapter
     }
 
     /**
-     * Filter out any Operator-typed values from $attrs and apply them against
+     * Filter out any Operator-typed values from $attributes and apply them against
      * the stored row, returning the remaining (regular) attributes plus the
      * operator-derived assignments. The split mirrors how MariaDB's UPDATE
      * separates operator SQL fragments from bound parameters.
      *
-     * @param  array<string, mixed>  $attrs  Incoming attributes (mix of operators and scalars)
+     * @param  array<string, mixed>  $attributes  Incoming attributes (mix of operators and scalars)
      * @param  array<string, mixed>  $row  Stored row (post-filter on rowToDocument)
      * @return array<string, mixed> Regular attributes ready for write
      */
-    protected function applyOperators(array $attrs, array $row): array
+    protected function applyOperators(array $attributes, array $row): array
     {
         $result = [];
-        foreach ($attrs as $attribute => $value) {
+        foreach ($attributes as $attribute => $value) {
             if (Operator::isOperator($value)) {
                 /** @var Operator $value */
                 $current = $row[$this->filter($attribute)] ?? null;

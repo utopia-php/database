@@ -3,20 +3,21 @@
 namespace Tests\E2E\Adapter;
 
 use Redis;
-use ReflectionClass;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\Pool;
+use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Exception\Limit;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
 use Utopia\Database\PDO;
+use Utopia\Database\Permission;
+use Utopia\Database\Role;
 use Utopia\Pools\Adapter\Stack;
 use Utopia\Pools\Pool as UtopiaPool;
 
@@ -28,24 +29,26 @@ class PoolTest extends Base
      * @var UtopiaPool<MySQL>
      */
     protected static UtopiaPool $pool;
+
+    #[\Override]
     protected static string $namespace;
 
     /**
-     * @return Database
      * @throws Exception
      * @throws Duplicate
      * @throws Limit
      */
+    #[\Override]
     public function getDatabase(): Database
     {
-        if (!is_null(self::$database)) {
+        if (! is_null(self::$database)) {
             return self::$database;
         }
 
         $redis = new Redis();
         $redis->connect('redis', 6379);
-        $redis->flushAll();
-        $cache = new Cache(new RedisAdapter($redis));
+        $redis->select(6);
+        $cache = new Cache((new RedisAdapter($redis))->setMaxRetries(3));
 
         $pool = new UtopiaPool(new Stack(), 'mysql', 10, function () {
             $dbHost = 'mysql';
@@ -57,16 +60,16 @@ class PoolTest extends Base
                 dsn: "mysql:host={$dbHost};port={$dbPort};charset=utf8mb4",
                 username: $dbUser,
                 password: $dbPass,
-                config: MySQL::getPDOAttributes(),
+                config: self::PDO_ATTRIBUTES,
             ));
         }, timeout: 0.0);
 
         $database = new Database(new Pool($pool), $cache);
-
+        assert(self::$authorization !== null);
         $database
             ->setAuthorization(self::$authorization)
-            ->setDatabase('utopiaTests')
-            ->setNamespace(static::$namespace = 'myapp_' . uniqid());
+            ->setDatabase($this->testDatabase)
+            ->setNamespace(static::$namespace = 'myapp_'.uniqid());
 
         if ($database->exists()) {
             $database->delete();
@@ -79,34 +82,30 @@ class PoolTest extends Base
         return self::$database = $database;
     }
 
+    #[\Override]
     protected function deleteColumn(string $collection, string $column): bool
     {
-        $sqlTable = "`" . $this->getDatabase()->getDatabase() . "`.`" . $this->getDatabase()->getNamespace() . "_" . $collection . "`";
+        $sqlTable = '`'.$this->getDatabase()->getDatabase().'`.`'.$this->getDatabase()->getNamespace().'_'.$collection.'`';
         $sql = "ALTER TABLE {$sqlTable} DROP COLUMN `{$column}`";
 
         self::$pool->use(function (Adapter $adapter) use ($sql) {
-            // Hack to get adapter PDO reference
-            $class = new ReflectionClass($adapter);
-            $property = $class->getProperty('pdo');
-            $property->setAccessible(true);
-            $pdo = $property->getValue($adapter);
+            $pdo = $adapter->getDriver();
+            assert($pdo instanceof PDO);
             $pdo->exec($sql);
         });
 
         return true;
     }
 
+    #[\Override]
     protected function deleteIndex(string $collection, string $index): bool
     {
-        $sqlTable = "`" . $this->getDatabase()->getDatabase() . "`.`" . $this->getDatabase()->getNamespace() . "_" . $collection . "`";
+        $sqlTable = '`'.$this->getDatabase()->getDatabase().'`.`'.$this->getDatabase()->getNamespace().'_'.$collection.'`';
         $sql = "DROP INDEX `{$index}` ON {$sqlTable}";
 
         self::$pool->use(function (Adapter $adapter) use ($sql) {
-            // Hack to get adapter PDO reference
-            $class = new ReflectionClass($adapter);
-            $property = $class->getProperty('pdo');
-            $property->setAccessible(true);
-            $pdo = $property->getValue($adapter);
+            $pdo = $adapter->getDriver();
+            assert($pdo instanceof PDO);
             $pdo->exec($sql);
         });
 
@@ -114,23 +113,20 @@ class PoolTest extends Base
     }
 
     /**
-     * Execute raw SQL via the pool using reflection to access the adapter's PDO.
+     * Execute raw SQL via the pool on the adapter's driver.
      *
-     * @param string $sql
-     * @param array<string, mixed> $binds
+     * @param  array<string, mixed>  $binds
      */
     private function execRawSQL(string $sql, array $binds = []): void
     {
         self::$pool->use(function (Adapter $adapter) use ($sql, $binds) {
-            $class = new ReflectionClass($adapter);
-            $property = $class->getProperty('pdo');
-            $property->setAccessible(true);
-            $pdo = $property->getValue($adapter);
-            $stmt = $pdo->prepare($sql);
+            $pdo = $adapter->getDriver();
+            assert($pdo instanceof PDO);
+            $statement = $pdo->prepare($sql);
             foreach ($binds as $key => $value) {
-                $stmt->bindValue($key, $value);
+                $statement->bindValue($key, $value);
             }
-            $stmt->execute();
+            $statement->execute();
         });
     }
 
@@ -139,13 +135,13 @@ class PoolTest extends Base
      * don't block document recreation. The createDocument method should
      * clean up orphaned perms and retry.
      */
-    public function testOrphanedPermissionsRecovery(): void
+    public function test_orphaned_permissions_recovery(): void
     {
         $database = $this->getDatabase();
         $collection = 'orphanedPermsRecovery';
 
-        $database->createCollection($collection);
-        $database->createAttribute($collection, 'title', Database::VAR_STRING, 128, true);
+        $database->createCollection(Collection::create(id: $collection));
+        $database->createAttribute($collection, Attribute::string(key: 'title', size: 128, required: true));
 
         // Step 1: Create a document with permissions
         $doc = $database->createDocument($collection, new Document([

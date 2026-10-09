@@ -4,12 +4,17 @@ namespace Utopia\Database\Validator;
 
 use Closure;
 use Exception;
+use Utopia\Database\Adapter\Profile;
+use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Operator;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
 use Utopia\Database\Validator\Operator as OperatorValidator;
+use Utopia\Query\Schema\ColumnType;
 use Utopia\Validator;
 use Utopia\Validator\Boolean;
 use Utopia\Validator\FloatValidator;
@@ -20,136 +25,70 @@ use Utopia\Validator\Text;
 class Structure extends Validator
 {
     /**
-     * @var array<array<string, mixed>>
+     * @var list<Attribute>|null
      */
-    protected array $attributes = [
-        [
-            '$id' => '$id',
-            'type' => Database::VAR_STRING,
-            'size' => 255,
-            'required' => false,
-            'signed' => true,
-            'array' => false,
-            'filters' => [],
-        ],
-        [
-            '$id' => '$sequence',
-            'type' => Database::VAR_ID,
-            'size' => 0,
-            'required' => false,
-            'signed' => true,
-            'array' => false,
-            'filters' => [],
-        ],
-        [
-            '$id' => '$collection',
-            'type' => Database::VAR_STRING,
-            'size' => 255,
-            'required' => true,
-            'signed' => true,
-            'array' => false,
-            'filters' => [],
-        ],
-        [
-            '$id' => '$tenant',
-            'type' => Database::VAR_ID,
-            'size' => 0,
-            'required' => false,
-            'default' => null,
-            'signed' => true,
-            'array' => false,
-            'filters' => [],
-        ],
-        [
-            '$id' => '$permissions',
-            'type' => Database::VAR_STRING,
-            'size' => 67000, // medium text
-            'required' => false,
-            'signed' => true,
-            'array' => true,
-            'filters' => [],
-        ],
-        [
-            '$id' => '$createdAt',
-            'type' => Database::VAR_DATETIME,
-            'size' => 0,
-            'required' => true,
-            'signed' => false,
-            'array' => false,
-            'filters' => [],
-        ],
-        [
-            '$id' => '$updatedAt',
-            'type' => Database::VAR_DATETIME,
-            'size' => 0,
-            'required' => true,
-            'signed' => false,
-            'array' => false,
-            'filters' => [],
-        ]
-    ];
+    private static ?array $internalAttributes = null;
 
     /**
      * @var array<string, array{callback: callable, type: string}>
      */
     protected static array $formats = [];
 
-    /**
-     * @var string
-     */
     protected string $message = 'General Error';
 
     /**
-     * Structure constructor.
+     * Internal and collection attributes by key, built on first use. A validator is built for one schema:
+     * construct a new one after the collection's attributes change.
      *
+     * @var array<string, Attribute>|null
+     */
+    private ?array $definitions = null;
+
+    /**
+     * @var array<string, array<string, mixed>>
+     */
+    private array $formatDefinitions = [];
+
+    /**
+     * @var array<string, true>
+     */
+    private readonly array $storedAttributes;
+
+    private readonly bool $supportForAttributes;
+
+    private readonly bool $supportUnsignedBigInt;
+
+    /**
+     * @param  list<string>  $storedAttributes  Attributes whose values are the stored ones, unchanged by the
+     *                                         write: they are not validated again, as the rules may have
+     *                                         tightened since those values were stored.
      */
     public function __construct(
         protected readonly Document $collection,
-        private readonly string $idAttributeType,
-        private readonly \DateTime $minAllowedDate = new \DateTime('0000-01-01'),
-        private readonly \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
-        private bool $supportForAttributes = true,
-        private readonly bool $supportUnsignedBigInt = true,
-        private readonly ?Document $currentDocument = null
+        private readonly Profile $profile,
+        private readonly ?Document $currentDocument = null,
+        array $storedAttributes = [],
     ) {
+        $this->storedAttributes = \array_fill_keys($storedAttributes, true);
+        $this->supportForAttributes = $profile->supports(Capability::DefinedAttributes);
+        $this->supportUnsignedBigInt = $profile->supports(Capability::UnsignedBigInt);
     }
 
     /**
-     * Remove a Validator
-     *
-     * @return array<string, array{callback: callable, type: string}>
+     * @param  Closure(array<string, mixed>): Validator  $callback
+     * @param  ColumnType  $type  Primitive data type for validation
      */
-    public static function getFormats(): array
-    {
-        return self::$formats;
-    }
-
-    /**
-     * Add a new Validator
-     * Stores a callback and required params to create Validator
-     *
-     * @param string $name
-     * @param Closure $callback Callback that accepts $params in order and returns \Utopia\Validator
-     * @param string $type Primitive data type for validation
-     */
-    public static function addFormat(string $name, Closure $callback, string $type): void
+    public static function addFormat(string $name, Closure $callback, ColumnType $type): void
     {
         self::$formats[$name] = [
             'callback' => $callback,
-            'type' => $type,
+            'type' => $type->value,
         ];
     }
 
-    /**
-     * Check if validator has been added
-     *
-     * @param string $name
-     *
-     * @return bool
-     */
-    public static function hasFormat(string $name, string $type): bool
+    public static function hasFormat(string $name, ColumnType $type): bool
     {
-        if (isset(self::$formats[$name]) && self::$formats[$name]['type'] === $type) {
+        if (isset(self::$formats[$name]) && self::$formats[$name]['type'] === $type->value) {
             return true;
         }
 
@@ -157,19 +96,15 @@ class Structure extends Validator
     }
 
     /**
-     * Get a Format array to create Validator
-     *
-     * @param string $name
-     * @param string $type
-     *
      * @return array{callback: callable, type: string}
+     *
      * @throws Exception
      */
-    public static function getFormat(string $name, string $type): array
+    public static function getFormat(string $name, ColumnType $type): array
     {
         if (isset(self::$formats[$name])) {
-            if (self::$formats[$name]['type'] !== $type) {
-                throw new DatabaseException('Format "'.$name.'" not available for attribute type "'.$type.'"');
+            if (self::$formats[$name]['type'] !== $type->value) {
+                throw new DatabaseException('Format "'.$name.'" not available for attribute type "'.$type->value.'"');
             }
 
             return self::$formats[$name];
@@ -178,67 +113,50 @@ class Structure extends Validator
         throw new DatabaseException('Unknown format validator "'.$name.'"');
     }
 
-    /**
-     * Remove a Validator
-     *
-     * @param string $name
-     */
     public static function removeFormat(string $name): void
     {
         unset(self::$formats[$name]);
     }
 
-    /**
-     * Get Description.
-     *
-     * Returns validator description
-     *
-     * @return string
-     */
+    #[\Override]
     public function getDescription(): string
     {
         return 'Invalid document structure: '.$this->message;
     }
 
-    /**
-     * Is valid.
-     *
-     * Returns true if valid or false if not.
-     *
-     * @param mixed $document
-     *
-     * @return bool
-     */
-    public function isValid($document): bool
+    #[\Override]
+    public function isValid(mixed $value): bool
     {
-        if (!$document instanceof Document) {
+        if (! $value instanceof Document) {
             $this->message = 'Value must be an instance of Document';
+
             return false;
         }
 
-        if (empty($document->getCollection())) {
-            $this->message = 'Missing collection attribute $collection';
+        if (empty($value->getCollection())) {
+            $this->message = 'Missing collection attribute '.Document::COLLECTION;
+
             return false;
         }
 
-        if (empty($this->collection->getId()) || Database::METADATA !== $this->collection->getCollection()) {
+        if (empty($this->collection->getId()) || $this->collection->getCollection() !== Database::METADATA) {
             $this->message = 'Collection not found';
+
             return false;
         }
 
-        $keys = [];
-        $structure = $document->getArrayCopy();
-        $attributes = \array_merge($this->attributes, $this->collection->getAttribute('attributes', []));
+        $structure = $value->getArrayCopy();
+        $definitions = $this->definitions();
 
-        if (!$this->checkForAllRequiredValues($structure, $attributes, $keys)) {
+        if (! $this->checkForAllRequiredValues($structure, $definitions)) {
             return false;
         }
 
-        if (!$this->checkForUnknownAttributes($structure, $keys)) {
+        if (! $this->checkForUnknownAttributes($structure, $definitions)) {
             return false;
         }
 
-        if (!$this->checkForInvalidAttributeValues($document, $structure, $keys)) {
+        if (! $this->checkForInvalidAttributeValues($value, $structure, $definitions)) {
             return false;
         }
 
@@ -246,33 +164,57 @@ class Structure extends Validator
     }
 
     /**
-     * Check for all required values
-     *
-     * @param array<string, mixed> $structure
-     * @param array<string, mixed> $attributes
-     * @param array<string, mixed> $keys
-     *
-     * @return bool
+     * @return list<Attribute>
      */
-    protected function checkForAllRequiredValues(array $structure, array $attributes, array &$keys): bool
+    protected static function internalAttributes(): array
     {
-        if (!$this->supportForAttributes) {
+        return self::$internalAttributes ??= [
+            Attribute::string(Document::ID, 255),
+            Attribute::id(Document::SEQUENCE),
+            Attribute::string(Document::COLLECTION, 255, required: true),
+            Attribute::id(Document::TENANT),
+            Attribute::string(Document::PERMISSIONS, 67000, array: true),
+            Attribute::datetime(Document::CREATED_AT, required: true),
+            Attribute::datetime(Document::UPDATED_AT, required: true),
+        ];
+    }
+
+    /**
+     * @return array<string, Attribute>
+     */
+    protected function definitions(): array
+    {
+        if ($this->definitions !== null) {
+            return $this->definitions;
+        }
+
+        $collection = Collection::fromDocument($this->collection);
+
+        $definitions = [];
+        foreach (self::internalAttributes() as $attribute) {
+            $definitions[$attribute->key] = $attribute;
+        }
+        foreach ($collection->attributes() as $attribute) {
+            $definitions[$attribute->key] = $attribute;
+        }
+
+        return $this->definitions = $definitions;
+    }
+
+    /**
+     * @param  array<string, mixed>  $structure
+     * @param  array<Attribute>  $attributes
+     */
+    protected function checkForAllRequiredValues(array $structure, array $attributes): bool
+    {
+        if (! $this->supportForAttributes) {
             return true;
         }
 
-        foreach ($attributes as $attribute) { // Check all required attributes are set
-            $name = $attribute['$id'] ?? '';
-            $required = $attribute['required'] ?? false;
+        foreach ($attributes as $attribute) {
+            if ($attribute->required && ! isset($structure[$attribute->key]) && ! $this->isStoredAsNull($attribute->key)) {
+                $this->message = 'Missing required attribute "'.$attribute->key.'"';
 
-            $keys[$name] = $attribute; // List of allowed attributes to help find unknown ones
-
-            if ($required && !isset($structure[$name])) {
-                // Documents stored before the attribute became required hold null, and may keep it
-                if ($this->currentDocument !== null && $this->currentDocument->getAttribute($name) === null) {
-                    continue;
-                }
-
-                $this->message = 'Missing required attribute "'.$name.'"';
                 return false;
             }
         }
@@ -281,21 +223,26 @@ class Structure extends Validator
     }
 
     /**
-     * Check for Unknown Attributes
-     *
-     * @param array<string, mixed> $structure
-     * @param array<string, mixed> $keys
-     *
-     * @return bool
+     * A document stored before the attribute became required holds null for it, and may keep it.
      */
-    protected function checkForUnknownAttributes(array $structure, array $keys): bool
+    private function isStoredAsNull(string $key): bool
     {
-        if (!$this->supportForAttributes) {
+        return $this->currentDocument !== null && $this->currentDocument->getAttribute($key) === null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $structure
+     * @param  array<string, Attribute>  $definitions
+     */
+    protected function checkForUnknownAttributes(array $structure, array $definitions): bool
+    {
+        if (! $this->supportForAttributes) {
             return true;
         }
         foreach ($structure as $key => $value) {
-            if (!array_key_exists($key, $keys)) { // Check no unknown attributes are set
+            if (! isset($definitions[$key])) {
                 $this->message = 'Unknown attribute: "'.$key.'"';
+
                 return false;
             }
         }
@@ -304,175 +251,179 @@ class Structure extends Validator
     }
 
     /**
-     * Check for invalid attribute values
-     *
-     * @param array<string, mixed> $structure
-     * @param array<string, mixed> $keys
-     *
-     * @return bool
+     * @param  array<string, mixed>  $structure
+     * @param  array<string, Attribute>  $definitions
      */
-    protected function checkForInvalidAttributeValues(Document $document, array $structure, array $keys): bool
+    protected function checkForInvalidAttributeValues(Document $document, array $structure, array $definitions): bool
     {
         foreach ($structure as $key => $value) {
             if (Operator::isOperator($value)) {
-                // Set the attribute name on the operator for validation
+                /** @var Operator $value */
                 $value->setAttribute($key);
 
-                $operatorValidator = new OperatorValidator($this->collection, $this->currentDocument);
-                if (!$operatorValidator->isValid($value)) {
+                $operatorValidator = new OperatorValidator(
+                    $this->collection,
+                    $this->currentDocument,
+                    $this->supportUnsignedBigInt,
+                );
+                if (! $operatorValidator->isValid($value)) {
                     $this->message = $operatorValidator->getDescription();
+
                     return false;
                 }
+
                 continue;
             }
 
-            $attribute = $keys[$key] ?? [];
-            $type = $attribute['type'] ?? '';
-            $array = $attribute['array'] ?? false;
-            $format = $attribute['format'] ?? '';
-            $required = $attribute['required'] ?? false;
-            $size = $attribute['size'] ?? 0;
-            $signed = $attribute['signed'] ?? true;
-
-            if ($required === false && is_null($value)) { // Allow null value to optional params
+            if (isset($this->storedAttributes[$key])) {
                 continue;
             }
 
-            if (is_null($value) && $this->currentDocument !== null && $this->currentDocument->getAttribute($key) === null) {
+            $attribute = $definitions[$key] ?? null;
+            if ($attribute === null) {
                 continue;
             }
 
-            if ($type === Database::VAR_RELATIONSHIP) {
+            $type = $attribute->type;
+            $size = $attribute->size ?? 0;
+            $signed = $attribute->signed;
+            $required = $attribute->required;
+
+            if (is_null($value) && ($required === false || $this->isStoredAsNull($key))) {
                 continue;
             }
 
-            // BIGINT accepts both PHP int and numeric strings.
-            // If the numeric string is within PHP's int range, normalize it to an int
-            // so downstream code gets a numeric value without precision loss.
-            if ($type === Database::VAR_BIGINT && \is_string($value) && BigInt::fitsPhpInt($value, $signed)) {
-                $normalized = (int)$value;
-                $document->setAttribute($key, $normalized);
-                $value = $normalized;
+            if ($type === ColumnType::Relationship) {
+                continue;
+            }
+
+            if ($type === ColumnType::BigInteger && \is_string($value) && BigInt::fitsPhpInt($value, $signed)) {
+                $value = (int) $value;
+                $document->setAttribute($key, $value);
             }
 
             $validators = [];
 
             switch ($type) {
-                case Database::VAR_ID:
-                    $validators[] = new Sequence($this->idAttributeType, $attribute['$id'] === '$sequence');
+                case ColumnType::Id:
+                    $validators[] = new Sequence($this->profile->limits->idType->value, $key === Document::SEQUENCE);
                     break;
 
-                case Database::VAR_TEXT:
+                case ColumnType::Text:
                     $validators[] = new ByteLength($size);
                     $validators[] = new ByteLength(Database::MAX_TEXT_BYTES);
                     break;
 
-                case Database::VAR_MEDIUMTEXT:
+                case ColumnType::MediumText:
                     $validators[] = new ByteLength($size);
                     $validators[] = new ByteLength(Database::MAX_MEDIUMTEXT_BYTES);
                     break;
 
-                case Database::VAR_LONGTEXT:
+                case ColumnType::LongText:
                     $validators[] = new ByteLength($size);
                     $validators[] = new ByteLength(Database::MAX_LONGTEXT_BYTES);
                     break;
 
-                case Database::VAR_VARCHAR:
-                case Database::VAR_STRING:
+                case ColumnType::Varchar:
+                case ColumnType::String:
                     $validators[] = new Text($size, min: 0);
                     break;
 
-                case Database::VAR_INTEGER:
-                    // Determine bit size based on attribute size in bytes
-                    // BIGINT is always 64-bit in SQL adapters; VAR_INTEGER uses size to decide.
-                    $bits =  $size >= 8 ? 64 : 32;
+                case ColumnType::Integer:
+                    $bits = $size >= 8 ? 64 : 32;
                     // For 64-bit unsigned, use signed since PHP doesn't support true 64-bit unsigned
                     // The Range validator will restrict to positive values only
-                    $unsigned = !$signed && $bits < 64;
+                    $unsigned = ! $signed && $bits < 64;
                     $validators[] = new Integer(false, $bits, $unsigned);
                     $max = $bits === 64 ? Database::MAX_BIG_INT : Database::MAX_INT;
                     $min = $signed ? -$max : 0;
-                    $validators[] = new Range($min, $max, Database::VAR_INTEGER);
+                    $validators[] = new Range($min, $max, ColumnType::Integer->value);
                     break;
 
-                case Database::VAR_BIGINT:
+                case ColumnType::BigInteger:
                     $validators[] = new BigInt($signed, $this->supportUnsignedBigInt);
                     break;
 
-                case Database::VAR_FLOAT:
+                case ColumnType::Float:
+                case ColumnType::Double:
                     // We need both Float and Range because Range implicitly casts non-numeric values
                     $validators[] = new FloatValidator();
                     $min = $signed ? -Database::MAX_DOUBLE : 0;
-                    $validators[] =  new Range($min, Database::MAX_DOUBLE, Database::VAR_FLOAT);
+                    $validators[] = new Range($min, Database::MAX_DOUBLE, ColumnType::Double->value);
                     break;
 
-                case Database::VAR_BOOLEAN:
+                case ColumnType::Boolean:
                     $validators[] = new Boolean();
                     break;
 
-                case Database::VAR_DATETIME:
+                case ColumnType::Datetime:
                     $validators[] = new DatetimeValidator(
-                        min: $this->minAllowedDate,
-                        max: $this->maxAllowedDate
+                        min: $this->profile->limits->minDateTime,
+                        max: $this->profile->limits->maxDateTime
                     );
                     break;
 
-                case Database::VAR_OBJECT:
-                    $validators[] = new ObjectValidator();
+                case ColumnType::Object:
+                    $validators[] = new ObjectValue();
                     break;
 
-                case Database::VAR_POINT:
-                case Database::VAR_LINESTRING:
-                case Database::VAR_POLYGON:
-                    $validators[] = new Spatial($type);
+                case ColumnType::Point:
+                case ColumnType::Linestring:
+                case ColumnType::Polygon:
+                    $validators[] = new Spatial($type->value);
                     break;
 
-                case Database::VAR_VECTOR:
-                    $validators[] = new Vector($attribute['size'] ?? 0);
+                case ColumnType::Vector:
+                    $validators[] = new Vector($size);
                     break;
 
                 default:
                     if ($this->supportForAttributes) {
-                        $this->message = 'Unknown attribute type "'.$type.'"';
+                        $this->message = 'Unknown attribute type "'.$type->value.'"';
+
                         return false;
                     }
             }
 
-            /** Error message label, either 'format' or 'type' */
-            $label = ($format) ? 'format' : 'type';
+            $format = $attribute->format?->name;
+            $label = $format !== null ? 'format' : 'type';
 
-            if ($format) {
-                // Format encoded as json string containing format name and relevant format options
-                $format = self::getFormat($format, $type);
-                $validators[] = $format['callback']($attribute);
+            if ($format !== null) {
+                $definition = self::getFormat($format, $type);
+                /** @var Validator $formatValidator */
+                $formatValidator = $definition['callback']($this->formatDefinitions[$key] ??= $attribute->toDocument()->getArrayCopy());
+                $validators[] = $formatValidator;
             }
 
-            if ($array) { // Validate attribute type for arrays - format for arrays handled separately
-                if (!$required && ((is_array($value) && empty($value)) || is_null($value))) { // Allow both null and [] for optional arrays
+            if ($attribute->array) {
+                if (! $required && ((is_array($value) && empty($value)) || is_null($value))) {
                     continue;
                 }
 
-                if (!\is_array($value) || !\array_is_list($value)) {
+                if (! \is_array($value) || ! \array_is_list($value)) {
                     $this->message = 'Attribute "'.$key.'" must be an array';
+
                     return false;
                 }
 
                 foreach ($value as $x => $child) {
-                    if (!$required && is_null($child)) { // Allow null value to optional params
+                    if (! $required && is_null($child)) {
                         continue;
                     }
 
                     foreach ($validators as $validator) {
-                        if (!$validator->isValid($child)) {
+                        if (! $validator->isValid($child)) {
                             $this->message = 'Attribute "'.$key.'[\''.$x.'\']" has invalid '.$label.'. '.$validator->getDescription();
+
                             return false;
                         }
                     }
                 }
             } else {
                 foreach ($validators as $validator) {
-                    if (!$validator->isValid($value)) {
+                    if (! $validator->isValid($value)) {
                         $this->message = 'Attribute "'.$key.'" has invalid '.$label.'. '.$validator->getDescription();
+
                         return false;
                     }
                 }
@@ -482,25 +433,13 @@ class Structure extends Validator
         return true;
     }
 
-    /**
-     * Is array
-     *
-     * Function will return true if object is array.
-     *
-     * @return bool
-     */
+    #[\Override]
     public function isArray(): bool
     {
         return false;
     }
 
-    /**
-     * Get Type
-     *
-     * Returns validator type.
-     *
-     * @return string
-     */
+    #[\Override]
     public function getType(): string
     {
         return self::TYPE_ARRAY;

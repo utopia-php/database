@@ -2,81 +2,106 @@
 
 namespace Utopia\Database\Validator\Queries;
 
-use Utopia\Database\Database;
+use Utopia\Database\Adapter\Profile;
+use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Document;
-use Utopia\Database\Validator\IndexedQueries;
+use Utopia\Database\Index;
+use Utopia\Database\Validator\Query\Aggregate;
 use Utopia\Database\Validator\Query\Cursor;
+use Utopia\Database\Validator\Query\Distinct;
 use Utopia\Database\Validator\Query\Filter;
+use Utopia\Database\Validator\Query\GroupBy;
+use Utopia\Database\Validator\Query\Having;
+use Utopia\Database\Validator\Query\Join;
 use Utopia\Database\Validator\Query\Limit;
 use Utopia\Database\Validator\Query\Offset;
 use Utopia\Database\Validator\Query\Order;
 use Utopia\Database\Validator\Query\Select;
 
-class Documents extends IndexedQueries
+/**
+ * Validates queries for document listing: filters, ordering, selection and pagination, plus joins
+ * and aggregations (aggregate functions, group by, having and distinct) when enabled.
+ */
+class Documents extends Indexed
 {
     /**
-     * @param array<mixed> $attributes
-     * @param array<mixed> $indexes
-     * @param string $idAttributeType
-     * @param int $maxValuesCount
-     * @param \DateTime $minAllowedDate
-     * @param \DateTime $maxAllowedDate
-     * @param bool $supportForAttributes
+     * @var list<Attribute>|null
+     */
+    private static ?array $internalAttributes = null;
+
+    /**
+     * @param  array<Attribute|Document>  $attributes
+     * @param  array<Index|Document>  $indexes
+     *
      * @throws \Utopia\Database\Exception
      */
     public function __construct(
         array $attributes,
         array $indexes,
-        string $idAttributeType,
+        Profile $profile,
         int $maxValuesCount = 5000,
-        int $maxUIDLength = 36,
-        \DateTime $minAllowedDate = new \DateTime('0000-01-01'),
-        \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
-        bool $supportForAttributes = true,
-        bool $supportUnsignedBigInt = true
     ) {
-        $attributes[] = new Document([
-            '$id' => '$id',
-            'key' => '$id',
-            'type' => Database::VAR_STRING,
-            'array' => false,
-        ]);
-        $attributes[] = new Document([
-            '$id' => '$sequence',
-            'key' => '$sequence',
-            'type' => Database::VAR_ID,
-            'array' => false,
-        ]);
-        $attributes[] = new Document([
-            '$id' => '$createdAt',
-            'key' => '$createdAt',
-            'type' => Database::VAR_DATETIME,
-            'array' => false,
-        ]);
-        $attributes[] = new Document([
-            '$id' => '$updatedAt',
-            'key' => '$updatedAt',
-            'type' => Database::VAR_DATETIME,
-            'array' => false,
-        ]);
+        $attributes = [
+            ...\array_map(
+                static fn (Attribute|Document $attribute): Attribute => $attribute instanceof Attribute ? $attribute : Attribute::fromDocument($attribute),
+                $attributes,
+            ),
+            ...self::internalAttributes(),
+        ];
+
+        $supportForAttributes = $profile->supports(Capability::DefinedAttributes);
+        $limits = $profile->limits;
 
         $validators = [
             new Limit(),
             new Offset(),
-            new Cursor($maxUIDLength),
+            new Cursor($limits->uidLength),
             new Filter(
                 $attributes,
-                $idAttributeType,
+                $limits->idType->value,
                 $maxValuesCount,
-                $minAllowedDate,
-                $maxAllowedDate,
+                $limits->minDateTime,
+                $limits->maxDateTime,
                 $supportForAttributes,
-                $supportUnsignedBigInt
+                $profile->supports(Capability::UnsignedBigInt),
             ),
-            new Order($attributes, $supportForAttributes),
-            new Select($attributes, $supportForAttributes),
+            new Order($attributes, $supportForAttributes, $profile->supports(Capability::OrderRandom)),
+            new Select($attributes, $supportForAttributes, $profile->sharedTables),
         ];
 
+        if ($profile->supports(Capability::Joins)) {
+            $validators[] = new Join($attributes, $supportForAttributes);
+        }
+
+        if ($profile->supports(Capability::Aggregations)) {
+            \array_push(
+                $validators,
+                new Aggregate($attributes, $supportForAttributes, $profile->sharedTables),
+                new GroupBy($attributes, $supportForAttributes, $profile->sharedTables),
+                new Having(),
+                new Distinct(),
+            );
+        }
+
         parent::__construct($attributes, $indexes, $validators);
+    }
+
+    /**
+     * The attributes every collection holds besides its own that queries may name like the collection's
+     * attributes: the document id, sequence and timestamps.
+     *
+     * @internal
+     *
+     * @return list<Attribute>
+     */
+    public static function internalAttributes(): array
+    {
+        return self::$internalAttributes ??= [
+            Attribute::string(Document::ID),
+            Attribute::id(Document::SEQUENCE),
+            Attribute::datetime(Document::CREATED_AT),
+            Attribute::datetime(Document::UPDATED_AT),
+        ];
     }
 }

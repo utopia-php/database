@@ -4,12 +4,16 @@ namespace Tests\Unit\Validator;
 
 use PHPUnit\Framework\TestCase;
 use Tests\Unit\Format;
+use Tests\Unit\Support\Profiles;
+use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception;
-use Utopia\Database\Helpers\ID;
+use Utopia\Database\Id;
 use Utopia\Database\Operator;
 use Utopia\Database\Validator\Structure;
+use Utopia\Query\Schema\ColumnType;
 
 class StructureTest extends TestCase
 {
@@ -23,7 +27,7 @@ class StructureTest extends TestCase
         'attributes' => [
             [
                 '$id' => 'title',
-                'type' => Database::VAR_STRING,
+                'type' => ColumnType::String->value,
                 'format' => '',
                 'size' => 256,
                 'required' => true,
@@ -33,7 +37,7 @@ class StructureTest extends TestCase
             ],
             [
                 '$id' => 'description',
-                'type' => Database::VAR_STRING,
+                'type' => ColumnType::String->value,
                 'format' => '',
                 'size' => 1000000,
                 'required' => false,
@@ -43,7 +47,7 @@ class StructureTest extends TestCase
             ],
             [
                 '$id' => 'rating',
-                'type' => Database::VAR_INTEGER,
+                'type' => ColumnType::Integer->value,
                 'format' => '',
                 'size' => 5,
                 'required' => true,
@@ -53,7 +57,7 @@ class StructureTest extends TestCase
             ],
             [
                 '$id' => 'reviews',
-                'type' => Database::VAR_INTEGER,
+                'type' => ColumnType::Integer->value,
                 'format' => '',
                 'size' => 5,
                 'required' => false,
@@ -63,7 +67,7 @@ class StructureTest extends TestCase
             ],
             [
                 '$id' => 'price',
-                'type' => Database::VAR_FLOAT,
+                'type' => ColumnType::Double->value,
                 'format' => '',
                 'size' => 5,
                 'required' => true,
@@ -73,7 +77,7 @@ class StructureTest extends TestCase
             ],
             [
                 '$id' => 'published',
-                'type' => Database::VAR_BOOLEAN,
+                'type' => ColumnType::Boolean->value,
                 'format' => '',
                 'size' => 5,
                 'required' => true,
@@ -83,7 +87,7 @@ class StructureTest extends TestCase
             ],
             [
                 '$id' => 'tags',
-                'type' => Database::VAR_STRING,
+                'type' => ColumnType::String->value,
                 'format' => '',
                 'size' => 55,
                 'required' => false,
@@ -93,7 +97,7 @@ class StructureTest extends TestCase
             ],
             [
                 '$id' => 'id',
-                'type' => Database::VAR_ID,
+                'type' => ColumnType::Id->value,
                 'format' => '',
                 'size' => 0,
                 'required' => false,
@@ -103,7 +107,7 @@ class StructureTest extends TestCase
             ],
             [
                 '$id' => 'varchar_field',
-                'type' => Database::VAR_VARCHAR,
+                'type' => ColumnType::Varchar->value,
                 'format' => '',
                 'size' => 255,
                 'required' => false,
@@ -113,7 +117,7 @@ class StructureTest extends TestCase
             ],
             [
                 '$id' => 'text_field',
-                'type' => Database::VAR_TEXT,
+                'type' => ColumnType::Text->value,
                 'format' => '',
                 'size' => 65535,
                 'required' => false,
@@ -123,7 +127,7 @@ class StructureTest extends TestCase
             ],
             [
                 '$id' => 'mediumtext_field',
-                'type' => Database::VAR_MEDIUMTEXT,
+                'type' => ColumnType::MediumText->value,
                 'format' => '',
                 'size' => 16777215,
                 'required' => false,
@@ -133,7 +137,7 @@ class StructureTest extends TestCase
             ],
             [
                 '$id' => 'longtext_field',
-                'type' => Database::VAR_LONGTEXT,
+                'type' => ColumnType::LongText->value,
                 'format' => '',
                 'size' => 4294967295,
                 'required' => false,
@@ -145,18 +149,24 @@ class StructureTest extends TestCase
         'indexes' => [],
     ];
 
-    public function setUp(): void
+    #[\Override]
+    protected function setUp(): void
     {
-        Structure::addFormat('email', function ($attribute) {
-            $size = $attribute['size'] ?? 0;
+        Structure::addFormat('email', function (mixed $attribute) {
+            /** @var array<string, mixed> $attribute */
+            $sizeRaw = $attribute['size'] ?? 0;
+            $size = is_numeric($sizeRaw) ? (int) $sizeRaw : 0;
+
             return new Format($size);
-        }, Database::VAR_STRING);
+        }, ColumnType::String);
 
         // Cannot encode format when defining constants
         // So add feedback attribute on startup
-        $this->collection['attributes'][] = [
-            '$id' => ID::custom('feedback'),
-            'type' => Database::VAR_STRING,
+        /** @var array<int, array<string, mixed>> $attrs */
+        $attrs = $this->collection['attributes'];
+        $attrs[] = [
+            '$id' => Id::custom('feedback'),
+            'type' => ColumnType::String->value,
             'format' => 'email',
             'size' => 55,
             'required' => true,
@@ -164,17 +174,19 @@ class StructureTest extends TestCase
             'array' => false,
             'filters' => [],
         ];
+        $this->collection['attributes'] = $attrs;
     }
 
-    public function tearDown(): void
+    #[\Override]
+    protected function tearDown(): void
     {
     }
 
-    public function testDocumentInstance(): void
+    public function test_document_instance(): void
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(false, $validator->isValid('string'));
@@ -185,11 +197,11 @@ class StructureTest extends TestCase
         $this->assertEquals('Invalid document structure: Value must be an instance of Document', $validator->getDescription());
     }
 
-    public function testCollectionAttribute(): void
+    public function test_collection_attribute(): void
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(false, $validator->isValid(new Document()));
@@ -197,15 +209,15 @@ class StructureTest extends TestCase
         $this->assertEquals('Invalid document structure: Missing collection attribute $collection', $validator->getDescription());
     }
 
-    public function testCollection(): void
+    public function test_collection(): void
     {
         $validator = new Structure(
             new Document(),
-            Database::VAR_INTEGER
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'Demo Title',
             'description' => 'Demo description',
             'rating' => 5,
@@ -214,21 +226,21 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Collection not found', $validator->getDescription());
     }
 
-    public function testRequiredKeys(): void
+    public function test_required_keys(): void
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'description' => 'Demo description',
             'rating' => 5,
             'price' => 1.99,
@@ -236,53 +248,51 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Missing required attribute "title"', $validator->getDescription());
     }
 
-    public function testRequiredKeyStoredAsNull(): void
+    public function test_required_key_stored_as_null(): void
     {
+        $profile = Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]);
         $document = [
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'description' => 'Demo description',
             'rating' => 5,
             'price' => 1.99,
             'published' => true,
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ];
 
-        $validator = new Structure(
-            new Document($this->collection),
-            Database::VAR_INTEGER,
-            currentDocument: new Document(['title' => null])
-        );
+        $validator = new Structure(new Document($this->collection), $profile, currentDocument: new Document(['title' => null]));
 
         $this->assertTrue($validator->isValid(new Document($document)), $validator->getDescription());
         $this->assertTrue($validator->isValid(new Document([...$document, 'title' => null])), $validator->getDescription());
 
-        $validator = new Structure(
-            new Document($this->collection),
-            Database::VAR_INTEGER,
-            currentDocument: new Document(['title' => 'My Title'])
-        );
+        $validator = new Structure(new Document($this->collection), $profile, currentDocument: new Document(['title' => 'My Title']));
 
         $this->assertFalse($validator->isValid(new Document([...$document, 'title' => null])));
-        $this->assertEquals('Invalid document structure: Missing required attribute "title"', $validator->getDescription());
+        $this->assertSame('Invalid document structure: Missing required attribute "title"', $validator->getDescription());
+
+        $validator = new Structure(new Document($this->collection), $profile);
+
+        $this->assertFalse($validator->isValid(new Document($document)));
+        $this->assertSame('Invalid document structure: Missing required attribute "title"', $validator->getDescription());
     }
 
-    public function testNullValues(): void
+    public function test_null_values(): void
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(true, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'My Title',
             'description' => null,
             'rating' => 5,
@@ -296,7 +306,7 @@ class StructureTest extends TestCase
         ])));
 
         $this->assertEquals(true, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'My Title',
             'description' => null,
             'rating' => 5,
@@ -305,19 +315,19 @@ class StructureTest extends TestCase
             'tags' => ['dog', null, 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
     }
 
-    public function testUnknownKeys(): void
+    public function test_unknown_keys(): void
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'Demo Title',
             'titlex' => 'Unknown Attribute',
             'description' => 'Demo description',
@@ -327,21 +337,21 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Unknown attribute: "titlex"', $validator->getDescription());
     }
 
-    public function testIntegerAsString(): void
+    public function test_integer_as_string(): void
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'Demo Title',
             'description' => 'Demo description',
             'rating' => '5',
@@ -350,21 +360,21 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "rating" has invalid type. Value must be a valid signed 32-bit integer between -2,147,483,648 and 2,147,483,647', $validator->getDescription());
     }
 
-    public function testValidDocument(): void
+    public function test_valid_document(): void
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(true, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'Demo Title',
             'description' => 'Demo description',
             'rating' => 5,
@@ -373,19 +383,19 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
     }
 
-    public function testStringValidation(): void
+    public function test_string_validation(): void
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 5,
             'description' => 'Demo description',
             'rating' => 5,
@@ -394,131 +404,21 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "title" has invalid type. Value must be a valid string and no longer than 256 chars', $validator->getDescription());
     }
 
-    public function testTextByteSafeValidationTooBig(): void
-    {
-        // A legacy `text` attribute whose declared size (1MB) exceeds the real
-        // 65,535-byte capacity of a TEXT column. Such attributes exist in older
-        // databases created before VAR_TEXT was capped, so the limit must come
-        // from the column type, not from the (untrustworthy) declared size.
-        $collection = new Document([
-            '$id' => ID::custom('posts'),
-            '$collection' => Database::METADATA,
-            'name' => 'posts',
-            'attributes' => [
-                [
-                    '$id' => 'text',
-                    'type' => Database::VAR_TEXT,
-                    'format' => '',
-                    'size' => 1048576,
-                    'required' => false,
-                    'signed' => true,
-                    'array' => false,
-                    'filters' => [],
-                ],
-            ],
-            'indexes' => [],
-        ]);
-
-        $validator = new Structure($collection, Database::VAR_INTEGER);
-
-        $base = [
-            '$collection' => ID::custom('posts'),
-            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
-        ];
-
-        // A TEXT column is limited to 65,535 bytes. Validation measures the
-        // value's actual byte length, so a value over that capacity is rejected
-        // even though the declared $size (1MB) would allow the character count.
-        $tooBig = \str_repeat('a', 65536);
-        $this->assertEquals(false, $validator->isValid(new Document($base + ['text' => $tooBig])));
-        $this->assertEquals('Invalid document structure: Attribute "text" has invalid type. Value must be a valid string no longer than 65535 bytes', $validator->getDescription());
-    }
-
-    public function testTextByteSafeValidationMultibyte(): void
-    {
-        $collection = new Document([
-            '$id' => ID::custom('posts'),
-            '$collection' => Database::METADATA,
-            'name' => 'posts',
-            'attributes' => [
-                [
-                    '$id' => 'text',
-                    'type' => Database::VAR_TEXT,
-                    'format' => '',
-                    'size' => 1048576,
-                    'required' => false,
-                    'signed' => true,
-                    'array' => false,
-                    'filters' => [],
-                ],
-            ],
-            'indexes' => [],
-        ]);
-
-        $validator = new Structure($collection, Database::VAR_INTEGER);
-
-        $base = [
-            '$collection' => ID::custom('posts'),
-            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
-        ];
-
-        // Multi-byte content over the byte capacity is rejected the same way
-        // (20,000 emoji = 80,000 bytes in utf8mb4).
-        $multibyte = \str_repeat('📝', 20000);
-        $this->assertEquals(false, $validator->isValid(new Document($base + ['text' => $multibyte])));
-    }
-
-    public function testTextByteSafeValidationValid(): void
-    {
-        $collection = new Document([
-            '$id' => ID::custom('posts'),
-            '$collection' => Database::METADATA,
-            'name' => 'posts',
-            'attributes' => [
-                [
-                    '$id' => 'text',
-                    'type' => Database::VAR_TEXT,
-                    'format' => '',
-                    'size' => 1048576,
-                    'required' => false,
-                    'signed' => true,
-                    'array' => false,
-                    'filters' => [],
-                ],
-            ],
-            'indexes' => [],
-        ]);
-
-        $validator = new Structure($collection, Database::VAR_INTEGER);
-
-        $base = [
-            '$collection' => ID::custom('posts'),
-            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
-        ];
-
-        // A value that fills the column's full byte capacity is accepted.
-        $ok = \str_repeat('a', 65535);
-        $this->assertEquals(true, $validator->isValid(new Document($base + ['text' => $ok])));
-    }
-
-    public function testArrayOfStringsValidation(): void
+    public function test_array_of_strings_validation(): void
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'string',
             'description' => 'Demo description',
             'rating' => 5,
@@ -527,13 +427,13 @@ class StructureTest extends TestCase
             'tags' => [1, 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "tags[\'0\']" has invalid type. Value must be a valid string and no longer than 55 chars', $validator->getDescription());
 
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'string',
             'description' => 'Demo description',
             'rating' => 5,
@@ -542,13 +442,13 @@ class StructureTest extends TestCase
             'tags' => [true],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "tags[\'0\']" has invalid type. Value must be a valid string and no longer than 55 chars', $validator->getDescription());
 
         $this->assertEquals(true, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'string',
             'description' => 'Demo description',
             'rating' => 5,
@@ -557,11 +457,11 @@ class StructureTest extends TestCase
             'tags' => [],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'string',
             'description' => 'Demo description',
             'rating' => 5,
@@ -570,7 +470,7 @@ class StructureTest extends TestCase
             'tags' => ['too-long-tag-name-to-make-sure-the-length-validator-inside-string-attribute-type-fails-properly'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "tags[\'0\']" has invalid type. Value must be a valid string and no longer than 55 chars', $validator->getDescription());
@@ -579,15 +479,15 @@ class StructureTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testArrayAsObjectValidation(): void
+    public function test_array_as_object_validation(): void
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'string',
             'description' => 'Demo description',
             'rating' => 5,
@@ -596,19 +496,19 @@ class StructureTest extends TestCase
             'tags' => ['name' => 'dog'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
     }
 
-    public function testArrayOfObjectsValidation(): void
+    public function test_array_of_objects_validation(): void
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'string',
             'description' => 'Demo description',
             'rating' => 5,
@@ -617,19 +517,19 @@ class StructureTest extends TestCase
             'tags' => [['name' => 'dog']],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
     }
 
-    public function testIntegerValidation(): void
+    public function test_integer_validation(): void
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'string',
             'description' => 'Demo description',
             'rating' => true,
@@ -638,13 +538,13 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "rating" has invalid type. Value must be a valid signed 32-bit integer between -2,147,483,648 and 2,147,483,647', $validator->getDescription());
 
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'string',
             'description' => 'Demo description',
             'rating' => '',
@@ -653,21 +553,21 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "rating" has invalid type. Value must be a valid signed 32-bit integer between -2,147,483,648 and 2,147,483,647', $validator->getDescription());
     }
 
-    public function testArrayOfIntegersValidation(): void
+    public function test_array_of_integers_validation(): void
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(true, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'string',
             'description' => 'Demo description',
             'rating' => 5,
@@ -677,11 +577,11 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals(true, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'string',
             'description' => 'Demo description',
             'rating' => 5,
@@ -691,11 +591,11 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals(true, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'string',
             'description' => 'Demo description',
             'rating' => 5,
@@ -705,11 +605,11 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'string',
             'description' => 'Demo description',
             'rating' => 5,
@@ -719,21 +619,21 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "reviews[\'0\']" has invalid type. Value must be a valid signed 32-bit integer between -2,147,483,648 and 2,147,483,647', $validator->getDescription());
     }
 
-    public function testFloatValidation(): void
+    public function test_float_validation(): void
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'string',
             'description' => 'Demo description',
             'rating' => 5,
@@ -742,13 +642,13 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "price" has invalid type. Value must be a valid float', $validator->getDescription());
 
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'string',
             'description' => 'Demo description',
             'rating' => 5,
@@ -757,21 +657,21 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "price" has invalid type. Value must be a valid float', $validator->getDescription());
     }
 
-    public function testBooleanValidation(): void
+    public function test_boolean_validation(): void
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'string',
             'description' => 'Demo description',
             'rating' => 5,
@@ -780,13 +680,13 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "published" has invalid type. Value must be a valid boolean', $validator->getDescription());
 
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'string',
             'description' => 'Demo description',
             'rating' => 5,
@@ -795,21 +695,21 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "published" has invalid type. Value must be a valid boolean', $validator->getDescription());
     }
 
-    public function testFormatValidation(): void
+    public function test_format_validation(): void
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'string',
             'description' => 'Demo description',
             'rating' => 5,
@@ -818,21 +718,21 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team_appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "feedback" has invalid format. Value must be a valid email address', $validator->getDescription());
     }
 
-    public function testIntegerMaxRange(): void
+    public function test_integer_max_range(): void
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'string',
             'description' => 'Demo description',
             'rating' => PHP_INT_MAX,
@@ -841,21 +741,21 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "rating" has invalid type. Value must be a valid signed 32-bit integer between -2,147,483,648 and 2,147,483,647', $validator->getDescription());
     }
 
-    public function testDoubleUnsigned(): void
+    public function test_double_unsigned(): void
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'string',
             'description' => 'Demo description',
             'rating' => 5,
@@ -864,21 +764,21 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertStringContainsString('Invalid document structure: Attribute "price" has invalid type. Value must be a valid range between 0 and ', $validator->getDescription());
     }
 
-    public function testDoubleMaxRange(): void
+    public function test_double_max_range(): void
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'string',
             'description' => 'Demo description',
             'rating' => 1,
@@ -887,22 +787,22 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
     }
 
-    public function testId(): void
+    public function test_id(): void
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $sqlId = '1000';
         $mongoId = '0198fffb-d664-710a-9765-f922b3e81e3d';
 
         $this->assertEquals(true, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'My Title',
             'description' => null,
             'rating' => 5,
@@ -916,7 +816,7 @@ class StructureTest extends TestCase
         ])));
 
         $this->assertEquals(true, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'My Title',
             'description' => null,
             'rating' => 5,
@@ -931,11 +831,11 @@ class StructureTest extends TestCase
 
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_UUID7
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt], idType: ColumnType::Uuid7),
         );
 
         $this->assertEquals(true, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'My Title',
             'description' => null,
             'rating' => 5,
@@ -949,7 +849,7 @@ class StructureTest extends TestCase
         ])));
 
         $this->assertEquals(true, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'My Title',
             'description' => null,
             'rating' => 5,
@@ -963,16 +863,16 @@ class StructureTest extends TestCase
         ])));
     }
 
-    public function testOperatorsSkippedDuringValidation(): void
+    public function test_operators_skipped_during_validation(): void
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         // Operators should be skipped during structure validation
         $this->assertTrue($validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'My Title',
             'description' => 'Demo description',
             'rating' => Operator::increment(1), // Operator on required field
@@ -981,20 +881,20 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])), $validator->getDescription());
     }
 
-    public function testMultipleOperatorsSkippedDuringValidation(): void
+    public function test_multiple_operators_skipped_during_validation(): void
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         // Multiple operators should all be skipped
         $this->assertTrue($validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => Operator::stringConcat(' - Updated'),
             'description' => 'Demo description',
             'rating' => Operator::increment(1),
@@ -1003,20 +903,20 @@ class StructureTest extends TestCase
             'tags' => Operator::arrayAppend(['new']),
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])), $validator->getDescription());
     }
 
-    public function testMissingRequiredFieldWithoutOperator(): void
+    public function test_missing_required_field_without_operator(): void
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         // Missing required field (not replaced by operator) should still fail
         $this->assertFalse($validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'My Title',
             'description' => 'Demo description',
             // 'rating' is missing entirely - should fail
@@ -1025,21 +925,21 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Missing required attribute "rating"', $validator->getDescription());
     }
 
-    public function testVarcharValidation(): void
+    public function test_varchar_validation(): void
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(true, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'Demo Title',
             'description' => 'Demo description',
             'rating' => 5,
@@ -1049,11 +949,11 @@ class StructureTest extends TestCase
             'feedback' => 'team@appwrite.io',
             'varchar_field' => 'Short varchar text',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'Demo Title',
             'description' => 'Demo description',
             'rating' => 5,
@@ -1063,13 +963,13 @@ class StructureTest extends TestCase
             'feedback' => 'team@appwrite.io',
             'varchar_field' => 123,
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "varchar_field" has invalid type. Value must be a valid string and no longer than 255 chars', $validator->getDescription());
 
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'Demo Title',
             'description' => 'Demo description',
             'rating' => 5,
@@ -1079,21 +979,21 @@ class StructureTest extends TestCase
             'feedback' => 'team@appwrite.io',
             'varchar_field' => \str_repeat('a', 256),
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "varchar_field" has invalid type. Value must be a valid string and no longer than 255 chars', $validator->getDescription());
     }
 
-    public function testTextValidation(): void
+    public function test_text_validation(): void
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(true, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'Demo Title',
             'description' => 'Demo description',
             'rating' => 5,
@@ -1112,7 +1012,7 @@ class StructureTest extends TestCase
         // ByteLength check (which would otherwise reject it, since
         // is_string(null) is false). Hence a null optional text value passes.
         $this->assertEquals(true, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'Demo Title',
             'description' => 'Demo description',
             'rating' => 5,
@@ -1122,11 +1022,11 @@ class StructureTest extends TestCase
             'feedback' => 'team@appwrite.io',
             'text_field' => null,
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'Demo Title',
             'description' => 'Demo description',
             'rating' => 5,
@@ -1136,13 +1036,13 @@ class StructureTest extends TestCase
             'feedback' => 'team@appwrite.io',
             'text_field' => 123,
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "text_field" has invalid type. Value must be a valid string no longer than 65535 bytes', $validator->getDescription());
 
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'Demo Title',
             'description' => 'Demo description',
             'rating' => 5,
@@ -1152,21 +1052,21 @@ class StructureTest extends TestCase
             'feedback' => 'team@appwrite.io',
             'text_field' => \str_repeat('a', 65536),
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "text_field" has invalid type. Value must be a valid string no longer than 65535 bytes', $validator->getDescription());
     }
 
-    public function testMediumtextValidation(): void
+    public function test_mediumtext_validation(): void
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(true, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'Demo Title',
             'description' => 'Demo description',
             'rating' => 5,
@@ -1176,11 +1076,11 @@ class StructureTest extends TestCase
             'feedback' => 'team@appwrite.io',
             'mediumtext_field' => \str_repeat('a', 100000),
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'Demo Title',
             'description' => 'Demo description',
             'rating' => 5,
@@ -1190,7 +1090,7 @@ class StructureTest extends TestCase
             'feedback' => 'team@appwrite.io',
             'mediumtext_field' => 123,
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "mediumtext_field" has invalid type. Value must be a valid string no longer than 16777215 bytes', $validator->getDescription());
@@ -1202,13 +1102,13 @@ class StructureTest extends TestCase
         // is enforced as a byte limit (ByteLength), independent of the column's
         // physical 16MB ceiling.
         $collection = new Document([
-            '$id' => ID::custom('posts'),
+            '$id' => Id::custom('posts'),
             '$collection' => Database::METADATA,
             'name' => 'posts',
             'attributes' => [
                 [
                     '$id' => 'mediumtext',
-                    'type' => Database::VAR_MEDIUMTEXT,
+                    'type' => ColumnType::MediumText->value,
                     'format' => '',
                     'size' => 100,
                     'required' => false,
@@ -1220,10 +1120,10 @@ class StructureTest extends TestCase
             'indexes' => [],
         ]);
 
-        $validator = new Structure($collection, Database::VAR_INTEGER);
+        $validator = new Structure($collection, Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]));
 
         $base = [
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
             '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ];
@@ -1247,15 +1147,15 @@ class StructureTest extends TestCase
         $this->assertEquals('Invalid document structure: Attribute "mediumtext" has invalid type. Value must be a valid string no longer than 100 bytes', $validator->getDescription());
     }
 
-    public function testLongtextValidation(): void
+    public function test_longtext_validation(): void
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(true, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'Demo Title',
             'description' => 'Demo description',
             'rating' => 5,
@@ -1265,11 +1165,11 @@ class StructureTest extends TestCase
             'feedback' => 'team@appwrite.io',
             'longtext_field' => \str_repeat('a', 1000000),
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'title' => 'Demo Title',
             'description' => 'Demo description',
             'rating' => 5,
@@ -1279,13 +1179,13 @@ class StructureTest extends TestCase
             'feedback' => 'team@appwrite.io',
             'longtext_field' => 123,
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "longtext_field" has invalid type. Value must be a valid string no longer than 4294967295 bytes', $validator->getDescription());
     }
 
-    public function testStringTypeArrayValidation(): void
+    public function test_string_type_array_validation(): void
     {
         $collection = [
             '$id' => Database::METADATA,
@@ -1294,7 +1194,7 @@ class StructureTest extends TestCase
             'attributes' => [
                 [
                     '$id' => 'varchar_array',
-                    'type' => Database::VAR_VARCHAR,
+                    'type' => ColumnType::Varchar->value,
                     'format' => '',
                     'size' => 128,
                     'required' => false,
@@ -1304,7 +1204,7 @@ class StructureTest extends TestCase
                 ],
                 [
                     '$id' => 'text_array',
-                    'type' => Database::VAR_TEXT,
+                    'type' => ColumnType::Text->value,
                     'format' => '',
                     'size' => 65535,
                     'required' => false,
@@ -1318,151 +1218,155 @@ class StructureTest extends TestCase
 
         $validator = new Structure(
             new Document($collection),
-            Database::VAR_INTEGER
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
         );
 
         $this->assertEquals(true, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'varchar_array' => ['test1', 'test2', 'test3'],
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'varchar_array' => [123, 'test2', 'test3'],
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "varchar_array[\'0\']" has invalid type. Value must be a valid string and no longer than 128 chars', $validator->getDescription());
 
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => ID::custom('posts'),
+            '$collection' => Id::custom('posts'),
             'varchar_array' => [\str_repeat('a', 129), 'test2'],
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "varchar_array[\'0\']" has invalid type. Value must be a valid string and no longer than 128 chars', $validator->getDescription());
     }
 
-    public function testBigIntSignedAcceptsNumericStringAndNormalizesToInt(): void
+    public function testLegacyBigIntegerMetadataUsesBigIntegerValidation(): void
     {
-        $collection = [
-            '$id' => Database::METADATA,
+        $collection = new Document([
+            '$id' => Id::custom('posts'),
             '$collection' => Database::METADATA,
-            'name' => 'collections',
+            'name' => 'posts',
             'attributes' => [
                 [
-                    '$id' => 'bigint_signed',
-                    'type' => Database::VAR_BIGINT,
+                    '$id' => 'signed',
+                    'type' => 'bigint',
+                    'format' => '',
+                    'size' => 9999,
+                    'required' => false,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                ],
+                [
+                    '$id' => 'unsigned',
+                    'type' => ColumnType::BigInteger->value,
+                    'format' => '',
+                    'size' => 0,
+                    'required' => false,
+                    'signed' => false,
+                    'array' => false,
+                    'filters' => [],
+                ],
+            ],
+            'indexes' => [],
+        ]);
+        $validator = new Structure($collection, Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]));
+        $document = new Document([
+            '$collection' => Id::custom('posts'),
+            'signed' => '-9223372036854775808',
+            'unsigned' => '18446744073709551615',
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
+        ]);
+
+        $this->assertTrue($validator->isValid($document));
+        $this->assertSame(PHP_INT_MIN, $document->getAttribute('signed'));
+        $this->assertSame('18446744073709551615', $document->getAttribute('unsigned'));
+    }
+
+    public function testBigIntUnsignedRejectsNegativeNumericString(): void
+    {
+        $collection = new Document([
+            '$id' => Id::custom('posts'),
+            '$collection' => Database::METADATA,
+            'name' => 'posts',
+            'attributes' => [
+                [
+                    '$id' => 'bigint_unsigned',
+                    'type' => ColumnType::BigInteger->value,
                     'format' => '',
                     'size' => 0,
                     'required' => true,
+                    'signed' => false,
+                    'array' => false,
+                    'filters' => [],
+                ],
+            ],
+            'indexes' => [],
+        ]);
+
+        $validator = new Structure($collection, Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]));
+
+        $document = new Document([
+            '$collection' => Id::custom('posts'),
+            'bigint_unsigned' => '-1',
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
+        ]);
+
+        $this->assertFalse($validator->isValid($document));
+        $this->assertSame(
+            'Invalid document structure: Attribute "bigint_unsigned" has invalid type. Value must be a valid unsigned 64-bit integer between 0 and 18,446,744,073,709,551,615',
+            $validator->getDescription()
+        );
+    }
+
+    /**
+     * A legacy text attribute can declare a size far past the 65,535 bytes a TEXT column holds,
+     * so the limit has to come from the column type and be measured in bytes.
+     */
+    public function testTextValidationUsesColumnCapacityNotDeclaredSize(): void
+    {
+        $collection = new Document([
+            '$id' => Id::custom('posts'),
+            '$collection' => Database::METADATA,
+            'name' => 'posts',
+            'attributes' => [
+                [
+                    '$id' => 'text',
+                    'type' => ColumnType::Text->value,
+                    'format' => '',
+                    'size' => 1048576,
+                    'required' => false,
                     'signed' => true,
                     'array' => false,
                     'filters' => [],
                 ],
             ],
             'indexes' => [],
-        ];
-
-        $validator = new Structure(
-            new Document($collection),
-            Database::VAR_INTEGER
-        );
-
-        $doc = new Document([
-            '$collection' => ID::custom('posts'),
-            'bigint_signed' => (string)PHP_INT_MAX,
-            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ]);
 
-        $this->assertTrue($validator->isValid($doc));
-        $this->assertIsInt($doc->getAttribute('bigint_signed'));
-        $this->assertEquals(PHP_INT_MAX, $doc->getAttribute('bigint_signed'));
-    }
+        $validator = new Structure($collection, Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]));
 
-    public function testBigIntUnsignedAcceptsLargeNumericStringAsString(): void
-    {
-        $collection = [
-            '$id' => Database::METADATA,
-            '$collection' => Database::METADATA,
-            'name' => 'collections',
-            'attributes' => [
-                [
-                    '$id' => 'bigint_unsigned',
-                    'type' => Database::VAR_BIGINT,
-                    'format' => '',
-                    'size' => 0,
-                    'required' => true,
-                    'signed' => false,
-                    'array' => false,
-                    'filters' => [],
-                ],
-            ],
-            'indexes' => [],
-        ];
-
-        $validator = new Structure(
-            new Document($collection),
-            Database::VAR_INTEGER
-        );
-
-        $unsignedMax = '18446744073709551615';
-
-        $doc = new Document([
-            '$collection' => ID::custom('posts'),
-            'bigint_unsigned' => $unsignedMax,
+        $base = [
+            '$collection' => Id::custom('posts'),
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
             '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
-        ]);
-
-        $this->assertTrue($validator->isValid($doc));
-        $this->assertIsString($doc->getAttribute('bigint_unsigned'));
-        $this->assertEquals($unsignedMax, $doc->getAttribute('bigint_unsigned'));
-    }
-
-    public function testBigIntUnsignedRejectsNegativeNumericString(): void
-    {
-        $collection = [
-            '$id' => Database::METADATA,
-            '$collection' => Database::METADATA,
-            'name' => 'collections',
-            'attributes' => [
-                [
-                    '$id' => 'bigint_unsigned',
-                    'type' => Database::VAR_BIGINT,
-                    'format' => '',
-                    'size' => 0,
-                    'required' => true,
-                    'signed' => false,
-                    'array' => false,
-                    'filters' => [],
-                ],
-            ],
-            'indexes' => [],
         ];
 
-        $validator = new Structure(
-            new Document($collection),
-            Database::VAR_INTEGER
-        );
+        $this->assertTrue($validator->isValid(new Document($base + ['text' => \str_repeat('a', 65535)])), 'A value filling the full column capacity is accepted');
 
-        $doc = new Document([
-            '$collection' => ID::custom('posts'),
-            'bigint_unsigned' => '-1',
-            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
-        ]);
+        $this->assertFalse($validator->isValid(new Document($base + ['text' => \str_repeat('a', 65536)])));
+        $this->assertSame('Invalid document structure: Attribute "text" has invalid type. Value must be a valid string no longer than 65535 bytes', $validator->getDescription());
 
-        $this->assertFalse($validator->isValid($doc));
-        $this->assertEquals(
-            'Invalid document structure: Attribute "bigint_unsigned" has invalid type. Value must be a valid unsigned 64-bit integer between 0 and 18,446,744,073,709,551,615',
-            $validator->getDescription()
-        );
+        $this->assertFalse($validator->isValid(new Document($base + ['text' => \str_repeat('📝', 20000)])), '20,000 emoji are 80,000 bytes and must be rejected by byte length');
+        $this->assertSame('Invalid document structure: Attribute "text" has invalid type. Value must be a valid string no longer than 65535 bytes', $validator->getDescription());
     }
-
 }

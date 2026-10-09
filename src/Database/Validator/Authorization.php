@@ -2,101 +2,112 @@
 
 namespace Utopia\Database\Validator;
 
+use Utopia\Database\State\Group;
+use Utopia\Database\State\Value;
 use Utopia\Database\Validator\Authorization\Input;
 use Utopia\Validator;
 
+/**
+ * The status and the roles are shared by every caller, except inside skip() and withRoles(): those
+ * scopes belong to the calling coroutine and the coroutines it starts (see {@see Value}). The status and the roles
+ * share one {@see Group}, so any of those scopes keeps the status and role changes of a coroutine cut off from it,
+ * because a coroutine between them has returned, local to that coroutine.
+ */
 class Authorization extends Validator
 {
     /**
-     * @var bool
+     * @var Value<bool>
      */
-    protected bool $status = true;
+    private Value $status;
 
     /**
-     * Default value in case we need
-     *  to reset Authorization status
-     *
-     * @var bool
+     * @var Value<array<string, bool>>
      */
-    protected bool $statusDefault = true;
+    private Value $roles;
 
-    /**
-     * @var array<string, bool>
-     */
-    private array $roles = [
-        'any' => true
-    ];
-
-    /**
-     * @var string
-     */
     protected string $message = 'Authorization Error';
 
     /**
-     * Get Description.
-     *
-     * Returns validator description
-     *
-     * @return string
+     * @param  bool  $defaultStatus  The status the handle starts with, which reset() restores
      */
+    public function __construct(protected readonly bool $defaultStatus = true)
+    {
+        $group = new Group();
+        $this->status = new Value($defaultStatus, $group);
+
+        /** @var Value<array<string, bool>> $roles */
+        $roles = new Value(['any' => true], $group);
+        $this->roles = $roles;
+    }
+
+    public function __clone()
+    {
+        $group = new Group();
+        $this->status = new Value($this->status->get(), $group);
+        $this->roles = new Value($this->roles->get(), $group);
+    }
+
+    #[\Override]
     public function getDescription(): string
     {
         return $this->message;
     }
 
-    /*
-     * Validation
-     *
-     * Returns true if valid or false if not.
-    */
-    public function isValid(mixed $input): bool
+    /**
+     * Validate that the given Authorization\Input has the required permissions for the current roles.
+     */
+    #[\Override]
+    public function isValid(mixed $value): bool
     {
-        if (!($input instanceof Input)) {
+        if (! ($value instanceof Input)) {
             $this->message = 'Invalid input provided';
+
             return false;
         }
 
-        $permissions = $input->getPermissions();
-        $action = $input->getAction();
+        $permissions = $value->getPermissions();
+        $action = $value->getAction();
 
-        if (!$this->status) {
+        if (! $this->status->get()) {
             return true;
         }
 
         if (empty($permissions)) {
             $this->message = 'No permissions provided for action \''.$action.'\'';
+
             return false;
         }
 
         $permission = '-';
+        $roles = $this->roles->get();
 
         foreach ($permissions as $permission) {
-            if (\array_key_exists($permission, $this->roles)) {
+            if (\array_key_exists($permission, $roles)) {
                 return true;
             }
         }
 
         $this->message = 'Missing "'.$action.'" permission for role "'.$permission.'". Only "'.\json_encode($this->getRoles()).'" scopes are allowed and "'.\json_encode($permissions).'" was given.';
+
         return false;
     }
 
-    /**
-     * @param string $role
-     * @return void
-     */
-    public function addRole(string $role): void
+    public function addRole(string $role): static
     {
-        $this->roles[$role] = true;
+        $roles = $this->roles->get();
+        $roles[$role] = true;
+        $this->roles->set($roles);
+
+        return $this;
     }
 
-    /**
-     * @param string $role
-     *
-     * @return void
-     */
-    public function removeRole(string $role): void
+    public function removeRole(string $role): static
     {
-        unset($this->roles[$role]);
+        $roles = $this->roles->get();
+        unset($roles[$role]);
+        $this->roles->set($roles);
+
+        return $this;
     }
 
     /**
@@ -104,131 +115,105 @@ class Authorization extends Validator
      */
     public function getRoles(): array
     {
-        return \array_keys($this->roles);
+        return \array_keys($this->roles->get());
     }
 
     /**
-     * @return void
-     */
-    public function cleanRoles(): void
-    {
-        $this->roles = [];
-    }
-
-    /**
-     * @param string $role
-     *
-     * @return bool
-     */
-    public function hasRole(string $role): bool
-    {
-        return (\array_key_exists($role, $this->roles));
-    }
-
-    /**
-     * Change default status.
-     * This will be used for the
-     *  value set on the $this->reset() method
-     * @param bool $status
-     * @return void
-     */
-    public function setDefaultStatus(bool $status): void
-    {
-        $this->statusDefault = $status;
-        $this->status = $status;
-    }
-
-    /**
-     * Change status
-     *
-     * @param bool $status
-     * @return void
-     */
-    public function setStatus(bool $status): void
-    {
-        $this->status = $status;
-    }
-
-    /**
-     * Get status
-     *
-     * @return bool
-     */
-    public function getStatus(): bool
-    {
-        return $this->status;
-    }
-
-    /**
-     * Skip Authorization
-     *
-     * Skips authorization for the code to be executed inside the callback
+     * Run the callback with exactly these roles for the calling coroutine and the coroutines it starts. Roles
+     * added or removed inside the callback change that scope only.
      *
      * @template T
-     * @param callable(): T $callback
+     *
+     * @param  array<string>  $roles
+     * @param  callable(): T  $callback
+     * @return T
+     */
+    public function withRoles(array $roles, callable $callback): mixed
+    {
+        return $this->roles->with(\array_fill_keys($roles, true), $callback);
+    }
+
+    public function cleanRoles(): static
+    {
+        $this->roles->set([]);
+
+        return $this;
+    }
+
+    public function hasRole(string $role): bool
+    {
+        return \array_key_exists($role, $this->roles->get());
+    }
+
+    public function setStatus(bool $status): static
+    {
+        $this->status->set($status);
+
+        return $this;
+    }
+
+    public function getStatus(): bool
+    {
+        return $this->status->get();
+    }
+
+    /**
+     * @template T
+     *
+     * @param  callable(): T  $callback
      * @return T
      */
     public function skip(callable $callback): mixed
     {
-        $initialStatus = $this->status;
-        $this->disable();
-
-        try {
-            return $callback();
-        } finally {
-            $this->status = $initialStatus;
-        }
+        return $this->status->with(false, $callback);
     }
 
     /**
-     * Enable Authorization checks
+     * Run the callback with exactly this status and these roles for the calling coroutine and the coroutines it
+     * starts, as Database::withSnapshot() restores them.
      *
-     * @return void
+     * @internal
+     *
+     * @template T
+     *
+     * @param  array<string>  $roles
+     * @param  callable(): T  $callback
+     * @return T
      */
-    public function enable(): void
+    public function restore(bool $status, array $roles, callable $callback): mixed
     {
-        $this->status = true;
+        return $this->status->with($status, fn (): mixed => $this->withRoles($roles, $callback));
+    }
+
+    public function enable(): static
+    {
+        $this->status->set(true);
+
+        return $this;
+    }
+
+    public function disable(): static
+    {
+        $this->status->set(false);
+
+        return $this;
     }
 
     /**
-     * Disable Authorization checks
-     *
-     * @return void
-     */
-    public function disable(): void
-    {
-        $this->status = false;
-    }
-
-    /**
-     * Disable Authorization checks
-     *
-     * @return void
+     * Restore the status the handle was constructed with.
      */
     public function reset(): void
     {
-        $this->status = $this->statusDefault;
+        $this->status->set($this->defaultStatus);
     }
 
-    /**
-     * Is array
-     *
-     * Function will return true if object is array.
-     *
-     * @return bool
-     */
+    #[\Override]
     public function isArray(): bool
     {
         return false;
     }
 
-    /**
-     * Get Type
-     *
-     * Returns validator type.
-     *
-     * @return string
-     */
+    #[\Override]
     public function getType(): string
     {
         return self::TYPE_ARRAY;

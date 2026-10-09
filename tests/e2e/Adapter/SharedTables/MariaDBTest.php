@@ -13,26 +13,25 @@ use Utopia\Database\PDO;
 class MariaDBTest extends Base
 {
     protected static ?Database $database = null;
+
     protected static ?PDO $pdo = null;
+
+    #[\Override]
     protected static string $namespace;
 
     // Remove once all methods are implemented
     /**
      * Return name of adapter
-     *
-     * @return string
      */
     public static function getAdapterName(): string
     {
-        return "mariadb";
+        return 'mariadb';
     }
 
-    /**
-     * @return Database
-     */
+    #[\Override]
     public function getDatabase(bool $fresh = false): Database
     {
-        if (!is_null(self::$database) && !$fresh) {
+        if (! is_null(self::$database) && ! $fresh) {
             return self::$database;
         }
 
@@ -41,21 +40,21 @@ class MariaDBTest extends Base
         $dbUser = 'root';
         $dbPass = 'password';
 
-        $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MariaDB::getPDOAttributes());
+        $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, self::PDO_ATTRIBUTES);
         $redis = new Redis();
         $redis->connect('redis', 6379);
-        $redis->flushAll();
-        $cache = new Cache(new RedisAdapter($redis));
+        $redis->select(7);
+        $cache = new Cache((new RedisAdapter($redis))->setMaxRetries(3));
 
         $database = new Database(new MariaDB($pdo), $cache);
+        assert(self::$authorization !== null);
         $database
             ->setAuthorization(self::$authorization)
-            ->setDatabase('utopiaTests')
+            ->setDatabase($this->testDatabase)
             ->setSharedTables(true)
             ->setTenant(999)
-            ->setNamespace(static::$namespace = '')
-            ->enableLocks(true)
-        ;
+            ->setNamespace(static::$namespace = 'st_'.static::getTestToken())
+            ->setLocks(true);
 
         if ($database->exists()) {
             $database->delete();
@@ -64,24 +63,29 @@ class MariaDBTest extends Base
         $database->create();
 
         self::$pdo = $pdo;
+
         return self::$database = $database;
     }
 
+    #[\Override]
     protected function deleteColumn(string $collection, string $column): bool
     {
-        $sqlTable = "`" . $this->getDatabase()->getDatabase() . "`.`" . $this->getDatabase()->getNamespace() . "_" . $collection . "`";
+        $sqlTable = '`'.$this->getDatabase()->getDatabase().'`.`'.$this->getDatabase()->getNamespace().'_'.$collection.'`';
         $sql = "ALTER TABLE {$sqlTable} DROP COLUMN `{$column}`";
 
+        assert(self::$pdo !== null);
         self::$pdo->exec($sql);
 
         return true;
     }
 
+    #[\Override]
     protected function deleteIndex(string $collection, string $index): bool
     {
-        $sqlTable = "`" . $this->getDatabase()->getDatabase() . "`.`" . $this->getDatabase()->getNamespace() . "_" . $collection . "`";
+        $sqlTable = '`'.$this->getDatabase()->getDatabase().'`.`'.$this->getDatabase()->getNamespace().'_'.$collection.'`';
         $sql = "DROP INDEX `{$index}` ON {$sqlTable}";
 
+        assert(self::$pdo !== null);
         self::$pdo->exec($sql);
 
         return true;

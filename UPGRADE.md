@@ -696,13 +696,14 @@ It fires once per written document from `updateDocument()` (for both the old and
 `Event\Document\Purged` with the document's `collection` and `id`. As in 7.x, `createDocument()` and `createDocuments()` do
 not fire it. Attribute schema changes fire it for the collection's metadata document (`$collection` = `_metadata`).
 
-A write fires it after the outermost transaction commits: inside `withTransaction()` the events of every write wait
-for the outer commit, a rollback drops them, and a retried attempt announces once. Each event runs under the tenant
-and the `silent()` scope in force when its document was written. If the cache invalidation after the commit fails,
-the write throws with its data committed, after `document_purge` has fired. `purgeCachedDocument()` fires it at once.
-On an adapter without savepoints (MongoDB), a nested `withTransaction()` that fails is not rolled back on its own:
-when the caller catches the failure, the nested writes commit with the caller and their events fire after that
-commit.
+As in 7.x, a write fires it inside its transaction, so a listener that throws rolls the write back and its failure
+reaches the caller. The events wait for the end of the outermost transaction and fire just before it commits: inside
+`withTransaction()` the events of every write fire together before the outer commit, a rollback before that point
+drops them, and every attempt of a retried transaction that reaches its commit announces them. Each event runs under
+the tenant and the `silent()` scope in force when its document was written. If the cache invalidation after the
+commit fails, the write throws with its data committed. `purgeCachedDocument()` fires it at once. On an adapter
+without savepoints (MongoDB), a nested `withTransaction()` that fails is not rolled back on its own: when the caller
+catches the failure, the nested writes commit with the caller and their events fire before that commit.
 
 ### `document_update` for related documents a delete changed
 

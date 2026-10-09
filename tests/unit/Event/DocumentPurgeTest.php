@@ -233,7 +233,7 @@ final class DocumentPurgeTest extends TestCase
         $this->assertSame(['posts/first'], $this->purged($recorder));
     }
 
-    public function testDocumentPurgeFiresOnceWhenTheTransactionIsRetried(): void
+    public function testDocumentPurgeFiresForEveryAttemptThatReachesItsCommit(): void
     {
         $adapter = new class () extends Memory {
             public int $commitFailures = 0;
@@ -259,12 +259,15 @@ final class DocumentPurgeTest extends TestCase
 
         $this->assertSame([
             Event::DocumentPurge,
+            Event::DocumentPurge,
             Event::DocumentUpdate,
+            Event::DocumentPurge,
+            Event::DocumentPurge,
             Event::DocumentPurge,
             Event::DocumentPurge,
             Event::DocumentsDelete,
         ], $recorder->getEvents());
-        $this->assertSame(['posts/first', 'posts/first', 'posts/second'], $this->purged($recorder));
+        $this->assertSame(['posts/first', 'posts/first', 'posts/first', 'posts/second', 'posts/first', 'posts/second'], $this->purged($recorder));
     }
 
     /**
@@ -284,6 +287,26 @@ final class DocumentPurgeTest extends TestCase
             $this->assertSame($failure, $this->failureOf(static fn () => $call($database)));
             $this->assertNotContains(Event::DocumentPurge, $later->getEvents());
         }
+    }
+
+    /**
+     * @param  Closure(Database): mixed  $write
+     */
+    #[DataProvider('writes')]
+    public function testAPurgeListenerFailureRollsTheWriteBack(Closure $write): void
+    {
+        $database = HookFixture::sqlite();
+        HookFixture::seed($database, ['first', 'second']);
+        $stored = static fn (): array => \array_map(
+            static fn (Document $document): array => [$document->getId(), $document->getAttribute('title'), $document->getAttribute('views')],
+            $database->find(HookFixture::COLLECTION),
+        );
+        $before = $stored();
+        $failure = new RuntimeException('region broadcast failed');
+        $database->addHook(new FailingLifecycle(Event::DocumentPurge, $failure));
+
+        $this->assertSame($failure, $this->failureOf(static fn () => $write($database)));
+        $this->assertSame($before, $stored());
     }
 
     public function testDocumentPurgeThroughMirrorReachesTheCaller(): void
@@ -360,14 +383,14 @@ final class DocumentPurgeTest extends TestCase
      * @param  Closure(Database): mixed  $write
      */
     #[DataProvider('writes')]
-    public function testPurgeEventsInsideACallerTransactionFireAfterTheCommit(Closure $write): void
+    public function testPurgeEventsInsideACallerTransactionFireBeforeItsCommit(Closure $write): void
     {
         [$database, $recorder] = $this->seeded(HookFixture::sqlite(), ['first']);
         $inTransaction = $this->observePurges($database, static fn (): bool => $database->getAdapter()->inTransaction());
 
         $database->withTransaction(static fn (): mixed => $write($database));
 
-        $this->assertSame([false], $inTransaction->getArrayCopy());
+        $this->assertSame([true], $inTransaction->getArrayCopy());
         $this->assertSame(['posts/first'], $this->purged($recorder));
     }
 
@@ -466,7 +489,7 @@ final class DocumentPurgeTest extends TestCase
      * @param  Closure(Database): mixed  $write
      */
     #[DataProvider('writes')]
-    public function testPurgeEventsOfARetriedCallerTransactionFireOnce(Closure $write): void
+    public function testPurgeEventsOfARetriedCallerTransactionFireForEveryAttemptThatReachesItsCommit(Closure $write): void
     {
         $adapter = new class (new PDO('sqlite::memory:')) extends SQLite {
             public int $commitFailures = 0;
@@ -489,7 +512,7 @@ final class DocumentPurgeTest extends TestCase
         $database->withTransaction(static fn (): mixed => $write($database));
 
         $this->assertSame(0, $adapter->commitFailures);
-        $this->assertSame(['posts/first'], $this->purged($recorder));
+        $this->assertSame(['posts/first', 'posts/first'], $this->purged($recorder));
     }
 
     public function testPurgeEventsOfWritesWithoutAnAdapterTransactionFireAtOnce(): void
@@ -704,7 +727,7 @@ final class DocumentPurgeTest extends TestCase
     }
 
     #[DataProvider('savepoints')]
-    public function testOnlyTheUnconfirmedAttemptOfARetriedTransactionAnnouncesItsPurgeEvents(bool $savepoints): void
+    public function testEveryAttemptOfARetriedTransactionThatReachesItsCommitAnnouncesItsPurgeEvents(bool $savepoints): void
     {
         [$database, $recorder] = $this->unconfirmed($savepoints, ['first', 'second'], commitFailures: 1);
         $attempts = 0;
@@ -718,7 +741,7 @@ final class DocumentPurgeTest extends TestCase
 
         $this->assertSame(2, $attempts);
         $this->assertInstanceOf(UnconfirmedException::class, $thrown);
-        $this->assertSame(['posts/second'], $this->purged($recorder));
+        $this->assertSame(['posts/first', 'posts/second'], $this->purged($recorder));
     }
 
     #[DataProvider('savepoints')]
@@ -740,10 +763,11 @@ final class DocumentPurgeTest extends TestCase
     }
 
     #[DataProvider('savepoints')]
-    public function testAnUnconfirmedCommitStaysTheFailureWhenAPurgeListenerFails(bool $savepoints): void
+    public function testAPurgeListenerFailureRollsTheTransactionBackBeforeItsCommit(bool $savepoints): void
     {
         [$database, $recorder] = $this->unconfirmed($savepoints, ['first', 'second']);
-        $database->addHook(new FailingLifecycle(Event::DocumentPurge, new RuntimeException('region broadcast failed')));
+        $failure = new RuntimeException('region broadcast failed');
+        $database->addHook(new FailingLifecycle(Event::DocumentPurge, $failure));
 
         $thrown = $this->failureOf(static function () use ($database): void {
             $database->withTransaction(static function () use ($database): void {
@@ -752,8 +776,10 @@ final class DocumentPurgeTest extends TestCase
             });
         });
 
-        $this->assertInstanceOf(UnconfirmedException::class, $thrown);
+        $this->assertSame($failure, $thrown);
         $this->assertSame(['posts/first', 'posts/second'], $this->purged($recorder));
+        $this->assertSame('first', $database->getDocument(HookFixture::COLLECTION, 'first')->getAttribute('title'));
+        $this->assertSame('second', $database->getDocument(HookFixture::COLLECTION, 'second')->getAttribute('title'));
     }
 
     /**
@@ -779,7 +805,7 @@ final class DocumentPurgeTest extends TestCase
     }
 
     #[DataProvider('savepoints')]
-    public function testPurgeEventsAreDroppedWhenARetriedCallbackThrowsAnotherCommitsUnconfirmed(bool $savepoints): void
+    public function testOnlyTheAttemptThatReachedItsCommitAnnouncesWhenARetriedCallbackThrowsAnotherCommitsUnconfirmed(bool $savepoints): void
     {
         [$database, $recorder] = $this->unconfirmed($savepoints, ['first', 'second'], commitFailures: 1, confirmed: true);
         $foreign = new UnconfirmedException('Failed to commit transaction: the commit could not be confirmed');
@@ -798,7 +824,7 @@ final class DocumentPurgeTest extends TestCase
         $this->assertSame($foreign, $this->failureOf(static fn (): mixed => $database->withTransaction($attempt)));
 
         $this->assertSame(2, $attempts);
-        $this->assertSame([], $this->purged($recorder));
+        $this->assertSame(['posts/first'], $this->purged($recorder));
     }
 
     #[DataProvider('savepoints')]

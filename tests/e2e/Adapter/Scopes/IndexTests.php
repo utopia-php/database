@@ -1600,7 +1600,7 @@ trait IndexTests
                 $database->renameIndex($collection, 'byAge', 'ageIndex');
                 $this->fail('A rename of an index the schema does not have must fail');
             } catch (DatabaseException $error) {
-                $this->assertStringStartsWith("Failed to rename index 'byAge' to 'ageIndex': ", $error->getMessage());
+                $this->assertStringStartsWith("Failed to rename index 'byAge' to 'ageIndex'", $error->getMessage());
             }
 
             $this->assertSame(['byAge'], $this->getIndexKeys($database, $collection));

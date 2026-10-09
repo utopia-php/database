@@ -2976,7 +2976,7 @@ trait AttributeTests
                 $database->renameIndex($collection, 'byAge', 'ageIndex');
                 $this->fail('A rename no tenant\'s index backs must fail');
             } catch (DatabaseException $error) {
-                $this->assertStringStartsWith("Failed to rename index 'byAge' to 'ageIndex': ", $error->getMessage());
+                $this->assertStringStartsWith("Failed to rename index 'byAge' to 'ageIndex'", $error->getMessage());
             }
 
             $this->assertSame(['byAge'], $this->getIndexKeys($database, $collection));

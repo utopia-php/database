@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Indexes;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use Utopia\Cache\Adapter\None;
@@ -182,14 +183,14 @@ final class IndexSchemaReconciliationTest extends TestCase
 
     public function testARenameTheAdapterDoesNotRedoAfterReversingItIsReportedWithItsCause(): void
     {
-        $cause = new NotFoundException('Index not found in the schema');
+        $cause = new RuntimeException('the engine lost the index');
         $adapter = new class ($cause) extends Memory {
             /**
              * @var list<string>
              */
             public array $renames = [];
 
-            public function __construct(private readonly NotFoundException $cause)
+            public function __construct(private readonly RuntimeException $cause)
             {
                 parent::__construct();
             }
@@ -213,11 +214,48 @@ final class IndexSchemaReconciliationTest extends TestCase
             $this->fail('a rename the adapter does not redo must fail');
         } catch (DatabaseException $error) {
             $this->assertNotInstanceOf(RefusedException::class, $error);
-            $this->assertSame("Failed to rename index 'existing' to 'renamed': Index not found in the schema", $error->getMessage());
+            $this->assertSame("Failed to rename index 'existing' to 'renamed': the engine lost the index", $error->getMessage());
             $this->assertSame($cause, $error->getPrevious());
         }
 
         $this->assertSame(['existing->renamed', 'renamed->existing', 'existing->renamed'], $adapter->renames);
+        $this->assertSame(['existing'], $this->indexKeys($database));
+    }
+
+    /**
+     * @return array<string, array{\Throwable}>
+     */
+    public static function typedRenameFailures(): array
+    {
+        return [
+            'not found' => [new NotFoundException('Collection not found')],
+            'duplicate' => [new DuplicateException('Index already exists')],
+        ];
+    }
+
+    #[DataProvider('typedRenameFailures')]
+    public function testATypedFailureTheRenameCannotCompleteIsTheAdaptersOwn(\Throwable $failure): void
+    {
+        $database = $this->database(new class ($failure) extends Memory {
+            public function __construct(private readonly \Throwable $failure)
+            {
+                parent::__construct();
+            }
+
+            #[\Override]
+            public function renameIndex(string $collection, string $old, string $new): bool
+            {
+                throw $this->failure;
+            }
+        });
+
+        try {
+            $database->renameIndex(self::COLLECTION, 'existing', 'renamed');
+            $this->fail('a rename that fails both ways must be reported');
+        } catch (\Throwable $error) {
+            $this->assertSame($failure, $error);
+        }
+
         $this->assertSame(['existing'], $this->indexKeys($database));
     }
 

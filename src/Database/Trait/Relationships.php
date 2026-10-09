@@ -326,6 +326,10 @@ trait Relationships
                 );
             } catch (Throwable $error) {
                 if (! $this->adapter->supports(Capability::SchemaIntrospection) || ! $this->hasSchemaColumn($collectionId, $newKey)) {
+                    if ($error instanceof DuplicateException || $error instanceof NotFoundException) {
+                        throw $error;
+                    }
+
                     throw new DatabaseException("Failed to update relationship '{$key}': ".$error->getMessage(), previous: $error);
                 }
 

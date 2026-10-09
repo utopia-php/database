@@ -396,7 +396,8 @@ trait Indexes
      * update and rollback failed. Renaming back and forth again proves the schema holds the index under the
      * new name and completes the rename.
      *
-     * @throws DatabaseException When the round trip fails, wrapping the rename's own error
+     * @throws DuplicateException|NotFoundException When the round trip fails after the adapter raised one
+     * @throws DatabaseException When the round trip fails after any other error, wrapping it
      */
     private function completePriorIndexRename(string $collection, string $old, string $new, Throwable $error): void
     {
@@ -407,9 +408,15 @@ trait Indexes
             $completed = false;
         }
 
-        if (! $completed) {
-            throw new DatabaseException("Failed to rename index '{$old}' to '{$new}': ".$error->getMessage(), previous: $error);
+        if ($completed) {
+            return;
         }
+
+        if ($error instanceof DuplicateException || $error instanceof NotFoundException) {
+            throw $error;
+        }
+
+        throw new DatabaseException("Failed to rename index '{$old}' to '{$new}': ".$error->getMessage(), previous: $error);
     }
 
     /**

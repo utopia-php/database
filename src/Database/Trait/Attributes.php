@@ -436,7 +436,7 @@ trait Attributes
 
         try {
             $renamedInSchema = $this->adapter->renameAttribute($definition->getId(), $old, $new);
-        } catch (DuplicateException $error) {
+        } catch (DuplicateException|NotFoundException $error) {
             throw $error;
         } catch (Throwable $error) {
             throw new DatabaseException("Failed to rename attribute '{$old}' to '{$new}': ".$error->getMessage(), previous: $error);

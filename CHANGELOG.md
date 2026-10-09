@@ -296,8 +296,9 @@ have to make, with the 7.x and 8.0 forms side by side.
 - A schema change the adapter returns `false` for throws `Exception\Refused`. A refused `renameAttribute()`,
   `renameIndex()` or `updateRelationship()` has one message naming its keys (`Failed to rename attribute 'a' to 'b'`)
   instead of being wrapped like an adapter error (`Failed to rename attribute 'a' to 'b': Failed to rename
-  attribute`), and a refused `renameIndex()` no longer tries to complete an earlier rename. See
-  [Errors](UPGRADE.md#errors).
+  attribute`), and a refused `renameIndex()` no longer tries to complete an earlier rename. These three also let an
+  adapter's `Exception\Duplicate` or `Exception\NotFound` through unwrapped, so `renameAttribute()` of a column the
+  table lacks throws `Exception\NotFound` on MariaDB and MySQL as documented. See [Errors](UPGRADE.md#errors).
 - A filter on a path into an object attribute takes keys of `a-z`, `A-Z`, `0-9`, `_` and `-` only, on every adapter,
   and PostgreSQL refuses any other key also when validation is skipped. See [Queries](UPGRADE.md#queries).
 - `createAttributes()` fires `attribute_create` once per attribute and then `attributes_create` once with the list

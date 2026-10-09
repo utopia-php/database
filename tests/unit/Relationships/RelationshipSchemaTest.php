@@ -413,6 +413,34 @@ final class RelationshipSchemaTest extends TestCase
         $this->assertNotContains('writer', $this->attributeKeys($database, 'books'));
     }
 
+    /**
+     * @return array<string, array{\Throwable}>
+     */
+    public static function typedUpdateFailures(): array
+    {
+        return [
+            'not found' => [new NotFoundException('Attribute not found')],
+            'duplicate' => [new DuplicateException('Attribute already exists')],
+        ];
+    }
+
+    #[DataProvider('typedUpdateFailures')]
+    public function testATypedUpdateFailureIsTheAdaptersOwn(\Throwable $failure): void
+    {
+        $database = $this->database($this->memory(['updateRelationship' => static fn (): never => throw $failure]));
+        $database->createRelationship('books', Relationship::manyToOne(relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books'));
+
+        try {
+            $database->updateRelationship('books', 'author', new RelationshipUpdate(key: 'writer'));
+            $this->fail('an update the adapter fails must be reported');
+        } catch (\Throwable $error) {
+            $this->assertSame($failure, $error);
+        }
+
+        $this->assertContains('author', $this->attributeKeys($database, 'books'));
+        $this->assertNotContains('writer', $this->attributeKeys($database, 'books'));
+    }
+
     public function testARenameTheSchemaAlreadyAppliedIsCompleted(): void
     {
         $adapter = new class (new PDO('sqlite::memory:')) extends SQLite {

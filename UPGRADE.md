@@ -1169,11 +1169,13 @@ coroutine that opened it and the coroutines it starts; see [Pools and profiling]
   a refused rename or relationship update now has one message naming its keys: `Failed to rename attribute 'a' to
   'b'`, `Failed to rename index 'a' to 'b'` and `Failed to update relationship 'k'`. 7.x wrapped those three
   refusals in the message it uses for an adapter error (`Failed to rename attribute 'a' to 'b': Failed to rename
-  attribute`), so a refusal looked like an engine failure. An error the adapter raises is unchanged: it reaches the
-  caller as itself, or, for the renames and the relationship update, wrapped in a plain `Utopia\Database\Exception`
-  (`Failed to rename attribute 'a' to 'b': <error>`) whose `getPrevious()` is the error; `renameAttribute()` still
-  rethrows `Exception\Duplicate` as it is. Catch `Exception\Refused` to tell a refusal apart instead of matching
-  the message or the nesting of causes. A refused `renameIndex()` no longer renames back and forth to complete an
+  attribute`), so a refusal looked like an engine failure. An error the adapter raises reaches the caller as itself,
+  except from `renameAttribute()`, `renameIndex()` and `updateRelationship()`: there an `Exception\Duplicate` or
+  `Exception\NotFound` (such as MariaDB/MySQL 1054 for a missing column) still reaches the caller as itself, and any
+  other error is wrapped in a plain `Utopia\Database\Exception` (`Failed to rename attribute 'a' to 'b': <error>`)
+  whose `getPrevious()` is the error. `renameIndex()` and `updateRelationship()` first check whether an earlier
+  attempt already made the change, and complete it when it did. 7.x wrapped `Duplicate` and `NotFound` too. Catch
+  `Exception\Refused` to tell a refusal apart instead of matching the message or the nesting of causes. A refused `renameIndex()` no longer renames back and forth to complete an
   earlier rename: an adapter returns `false` only when the index is under neither name. When `createAttributes()`
   falls back to creating the columns one at a time, a column the adapter does not create is refused too; 7.x stored
   it in the metadata as created.

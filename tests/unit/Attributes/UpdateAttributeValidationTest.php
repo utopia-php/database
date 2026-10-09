@@ -559,6 +559,22 @@ final class UpdateAttributeValidationTest extends TestCase
         $this->assertSame($before, $this->definitions($database));
     }
 
+    public function testARenameOfAColumnTheSchemaLacksIsTheAdaptersNotFound(): void
+    {
+        $missing = new NotFoundException('Attribute not found');
+        $database = $this->database($this->renameFailingSQLite($missing));
+        $before = $this->definitions($database);
+
+        try {
+            $database->renameAttribute(self::COLLECTION, 'label', 'caption');
+            $this->fail('a rename of a column the schema lacks must be not found');
+        } catch (NotFoundException $error) {
+            $this->assertSame($missing, $error);
+        }
+
+        $this->assertSame($before, $this->definitions($database));
+    }
+
     private function renameFailingSQLite(Throwable $failure): SQLite
     {
         return new class (new PDO('sqlite::memory:'), $failure) extends SQLite {

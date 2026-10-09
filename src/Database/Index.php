@@ -149,6 +149,11 @@ final readonly class Index
      */
     public static function fromArray(array $data): self
     {
+        $type = $data[self::TYPE] ?? null;
+        if (\is_string($type) && IndexType::tryFrom($type) === null) {
+            throw new IndexException(self::unknownTypeMessage($type));
+        }
+
         return self::hydrate(
             $data[self::KEY] ?? $data[Document::ID] ?? '',
             $data[self::TYPE] ?? IndexType::Key->value,
@@ -157,6 +162,14 @@ final readonly class Index
             $data[self::ORDERS] ?? [],
             $data[self::TTL] ?? null,
         );
+    }
+
+    /**
+     * @internal
+     */
+    public static function unknownTypeMessage(string $type): string
+    {
+        return 'Unknown index type: '.$type.'. Must be one of '.IndexType::Key->value.', '.IndexType::Unique->value.', '.IndexType::Fulltext->value.', '.IndexType::Spatial->value.', '.IndexType::Object->value.', '.IndexType::HnswEuclidean->value.', '.IndexType::HnswCosine->value.', '.IndexType::HnswDot->value.', '.IndexType::Trigram->value.', '.IndexType::Ttl->value;
     }
 
     public function toDocument(): Document

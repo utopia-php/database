@@ -7923,7 +7923,7 @@ trait DocumentTests
             $this->fail('Expected UniqueException for unique index violation');
         } catch (DuplicateException $e) {
             $this->assertInstanceOf(UniqueException::class, $e);
-            $this->assertStringContainsString('unique attributes', $e->getMessage());
+            $this->assertSame('Unique index violation', $e->getMessage());
         }
 
         // '_uid' is the document ID column, so a conflicting value containing it must not be read as an ID conflict.
@@ -7946,7 +7946,7 @@ trait DocumentTests
             $this->fail('Expected UniqueException for unique index violation on a value containing _uid');
         } catch (DuplicateException $e) {
             $this->assertInstanceOf(UniqueException::class, $e);
-            $this->assertStringContainsString('unique attributes', $e->getMessage());
+            $this->assertSame('Unique index violation', $e->getMessage());
         }
 
         $database->deleteCollection('duplicateMessages');

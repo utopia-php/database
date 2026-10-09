@@ -993,11 +993,16 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
-     * Drop a collection this call created but could not finish, so a later create does not adopt it without its
-     * indexes.
+     * Drop a collection this call created but could not finish. Inside a transaction the collection is left to the
+     * transaction's abort, since MongoDB runs no drop in a multi-document transaction and one outside it would not
+     * see the uncommitted collection.
      */
     private function dropCreatedCollection(string $id): void
     {
+        if ($this->inTransaction > 0) {
+            return;
+        }
+
         try {
             $this->getClient()->dropCollection($id);
         } catch (Throwable) {

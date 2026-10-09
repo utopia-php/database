@@ -127,12 +127,18 @@ final class MongoCreateCollectionTest extends TestCase
         $this->assertSame([], $this->droppedAfterAFailedCreate($createIndexes, $indexes, sharedTables: true), 'Another tenant may already use a shared collection; the next create gives it its indexes');
     }
 
+    #[DataProvider('indexesNotCreated')]
+    public function testACollectionCreatedInATransactionIsLeftToItsAbort(Closure $createIndexes, array $indexes): void
+    {
+        $this->assertSame([], $this->droppedAfterAFailedCreate($createIndexes, $indexes, inTransaction: true), 'MongoDB runs no drop inside a transaction; the abort discards the collection');
+    }
+
     /**
      * @param  Closure(int): bool  $createIndexes
      * @param  list<Index>  $indexes
      * @return list<string>
      */
-    private function droppedAfterAFailedCreate(Closure $createIndexes, array $indexes, bool $sharedTables = false): array
+    private function droppedAfterAFailedCreate(Closure $createIndexes, array $indexes, bool $sharedTables = false, bool $inTransaction = false): array
     {
         $client = new class ($createIndexes) extends Client {
             /**
@@ -193,6 +199,9 @@ final class MongoCreateCollectionTest extends TestCase
         $adapter = new Mongo($client);
         $adapter->setNamespace('engine');
         $adapter->setSharedTables($sharedTables);
+        if ($inTransaction) {
+            (new \ReflectionProperty(Mongo::class, 'inTransaction'))->setValue($adapter, 1);
+        }
 
         try {
             $this->assertFalse($adapter->createCollection('orders', [Attribute::string(key: 'title', size: 64)], $indexes));

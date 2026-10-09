@@ -3843,8 +3843,8 @@ trait Documents
         $joinedByAlias = $this->joinedCollectionsByAlias($joins, $joinedCollectionsById);
         $joinedCollections = $isAggregation ? [] : $joinedByAlias;
 
-        // 7.x read a random order with a cursor as the random order alone, so the cursor is dropped as it was.
-        if ($orderTypes === [OrderDirection::Random]) {
+        // 7.x read a random order with a cursor as a random order without one, so the cursor is dropped as it was.
+        if (\in_array(OrderDirection::Random, $orderTypes, true)) {
             $cursor = null;
         }
 

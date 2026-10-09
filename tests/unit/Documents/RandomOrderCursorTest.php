@@ -25,4 +25,15 @@ final class RandomOrderCursorTest extends TestCase
             $this->assertSame(['first', 'second', 'third'], $ids, $page->getMethod()->value);
         }
     }
+
+    public function testARandomOrderNextToAnotherOrderReadsEveryRowWhateverTheCursor(): void
+    {
+        $database = HookFixture::memory();
+        HookFixture::seed($database, ['first', 'second', 'third']);
+        $cursor = $database->getDocument(HookFixture::COLLECTION, 'second');
+
+        $documents = $database->find(HookFixture::COLLECTION, [Query::orderRandom(), Query::orderAsc('title'), Query::cursorAfter($cursor)]);
+
+        $this->assertCount(3, $documents);
+    }
 }

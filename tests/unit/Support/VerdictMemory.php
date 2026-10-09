@@ -11,12 +11,13 @@ use Utopia\Database\RelationshipSide;
 use Utopia\Database\RelationshipUpdate;
 
 /**
- * A Memory adapter whose schema methods answer with the verdict set for them, or apply the change otherwise.
+ * A Memory adapter whose schema methods answer with the verdict set for them, or apply the change when there is
+ * none or it returns null.
  */
 final class VerdictMemory extends Memory
 {
     /**
-     * @var array<string, Closure(): bool>
+     * @var array<string, Closure(): ?bool>
      */
     public array $verdicts = [];
 

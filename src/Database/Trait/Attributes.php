@@ -505,10 +505,16 @@ trait Attributes
         } catch (DuplicateException) {
             // At least one column already exists, so each is created on its own and the duplicates are skipped.
             $created = [];
-            foreach ($attributes as $attribute) {
-                if ($this->createAttributeInSchema($collection, $attribute)) {
-                    $created[] = $attribute;
+            try {
+                foreach ($attributes as $attribute) {
+                    if ($this->createAttributeInSchema($collection, $attribute)) {
+                        $created[] = $attribute;
+                    }
                 }
+            } catch (Throwable $error) {
+                $this->cleanupAttributes($collection, $created);
+
+                throw $error;
             }
 
             return $created;

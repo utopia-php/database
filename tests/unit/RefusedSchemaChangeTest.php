@@ -14,6 +14,7 @@ use Utopia\Database\Attribute;
 use Utopia\Database\AttributeUpdate;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Refused as RefusedException;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Index;
@@ -174,6 +175,28 @@ final class RefusedSchemaChangeTest extends TestCase
 
         $this->assertInstanceOf(RefusedException::class, $this->attempt($database, static fn (Database $database) => $database->deleteCollection('notes')));
         $this->assertNotNull($database->findCollection('notes'));
+    }
+
+    public function testColumnsCreatedBeforeARefusalInTheOneAtATimeFallbackAreDropped(): void
+    {
+        [$database, $adapter] = $this->database();
+        $adapter->verdicts['createAttributes'] = static fn (): never => throw new DuplicateException('Attribute already exists');
+        $calls = 0;
+        $adapter->verdicts['createAttribute'] = static function () use (&$calls): ?bool {
+            return ++$calls === 1 ? null : false;
+        };
+        $dropped = [];
+        $adapter->verdicts['deleteAttribute'] = static function () use (&$dropped): ?bool {
+            $dropped[] = true;
+
+            return null;
+        };
+
+        $error = $this->attempt($database, static fn (Database $database): array => $database->createAttributes('books', [Attribute::string(key: 'summary', size: 64), Attribute::integer(key: 'pages')]));
+
+        $this->assertInstanceOf(RefusedException::class, $error);
+        $this->assertCount(1, $dropped, 'The column created before the refusal must be dropped');
+        $this->assertNotContains('summary', \array_map(static fn (Attribute $attribute): string => $attribute->key, $database->getCollection('books')->attributes()));
     }
 
     /**

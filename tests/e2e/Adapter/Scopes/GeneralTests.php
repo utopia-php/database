@@ -67,30 +67,38 @@ trait GeneralTests
 
         $database->createCollection(Collection::create(id: 'global-timeouts'));
 
-        $database->createAttribute('global-timeouts', Attribute::string(key: 'longtext', size: 100000000, required: true));
-
-        for ($i = 0; $i < 20; $i++) {
-            $database->createDocument('global-timeouts', new Document([
-                'longtext' => file_get_contents(__DIR__.'/../../../resources/longtext.txt'),
-                '$permissions' => [
-                    Permission::read(Role::any()),
-                    Permission::update(Role::any()),
-                    Permission::delete(Role::any()),
-                ],
-            ]));
-        }
-
-        $database->setTimeout(1);
-
         try {
-            $database->find('global-timeouts', [
-                Query::notEqual('longtext', 'appwrite'),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (\Exception $e) {
+            $database->createAttribute('global-timeouts', Attribute::string(key: 'longtext', size: 100000000, required: true));
+
+            $longtext = file_get_contents(__DIR__.'/../../../resources/longtext.txt');
+            $this->assertIsString($longtext);
+
+            for ($i = 0; $i < 20; $i++) {
+                $database->createDocument('global-timeouts', new Document([
+                    'longtext' => $longtext,
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::update(Role::any()),
+                        Permission::delete(Role::any()),
+                    ],
+                ]));
+            }
+
+            $database->setTimeout(1);
+
+            $thrown = null;
+            try {
+                $database->find('global-timeouts', [
+                    Query::notEqual('longtext', 'appwrite'),
+                ]);
+            } catch (\Exception $e) {
+                $thrown = $e;
+            }
+
+            $this->assertInstanceOf(TimeoutException::class, $thrown, 'find() must throw a timeout exception');
+        } finally {
             $database->clearTimeout();
             $database->deleteCollection('global-timeouts');
-            $this->assertInstanceOf(TimeoutException::class, $e);
         }
     }
 
@@ -1206,23 +1214,23 @@ trait GeneralTests
 
         $database->createCollection(Collection::create(id: 'count-timeouts'));
 
-        $database->createAttribute('count-timeouts', Attribute::string(key: 'longtext', size: 100000000, required: true));
-
-        $longtext = file_get_contents(__DIR__.'/../../../resources/longtext.txt');
-        $this->assertIsString($longtext);
-
-        for ($i = 0; $i < 20; $i++) {
-            $database->createDocument('count-timeouts', new Document([
-                'longtext' => $longtext,
-                '$permissions' => [
-                    Permission::read(Role::any()),
-                    Permission::update(Role::any()),
-                    Permission::delete(Role::any()),
-                ],
-            ]));
-        }
-
         try {
+            $database->createAttribute('count-timeouts', Attribute::string(key: 'longtext', size: 100000000, required: true));
+
+            $longtext = file_get_contents(__DIR__.'/../../../resources/longtext.txt');
+            $this->assertIsString($longtext);
+
+            for ($i = 0; $i < 20; $i++) {
+                $database->createDocument('count-timeouts', new Document([
+                    'longtext' => $longtext,
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::update(Role::any()),
+                        Permission::delete(Role::any()),
+                    ],
+                ]));
+            }
+
             $database->setTimeout(1);
 
             $thrown = null;

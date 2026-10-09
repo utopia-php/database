@@ -472,19 +472,68 @@ final class RelationshipSchemaTest extends TestCase
         $this->assertNotContains('books', $this->attributeKeys($database, 'authors'));
     }
 
-    public function testAnAdapterThatDoesNotDeleteTheRelationshipFailsTheDelete(): void
+    /**
+     * @return array<string, array{Closure(): Adapter, Closure(): bool, class-string<\Throwable>}>
+     */
+    public static function failedRelationshipDrops(): array
     {
-        $database = $this->database($this->memory(['deleteRelationship' => static fn (): bool => false]));
+        $refuse = static fn (): bool => false;
+        $fail = static fn (): never => throw new RuntimeException('the engine failed the drop');
+
+        return [
+            'memory refusal' => [static fn (): Adapter => new Memory(), $refuse, RefusedException::class],
+            'memory error' => [static fn (): Adapter => new Memory(), $fail, RuntimeException::class],
+            'sqlite refusal' => [static fn (): Adapter => new SQLite(new PDO('sqlite::memory:')), $refuse, RefusedException::class],
+            'sqlite error' => [static fn (): Adapter => new SQLite(new PDO('sqlite::memory:')), $fail, RuntimeException::class],
+        ];
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     * @param  Closure(): bool  $drop
+     * @param  class-string<\Throwable>  $expected
+     */
+    #[DataProvider('failedRelationshipDrops')]
+    public function testADropTheAdapterDoesNotMakeKeepsTheRelationshipsIndexes(Closure $adapter, Closure $drop, string $expected): void
+    {
+        $database = $this->database($this->droppingRelationships($adapter(), $drop));
         $database->createRelationship('books', Relationship::manyToOne(relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books'));
+        $schemaIndexes = $this->schemaIndexIds($database, 'books');
 
         try {
             $database->deleteRelationship('books', 'author');
-            $this->fail('an adapter that does not drop the relationship must fail the delete');
-        } catch (RefusedException $error) {
-            $this->assertSame('Failed to delete relationship', $error->getMessage());
+            $this->fail('a drop the adapter does not make must fail the delete');
+        } catch (\Throwable $error) {
+            $this->assertInstanceOf($expected, $error);
         }
 
         $this->assertContains('author', $this->attributeKeys($database, 'books'));
+        $this->assertContains('books', $this->attributeKeys($database, 'authors'));
+        $this->assertSame(['author'], $this->indexAttributes($database, 'books', '_index_author'));
+        $this->assertSame($schemaIndexes, $this->schemaIndexIds($database, 'books'));
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     * @param  Closure(): bool  $drop
+     * @param  class-string<\Throwable>  $expected
+     */
+    #[DataProvider('failedRelationshipDrops')]
+    public function testADropTheAdapterDoesNotMakeKeepsTheJunctionDefinition(Closure $adapter, Closure $drop, string $expected): void
+    {
+        $database = $this->database($this->droppingRelationships($adapter(), $drop));
+        $database->createRelationship('books', Relationship::manyToMany(relatedCollection: 'authors', twoWay: true, key: 'writers', twoWayKey: 'works'));
+        $junction = $this->junction($database);
+
+        try {
+            $database->deleteRelationship('books', 'writers');
+            $this->fail('a drop the adapter does not make must fail the delete');
+        } catch (\Throwable $error) {
+            $this->assertInstanceOf($expected, $error);
+        }
+
+        $this->assertContains('writers', $this->attributeKeys($database, 'books'));
+        $this->assertEqualsCanonicalizing(['writers', 'works'], $this->attributeKeys($database, $junction));
     }
 
     public function testAFailedDefinitionWriteOnDeleteKeepsItsErrorWhenTheRollbackFails(): void
@@ -952,6 +1001,32 @@ final class RelationshipSchemaTest extends TestCase
     private function junction(Database $database): string
     {
         return '_'.$database->getCollection('books')->getSequence().'_'.$database->getCollection('authors')->getSequence();
+    }
+
+    /**
+     * @param  Closure(): bool  $drop
+     */
+    private function droppingRelationships(Adapter $adapter, Closure $drop): Adapter
+    {
+        if ($adapter instanceof SQLite) {
+            return new class (new PDO('sqlite::memory:'), $drop) extends SQLite {
+                /**
+                 * @param  Closure(): bool  $drop
+                 */
+                public function __construct(PDO $pdo, private readonly Closure $drop)
+                {
+                    parent::__construct($pdo);
+                }
+
+                #[\Override]
+                public function deleteRelationship(string $collection, Relationship $relationship, RelationshipSide $side): bool
+                {
+                    return ($this->drop)();
+                }
+            };
+        }
+
+        return $this->memory(['deleteRelationship' => $drop]);
     }
 
     private function refusingUpdates(Adapter $adapter): Adapter

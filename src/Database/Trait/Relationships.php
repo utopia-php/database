@@ -475,7 +475,13 @@ trait Relationships
         $collection->setAttribute(self::COLLECTION_ATTRIBUTES, $collectionAttributes);
         $relatedCollection->setAttribute(self::COLLECTION_ATTRIBUTES, $relatedCollectionAttributes);
 
-        $shouldRollback = $this->deleteRelationshipFromSchema($collection->getId(), $relationship, $side);
+        try {
+            $shouldRollback = $this->deleteRelationshipFromSchema($collection->getId(), $relationship, $side);
+        } catch (Throwable $error) {
+            self::bestEffort($this->relationshipDefinitionRestores($deletedIndexes, $deletedJunction));
+
+            throw $error;
+        }
 
         try {
             $this->withRetries(function () use ($collection, $relatedCollection) {
@@ -494,15 +500,7 @@ trait Relationships
                     : fn () => $adapter->createRelationship($relatedCollection->getId(), $relationship->inverse($collection->getId()));
             }
 
-            foreach ($deletedIndexes as [$indexCollection, $index]) {
-                $rollbacks[] = fn () => $this->createIndex($indexCollection, $index);
-            }
-
-            if ($deletedJunction !== null && ! $deletedJunction->isEmpty()) {
-                $rollbacks[] = fn () => $this->silent(fn () => $this->createDocument(self::METADATA, $deletedJunction));
-            }
-
-            self::bestEffort($rollbacks);
+            self::bestEffort([...$rollbacks, ...$this->relationshipDefinitionRestores($deletedIndexes, $deletedJunction)]);
 
             throw new DatabaseException(
                 "Failed to persist metadata after retries for relationship deletion '{$key}': ".$error->getMessage(),
@@ -517,6 +515,27 @@ trait Relationships
         if ($listeners !== []) {
             $this->dispatch(new Event\Attribute\Deleted($collection->getId(), $attribute), $listeners);
         }
+    }
+
+    /**
+     * The steps that put back what deleteRelationship() removed before dropping the relationship: its indexes, or
+     * the definition of its junction collection.
+     *
+     * @param  list<array{string, Index}>  $deletedIndexes
+     * @return list<callable(): mixed>
+     */
+    private function relationshipDefinitionRestores(array $deletedIndexes, ?Document $deletedJunction): array
+    {
+        $restores = [];
+        foreach ($deletedIndexes as [$indexCollection, $index]) {
+            $restores[] = fn () => $this->createIndex($indexCollection, $index);
+        }
+
+        if ($deletedJunction !== null && ! $deletedJunction->isEmpty()) {
+            $restores[] = fn () => $this->silent(fn () => $this->createDocument(self::METADATA, $deletedJunction));
+        }
+
+        return $restores;
     }
 
     /**

@@ -27,7 +27,9 @@ have to make, with the 7.x and 8.0 forms side by side.
   [Schema: value objects](UPGRADE.md#schema-value-objects).
 - Stored attribute values are normalised per type (datetime `signed: false`; integer `size` 0 or 8; boolean, double
   and id `size: 0`; strings `signed: true`), fulltext and TTL indexes store no `orders`, fulltext indexes no
-  `lengths`, and an index other than TTL no longer stores `ttl: 1`.
+  `lengths`, and an index other than TTL no longer stores `ttl: 1`. `Attribute::fromDocument()` and
+  `Index::fromDocument()` read 7.x metadata with the same normalisation, so a legacy attribute or index equals the
+  one 8.0 creates.
 - A stored attribute of an unknown type (`uuid7` included) or a stored relationship `onDelete` of `setDefault` or
   `noAction` makes its collection unreadable until the metadata row is repaired. See
   [Stored metadata](UPGRADE.md#stored-metadata).

@@ -250,8 +250,8 @@ final readonly class Index
             key: $key,
             type: $type,
             attributes: self::attributes($attributes),
-            lengths: self::lengths($lengths),
-            orders: self::orders($orders),
+            lengths: self::storesLengths($type) ? self::lengths($lengths) : [],
+            orders: self::storesOrders($type) ? self::orders($orders) : [],
             ttl: $type === IndexType::Ttl && \is_int($ttl) ? $ttl : null,
         );
     }

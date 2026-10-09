@@ -10,6 +10,7 @@ use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\Limits;
+use Utopia\Database\Adapter\SQL\Wkt;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -164,20 +165,32 @@ class SpatialValidationTest extends TestCase
 
     public function testSpatialAttributeDefaults(): void
     {
+        $encoded = [];
+        $this->adapter->method('hasFeature')->willReturnCallback(static fn (string $feature): bool => $feature === Feature\Spatial::class);
+        $this->adapter->method('encode')->willReturnCallback(static function (mixed $value, ColumnType $type) use (&$encoded): string {
+            $wkt = Wkt::encode($value, $type);
+            $encoded[$wkt] = $value;
+
+            return $wkt;
+        });
+        $this->adapter->method('decode')->willReturnCallback(static function (string $value) use (&$encoded): mixed {
+            return $encoded[$value];
+        });
+
         $ptAttr = new Document([
             '$id' => 'pt', 'key' => 'pt', 'type' => ColumnType::Point->value,
             'size' => 0, 'required' => false, 'default' => [1.0, 2.0],
-            'signed' => true, 'array' => false, 'filters' => [],
+            'signed' => true, 'array' => false, 'filters' => ['point'],
         ]);
         $lnAttr = new Document([
             '$id' => 'ln', 'key' => 'ln', 'type' => ColumnType::Linestring->value,
             'size' => 0, 'required' => false, 'default' => [[0.0, 0.0], [1.0, 1.0]],
-            'signed' => true, 'array' => false, 'filters' => [],
+            'signed' => true, 'array' => false, 'filters' => ['linestring'],
         ]);
         $pgAttr = new Document([
             '$id' => 'pg', 'key' => 'pg', 'type' => ColumnType::Polygon->value,
             'size' => 0, 'required' => false, 'default' => [[[0.0, 0.0], [0.0, 2.0], [2.0, 2.0], [0.0, 0.0]]],
-            'signed' => true, 'array' => false, 'filters' => [],
+            'signed' => true, 'array' => false, 'filters' => ['polygon'],
         ]);
 
         $col = $this->makeCollection('spatial_defaults', [$ptAttr, $lnAttr, $pgAttr]);

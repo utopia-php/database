@@ -616,7 +616,7 @@ final readonly class Attribute
             [$relationship, $side] = self::hydrateRelationship($key, $options);
         }
 
-        return new self(
+        return self::normalised(
             $key,
             $columnType,
             self::storedSize($size),

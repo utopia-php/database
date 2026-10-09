@@ -51,6 +51,34 @@ final class IndexTest extends TestCase
         $this->assertNull($index->ttl);
     }
 
+    public function testFromDocumentDropsTheLegacyLengthsAndOrdersOfAFulltextIndex(): void
+    {
+        $index = Index::fromDocument(new Document([
+            '$id' => 'search',
+            'type' => 'fulltext',
+            'attributes' => ['title'],
+            'lengths' => [null],
+            'orders' => ['ASC'],
+            'ttl' => 1,
+        ]));
+
+        $this->assertEquals(Index::fulltext('search', ['title']), $index);
+    }
+
+    public function testFromDocumentDropsTheLegacyOrdersOfATtlIndex(): void
+    {
+        $index = Index::fromDocument(new Document([
+            '$id' => 'expiry',
+            'type' => 'ttl',
+            'attributes' => ['expiresAt'],
+            'lengths' => [],
+            'orders' => ['ASC'],
+            'ttl' => 60,
+        ]));
+
+        $this->assertEquals(Index::ttl('expiry', 'expiresAt', 60), $index);
+    }
+
     public function testFromDocumentReadsTheLegacyIndexTypeAsKey(): void
     {
         $index = Index::fromDocument(new Document(['$id' => 'legacy', 'type' => 'index', 'attributes' => ['age']]));

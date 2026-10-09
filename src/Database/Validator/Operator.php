@@ -163,16 +163,19 @@ class Operator extends Validator
             return true;
         }
 
-        $current = $this->getIntegerValue($this->currentDocument->getAttribute($operator->getAttribute()) ?? 0);
+        $stored = $this->getIntegerValue($this->currentDocument->getAttribute($operator->getAttribute()) ?? 0);
         $bounds = $attribute->bounds();
-        if ($current === null || $bounds === null || ! $this->isNumericValueInBounds($current, $attribute)) {
+        if ($stored === null || $bounds === null || ! $this->isNumericValueInBounds($stored, $attribute)) {
             $this->message = "Cannot apply {$methodName} operator: current value is outside the attribute range";
 
             return false;
         }
 
-        $current = $current + 0;
-        $change = $values[0] + 0;
+        $current = $this->getNumericValue($stored);
+        $change = $this->getNumericValue($values[0]);
+        if ($current === null || $change === null) {
+            return true;
+        }
         $predicted = match ($method) {
             OperatorType::Increment => $current + $change,
             OperatorType::Decrement => $current - $change,
@@ -208,8 +211,9 @@ class Operator extends Validator
         }
 
         $bounds = $attribute->bounds();
+        $numeric = $this->getNumericValue($item);
 
-        return $bounds !== null && $item + 0 <= (float) $bounds->max && $item + 0 >= (float) $bounds->min;
+        return $bounds !== null && $numeric !== null && $numeric <= (float) $bounds->max && $numeric >= (float) $bounds->min;
     }
 
     private function getIntegerValue(mixed $value): int|string|null

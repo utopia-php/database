@@ -15,6 +15,7 @@ use Utopia\Database\Validator\Query\Joined\Collection;
 use Utopia\Database\Validator\Query\Order;
 use Utopia\Database\Validator\Query\Select;
 use Utopia\Query\Method;
+use Utopia\Query\Query as BaseQuery;
 use Utopia\Validator;
 
 class Base extends Validator
@@ -266,7 +267,7 @@ class Base extends Validator
      * Validate the children of a logical query before the query itself, as 7.x did, so a child's error is
      * the one reported; a join's ON conditions come after the join.
      */
-    private function isValidQuery(Query $query, bool $hasFilterValidator): bool
+    private function isValidQuery(BaseQuery $query, bool $hasFilterValidator): bool
     {
         if ($query->isNested() && ! $this->isValidLength($query->getValues(), $query->getMethod())) {
             return false;

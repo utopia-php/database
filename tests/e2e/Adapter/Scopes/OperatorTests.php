@@ -5314,11 +5314,13 @@ trait OperatorTests
                 $database->createDocument($collectionId, new Document(['$id' => $id, 'count' => 5, 'nums' => [1]]));
 
                 if ($family === 'postgres') {
+                    $failure = null;
                     try {
                         $database->updateDocument($collectionId, $id, new Document(['count' => $operator]));
-                        $this->fail("PostgreSQL stored a fractional {$id} of an integer");
-                    } catch (\PDOException) {
+                    } catch (\Throwable $error) {
+                        $failure = $error;
                     }
+                    $this->assertInstanceOf(\PDOException::class, $failure, "PostgreSQL stored a fractional {$id} of an integer");
                     $this->assertSame(5, $database->getDocument($collectionId, $id)->getAttribute('count'), $id);
 
                     continue;

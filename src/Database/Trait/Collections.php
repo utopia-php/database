@@ -449,9 +449,6 @@ trait Collections
     }
 
     /**
-     * @throws DatabaseException If cleanup fails after all retries
-     */
-    /**
      * @param  list<Attribute>  $attributes
      * @param  list<Index>  $indexes
      * @return bool True when this call created the table, false when it reuses the metadata table or a table shared
@@ -514,6 +511,9 @@ trait Collections
         return true;
     }
 
+    /**
+     * @throws DatabaseException If cleanup fails after all retries
+     */
     private function cleanupCollection(string $collection, int $maxAttempts = 3): void
     {
         $this->cleanup(

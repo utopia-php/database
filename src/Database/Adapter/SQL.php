@@ -4633,6 +4633,9 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                     $hasDistinct ? $selections : [...$selections, ...$orderAttributes],
                 );
                 $hasSelectionProjection = true;
+            } elseif (! empty($selections)) {
+                // As in 7.x, `*` selects every column and the terms next to it, such as `*.*`, add nothing.
+                $queries = \array_values(\array_filter($queries, static fn (BaseQuery $query): bool => $query->getMethod() !== Method::Select));
             }
         }
 

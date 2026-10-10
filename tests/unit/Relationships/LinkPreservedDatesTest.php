@@ -27,7 +27,9 @@ final class LinkPreservedDatesTest extends TestCase
 
         foreach (['book4', 'book5'] as $id) {
             $book = $authorization->skip(fn () => $database->getDocument('books', $id));
-            $this->assertSame('author3', $book->getAttribute('author')?->getId(), $id);
+            $author = $book->getAttribute('author');
+            $this->assertInstanceOf(Document::class, $author, $id);
+            $this->assertSame('author3', $author->getId(), $id);
             $this->assertSame(self::STORED, $book->getUpdatedAt(), $id);
         }
     }

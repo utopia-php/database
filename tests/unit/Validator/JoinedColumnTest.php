@@ -46,6 +46,7 @@ final class JoinedColumnTest extends TestCase
                 $cases[$attribute.' in '.$type] = [$attribute, $queries];
             }
         }
+        unset($cases['$tenant in select']);
 
         return $cases;
     }
@@ -62,6 +63,14 @@ final class JoinedColumnTest extends TestCase
         $aliased = $validator->isValid([self::join(), ...$queries('note.'.$attribute)]);
 
         $this->assertSame($unaliased, $aliased, $validator->getDescription());
+    }
+
+    public function testTenantSelectPassesOnlyOnTheMainCollectionWithoutSharedTables(): void
+    {
+        $validator = $this->validator([$this->notes()]);
+
+        $this->assertTrue($validator->isValid([Query::select(['$tenant'])]), $validator->getDescription());
+        $this->assertFalse($validator->isValid([self::join(), Query::select(['note.$tenant'])]));
     }
 
     public function testCollectionOfAJoinedRowCannotBeReferenced(): void

@@ -166,13 +166,17 @@ trait Transactions
         $discard = function () use ($context, $queued): void {
             \array_splice($this->documentPurgeEvents[$context], $queued);
         };
+        $outermost = ! $this->adapter->inTransaction();
         $returned = false;
 
         try {
-            return $this->adapter->withTransaction(function () use ($callback, $discard, &$returned): mixed {
+            return $this->adapter->withTransaction(function () use ($callback, $discard, $outermost, $context, &$returned): mixed {
                 $returned = false;
                 $discard();
                 $result = $callback();
+                if ($outermost) {
+                    $this->announceBeforeCommit($context);
+                }
                 $returned = true;
 
                 return $result;
@@ -189,6 +193,24 @@ trait Transactions
             $this->transactionFailures[$error] = true;
 
             throw $error;
+        }
+    }
+
+    /**
+     * Fire the document purge events queued in the outermost transaction before it commits, as 7.x fired them
+     * from inside the write's transaction: a listener that fails rolls the write back and its failure is thrown,
+     * rather than the write committing and the request failing after it.
+     *
+     * @throws Throwable The first listener failure
+     */
+    private function announceBeforeCommit(int $context): void
+    {
+        $events = $this->documentPurgeEvents[$context];
+        $this->documentPurgeEvents[$context] = [];
+
+        $failure = $this->announceDocumentPurges($events);
+        if ($failure !== null) {
+            throw $failure;
         }
     }
 
@@ -214,10 +236,11 @@ trait Transactions
 
     /**
      * Keep all nested mutation tombstones blocked, and purge every written document
-     * again, once the outer transaction has committed or rolled back. Document purge
-     * events queued in the scope fire after a commit, even when the invalidation after it
-     * fails, and after a commit that could not be confirmed, whose failure is still the
-     * one thrown. A rollback drops them, also when its callback threw Exception\Unconfirmed.
+     * again, once the outer transaction has committed or rolled back. The outermost adapter
+     * transaction fires the document purge events queued in it before it commits; any queued
+     * outside one fire after the commit, even when the invalidation after it fails, and after a
+     * commit that could not be confirmed, whose failure is still the one thrown. A rollback
+     * drops them, also when its callback threw Exception\Unconfirmed.
      *
      * @template T
      *

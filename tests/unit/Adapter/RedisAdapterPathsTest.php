@@ -394,7 +394,7 @@ final class RedisAdapterPathsTest extends TestCase
         $adapter->createDocument($this->notes(), new Document(['$id' => 'second', '$permissions' => [], 'tags' => ['a', 'b']]));
     }
 
-    public function testFractionalOperatorLimitIsRefusedBeforeTheWrite(): void
+    public function testFractionalOperatorLimitOnABigIntegerIsRefusedBeforeTheWrite(): void
     {
         $database = $this->database();
         $database->create();
@@ -406,12 +406,12 @@ final class RedisAdapterPathsTest extends TestCase
         $database->createDocument(self::NOTES, new Document(['$id' => 'counter', 'count' => 100, 'big' => PHP_INT_MAX - 5]));
 
         try {
-            $database->updateDocument(self::NOTES, 'counter', new Document(['count' => Operator::increment(5, 102.4)]));
-            $this->fail('A fractional limit on an integer attribute must be refused');
+            $database->updateDocument(self::NOTES, 'counter', new Document(['big' => Operator::increment(5, 4.0e15 + 0.5)]));
+            $this->fail('A fractional limit on a bigint attribute must be refused');
         } catch (StructureException $exception) {
-            $this->assertSame("Invalid document structure: Cannot apply increment operator: max/min limit must be a whole number for integer attribute 'count', got 102.4", $exception->getMessage());
+            $this->assertStringStartsWith("Invalid document structure: Cannot apply increment operator: max/min limit must be a whole number for integer attribute 'big'", $exception->getMessage());
         }
-        $this->assertSame(100, $database->getDocument(self::NOTES, 'counter')->getAttribute('count'));
+        $this->assertSame(PHP_INT_MAX - 5, $database->getDocument(self::NOTES, 'counter')->getAttribute('big'));
 
         $database->updateDocument(self::NOTES, 'counter', new Document(['big' => Operator::increment(10, 9.0e18)]));
         $this->assertSame(PHP_INT_MAX - 5, $database->getDocument(self::NOTES, 'counter')->getAttribute('big'));

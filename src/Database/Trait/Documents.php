@@ -269,11 +269,35 @@ trait Documents
         return $attribute !== null && ! $attribute->array && $attribute->isInteger();
     }
 
-    private function assertIntegerChange(int|float|string $value): void
+    /**
+     * A change or bound that is not a whole number on an integer attribute: 7.x applied it as given, so the
+     * engine stored the sum its own way (MariaDB and MySQL round it) and the returned document held the sum.
+     */
+    private function isFractionalChange(int|float|string $value, int|float|string|null $bound): bool
     {
-        if (! \is_int($value) && (! \is_string($value) || ! BigInt::isIntegerString($value))) {
-            throw new TypeException('Change value must be an integer.');
+        return \is_float($value)
+            || (\is_string($value) && ! BigInt::isIntegerString($value))
+            || ($bound !== null && BigInt::integralValue($bound) === null);
+    }
+
+    /**
+     * A whole float as the integer 7.x bound it as, which PostgreSQL takes for an integer column.
+     */
+    private function wholeOrNative(int|float $value): int|float
+    {
+        return \is_float($value) && \is_finite($value) && \floor($value) === $value && \abs($value) < \PHP_INT_MAX
+            ? (int) $value
+            : $value;
+    }
+
+    private function getFractionalResult(mixed $current, int|float|string $value, bool $increase): int|float
+    {
+        if ($current !== null && ! \is_numeric($current)) {
+            throw new TypeException('Attribute value must be numeric.');
         }
+        $current = $current === null ? 0 : $this->getNativeNumber($current);
+
+        return $increase ? $current + $this->getNativeNumber($value) : $current - $this->getNativeNumber($value);
     }
 
     private function integerBound(int|float|string $bound, string $name): int|string
@@ -2459,18 +2483,18 @@ trait Documents
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $numericAttribute = $this->numericAttribute($collection, $attribute);
+        $declaredInteger = $this->isDeclaredInteger($numericAttribute ?? $this->declaredAttribute($collection, $attribute));
+        $fractional = $declaredInteger && $this->isFractionalChange($value, $max);
 
-        if ($this->isDeclaredInteger($numericAttribute ?? $this->declaredAttribute($collection, $attribute))) {
-            $this->assertIntegerChange($value);
-            if ($max !== null) {
-                $max = $this->integerBound($max, 'Max');
-            }
+        if ($declaredInteger && ! $fractional && $max !== null) {
+            $max = $this->integerBound($max, 'Max');
         }
+        $integerArithmetic = $numericAttribute?->isInteger() === true && ! $fractional;
 
         $cacheTarget = $collection->getId() === self::METADATA
             ? new Document([Document::ID => $id, Document::COLLECTION => self::METADATA])
             : $collection->getId();
-        $document = $this->withMutation(Event::DocumentIncrease, $cacheTarget, function () use ($collection, $id, $attribute, $value, $max, $numericAttribute) {
+        $document = $this->withMutation(Event::DocumentIncrease, $cacheTarget, function () use ($collection, $id, $attribute, $value, $max, $numericAttribute, $fractional, $integerArithmetic) {
             /** @var Document $document */
             $document = $this->authorization->skip(fn () => $this->silent(fn () => $this->readDocument($collection, $id, forUpdate: true))); // Skip ensures user does not need read permission for this
 
@@ -2491,7 +2515,9 @@ trait Documents
 
             $attributeExists = $document->offsetExists($attribute);
             $currentVal = $document->getAttribute($attribute);
-            if ($numericAttribute instanceof Attribute) {
+            if ($fractional) {
+                $result = $this->getFractionalResult($currentVal, $value, true);
+            } elseif ($numericAttribute instanceof Attribute) {
                 $result = $this->getNumericResult($numericAttribute, $currentVal, $value, true);
             } else {
                 if (! $attributeExists) {
@@ -2503,7 +2529,7 @@ trait Documents
                 $result = $currentVal + $this->getNativeNumber($value);
             }
             $exceedsMaximum = ! \is_null($max) && (
-                $numericAttribute?->isInteger() === true
+                $integerArithmetic
                     ? BigInt::compare($result, $max) > 0
                     : $result > $max
             );
@@ -2515,18 +2541,22 @@ trait Documents
             $updatedAt = $document->getUpdatedAt();
             $updatedAt = (empty($updatedAt) || ! $this->datePreservation()->get()) ? $time : DateTime::setTimezone($updatedAt);
             if ($max !== null) {
-                $max = $numericAttribute?->isInteger() === true
-                    ? BigInt::subtract($max, $value)
-                    : $this->getNativeNumber($max) - $this->getNativeNumber($value);
+                $max = match (true) {
+                    $integerArithmetic => BigInt::subtract($max, $value),
+                    $fractional => $this->wholeOrNative($this->getNativeNumber($max) - $this->getNativeNumber($value)),
+                    default => $this->getNativeNumber($max) - $this->getNativeNumber($value),
+                };
             }
 
             $this->adapter->increaseDocumentAttribute(
                 $collection,
                 $id,
                 $attribute,
-                $numericAttribute?->isInteger() === true
-                    ? BigInt::toNative($value)
-                    : $this->getNativeNumber($value),
+                match (true) {
+                    $integerArithmetic => BigInt::toNative($value),
+                    $fractional => $this->wholeOrNative($this->getNativeNumber($value)),
+                    default => $this->getNativeNumber($value),
+                },
                 $updatedAt,
                 max: $max
             );
@@ -2546,14 +2576,14 @@ trait Documents
     }
 
     /**
-     * @throws TypeException
+     * @throws \InvalidArgumentException
      */
     private function assertPositiveChange(int|float|string $value): void
     {
         if (! \is_numeric($value) || (\is_string($value) && BigInt::isIntegerString($value)
             ? BigInt::compare($value, 0) <= 0
             : (float) $value <= 0)) {
-            throw new TypeException('Value must be numeric and greater than 0');
+            throw new \InvalidArgumentException('Value must be numeric and greater than 0');
         }
     }
 
@@ -2569,7 +2599,7 @@ trait Documents
      *
      * @throws AuthorizationException
      * @throws DatabaseException
-     * @throws TypeException When $value is not a number greater than 0
+     * @throws \InvalidArgumentException When $value is not a number greater than 0
      */
     public function decreaseDocumentAttribute(
         string $collection,
@@ -2583,18 +2613,18 @@ trait Documents
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $numericAttribute = $this->numericAttribute($collection, $attribute);
+        $declaredInteger = $this->isDeclaredInteger($numericAttribute ?? $this->declaredAttribute($collection, $attribute));
+        $fractional = $declaredInteger && $this->isFractionalChange($value, $min);
 
-        if ($this->isDeclaredInteger($numericAttribute ?? $this->declaredAttribute($collection, $attribute))) {
-            $this->assertIntegerChange($value);
-            if ($min !== null) {
-                $min = $this->integerBound($min, 'Min');
-            }
+        if ($declaredInteger && ! $fractional && $min !== null) {
+            $min = $this->integerBound($min, 'Min');
         }
+        $integerArithmetic = $numericAttribute?->isInteger() === true && ! $fractional;
 
         $cacheTarget = $collection->getId() === self::METADATA
             ? new Document([Document::ID => $id, Document::COLLECTION => self::METADATA])
             : $collection->getId();
-        $document = $this->withMutation(Event::DocumentDecrease, $cacheTarget, function () use ($collection, $id, $attribute, $value, $min, $numericAttribute) {
+        $document = $this->withMutation(Event::DocumentDecrease, $cacheTarget, function () use ($collection, $id, $attribute, $value, $min, $numericAttribute, $fractional, $integerArithmetic) {
             /** @var Document $document */
             $document = $this->authorization->skip(fn () => $this->silent(fn () => $this->readDocument($collection, $id, forUpdate: true))); // Skip ensures user does not need read permission for this
 
@@ -2615,7 +2645,9 @@ trait Documents
 
             $attributeExists = $document->offsetExists($attribute);
             $currentDecVal = $document->getAttribute($attribute);
-            if ($numericAttribute instanceof Attribute) {
+            if ($fractional) {
+                $result = $this->getFractionalResult($currentDecVal, $value, false);
+            } elseif ($numericAttribute instanceof Attribute) {
                 $result = $this->getNumericResult($numericAttribute, $currentDecVal, $value, false);
             } else {
                 if (! $attributeExists) {
@@ -2627,7 +2659,7 @@ trait Documents
                 $result = $currentDecVal - $this->getNativeNumber($value);
             }
             $belowMinimum = ! \is_null($min) && (
-                $numericAttribute?->isInteger() === true
+                $integerArithmetic
                     ? BigInt::compare($result, $min) < 0
                     : $result < $min
             );
@@ -2639,18 +2671,22 @@ trait Documents
             $updatedAt = $document->getUpdatedAt();
             $updatedAt = (empty($updatedAt) || ! $this->datePreservation()->get()) ? $time : DateTime::setTimezone($updatedAt);
             if ($min !== null) {
-                $min = $numericAttribute?->isInteger() === true
-                    ? BigInt::add($min, $value)
-                    : $this->getNativeNumber($min) + $this->getNativeNumber($value);
+                $min = match (true) {
+                    $integerArithmetic => BigInt::add($min, $value),
+                    $fractional => $this->wholeOrNative($this->getNativeNumber($min) + $this->getNativeNumber($value)),
+                    default => $this->getNativeNumber($min) + $this->getNativeNumber($value),
+                };
             }
 
             $this->adapter->increaseDocumentAttribute(
                 $collection,
                 $id,
                 $attribute,
-                $numericAttribute?->isInteger() === true
-                    ? BigInt::negate($value)
-                    : $this->getNativeNumber($value) * -1,
+                match (true) {
+                    $integerArithmetic => BigInt::negate($value),
+                    $fractional => $this->wholeOrNative($this->getNativeNumber($value) * -1),
+                    default => $this->getNativeNumber($value) * -1,
+                },
                 $updatedAt,
                 min: $min
             );
@@ -3806,6 +3842,11 @@ trait Documents
 
         $joinedByAlias = $this->joinedCollectionsByAlias($joins, $joinedCollectionsById);
         $joinedCollections = $isAggregation ? [] : $joinedByAlias;
+
+        // 7.x read a random order with a cursor as a random order without one, so the cursor is dropped as it was.
+        if (\in_array(OrderDirection::Random, $orderTypes, true)) {
+            $cursor = null;
+        }
 
         if ($joinedCollections !== [] && $cursor !== null) {
             [$orderAttributes, $cursor] = $this->qualifyJoinedOrders($collection, $orderAttributes, $cursor, $joinedCollections);

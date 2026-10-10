@@ -129,6 +129,93 @@ class Operator extends Validator
         return true;
     }
 
+    /**
+     * A numeric operator on an integer or double attribute is checked as 7.x checked it: the change and the limit
+     * only have to be numeric, so a fractional change or limit on an integer reaches the engine, which stores the
+     * result its own way. Without a limit, the result predicted from the current document has to fit the attribute.
+     *
+     * @param  array<mixed>  $values
+     */
+    private function isValidNumericChange(DatabaseOperator $operator, Attribute $attribute, array $values): bool
+    {
+        $method = $operator->getMethod();
+        $methodName = $method->value;
+
+        if (! isset($values[0]) || ! \is_numeric($values[0]) || ! \is_finite((float) $values[0])) {
+            $this->message = "Cannot apply {$methodName} operator: value must be numeric, got ".\gettype($operator->getValue());
+
+            return false;
+        }
+
+        if (($method === OperatorType::Divide || $method === OperatorType::Modulo) && (float) $values[0] === 0.0) {
+            $this->message = "Cannot apply {$methodName} operator: ".($method === OperatorType::Divide ? 'division' : 'modulo').' by zero';
+
+            return false;
+        }
+
+        if (\count($values) > 1 && $values[1] !== null && (! \is_numeric($values[1]) || ! \is_finite((float) $values[1]))) {
+            $this->message = "Cannot apply {$methodName} operator: max/min limit must be numeric, got ".\gettype($values[1]);
+
+            return false;
+        }
+
+        if ($this->currentDocument === null || ! $attribute->isInteger() || isset($values[1])) {
+            return true;
+        }
+
+        $stored = $this->getIntegerValue($this->currentDocument->getAttribute($operator->getAttribute()) ?? 0);
+        $bounds = $attribute->bounds();
+        if ($stored === null || $bounds === null || ! $this->isNumericValueInBounds($stored, $attribute)) {
+            $this->message = "Cannot apply {$methodName} operator: current value is outside the attribute range";
+
+            return false;
+        }
+
+        $current = $this->getNumericValue($stored);
+        $change = $this->getNumericValue($values[0]);
+        if ($current === null || $change === null) {
+            return true;
+        }
+        $predicted = match ($method) {
+            OperatorType::Increment => $current + $change,
+            OperatorType::Decrement => $current - $change,
+            OperatorType::Multiply => $current * $change,
+            OperatorType::Divide => $current / $change,
+            OperatorType::Modulo => (int) $change === 0 ? $current : (int) $current % (int) $change,
+            default => $current ** $change,
+        };
+
+        if ($predicted > (float) $bounds->max) {
+            $this->message = "Cannot apply {$methodName} operator: would overflow maximum value of {$bounds->max}";
+
+            return false;
+        }
+
+        if ($predicted < (float) $bounds->min) {
+            $this->message = "Cannot apply {$methodName} operator: would underflow minimum value of {$bounds->min}";
+
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * 7.x checked a numeric item appended to an integer array against the range only, so a fractional item passes
+     * here; a bigint array, new in 8.0, checks the item is a whole number in range.
+     */
+    private function isArrayItemInBounds(int|float|string $item, Attribute $attribute): bool
+    {
+        if ($attribute->type === ColumnType::BigInteger) {
+            return $this->isNumericValueInBounds($item, $attribute);
+        }
+
+        $bounds = $attribute->bounds();
+        $numeric = $this->getNumericValue($item);
+
+        return $bounds !== null && $numeric !== null && $numeric <= (float) $bounds->max && $numeric >= (float) $bounds->min;
+    }
+
     private function getIntegerValue(mixed $value): int|string|null
     {
         if (\is_int($value)) {
@@ -274,6 +361,14 @@ class Operator extends Validator
                     return false;
                 }
 
+                if ($type !== ColumnType::BigInteger) {
+                    if (! $this->isValidNumericChange($operator, $attribute, $values)) {
+                        return false;
+                    }
+
+                    break;
+                }
+
                 if (! isset($values[0]) || ! $this->isNumericValueInBounds($values[0], $attribute)) {
                     $this->message = "Cannot apply {$methodName} operator: value must be numeric, got ".gettype($operator->getValue());
 
@@ -345,7 +440,7 @@ class Operator extends Validator
                 if (! empty($values) && $attribute->isInteger()) {
                     $newItems = \is_array($values[0]) ? $values[0] : $values;
                     foreach ($newItems as $item) {
-                        if (\is_numeric($item) && ! $this->isNumericValueInBounds($item, $attribute)) {
+                        if (\is_numeric($item) && ! $this->isArrayItemInBounds($item, $attribute)) {
                             $bounds = $attribute->bounds();
                             if ($bounds === null) {
                                 return false;

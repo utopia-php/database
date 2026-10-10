@@ -646,7 +646,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
             $this->remapRow($row);
 
-            return Document::fromRow($row);
+            return Document::fromRow(self::sequenceBeforeId($row));
         }
 
         if ($this->queriesHaveJoins($queries)) {
@@ -705,7 +705,33 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
         $this->remapRow($document);
 
-        return Document::fromRow($document);
+        return Document::fromRow(self::sequenceBeforeId($document));
+    }
+
+    /**
+     * A single read returns `$sequence` ahead of `$id`, in the key order 7.x returned it.
+     *
+     * @param  array<int|string, mixed>  $row
+     * @return array<int|string, mixed>
+     */
+    private static function sequenceBeforeId(array $row): array
+    {
+        if (! \array_key_exists(Document::SEQUENCE, $row) || ! \array_key_exists(Document::ID, $row)) {
+            return $row;
+        }
+
+        $ordered = [];
+        foreach ($row as $key => $value) {
+            if ($key === Document::SEQUENCE) {
+                continue;
+            }
+            if ($key === Document::ID) {
+                $ordered[Document::SEQUENCE] = $row[Document::SEQUENCE];
+            }
+            $ordered[$key] = $value;
+        }
+
+        return $ordered;
     }
 
     /**
@@ -3498,6 +3524,9 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * Prepares the SQL statement and binds positional parameters from the Statement.
      * Does NOT call execute() - the caller is responsible for that.
      *
+     * Floats are bound as 7.x bound them: a find() binds them in fixed-point notation, every other statement as
+     * PHP writes them, so a write keeps a magnitude fixed point would round to zero.
+     *
      * @param  string  $collection  The collection the statement reads or writes, for the profiler
      * @return PDOStatement|DatabasePDOStatement|PDOStatementProxy
      */
@@ -3509,8 +3538,10 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             if (\is_bool($value) && $this->supports(Capability::IntegerBooleans)) {
                 $value = (int) $value;
             }
-            if (\is_float($value)) {
+            if (\is_float($value) && $event === Event::DocumentFind) {
                 $prepared->bindValue($i + 1, $this->getFloatPrecision($value), PDO::PARAM_STR);
+            } elseif (\is_float($value)) {
+                $prepared->bindValue($i + 1, $value, PDO::PARAM_STR);
             } else {
                 $prepared->bindValue($i + 1, $value, $this->getPdoType($value));
             }
@@ -4628,6 +4659,9 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                     $hasDistinct ? $selections : [...$selections, ...$orderAttributes],
                 );
                 $hasSelectionProjection = true;
+            } elseif (! empty($selections)) {
+                // As in 7.x, `*` selects every column and the terms next to it, such as `*.*`, add nothing.
+                $queries = \array_values(\array_filter($queries, static fn (BaseQuery $query): bool => $query->getMethod() !== Method::Select));
             }
         }
 

@@ -24,6 +24,47 @@ use Utopia\Query\Schema\ColumnType;
 
 trait OneToManyTests
 {
+    public function testLinkingAChildThroughItsParentKeepsItsUpdatedAtUnderPreservedDates(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $stored = '2020-01-01T00:00:00.000+00:00';
+        $any = [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())];
+        $database->createCollection(Collection::create(id: 'dated_authors', permissions: $any, documentSecurity: false));
+        $database->createCollection(Collection::create(id: 'dated_books', permissions: $any, documentSecurity: false));
+        $database->createAttribute('dated_authors', Attribute::string(key: 'name', size: 64));
+        $database->createAttribute('dated_books', Attribute::string(key: 'name', size: 64));
+        $database->createRelationship('dated_authors', Relationship::oneToMany('dated_books', key: 'books', twoWay: true, twoWayKey: 'author', onDelete: RelationshipDeleteAction::SetNull));
+
+        try {
+            $database->withPreserveDates(true, function () use ($database, $stored): void {
+                $database->createDocument('dated_authors', new Document(['$id' => 'author3', 'name' => 'Linus', '$createdAt' => $stored, '$updatedAt' => $stored]));
+                foreach (['book4', 'book5'] as $id) {
+                    $database->createDocument('dated_books', new Document(['$id' => $id, 'name' => $id, '$createdAt' => $stored, '$updatedAt' => $stored]));
+                }
+                $database->updateDocument('dated_authors', 'author3', new Document(['books' => ['book4', 'book5']]));
+            });
+
+            foreach (['book4', 'book5'] as $id) {
+                $book = $database->getDocument('dated_books', $id);
+                $author = $book->getAttribute('author');
+                $this->assertInstanceOf(Document::class, $author, $id);
+                $this->assertSame('author3', $author->getId(), $id);
+                $this->assertSame($stored, $book->getUpdatedAt(), $id);
+            }
+        } finally {
+            $database->deleteCollection('dated_authors');
+            $database->deleteCollection('dated_books');
+        }
+    }
+
     public function testOneToManyOneWayRelationship(): void
     {
         /** @var Database $database */

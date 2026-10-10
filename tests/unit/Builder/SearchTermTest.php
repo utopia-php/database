@@ -18,23 +18,23 @@ final class SearchTermTest extends TestCase
     public static function postgreSQLTerms(): array
     {
         return [
-            'slash separates words' => ['foo/bar', 'foo or bar'],
-            'comma separates words' => ['foo,bar', 'foo or bar'],
-            'semicolon separates words' => ['foo;bar', 'foo or bar'],
-            'percent separates words' => ['foo%bar', 'foo or bar'],
-            'equals separates words' => ['foo=bar', 'foo or bar'],
-            'question mark separates words' => ['foo?bar', 'foo or bar'],
-            'hash separates words' => ['foo#bar', 'foo or bar'],
-            'colon separates words' => ['foo:bar', 'foo or bar'],
-            'pipe separates words' => ['foo|bar', 'foo or bar'],
-            'ampersand separates words' => ['foo&bar', 'foo or bar'],
-            'exclamation mark separates words' => ['foo!bar', 'foo or bar'],
-            'underscore stays inside a word' => ['foo_bar', 'foo_bar'],
-            'mixed separators and spaces' => ['baz, foo/bar;  qux', 'baz or foo or bar or qux'],
-            'operators are dropped' => ['+foo -bar* @3 <baz> ~qux (quux)', 'foo or bar or 3 or baz or qux or quux'],
-            'accented words are kept' => ['@García!', 'García'],
-            'exact phrase keeps its quotes' => ['"foo/bar baz"', '"foo bar baz"'],
-            'unbalanced quote is not exact' => ['"foo/bar', 'foo or bar'],
+            'slash separates words' => ['foo/bar', "'foo or bar'"],
+            'comma separates words' => ['foo,bar', "'foo or bar'"],
+            'semicolon separates words' => ['foo;bar', "'foo or bar'"],
+            'percent separates words' => ['foo%bar', "'foo or bar'"],
+            'equals separates words' => ['foo=bar', "'foo or bar'"],
+            'question mark separates words' => ['foo?bar', "'foo or bar'"],
+            'hash separates words' => ['foo#bar', "'foo or bar'"],
+            'colon separates words' => ['foo:bar', "'foo or bar'"],
+            'pipe separates words' => ['foo|bar', "'foo or bar'"],
+            'ampersand separates words' => ['foo&bar', "'foo or bar'"],
+            'exclamation mark separates words' => ['foo!bar', "'foo or bar'"],
+            'underscore stays inside a word' => ['foo_bar', "'foo_bar'"],
+            'mixed separators and spaces' => ['baz, foo/bar;  qux', "'baz or foo or bar or qux'"],
+            'operators are dropped' => ['+foo -bar* @3 <baz> ~qux (quux)', "'foo or bar or 3 or baz or qux or quux'"],
+            'accented words are kept' => ['@García!', "'García'"],
+            'exact term matches every word in single quotes' => ['"foo/bar baz"', "'foo bar baz'"],
+            'unbalanced quote is not exact' => ['"foo/bar', "'foo or bar'"],
         ];
     }
 
@@ -75,6 +75,16 @@ final class SearchTermTest extends TestCase
     {
         $this->assertSame([$bound], $this->bindings(new Postgres(), Query::search('title', $term)));
         $this->assertSame([$bound], $this->bindings(new Postgres(), Query::notSearch('title', $term)));
+    }
+
+    public function testPostgreSQLMatchesTheTermWithWebsearchToTsquery(): void
+    {
+        $search = (new Postgres())->compileFilters([Query::search('title', '"foo bar"')]);
+        $notSearch = (new Postgres())->compileFilters([Query::notSearch('title', '"foo bar"')]);
+
+        $this->assertStringContainsString("@@ websearch_to_tsquery(?)", $search->expression);
+        $this->assertStringStartsWith('NOT (', $notSearch->expression);
+        $this->assertSame(["'foo bar'"], $search->bindings);
     }
 
     #[DataProvider('mySQLTerms')]

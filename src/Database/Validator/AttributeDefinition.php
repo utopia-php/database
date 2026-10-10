@@ -505,6 +505,14 @@ class AttributeDefinition extends Validator
     }
 
     /**
+     * A default as 7.x wrote it into the message: a scalar as PHP prints it, so a string default is not quoted.
+     */
+    private static function defaultText(mixed $default): string
+    {
+        return \is_scalar($default) ? (string) $default : (string) \json_encode($default);
+    }
+
+    /**
      * @throws DatabaseException
      */
     protected function validateDefaultTypes(ColumnType $type, mixed $default, bool $signed = true): void
@@ -543,33 +551,35 @@ class AttributeDefinition extends Validator
             case ColumnType::MediumText:
             case ColumnType::LongText:
                 if ($defaultType !== 'string') {
-                    $this->message = 'Default value '.json_encode($default).' does not match given type '.Attribute::storedType($type);
+                    $this->message = 'Default value '.self::defaultText($default).' does not match given type '.Attribute::storedType($type);
                     throw new DatabaseException($this->message);
                 }
                 break;
             case ColumnType::Integer:
             case ColumnType::Boolean:
                 if ($type->value !== $defaultType) {
-                    $this->message = 'Default value '.json_encode($default).' does not match given type '.Attribute::storedType($type);
+                    $this->message = 'Default value '.self::defaultText($default).' does not match given type '.Attribute::storedType($type);
                     throw new DatabaseException($this->message);
                 }
                 break;
             case ColumnType::BigInteger:
                 if (! (new BigInt($signed, $this->profile->supports(Capability::UnsignedBigInt)))->isValid($default)) {
-                    $this->message = 'Default value '.json_encode($default).' does not match given type '.Attribute::storedType($type);
+                    $this->message = \is_string($default) && ! BigInt::isIntegerString($default, $signed)
+                        ? 'Default value '.$default.' is not a valid integer string for type bigint'
+                        : 'Default value '.self::defaultText($default).' does not match given type '.Attribute::storedType($type);
                     throw new DatabaseException($this->message);
                 }
                 break;
             case ColumnType::Float:
             case ColumnType::Double:
                 if ($defaultType !== 'double') {
-                    $this->message = 'Default value '.json_encode($default).' does not match given type '.Attribute::storedType($type);
+                    $this->message = 'Default value '.self::defaultText($default).' does not match given type '.Attribute::storedType($type);
                     throw new DatabaseException($this->message);
                 }
                 break;
             case ColumnType::Datetime:
                 if ($defaultType !== 'string') {
-                    $this->message = 'Default value '.json_encode($default).' does not match given type '.Attribute::storedType($type);
+                    $this->message = 'Default value '.self::defaultText($default).' does not match given type '.Attribute::storedType($type);
                     throw new DatabaseException($this->message);
                 }
                 break;

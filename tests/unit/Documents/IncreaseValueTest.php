@@ -2,12 +2,11 @@
 
 namespace Tests\Unit\Documents;
 
+use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Tests\Unit\Event\HookFixture;
 use Utopia\Database\Database;
-use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Exception\Type as TypeException;
 
 final class IncreaseValueTest extends TestCase
 {
@@ -44,11 +43,11 @@ final class IncreaseValueTest extends TestCase
         $this->assertSame(1, $database->getDocument(HookFixture::COLLECTION, 'first')->getAttribute('views'));
     }
 
-    public function testTheRefusalIsADatabaseException(): void
+    public function testTheRefusalIsAnInvalidArgumentAs7xThrew(): void
     {
         $database = $this->database();
 
-        $this->expectException(DatabaseException::class);
+        $this->expectException(InvalidArgumentException::class);
 
         $database->increaseDocumentAttribute(HookFixture::COLLECTION, 'first', 'views', 0);
     }
@@ -66,7 +65,7 @@ final class IncreaseValueTest extends TestCase
         try {
             $operation();
             $this->fail('A change that is not a positive number was accepted');
-        } catch (TypeException $error) {
+        } catch (InvalidArgumentException $error) {
             $this->assertSame('Value must be numeric and greater than 0', $error->getMessage());
         }
     }

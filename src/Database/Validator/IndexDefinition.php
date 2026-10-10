@@ -264,7 +264,7 @@ class IndexDefinition extends Validator
                 break;
 
             default:
-                $this->message = self::unknownTypeMessage($type->value);
+                $this->message = Index::unknownTypeMessage($type->value);
 
                 return false;
         }
@@ -280,7 +280,7 @@ class IndexDefinition extends Validator
         }
 
         if (! \is_string($type) || IndexType::tryFrom($type) === null) {
-            $this->message = self::unknownTypeMessage(\is_string($type) ? $type : '');
+            $this->message = Index::unknownTypeMessage(\is_string($type) ? $type : '');
 
             return false;
         }
@@ -292,11 +292,6 @@ class IndexDefinition extends Validator
         }
 
         return true;
-    }
-
-    private static function unknownTypeMessage(string $type): string
-    {
-        return 'Unknown index type: '.$type.'. Must be one of '.IndexType::Key->value.', '.IndexType::Unique->value.', '.IndexType::Fulltext->value.', '.IndexType::Spatial->value.', '.IndexType::Object->value.', '.IndexType::HnswEuclidean->value.', '.IndexType::HnswCosine->value.', '.IndexType::HnswDot->value.', '.IndexType::Trigram->value.', '.IndexType::Ttl->value;
     }
 
     /**

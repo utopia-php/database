@@ -28,15 +28,24 @@ trait PreparesSearchTerms
 
     private function prepareSearchTerm(string $term): string
     {
-        $exact = \str_starts_with($term, self::SEARCH_QUOTE) && \str_ends_with($term, self::SEARCH_QUOTE);
+        $words = $this->searchWords($term);
 
-        $words = \preg_replace(self::SEARCH_SEPARATORS, ' ', $term) ?? '';
-        $words = \trim(\preg_replace(self::SEARCH_WHITESPACE, ' ', $words) ?? '');
-
-        if ($exact && $words !== '') {
+        if ($this->isExactSearch($term) && $words !== '') {
             return self::SEARCH_QUOTE.$words.self::SEARCH_QUOTE;
         }
 
         return $words;
+    }
+
+    private function isExactSearch(string $term): bool
+    {
+        return \str_starts_with($term, self::SEARCH_QUOTE) && \str_ends_with($term, self::SEARCH_QUOTE);
+    }
+
+    private function searchWords(string $term): string
+    {
+        $words = \preg_replace(self::SEARCH_SEPARATORS, ' ', $term) ?? '';
+
+        return \trim(\preg_replace(self::SEARCH_WHITESPACE, ' ', $words) ?? '');
     }
 }

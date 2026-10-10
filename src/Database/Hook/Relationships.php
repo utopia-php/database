@@ -1705,6 +1705,22 @@ class Relationships implements Attachable, Hook
     }
 
     /**
+     * The attributes a related document keeps for the selects passed down to it, as 7.x read them: a nested path
+     * through one of its relationships keeps that relationship, or nothing more, and a select left with nothing kept
+     * keeps every attribute. The selects themselves are left as they are for the next level.
+     *
+     * @param  array<Query>  $selectQueries
+     * @return array<Query>
+     */
+    private function selectsOfRelated(Document $relatedCollection, array $selectQueries): array
+    {
+        $selects = \array_map(static fn (Query $query): Query => clone $query, $selectQueries);
+        $this->processQueries(self::relationships($relatedCollection), $selects);
+
+        return $selects;
+    }
+
+    /**
      * @param  array<Attribute>  $relationships  The relationship attributes of the collection the queries read
      * @param  array<Query>  $queries
      * @return array<string, array<Query>>
@@ -2310,7 +2326,7 @@ class Relationships implements Attachable, Hook
             $relatedById[$related->getId()] = $related;
         }
 
-        $this->database->applySelectFiltersToDocuments($relatedDocuments, $selectQueries);
+        $this->database->applySelectFiltersToDocuments($relatedDocuments, $this->selectsOfRelated($relatedCollection, $selectQueries));
 
         foreach ($documentsByRelatedId as $relatedId => $docs) {
             if (isset($relatedById[$relatedId])) {
@@ -2398,7 +2414,7 @@ class Relationships implements Attachable, Hook
             $relatedByParentId[$parentKey][] = $related;
         }
 
-        $this->database->applySelectFiltersToDocuments($relatedDocuments, $selectQueries);
+        $this->database->applySelectFiltersToDocuments($relatedDocuments, $this->selectsOfRelated($relatedCollection, $selectQueries));
 
         foreach ($documents as $document) {
             $parentId = $document->getId();
@@ -2480,7 +2496,7 @@ class Relationships implements Attachable, Hook
             $relatedByChildId[$childKey][] = $related;
         }
 
-        $this->database->applySelectFiltersToDocuments($relatedDocuments, $selectQueries);
+        $this->database->applySelectFiltersToDocuments($relatedDocuments, $this->selectsOfRelated($relatedCollection, $selectQueries));
 
         foreach ($documents as $document) {
             $childId = $document->getId();
@@ -2580,7 +2596,7 @@ class Relationships implements Attachable, Hook
                 $relatedById[$doc->getId()] = $doc;
             }
 
-            $this->database->applySelectFiltersToDocuments($allRelatedDocs, $selectQueries);
+            $this->database->applySelectFiltersToDocuments($allRelatedDocs, $this->selectsOfRelated($relatedCollection, $selectQueries));
 
             foreach ($junctionsByDocumentId as $documentId => $relatedDocIds) {
                 $documentRelated = [];
@@ -2989,6 +3005,15 @@ class Relationships implements Attachable, Hook
      */
     private function linkRelatedDocuments(Document $collection, string $twoWayKey, string $documentId, array $ids): void
     {
+        // 7.x linked each document on its own, so with dates preserved each kept its stored $updatedAt.
+        if ($this->database->isPreservingDates()) {
+            foreach (\array_values(\array_unique($ids)) as $id) {
+                $this->linkRelatedDocument($collection, $id, $twoWayKey, $documentId);
+            }
+
+            return;
+        }
+
         foreach (\array_chunk(\array_values(\array_unique($ids)), $this->relationQueryChunkSize()) as $chunk) {
             $linked = $this->database->skipRelationships(fn () => $this->database->updateDocuments(
                 $collection->getId(),
@@ -3033,10 +3058,15 @@ class Relationships implements Attachable, Hook
 
         $this->authorizeLink($collection, $related);
 
+        $link = [$twoWayKey => $documentId];
+        if ($this->database->isPreservingDates()) {
+            $link[Document::UPDATED_AT] = $related->getUpdatedAt();
+        }
+
         $this->database->skipRelationships(fn () => $this->database->updateDocument(
             $collection->getId(),
             $id,
-            new Document([$twoWayKey => $documentId]),
+            new Document($link),
         ));
     }
 

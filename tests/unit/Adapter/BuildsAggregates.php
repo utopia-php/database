@@ -48,6 +48,6 @@ trait BuildsAggregates
      */
     public function boundValues(array $bindings): array
     {
-        return \array_map(fn (mixed $value): mixed => \is_float($value) ? $this->getFloatPrecision($value) : $value, $bindings);
+        return $bindings;
     }
 }

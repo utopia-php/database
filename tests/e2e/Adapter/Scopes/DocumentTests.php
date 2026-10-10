@@ -2626,6 +2626,54 @@ trait DocumentTests
         $this->assertLessThanOrEqual(25, count($documents)); // Default limit is 25
     }
 
+    public function testFloatsAreStoredAs7xBoundThem(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $family = $this->engineFamily($database);
+        if ($family === null) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'float_binding';
+        $database->createCollection(Collection::create(id: $collection, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+        ], documentSecurity: false));
+        $database->createAttribute($collection, Attribute::double(key: 'f'));
+        $database->createAttribute($collection, Attribute::double(key: 'fa', array: true));
+
+        $values = [
+            'tiny' => [1e-300, 1e-300],
+            'negative' => [-2.5e-20, -2.5e-20],
+            'digits' => [1.2345678901234567e-10, $family === 'mongo' ? 1.2345678901234567e-10 : 1.2345678901235e-10],
+            'avogadro' => [6.02214076e23, 6.02214076e23],
+            'sum' => [0.1 + 0.2, $family === 'mongo' ? 0.1 + 0.2 : 0.3],
+            'max' => [1.7976931348623157e308, $family === 'mongo' ? 1.7976931348623157e308 : 1.7976931348623e308],
+        ];
+        foreach ($values as $id => [$written]) {
+            $database->createDocument($collection, new Document(['$id' => $id, 'f' => $written, 'fa' => [$written]]));
+        }
+
+        foreach ($values as $id => [$written, $stored]) {
+            $document = $database->getDocument($collection, $id);
+            $this->assertSame($stored, $document->getAttribute('f'), $id);
+            $this->assertSame([$written], $document->getAttribute('fa'), $id);
+        }
+
+        $database->updateDocument($collection, 'tiny', new Document(['f' => -1e-300]));
+        $this->assertSame(-1e-300, $database->getDocument($collection, 'tiny')->getAttribute('f'));
+
+        $small = \array_map(
+            static fn (Document $document): string => $document->getId(),
+            $database->find($collection, [Query::lessThan('f', 1e-5), Query::greaterThan('f', -1), Query::orderAsc('$id')]),
+        );
+        $this->assertSame(['digits', 'negative', 'tiny'], $small);
+    }
+
     public function testFindOrderRandomIgnoresACursorAs7xDid(): void
     {
         $this->initMoviesFixture();

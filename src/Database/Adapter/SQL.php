@@ -3498,6 +3498,9 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * Prepares the SQL statement and binds positional parameters from the Statement.
      * Does NOT call execute() - the caller is responsible for that.
      *
+     * Floats are bound as 7.x bound them: a find() binds them in fixed-point notation, every other statement as
+     * PHP writes them, so a write keeps a magnitude fixed point would round to zero.
+     *
      * @param  string  $collection  The collection the statement reads or writes, for the profiler
      * @return PDOStatement|DatabasePDOStatement|PDOStatementProxy
      */
@@ -3509,8 +3512,10 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             if (\is_bool($value) && $this->supports(Capability::IntegerBooleans)) {
                 $value = (int) $value;
             }
-            if (\is_float($value)) {
+            if (\is_float($value) && $event === Event::DocumentFind) {
                 $prepared->bindValue($i + 1, $this->getFloatPrecision($value), PDO::PARAM_STR);
+            } elseif (\is_float($value)) {
+                $prepared->bindValue($i + 1, $value, PDO::PARAM_STR);
             } else {
                 $prepared->bindValue($i + 1, $value, $this->getPdoType($value));
             }

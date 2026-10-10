@@ -2632,7 +2632,7 @@ trait DocumentTests
         $database = $this->getDatabase();
         $adapter = $database->getAdapter();
 
-        if (! $adapter instanceof Mongo || $database->getSharedTables() || ! $adapter->supports(Capability::DefinedAttributes)) {
+        if (! $adapter instanceof Mongo || $database->hasSharedTables() || ! $adapter->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
 
             return;

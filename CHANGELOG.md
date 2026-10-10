@@ -31,6 +31,17 @@ unchanged.
 - `Index::fromArray()` refuses an unknown index type with `Exception\Index` (`Unknown index type: …`) instead of
   creating a key index.
 - `Exception\Unique::MESSAGE` is `Unique index violation` again.
+- A many-to-many relationship created by 7.x can be renamed again: its junction index, which 7.x stored with `key`
+  `index_<key>`, is read under its `$id` `_index_<key>`.
+- The SQL adapters bind floats as 7.x did: fixed-point only in `find()`, as PHP writes them elsewhere, so a write
+  no longer stores `1e-300` or `-2.5e-20` as `0`.
+- Two-level relationship selects (`author.profile.*`, `tags.books.name`) return the related documents' attributes
+  as in 7.x, and `select(['*', '*.*'])` reads every column instead of failing on MariaDB, MySQL and PostgreSQL.
+- A single SQL read returns `$sequence` ahead of `$id`, in 7.x's key order.
+- An update validates the stored values it leaves unchanged again, as 7.x did; a stored object value is held to
+  7.x's object rules.
+- On MongoDB a transaction that lost a write conflict runs again up to 20 times, so concurrent increments of one
+  document all land.
 
 ## 8.0.0 (unreleased)
 

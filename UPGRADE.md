@@ -1137,7 +1137,8 @@ coroutine that opened it and the coroutines it starts; see [Pools and profiling]
   below). On a sharded cluster (`mongos`) the adapter runs without transactions, as on a standalone server.
 - **Commits the server reports aborted.** On MongoDB, a commit that the server reports aborted (`NoSuchTransaction`
   (251) or `WriteConflict` (112)) stored nothing, so `withTransaction()` runs the callback again, within its usual 2
-  retries, whether it was the first commit or a retry; when the retries run out it throws `Utopia\Database\Exception`
+  retries (20 for a write conflict, after a short randomised wait, so concurrent writes to one document all land),
+  whether it was the first commit or a retry; when the retries run out it throws `Utopia\Database\Exception`
   with an `Exception\Transaction` cause. 7.x reported a first commit the server had aborted as a success, so the
   callback's writes were lost while the call returned normally. MongoDB aborts the whole transaction on a failed
   write in it, so a callback that catches a failed write (a `Duplicate`, for example) and carries on now runs again
@@ -2005,8 +2006,10 @@ $validator = new IndexDefinition($attributes, $indexes, $database->profile());
   it starts; `setStatus()`, `enable()`, `disable()` and `reset()` change the shared status unless called inside
   such a scope (see [Coroutines](#coroutines)). `setDefaultStatus()` is a constructor argument,
   `new Authorization(bool $defaultStatus = true)`. `restore()` is internal.
-- `Validator\Structure` takes `array $storedAttributes = []`: the attributes whose values are the stored ones, which
-  it does not validate again. `Database::updateDocument()` passes it.
+- `Validator\Structure` takes `array $storedAttributes = []`: the attributes whose values are the stored ones. They
+  are validated as in 7.x, so an update fails on a stored value a narrowed definition no longer admits, but a stored
+  object value is held to what 7.x accepted (any JSON string or empty value). `Database::updateDocument()` passes
+  it.
 - `Database::convertQueries()` takes an optional `array $joinedCollections` (join alias => collection). With it,
   filters on `alias.attribute`, the filters of join ON lists and `having()` conditions in the list are converted
   too; aggregates and selects in the list are left as they are. Without it the method converts as before.
@@ -2017,7 +2020,7 @@ Nothing in the library, Appwrite, Appwrite Cloud or utopia-php/migration calls t
 
 | Removed | Replacement |
 |---|---|
-| `Adapter\SQL::setFloatPrecision(int $precision)` | Floats are bound with 17 digits. A subclass can set the protected `$floatPrecision` property |
+| `Adapter\SQL::setFloatPrecision(int $precision)` | As in 7.x, a `find()` binds floats in fixed-point with 17 decimals and every other statement binds them as PHP writes them. A subclass can set the protected `$floatPrecision` property |
 | `Adapter\SQLite::setEmulateMySQL()`, `getEmulateMySQL()` | A subclass sets the protected `$emulateMySQL` property to `true` |
 | `Database::getInstanceFilters()` | The codecs given to the constructor, or `getFilters()` |
 | `Mirror::getWriteFilters()` | The `$filters` given to the constructor. A subclass reads the protected `$writeFilters` property |

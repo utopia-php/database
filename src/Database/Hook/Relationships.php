@@ -1705,6 +1705,22 @@ class Relationships implements Attachable, Hook
     }
 
     /**
+     * The attributes a related document keeps for the selects passed down to it, as 7.x read them: a nested path
+     * through one of its relationships keeps that relationship, or nothing more, and a select left with nothing kept
+     * keeps every attribute. The selects themselves are left as they are for the next level.
+     *
+     * @param  array<Query>  $selectQueries
+     * @return array<Query>
+     */
+    private function selectsOfRelated(Document $relatedCollection, array $selectQueries): array
+    {
+        $selects = \array_map(static fn (Query $query): Query => clone $query, $selectQueries);
+        $this->processQueries(self::relationships($relatedCollection), $selects);
+
+        return $selects;
+    }
+
+    /**
      * @param  array<Attribute>  $relationships  The relationship attributes of the collection the queries read
      * @param  array<Query>  $queries
      * @return array<string, array<Query>>
@@ -2310,7 +2326,7 @@ class Relationships implements Attachable, Hook
             $relatedById[$related->getId()] = $related;
         }
 
-        $this->database->applySelectFiltersToDocuments($relatedDocuments, $selectQueries);
+        $this->database->applySelectFiltersToDocuments($relatedDocuments, $this->selectsOfRelated($relatedCollection, $selectQueries));
 
         foreach ($documentsByRelatedId as $relatedId => $docs) {
             if (isset($relatedById[$relatedId])) {
@@ -2398,7 +2414,7 @@ class Relationships implements Attachable, Hook
             $relatedByParentId[$parentKey][] = $related;
         }
 
-        $this->database->applySelectFiltersToDocuments($relatedDocuments, $selectQueries);
+        $this->database->applySelectFiltersToDocuments($relatedDocuments, $this->selectsOfRelated($relatedCollection, $selectQueries));
 
         foreach ($documents as $document) {
             $parentId = $document->getId();
@@ -2480,7 +2496,7 @@ class Relationships implements Attachable, Hook
             $relatedByChildId[$childKey][] = $related;
         }
 
-        $this->database->applySelectFiltersToDocuments($relatedDocuments, $selectQueries);
+        $this->database->applySelectFiltersToDocuments($relatedDocuments, $this->selectsOfRelated($relatedCollection, $selectQueries));
 
         foreach ($documents as $document) {
             $childId = $document->getId();
@@ -2580,7 +2596,7 @@ class Relationships implements Attachable, Hook
                 $relatedById[$doc->getId()] = $doc;
             }
 
-            $this->database->applySelectFiltersToDocuments($allRelatedDocs, $selectQueries);
+            $this->database->applySelectFiltersToDocuments($allRelatedDocs, $this->selectsOfRelated($relatedCollection, $selectQueries));
 
             foreach ($junctionsByDocumentId as $documentId => $relatedDocIds) {
                 $documentRelated = [];

@@ -506,6 +506,73 @@ trait RelationshipTests
         $this->assertEquals('Bronx Zoo', $animal->getDocument('zoo')->getAttribute('name')); // Check zoo is an object
     }
 
+    private function librarySchema(Database $database): void
+    {
+        $any = [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any()), Permission::delete(Role::any())];
+        foreach (['lib_authors', 'lib_profiles', 'lib_books', 'lib_libraries', 'lib_tags'] as $collection) {
+            $database->createCollection(Collection::create(id: $collection, permissions: $any, documentSecurity: false));
+            $database->createAttribute($collection, Attribute::string(key: 'name', size: 64, required: true));
+        }
+        $database->createRelationship('lib_authors', Relationship::oneToOne('lib_profiles', key: 'profile', twoWay: true, twoWayKey: 'author', onDelete: RelationshipDeleteAction::Cascade));
+        $database->createRelationship('lib_authors', Relationship::oneToMany('lib_books', key: 'books', twoWay: true, twoWayKey: 'author', onDelete: RelationshipDeleteAction::SetNull));
+        $database->createRelationship('lib_books', Relationship::manyToOne('lib_libraries', key: 'library', twoWayKey: 'books_inverse'));
+        $database->createRelationship('lib_books', Relationship::manyToMany('lib_tags', key: 'tags', twoWay: true, twoWayKey: 'books', onDelete: RelationshipDeleteAction::SetNull));
+        $database->createRelationship('lib_libraries', Relationship::oneToMany('lib_tags', key: 'featured', twoWayKey: 'featured_inverse', onDelete: RelationshipDeleteAction::Cascade));
+
+        foreach ([1, 2] as $number) {
+            $database->createDocument('lib_libraries', new Document(['$id' => "lib{$number}", 'name' => "Library {$number}", 'featured' => [['$id' => "feat{$number}", 'name' => "Featured {$number}"]]]));
+        }
+        foreach ([1, 2] as $number) {
+            $database->createDocument('lib_tags', new Document(['$id' => "tag{$number}", 'name' => "Tag {$number}"]));
+        }
+        $database->createDocument('lib_authors', new Document([
+            '$id' => 'author1',
+            'name' => 'Ada',
+            'profile' => ['$id' => 'profile1', 'name' => 'Ada profile'],
+            'books' => [['$id' => 'book1', 'name' => 'Notes', 'library' => 'lib1', 'tags' => ['tag1', 'tag2']]],
+        ]));
+        $database->createDocument('lib_books', new Document(['$id' => 'book2', 'name' => 'Orphan']));
+    }
+
+    public function testNestedRelationshipSelectsReturnWhat7xReturned(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (! $database->getAdapter()->hasFeature(Feature\Relationships::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->librarySchema($database);
+
+        try {
+            $books = $database->find('lib_books', [Query::select(['name', 'author.name', 'author.profile.*']), Query::equal('$id', ['book1'])]);
+            $this->assertSame('Ada', $books[0]->getAttribute('author')->getAttribute('name'));
+            $this->assertSame('Ada profile', $books[0]->getAttribute('author')->getAttribute('profile')?->getAttribute('name'));
+
+            $books = $database->find('lib_books', [Query::select(['tags.books.name']), Query::equal('$id', ['book1'])]);
+            $tags = $books[0]->getAttribute('tags');
+            $this->assertSame(['Tag 1', 'Tag 2'], \array_map(static fn (Document $tag): mixed => $tag->getAttribute('name'), $tags));
+
+            $book = $database->getDocument('lib_books', 'book1', [Query::select(['name', 'library.featured.*'])]);
+            $this->assertSame('Library 1', $book->getAttribute('library')->getAttribute('name'));
+            $this->assertSame('Featured 1', $book->getAttribute('library')->getAttribute('featured')[0]->getAttribute('name'));
+
+            $books = $database->find('lib_books', [Query::select(['*', '*.*']), Query::orderAsc('$id')]);
+            $this->assertSame(['book1', 'book2'], \array_map(static fn (Document $book): string => $book->getId(), $books));
+            $this->assertSame('Notes', $books[0]->getAttribute('name'));
+
+            $keys = \array_keys($database->getDocument('lib_authors', 'author1')->getArrayCopy());
+            $this->assertLessThan(\array_search('$id', $keys, true), \array_search('$sequence', $keys, true), 'a single read returns $sequence ahead of $id, as in 7.x');
+        } finally {
+            foreach (['lib_books', 'lib_authors', 'lib_profiles', 'lib_libraries', 'lib_tags'] as $collection) {
+                $database->deleteCollection($collection);
+            }
+        }
+    }
+
     public function testSimpleRelationshipPopulation(): void
     {
         /** @var Database $database */

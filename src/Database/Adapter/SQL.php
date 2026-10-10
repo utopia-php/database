@@ -646,7 +646,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
             $this->remapRow($row);
 
-            return Document::fromRow($row);
+            return Document::fromRow(self::sequenceBeforeId($row));
         }
 
         if ($this->queriesHaveJoins($queries)) {
@@ -705,7 +705,33 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
         $this->remapRow($document);
 
-        return Document::fromRow($document);
+        return Document::fromRow(self::sequenceBeforeId($document));
+    }
+
+    /**
+     * A single read returns `$sequence` ahead of `$id`, in the key order 7.x returned it.
+     *
+     * @param  array<string, mixed>  $row
+     * @return array<string, mixed>
+     */
+    private static function sequenceBeforeId(array $row): array
+    {
+        if (! \array_key_exists(Document::SEQUENCE, $row) || ! \array_key_exists(Document::ID, $row)) {
+            return $row;
+        }
+
+        $ordered = [];
+        foreach ($row as $key => $value) {
+            if ($key === Document::SEQUENCE) {
+                continue;
+            }
+            if ($key === Document::ID) {
+                $ordered[Document::SEQUENCE] = $row[Document::SEQUENCE];
+            }
+            $ordered[$key] = $value;
+        }
+
+        return $ordered;
     }
 
     /**

@@ -2626,6 +2626,56 @@ trait DocumentTests
         $this->assertLessThanOrEqual(25, count($documents)); // Default limit is 25
     }
 
+    public function testConcurrentIncrementsOnMongoDBAllLand(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if (! $adapter instanceof Mongo || $database->getSharedTables() || ! $adapter->supports(Capability::DefinedAttributes)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'concurrent_counters';
+        $database->createCollection(Collection::create(id: $collection, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+        ], documentSecurity: false));
+        $database->createAttribute($collection, Attribute::integer(key: 'count'));
+        $database->createDocument($collection, new Document(['$id' => 'counter', 'count' => 5]));
+
+        $failures = [];
+        try {
+            \Swoole\Coroutine\run(function () use ($database, $collection, &$failures): void {
+                for ($writer = 0; $writer < 8; $writer++) {
+                    \Swoole\Coroutine::create(function () use ($database, $collection, &$failures): void {
+                        $client = new \Utopia\Mongo\Client($database->getDatabase(), 'mongo', 27017, 'root', 'password', true);
+                        $writerDatabase = (new Database(new Mongo($client), new Cache(new NoneCacheAdapter())))
+                            ->setAuthorization($database->getAuthorization())
+                            ->setDatabase($database->getDatabase())
+                            ->setNamespace($database->getNamespace());
+                        $writerDatabase->setSchemaless(false);
+                        for ($increment = 0; $increment < 10; $increment++) {
+                            try {
+                                $writerDatabase->increaseDocumentAttribute($collection, 'counter', 'count', 1);
+                            } catch (Throwable $error) {
+                                $failures[] = $error->getMessage();
+                            }
+                        }
+                    });
+                }
+            });
+
+            $this->assertSame([], $failures);
+            $this->assertSame(85, $database->getDocument($collection, 'counter')->getAttribute('count'));
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
     public function testFloatsAreStoredAs7xBoundThem(): void
     {
         /** @var Database $database */

@@ -133,7 +133,7 @@ final readonly class Index
     public static function fromDocument(Document $document): self
     {
         return self::hydrate(
-            $document->getAttribute(self::KEY, $document->getId()),
+            self::storedKey($document),
             $document->getAttribute(self::TYPE, IndexType::Key->value),
             $document->getAttribute(self::ATTRIBUTES, []),
             $document->getAttribute(self::LENGTHS, []),
@@ -162,6 +162,18 @@ final readonly class Index
             $data[self::ORDERS] ?? [],
             $data[self::TTL] ?? null,
         );
+    }
+
+    /**
+     * The key an index is stored under. 7.x wrote a many-to-many junction's first index with `$id` `_index_<key>`,
+     * the name the engine holds, but `key` `index_<key>`; that index is read by its `$id`.
+     */
+    private static function storedKey(Document $document): mixed
+    {
+        $key = $document->getAttribute(self::KEY, $document->getId());
+        $id = $document->getId();
+
+        return \is_string($key) && $id === '_'.$key && \str_starts_with($id, '_index_') ? $id : $key;
     }
 
     /**

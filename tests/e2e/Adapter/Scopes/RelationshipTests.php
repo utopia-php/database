@@ -549,16 +549,25 @@ trait RelationshipTests
 
         try {
             $books = $database->find('lib_books', [Query::select(['name', 'author.name', 'author.profile.*']), Query::equal('$id', ['book1'])]);
-            $this->assertSame('Ada', $books[0]->getAttribute('author')->getAttribute('name'));
-            $this->assertSame('Ada profile', $books[0]->getAttribute('author')->getAttribute('profile')?->getAttribute('name'));
+            $author = $books[0]->getAttribute('author');
+            $this->assertInstanceOf(Document::class, $author);
+            $this->assertSame('Ada', $author->getAttribute('name'));
+            $profile = $author->getAttribute('profile');
+            $this->assertInstanceOf(Document::class, $profile);
+            $this->assertSame('Ada profile', $profile->getAttribute('name'));
 
             $books = $database->find('lib_books', [Query::select(['tags.books.name']), Query::equal('$id', ['book1'])]);
             $tags = $books[0]->getAttribute('tags');
-            $this->assertSame(['Tag 1', 'Tag 2'], \array_map(static fn (Document $tag): mixed => $tag->getAttribute('name'), $tags));
+            $this->assertIsArray($tags);
+            $this->assertSame(['Tag 1', 'Tag 2'], \array_map(static fn (mixed $tag): mixed => $tag instanceof Document ? $tag->getAttribute('name') : null, $tags));
 
-            $book = $database->getDocument('lib_books', 'book1', [Query::select(['name', 'library.featured.*'])]);
-            $this->assertSame('Library 1', $book->getAttribute('library')->getAttribute('name'));
-            $this->assertSame('Featured 1', $book->getAttribute('library')->getAttribute('featured')[0]->getAttribute('name'));
+            $library = $database->getDocument('lib_books', 'book1', [Query::select(['name', 'library.featured.*'])])->getAttribute('library');
+            $this->assertInstanceOf(Document::class, $library);
+            $this->assertSame('Library 1', $library->getAttribute('name'));
+            $featured = $library->getAttribute('featured');
+            $this->assertIsArray($featured);
+            $this->assertInstanceOf(Document::class, $featured[0]);
+            $this->assertSame('Featured 1', $featured[0]->getAttribute('name'));
 
             $books = $database->find('lib_books', [Query::select(['*', '*.*']), Query::orderAsc('$id')]);
             $this->assertSame(['book1', 'book2'], \array_map(static fn (Document $book): string => $book->getId(), $books));

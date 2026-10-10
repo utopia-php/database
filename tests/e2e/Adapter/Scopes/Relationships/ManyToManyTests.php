@@ -46,9 +46,10 @@ trait ManyToManyTests
         $junction = '_'.$database->getCollection('legacy_books')->getSequence().'_'.$database->getCollection('legacy_tags')->getSequence();
         $database->getAuthorization()->skip(fn () => $database->silent(function () use ($database, $junction): void {
             $definition = $database->getDocument(Database::METADATA, $junction);
+            $stored = $definition->getAttribute('indexes', []);
             $indexes = \array_map(
-                static fn (Document $index): Document => $index->getId() === '_index_tags' ? $index->setAttribute('key', 'index_tags') : $index,
-                $definition->getAttribute('indexes', []),
+                static fn (mixed $index): mixed => $index instanceof Document && $index->getId() === '_index_tags' ? $index->setAttribute('key', 'index_tags') : $index,
+                \is_array($stored) ? $stored : [],
             );
             $database->updateDocument(Database::METADATA, $junction, $definition->setAttribute('indexes', $indexes));
         }));
@@ -59,10 +60,9 @@ trait ManyToManyTests
         $keys = \array_map(static fn ($index): string => $index->key, $database->getCollection($junction)->indexes());
         $this->assertContains('_index_labels', $keys);
         $this->assertNotContains('_index_tags', $keys);
-        $this->assertSame(['tag1'], \array_map(
-            static fn (Document $tag): string => $tag->getId(),
-            $database->getDocument('legacy_books', 'book1')->getAttribute('labels'),
-        ));
+        $labels = $database->getDocument('legacy_books', 'book1')->getAttribute('labels');
+        $this->assertIsArray($labels);
+        $this->assertSame(['tag1'], \array_map(static fn (mixed $tag): mixed => $tag instanceof Document ? $tag->getId() : null, $labels));
 
         $database->deleteCollection('legacy_books');
         $database->deleteCollection('legacy_tags');

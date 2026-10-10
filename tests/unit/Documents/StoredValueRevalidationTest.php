@@ -24,6 +24,7 @@ final class StoredValueRevalidationTest extends TestCase
 {
     private const string COLLECTION = 'rows';
 
+    #[\Override]
     public static function setUpBeforeClass(): void
     {
         Structure::addFormat('storedRange', static function (mixed $attribute): Range {

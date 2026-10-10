@@ -711,8 +711,8 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     /**
      * A single read returns `$sequence` ahead of `$id`, in the key order 7.x returned it.
      *
-     * @param  array<string, mixed>  $row
-     * @return array<string, mixed>
+     * @param  array<int|string, mixed>  $row
+     * @return array<int|string, mixed>
      */
     private static function sequenceBeforeId(array $row): array
     {

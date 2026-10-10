@@ -58,7 +58,6 @@ final class MongoTransactionRetryTest extends TestCase
             'contention' => [new ContentionException('Write conflict')],
             'transaction' => [new TransactionException('Transaction aborted')],
             'labelled transient' => [new MongoException('Transaction was aborted', 251, null, [self::TRANSIENT_TRANSACTION_ERROR])],
-            'write conflict' => [new MongoException('WriteConflict', self::WRITE_CONFLICT)],
             'network error' => [new MongoException('Socket error', self::SOCKET_EXCEPTION)],
             'unsent' => [new UnsentException('Connection to MongoDB has been lost')],
             'failure wrapping a transient error' => [new DatabaseException('Failed to commit transaction', previous: new MongoException('Transaction was aborted', 0, null, [self::TRANSIENT_TRANSACTION_ERROR]))],
@@ -91,6 +90,19 @@ final class MongoTransactionRetryTest extends TestCase
         $this->assertSame($failure, $thrown);
         $this->assertSame(self::ATTEMPTS, $attempts);
         $this->assertSame(self::ATTEMPTS, $client->sessions);
+        $this->assertFalse($adapter->inTransaction());
+    }
+
+    public function testAWriteConflictRunsUntilItsRetriesForWriteConflictsRunOut(): void
+    {
+        $client = new ReplicaSetClient();
+        $adapter = new Mongo($client);
+        $failure = new MongoException('WriteConflict', self::WRITE_CONFLICT);
+
+        [$thrown, $attempts] = $this->attempt($adapter, $failure);
+
+        $this->assertSame($failure, $thrown);
+        $this->assertSame(21, $attempts);
         $this->assertFalse($adapter->inTransaction());
     }
 

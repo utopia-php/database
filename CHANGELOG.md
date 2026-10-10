@@ -42,6 +42,8 @@ unchanged.
   7.x's object rules.
 - On MongoDB a transaction that lost a write conflict runs again up to 20 times, so concurrent increments of one
   document all land.
+- With dates preserved, linking existing children through their one-to-many parent keeps each child's stored
+  `$updatedAt`, as 7.x did; unlinking still stamps the child.
 
 ## 8.0.0 (unreleased)
 

@@ -3005,6 +3005,15 @@ class Relationships implements Attachable, Hook
      */
     private function linkRelatedDocuments(Document $collection, string $twoWayKey, string $documentId, array $ids): void
     {
+        // 7.x linked each document on its own, so with dates preserved each kept its stored $updatedAt.
+        if ($this->database->isPreservingDates()) {
+            foreach (\array_values(\array_unique($ids)) as $id) {
+                $this->linkRelatedDocument($collection, $id, $twoWayKey, $documentId);
+            }
+
+            return;
+        }
+
         foreach (\array_chunk(\array_values(\array_unique($ids)), $this->relationQueryChunkSize()) as $chunk) {
             $linked = $this->database->skipRelationships(fn () => $this->database->updateDocuments(
                 $collection->getId(),
@@ -3049,10 +3058,15 @@ class Relationships implements Attachable, Hook
 
         $this->authorizeLink($collection, $related);
 
+        $link = [$twoWayKey => $documentId];
+        if ($this->database->isPreservingDates()) {
+            $link[Document::UPDATED_AT] = $related->getUpdatedAt();
+        }
+
         $this->database->skipRelationships(fn () => $this->database->updateDocument(
             $collection->getId(),
             $id,
-            new Document([$twoWayKey => $documentId]),
+            new Document($link),
         ));
     }
 

@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Id;
 use Utopia\Database\Permission;
 use Utopia\Database\PermissionType;
@@ -327,6 +328,81 @@ class PermissionTest extends TestCase
             'create("user:123")',
             'update("user:123")',
             'delete("user:123")',
+        ], $parsed);
+    }
+
+    /**
+     * A permission may name one column, and then covers that column alone. Naming none
+     * covers every column, which is what every permission has always meant.
+     *
+     * @throws \Exception
+     */
+    public function test_column_scope(): void
+    {
+        $permission = Permission::parse('read("any", "salary")');
+        $this->assertEquals('read', $permission->getPermission());
+        $this->assertEquals('any', $permission->getRole());
+        $this->assertEquals('salary', $permission->getColumn());
+        $this->assertFalse($permission->isForAllColumns());
+        $this->assertEquals('read("any", "salary")', $permission->toString());
+
+        $permission = Permission::parse('read("any")');
+        $this->assertEquals(Permission::ALL_COLUMNS, $permission->getColumn());
+        $this->assertTrue($permission->isForAllColumns());
+
+        // The column does not disturb the role grammar either side of it.
+        $permission = Permission::parse('update("team:123/admin", "salary")');
+        $this->assertEquals('team', $permission->getRole());
+        $this->assertEquals('123', $permission->getIdentifier());
+        $this->assertEquals('admin', $permission->getDimension());
+        $this->assertEquals('salary', $permission->getColumn());
+        $this->assertEquals('update("team:123/admin", "salary")', $permission->toString());
+
+        $permission = Permission::parse('read("user:123", "name")');
+        $this->assertEquals('user', $permission->getRole());
+        $this->assertEquals('123', $permission->getIdentifier());
+        $this->assertEmpty($permission->getDimension());
+        $this->assertEquals('name', $permission->getColumn());
+    }
+
+    /**
+     * @throws \Exception
+     */
+    public function test_column_must_not_be_empty(): void
+    {
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Column must not be empty');
+
+        Permission::parse('read("any", "")');
+    }
+
+    /**
+     * Every builder takes the column, so a caller never has to assemble the string by hand.
+     */
+    public function test_column_builders(): void
+    {
+        $this->assertEquals('read("any", "name")', Permission::read(Role::any(), 'name'));
+        $this->assertEquals('create("any", "name")', Permission::create(Role::any(), 'name'));
+        $this->assertEquals('update("any", "name")', Permission::update(Role::any(), 'name'));
+        $this->assertEquals('delete("any", "name")', Permission::delete(Role::any(), 'name'));
+        $this->assertEquals('write("any", "name")', Permission::write(Role::any(), 'name'));
+
+        $this->assertEquals('read("any")', Permission::read(Role::any()));
+    }
+
+    /**
+     * Expanding write() keeps the column: the aggregate is the same grant, narrowed the same way.
+     *
+     * @throws \Exception
+     */
+    public function test_aggregation_keeps_the_column(): void
+    {
+        $parsed = Permission::aggregate([Permission::write(Role::any(), 'salary')]);
+
+        $this->assertEquals([
+            'create("any", "salary")',
+            'update("any", "salary")',
+            'delete("any", "salary")',
         ], $parsed);
     }
 }

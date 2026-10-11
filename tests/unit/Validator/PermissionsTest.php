@@ -356,4 +356,53 @@ class PermissionsTest extends TestCase
         $this->assertFalse($object->isValid(['execute("any")']));
         $this->assertSame('Permission "execute("any")" is not allowed. Must be one of: create, read, update, delete, write.', $object->getDescription());
     }
+
+    /**
+     * A column list is the collection's own. Only then may a permission name a column,
+     * and only one that is on the list.
+     */
+    public function test_column_scope_against_a_collection(): void
+    {
+        $object = new Permissions(columns: ['name', 'salary']);
+
+        $this->assertTrue($object->isValid([Permission::read(Role::any(), 'name')]));
+        $this->assertTrue($object->isValid([Permission::read(Role::team('hr'), 'salary')]));
+
+        // A permission naming no column still covers every column.
+        $this->assertTrue($object->isValid([Permission::read(Role::any())]));
+
+        $this->assertFalse($object->isValid([Permission::read(Role::any(), 'nope')]));
+        $this->assertSame('Column "nope" does not exist.', $object->getDescription());
+    }
+
+    /**
+     * Without a column list there is nothing to judge a column against, so naming one is
+     * refused rather than stored and never enforced. This is every set but a collection's own.
+     */
+    public function test_column_scope_refused_without_a_column_list(): void
+    {
+        $object = new Permissions();
+
+        $this->assertFalse($object->isValid([Permission::read(Role::any(), 'name')]));
+        $this->assertSame(
+            'Permission "read("any", "name")" is scoped to a column. Column-scoped permissions are set on the collection, not here.',
+            $object->getDescription(),
+        );
+
+        $this->assertTrue($object->isValid([Permission::read(Role::any())]));
+    }
+
+    /**
+     * An empty column list is a collection with no columns: no permission may name one,
+     * and that is not the same as having no list at all.
+     */
+    public function test_column_scope_against_a_collection_without_columns(): void
+    {
+        $object = new Permissions(columns: []);
+
+        $this->assertFalse($object->isValid([Permission::read(Role::any(), 'name')]));
+        $this->assertSame('Column "name" does not exist.', $object->getDescription());
+
+        $this->assertTrue($object->isValid([Permission::read(Role::any())]));
+    }
 }

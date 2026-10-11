@@ -1229,8 +1229,19 @@ trait Documents
 
         $document = $this->encode($collection, $document);
 
-        if ($this->validation()->get()) {
-            $validator = new Permissions();
+        // A metadata document is a collection definition, whose permissions name that
+        // collection's columns rather than _metadata's, and createCollection() and
+        // updateCollection() have already judged them against the right list.
+        // withForeignColumnPermissions() says the same of any other document a caller keeps a
+        // collection's settings in. Both are records of permissions enforced elsewhere, so
+        // judging them here would only ever compare them to the wrong schema.
+        $recordsForeignPermissions = $collection->getId() === Database::METADATA
+            || $this->hasForeignColumnPermissions();
+
+        if ($this->validation()->get() && ! $recordsForeignPermissions) {
+            // No column list on purpose: column permissions are set on the collection, so a
+            // document naming one is refused rather than stored and never enforced.
+            $validator = new Permissions(columns: null);
             if (! $validator->isValid($document->getPermissions())) {
                 throw new DatabaseException($validator->getDescription());
             }

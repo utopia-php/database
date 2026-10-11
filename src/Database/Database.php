@@ -258,6 +258,9 @@ class Database
     private ?Value $validation = null;
 
     /** @var Value<bool>|null */
+    private ?Value $foreignColumnPermissions = null;
+
+    /** @var Value<bool>|null */
     private ?Value $datePreservation = null;
 
     /** @var Value<bool>|null */
@@ -1313,6 +1316,32 @@ class Database
     }
 
     /**
+     * Run the callback accepting column-scoped permissions on documents whose columns belong
+     * to another collection.
+     *
+     * A document's permissions are normally judged against its own collection's columns, and a
+     * column-scoped one is refused because there is nothing here it could correctly name. That
+     * is wrong for a document that *records* another collection's permissions rather than
+     * carrying its own -- a collection definition does this, and so does any row a caller keeps
+     * a collection's settings in. Those permissions are enforced where they belong, on the
+     * collection they describe, and judging them here would only compare them to the wrong
+     * schema.
+     *
+     * Scoped to the callback rather than set once, so the exemption covers the one write that
+     * needs it instead of every write that follows. Nothing is enforced inside: this says the
+     * permissions are a record, not a rule.
+     *
+     * @template T
+     *
+     * @param  callable(): T  $callback
+     * @return T
+     */
+    public function withForeignColumnPermissions(callable $callback): mixed
+    {
+        return $this->foreignColumnPermissions()->with(true, $callback);
+    }
+
+    /**
      * Register a hook into the database pipeline.
      *
      * Dispatches by type:
@@ -1648,6 +1677,22 @@ class Database
     private function validation(): Value
     {
         return $this->validation ??= new Value(true);
+    }
+
+    /**
+     * @return Value<bool>
+     */
+    private function foreignColumnPermissions(): Value
+    {
+        return $this->foreignColumnPermissions ??= new Value(false);
+    }
+
+    /**
+     * Whether a document's permissions may name a column belonging to another collection.
+     */
+    public function hasForeignColumnPermissions(): bool
+    {
+        return $this->foreignColumnPermissions()->get();
     }
 
     /**

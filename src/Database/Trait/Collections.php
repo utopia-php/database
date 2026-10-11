@@ -55,7 +55,7 @@ trait Collections
         }
 
         if ($this->validation()->get()) {
-            $validator = new Permissions();
+            $validator = new Permissions(columns: \array_map(fn (Attribute $attribute) => $attribute->key, $attributes));
             if (! $validator->isValid($permissions)) {
                 throw new DatabaseException($validator->getDescription());
             }
@@ -160,14 +160,17 @@ trait Collections
      */
     public function updateCollection(string $collection, CollectionUpdate $update): Collection
     {
+        $definition = $this->silent(fn () => $this->getOwnCollection($collection));
+
+        // After the read, not before: a column-scoped permission is judged against this
+        // collection's columns, so there is nothing to judge it with until the definition
+        // is in hand.
         if ($update->permissions !== null && $this->validation()->get()) {
-            $validator = new Permissions();
+            $validator = new Permissions(columns: \array_map(fn (Attribute $attribute) => $attribute->key, $definition->attributes()));
             if (! $validator->isValid($update->permissions)) {
                 throw new DatabaseException($validator->getDescription());
             }
         }
-
-        $definition = $this->silent(fn () => $this->getOwnCollection($collection));
 
         if ($update->permissions === null && $update->documentSecurity === null) {
             return $definition;

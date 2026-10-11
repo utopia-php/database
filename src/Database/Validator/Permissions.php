@@ -21,13 +21,27 @@ class Permissions extends Roles
     protected int $length;
 
     /**
+     * Columns a permission in this set is allowed to name.
+     *
+     * @var array<string>|null
+     */
+    private ?array $columns;
+
+    /**
      * @param  int  $length  maximum amount of permissions. 0 means unlimited.
      * @param  array<PermissionType>  $allowed  allowed permissions. Defaults to all available.
+     * @param  array<string>|null  $columns  the collection's column keys. A permission may name one
+     *                                       of these and no other. Null means this set may not name
+     *                                       a column at all, which is the case for every permission
+     *                                       outside a collection's own -- a document's permissions
+     *                                       carry no column, and nothing else has a column list to
+     *                                       judge one against.
      */
-    public function __construct(int $length = 0, array $allowed = [PermissionType::Create, PermissionType::Read, PermissionType::Update, PermissionType::Delete, PermissionType::Write])
+    public function __construct(int $length = 0, array $allowed = [PermissionType::Create, PermissionType::Read, PermissionType::Update, PermissionType::Delete, PermissionType::Write], ?array $columns = null)
     {
         $this->length = $length;
         $this->allowed = \array_map(fn (PermissionType $p) => $p->value, $allowed);
+        $this->columns = $columns;
     }
 
     #[\Override]
@@ -98,6 +112,33 @@ class Permissions extends Roles
             if (! $this->isValidRole($role, $identifier, $dimension)) {
                 return false;
             }
+
+            if (! $permission->isForAllColumns() && ! $this->isValidColumn($permission)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * A permission may name a column only where columns are meaningful, and only one that exists.
+     *
+     * Reported by the key the caller wrote. Nothing has translated it yet at this point, and an
+     * error naming something the caller did not type is worse than no error at all.
+     */
+    private function isValidColumn(Permission $permission): bool
+    {
+        if ($this->columns === null) {
+            $this->message = 'Permission "'.$permission->toString().'" is scoped to a column. Column-scoped permissions are set on the collection, not here.';
+
+            return false;
+        }
+
+        if (! \in_array($permission->getColumn(), $this->columns, true)) {
+            $this->message = 'Column "'.$permission->getColumn().'" does not exist.';
+
+            return false;
         }
 
         return true;

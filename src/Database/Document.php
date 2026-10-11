@@ -299,7 +299,18 @@ class Document extends ArrayObject
                 continue;
             }
             $type = \trim(\substr($permission, 0, $open));
-            $roles[$type][] = \str_replace([')', '"', ' '], '', \substr($permission, $open + 1));
+            $role = \substr($permission, $open + 1);
+
+            // A column-scoped permission is read("role", "column"). Only the role belongs here:
+            // this list answers who holds a permission, and the column narrows what that
+            // permission reaches, not who holds it. Leaving the column in would produce a role
+            // of "any,name" that matches nobody.
+            $separator = \strpos($role, '", "');
+            if ($separator !== false) {
+                $role = \substr($role, 0, $separator + 1);
+            }
+
+            $roles[$type][] = \str_replace([')', '"', ' '], '', $role);
         }
 
         return $this->parsedPermissions = [

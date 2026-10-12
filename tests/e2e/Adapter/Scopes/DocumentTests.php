@@ -2029,18 +2029,54 @@ trait DocumentTests
         $this->assertSame($adapter instanceof Mongo ? [] : ['lower', 'other'], $ids(['alpha', 'beta']));
     }
 
-    public function testFindFulltextExactTermOnPostgresMatchesEveryWordInAnyOrder(): void
+    public function testFindFulltextExactTermMatchesTheAdjacentPhraseOnEveryEngine(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter() instanceof Postgres) {
+        if (! $database->getAdapter()->supports(Capability::IndexFulltext)) {
             $this->expectNotToPerformAssertions();
 
             return;
         }
 
-        $collection = 'full_text_exact_words';
+        $collection = $this->createPhraseSearchCollection($database, 'full_text_exact_phrase');
+
+        $this->assertSame(['phrase', 'sentence'], $this->searchedIds($database, $collection, '"donald trump"'));
+
+        if ($database->getAdapter() instanceof Mongo) {
+            return;
+        }
+
+        $excluded = \array_map(
+            static fn (Document $document): string => $document->getId(),
+            $database->find($collection, [Query::notSearch('text', '"donald trump"')]),
+        );
+        \sort($excluded);
+        $this->assertSame(['apart', 'one', 'other', 'reversed'], $excluded);
+    }
+
+    public function testFindFulltextWordsWithoutQuotesMatchAnyWordInAnyOrder(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::IndexFulltext)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = $this->createPhraseSearchCollection($database, 'full_text_any_word');
+
+        $anyWord = ['apart', 'one', 'phrase', 'reversed', 'sentence'];
+        $this->assertSame($anyWord, $this->searchedIds($database, $collection, 'donald trump'));
+        $this->assertSame($anyWord, $this->searchedIds($database, $collection, 'trump donald'));
+        $this->assertSame($anyWord, $this->searchedIds($database, $collection, 'donald/trump'));
+    }
+
+    private function createPhraseSearchCollection(Database $database, string $collection): string
+    {
         $database->createCollection(Collection::create(id: $collection, permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
@@ -2048,7 +2084,15 @@ trait DocumentTests
         $database->createAttribute($collection, Attribute::string(key: 'text', size: 128, required: true));
         $database->createIndex($collection, Index::fulltext(key: 'text-ft', attributes: ['text']));
 
-        foreach (['phrase' => 'donald trump', 'reversed' => 'trump donald', 'apart' => 'donald j trump', 'one' => 'donald duck'] as $id => $text) {
+        $texts = [
+            'phrase' => 'donald trump',
+            'sentence' => 'president donald trump spoke',
+            'reversed' => 'trump donald',
+            'apart' => 'donald john trump',
+            'one' => 'donald duck',
+            'other' => 'mickey mouse',
+        ];
+        foreach ($texts as $id => $text) {
             $database->createDocument($collection, new Document([
                 '$id' => $id,
                 '$permissions' => [Permission::read(Role::any())],
@@ -2056,13 +2100,7 @@ trait DocumentTests
             ]));
         }
 
-        $this->assertSame(['apart', 'phrase', 'reversed'], $this->searchedIds($database, $collection, '"donald trump"'));
-
-        $excluded = \array_map(
-            static fn (Document $document): string => $document->getId(),
-            $database->find($collection, [Query::notSearch('text', '"donald trump"')]),
-        );
-        $this->assertSame(['one'], $excluded);
+        return $collection;
     }
 
     /**

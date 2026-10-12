@@ -718,6 +718,7 @@ trait Documents
         }
 
         $document = $this->castAfterDocument($collection, $document);
+        self::placeSequenceBeforeId($document);
 
         // Convert to custom document type if mapped
         if (isset($this->documentTypes[$collection->getId()])) {
@@ -5267,6 +5268,29 @@ trait Documents
         }
 
         return $this->adapter->castBefore($collection, $document);
+    }
+
+    /**
+     * A single read returns `$sequence` ahead of `$id`, in the key order 7.x returned it on every adapter.
+     */
+    private static function placeSequenceBeforeId(Document $document): void
+    {
+        if (! $document->offsetExists(Document::SEQUENCE) || ! $document->offsetExists(Document::ID)) {
+            return;
+        }
+
+        $ordered = [];
+        foreach ($document as $key => $value) {
+            if ($key === Document::SEQUENCE) {
+                continue;
+            }
+            if ($key === Document::ID) {
+                $ordered[Document::SEQUENCE] = $document->offsetGet(Document::SEQUENCE);
+            }
+            $ordered[$key] = $value;
+        }
+
+        $document->exchangeArray($ordered);
     }
 
     private function castAfterDocument(Document $collection, Document $document): Document

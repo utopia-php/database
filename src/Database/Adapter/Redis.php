@@ -1589,10 +1589,8 @@ class Redis extends Adapter implements
 
             $document = $this->decode($payload);
             $current = $document->getAttribute($attribute);
-            $exact = BigInt::isIntegerValue($current)
-                && BigInt::isIntegerValue($value)
-                && ($min === null || BigInt::isIntegerValue($min))
-                && ($max === null || BigInt::isIntegerValue($max));
+            $exact = (\is_int($current) || (\is_string($current) && BigInt::isIntegerString($current)))
+                && (\is_int($value) || (\is_string($value) && BigInt::isIntegerString($value)));
             if ($exact) {
                 $current = BigInt::toNative($current);
                 $value = BigInt::toNative($value);

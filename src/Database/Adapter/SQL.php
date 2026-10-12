@@ -5371,6 +5371,10 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * With $nullable, a cursor value may be null and each comparison keeps the engine's own null placement: an
      * equal prefix on null is IS NULL, and nulls come after every value in a direction that sorts them last.
      *
+     * Every row after the cursor has its first order attribute at or past the cursor value, so that range is added
+     * beside the conditions: Postgres reads none of them as an index bound, and would otherwise filter every row
+     * before the cursor out of the index. It is left out when the cursor value is null or nulls follow the cursor.
+     *
      * @param  array<string>  $orderAttributes
      * @param  array<OrderDirection>  $orderTypes
      * @param  array<string, mixed>  $cursor
@@ -5395,7 +5399,23 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             return;
         }
 
-        $builder->filter([$this->anyOf($cursorConditions)]);
+        $filters = [$this->anyOf($cursorConditions)];
+
+        $first = $orderAttributes[0];
+        $direction = $orderTypes[0] ?? OrderDirection::Asc;
+        if ($cursorDirection === CursorDirection::Before) {
+            $direction = $direction === OrderDirection::Asc ? OrderDirection::Desc : OrderDirection::Asc;
+        }
+
+        /** @var bool|float|int|string|null $value */
+        $value = $cursor[$first] ?? null;
+        if (\count($cursorConditions) > 1 && $value !== null && (! $nullable || $direction === $this->getNullOrder())) {
+            $filters[] = $direction === OrderDirection::Desc
+                ? BaseQuery::lessThanEqual($resolveInternalKey($first), $value)
+                : BaseQuery::greaterThanEqual($resolveInternalKey($first), $value);
+        }
+
+        $builder->filter($filters);
     }
 
     /**

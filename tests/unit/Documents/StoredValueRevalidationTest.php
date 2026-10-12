@@ -37,30 +37,44 @@ final class StoredValueRevalidationTest extends TestCase
         }, ColumnType::String);
     }
 
-    public function testAnUpdateFailsOnAStoredValueANarrowedRangeNoLongerAdmits(): void
+    public function testAnUpdateKeepsAStoredValueANarrowedRangeNoLongerAdmits(): void
+    {
+        $database = $this->database();
+        $database->updateAttribute(self::COLLECTION, 'level', new AttributeUpdate(format: new Format('storedRange', ['min' => 0, 'max' => 10])));
+
+        $updated = $database->updateDocument(self::COLLECTION, 'row', new Document(['note' => 'after narrow']));
+
+        $this->assertSame('after narrow', $updated->getAttribute('note'));
+        $stored = $database->getDocument(self::COLLECTION, 'row');
+        $this->assertSame('after narrow', $stored->getAttribute('note'));
+        $this->assertSame(50, $stored->getAttribute('level'));
+    }
+
+    public function testAnUpdateKeepsAStoredValueAShrunkEnumNoLongerAdmits(): void
+    {
+        $database = $this->database();
+        $database->updateAttribute(self::COLLECTION, 'kind', new AttributeUpdate(format: new Format('storedEnum', ['elements' => ['a']])));
+
+        $database->updateDocument(self::COLLECTION, 'row', new Document(['note' => 'after shrink']));
+
+        $stored = $database->getDocument(self::COLLECTION, 'row');
+        $this->assertSame('after shrink', $stored->getAttribute('note'));
+        $this->assertSame('b', $stored->getAttribute('kind'));
+    }
+
+    public function testAnUpdateThatWritesAValueTheNarrowedRangeRefusesFails(): void
     {
         $database = $this->database();
         $database->updateAttribute(self::COLLECTION, 'level', new AttributeUpdate(format: new Format('storedRange', ['min' => 0, 'max' => 10])));
 
         try {
-            $database->updateDocument(self::COLLECTION, 'row', new Document(['note' => 'after narrow']));
-            $this->fail('An update kept a stored value the narrowed range refuses');
+            $database->updateDocument(self::COLLECTION, 'row', new Document(['level' => 60, 'note' => 'written']));
+            $this->fail('An update wrote a value the narrowed range refuses');
         } catch (StructureException $error) {
             $this->assertSame('Invalid document structure: Attribute "level" has invalid format. Value must be a valid range between 0 and 10', $error->getMessage());
         }
 
         $this->assertSame('before', $database->getDocument(self::COLLECTION, 'row')->getAttribute('note'));
-    }
-
-    public function testAnUpdateFailsOnAStoredValueAShrunkEnumNoLongerAdmits(): void
-    {
-        $database = $this->database();
-        $database->updateAttribute(self::COLLECTION, 'kind', new AttributeUpdate(format: new Format('storedEnum', ['elements' => ['a']])));
-
-        $this->expectException(StructureException::class);
-        $this->expectExceptionMessage('Attribute "kind" has invalid format');
-
-        $database->updateDocument(self::COLLECTION, 'row', new Document(['note' => 'after shrink']));
     }
 
     private function database(): Database

@@ -223,8 +223,11 @@ $permissions = [Permission::read(Role::user(Id::unique()))];
 - A filter on a path into an object attribute (`meta.address.city`) takes keys of `a-z`, `A-Z`, `0-9`, `_` and `-`
   only. The query validator refuses any other key with `Utopia\Database\Exception\Query` on every adapter (7.x
   refused such keys on PostgreSQL only), and on PostgreSQL the query is refused also when validation is skipped.
-- On PostgreSQL, an exact search (`search('title', '"foo bar"')`) matches documents holding every word in any order,
-  as in 7.x, where MariaDB, MySQL and SQLite match the adjacent phrase.
+- On PostgreSQL, an exact search (`search('title', '"foo bar"')`) matches the words as an adjacent phrase, as on
+  MariaDB, MySQL and SQLite, and `notSearch()` with an exact term excludes only that phrase. In 7.x PostgreSQL
+  matched every word in any order, and so did 8.0.1, which reverted the phrase match by mistake; 8.0.0 and 8.0.2
+  match the phrase. To match every word in any order, pass a `search()` for each word. A term without quotes still
+  matches any of its words.
 - `containsAll()` on an attribute that is not an array matches as in 7.x: on MariaDB, MySQL and PostgreSQL each value
   is a `LIKE` (`ILIKE`) pattern on the whole value and a document matching any of them is returned; on MongoDB it is
   `$all`. Use `containsString()` for substrings.
@@ -699,14 +702,17 @@ It fires once per written document from `updateDocument()` (for both the old and
 `Event\Document\Purged` with the document's `collection` and `id`. As in 7.x, `createDocument()` and `createDocuments()` do
 not fire it. Attribute schema changes fire it for the collection's metadata document (`$collection` = `_metadata`).
 
-As in 7.x, a write fires it inside its transaction, so a listener that throws rolls the write back and its failure
-reaches the caller. The events wait for the end of the outermost transaction and fire just before it commits: inside
-`withTransaction()` the events of every write fire together before the outer commit, a rollback before that point
-drops them, and every attempt of a retried transaction that reaches its commit announces them. Each event runs under
-the tenant and the `silent()` scope in force when its document was written. If the cache invalidation after the
-commit fails, the write throws with its data committed. `purgeCachedDocument()` fires it at once. On an adapter
-without savepoints (MongoDB), a nested `withTransaction()` that fails is not rolled back on its own: when the caller
-catches the failure, the nested writes commit with the caller and their events fire before that commit.
+A write fires it after the outermost transaction commits: inside `withTransaction()` the events of every write wait
+for the outer commit, a rollback drops them, and a retried attempt announces once. Each event runs under the tenant
+and the `silent()` scope in force when its document was written. If the cache invalidation after the commit fails,
+the write throws with its data committed, after `document_purge` has fired. `purgeCachedDocument()` fires it at once. The
+cache entry itself is purged inside the write's transaction, so a cache failure rolls the write back and no event
+fires.
+On an adapter without savepoints (MongoDB), a nested `withTransaction()` that fails is not rolled back on its own:
+when the caller catches the failure, the nested writes commit with the caller and their events fire after that
+commit.
+
+8.0.1 fired the event just before the commit instead, by mistake; 8.0.2 fires it after the commit again.
 
 ### `document_update` for related documents a delete changed
 
@@ -882,20 +888,30 @@ method as a no-op, so a hook overrides only what it needs:
   counted and emitted it). Of a batch that repeats an id, only the first copy is written. Permissions are written
   only for inserted documents: in 7.x the skipped copy's permissions were added to the stored document on MariaDB,
   MySQL and SQLite, so `find()`, `count()` and `sum()` could return it to roles its own permissions do not grant.
-- **Fractional numbers on integer attributes.** As in 7.x, `increaseDocumentAttribute()` and
-  `decreaseDocumentAttribute()` pass a fractional change value, `max` or `min` on an integer attribute to the
-  engine and return the document with the exact sum: MariaDB and MySQL store it rounded, MongoDB stores it and reads
-  it back truncated, and PostgreSQL fails. A whole float such as `2.0` is bound as the integer. A whole change value
-  and whole bounds are compared with exact integer arithmetic, so 64-bit and unsigned values never pass through a
-  float. A change value that is not a number greater than 0 throws `\InvalidArgumentException`
-  (`Value must be numeric and greater than 0`), as in 7.x.
-- **Operator limits on integer attributes.** As in 7.x, the change and the `max` or `min` limit of
-  `Operator::increment()`, `decrement()`, `multiply()`, `divide()` and `power()` on an integer or double attribute
-  only have to be numeric and finite: a fractional change or limit on an integer reaches the engine, which stores
-  the result as for a fractional counter. Without a limit, a result predicted outside the attribute's range is
-  refused with `Utopia\Database\Exception\Structure` (`Cannot apply <operator> operator: would overflow maximum value
-  of <max>`). On a big integer attribute the limit has to be a whole number in the attribute's range (`Cannot apply
-  <operator> operator: max/min limit must be a whole number for integer attribute '<key>', got <limit>`).
+- **Fractional numbers on integer attributes.** `increaseDocumentAttribute()` and `decreaseDocumentAttribute()`
+  throw `Utopia\Database\Exception\Type` before anything is written, on every adapter and also on schemaless
+  collections that declare the attribute as an integer:
+  - for a fractional change value (`Change value must be an integer.`). 7.x passed it to the engine, which rounded
+    it on MariaDB and MySQL, failed on PostgreSQL, and stored a float in the integer attribute on SQLite, MongoDB,
+    Memory and Redis. Pass an integer change value, or use a float attribute for fractional counters.
+  - for a fractional `max` or `min` (`Max must be an integer.`, `Min must be an integer.`). Integer bounds are
+    compared with exact integer arithmetic, so 64-bit and unsigned values never pass through a float. The bound
+    accepts the same whole numbers as an operator limit: an integer, an integer string, a string with only zero
+    decimals such as `'102.0'`, or a float without a fractional part such as `102.0`, each converted exactly. Pass
+    a whole bound, for example `floor($max)` or `ceil($min)`, which admits the same integer values.
+
+  Change values and bounds on float and double attributes may still be fractional.
+- **Operator limits on integer attributes.** The `max` or `min` limit of `Operator::increment()`, `decrement()`,
+  `multiply()`, `divide()` and `power()` on an integer or big integer attribute has to be a whole number: an
+  integer, an integer string, or a float without a fractional part such as `9.0e18`. A fractional limit such as
+  `102.4` is refused before anything is written with `Utopia\Database\Exception\Structure`
+  (`Cannot apply <operator> operator: max/min limit must be a whole number for integer attribute '<key>', got
+  <limit>`). With validation skipped that check does not run, and Memory and Redis refuse such a limit with
+  `Utopia\Database\Exception\Operator` when the result leaves PHP's integer range. Limits on float and double
+  attributes are unchanged. Numeric text such as `power('2')` is accepted.
+- 8.0.1 passed fractional change values and bounds on integer attributes to the engine, accepted fractional operator
+  limits on integers, and threw `\InvalidArgumentException` for a change value of 0 or less, by mistake; 8.0.2
+  refuses them again as described above.
 - **Operators on upserts that create a document.** An upsert that creates a document applies every operator to the
   attribute's default, as it does for an existing document: `dateAddDays()` and `dateSubDays()` shift the date,
   `arrayFilter()` filters the array, and the maximum or minimum of increment, decrement, multiply, divide and power
@@ -2019,10 +2035,10 @@ $validator = new IndexDefinition($attributes, $indexes, $database->profile());
   it starts; `setStatus()`, `enable()`, `disable()` and `reset()` change the shared status unless called inside
   such a scope (see [Coroutines](#coroutines)). `setDefaultStatus()` is a constructor argument,
   `new Authorization(bool $defaultStatus = true)`. `restore()` is internal.
-- `Validator\Structure` takes `array $storedAttributes = []`: the attributes whose values are the stored ones. They
-  are validated as in 7.x, so an update fails on a stored value a narrowed definition no longer admits, but a stored
-  object value is held to what 7.x accepted (any JSON string or empty value). `Database::updateDocument()` passes
-  it.
+- `Validator\Structure` takes `array $storedAttributes = []`: the attributes whose values are the stored ones, which
+  it does not validate again, whatever their type, so a stored value a narrowed definition no longer admits never
+  blocks an update of another attribute. `Database::updateDocument()` passes it. (8.0.1 validated them again, by
+  mistake; 8.0.2 does not.)
 - `Database::convertQueries()` takes an optional `array $joinedCollections` (join alias => collection). With it,
   filters on `alias.attribute`, the filters of join ON lists and `having()` conditions in the list are converted
   too; aggregates and selects in the list are left as they are. Without it the method converts as before.

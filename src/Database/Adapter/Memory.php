@@ -1884,10 +1884,8 @@ class Memory extends Adapter implements Feature\Relationships
         $previousValue = $this->data[$key]['documents'][$docKey][$column] ?? null;
         $previousUpdatedAt = $this->data[$key]['documents'][$docKey][Storage::UPDATED_AT] ?? null;
         $current = $previousValue ?? 0;
-        $exact = BigInt::isIntegerValue($current)
-            && BigInt::isIntegerValue($value)
-            && ($min === null || BigInt::isIntegerValue($min))
-            && ($max === null || BigInt::isIntegerValue($max));
+        $exact = (\is_int($current) || (\is_string($current) && BigInt::isIntegerString($current)))
+            && (\is_int($value) || (\is_string($value) && BigInt::isIntegerString($value)));
 
         // MariaDB encodes the bound check as part of the WHERE clause against
         // the current column value (`attr <= :max` / `attr >= :min`); when the

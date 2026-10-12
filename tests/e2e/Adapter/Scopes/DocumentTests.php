@@ -9,6 +9,7 @@ use Throwable;
 use Utopia\Cache\Adapter\None as NoneCacheAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\Postgres;
@@ -2100,6 +2101,18 @@ trait DocumentTests
         }
 
         return $collection;
+    }
+
+    private function engineFamily(Database $database): ?string
+    {
+        $adapter = $database->getAdapter();
+
+        return match (true) {
+            $adapter instanceof MariaDB => 'mariadb',
+            $adapter instanceof Postgres => 'postgres',
+            $adapter instanceof Mongo => 'mongo',
+            default => null,
+        };
     }
 
     /**

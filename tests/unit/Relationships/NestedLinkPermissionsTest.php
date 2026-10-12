@@ -21,7 +21,6 @@ use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Permission;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationshipDeleteAction;
-use Utopia\Database\RelationshipType;
 use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
 
@@ -309,6 +308,6 @@ final class NestedLinkPermissionsTest extends TestCase
     {
         $values = \is_array($value) ? $value : ($value === null ? [] : [$value]);
 
-        return \array_values(\array_map(static fn (mixed $item): string => $item instanceof Document ? $item->getId() : (string) $item, $values));
+        return \array_values(\array_map(static fn (mixed $item): string => $item instanceof Document ? $item->getId() : (\is_string($item) ? $item : ''), $values));
     }
 }

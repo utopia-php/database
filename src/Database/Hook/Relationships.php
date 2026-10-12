@@ -3209,8 +3209,7 @@ class Relationships implements Attachable, Hook
 
             $linked = self::relatedIds($old?->getAttribute($key));
             $value = $document->getAttribute($key);
-            if (Operator::isOperator($value)) {
-                /** @var Operator $value */
+            if ($value instanceof Operator) {
                 $value = $value->isArrayOperation() ? $this->applyRelationshipOperator($value, $linked) : [];
             }
 

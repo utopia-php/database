@@ -618,7 +618,7 @@ trait RelationshipTests
                     ])]));
 
                     $ids = static fn (mixed $value): array => \array_values(\array_map(
-                        static fn (mixed $item): string => $item instanceof Document ? $item->getId() : (string) $item,
+                        static fn (mixed $item): string => $item instanceof Document ? $item->getId() : (\is_string($item) ? $item : ''),
                         \is_array($value) ? $value : ($value === null ? [] : [$value]),
                     ));
                     $stored = $database->getDocument($related, 'stored');

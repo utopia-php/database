@@ -1905,6 +1905,7 @@ trait PermissionTests
 
         $authorization = $database->getAuthorization();
         $session = [Role::any()->toString(), Role::users()->toString(), Role::user('linker')->toString()];
+        /** @var array<string, array{bool, list<string>, string|Document, ?string}> $scenarios */
         $scenarios = [
             'by ID without update' => [false, [Permission::read(Role::users())], 'stored', "No permissions provided for action 'update'"],
             'by ID, hidden by document security' => [true, [Permission::create(Role::users())], 'stored', "No permissions provided for action 'read'"],
@@ -1930,7 +1931,7 @@ trait PermissionTests
                     $database->createDocument($relatedCollection, new Document(['$id' => 'stored', 'name' => 'Stored', '$permissions' => []]));
                 });
 
-                $value = $related instanceof Document ? new Document($related->getArrayCopy()) : $related;
+                $value = $related instanceof Document ? clone $related : $related;
                 $parent = new Document([
                     '$id' => 'parent',
                     '$permissions' => [Permission::read(Role::any())],
@@ -1952,7 +1953,7 @@ trait PermissionTests
 
                     $stored = $authorization->skip(fn () => $database->getDocument($relatedCollection, 'stored'));
                     $back = $stored->getAttribute('back');
-                    $backIds = \array_map(static fn (mixed $item): string => $item instanceof Document ? $item->getId() : (string) $item, \is_array($back) ? $back : ($back === null ? [] : [$back]));
+                    $backIds = \array_map(static fn (mixed $item): string => $item instanceof Document ? $item->getId() : (\is_string($item) ? $item : ''), \is_array($back) ? $back : ($back === null ? [] : [$back]));
                     if ($refusal !== null) {
                         $this->assertTrue($authorization->skip(fn () => $database->getDocument($parents, 'parent'))->isEmpty(), $label.': a refused create writes no parent');
                         $this->assertSame('Stored', $stored->getAttribute('name'), $label);

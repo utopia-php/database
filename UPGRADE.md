@@ -855,6 +855,12 @@ method as a no-op, so a hook overrides only what it needs:
   operations of a transaction another request commits, calls them at staging instead of repeating the checks.
   `authorizeUpdate()` checks the update against `$old`, the stored document as the caller reads it, and always needs
   update permission, where `updateDocument()` lets an update that changes nothing through with read permission.
+  Since 8.0.3 both take an optional `$resolve(string $collection, string $id): ?Document`, the related documents as
+  the writes staged earlier leave them: the document with its permissions, unfiltered by the caller's read, an
+  empty `Document` for one they delete, or `null` for one they leave as stored. Pass it when the staged write runs
+  after other staged writes, so a related document staged for deletion is judged as new (create on its collection)
+  and one staged for an update or create by its staged permissions and links, as the later write finds them. Pass
+  `$old` as the staged writes leave it too.
 - `deleteDocuments()` applies `Cascade` and `Restrict` to every related document, also when its queries include a
   select (7.x skipped the cascade and ignored `Restrict` then) and also to related documents the caller cannot read.
   Each document a cascade reaches is deleted through `deleteDocument()`, so one the caller may not delete throws

@@ -1049,14 +1049,21 @@ trait Documents
      * refused. For staging a write that runs later, such as an operation of a transaction committed by another
      * request; createDocument() runs the same checks when it writes.
      *
+     * Writes staged before the later one change what it finds. With $resolve, every related document is judged as
+     * the later write would find it: $resolve(collection, ID) is given the collection identifier and the document ID
+     * and returns the document as the staged writes leave it, with its permissions and whether or not the caller can
+     * read it, an empty document when they delete it, or null when they leave it as stored. A related document the
+     * staged writes delete is new to the later write, so it needs create rather than update.
+     *
      * @param  string  $collection  The collection identifier
      * @param  Document  $document  The document a later createDocument() would be given; it is not changed
+     * @param  (callable(string, string): ?Document)|null  $resolve  The staged view of a related document; null judges every one as stored
      *
      * @throws AuthorizationException When createDocument() would refuse the caller
      * @throws NotFoundException When the collection does not exist
      * @throws RelationshipException When a relationship value is not a document, an ID or a list of them
      */
-    public function authorizeCreate(string $collection, Document $document): void
+    public function authorizeCreate(string $collection, Document $document, ?callable $resolve = null): void
     {
         $definition = $this->silent(fn () => $this->getCollection($collection));
 
@@ -1065,7 +1072,7 @@ trait Documents
         }
 
         if ($this->relationshipHook?->isEnabled()) {
-            $this->relationshipHook->authorize($definition, $document);
+            $this->relationshipHook->authorize($definition, $document, resolve: $resolve);
         }
     }
 
@@ -1074,17 +1081,19 @@ trait Documents
      * collection, or on $old under document security) and, for every related document $document carries, what
      * authorizeCreate() checks for it. A related document $old already links needs no link check, only update when
      * it is sent as a document with attributes to change. Unlike updateDocument(), which lets an update that changes
-     * nothing through with read permission, this always needs update.
+     * nothing through with read permission, this always needs update. $resolve gives the staged view of related
+     * documents as for authorizeCreate(); $old is the document as the staged writes leave it.
      *
      * @param  string  $collection  The collection identifier
      * @param  Document  $old  The stored document the update changes, as the caller reads it
      * @param  Document  $document  The changes a later updateDocument() would be given; it is not changed
+     * @param  (callable(string, string): ?Document)|null  $resolve  The staged view of a related document; null judges every one as stored
      *
      * @throws AuthorizationException When updateDocument() would refuse the caller
      * @throws NotFoundException When the collection does not exist
      * @throws RelationshipException When a relationship value is not a document, an ID or a list of them
      */
-    public function authorizeUpdate(string $collection, Document $old, Document $document): void
+    public function authorizeUpdate(string $collection, Document $old, Document $document, ?callable $resolve = null): void
     {
         $definition = $this->silent(fn () => $this->getCollection($collection));
 
@@ -1096,7 +1105,7 @@ trait Documents
         }
 
         if ($this->relationshipHook?->isEnabled()) {
-            $this->relationshipHook->authorize($definition, $document, $old);
+            $this->relationshipHook->authorize($definition, $document, $old, $resolve);
         }
     }
 

@@ -1,5 +1,18 @@
 # Changelog
 
+## 8.0.3
+
+### Added
+
+- `Database::authorizeCreate()` and `Database::authorizeUpdate()` take an optional resolver,
+  `?callable $resolve = null`, so a write staged after other writes is judged as it will run, after them.
+  `$resolve(string $collection, string $id): ?Document` returns a related document as the earlier staged writes leave
+  it: the document with its permissions (whether or not the caller can read it), an empty `Document` when they delete
+  it, or `null` when they leave it as stored. Every related-document lookup of the checks uses it: a document staged
+  for deletion is new to the write and needs create on its collection, a staged update or create is judged by its
+  staged permissions and links, and a `null` answer reads the stored document as before. Without `$resolve` the
+  checks are unchanged, and they still write nothing.
+
 ## 8.0.2
 
 8.0.1 reverted six deliberate 8.0.0 changes as if they were regressions. 8.0.2 brings them back; everything else in

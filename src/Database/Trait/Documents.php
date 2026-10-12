@@ -1236,9 +1236,16 @@ trait Documents
         // that reaches past createCollection() could record a grant on a column that does not
         // exist, and nothing would ever say so.
         if ($this->validation()->get() && $collection->getId() === Database::METADATA) {
+            $declared = $document->getAttribute(Collection::ATTRIBUTES, []);
             $columns = [];
-            foreach ($document->getAttribute(Collection::ATTRIBUTES, []) as $attribute) {
-                $key = $attribute instanceof Document ? $attribute->getAttribute('key') : ($attribute['key'] ?? null);
+
+            foreach (\is_array($declared) ? $declared : [] as $attribute) {
+                $key = match (true) {
+                    $attribute instanceof Document => $attribute->getAttribute('key'),
+                    \is_array($attribute) => $attribute['key'] ?? null,
+                    default => null,
+                };
+
                 if (\is_string($key) && $key !== '') {
                     $columns[] = $key;
                 }

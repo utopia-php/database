@@ -41,9 +41,12 @@ trait ColumnPermissionTests
 
         $stored = $database->getCollection('columnGrants');
 
-        $this->assertContains('read("any", "name")', $stored->declaredPermissions());
-        $this->assertContains('read("team:hr", "salary")', $stored->declaredPermissions());
-        $this->assertContains('create("any")', $stored->declaredPermissions());
+        $permissions = $stored->declaredPermissions();
+
+        $this->assertNotNull($permissions);
+        $this->assertContains('read("any", "name")', $permissions);
+        $this->assertContains('read("team:hr", "salary")', $permissions);
+        $this->assertContains('create("any")', $permissions);
     }
 
     /**
@@ -217,10 +220,10 @@ trait ColumnPermissionTests
             Permission::create(Role::any()),
         ]));
 
-        $this->assertContains(
-            'read("any", "name")',
-            $database->getCollection('columnGrantsUpdate')->declaredPermissions(),
-        );
+        $updated = $database->getCollection('columnGrantsUpdate')->declaredPermissions();
+
+        $this->assertNotNull($updated);
+        $this->assertContains('read("any", "name")', $updated);
 
         try {
             $database->updateCollection('columnGrantsUpdate', new CollectionUpdate(permissions: [
@@ -232,10 +235,10 @@ trait ColumnPermissionTests
         }
 
         // The rejected update left the collection as it was.
-        $this->assertContains(
-            'read("any", "name")',
-            $database->getCollection('columnGrantsUpdate')->declaredPermissions(),
-        );
+        $updated = $database->getCollection('columnGrantsUpdate')->declaredPermissions();
+
+        $this->assertNotNull($updated);
+        $this->assertContains('read("any", "name")', $updated);
     }
 
     public function testADocumentPermissionMayNotNameAColumn(): void

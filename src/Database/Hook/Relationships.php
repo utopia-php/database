@@ -3160,10 +3160,7 @@ class Relationships implements Attachable, Hook
     {
         $authorization = $this->database->getAuthorization();
 
-        if (! $authorization->isValid(new Input(PermissionType::Update, [
-            ...$collection->getPermissionsByType(PermissionType::Update),
-            ...($collection->getAttribute('documentSecurity', false) ? $related->getPermissionsByType(PermissionType::Update) : []),
-        ]))) {
+        if (! $authorization->isValid(self::permissionInput($collection, $related, PermissionType::Update))) {
             throw new AuthorizationException($authorization->getDescription());
         }
     }
@@ -3175,23 +3172,32 @@ class Relationships implements Attachable, Hook
      * document, and never a stored document the caller cannot read. With $old, the stored document an update
      * changes, a related document $old already links is not linked again, so only changing it needs update.
      *
+     * With $resolve, every related document is judged as a later write would find it: $resolve(collection, ID)
+     * returns the document as it will be when the write runs, with its permissions and without the caller's read
+     * applied, an empty document when it will be gone, or null to judge the stored one.
+     *
+     * @param  (callable(string, string): ?Document)|null  $resolve
+     *
      * @throws AuthorizationException When writing $document would be refused
      * @throws RelationshipException When a relationship value is not a document, an ID or a list of them
      *
      * @internal
      */
-    public function authorize(Document $collection, Document $document, ?Document $old = null): void
+    public function authorize(Document $collection, Document $document, ?Document $old = null, ?callable $resolve = null): void
     {
-        $this->authorizeRelated($collection, $document, $old, []);
+        $this->authorizeRelated($collection, $document, $old, [], $resolve === null
+            ? null
+            : static fn (string $collection, string $id): ?Document => $resolve($collection, $id));
     }
 
     /**
      * @param  list<string>  $writeStack  The collections of the writes relating $document, innermost last
+     * @param  (Closure(string, string): ?Document)|null  $resolve
      *
      * @throws AuthorizationException
      * @throws RelationshipException
      */
-    private function authorizeRelated(Document $collection, Document $document, ?Document $old, array $writeStack): void
+    private function authorizeRelated(Document $collection, Document $document, ?Document $old, array $writeStack, ?Closure $resolve): void
     {
         $depth = \count($writeStack);
 
@@ -3215,31 +3221,30 @@ class Relationships implements Attachable, Hook
 
             foreach (self::relatedValues($value) as $related) {
                 if (\is_string($related)) {
-                    $this->authorizeLinkById($relatedCollection, $related, $linked);
+                    $this->authorizeLinkById($relatedCollection, $related, $linked, $resolve);
 
                     continue;
                 }
 
-                $this->authorizeRelatedDocument($collection, $relatedCollection, $related, $linked, $writeStack);
+                $this->authorizeRelatedDocument($collection, $relatedCollection, $related, $linked, $writeStack, $resolve);
             }
         }
     }
 
     /**
      * @param  list<string>  $linked
+     * @param  (Closure(string, string): ?Document)|null  $resolve
      *
      * @throws AuthorizationException
      */
-    private function authorizeLinkById(Document $relatedCollection, string $id, array $linked): void
+    private function authorizeLinkById(Document $relatedCollection, string $id, array $linked, ?Closure $resolve): void
     {
         if (\in_array($id, $linked, true)) {
             return;
         }
 
-        $stored = $this->database->skipRelationships(fn () => $this->database->getDocument($relatedCollection->getId(), $id, [Query::select([Document::ID])]));
+        $stored = $this->viewRelated($relatedCollection, $id, PermissionType::Read, $resolve, [Query::select([Document::ID])]);
         if ($stored->isEmpty()) {
-            $this->refuseUnreadable($relatedCollection, $id, PermissionType::Read);
-
             return;
         }
 
@@ -3249,26 +3254,25 @@ class Relationships implements Attachable, Hook
     /**
      * @param  list<string>  $linked
      * @param  list<string>  $writeStack
+     * @param  (Closure(string, string): ?Document)|null  $resolve
      *
      * @throws AuthorizationException
      * @throws RelationshipException
      */
-    private function authorizeRelatedDocument(Document $collection, Document $relatedCollection, Document $related, array $linked, array $writeStack): void
+    private function authorizeRelatedDocument(Document $collection, Document $relatedCollection, Document $related, array $linked, array $writeStack, ?Closure $resolve): void
     {
         $id = $related->getId();
         $stored = $id === ''
             ? new Document()
-            : $this->database->skipRelationships(fn () => $this->database->getDocument($relatedCollection->getId(), $id));
+            : $this->viewRelated($relatedCollection, $id, PermissionType::Update, $resolve);
 
         if ($stored->isEmpty()) {
-            $this->refuseUnreadable($relatedCollection, $id, PermissionType::Update);
-
             $authorization = $this->database->getAuthorization();
             if (! $authorization->isValid(new Input(PermissionType::Create, $relatedCollection->getPermissionsByType(PermissionType::Create)))) {
                 throw new AuthorizationException($authorization->getDescription());
             }
 
-            $this->authorizeRelated($relatedCollection, $related, null, [...$writeStack, $collection->getId()]);
+            $this->authorizeRelated($relatedCollection, $related, null, [...$writeStack, $collection->getId()], $resolve);
 
             return;
         }
@@ -3278,7 +3282,36 @@ class Relationships implements Attachable, Hook
             $this->authorizeLink($relatedCollection, $stored);
         }
 
-        $this->authorizeRelated($relatedCollection, $related, $stored, [...$writeStack, $collection->getId()]);
+        $this->authorizeRelated($relatedCollection, $related, $stored, [...$writeStack, $collection->getId()], $resolve);
+    }
+
+    /**
+     * The related document $id as a write would find it: the document $resolve gives for it, else the stored one,
+     * either empty when there is none. One the caller cannot read is refused for the reason of $check, or of read
+     * when the caller passes $check.
+     *
+     * @param  (Closure(string, string): ?Document)|null  $resolve
+     * @param  array<Query>  $queries  The queries reading the stored document
+     *
+     * @throws AuthorizationException
+     */
+    private function viewRelated(Document $collection, string $id, PermissionType $check, ?Closure $resolve, array $queries = []): Document
+    {
+        $staged = $resolve === null ? null : $resolve($collection->getId(), $id);
+        if ($staged === null) {
+            $stored = $this->database->skipRelationships(fn () => $this->database->getDocument($collection->getId(), $id, $queries));
+            if ($stored->isEmpty()) {
+                $this->refuseUnreadable($collection, $id, $check);
+            }
+
+            return $stored;
+        }
+
+        if (! $staged->isEmpty() && ! $this->database->getAuthorization()->isValid(self::permissionInput($collection, $staged, PermissionType::Read))) {
+            $this->refuseHidden($collection, $staged, $check);
+        }
+
+        return $staged;
     }
 
     /**
@@ -3354,15 +3387,34 @@ class Relationships implements Attachable, Hook
             return;
         }
 
-        $documentSecurity = $collection->getAttribute('documentSecurity', false);
+        $this->refuseHidden($collection, $stored, $check);
+    }
+
+    /**
+     * Refuse $hidden, a related document the caller cannot read, for the reason of $check, or of read when the
+     * caller passes $check.
+     *
+     * @throws AuthorizationException
+     */
+    private function refuseHidden(Document $collection, Document $hidden, PermissionType $check): void
+    {
+        $authorization = $this->database->getAuthorization();
         foreach ($check === PermissionType::Read ? [$check] : [$check, PermissionType::Read] as $type) {
-            if (! $authorization->isValid(new Input($type, [
-                ...$collection->getPermissionsByType($type),
-                ...($documentSecurity ? $stored->getPermissionsByType($type) : []),
-            ]))) {
+            if (! $authorization->isValid(self::permissionInput($collection, $hidden, $type))) {
                 throw new AuthorizationException($authorization->getDescription());
             }
         }
+    }
+
+    /**
+     * The permissions granting $type on $document: its collection's, and its own under document security.
+     */
+    private static function permissionInput(Document $collection, Document $document, PermissionType $type): Input
+    {
+        return new Input($type, [
+            ...$collection->getPermissionsByType($type),
+            ...($collection->getAttribute('documentSecurity', false) ? $document->getPermissionsByType($type) : []),
+        ]);
     }
 
     private function notReferencing(string $twoWayKey, string $documentId): Query

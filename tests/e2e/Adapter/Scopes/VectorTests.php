@@ -1034,6 +1034,7 @@ trait VectorTests
         $parent1 = $database->createDocument('vectorParent', new Document([
             '$permissions' => [
                 Permission::read(Role::any()),
+                Permission::update(Role::any()),
             ],
             'name' => 'Parent 1',
             'embedding' => [1.0, 0.0, 0.0],
@@ -1042,6 +1043,7 @@ trait VectorTests
         $parent2 = $database->createDocument('vectorParent', new Document([
             '$permissions' => [
                 Permission::read(Role::any()),
+                Permission::update(Role::any()),
             ],
             'name' => 'Parent 2',
             'embedding' => [0.0, 1.0, 0.0],
@@ -1124,6 +1126,7 @@ trait VectorTests
         $author = $database->createDocument('vectorAuthors', new Document([
             '$permissions' => [
                 Permission::read(Role::any()),
+                Permission::update(Role::any()),
             ],
             'name' => 'Author 1',
             'embedding' => [1.0, 0.0, 0.0],

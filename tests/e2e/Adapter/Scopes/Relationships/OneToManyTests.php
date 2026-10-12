@@ -144,6 +144,7 @@ trait OneToManyTests
             '$id' => 'artist2',
             '$permissions' => [
                 Permission::read(Role::any()),
+                Permission::update(Role::any()),
                 Permission::delete(Role::any()),
             ],
             'name' => 'Artist 2',

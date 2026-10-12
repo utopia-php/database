@@ -463,7 +463,7 @@ final class QueryValidationTest extends TestCase
         $this->database->createCollection(Collection::create(
             id: $id,
             attributes: $attributes,
-            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())],
             documentSecurity: false,
         ));
     }

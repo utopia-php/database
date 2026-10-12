@@ -1892,6 +1892,83 @@ trait PermissionTests
         $database->deleteCollection('childRelationTest');
     }
 
+    public function testNestedRelatedDocumentsFollowTheLinkRule(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->hasFeature(Feature\Relationships::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $authorization = $database->getAuthorization();
+        $session = [Role::any()->toString(), Role::users()->toString(), Role::user('linker')->toString()];
+        $scenarios = [
+            'by ID without update' => [false, [Permission::read(Role::users())], 'stored', "No permissions provided for action 'update'"],
+            'by ID, hidden by document security' => [true, [Permission::create(Role::users())], 'stored', "No permissions provided for action 'read'"],
+            'as a document, hidden by document security' => [true, [Permission::create(Role::users())], new Document(['$id' => 'stored', 'name' => 'Changed']), "No permissions provided for action 'update'"],
+            'by ID with update' => [false, [Permission::read(Role::users()), Permission::update(Role::users())], 'stored', null],
+        ];
+
+        foreach ([RelationshipType::OneToOne, RelationshipType::OneToMany, RelationshipType::ManyToOne, RelationshipType::ManyToMany] as $type) {
+            foreach ($scenarios as $scenario => [$documentSecurity, $permissions, $related, $refusal]) {
+                $parents = 'link_rule_parents_'.\uniqid();
+                $relatedCollection = 'link_rule_related_'.\uniqid();
+                $label = $type->value.', '.$scenario;
+
+                $authorization->skip(function () use ($database, $type, $parents, $relatedCollection, $documentSecurity, $permissions): void {
+                    $database->createCollection(Collection::create(id: $parents, attributes: [Attribute::string(key: 'name', size: 64)], permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: false));
+                    $database->createCollection(Collection::create(id: $relatedCollection, attributes: [Attribute::string(key: 'name', size: 64)], permissions: $permissions, documentSecurity: $documentSecurity));
+                    $database->createRelationship($parents, match ($type) {
+                        RelationshipType::OneToOne => Relationship::oneToOne($relatedCollection, 'related', twoWay: true, twoWayKey: 'back', onDelete: RelationshipDeleteAction::SetNull),
+                        RelationshipType::OneToMany => Relationship::oneToMany($relatedCollection, 'related', twoWay: true, twoWayKey: 'back', onDelete: RelationshipDeleteAction::SetNull),
+                        RelationshipType::ManyToOne => Relationship::manyToOne($relatedCollection, 'related', twoWay: true, twoWayKey: 'back', onDelete: RelationshipDeleteAction::SetNull),
+                        RelationshipType::ManyToMany => Relationship::manyToMany($relatedCollection, 'related', twoWay: true, twoWayKey: 'back', onDelete: RelationshipDeleteAction::SetNull),
+                    });
+                    $database->createDocument($relatedCollection, new Document(['$id' => 'stored', 'name' => 'Stored', '$permissions' => []]));
+                });
+
+                $value = $related instanceof Document ? new Document($related->getArrayCopy()) : $related;
+                $parent = new Document([
+                    '$id' => 'parent',
+                    '$permissions' => [Permission::read(Role::any())],
+                    'related' => \in_array($type, [RelationshipType::OneToMany, RelationshipType::ManyToMany], true) ? [$value] : $value,
+                ]);
+                $refused = static function (callable $write) use ($authorization, $session): ?string {
+                    try {
+                        $authorization->withRoles($session, $write);
+                    } catch (AuthorizationException $error) {
+                        return $error->getMessage();
+                    }
+
+                    return null;
+                };
+
+                try {
+                    $this->assertSame($refusal, $refused(fn () => $database->withTransaction(fn () => $database->createDocuments($parents, [$parent]))), $label.': the create');
+
+                    $stored = $authorization->skip(fn () => $database->getDocument($relatedCollection, 'stored'));
+                    $back = $stored->getAttribute('back');
+                    $backIds = \array_map(static fn (mixed $item): string => $item instanceof Document ? $item->getId() : (string) $item, \is_array($back) ? $back : ($back === null ? [] : [$back]));
+                    if ($refusal !== null) {
+                        $this->assertTrue($authorization->skip(fn () => $database->getDocument($parents, 'parent'))->isEmpty(), $label.': a refused create writes no parent');
+                        $this->assertSame('Stored', $stored->getAttribute('name'), $label);
+                        $this->assertSame([], $backIds, $label.': a refused create leaves no link');
+                    } else {
+                        $this->assertSame(['parent'], $backIds, $label);
+                    }
+                } finally {
+                    $authorization->skip(function () use ($database, $parents, $relatedCollection): void {
+                        $database->deleteCollection($parents);
+                        $database->deleteCollection($relatedCollection);
+                    });
+                }
+            }
+        }
+    }
+
     public function testDocumentPermissionRolesAreMatchedExactly(): void
     {
         /** @var Database $database */

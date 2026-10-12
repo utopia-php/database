@@ -919,6 +919,7 @@ class Relationships implements Attachable, Hook
                                 $twoWay,
                                 $twoWayKey,
                                 $side,
+                                $coroutine,
                                 $prepared,
                             );
                         } else {
@@ -976,6 +977,7 @@ class Relationships implements Attachable, Hook
                         $twoWay,
                         $twoWayKey,
                         $side,
+                        $coroutine,
                         $prepared,
                     );
                 } elseif ($value === null) {
@@ -1026,6 +1028,7 @@ class Relationships implements Attachable, Hook
             $value = $this->coerceToDocument($document, $key, $value);
 
             $oldValue = $old->getAttribute($key);
+            $oldId = $oldValue instanceof Document ? $oldValue->getId() : (\is_string($oldValue) ? $oldValue : null);
             $relatedCollection = $this->database->getCollection($relationship->relatedCollection);
             $relationType = $relationship->type;
             $twoWay = $relationship->twoWay;
@@ -1080,7 +1083,10 @@ class Relationships implements Attachable, Hook
                             if (\is_string($value)) {
                                 $related = $this->database->skipRelationships(fn () => $this->database->getDocument($relatedCollection->getId(), $value, [Query::select([Document::ID])]));
                                 if ($related->isEmpty()) {
+                                    $this->refuseUnreadable($relatedCollection, $value, PermissionType::Read);
                                     $document->setAttribute($key, null);
+                                } elseif ($value !== $oldId) {
+                                    $this->authorizeLink($relatedCollection, $related);
                                 }
                             } elseif ($value instanceof Document) {
                                 $relationId = $this->relateDocuments(
@@ -1095,6 +1101,7 @@ class Relationships implements Attachable, Hook
                                     $side,
                                     $coroutine,
                                     null,
+                                    linked: $value->getId() === $oldId,
                                 );
                                 $document->setAttribute($key, $relationId);
                             } elseif (is_array($value)) {
@@ -1114,6 +1121,7 @@ class Relationships implements Attachable, Hook
                             );
 
                             if ($related->isEmpty()) {
+                                $this->refuseUnreadable($relatedCollection, $value, PermissionType::Read);
                                 $document->setAttribute($key, null);
                             } else {
                                 /** @var Document|null $oldValueDoc */
@@ -1144,6 +1152,7 @@ class Relationships implements Attachable, Hook
                             }
 
                             if ($related->isEmpty()) {
+                                $this->refuseUnreadable($relatedCollection, $value->getId(), PermissionType::Update);
                                 if (! isset($value[Document::PERMISSIONS])) {
                                     $value->setAttribute(Document::PERMISSIONS, $document->getAttribute(Document::PERMISSIONS));
                                 }
@@ -1244,6 +1253,10 @@ class Relationships implements Attachable, Hook
                                     }
                                 }
 
+                                foreach (\array_diff($stringRelations, $unlinkedIds, $oldIds) as $relation) {
+                                    $this->refuseUnreadable($relatedCollection, $relation, PermissionType::Read);
+                                }
+
                                 $this->linkRelatedDocuments($relatedCollection, $twoWayKey, $document->getId(), $unlinkedIds);
                             }
 
@@ -1263,6 +1276,7 @@ class Relationships implements Attachable, Hook
                                     );
 
                                     if ($related->isEmpty()) {
+                                        $this->refuseUnreadable($relatedCollection, $relation->getId(), PermissionType::Update);
                                         if (! isset($relation[Document::PERMISSIONS])) {
                                             $relation->setAttribute(Document::PERMISSIONS, $document->getAttribute(Document::PERMISSIONS));
                                         }
@@ -1294,7 +1308,10 @@ class Relationships implements Attachable, Hook
                             );
 
                             if ($related->isEmpty()) {
+                                $this->refuseUnreadable($relatedCollection, $value, PermissionType::Read);
                                 $document->setAttribute($key, null);
+                            } elseif ($value !== $oldId) {
+                                $this->authorizeLink($relatedCollection, $related);
                             }
                             $this->database->purgeCachedDocument($relatedCollection->getId(), $value);
                         } elseif ($value instanceof Document) {
@@ -1307,6 +1324,7 @@ class Relationships implements Attachable, Hook
                             );
 
                             if ($related->isEmpty()) {
+                                $this->refuseUnreadable($relatedCollection, $value->getId(), PermissionType::Update);
                                 if (! isset($value[Document::PERMISSIONS])) {
                                     $value->setAttribute(Document::PERMISSIONS, $document->getAttribute(Document::PERMISSIONS));
                                 }
@@ -1314,7 +1332,11 @@ class Relationships implements Attachable, Hook
                                     $relatedCollection->getId(),
                                     $value
                                 );
-                            } elseif ($related->getAttributes() != $value->getAttributes()) {
+                            } elseif ($value->getId() !== $oldId) {
+                                $this->authorizeLink($relatedCollection, $related);
+                            }
+
+                            if (! $related->isEmpty() && $related->getAttributes() != $value->getAttributes()) {
                                 $this->database->updateDocument(
                                     $relatedCollection->getId(),
                                     $related->getId(),
@@ -1418,6 +1440,8 @@ class Relationships implements Attachable, Hook
                                     $related = $this->database->getDocument($relatedCollection->getId(), $relation, [Query::select([Document::ID])]);
 
                                     if ($related->isEmpty()) {
+                                        $this->refuseUnreadable($relatedCollection, $relation, PermissionType::Read);
+
                                         continue;
                                     }
 
@@ -1430,6 +1454,7 @@ class Relationships implements Attachable, Hook
                                     }
 
                                     if ($related->isEmpty()) {
+                                        $this->refuseUnreadable($relatedCollection, $relation->getId(), PermissionType::Update);
                                         if (! isset($relation[Document::PERMISSIONS])) {
                                             $relation->setAttribute(Document::PERMISSIONS, $document->getAttribute(Document::PERMISSIONS));
                                         }
@@ -2047,6 +2072,7 @@ class Relationships implements Attachable, Hook
         RelationshipSide $side,
         int $coroutine,
         ?PreparedCreate $prepared,
+        bool $linked = false,
     ): string {
         switch ($relationType) {
             case RelationshipType::OneToOne:
@@ -2072,7 +2098,9 @@ class Relationships implements Attachable, Hook
 
         $related = $this->database->getDocument($relatedCollection->getId(), $relation->getId());
 
-        if ($relationType === RelationshipType::ManyToMany && ! $related->isEmpty()) {
+        if ($related->isEmpty()) {
+            $this->refuseUnreadable($relatedCollection, $relation->getId(), PermissionType::Update);
+        } elseif (! $linked) {
             $this->authorizeLink($relatedCollection, $related);
         }
 
@@ -2157,25 +2185,31 @@ class Relationships implements Attachable, Hook
         bool $twoWay,
         string $twoWayKey,
         RelationshipSide $side,
+        int $coroutine,
         ?PreparedCreate $prepared,
     ): void {
+        // A new document still being related or prepared is written after this read and was not stored before:
+        // linking to it links to a document this write creates.
+        $creating = isset($prepared?->preparing[$relatedCollection->getId()][$relationId])
+            || $this->isRelating($coroutine, $relatedCollection, $relationId);
+        if ($creating && ($this->checkExist->get() || ! $this->writesById($relationType, $twoWay, $side))) {
+            return;
+        }
+
         if ($prepared !== null) {
-            if (! $this->writesById($relationType, $twoWay, $side)) {
-                return;
-            }
-
-            // One by one, a document still being prepared is written after this read, and it was not stored before.
-            if ($this->checkExist->get() && isset($prepared->preparing[$relatedCollection->getId()][$relationId])) {
-                return;
-            }
-
             $this->writePrepared($prepared);
         }
 
         $related = $this->database->skipRelationships(fn () => $this->database->getDocument($relatedCollection->getId(), $relationId));
 
-        if ($related->isEmpty() && $this->checkExist->get()) {
-            return;
+        if ($related->isEmpty()) {
+            $this->refuseUnreadable($relatedCollection, $relationId, PermissionType::Read);
+
+            if ($this->checkExist->get()) {
+                return;
+            }
+        } else {
+            $this->authorizeLink($relatedCollection, $related);
         }
 
         switch ($relationType) {
@@ -2198,10 +2232,6 @@ class Relationships implements Attachable, Hook
                 }
                 break;
             case RelationshipType::ManyToMany:
-                if (! $related->isEmpty()) {
-                    $this->authorizeLink($relatedCollection, $related);
-                }
-
                 $this->database->purgeCachedDocument($relatedCollection->getId(), $relationId);
 
                 $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
@@ -3135,6 +3165,38 @@ class Relationships implements Attachable, Hook
             ...($collection->getAttribute('documentSecurity', false) ? $related->getPermissionsByType(PermissionType::Update) : []),
         ]))) {
             throw new AuthorizationException($authorization->getDescription());
+        }
+    }
+
+    /**
+     * Refuse a related document the caller's read came back empty for although it is stored: a nested write never
+     * links, changes or creates over a document the caller cannot read, nor tells it apart from a missing one by
+     * failing to create it. The refusal gives the reason of $check, or of read when the caller passes $check.
+     *
+     * @throws AuthorizationException
+     */
+    private function refuseUnreadable(Document $collection, string $id, PermissionType $check): void
+    {
+        $authorization = $this->database->getAuthorization();
+        if ($id === '' || ! $authorization->getStatus()) {
+            return;
+        }
+
+        $stored = $authorization->skip(fn () => $this->database->skipRelationships(
+            fn () => $this->database->getDocument($collection->getId(), $id, [Query::select([Document::ID])])
+        ));
+        if ($stored->isEmpty()) {
+            return;
+        }
+
+        $documentSecurity = $collection->getAttribute('documentSecurity', false);
+        foreach ($check === PermissionType::Read ? [$check] : [$check, PermissionType::Read] as $type) {
+            if (! $authorization->isValid(new Input($type, [
+                ...$collection->getPermissionsByType($type),
+                ...($documentSecurity ? $stored->getPermissionsByType($type) : []),
+            ]))) {
+                throw new AuthorizationException($authorization->getDescription());
+            }
         }
     }
 

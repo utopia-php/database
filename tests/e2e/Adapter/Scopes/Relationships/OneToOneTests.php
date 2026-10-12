@@ -139,6 +139,7 @@ trait OneToOneTests
             '$id' => 'library2',
             '$permissions' => [
                 Permission::read(Role::any()),
+                Permission::update(Role::any()),
                 Permission::delete(Role::any()),
             ],
             'name' => 'Library 2',
@@ -303,6 +304,7 @@ trait OneToOneTests
             '$id' => 'library4',
             '$permissions' => [
                 Permission::read(Role::any()),
+                Permission::update(Role::any()),
                 Permission::delete(Role::any()),
             ],
             'name' => 'Library 4',

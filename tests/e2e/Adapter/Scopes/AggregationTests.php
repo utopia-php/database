@@ -2281,8 +2281,9 @@ trait AggregationTests
         $database->createRelationship($accounts, Relationship::manyToOne(relatedCollection: $regions, key: 'region', twoWayKey: 'accounts'));
 
         $read = [Permission::read(Role::any())];
-        $database->createDocument($regions, new Document(['$id' => 'eu', 'code' => 'eu', '$permissions' => $read]));
-        $database->createDocument($accounts, new Document(['$id' => 'pro', 'plan' => 'pro', 'region' => 'eu', '$permissions' => $read]));
+        $linkable = [Permission::read(Role::any()), Permission::update(Role::any())];
+        $database->createDocument($regions, new Document(['$id' => 'eu', 'code' => 'eu', '$permissions' => $linkable]));
+        $database->createDocument($accounts, new Document(['$id' => 'pro', 'plan' => 'pro', 'region' => 'eu', '$permissions' => $linkable]));
         $database->createDocument($customers, new Document(['$id' => 'c1', 'status' => 'active', 'account' => 'pro', '$permissions' => $read]));
         $database->createDocument($customers, new Document(['$id' => 'c2', 'status' => 'active', '$permissions' => $read]));
         $database->createDocument($customers, new Document(['$id' => 'c3', 'status' => 'closed', '$permissions' => $read]));

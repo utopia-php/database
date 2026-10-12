@@ -3,7 +3,16 @@
 ## 8.0.1
 
 8.0.1 restores the 7.4.1 behaviour that 8.0.0 changed for callers of features 7.x already had. New 8.0 features are
-unchanged.
+unchanged. It also holds nested relationship links to the permission rule UPGRADE.md states.
+
+### Added
+
+- `Database::authorizeCreate(string $collection, Document $document)` and `Database::authorizeUpdate(string
+  $collection, Document $old, Document $document)` run the permission checks of a later `createDocument()` or
+  `updateDocument()` without writing: create on the collection (update on the document for an update, document-level
+  under document security) and, when the relationship hook is attached and enabled, every nested related document
+  as deep as the write relates it. They throw `Exception\Authorization` with the reason the write would give. Use
+  them to refuse a write you stage to run later, such as a transaction operation, when it is staged.
 
 ### Fixed
 
@@ -37,13 +46,22 @@ unchanged.
   no longer stores `1e-300` or `-2.5e-20` as `0`.
 - Two-level relationship selects (`author.profile.*`, `tags.books.name`) return the related documents' attributes
   as in 7.x, and `select(['*', '*.*'])` reads every column instead of failing on MariaDB, MySQL and PostgreSQL.
-- A single SQL read returns `$sequence` ahead of `$id`, in 7.x's key order.
+- A single read returns `$sequence` ahead of `$id`, in 7.x's key order, on every adapter.
 - An update validates the stored values it leaves unchanged again, as 7.x did; a stored object value is held to
   7.x's object rules.
 - On MongoDB a transaction that lost a write conflict runs again up to 20 times, so concurrent increments of one
   document all land.
 - With dates preserved, linking existing children through their one-to-many parent keeps each child's stored
   `$updatedAt`, as 7.x did; unlinking still stamps the child.
+- Linking a stored related document by ID needs update permission on it for every relationship type, as UPGRADE.md
+  states: a one-way one-to-one link, a many-to-one link and a one-to-many child pointing at its parent linked with
+  read permission alone in 8.0.0, as in 7.x.
+- A nested write refuses a stored related document the caller cannot read with `Exception\Authorization`: with the
+  read check's reason when it is given by ID, with the update check's reason (or the read check's when the caller may
+  update) when it is given as a document. 8.0.0 left a half link to it (one-to-one, many-to-one), dropped it
+  silently (one-to-many, many-to-many) or tried to create it, failing with `Exception\Duplicate`.
+- A stored two-way one-to-one or one-to-many related document given as a document in a new parent is linked to
+  it; 8.0.0 and 7.x updated it but left its reference to the parent empty.
 
 ## 8.0.0 (unreleased)
 

@@ -832,10 +832,23 @@ method as a no-op, so a hook overrides only what it needs:
 - Linking an existing related document, at any nesting depth of a create or an update, needs update permission on
   that document, for every relationship type; without it the write throws `Utopia\Database\Exception\Authorization`
   and nothing is written. In 7.x a many-to-many link needed only read permission on the related document, because
-  the link is a row in the junction collection rather than a column on the related document; it now needs update
-  permission too, whether the value is an id or a document. A related document the same write creates needs no
-  update permission. Relinking a document that is already linked needs only read permission, and removing a link
-  needs no update permission on the unlinked document.
+  the link is a row in the junction collection rather than a column on the related document, and so did a link by
+  id from the side that holds the key: a one-way one-to-one, a many-to-one, and a one-to-many child pointing at its
+  parent. These now need update permission too, whether the value is an id or a document (since 8.0.1; 8.0.0 still
+  linked them with read permission). A related document the same write creates needs no update permission.
+  Relinking a document that is already linked needs only read permission, and removing a link needs no update
+  permission on the unlinked document.
+- A stored related document the caller cannot read is refused with `Utopia\Database\Exception\Authorization`, with
+  the read check's reason when the value is its id, and with the update check's reason (or the read check's when the
+  caller may update it) when the value is a document. 7.x left a one-to-one or many-to-one link to it, dropped it
+  from a one-to-many or many-to-many value, and tried to create it when it was given as a document, failing with
+  `Utopia\Database\Exception\Duplicate`.
+- `Database::authorizeCreate(string $collection, Document $document)` and `Database::authorizeUpdate(string
+  $collection, Document $old, Document $document)` (since 8.0.1) run these checks, and the create or update check on
+  the document itself, without writing anything. An application that stages writes to run later, such as the
+  operations of a transaction another request commits, calls them at staging instead of repeating the checks.
+  `authorizeUpdate()` checks the update against `$old`, the stored document as the caller reads it, and always needs
+  update permission, where `updateDocument()` lets an update that changes nothing through with read permission.
 - `deleteDocuments()` applies `Cascade` and `Restrict` to every related document, also when its queries include a
   select (7.x skipped the cascade and ignored `Restrict` then) and also to related documents the caller cannot read.
   Each document a cascade reaches is deleted through `deleteDocument()`, so one the caller may not delete throws

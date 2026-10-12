@@ -176,6 +176,82 @@ final class NestedLinkPermissionsTest extends TestCase
     }
 
     /**
+     * Database::authorizeCreate() refuses what the create refuses, for the same reason, and writes nothing.
+     *
+     * @param  Closure(): Adapter  $adapter
+     * @param  list<string>  $collectionPermissions
+     * @param  list<string>  $documentPermissions
+     */
+    #[DataProvider('cases')]
+    public function testAuthorizeCreateRefusesWhatTheCreateRefuses(Closure $adapter, string $type, bool $documentSecurity, array $collectionPermissions, array $documentPermissions, string $caller, string $value, ?string $refusal, bool $transaction): void
+    {
+        $this->seed($adapter(), $type, $documentSecurity, $collectionPermissions, $documentPermissions);
+
+        $related = $value === self::ID ? 'stored' : new Document(['$id' => 'stored', 'name' => 'Changed']);
+        $parent = new Document([
+            '$id' => 'parent',
+            '$permissions' => [Permission::read(Role::any())],
+            'related' => \in_array($type, ['oneToMany', 'manyToMany'], true) ? [$related] : $related,
+        ]);
+        $given = $parent->getArrayCopy();
+
+        $this->assertSame($refusal, $this->refusal(fn (): mixed => $this->as($caller, fn () => $transaction
+            ? $this->database->withTransaction(fn () => $this->database->authorizeCreate('parents', $parent))
+            : $this->database->authorizeCreate('parents', $parent))));
+
+        $this->assertEquals($given, $parent->getArrayCopy(), 'The check leaves the document it is given unchanged');
+        $this->assertWroteNothing();
+    }
+
+    /**
+     * Database::authorizeUpdate() refuses what the update refuses, for the same reason, and writes nothing.
+     *
+     * @param  Closure(): Adapter  $adapter
+     * @param  list<string>  $collectionPermissions
+     * @param  list<string>  $documentPermissions
+     */
+    #[DataProvider('cases')]
+    public function testAuthorizeUpdateRefusesWhatTheUpdateRefuses(Closure $adapter, string $type, bool $documentSecurity, array $collectionPermissions, array $documentPermissions, string $caller, string $value, ?string $refusal, bool $transaction): void
+    {
+        $this->seed($adapter(), $type, $documentSecurity, $collectionPermissions, $documentPermissions);
+        $old = $this->authorization->skip(fn (): Document => $this->database->createDocument('parents', new Document([
+            '$id' => 'parent',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+        ])));
+
+        $related = $value === self::ID ? 'stored' : new Document(['$id' => 'stored', 'name' => 'Changed']);
+        $update = new Document(['related' => \in_array($type, ['oneToMany', 'manyToMany'], true) ? [$related] : $related]);
+
+        $this->assertSame($refusal, $this->refusal(fn (): mixed => $this->as($caller, fn () => $transaction
+            ? $this->database->withTransaction(fn () => $this->database->authorizeUpdate('parents', $old, $update))
+            : $this->database->authorizeUpdate('parents', $old, $update))));
+
+        $this->assertSame([], self::ids($this->authorization->skip(fn (): Document => $this->database->getDocument('parents', 'parent'))->getAttribute('related')), 'The check links nothing');
+        $stored = $this->authorization->skip(fn (): Document => $this->database->getDocument('related', 'stored'));
+        $this->assertSame('Stored', $stored->getAttribute('name'), 'The check changes nothing');
+        $this->assertSame([], self::ids($stored->getAttribute('back')), 'The check links nothing');
+    }
+
+    private function refusal(callable $check): ?string
+    {
+        try {
+            $check();
+        } catch (AuthorizationException $error) {
+            return $error->getMessage();
+        }
+
+        return null;
+    }
+
+    private function assertWroteNothing(): void
+    {
+        $this->assertTrue($this->authorization->skip(fn (): bool => $this->database->getDocument('parents', 'parent')->isEmpty()), 'The check writes no parent');
+        $stored = $this->authorization->skip(fn (): Document => $this->database->getDocument('related', 'stored'));
+        $this->assertSame('Stored', $stored->getAttribute('name'), 'The check changes no related document');
+        $this->assertSame([], self::ids($stored->getAttribute('back')), 'The check links nothing');
+    }
+
+    /**
      * @param  list<string>  $collectionPermissions
      * @param  list<string>  $documentPermissions
      */

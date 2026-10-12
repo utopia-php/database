@@ -1065,6 +1065,66 @@ trait Documents
     }
 
     /**
+     * Check, without writing anything, that the caller may create $document in $collection: what createDocument()
+     * checks for the document itself (create on the collection) and for every related document nested in it, as
+     * deep as createDocument() relates them, when the relationship hook is attached and enabled. A new related
+     * document needs create on its collection; linking a stored one, by ID or as a document, needs update on it
+     * (on its collection, or on the document under document security); a stored document the caller cannot read is
+     * refused. For staging a write that runs later, such as an operation of a transaction committed by another
+     * request; createDocument() runs the same checks when it writes.
+     *
+     * @param  string  $collection  The collection identifier
+     * @param  Document  $document  The document a later createDocument() would be given; it is not changed
+     *
+     * @throws AuthorizationException When createDocument() would refuse the caller
+     * @throws NotFoundException When the collection does not exist
+     * @throws RelationshipException When a relationship value is not a document, an ID or a list of them
+     */
+    public function authorizeCreate(string $collection, Document $document): void
+    {
+        $definition = $this->silent(fn () => $this->getCollection($collection));
+
+        if ($definition->getId() !== self::METADATA && ! $this->authorization->isValid(new Input(PermissionType::Create, $definition->getPermissionsByType(PermissionType::Create)))) {
+            throw new AuthorizationException($this->authorization->getDescription());
+        }
+
+        if ($this->relationshipHook?->isEnabled()) {
+            $this->relationshipHook->authorize($definition, $document);
+        }
+    }
+
+    /**
+     * Check, without writing anything, that the caller may update $old with $document: update on the document (on its
+     * collection, or on $old under document security) and, for every related document $document carries, what
+     * authorizeCreate() checks for it. A related document $old already links needs no link check, only update when
+     * it is sent as a document with attributes to change. Unlike updateDocument(), which lets an update that changes
+     * nothing through with read permission, this always needs update.
+     *
+     * @param  string  $collection  The collection identifier
+     * @param  Document  $old  The stored document the update changes, as the caller reads it
+     * @param  Document  $document  The changes a later updateDocument() would be given; it is not changed
+     *
+     * @throws AuthorizationException When updateDocument() would refuse the caller
+     * @throws NotFoundException When the collection does not exist
+     * @throws RelationshipException When a relationship value is not a document, an ID or a list of them
+     */
+    public function authorizeUpdate(string $collection, Document $old, Document $document): void
+    {
+        $definition = $this->silent(fn () => $this->getCollection($collection));
+
+        if ($definition->getId() !== self::METADATA && ! $this->authorization->isValid(new Input(PermissionType::Update, [
+            ...$definition->getPermissionsByType(PermissionType::Update),
+            ...($definition->getAttribute('documentSecurity', false) ? $old->getPermissionsByType(PermissionType::Update) : []),
+        ]))) {
+            throw new AuthorizationException($this->authorization->getDescription());
+        }
+
+        if ($this->relationshipHook?->isEnabled()) {
+            $this->relationshipHook->authorize($definition, $document, $old);
+        }
+    }
+
+    /**
      * @param  string  $collection  The collection identifier
      * @param  Document  $document  The document to create
      * @return Document The created document with generated ID and timestamps

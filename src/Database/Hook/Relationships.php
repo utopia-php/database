@@ -3169,6 +3169,172 @@ class Relationships implements Attachable, Hook
     }
 
     /**
+     * Check, without writing, that the caller may relate the related documents $document carries the way writing it
+     * relates them, as deep as a write relates them: create on the related collection for a new document, update
+     * (collection-level, or document-level under document security) to link a stored one or to change one sent as a
+     * document, and never a stored document the caller cannot read. With $old, the stored document an update
+     * changes, a related document $old already links is not linked again, so only changing it needs update.
+     *
+     * @throws AuthorizationException When writing $document would be refused
+     * @throws RelationshipException When a relationship value is not a document, an ID or a list of them
+     *
+     * @internal
+     */
+    public function authorize(Document $collection, Document $document, ?Document $old = null): void
+    {
+        $this->authorizeRelated($collection, $document, $old, []);
+    }
+
+    /**
+     * @param  list<string>  $writeStack  The collections of the writes relating $document, innermost last
+     *
+     * @throws AuthorizationException
+     * @throws RelationshipException
+     */
+    private function authorizeRelated(Document $collection, Document $document, ?Document $old, array $writeStack): void
+    {
+        $depth = \count($writeStack);
+
+        foreach (self::relationships($collection) as $attribute) {
+            $relationship = $attribute->relationship;
+            $key = $attribute->key;
+            if ($relationship === null || ! $document->offsetExists($key)) {
+                continue;
+            }
+
+            $relatedCollection = $this->database->getCollection($relationship->relatedCollection);
+            if ($depth >= Database::RELATION_MAX_DEPTH - 1 && $writeStack[$depth - 1] !== $relatedCollection->getId()) {
+                continue;
+            }
+
+            $linked = self::relatedIds($old?->getAttribute($key));
+            $value = $document->getAttribute($key);
+            if (Operator::isOperator($value)) {
+                /** @var Operator $value */
+                $value = $value->isArrayOperation() ? $this->applyRelationshipOperator($value, $linked) : [];
+            }
+
+            foreach (self::relatedValues($value) as $related) {
+                if (\is_string($related)) {
+                    $this->authorizeLinkById($relatedCollection, $related, $linked);
+
+                    continue;
+                }
+
+                $this->authorizeRelatedDocument($collection, $relatedCollection, $related, $linked, $writeStack);
+            }
+        }
+    }
+
+    /**
+     * @param  list<string>  $linked
+     *
+     * @throws AuthorizationException
+     */
+    private function authorizeLinkById(Document $relatedCollection, string $id, array $linked): void
+    {
+        if (\in_array($id, $linked, true)) {
+            return;
+        }
+
+        $stored = $this->database->skipRelationships(fn () => $this->database->getDocument($relatedCollection->getId(), $id, [Query::select([Document::ID])]));
+        if ($stored->isEmpty()) {
+            $this->refuseUnreadable($relatedCollection, $id, PermissionType::Read);
+
+            return;
+        }
+
+        $this->authorizeLink($relatedCollection, $stored);
+    }
+
+    /**
+     * @param  list<string>  $linked
+     * @param  list<string>  $writeStack
+     *
+     * @throws AuthorizationException
+     * @throws RelationshipException
+     */
+    private function authorizeRelatedDocument(Document $collection, Document $relatedCollection, Document $related, array $linked, array $writeStack): void
+    {
+        $id = $related->getId();
+        $stored = $id === ''
+            ? new Document()
+            : $this->database->skipRelationships(fn () => $this->database->getDocument($relatedCollection->getId(), $id));
+
+        if ($stored->isEmpty()) {
+            $this->refuseUnreadable($relatedCollection, $id, PermissionType::Update);
+
+            $authorization = $this->database->getAuthorization();
+            if (! $authorization->isValid(new Input(PermissionType::Create, $relatedCollection->getPermissionsByType(PermissionType::Create)))) {
+                throw new AuthorizationException($authorization->getDescription());
+            }
+
+            $this->authorizeRelated($relatedCollection, $related, null, [...$writeStack, $collection->getId()]);
+
+            return;
+        }
+
+        $changes = \array_diff(\array_keys($related->getArrayCopy()), [Document::ID]) !== [];
+        if (! \in_array($id, $linked, true) || $changes) {
+            $this->authorizeLink($relatedCollection, $stored);
+        }
+
+        $this->authorizeRelated($relatedCollection, $related, $stored, [...$writeStack, $collection->getId()]);
+    }
+
+    /**
+     * The IDs of the related documents a relationship value holds.
+     *
+     * @return list<string>
+     */
+    private static function relatedIds(mixed $value): array
+    {
+        $ids = [];
+        foreach (\is_array($value) && \array_is_list($value) ? $value : [$value] as $related) {
+            if ($related instanceof Document) {
+                $ids[] = $related->getId();
+            } elseif (\is_string($related)) {
+                $ids[] = $related;
+            }
+        }
+
+        return $ids;
+    }
+
+    /**
+     * The related documents and IDs a relationship value holds, a document given as an array read as a document.
+     *
+     * @return list<Document|string>
+     *
+     * @throws RelationshipException
+     */
+    private static function relatedValues(mixed $value): array
+    {
+        if ($value === null) {
+            return [];
+        }
+
+        $values = [];
+        foreach (\is_array($value) && \array_is_list($value) ? $value : [$value] as $related) {
+            if (\is_array($related)) {
+                try {
+                    $related = new Document($related); // @phpstan-ignore argument.type
+                } catch (StructureException $e) {
+                    throw new RelationshipException('Invalid relationship value. '.$e->getMessage());
+                }
+            }
+
+            if (! $related instanceof Document && ! \is_string($related)) {
+                throw new RelationshipException('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
+            }
+
+            $values[] = $related;
+        }
+
+        return $values;
+    }
+
+    /**
      * Refuse a related document the caller's read came back empty for although it is stored: a nested write never
      * links, changes or creates over a document the caller cannot read, nor tells it apart from a missing one by
      * failing to create it. The refusal gives the reason of $check, or of read when the caller passes $check.

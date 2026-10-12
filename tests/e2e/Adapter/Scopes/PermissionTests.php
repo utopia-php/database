@@ -1947,6 +1947,7 @@ trait PermissionTests
                 };
 
                 try {
+                    $this->assertSame($refusal, $refused(fn () => $database->authorizeCreate($parents, $parent)), $label.': the pre-check');
                     $this->assertSame($refusal, $refused(fn () => $database->withTransaction(fn () => $database->createDocuments($parents, [$parent]))), $label.': the create');
 
                     $stored = $authorization->skip(fn () => $database->getDocument($relatedCollection, 'stored'));

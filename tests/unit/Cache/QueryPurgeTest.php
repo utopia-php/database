@@ -1,0 +1,183 @@
+<?php
+
+namespace Tests\Unit\Cache;
+
+use PHPUnit\Framework\TestCase;
+use RuntimeException;
+use Utopia\Cache\Adapter\Memory as MemoryCache;
+use Utopia\Cache\Cache;
+use Utopia\Database\Adapter\Memory as DatabaseMemory;
+use Utopia\Database\Cache\Query as ResultCache;
+use Utopia\Database\Collection;
+use Utopia\Database\Database;
+use Utopia\Database\Document;
+use Utopia\Database\Permission;
+use Utopia\Database\Query;
+use Utopia\Database\Role;
+use Utopia\Database\Validator\Authorization;
+
+final class QueryPurgeTest extends TestCase
+{
+    public function testPurgeCachedQueriesDropsTheResultsFindCached(): void
+    {
+        [$reader, $bypass] = $this->createDatabases('posts_'.\uniqid());
+
+        $this->assertSame(['first'], $this->ids($reader->find('posts', [Query::orderAsc('$id')])));
+        $bypass->createDocument('posts', new Document(['$id' => 'second']));
+        $this->assertSame(
+            ['first'],
+            $this->ids($reader->find('posts', [Query::orderAsc('$id')])),
+            'A write the query cache never saw stays invisible until the cache is purged',
+        );
+
+        $this->assertTrue($reader->purgeCachedQueries('posts'));
+
+        $this->assertSame(['first', 'second'], $this->ids($reader->find('posts', [Query::orderAsc('$id')])));
+    }
+
+    public function testPurgeCachedQueriesReachesTheNamespaceItNames(): void
+    {
+        $namespace = 'posts_'.\uniqid();
+        $queryCache = new ResultCache(new Cache(new LeasableHashCache()));
+        [$reader, $bypass] = $this->createDatabases($namespace, $queryCache);
+        $caller = new Database(new DatabaseMemory(), new Cache(new LeasableHashCache()));
+        $caller
+            ->setDatabase('purge')
+            ->setNamespace('caller_'.\uniqid())
+            ->setQueryCache($queryCache);
+        $caller->create();
+
+        $this->assertSame(['first'], $this->ids($reader->find('posts', [Query::orderAsc('$id')])));
+        $bypass->createDocument('posts', new Document(['$id' => 'second']));
+
+        $this->assertTrue($caller->purgeCachedQueries('posts', $namespace));
+
+        $this->assertSame(['first', 'second'], $this->ids($reader->find('posts', [Query::orderAsc('$id')])));
+    }
+
+    public function testPurgeCachedQueriesReportsAQueryCacheItCouldNotPurge(): void
+    {
+        $queryCache = new FailingMemory();
+        [$reader] = $this->createDatabases('posts_'.\uniqid(), new ResultCache(new Cache($queryCache)));
+        $queryCache->failBlocks();
+
+        $this->assertFalse($reader->purgeCachedQueries('posts'));
+    }
+
+    public function testPurgeCachedCollectionInvalidatesCachedFinds(): void
+    {
+        [$reader, $bypass] = $this->createDatabases('posts_'.\uniqid());
+
+        $this->assertSame(['first'], $this->ids($reader->find('posts', [Query::orderAsc('$id')])));
+        $bypass->createDocument('posts', new Document(['$id' => 'second']));
+
+        $reader->purgeCachedCollection('posts');
+
+        $this->assertSame(
+            ['first', 'second'],
+            $this->ids($reader->find('posts', [Query::orderAsc('$id')])),
+            'Purging a collection must also drop the results find() cached for it',
+        );
+    }
+
+    public function testPurgeCachedQueriesReturnsFalseWhenTheCacheFails(): void
+    {
+        $cache = new class () extends MemoryCache {
+            public bool $failing = false;
+
+            #[\Override]
+            public function load(string $key, int $ttl, string $hash = ''): mixed
+            {
+                $this->assertAvailable($key);
+
+                return parent::load($key, $ttl, $hash);
+            }
+
+            /**
+             * @param  array<int|string, mixed>|string  $data
+             * @return bool|string|array<int|string, mixed>
+             */
+            #[\Override]
+            public function save(string $key, array|string $data, string $hash = '', int $ttl = 0): bool|string|array
+            {
+                $this->assertAvailable($key);
+
+                return parent::save($key, $data, $hash);
+            }
+
+            #[\Override]
+            public function purge(string $key, string $hash = ''): bool
+            {
+                $this->assertAvailable($key);
+
+                return parent::purge($key, $hash);
+            }
+
+            private function assertAvailable(string $key): void
+            {
+                if ($this->failing && \str_ends_with($key, ':query#epoch')) {
+                    throw new RuntimeException('Cache unavailable');
+                }
+            }
+        };
+        $database = new Database(new DatabaseMemory(), new Cache($cache));
+        $database
+            ->setDatabase('purge')
+            ->setNamespace('posts_'.\uniqid());
+        $database->create();
+        $database->getAuthorization()->addRole(Role::any()->toString());
+        $database->createCollection(Collection::create(id: 'posts', permissions: [
+            Permission::read(Role::any()),
+        ], documentSecurity: false));
+        $cache->failing = true;
+
+        $this->assertFalse($database->purgeCachedQueries('posts'), 'A cache that fails while the cached queries are purged must be reported, not thrown');
+    }
+
+    /**
+     * A reader with the query cache and a writer on the same data without it,
+     * like a migration or a worker that bypasses the reader's invalidation.
+     *
+     * @return array{Database, Database}
+     */
+    private function createDatabases(string $namespace, ?ResultCache $queryCache = null): array
+    {
+        $adapter = new DatabaseMemory();
+        $cache = new Cache(new LeasableHashCache());
+        $authorization = new Authorization();
+        $authorization->addRole(Role::any()->toString());
+
+        $databases = [];
+        foreach ([0, 1] as $ignored) {
+            $database = new Database($adapter, $cache);
+            $database
+                ->setAuthorization($authorization)
+                ->setDatabase('purge')
+                ->setNamespace($namespace);
+            $databases[] = $database;
+        }
+        [$reader, $bypass] = $databases;
+
+        $reader->create();
+        $reader->setQueryCache($queryCache ?? new ResultCache(new Cache(new LeasableHashCache())));
+        $reader->createCollection(Collection::create(id: 'posts', permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ], documentSecurity: false));
+        $reader->createDocument('posts', new Document(['$id' => 'first']));
+
+        return [$reader, $bypass];
+    }
+
+    /**
+     * @param  array<Document>  $documents
+     * @return array<string>
+     */
+    private function ids(array $documents): array
+    {
+        return \array_map(
+            static fn (Document $document): string => $document->getId(),
+            $documents,
+        );
+    }
+}

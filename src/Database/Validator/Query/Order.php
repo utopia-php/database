@@ -2,52 +2,93 @@
 
 namespace Utopia\Database\Validator\Query;
 
+use Utopia\Database\Attribute;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
+use Utopia\Database\Validator\Query\Joined\Attributes;
+use Utopia\Query\Method;
+use Utopia\Query\Query as BaseQuery;
 
 class Order extends Base
 {
+    use Attributes;
+
     /**
      * @var array<int|string, true>
      */
     protected array $schema = [];
 
     /**
-     * @param array<Document> $attributes
-     * @param bool $supportForAttributes
+     * Transient aggregation aliases registered by Queries::isValid for the
+     * current validation pass. Kept separate from $schema so it can be reset
+     * per-call without clobbering the real attribute schema — prior versions
+     * mutated $schema directly, leaking aliases across requests in long-lived
+     * processes (Swoole) and pooled validator instances.
+     *
+     * @var array<string, true>
      */
-    public function __construct(array $attributes = [], protected bool $supportForAttributes = true)
-    {
+    protected array $aggregationAliases = [];
+
+    private bool $aggregates = false;
+
+    /**
+     * @var list<string>
+     */
+    private array $groupBy = [];
+
+    /**
+     * @param  array<Attribute|Document>  $attributes
+     */
+    public function __construct(
+        array $attributes = [],
+        protected bool $supportForAttributes = true,
+        protected bool $supportForOrderRandom = true,
+    ) {
         foreach ($attributes as $attribute) {
-            $this->schema[$attribute->getAttribute('key', $attribute->getAttribute('$id'))] = true;
+            $attribute = $attribute instanceof Attribute ? $attribute : Attribute::fromDocument($attribute);
+            $this->schema[$attribute->key] = true;
         }
     }
 
-    /**
-     * @param string $attribute
-     * @return bool
-     */
     protected function isValidAttribute(string $attribute): bool
     {
-        if (\str_contains($attribute, '.')) {
-            // Check for special symbol `.`
+        $dot = \strpos($attribute, '.');
+        if ($dot !== false) {
             if (isset($this->schema[$attribute])) {
                 return true;
             }
 
+            $alias = \substr($attribute, 0, $dot);
+            $column = \substr($attribute, $dot + 1);
+
+            if ($this->isJoinColumnReference($alias, $column)) {
+                $join = $this->joinsByAlias[$alias] ?? null;
+
+                return ! $this->supportForAttributes || $join?->holdsColumn($column) === true || $this->isJoinedColumn($alias, $column);
+            }
+
             // For relationships, just validate the top level.
             // Will validate each nested level during the recursive calls.
-            $attribute = \explode('.', $attribute)[0];
+            $attribute = $alias;
 
             if (isset($this->schema[$attribute])) {
-                $this->message = 'Cannot order by nested attribute: ' . $attribute;
+                $this->message = 'Cannot order by nested attribute: '.$attribute;
+
                 return false;
             }
         }
 
-        // Search for attribute in schema
-        if ($this->supportForAttributes && !isset($this->schema[$attribute])) {
-            $this->message = 'Attribute not found in schema: ' . $attribute;
+        if (isset($this->aggregationAliases[$attribute])) {
+            return true;
+        }
+
+        if ($this->supportForAttributes && ! isset($this->schema[$attribute])) {
+            if ($dot === false && $this->joins !== []) {
+                return $this->isJoinedAttribute($attribute);
+            }
+
+            $this->message = 'Attribute not found in schema: '.$attribute;
+
             return false;
         }
 
@@ -55,35 +96,106 @@ class Order extends Base
     }
 
     /**
-     * Is valid.
-     *
-     * Returns true if method is ORDER_ASC or ORDER_DESC and attributes are valid
-     *
-     * Otherwise, returns false
-     *
-     * @param Query $value
-     * @return bool
+     * @param  mixed  $value
      */
-    public function isValid($value): bool
+    #[\Override]
+    public function isValid(mixed $value): bool
     {
-        if (!$value instanceof Query) {
+        if (! $value instanceof Query) {
             return false;
         }
 
         $method = $value->getMethod();
         $attribute = $value->getAttribute();
 
-        if ($method === Query::TYPE_ORDER_ASC || $method === Query::TYPE_ORDER_DESC) {
-            return $this->isValidAttribute($attribute);
+        if ($method === Method::OrderAsc || $method === Method::OrderDesc) {
+            return $this->isValidAttribute($attribute) && $this->isGroupedOrder($attribute);
         }
 
-        if ($method === Query::TYPE_ORDER_RANDOM) {
-            return true; // orderRandom doesn't need an attribute
+        if ($method === Method::OrderRandom) {
+            if (! $this->supportForOrderRandom) {
+                $this->message = 'Random order is not supported by this adapter';
+
+                return false;
+            }
+
+            return true;
         }
 
         return false;
     }
 
+    #[\Override]
+    protected function acceptsMainAttribute(string $attribute): bool
+    {
+        return isset($this->schema[$attribute]);
+    }
+
+    /**
+     * Register aggregation aliases that become valid order targets for the
+     * current validation pass. Callers (see Queries::isValid) must invoke
+     * resetAggregationAliases() before the pass to avoid cross-call leakage.
+     *
+     * @param array<string> $aliases
+     */
+    public function addAggregationAliases(array $aliases): void
+    {
+        foreach ($aliases as $alias) {
+            $this->aggregationAliases[$alias] = true;
+        }
+    }
+
+    /**
+     * Clear any aggregation aliases added by a previous validation pass.
+     */
+    public function resetAggregationAliases(): void
+    {
+        $this->aggregationAliases = [];
+    }
+
+    /**
+     * The aggregates of the query set. With one, or with a groupBy, the query returns a row per
+     * group, so an order can name only an aggregate alias or an attribute the query groups by.
+     *
+     * @param  array<BaseQuery>  $aggregations
+     */
+    public function setAggregations(array $aggregations): void
+    {
+        $this->aggregates = $aggregations !== [];
+    }
+
+    /**
+     * @param  array<mixed>  $attributes  the groupBy attributes of the query set
+     */
+    public function setGroupBy(array $attributes): void
+    {
+        $this->groupBy = [];
+
+        foreach ($attributes as $attribute) {
+            if (\is_string($attribute) && $attribute !== '') {
+                $this->groupBy[] = $attribute;
+            }
+        }
+    }
+
+    private function isGroupedOrder(string $attribute): bool
+    {
+        if ((! $this->aggregates && $this->groupBy === []) || isset($this->aggregationAliases[$attribute])) {
+            return true;
+        }
+
+        foreach ($this->groupBy as $group) {
+            if ($this->column($group) === $this->column($attribute)) {
+                return true;
+            }
+        }
+
+        $this->message = 'Cannot order by "'.$attribute.'": an aggregation query can only order by its groups and aggregates';
+
+        return false;
+    }
+
+    #[\Override]
     public function getMethodType(): string
     {
         return self::METHOD_TYPE_ORDER;

@@ -49,10 +49,12 @@ class PDOStatement implements \IteratorAggregate
      */
     private array $attributes = [];
 
+    private ?int $fetchMode = null;
+
     /**
-     * @var array<int|string, mixed>|null
+     * @var array<int, mixed>
      */
-    private ?array $fetchMode = null;
+    private array $fetchModeArguments = [];
 
     /**
      * @param array<mixed> $options
@@ -94,6 +96,7 @@ class PDOStatement implements \IteratorAggregate
      * Preserve \PDOStatement's native iterability (foreach over rows), which
      * does not route through __call().
      */
+    #[\Override]
     public function getIterator(): \Traversable
     {
         return $this->statement;
@@ -130,6 +133,11 @@ class PDOStatement implements \IteratorAggregate
         return $this->statement;
     }
 
+    public function getQueryString(): string
+    {
+        return $this->statement->queryString;
+    }
+
     public function setAttribute(int $attribute, mixed $value): bool
     {
         $this->attributes[$attribute] = $value;
@@ -139,7 +147,8 @@ class PDOStatement implements \IteratorAggregate
 
     public function setFetchMode(int $mode, mixed ...$args): bool
     {
-        $this->fetchMode = [$mode, ...$args];
+        $this->fetchMode = $mode;
+        $this->fetchModeArguments = \array_values($args);
 
         return $this->statement->setFetchMode($mode, ...$args);
     }
@@ -183,7 +192,7 @@ class PDOStatement implements \IteratorAggregate
         }
 
         if ($this->fetchMode !== null) {
-            $this->statement->setFetchMode(...$this->fetchMode);
+            $this->statement->setFetchMode($this->fetchMode, ...$this->fetchModeArguments);
         }
 
         // Replay value/param bindings in the original call order so a placeholder

@@ -2,35 +2,43 @@
 
 namespace Tests\Unit;
 
+use Closure;
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter;
 use Utopia\Cache\Cache;
 use Utopia\Cache\Feature\Leasable;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
+use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Permission;
+use Utopia\Database\Query;
+use Utopia\Database\Role;
 
 class WithCacheLeaseTest extends TestCase
 {
-    private LeasableMemoryCache $cacheAdapter;
+    private Cache $cache;
+
+    private DatabaseMemory $adapter;
 
     private Database $database;
 
     private string $key;
 
+    #[\Override]
     protected function setUp(): void
     {
-        $this->cacheAdapter = new LeasableMemoryCache();
-        $this->database = new Database(new DatabaseMemory(), new Cache($this->cacheAdapter));
+        $this->cache = new Cache(new LeasableMemoryCache());
+        $this->adapter = new DatabaseMemory();
+        $this->database = new Database($this->adapter, $this->cache);
         $this->database
             ->setDatabase('utopiaTests')
             ->setNamespace('with_cache_' . \uniqid());
 
         $this->database->create();
-        $this->database->createCollection('projects');
-        $this->database->createAttribute('projects', 'name', Database::VAR_STRING, 255, false);
+        $this->database->createCollection(Collection::create(id: 'projects'));
+        $this->database->createAttribute('projects', Attribute::string(key: 'name'));
         $this->database->createDocument('projects', new Document([
             '$id' => 'project',
             '$permissions' => [
@@ -42,23 +50,83 @@ class WithCacheLeaseTest extends TestCase
         $this->key = $this->database->getQueryCacheKey('projects');
     }
 
-    public function testDocumentPurgeRemovesAllVariantsAndRejectsStaleWrites(): void
+    /**
+     * Write to the row through the adapter, bypassing Database and therefore the
+     * cache purge, so the cache is left holding the previous copy.
+     */
+    private function staleCache(string $attribute, string $value): void
     {
-        [$collectionKey, $documentKey, $firstHash] = $this->database->getCacheKeys('projects', 'project');
-        [, , $secondHash] = $this->database->getCacheKeys('projects', 'project', ['name']);
-        $this->cacheAdapter->save($collectionKey, 'legacy', $documentKey);
-        $this->cacheAdapter->save($documentKey, 'first', $firstHash);
-        $this->cacheAdapter->save($documentKey, 'second', $secondHash);
-        $lease = $this->cacheAdapter->getGeneration($documentKey);
+        $collection = $this->database->getCollection('projects');
+        $document = $this->adapter->getDocument($collection, 'project');
+        $document->setAttribute($attribute, $value);
+        $this->adapter->updateDocument($collection, 'project', $document, true);
+    }
 
-        $this->assertTrue($this->database->purgeCachedDocument('projects', 'project'));
+    public function testDocumentPurgeRemovesAllVariants(): void
+    {
+        $plain = fn (): mixed => $this->database->getDocument('projects', 'project')->getAttribute('name');
+        $projected = fn (): mixed => $this->database
+            ->getDocument('projects', 'project', [Query::select(['name'])])
+            ->getAttribute('name');
 
-        $this->assertFalse($this->cacheAdapter->load($collectionKey, Database::TTL, $documentKey));
-        $this->assertFalse($this->cacheAdapter->load($documentKey, Database::TTL, $firstHash));
-        $this->assertFalse($this->cacheAdapter->load($documentKey, Database::TTL, $secondHash));
-        $this->cacheAdapter->saveWithLease($documentKey, 'stale', $firstHash, $lease);
-        $this->assertFalse($this->cacheAdapter->load($documentKey, Database::TTL, $firstHash));
-        $this->assertSame('fresh', $this->database->getDocument('projects', 'project')->getAttribute('name'));
+        $this->assertSame('fresh', $plain());
+        $this->assertSame('fresh', $projected());
+
+        $this->staleCache('name', 'changed');
+
+        // Both variants still answer 'fresh' from cache, so the purge has something to invalidate.
+        $this->assertSame('fresh', $plain());
+        $this->assertSame('fresh', $projected());
+
+        $this->database->purgeCachedDocument('projects', 'project');
+
+        $this->assertSame('changed', $plain());
+        $this->assertSame('changed', $projected());
+    }
+
+    public function testAReadInFlightDuringAPurgeCannotCacheWhatItRead(): void
+    {
+        $adapter = new class () extends DatabaseMemory {
+            public ?Closure $afterNextDocumentRead = null;
+
+            #[\Override]
+            public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
+            {
+                $document = parent::getDocument($collection, $id, $queries, $forUpdate);
+
+                $callback = $collection->getId() === Database::METADATA ? null : $this->afterNextDocumentRead;
+                if ($callback !== null) {
+                    $this->afterNextDocumentRead = null;
+                    $callback();
+                }
+
+                return $document;
+            }
+        };
+        $database = new Database($adapter, new Cache(new LeasableMemoryCache()));
+        $database
+            ->setDatabase('utopiaTests')
+            ->setNamespace('with_cache_in_flight_' . \uniqid());
+        $database->create();
+        $database->createCollection(Collection::create(id: 'projects'));
+        $database->createAttribute('projects', Attribute::string(key: 'name'));
+        $database->createDocument('projects', new Document([
+            '$id' => 'project',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'name' => 'fresh',
+        ]));
+
+        $adapter->afterNextDocumentRead = function () use ($adapter, $database): void {
+            $collection = $database->getCollection('projects');
+            $row = $adapter->getDocument($collection, 'project')->setAttribute('name', 'changed');
+            $adapter->updateDocument($collection, 'project', $row, true);
+            $database->purgeCachedDocument('projects', 'project');
+        };
+
+        $this->assertSame('fresh', $database->getDocument('projects', 'project')->getAttribute('name'), 'The read returns the row it read before the purge');
+        $this->assertSame('changed', $database->getDocument('projects', 'project')->getAttribute('name'), 'The read that started before the purge must not have cached its row');
     }
 
     public function testStaleListWriteAfterConcurrentPurgeIsRejected(): void
@@ -71,17 +139,24 @@ class WithCacheLeaseTest extends TestCase
         // concurrent writer purges the query key after the read started but
         // before the result is cached. Without a lease the stale list below
         // would land in the cache after the purge.
-        $result = $this->database->withCache($this->key, function () use ($hash, $document) {
-            $this->cacheAdapter->purge($this->key, $hash);
+        $result = $this->database->withCache($this->key, function () use ($document) {
+            $this->database->purgeCachedQueries('projects');
 
             return [$document];
         }, $hash);
 
+        /** @var mixed $result */
+        $this->assertIsArray($result);
         $this->assertCount(1, $result);
-        $this->assertFalse(
-            $this->cacheAdapter->load($this->key, Database::TTL, $hash),
-            'A list read whose query key was purged mid-flight must not be re-cached.'
-        );
+        $callbackCalls = 0;
+        $fresh = $this->database->withCache($this->key, function () use (&$callbackCalls): array {
+            $callbackCalls++;
+
+            return [];
+        }, $hash);
+        /** @var mixed $fresh */
+        $this->assertSame([], $fresh);
+        $this->assertSame(1, $callbackCalls);
     }
 
     public function testListWriteLandsWhenNoConcurrentPurge(): void
@@ -92,11 +167,19 @@ class WithCacheLeaseTest extends TestCase
 
         $result = $this->database->withCache($this->key, fn () => [$document], $hash);
 
+        /** @var mixed $result */
+        $this->assertIsArray($result);
         $this->assertCount(1, $result);
-        $this->assertNotFalse(
-            $this->cacheAdapter->load($this->key, Database::TTL, $hash),
-            'A list read with no concurrent purge must populate the cache.'
-        );
+        $callbackCalls = 0;
+        $cached = $this->database->withCache($this->key, function () use (&$callbackCalls): array {
+            $callbackCalls++;
+
+            return [];
+        }, $hash);
+        /** @var mixed $cached */
+        $this->assertIsArray($cached);
+        $this->assertCount(1, $cached);
+        $this->assertSame(0, $callbackCalls);
     }
 }
 
@@ -105,10 +188,11 @@ class LeasableMemoryCache implements Adapter, Leasable
     private const string GENERATION_FIELD = '__utopia_gen__';
 
     /**
-     * @var array<string, array<string, mixed>>
+     * @var array<string, array<string, array{time: int, data: array<int|string, mixed>|string}>>
      */
     private array $store = [];
 
+    #[\Override]
     public function load(string $key, int $ttl, string $hash = ''): mixed
     {
         if ($hash === '') {
@@ -124,7 +208,8 @@ class LeasableMemoryCache implements Adapter, Leasable
         return ($saved['time'] + $ttl > \time()) ? $saved['data'] : false;
     }
 
-    public function save(string $key, array|string $data, string $hash = ''): bool|string|array
+    #[\Override]
+    public function save(string $key, array|string $data, string $hash = '', int $ttl = 0): bool|string|array
     {
         if (empty($key) || empty($data)) {
             return false;
@@ -143,11 +228,15 @@ class LeasableMemoryCache implements Adapter, Leasable
         return $data;
     }
 
+    #[\Override]
     public function getGeneration(string $key): string
     {
-        return $this->store[$key][self::GENERATION_FIELD]['data'] ?? '0';
+        $generation = $this->store[$key][self::GENERATION_FIELD]['data'] ?? '0';
+
+        return \is_string($generation) ? $generation : '0';
     }
 
+    #[\Override]
     public function saveWithLease(string $key, array|string $data, string $hash, string $generation): bool|string|array
     {
         if (empty($key) || empty($data)) {
@@ -161,6 +250,7 @@ class LeasableMemoryCache implements Adapter, Leasable
         return $this->save($key, $data, $hash);
     }
 
+    #[\Override]
     public function touch(string $key, string $hash = ''): bool
     {
         if ($hash === '') {
@@ -179,6 +269,7 @@ class LeasableMemoryCache implements Adapter, Leasable
     /**
      * @return string[]
      */
+    #[\Override]
     public function list(string $key): array
     {
         return \array_values(\array_filter(
@@ -187,6 +278,7 @@ class LeasableMemoryCache implements Adapter, Leasable
         ));
     }
 
+    #[\Override]
     public function purge(string $key, string $hash = ''): bool
     {
         $generation = (string) (((int) $this->getGeneration($key)) + 1);
@@ -202,6 +294,7 @@ class LeasableMemoryCache implements Adapter, Leasable
         return true;
     }
 
+    #[\Override]
     public function flush(): bool
     {
         $this->store = [];
@@ -209,16 +302,19 @@ class LeasableMemoryCache implements Adapter, Leasable
         return true;
     }
 
+    #[\Override]
     public function ping(): bool
     {
         return true;
     }
 
+    #[\Override]
     public function getSize(): int
     {
         return \count($this->store);
     }
 
+    #[\Override]
     public function getName(?string $key = null): string
     {
         return 'leasable-memory';

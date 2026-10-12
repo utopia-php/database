@@ -4,6 +4,7 @@ services:
     image: databases-dev
     build:
       context: .
+      dockerfile: Dockerfile
       args:
         DEBUG: true
     networks:
@@ -19,29 +20,11 @@ services:
       - ./docker-compose.yml:/usr/src/code/docker-compose.yml
     environment:
       PHP_IDE_CONFIG: serverName=tests
-    depends_on:
-      postgres:
-        condition: service_healthy
-      postgres-mirror:
-        condition: service_healthy
-      mariadb:
-        condition: service_healthy
-      mariadb-mirror:
-        condition: service_healthy
-      mysql:
-        condition: service_healthy
-      mysql-mirror:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      redis-mirror:
-        condition: service_healthy
-      mongo:
-        condition: service_healthy
 
   adminer:
     image: adminer
     container_name: utopia-adminer
+    profiles: [debug]
     restart: always
     ports:
       - "8700:8080"
@@ -55,6 +38,7 @@ services:
       args:
         POSTGRES_VERSION: 16
     container_name: utopia-postgres
+    profiles: [postgres]
     networks:
       - database
     ports:
@@ -77,6 +61,7 @@ services:
       args:
         POSTGRES_VERSION: 16
     container_name: utopia-postgres-mirror
+    profiles: [postgres-mirror]
     networks:
       - database
     ports:
@@ -95,6 +80,7 @@ services:
   mariadb:
     image: mariadb:10.11
     container_name: utopia-mariadb
+    profiles: [mariadb]
     command: mariadbd --max_allowed_packet=1G
     networks:
       - database
@@ -112,6 +98,7 @@ services:
   mariadb-mirror:
     image: mariadb:10.11
     container_name: utopia-mariadb-mirror
+    profiles: [mariadb-mirror]
     command: mariadbd --max_allowed_packet=1G
     networks:
       - database
@@ -129,6 +116,7 @@ services:
   mongo:
     image: mongo:8.0.14
     container_name: utopia-mongo
+    profiles: [mongo]
     entrypoint: ["/entrypoint.sh"]
     networks:
       - database
@@ -161,6 +149,7 @@ services:
   mongo-express:
     image: mongo-express
     container_name: mongo-express
+    profiles: [debug]
     depends_on:
       mongo:
         condition: service_healthy
@@ -176,6 +165,7 @@ services:
   mysql:
     image: mysql:8.0.43
     container_name: utopia-mysql
+    profiles: [mysql]
     networks:
       - database
     ports:
@@ -198,6 +188,7 @@ services:
   mysql-mirror:
     image: mysql:8.0.43
     container_name: utopia-mysql-mirror
+    profiles: [mysql-mirror]
     networks:
       - database
     ports:
@@ -220,6 +211,7 @@ services:
   redis:
     image: redis:8.2.1-alpine3.22
     container_name: utopia-redis
+    restart: always
     ports:
       - "8708:6379"
     networks:
@@ -234,6 +226,8 @@ services:
   redis-mirror:
     image: redis:8.2.1-alpine3.22
     container_name: utopia-redis-mirror
+    profiles: [redis-mirror]
+    restart: always
     ports:
       - "8709:6379"
     networks:

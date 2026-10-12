@@ -1,0 +1,81 @@
+<?php
+
+namespace Tests\Unit\Cache;
+
+use PHPUnit\Framework\TestCase;
+use Utopia\Cache\Adapter\None;
+use Utopia\Cache\Cache;
+use Utopia\Database\Cache\Query as ResultCache;
+use Utopia\Database\Collection;
+use Utopia\Database\Database;
+use Utopia\Database\Document;
+use Utopia\Database\Permission;
+use Utopia\Database\Query;
+use Utopia\Database\Role;
+
+final class QueryRoundTripTest extends TestCase
+{
+    private const int HIT_BUDGET = 3;
+
+    private const int MISS_BUDGET = 5;
+
+    public function testACachedFindStaysWithinTheHitRoundTripBudget(): void
+    {
+        [$database, $adapter, $cache] = $this->createDatabase();
+        $database->find('posts', [Query::orderAsc('$id')]);
+        $adapter->observeFinds('posts');
+        $cache->resetOperations();
+
+        $this->assertSame(['first'], $this->ids($database->find('posts', [Query::orderAsc('$id')])));
+
+        $this->assertSame(0, $adapter->getObservedFinds(), 'The second find must be served from the query cache');
+        $this->assertLessThanOrEqual(self::HIT_BUDGET, $cache->getOperations(), 'A cached find must stay within its cache round-trip budget (7.3.12 had no query cache, so the budget is the current cost)');
+    }
+
+    public function testAnUncachedFindStaysWithinTheMissRoundTripBudget(): void
+    {
+        [$database, $adapter, $cache] = $this->createDatabase();
+        $adapter->observeFinds('posts');
+        $cache->resetOperations();
+
+        $this->assertSame(['first'], $this->ids($database->find('posts', [Query::orderAsc('$id')])));
+
+        $this->assertSame(1, $adapter->getObservedFinds(), 'The first find after a write must read the database');
+        $this->assertLessThanOrEqual(self::MISS_BUDGET, $cache->getOperations(), 'An uncached find must stay within its cache round-trip budget (7.3.12 had no query cache, so the budget is the current cost)');
+    }
+
+    /**
+     * @return array{Database, ObservedMemory, CountingCache}
+     */
+    private function createDatabase(): array
+    {
+        $adapter = new ObservedMemory();
+        $cache = new CountingCache(new LeasableHashCache());
+        $database = new Database($adapter, new Cache(new None()));
+        $database
+            ->setDatabase('round_trips')
+            ->setNamespace('round_trips_'.\uniqid());
+        $database->create();
+        $database->getAuthorization()->addRole(Role::any()->toString());
+        $database->setQueryCache(new ResultCache(new Cache($cache)));
+        $database->createCollection(Collection::create(id: 'posts', permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ], documentSecurity: false));
+        $database->createDocument('posts', new Document(['$id' => 'first']));
+
+        return [$database, $adapter, $cache];
+    }
+
+    /**
+     * @param  array<Document>  $documents
+     * @return array<string>
+     */
+    private function ids(array $documents): array
+    {
+        return \array_map(
+            static fn (Document $document): string => $document->getId(),
+            $documents,
+        );
+    }
+}

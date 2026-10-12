@@ -8,7 +8,10 @@ This library will abstract multiple database technologies using the adapter's de
 * MariaDB
 * MySQL
 * Postgres
+* SQLite
 * MongoDB
+* Redis
+* Memory
 
 ## Data Types
 
@@ -36,36 +39,43 @@ Databases that don't support the storage of complex data types should store them
 Each database adapter should support the following action for fast storing and retrieval of collections of documents.
 
 **Databases** (Schemas for MariaDB)
-* create
-* delete
+* create(string $name)
+* update(string $name, string $new)
+* exists(string $database)
+* delete(string $name)
 
 **Collections** (Tables for MariaDB)
-* createCollection($name)
-* deleteCollection($name)
+* createCollection(string $collection, array $attributes = [], array $indexes = [])
+* collectionExists(string $database, string $collection)
+* deleteCollection(string $collection)
 
 **Attributes** (Table columns for MariaDB)
-* createAttribute(string $collection, string $name, string $type)
-* deleteAttribute(string $collection, string $name)
+* createAttribute(string $collection, Attribute $attribute)
+* updateAttribute(string $collection, string $key, Attribute $attribute)
+* renameAttribute(string $collection, string $old, string $new)
+* deleteAttribute(string $collection, string $key)
 
 **Indices** (Table indices for MariaDB)
-* createIndex(string $collection, string $name, string $type)
-* deleteIndex(string $collection, string $name, string $type)
+* createIndex(string $collection, Index $index)
+* renameIndex(string $collection, string $old, string $new)
+* deleteIndex(string $collection, string $key)
 
 **Documents** (Table rows columns for MariaDB)
-* getDocument(string $collection, $id)
-* createDocument(string $collection, array $data)
-* updateDocument(string $collection, $id, array $data)
-* deleteDocument(string $collection, $id)
+* getDocument(Document $collection, string $id)
+* createDocument(Document $collection, Document $document)
+* updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions)
+* deleteDocument(Document $collection, string $id)
+
+**Limits**
+* limits(): Adapter\Limits
 
 ## Queries
 
 Each database adapter should allow querying simple and advanced queries in consideration of underline limitations.
 
 Method for quering data:
-* find(string $collection, $filters)
-* findFirst(string $collection, $filters)
-* findLast(string $collection, $filters)
-* count(string $collection, $filters)
+* find(Document $collection, array $queries)
+* count(Document $collection, array $queries)
 
 ### Supported Query Operations
 * Equal (==)

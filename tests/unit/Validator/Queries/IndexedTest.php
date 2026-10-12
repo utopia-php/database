@@ -1,0 +1,556 @@
+<?php
+
+namespace Tests\Unit\Validator\Queries;
+
+use PHPUnit\Framework\TestCase;
+use Utopia\Database\Document;
+use Utopia\Database\Exception;
+use Utopia\Database\Query;
+use Utopia\Database\Validator\Queries\Indexed;
+use Utopia\Database\Validator\Query\Cursor;
+use Utopia\Database\Validator\Query\Filter;
+use Utopia\Database\Validator\Query\Join;
+use Utopia\Database\Validator\Query\Limit;
+use Utopia\Database\Validator\Query\Offset;
+use Utopia\Database\Validator\Query\Order;
+use Utopia\Query\Method;
+use Utopia\Query\Schema\ColumnType;
+use Utopia\Query\Schema\IndexType;
+
+class IndexedTest extends TestCase
+{
+    #[\Override]
+    protected function setUp(): void
+    {
+    }
+
+    #[\Override]
+    protected function tearDown(): void
+    {
+    }
+
+    public function test_empty_queries(): void
+    {
+        $validator = new Indexed();
+
+        $this->assertEquals(true, $validator->isValid([]));
+    }
+
+    public function test_invalid_query(): void
+    {
+        $validator = new Indexed();
+
+        $this->assertEquals(false, $validator->isValid(['this.is.invalid']));
+    }
+
+    public function test_invalid_method(): void
+    {
+        $validator = new Indexed();
+        $this->assertEquals(false, $validator->isValid(['equal("attr", "value")']));
+
+        $validator = new Indexed([], [], [new Limit()]);
+        $this->assertEquals(false, $validator->isValid(['equal("attr", "value")']));
+    }
+
+    public function test_invalid_value(): void
+    {
+        $validator = new Indexed([], [], [new Limit()]);
+        $this->assertEquals(false, $validator->isValid(['limit(-1)']));
+    }
+
+    public function test_valid(): void
+    {
+        $attributes = [
+            new Document([
+                '$id' => 'name',
+                'key' => 'name',
+                'type' => ColumnType::String->value,
+                'array' => false,
+            ]),
+        ];
+
+        $indexes = [
+            new Document([
+                'type' => IndexType::Key->value,
+                'attributes' => ['name'],
+            ]),
+            new Document([
+                'type' => IndexType::Fulltext->value,
+                'attributes' => ['name'],
+            ]),
+        ];
+
+        $validator = new Indexed(
+            $attributes,
+            $indexes,
+            [
+                new Cursor(),
+                new Filter($attributes, ColumnType::Integer->value),
+                new Limit(),
+                new Offset(),
+                new Order($attributes),
+            ]
+        );
+
+        $query = Query::cursorAfter(new Document(['$id' => 'abc']));
+        $this->assertEquals(true, $validator->isValid([$query]));
+        $query = Query::parse('{"method":"cursorAfter","attribute":"","values":["abc"]}');
+        $this->assertEquals(true, $validator->isValid([$query]));
+
+        $query = Query::parse('{"method":"cursorAfter","values":["abc"]}'); // No attribute required
+        $this->assertEquals(true, $validator->isValid([$query]));
+
+        $query = Query::equal('name', ['value']);
+        $this->assertEquals(true, $validator->isValid([$query]));
+        $query = Query::parse('{"method":"equal","attribute":"name","values":["value"]}');
+        $this->assertEquals(true, $validator->isValid([$query]));
+
+        $query = Query::limit(10);
+        $this->assertEquals(true, $validator->isValid([$query]));
+        $query = Query::parse('{"method":"limit","values":[10]}');
+        $this->assertEquals(true, $validator->isValid([$query]));
+
+        $query = Query::offset(10);
+        $this->assertEquals(true, $validator->isValid([$query]));
+        $query = Query::parse('{"method":"offset","values":[10]}');
+        $this->assertEquals(true, $validator->isValid([$query]));
+
+        $query = Query::orderAsc('name');
+        $this->assertEquals(true, $validator->isValid([$query]));
+        $query = Query::parse('{"method":"orderAsc","attribute":"name"}'); // No values required
+        $this->assertEquals(true, $validator->isValid([$query]));
+
+        $query = Query::search('name', 'value');
+        $this->assertEquals(true, $validator->isValid([$query]));
+        $query = Query::parse('{"method":"search","attribute":"name","values":["value"]}');
+        $this->assertEquals(true, $validator->isValid([$query]));
+    }
+
+    public function test_missing_index(): void
+    {
+        $attributes = [
+            new Document([
+                'key' => 'name',
+                'type' => ColumnType::String->value,
+                'array' => false,
+            ]),
+        ];
+
+        $indexes = [
+            new Document([
+                'type' => IndexType::Key->value,
+                'attributes' => ['name'],
+            ]),
+        ];
+
+        $validator = new Indexed(
+            $attributes,
+            $indexes,
+            [
+                new Cursor(),
+                new Filter($attributes, ColumnType::Integer->value),
+                new Limit(),
+                new Offset(),
+                new Order($attributes),
+            ]
+        );
+
+        $query = Query::equal('dne', ['value']);
+        $this->assertEquals(false, $validator->isValid([$query]));
+        $this->assertEquals('Invalid query: Attribute not found in schema: dne', $validator->getDescription());
+
+        $query = Query::orderAsc('dne');
+        $this->assertEquals(false, $validator->isValid([$query]));
+        $this->assertEquals('Invalid query: Attribute not found in schema: dne', $validator->getDescription());
+
+        $query = Query::search('dne', 'phrase');
+        $this->assertEquals(false, $validator->isValid([$query]));
+        $this->assertEquals('Invalid query: Attribute not found in schema: dne', $validator->getDescription());
+
+        $query = Query::search('name', 'phrase');
+        $this->assertEquals(false, $validator->isValid([$query]));
+        $this->assertEquals('Searching by attribute "name" requires a fulltext index.', $validator->getDescription());
+    }
+
+    public function test_join_side_search_skips_main_fulltext_index(): void
+    {
+        $attributes = [
+            new Document([
+                '$id' => 'name',
+                'key' => 'name',
+                'type' => ColumnType::String->value,
+                'array' => false,
+            ]),
+        ];
+
+        $validator = new Indexed(
+            $attributes,
+            [],
+            [
+                new Filter($attributes, ColumnType::Integer->value),
+                new Join(),
+            ]
+        );
+        $validator->setJoinedCollections([new Document([
+            '$id' => 'meta',
+            'attributes' => [
+                new Document([
+                    '$id' => 'mainId',
+                    'key' => 'mainId',
+                    'type' => ColumnType::String->value,
+                    'array' => false,
+                ]),
+                new Document([
+                    '$id' => 'body',
+                    'key' => 'body',
+                    'type' => ColumnType::String->value,
+                    'array' => false,
+                ]),
+            ],
+            'indexes' => [
+                new Document([
+                    '$id' => 'body_fulltext',
+                    'type' => IndexType::Fulltext->value,
+                    'attributes' => ['body'],
+                ]),
+            ],
+        ])]);
+
+        $this->assertTrue($validator->isValid([
+            Query::leftJoin('meta', 'meta', [Query::on('$id', 'mainId')]),
+            Query::search('meta.body', 'needle'),
+        ]), $validator->getDescription());
+
+        $this->assertFalse($validator->isValid([
+            Query::search('name', 'needle'),
+        ]));
+        $this->assertSame(
+            'Searching by attribute "name" requires a fulltext index.',
+            $validator->getDescription()
+        );
+    }
+
+    public function testNestedJoinOnRefusesSearchWithOrWithoutAFulltextIndex(): void
+    {
+        $attributes = [
+            new Document([
+                '$id' => 'name',
+                'key' => 'name',
+                'type' => ColumnType::String->value,
+                'array' => false,
+            ]),
+        ];
+
+        $validator = new Indexed(
+            $attributes,
+            [],
+            [
+                new Filter($attributes, ColumnType::Integer->value),
+                new Join(),
+            ]
+        );
+        $validator->setJoinedCollections([new Document([
+            '$id' => 'meta',
+            'attributes' => [
+                new Document([
+                    '$id' => 'mainId',
+                    'key' => 'mainId',
+                    'type' => ColumnType::String->value,
+                    'array' => false,
+                ]),
+                new Document([
+                    '$id' => 'body',
+                    'key' => 'body',
+                    'type' => ColumnType::String->value,
+                    'array' => false,
+                ]),
+            ],
+            'indexes' => [
+                new Document([
+                    '$id' => 'body_fulltext',
+                    'type' => IndexType::Fulltext->value,
+                    'attributes' => ['body'],
+                ]),
+            ],
+        ])]);
+
+        $this->assertFalse($validator->isValid([
+            new Query(Method::LeftJoin, 'meta', [
+                Query::on('$id', 'mainId'),
+                Query::search('name', 'needle'),
+            ], 'meta'),
+        ]));
+        $this->assertSame(
+            'Invalid query: Unsupported join ON condition: search',
+            $validator->getDescription()
+        );
+
+        $this->assertFalse($validator->isValid([
+            new Query(Method::LeftJoin, 'meta', [
+                Query::on('$id', 'mainId'),
+                Query::search('meta.body', 'needle'),
+            ], 'meta'),
+        ]), 'the builder compiles no search into an ON list, fulltext index or not');
+        $this->assertSame(
+            'Invalid query: Unsupported join ON condition: search',
+            $validator->getDescription()
+        );
+    }
+
+    public function testNestedJoinOnRefusesAVectorQueryNextToAnother(): void
+    {
+        $attributes = [
+            new Document([
+                '$id' => 'embedding',
+                'key' => 'embedding',
+                'type' => ColumnType::Vector->value,
+                'size' => 3,
+                'array' => false,
+            ]),
+        ];
+
+        $validator = new Indexed(
+            $attributes,
+            [],
+            [
+                new Filter($attributes, ColumnType::Integer->value),
+                new Join(),
+            ]
+        );
+
+        $this->assertFalse($validator->isValid([
+            Query::vectorDot('embedding', [0.1, 0.2, 0.3]),
+            new Query(Method::LeftJoin, 'meta', [
+                Query::on('$id', 'mainId'),
+                Query::vectorCosine('embedding', [0.3, 0.4, 0.5]),
+            ], 'meta'),
+        ]));
+        $this->assertSame(
+            'Invalid query: Unsupported join ON condition: vectorCosine',
+            $validator->getDescription()
+        );
+    }
+
+    public function testNestedJoinOnRefusesASingleVectorQuery(): void
+    {
+        $attributes = [
+            new Document([
+                '$id' => 'embedding',
+                'key' => 'embedding',
+                'type' => ColumnType::Vector->value,
+                'size' => 3,
+                'array' => false,
+            ]),
+        ];
+
+        $validator = new Indexed(
+            $attributes,
+            [],
+            [
+                new Filter($attributes, ColumnType::Integer->value),
+                new Join(),
+            ]
+        );
+
+        $this->assertFalse($validator->isValid([
+            new Query(Method::LeftJoin, 'meta', [
+                Query::on('$id', 'mainId'),
+                Query::vectorCosine('embedding', [0.3, 0.4, 0.5]),
+            ], 'meta'),
+        ]));
+        $this->assertSame(
+            'Invalid query: Unsupported join ON condition: vectorCosine',
+            $validator->getDescription()
+        );
+    }
+
+    public function test_two_attributes_fulltext(): void
+    {
+        $attributes = [
+            new Document([
+                '$id' => 'ft1',
+                'key' => 'ft1',
+                'type' => ColumnType::String->value,
+                'array' => false,
+            ]),
+            new Document([
+                '$id' => 'ft2',
+                'key' => 'ft2',
+                'type' => ColumnType::String->value,
+                'array' => false,
+            ]),
+        ];
+
+        $indexes = [
+            new Document([
+                'type' => IndexType::Fulltext->value,
+                'attributes' => ['ft1', 'ft2'],
+            ]),
+        ];
+
+        $validator = new Indexed(
+            $attributes,
+            $indexes,
+            [
+                new Cursor(),
+                new Filter($attributes, ColumnType::Integer->value),
+                new Limit(),
+                new Offset(),
+                new Order($attributes),
+            ]
+        );
+
+        $this->assertEquals(false, $validator->isValid([Query::search('ft1', 'value')]));
+    }
+
+    public function test_json_parse(): void
+    {
+        try {
+            Query::parse('{"method":"equal","attribute":"name","values":["value"]'); // broken Json;
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertEquals('Invalid query: Syntax error', $e->getMessage());
+        }
+    }
+
+    public function test_single_vector_query_passes(): void
+    {
+        $attributes = [
+            new Document([
+                '$id' => 'embedding',
+                'key' => 'embedding',
+                'type' => ColumnType::Vector->value,
+                'size' => 3,
+                'array' => false,
+            ]),
+        ];
+
+        $validator = new Indexed(
+            $attributes,
+            [],
+            [new Filter($attributes, ColumnType::Integer->value)]
+        );
+
+        $vectorQuery = Query::vectorCosine('embedding', [0.1, 0.2, 0.3]);
+        $this->assertTrue($validator->isValid([$vectorQuery]));
+    }
+
+    public function test_nested_queries_containing_vector_methods(): void
+    {
+        $attributes = [
+            new Document([
+                '$id' => 'embedding',
+                'key' => 'embedding',
+                'type' => ColumnType::Vector->value,
+                'size' => 3,
+                'array' => false,
+            ]),
+            new Document([
+                '$id' => 'name',
+                'key' => 'name',
+                'type' => ColumnType::String->value,
+                'array' => false,
+            ]),
+        ];
+
+        $validator = new Indexed(
+            $attributes,
+            [],
+            [new Filter($attributes, ColumnType::Integer->value)]
+        );
+
+        $orQuery = Query::or([
+            Query::equal('name', ['alice']),
+            Query::equal('name', ['bob']),
+        ]);
+        $vectorQuery = Query::vectorDot('embedding', [0.1, 0.2, 0.3]);
+        $this->assertTrue($validator->isValid([$orQuery, $vectorQuery]));
+    }
+
+    public function test_unparseable_string_query_returns_error(): void
+    {
+        $validator = new Indexed([], [], [new Limit()]);
+
+        $this->assertFalse($validator->isValid(['totally broken }{']));
+        $this->assertStringContainsString('Invalid query', $validator->getDescription());
+    }
+
+    public function test_nested_non_having_with_invalid_sub_queries(): void
+    {
+        $validator = new Indexed([], [], [new Filter([], ColumnType::Integer->value)]);
+
+        $nestedOr = Query::or([Query::equal('nonexistent', ['value'])]);
+        $this->assertFalse($validator->isValid([$nestedOr]));
+    }
+
+    public function test_nested_search_requires_fulltext_index(): void
+    {
+        $attributes = [
+            new Document([
+                '$id' => 'name',
+                'key' => 'name',
+                'type' => ColumnType::String->value,
+                'array' => false,
+            ]),
+            new Document([
+                '$id' => 'title',
+                'key' => 'title',
+                'type' => ColumnType::String->value,
+                'array' => false,
+            ]),
+        ];
+
+        $indexes = [
+            new Document([
+                'type' => IndexType::Fulltext->value,
+                'attributes' => ['title'],
+            ]),
+        ];
+
+        $validator = new Indexed(
+            $attributes,
+            $indexes,
+            [new Filter($attributes, ColumnType::Integer->value)]
+        );
+
+        $this->assertTrue($validator->isValid([
+            Query::or([
+                Query::search('title', 'foo'),
+                Query::equal('name', ['bar']),
+            ]),
+        ]));
+
+        $this->assertFalse($validator->isValid([
+            Query::or([
+                Query::search('name', 'foo'),
+                Query::equal('title', ['bar']),
+            ]),
+        ]));
+        $this->assertEquals('Searching by attribute "name" requires a fulltext index.', $validator->getDescription());
+    }
+
+    public function test_multiple_vector_queries_fails(): void
+    {
+        $attributes = [
+            new Document([
+                '$id' => 'embedding',
+                'key' => 'embedding',
+                'type' => ColumnType::Vector->value,
+                'size' => 3,
+                'array' => false,
+            ]),
+        ];
+
+        $validator = new Indexed(
+            $attributes,
+            [],
+            [new Filter($attributes, ColumnType::Integer->value)]
+        );
+
+        $vectorQuery1 = Query::vectorCosine('embedding', [0.1, 0.2, 0.3]);
+        $vectorQuery2 = Query::vectorEuclidean('embedding', [0.4, 0.5, 0.6]);
+
+        $this->assertFalse($validator->isValid([$vectorQuery1, $vectorQuery2]));
+        $this->assertEquals('Cannot use multiple vector queries in a single request', $validator->getDescription());
+    }
+}

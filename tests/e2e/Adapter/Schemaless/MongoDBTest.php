@@ -5,6 +5,7 @@ namespace Tests\E2E\Adapter\Schemaless;
 use Exception;
 use Redis;
 use Tests\E2E\Adapter\Base;
+use Tests\E2E\Adapter\Scopes\MongoReadFilterTests;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Mongo;
@@ -13,35 +14,37 @@ use Utopia\Mongo\Client;
 
 class MongoDBTest extends Base
 {
+    use MongoReadFilterTests;
+
     public static ?Database $database = null;
+
+    #[\Override]
     protected static string $namespace;
 
     /**
      * Return name of adapter
-     *
-     * @return string
      */
     public static function getAdapterName(): string
     {
-        return "mongodb";
+        return 'mongodb';
     }
 
     /**
-     * @return Database
      * @throws Exception
      */
+    #[\Override]
     public function getDatabase(): Database
     {
-        if (!is_null(self::$database)) {
+        if (! is_null(self::$database)) {
             return self::$database;
         }
 
         $redis = new Redis();
         $redis->connect('redis', 6379);
-        $redis->flushAll();
-        $cache = new Cache(new RedisAdapter($redis));
+        $redis->select(12);
+        $cache = new Cache((new RedisAdapter($redis))->setMaxRetries(3));
 
-        $schema = 'utopiaTests'; // same as $this->testDatabase
+        $schema = $this->testDatabase;
         $client = new Client(
             $schema,
             'mongo',
@@ -52,16 +55,16 @@ class MongoDBTest extends Base
         );
 
         $database = new Database(new Mongo($client), $cache);
-        $database->getAdapter()->setSupportForAttributes(false);
+        $database->setSchemaless(true);
+        assert(self::$authorization !== null);
         $database
             ->setAuthorization(self::$authorization)
             ->setDatabase($schema)
-            ->setNamespace(static::$namespace = 'myapp_' . uniqid());
+            ->setNamespace(static::$namespace = 'myapp_'.uniqid());
 
         if ($database->exists()) {
             $database->delete();
         }
-
 
         $database->create();
 
@@ -71,40 +74,28 @@ class MongoDBTest extends Base
     /**
      * @throws Exception
      */
+    #[\Override]
     public function testCreateExistsDelete(): void
     {
-        // Mongo creates databases on the fly, so exists would always pass. So we override this test to remove the exists check.
-        $this->assertNotNull(static::getDatabase()->create());
-        $this->assertEquals(true, $this->getDatabase()->delete($this->testDatabase));
-        $this->assertEquals(true, $this->getDatabase()->create());
-        $this->assertEquals($this->getDatabase(), $this->getDatabase()->setDatabase($this->testDatabase));
+        $database = $this->getDatabase();
+
+        $this->assertTrue($database->create());
+        $this->assertTrue($database->exists($this->testDatabase));
+        $this->assertFalse($database->exists($this->testDatabase.'Absent'));
+        $this->assertTrue($database->delete($this->testDatabase));
+        $this->assertFalse($database->exists($this->testDatabase));
+        $this->assertTrue($database->create());
+        $this->assertTrue($database->exists($this->testDatabase));
+        $this->assertSame($database, $database->setDatabase($this->testDatabase));
     }
 
-    public function testRenameAttribute(): void
-    {
-        $this->assertTrue(true);
-    }
-
-    public function testRenameAttributeExisting(): void
-    {
-        $this->assertTrue(true);
-    }
-
-    public function testUpdateAttributeStructure(): void
-    {
-        $this->assertTrue(true);
-    }
-
-    public function testKeywords(): void
-    {
-        $this->assertTrue(true);
-    }
-
+    #[\Override]
     protected function deleteColumn(string $collection, string $column): bool
     {
         return true;
     }
 
+    #[\Override]
     protected function deleteIndex(string $collection, string $index): bool
     {
         return true;

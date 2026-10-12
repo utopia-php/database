@@ -2,73 +2,67 @@
 
 namespace Tests\Unit;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Database;
+use stdClass;
 use Utopia\Database\Document;
-use Utopia\Database\Helpers\ID;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Exception\Structure as StructureException;
+use Utopia\Database\Id;
+use Utopia\Database\Permission;
+use Utopia\Database\PermissionType;
+use Utopia\Database\Role;
+use Utopia\Database\SetType;
 
 class DocumentTest extends TestCase
 {
-    /**
-     * @var Document
-     */
-    protected ?Document $document = null;
+    protected Document $document;
 
-    /**
-     * @var Document
-     */
-    protected ?Document $empty = null;
+    protected Document $empty;
 
-    /**
-     * @var string
-     */
-    protected ?string $id = null;
+    protected string $id;
 
-    /**
-     * @var string
-     */
-    protected ?string $collection = null;
+    protected string $collection;
 
-    public function setUp(): void
+    #[\Override]
+    protected function setUp(): void
     {
         $this->id = uniqid();
 
         $this->collection = uniqid();
 
         $this->document = new Document([
-            '$id' => ID::custom($this->id),
-            '$collection' => ID::custom($this->collection),
-            '$permissions' => [
-                Permission::read(Role::user(ID::custom('123'))),
-                Permission::read(Role::team(ID::custom('123'))),
+            Document::ID => Id::custom($this->id),
+            Document::COLLECTION => Id::custom($this->collection),
+            Document::PERMISSIONS => [
+                Permission::read(Role::user(Id::custom('123'))),
+                Permission::read(Role::team(Id::custom('123'))),
                 Permission::create(Role::any()),
-                Permission::create(Role::user(ID::custom('creator'))),
+                Permission::create(Role::user(Id::custom('creator'))),
                 Permission::update(Role::any()),
-                Permission::update(Role::user(ID::custom('updater'))),
+                Permission::update(Role::user(Id::custom('updater'))),
                 Permission::delete(Role::any()),
-                Permission::delete(Role::user(ID::custom('deleter'))),
+                Permission::delete(Role::user(Id::custom('deleter'))),
             ],
             'title' => 'This is a test.',
             'list' => [
-                'one'
+                'one',
             ],
             'children' => [
                 new Document(['name' => 'x']),
                 new Document(['name' => 'y']),
                 new Document(['name' => 'z']),
-            ]
+            ],
         ]);
 
         $this->empty = new Document();
     }
 
-    public function tearDown(): void
+    #[\Override]
+    protected function tearDown(): void
     {
     }
 
-    public function testDocumentNulls(): void
+    public function test_document_nulls(): void
     {
         $data = [
             'cat' => null,
@@ -86,93 +80,158 @@ class DocumentTest extends TestCase
         $this->assertEquals('dog', $document->getAttribute('dog', 'dog'));
     }
 
-    public function testId(): void
+    public function test_id(): void
     {
         $this->assertEquals($this->id, $this->document->getId());
         $this->assertEquals(null, $this->empty->getId());
     }
 
-    public function testCollection(): void
+    public function test_non_string_id_throws(): void
+    {
+        $this->expectException(StructureException::class);
+        $this->expectExceptionMessage(Document::ID.' must be of type string');
+
+        new Document([
+            Document::ID => 123,
+        ]);
+    }
+
+    public function testFromRowCoercesNullIdToEmptyString(): void
+    {
+        $document = Document::fromRow([
+            Document::ID => null,
+            'name' => 'unmatched',
+        ]);
+
+        $this->assertSame('', $document->getId());
+        $this->assertSame('unmatched', $document->getAttribute('name'));
+    }
+
+    public function testFromRowDropsPdoColumnIndexes(): void
+    {
+        $document = Document::fromRow([
+            0 => 1,
+            1 => 'migration',
+            Document::ID => 'migration',
+            'state' => 'pending',
+            Document::SEQUENCE => '1',
+        ]);
+
+        $this->assertSame(['$id', 'state', '$sequence'], \array_keys($document->getArrayCopy()));
+        $this->assertSame('migration', $document->getId());
+        $this->assertSame('pending', $document->getAttribute('state'));
+        $this->assertNull($document->getAttribute('0'));
+    }
+
+    public function test_id_and_collection_accessors(): void
+    {
+        $document = new Document([
+            Document::ID => 'doc-1',
+            Document::COLLECTION => 'users',
+        ]);
+
+        $this->assertSame('doc-1', $document->getId());
+        $this->assertSame('users', $document->getCollection());
+    }
+
+    public function test_collection(): void
     {
         $this->assertEquals($this->collection, $this->document->getCollection());
         $this->assertEquals(null, $this->empty->getCollection());
     }
 
-    public function testGetCreate(): void
+    public function test_get_create(): void
     {
-        $this->assertEquals(['any', 'user:creator'], $this->document->getCreate());
-        $this->assertEquals([], $this->empty->getCreate());
+        $this->assertEquals(['any', 'user:creator'], $this->document->getPermissionsByType(PermissionType::Create));
+        $this->assertEquals([], $this->empty->getPermissionsByType(PermissionType::Create));
     }
 
-    public function testGetRead(): void
+    public function test_get_read(): void
     {
-        $this->assertEquals(['user:123', 'team:123'], $this->document->getRead());
-        $this->assertEquals([], $this->empty->getRead());
+        $this->assertEquals(['user:123', 'team:123'], $this->document->getPermissionsByType(PermissionType::Read));
+        $this->assertEquals([], $this->empty->getPermissionsByType(PermissionType::Read));
     }
 
-    public function testGetUpdate(): void
+    public function test_get_update(): void
     {
-        $this->assertEquals(['any', 'user:updater'], $this->document->getUpdate());
-        $this->assertEquals([], $this->empty->getUpdate());
+        $this->assertEquals(['any', 'user:updater'], $this->document->getPermissionsByType(PermissionType::Update));
+        $this->assertEquals([], $this->empty->getPermissionsByType(PermissionType::Update));
     }
 
-    public function testGetDelete(): void
+    public function test_get_delete(): void
     {
-        $this->assertEquals(['any', 'user:deleter'], $this->document->getDelete());
-        $this->assertEquals([], $this->empty->getDelete());
+        $this->assertEquals(['any', 'user:deleter'], $this->document->getPermissionsByType(PermissionType::Delete));
+        $this->assertEquals([], $this->empty->getPermissionsByType(PermissionType::Delete));
     }
 
-    public function testGetPermissionByType(): void
+    public function test_get_permission_by_type(): void
     {
-        $this->assertEquals(['any','user:creator'], $this->document->getPermissionsByType(Database::PERMISSION_CREATE));
-        $this->assertEquals([], $this->empty->getPermissionsByType(Database::PERMISSION_CREATE));
+        $this->assertEquals(['any', 'user:creator'], $this->document->getPermissionsByType(PermissionType::Create));
+        $this->assertEquals([], $this->empty->getPermissionsByType(PermissionType::Create));
 
-        $this->assertEquals(['user:123','team:123'], $this->document->getPermissionsByType(Database::PERMISSION_READ));
-        $this->assertEquals([], $this->empty->getPermissionsByType(Database::PERMISSION_READ));
+        $this->assertEquals(['user:123', 'team:123'], $this->document->getPermissionsByType(PermissionType::Read));
+        $this->assertEquals([], $this->empty->getPermissionsByType(PermissionType::Read));
 
-        $this->assertEquals(['any','user:updater'], $this->document->getPermissionsByType(Database::PERMISSION_UPDATE));
-        $this->assertEquals([], $this->empty->getPermissionsByType(Database::PERMISSION_UPDATE));
+        $this->assertEquals(['any', 'user:updater'], $this->document->getPermissionsByType(PermissionType::Update));
+        $this->assertEquals([], $this->empty->getPermissionsByType(PermissionType::Update));
 
-        $this->assertEquals(['any','user:deleter'], $this->document->getPermissionsByType(Database::PERMISSION_DELETE));
-        $this->assertEquals([], $this->empty->getPermissionsByType(Database::PERMISSION_DELETE));
+        $this->assertEquals(['any', 'user:deleter'], $this->document->getPermissionsByType(PermissionType::Delete));
+        $this->assertEquals([], $this->empty->getPermissionsByType(PermissionType::Delete));
     }
 
-    public function testGetPermissions(): void
+    public function test_get_permissions_by_custom_type(): void
+    {
+        $document = new Document([
+            '$permissions' => [
+                'execute("any")',
+                'execute("user:runner")',
+                Permission::read(Role::any()),
+            ],
+        ]);
+
+        $this->assertSame(['any', 'user:runner'], $document->getPermissionsByType('execute'));
+        $this->assertSame(['any'], $document->getPermissionsByType('read'));
+        $this->assertSame(['any'], $document->getPermissionsByType(PermissionType::Read));
+        $this->assertSame([], $document->getPermissionsByType('subscribe'));
+        $this->assertSame([], $document->getPermissionsByType('exec'));
+    }
+
+    public function test_get_permissions(): void
     {
         $this->assertEquals([
-            Permission::read(Role::user(ID::custom('123'))),
-            Permission::read(Role::team(ID::custom('123'))),
+            Permission::read(Role::user(Id::custom('123'))),
+            Permission::read(Role::team(Id::custom('123'))),
             Permission::create(Role::any()),
-            Permission::create(Role::user(ID::custom('creator'))),
+            Permission::create(Role::user(Id::custom('creator'))),
             Permission::update(Role::any()),
-            Permission::update(Role::user(ID::custom('updater'))),
+            Permission::update(Role::user(Id::custom('updater'))),
             Permission::delete(Role::any()),
-            Permission::delete(Role::user(ID::custom('deleter'))),
+            Permission::delete(Role::user(Id::custom('deleter'))),
         ], $this->document->getPermissions());
     }
 
-    public function testGetAttributes(): void
+    public function test_get_attributes(): void
     {
         $this->assertEquals([
             'title' => 'This is a test.',
             'list' => [
-                'one'
+                'one',
             ],
             'children' => [
                 new Document(['name' => 'x']),
                 new Document(['name' => 'y']),
                 new Document(['name' => 'z']),
-            ]
+            ],
         ], $this->document->getAttributes());
     }
 
-    public function testGetAttribute(): void
+    public function test_get_attribute(): void
     {
         $this->assertEquals('This is a test.', $this->document->getAttribute('title', ''));
         $this->assertEquals('', $this->document->getAttribute('titlex', ''));
     }
 
-    public function testSetAttribute(): void
+    public function test_set_attribute(): void
     {
         $this->assertEquals('This is a test.', $this->document->getAttribute('title', ''));
         $this->assertEquals(['one'], $this->document->getAttribute('list', []));
@@ -183,22 +242,22 @@ class DocumentTest extends TestCase
         $this->assertEquals('New title', $this->document->getAttribute('title', ''));
         $this->assertEquals('', $this->document->getAttribute('titlex', ''));
 
-        $this->document->setAttribute('list', 'two', Document::SET_TYPE_APPEND);
+        $this->document->setAttribute('list', 'two', SetType::Append);
         $this->assertEquals(['one', 'two'], $this->document->getAttribute('list', []));
 
-        $this->document->setAttribute('list', 'zero', Document::SET_TYPE_PREPEND);
+        $this->document->setAttribute('list', 'zero', SetType::Prepend);
         $this->assertEquals(['zero', 'one', 'two'], $this->document->getAttribute('list', []));
 
-        $this->document->setAttribute('list', ['one'], Document::SET_TYPE_ASSIGN);
+        $this->document->setAttribute('list', ['one'], SetType::Assign);
         $this->assertEquals(['one'], $this->document->getAttribute('list', []));
     }
 
-    public function testSetAttributes(): void
+    public function test_set_attributes(): void
     {
-        $document = new Document(['$id' => ID::custom(''), '$collection' => 'users']);
+        $document = new Document(['$id' => Id::custom(''), '$collection' => 'users']);
 
         $otherDocument = new Document([
-            '$id' => ID::custom('new'),
+            '$id' => Id::custom('new'),
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::update(Role::user('new')),
@@ -217,129 +276,26 @@ class DocumentTest extends TestCase
         $this->assertEquals($otherDocument->getAttribute('prefs'), $document->getAttribute('prefs'));
     }
 
-    public function testRemoveAttribute(): void
+    public function test_remove_attribute(): void
     {
         $this->document->removeAttribute('list');
         $this->assertEquals([], $this->document->getAttribute('list', []));
     }
 
-    public function testFind(): void
-    {
-        $this->assertEquals(null, $this->document->find('find', 'one'));
-
-        $this->document->setAttribute('findString', 'demo');
-        $this->assertEquals($this->document, $this->document->find('findString', 'demo'));
-
-        $this->document->setAttribute('findArray', ['demo']);
-        $this->assertEquals(null, $this->document->find('findArray', 'demo'));
-        $this->assertEquals($this->document, $this->document->find('findArray', ['demo']));
-
-        $this->assertEquals($this->document->getAttribute('children')[0], $this->document->find('name', 'x', 'children'));
-        $this->assertEquals($this->document->getAttribute('children')[2], $this->document->find('name', 'z', 'children'));
-        $this->assertEquals(null, $this->document->find('name', 'v', 'children'));
-    }
-
-    public function testFindAndReplace(): void
-    {
-        $document = new Document([
-            '$id' => ID::custom($this->id),
-            '$collection' => ID::custom($this->collection),
-            '$permissions' => [
-                Permission::read(Role::user(ID::custom('123'))),
-                Permission::read(Role::team(ID::custom('123'))),
-                Permission::create(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-            'title' => 'This is a test.',
-            'list' => [
-                'one'
-            ],
-            'children' => [
-                new Document(['name' => 'x']),
-                new Document(['name' => 'y']),
-                new Document(['name' => 'z']),
-            ]
-        ]);
-
-        $this->assertEquals(true, $document->findAndReplace('name', 'x', new Document(['name' => '1', 'test' => true]), 'children'));
-        $this->assertEquals('1', $document->getAttribute('children')[0]['name']);
-        $this->assertEquals(true, $document->getAttribute('children')[0]['test']);
-
-        // Array with wrong value
-        $this->assertEquals(false, $document->findAndReplace('name', 'xy', new Document(['name' => '1', 'test' => true]), 'children'));
-
-        // Array with wrong key
-        $this->assertEquals(false, $document->findAndReplace('namex', 'x', new Document(['name' => '1', 'test' => true]), 'children'));
-
-        // No array
-        $this->assertEquals(true, $document->findAndReplace('title', 'This is a test.', 'new'));
-        $this->assertEquals('new', $document->getAttribute('title'));
-
-        // No array with wrong value
-        $this->assertEquals(false, $document->findAndReplace('title', 'test', 'new'));
-
-        // No array with wrong key
-        $this->assertEquals(false, $document->findAndReplace('titlex', 'This is a test.', 'new'));
-    }
-
-    public function testFindAndRemove(): void
-    {
-        $document = new Document([
-            '$id' => ID::custom($this->id),
-            '$collection' => ID::custom($this->collection),
-            '$permissions' => [
-                Permission::read(Role::user(ID::custom('123'))),
-                Permission::read(Role::team(ID::custom('123'))),
-                Permission::create(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-            'title' => 'This is a test.',
-            'list' => [
-                'one'
-            ],
-            'children' => [
-                new Document(['name' => 'x']),
-                new Document(['name' => 'y']),
-                new Document(['name' => 'z']),
-            ]
-        ]);
-        $this->assertEquals(true, $document->findAndRemove('name', 'x', 'children'));
-        $this->assertEquals('y', $document->getAttribute('children')[1]['name']);
-        $this->assertCount(2, $document->getAttribute('children'));
-
-        // Array with wrong value
-        $this->assertEquals(false, $document->findAndRemove('name', 'xy', 'children'));
-
-        // Array with wrong key
-        $this->assertEquals(false, $document->findAndRemove('namex', 'x', 'children'));
-
-        // No array
-        $this->assertEquals(true, $document->findAndRemove('title', 'This is a test.'));
-        $this->assertEquals(false, $document->isset('title'));
-
-        // No array with wrong value
-        $this->assertEquals(false, $document->findAndRemove('title', 'new'));
-
-        // No array with wrong key
-        $this->assertEquals(false, $document->findAndRemove('titlex', 'This is a test.'));
-    }
-
-    public function testIsEmpty(): void
+    public function test_is_empty(): void
     {
         $this->assertEquals(false, $this->document->isEmpty());
         $this->assertEquals(true, $this->empty->isEmpty());
     }
 
-    public function testIsSet(): void
+    public function test_is_set(): void
     {
         $this->assertEquals(false, $this->document->isSet('titlex'));
         $this->assertEquals(false, $this->empty->isSet('titlex'));
         $this->assertEquals(true, $this->document->isSet('title'));
     }
 
-    public function testClone(): void
+    public function test_clone(): void
     {
         $before = new Document([
             'level' => 0,
@@ -358,65 +314,82 @@ class DocumentTest extends TestCase
                             'children' => [
                                 new Document([
                                     'level' => 3,
-                                    'name' => 'i'
+                                    'name' => 'i',
                                 ]),
-                            ]
-                        ])
-                    ]
-                ])
-            ]
+                            ],
+                        ]),
+                    ],
+                ]),
+            ],
         ]);
 
         $after = clone $before;
 
         $before->setAttribute('name', 'before');
-        $before->getAttribute('document')->setAttribute('name', 'before_one');
-        $before->getAttribute('children')[0]->setAttribute('name', 'before_a');
-        $before->getAttribute('children')[0]->getAttribute('document')->setAttribute('name', 'before_two');
-        $before->getAttribute('children')[0]->getAttribute('children')[0]->setAttribute('name', 'before_x');
+        /** @var Document $beforeDoc */
+        $beforeDoc = $before->getAttribute('document');
+        $beforeDoc->setAttribute('name', 'before_one');
+        /** @var array<Document> $beforeChildren */
+        $beforeChildren = $before->getAttribute('children');
+        $beforeChildren[0]->setAttribute('name', 'before_a');
+        /** @var Document $beforeChildDoc */
+        $beforeChildDoc = $beforeChildren[0]->getAttribute('document');
+        $beforeChildDoc->setAttribute('name', 'before_two');
+        /** @var array<Document> $beforeChildChildren */
+        $beforeChildChildren = $beforeChildren[0]->getAttribute('children');
+        $beforeChildChildren[0]->setAttribute('name', 'before_x');
 
         $this->assertEquals('_', $after->getAttribute('name'));
-        $this->assertEquals('zero', $after->getAttribute('document')->getAttribute('name'));
-        $this->assertEquals('a', $after->getAttribute('children')[0]->getAttribute('name'));
-        $this->assertEquals('one', $after->getAttribute('children')[0]->getAttribute('document')->getAttribute('name'));
-        $this->assertEquals('x', $after->getAttribute('children')[0]->getAttribute('children')[0]->getAttribute('name'));
+        /** @var Document $afterDoc */
+        $afterDoc = $after->getAttribute('document');
+        $this->assertEquals('zero', $afterDoc->getAttribute('name'));
+        /** @var array<Document> $afterChildren */
+        $afterChildren = $after->getAttribute('children');
+        $this->assertEquals('a', $afterChildren[0]->getAttribute('name'));
+        /** @var Document $afterChildDoc */
+        $afterChildDoc = $afterChildren[0]->getAttribute('document');
+        $this->assertEquals('one', $afterChildDoc->getAttribute('name'));
+        /** @var array<Document> $afterChildChildren */
+        $afterChildChildren = $afterChildren[0]->getAttribute('children');
+        $this->assertEquals('x', $afterChildChildren[0]->getAttribute('name'));
     }
 
-    public function testGetArrayCopy(): void
+    public function test_get_array_copy(): void
     {
         $this->assertEquals([
-            '$id' => ID::custom($this->id),
-            '$collection' => ID::custom($this->collection),
+            '$id' => Id::custom($this->id),
+            '$collection' => Id::custom($this->collection),
             '$permissions' => [
-                Permission::read(Role::user(ID::custom('123'))),
-                Permission::read(Role::team(ID::custom('123'))),
+                Permission::read(Role::user(Id::custom('123'))),
+                Permission::read(Role::team(Id::custom('123'))),
                 Permission::create(Role::any()),
-                Permission::create(Role::user(ID::custom('creator'))),
+                Permission::create(Role::user(Id::custom('creator'))),
                 Permission::update(Role::any()),
-                Permission::update(Role::user(ID::custom('updater'))),
+                Permission::update(Role::user(Id::custom('updater'))),
                 Permission::delete(Role::any()),
-                Permission::delete(Role::user(ID::custom('deleter'))),
+                Permission::delete(Role::user(Id::custom('deleter'))),
             ],
             'title' => 'This is a test.',
             'list' => [
-                'one'
+                'one',
             ],
             'children' => [
                 ['name' => 'x'],
                 ['name' => 'y'],
                 ['name' => 'z'],
-            ]
+            ],
         ], $this->document->getArrayCopy());
         $this->assertEquals([], $this->empty->getArrayCopy());
     }
 
-    public function testEmptyDocumentSequence(): void
+    public function test_empty_document_sequence(): void
     {
         $empty = new Document();
 
         $this->assertNull($empty->getSequence());
         $this->assertNotSame('', $empty->getSequence());
     }
+
     public function testConstructionPreservesScalarArraysAndConvertsOnlyDocuments(): void
     {
         $object = new \stdClass();
@@ -428,15 +401,20 @@ class DocumentTest extends TestCase
         ];
         $document = new Document($input);
 
+        $child = $document->getAttribute('child');
+        $children = $document->getArray('children');
+
         $this->assertSame([], $document->getAttribute('empty'));
         $this->assertSame($input['values'], $document->getAttribute('values'));
-        $this->assertSame('child', $document->getAttribute('child')->getId());
-        $this->assertSame('first', $document->getAttribute('children')['first']->getId());
-        $this->assertSame('plain', $document->getAttribute('children')[9]);
-        $this->assertSame(['$id' => 'first'], $input['children']['first']);
+        $this->assertInstanceOf(Document::class, $child);
+        $this->assertSame('child', $child->getId());
+        $this->assertInstanceOf(Document::class, $children['first']);
+        $this->assertSame('first', $children['first']->getId());
+        $this->assertSame('plain', $children[9]);
+        $this->assertSame($input['children']['first'], $children['first']->getArrayCopy());
     }
 
-    public function testArrayCopyPreservesKeysAndFiltersNestedDocuments(): void
+    public function testExceptPreservesKeysAndFiltersTopLevelKeysOnly(): void
     {
         $document = new Document([
             'name' => 'parent',
@@ -444,17 +422,21 @@ class DocumentTest extends TestCase
             'values' => [7 => 'seven', 'null' => null, 'empty' => []],
             'children' => ['child' => new Document(['name' => 'nested', 'secret' => 'hidden'])],
         ]);
-        $copy = $document->getArrayCopy(['name', 'secret', 'values', 'children'], ['secret']);
+        $copy = $document->except(['secret']);
 
         $this->assertSame([
             'name' => 'parent',
             'values' => [7 => 'seven', 'null' => null, 'empty' => []],
-            'children' => ['child' => ['name' => 'nested']],
+            'children' => ['child' => ['name' => 'nested', 'secret' => 'hidden']],
         ], $copy);
         $copy['values'][7] = 'changed';
         $copy['children']['child']['name'] = 'changed';
-        $this->assertSame('seven', $document->getAttribute('values')[7]);
-        $this->assertSame('nested', $document->getAttribute('children')['child']->getAttribute('name'));
+
+        $nested = $document->getArray('children')['child'];
+
+        $this->assertSame('seven', $document->getArray('values')[7]);
+        $this->assertInstanceOf(Document::class, $nested);
+        $this->assertSame('nested', $nested->getAttribute('name'));
     }
 
     public function testClonePreservesScalarKeysAndIsolatesNestedDocuments(): void
@@ -466,15 +448,22 @@ class DocumentTest extends TestCase
             'children' => ['child' => new Document(['name' => 'nested']), 9 => 'plain'],
         ]);
         $copy = clone $original;
+        $this->assertIsArray($copy['values']);
         $copy['values'][7] = 'changed';
-        $copy->getAttribute('children')['child']->setAttribute('name', 'changed');
+
+        $copiedChild = $copy->getArray('children')['child'];
+        $this->assertInstanceOf(Document::class, $copiedChild);
+        $copiedChild->setAttribute('name', 'changed');
+
+        $originalChild = $original->getArray('children')['child'];
 
         $this->assertSame([], $copy->getAttribute('empty'));
-        $this->assertSame([7, 'object'], array_keys($copy->getAttribute('values')));
-        $this->assertSame($object, $copy->getAttribute('values')['object']);
-        $this->assertSame('seven', $original->getAttribute('values')[7]);
-        $this->assertSame('nested', $original->getAttribute('children')['child']->getAttribute('name'));
-        $this->assertSame('plain', $copy->getAttribute('children')[9]);
+        $this->assertSame([7, 'object'], array_keys($copy->getArray('values')));
+        $this->assertSame($object, $copy->getArray('values')['object']);
+        $this->assertSame('seven', $original->getArray('values')[7]);
+        $this->assertInstanceOf(Document::class, $originalChild);
+        $this->assertSame('nested', $originalChild->getAttribute('name'));
+        $this->assertSame('plain', $copy->getArray('children')[9]);
     }
 
     public function testArrayCopyAndCloneDetachReferencedArrayElements(): void
@@ -490,21 +479,279 @@ class DocumentTest extends TestCase
         $expected = ['first' => 'before', 7 => ['value' => 'before'], 'last' => false];
         $this->assertSame($expected, $export['values']);
         $this->assertSame($expected, $clone->getAttribute('values'));
-        $this->assertSame('after', $document->getAttribute('values')['first']);
+        $this->assertSame('after', $document->getArray('values')['first']);
     }
 
+    /**
+     * getArrayCopy() must not wrap a scalar array's elements in references.
+     *
+     * That is a pure allocation property, and deliberately measured as one.
+     * PHP unwraps a reference whose refcount is 1 when the array is copied,
+     * so an export whose elements were wrapped is indistinguishable from a
+     * clean one through every userland probe: write-through in either
+     * direction, ReflectionReference::fromArrayElement(), var_dump() and
+     * serialize() all report the wrapped array as unwrapped. The detachment
+     * assertions in this file therefore do not cover it, and there is no
+     * behavioural assertion that would.
+     */
     public function testScalarArrayExportAvoidsReferenceAllocationOverhead(): void
     {
-        $document = new Document(['values' => range(1, 100_000)]);
-        memory_reset_peak_usage();
-        $before = memory_get_usage();
-        $copy = $document->getArrayCopy();
-        $allocated = memory_get_peak_usage() - $before;
+        $values = range(1, 100_000);
+        $document = new Document(['values' => $values]);
 
+        // What one honest copy of this array costs on this build, measured in
+        // the same process, so the bound below is a multiple of the allocator
+        // in front of it rather than a byte count tuned to one platform.
+        memory_reset_peak_usage();
+        $mark = memory_get_usage();
+        $plain = $values;
+        $plain[0] = 0;
+        $plainCost = memory_get_peak_usage() - $mark;
+        unset($plain);
+
+        memory_reset_peak_usage();
+        $mark = memory_get_usage();
+        $copy = $document->getArrayCopy();
+        $exportCost = memory_get_peak_usage() - $mark;
+
+        $this->assertIsArray($copy['values']);
         $this->assertCount(100_000, $copy['values']);
-        $this->assertLessThan(3 * 1024 * 1024, $allocated, 'Export should copy the array without wrapping every element in a reference');
+        $this->assertGreaterThan(0, $plainCost, 'The allocator reported no cost for a plain copy, so the ratio below is meaningless');
+        $this->assertLessThan(
+            2 * $plainCost,
+            $exportCost,
+            \sprintf(
+                'Export allocated %d bytes where a plain copy of the same array costs %d: elements are being wrapped in references.',
+                $exportCost,
+                $plainCost,
+            ),
+        );
         $copy['values'][0] = 0;
-        $this->assertSame(1, $document->getAttribute('values')[0]);
+        $this->assertSame(1, $document->getArray('values')[0]);
     }
 
+    public function testArrayAccessPermissionWriteRefreshesRoles(): void
+    {
+        $document = new Document([Document::PERMISSIONS => [Permission::read(Role::user('old'))]]);
+        $this->assertSame(['user:old'], $document->getPermissionsByType(PermissionType::Read));
+
+        $document[Document::PERMISSIONS] = [Permission::read(Role::any())];
+
+        $this->assertSame(['any'], $document->getPermissionsByType(PermissionType::Read));
+        $this->assertSame([Permission::read(Role::any())], $document->getPermissions());
+    }
+
+    public function testUnsetPermissionsClearsRoles(): void
+    {
+        $document = new Document([Document::PERMISSIONS => [Permission::read(Role::any())]]);
+        $this->assertSame(['any'], $document->getPermissionsByType(PermissionType::Read));
+
+        unset($document[Document::PERMISSIONS]);
+
+        $this->assertSame([], $document->getPermissionsByType(PermissionType::Read));
+        $this->assertSame([], $document->getPermissions());
+    }
+
+    public function testExchangeArrayRefreshesRoles(): void
+    {
+        $document = new Document([Document::PERMISSIONS => [Permission::read(Role::any())]]);
+        $this->assertSame(['any'], $document->getPermissionsByType(PermissionType::Read));
+
+        $document->exchangeArray([Document::PERMISSIONS => [Permission::read(Role::user('new'))]]);
+
+        $this->assertSame(['user:new'], $document->getPermissionsByType(PermissionType::Read));
+    }
+
+    public function testReferenceWriteToPermissionsRefreshesRoles(): void
+    {
+        $document = new Document([Document::PERMISSIONS => [Permission::read(Role::user('old'))]]);
+        $this->assertSame(['user:old'], $document->getPermissionsByType(PermissionType::Read));
+
+        $permissions = &$document[Document::PERMISSIONS];
+        $this->assertIsArray($permissions);
+        $permissions[] = Permission::update(Role::any());
+        unset($permissions);
+
+        $this->assertSame(['user:old'], $document->getPermissionsByType(PermissionType::Read));
+        $this->assertSame(['any'], $document->getPermissionsByType(PermissionType::Update));
+    }
+
+    public function testGetPermissionsNormalisesArrayAccessWrites(): void
+    {
+        $document = new Document();
+        $document[Document::PERMISSIONS] = [
+            5 => Permission::read(Role::any()),
+            9 => Permission::read(Role::any()),
+            12 => Permission::update(Role::user('editor')),
+        ];
+
+        $this->assertSame(
+            [Permission::read(Role::any()), Permission::update(Role::user('editor'))],
+            $document->getPermissions(),
+        );
+        $this->assertSame('["read(\"any\")","update(\"user:editor\")"]', \json_encode($document->getPermissions()));
+        $this->assertSame(['user:editor'], $document->getPermissionsByType(PermissionType::Update));
+    }
+
+    public function testConstructorRejectsNonStringPermissions(): void
+    {
+        $this->expectException(StructureException::class);
+        $this->expectExceptionMessage('Every permission must be of type string');
+
+        new Document([Document::PERMISSIONS => [123, Permission::read(Role::any())]]);
+    }
+
+    public function testConstructorDeduplicatesPermissions(): void
+    {
+        $document = new Document([Document::PERMISSIONS => [
+            2 => Permission::read(Role::any()),
+            4 => Permission::read(Role::any()),
+            6 => Permission::delete(Role::user('owner')),
+        ]]);
+
+        $this->assertSame(
+            [Permission::read(Role::any()), Permission::delete(Role::user('owner'))],
+            $document->getAttribute(Document::PERMISSIONS),
+        );
+    }
+
+    public function testSetAttributeRejectsNonStringPermissions(): void
+    {
+        $document = new Document([Document::PERMISSIONS => [Permission::read(Role::any())]]);
+
+        $writes = [
+            [SetType::Assign, [Permission::update(Role::any()), 123]],
+            [SetType::Append, 123],
+        ];
+
+        foreach ($writes as [$type, $value]) {
+            try {
+                $document->setAttribute(Document::PERMISSIONS, $value, $type);
+                $this->fail('A non-string permission was accepted');
+            } catch (StructureException $error) {
+                $this->assertSame('Every permission must be of type string', $error->getMessage());
+            }
+        }
+
+        $this->assertSame([Permission::read(Role::any())], $document->getPermissions());
+        $this->assertSame(['any'], $document->getPermissionsByType(PermissionType::Read));
+    }
+
+    public function testSetAttributeRejectsPermissionsThatAreNotAnArray(): void
+    {
+        $document = new Document([Document::PERMISSIONS => [Permission::read(Role::any())]]);
+
+        try {
+            $document->setAttribute(Document::PERMISSIONS, Permission::update(Role::any()));
+            $this->fail('A permissions value that is not an array was accepted');
+        } catch (StructureException $error) {
+            $this->assertSame(Document::PERMISSIONS.' must be of type array', $error->getMessage());
+        }
+
+        $this->assertSame([Permission::read(Role::any())], $document->getPermissions());
+
+        $document->setAttribute(Document::PERMISSIONS, null);
+
+        $this->assertSame([], $document->getPermissions());
+    }
+
+    public function testFromRowFiltersNonStringPermissionsFromStoredRows(): void
+    {
+        $document = Document::fromRow([
+            Document::ID => 'legacy',
+            Document::PERMISSIONS => [123, Permission::read(Role::any()), null, Permission::read(Role::any())],
+        ]);
+
+        $this->assertSame([Permission::read(Role::any())], $document->getPermissions());
+        $this->assertSame(['any'], $document->getPermissionsByType(PermissionType::Read));
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     */
+    #[DataProvider('malformedRows')]
+    public function testFromRowRejectsANonStringIdAndNonArrayPermissions(array $row, string $message): void
+    {
+        $this->expectException(StructureException::class);
+        $this->expectExceptionMessage($message);
+
+        Document::fromRow($row);
+    }
+
+    /**
+     * @return iterable<string, array{array<string, mixed>, string}>
+     */
+    public static function malformedRows(): iterable
+    {
+        yield 'an integer $id' => [[Document::ID => 5], '$id must be of type string'];
+        yield 'a string $permissions' => [[Document::PERMISSIONS => 'read("any")'], '$permissions must be of type array'];
+    }
+
+    #[DataProvider('tenantsOfAnotherType')]
+    public function testATenantOfAnotherTypeReadsAsNoTenant(mixed $tenant): void
+    {
+        $document = new Document([Document::TENANT => $tenant]);
+
+        $this->assertNull($document->getTenant());
+    }
+
+    /**
+     * @return iterable<string, array{mixed}>
+     */
+    public static function tenantsOfAnotherType(): iterable
+    {
+        yield 'a float' => [1.0];
+        yield 'a boolean' => [true];
+        yield 'an array' => [[1]];
+        yield 'an object' => [new stdClass()];
+    }
+
+    public function testGetDocumentsWrapsArrayItemsAndSkipsScalars(): void
+    {
+        $first = new Document(['name' => 'first']);
+        $document = new Document([
+            'items' => [$first, ['name' => 'x', 0 => 'y'], 'scalar', null],
+            'text' => 'not a list',
+        ]);
+
+        $documents = $document->getDocuments('items');
+
+        $this->assertCount(2, $documents);
+        $this->assertSame($first, $documents[0]);
+        $this->assertSame(['name' => 'x'], $documents[1]->getArrayCopy());
+        $this->assertSame([], $document->getDocuments('missing'));
+        $this->assertSame([], $document->getDocuments('text'));
+    }
+
+    #[DataProvider('valuesThatAreNotADocument')]
+    public function testGetDocumentReturnsAnEmptyDocumentForAValueThatIsNotOne(mixed $value): void
+    {
+        $document = new Document(['value' => $value]);
+
+        $this->assertTrue($document->getDocument('value')->isEmpty());
+        $this->assertTrue($document->getDocument('missing')->isEmpty());
+    }
+
+    /**
+     * @return iterable<string, array{mixed}>
+     */
+    public static function valuesThatAreNotADocument(): iterable
+    {
+        yield 'null' => [null];
+        yield 'an empty array' => [[]];
+        yield 'a list' => [['a', 'b']];
+        yield 'a string' => ['x'];
+    }
+
+    public function testGetDocumentWrapsTheStringKeysOfAnAssociativeArray(): void
+    {
+        $child = new Document(['name' => 'child']);
+        $document = new Document([
+            'map' => ['name' => 'x', 0 => 'y'],
+            'child' => $child,
+        ]);
+
+        $this->assertSame(['name' => 'x'], $document->getDocument('map')->getArrayCopy());
+        $this->assertSame($child, $document->getDocument('child'));
+    }
 }

@@ -2,71 +2,73 @@
 
 namespace Utopia\Database\Validator;
 
+use DateTime as PhpDateTime;
+use Exception;
 use Utopia\Validator;
 
 class Datetime extends Validator
 {
-    public const PRECISION_DAYS = 'days';
-    public const PRECISION_HOURS = 'hours';
-    public const PRECISION_MINUTES = 'minutes';
-    public const PRECISION_SECONDS = 'seconds';
-    public const PRECISION_ANY = 'any';
+    public const string PRECISION_DAYS = 'days';
+
+    public const string PRECISION_HOURS = 'hours';
+
+    public const string PRECISION_MINUTES = 'minutes';
+
+    public const string PRECISION_SECONDS = 'seconds';
+
+    public const string PRECISION_ANY = 'any';
 
     /**
-     * @throws \Exception
+     * @throws Exception
      */
     public function __construct(
-        private readonly \DateTime $min = new \DateTime('0000-01-01'),
-        private readonly \DateTime $max = new \DateTime('9999-12-31'),
+        private readonly PhpDateTime $min = new PhpDateTime('0000-01-01'),
+        private readonly PhpDateTime $max = new PhpDateTime('9999-12-31'),
         private readonly bool $requireDateInFuture = false,
         private readonly string $precision = self::PRECISION_ANY,
         private readonly int $offset = 0,
     ) {
         if ($offset < 0) {
-            throw new \Exception('Offset must be a positive integer.');
+            throw new Exception('Offset must be a positive integer.');
         }
     }
 
-    /**
-     * Validator Description.
-     * @return string
-     */
+    #[\Override]
     public function getDescription(): string
     {
         $message = 'Value must be valid date';
 
         if ($this->offset > 0) {
-            $message .= " at least " . $this->offset . " seconds in the future and";
+            $message .= ' at least '.$this->offset.' seconds in the future and';
         } elseif ($this->requireDateInFuture) {
-            $message .= " in the future and";
+            $message .= ' in the future and';
         }
 
         if ($this->precision !== self::PRECISION_ANY) {
-            $message .= " with " . $this->precision . " precision";
+            $message .= ' with '.$this->precision.' precision';
         }
 
         $min = $this->min->format('Y-m-d H:i:s');
         $max = $this->max->format('Y-m-d H:i:s');
 
         $message .= " between {$min} and {$max}.";
+
         return $message;
     }
 
     /**
-     * Is valid.
-     * Returns true if valid or false if not.
-     * @param mixed $value
-     * @return bool
+     * @param  mixed  $value
      */
-    public function isValid($value): bool
+    #[\Override]
+    public function isValid(mixed $value): bool
     {
         if (empty($value) || ! is_string($value)) {
             return false;
         }
 
         try {
-            $date = new \DateTime($value);
-            $now = new \DateTime();
+            $date = new PhpDateTime($value);
+            $now = new PhpDateTime();
 
             if ($this->requireDateInFuture === true && $date < $now) {
                 return false;
@@ -80,38 +82,29 @@ class Datetime extends Validator
             }
 
             // Constants from: https://www.php.net/manual/en/datetime.format.php
-            $denyConstants = [];
-
-            switch ($this->precision) {
-                case self::PRECISION_DAYS:
-                    $denyConstants = [ 'H', 'i', 's', 'v' ];
-                    break;
-                case self::PRECISION_HOURS:
-                    $denyConstants = [ 'i', 's', 'v' ];
-                    break;
-                case self::PRECISION_MINUTES:
-                    $denyConstants = [ 's', 'v' ];
-                    break;
-                case self::PRECISION_SECONDS:
-                    $denyConstants = [ 'v' ];
-                    break;
-            }
+            $denyConstants = match ($this->precision) {
+                self::PRECISION_DAYS => ['H', 'i', 's', 'v'],
+                self::PRECISION_HOURS => ['i', 's', 'v'],
+                self::PRECISION_MINUTES => ['s', 'v'],
+                self::PRECISION_SECONDS => ['v'],
+                default => [],
+            };
 
             foreach ($denyConstants as $constant) {
                 if (\intval($date->format($constant)) !== 0) {
                     return false;
                 }
             }
-        } catch (\Exception) {
+        } catch (Exception) {
             return false;
         }
 
         // Custom year validation to account for PHP allowing year overflow
         $matches = [];
         if (preg_match('/(?<!\d)(\d{4})(?!\d)/', $value, $matches)) {
-            $year = (int)$matches[1];
-            $minYear = (int)$this->min->format('Y');
-            $maxYear = (int)$this->max->format('Y');
+            $year = (int) $matches[1];
+            $minYear = (int) $this->min->format('Y');
+            $maxYear = (int) $this->max->format('Y');
             if ($year < $minYear || $year > $maxYear) {
                 return false;
             }
@@ -126,25 +119,13 @@ class Datetime extends Validator
         return true;
     }
 
-    /**
-     * Is array
-     *
-     * Function will return true if object is array.
-     *
-     * @return bool
-     */
+    #[\Override]
     public function isArray(): bool
     {
         return false;
     }
 
-    /**
-     * Get Type
-     *
-     * Returns validator type.
-     *
-     * @return string
-     */
+    #[\Override]
     public function getType(): string
     {
         return self::TYPE_STRING;

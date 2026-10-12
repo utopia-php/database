@@ -2,8 +2,9 @@
 
 namespace Utopia\Database\Exception;
 
-use Utopia\Database\Exception;
-
-class Operator extends Exception
+/**
+ * Thrown when an invalid or unsupported query operator is used.
+ */
+class Operator extends Query
 {
 }

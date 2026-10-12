@@ -1,6 +1,6 @@
 name: "CodeQL"
 
-on: [ pull_request ]
+on: [ pull_request, workflow_dispatch ]
 jobs:
   lint:
     name: CodeQL
@@ -13,8 +13,13 @@ jobs:
           fetch-depth: 2
 
       - run: git checkout HEAD^2
+        if: github.event_name == 'pull_request'
 
       - name: Run CodeQL
         run: |
-          docker run --rm -v $PWD:/app -w /app phpswoole/swoole:5.1.8-php8.3-alpine sh -c \
-          "composer install --profile --ignore-platform-reqs && composer check"
+          container=$(docker create composer:2.8)
+          docker cp "$container":/usr/bin/composer /tmp/composer
+          docker rm "$container"
+          docker run --rm -v $PWD:/app -v /tmp/composer:/usr/local/bin/composer:ro -w /app php:8.5.8-cli-alpine sh -c \
+          "composer install --profile --ignore-platform-req='ext-*' && \
+           composer check"

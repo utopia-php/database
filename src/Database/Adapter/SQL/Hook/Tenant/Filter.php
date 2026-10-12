@@ -1,0 +1,150 @@
+<?php
+
+namespace Utopia\Database\Adapter\SQL\Hook\Tenant;
+
+use Utopia\Database\Adapter\SQL\Hook\Column\AllowNull;
+use Utopia\Database\Storage;
+use Utopia\Query\Builder\Condition;
+use Utopia\Query\Builder\JoinType;
+use Utopia\Query\Hook\Filter as FilterHook;
+use Utopia\Query\Hook\Join\Condition as JoinCondition;
+use Utopia\Query\Hook\Join\Filter as JoinFilter;
+use Utopia\Query\Hook\Join\Placement;
+
+/**
+ * SQL read hook that generates tenant isolation conditions for shared-table configurations.
+ */
+final readonly class Filter implements FilterHook, JoinFilter
+{
+    /**
+     * @var list<int|string|null>
+     */
+    private array $tenants;
+
+    /**
+     * @param int|string|null|list<int|string|null> $tenant The selected tenant, a list of them for a
+     *                                                     query that spans tenants, or null when none
+     *                                                     is selected: a shared table then matches no
+     *                                                     tenant's rows rather than every tenant's
+     * @param string $metadataCollection The metadata collection name; metadata tables allow NULL tenants
+     * @param string $collection The actual collection/table name being queried (not the alias)
+     * @param string $allowNullColumn When set, rows where this column is NULL also pass: the rows an
+     *                                outer join produced without a main-table match. It must be a
+     *                                NOT NULL column such as `_uid`, never `_tenant`, or a stored row
+     *                                that has no tenant would pass as if it were missing
+     * @param string $quoteCharacter The adapter's identifier quote: tables are named quoted with it, as the
+     *                          builder declares them
+     * @param list<string> $unindexed Join aliases no index serves the join of: an inner or left join matches
+     *                                their tenant as a range, so the engine cannot look their rows up by the
+     *                                tenant alone once per row it pairs them with
+     */
+    public function __construct(
+        int|string|null|array $tenant,
+        private string $metadataCollection = '',
+        private string $collection = '',
+        private string $allowNullColumn = '',
+        private string $quoteCharacter = '`',
+        private array $unindexed = [],
+    ) {
+        if (! \is_array($tenant)) {
+            $tenant = [$tenant];
+        }
+
+        $this->tenants = $tenant === [] ? [null] : $tenant;
+    }
+
+    private function placeholders(): string
+    {
+        return \implode(', ', \array_fill(0, \count($this->tenants), '?'));
+    }
+
+    #[\Override]
+    public function filter(string $table): Condition
+    {
+        $prefix = (! \str_contains($table, '.') && ! \str_contains($table, $this->quoteCharacter))
+            ? AllowNull::quote($table, $this->quoteCharacter).'.'
+            : '';
+
+        $name = $this->collection !== '' ? $this->collection : $table;
+
+        // A metadata row may be tenantless -- a shared pool creates its system
+        // collections once, with no tenant, so every tenant on the pool reads
+        // the one definition. Its permission rows carry the document's tenant,
+        // so they are tenantless too, and the side table has to be recognised
+        // as metadata or a write holding a project's tenant filters them out:
+        // the rows are matched for neither read nor delete, and revoking a
+        // permission on a shared definition silently does nothing.
+        $isMetadata = ! empty($this->metadataCollection)
+            && ($name === $this->metadataCollection
+                || $name === Storage::permissionsTable($this->metadataCollection));
+
+        $placeholders = $this->placeholders();
+
+        if ($isMetadata) {
+            $condition = new Condition("({$prefix}".Storage::TENANT." IN ({$placeholders}) OR {$prefix}".Storage::TENANT." IS NULL)", $this->tenants);
+        } else {
+            $condition = new Condition("{$prefix}".Storage::TENANT." IN ({$placeholders})", $this->tenants);
+        }
+
+        if ($this->allowNullColumn === '') {
+            return $condition;
+        }
+
+        return AllowNull::wrap($condition, $this->allowNullColumn, $this->quoteCharacter);
+    }
+
+    /**
+     * A condition in ON only limits what the joined table matches; one in WHERE runs after every
+     * join. When the query has a join that keeps unmatched rows - the main table is then relaxed
+     * through $allowNullColumn - a table filtered in WHERE may be missing from a row, and only a
+     * missing row may pass, never a stored row without a tenant: `_uid` is NOT NULL.
+     */
+    #[\Override]
+    public function filterJoin(string $table, JoinType $joinType): JoinCondition
+    {
+        $placement = match ($joinType) {
+            JoinType::Left, JoinType::Inner => Placement::On,
+            default => Placement::Where,
+        };
+
+        $condition = $placement === Placement::On && \in_array($table, $this->unindexed, true)
+            ? $this->range($table)
+            : $this->joined($table);
+
+        if ($placement === Placement::Where && ($joinType === JoinType::FullOuter || $this->allowNullColumn !== '')) {
+            $condition = AllowNull::wrap(
+                $condition,
+                $table.'.'.Storage::UID,
+                $this->quoteCharacter,
+            );
+        }
+
+        return new JoinCondition($condition, $placement);
+    }
+
+    /**
+     * The tenant condition of a joined table, before an outer join places or relaxes it.
+     */
+    public function joined(string $table): Condition
+    {
+        $column = AllowNull::quote($table, $this->quoteCharacter).'.'.Storage::TENANT;
+
+        return new Condition("{$column} IN ({$this->placeholders()})", $this->tenants);
+    }
+
+    /**
+     * MySQL turns an equality on a single tenant into a lookup on the leading `_tenant` of every index, and
+     * prefers it to reading the table once for a join no index serves, though it reads the tenant's whole
+     * table again for every row the join pairs. A range it reads once.
+     */
+    private function range(string $table): Condition
+    {
+        if (\count($this->tenants) !== 1) {
+            return $this->joined($table);
+        }
+
+        $column = AllowNull::quote($table, $this->quoteCharacter).'.'.Storage::TENANT;
+
+        return new Condition("({$column} >= ? AND {$column} <= ?)", [$this->tenants[0], $this->tenants[0]]);
+    }
+}

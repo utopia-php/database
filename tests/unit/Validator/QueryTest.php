@@ -4,10 +4,13 @@ namespace Tests\Unit\Validator;
 
 use Exception;
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Database;
+use Tests\Unit\Support\Profiles;
+use Utopia\Database\Capability;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Queries\Documents;
+use Utopia\Query\Method;
+use Utopia\Query\Schema\ColumnType;
 
 class QueryTest extends TestCase
 {
@@ -19,13 +22,14 @@ class QueryTest extends TestCase
     /**
      * @throws Exception
      */
-    public function setUp(): void
+    #[\Override]
+    protected function setUp(): void
     {
         $attributes = [
             [
                 '$id' => 'title',
                 'key' => 'title',
-                'type' => Database::VAR_STRING,
+                'type' => ColumnType::String->value,
                 'size' => 256,
                 'required' => true,
                 'signed' => true,
@@ -35,7 +39,7 @@ class QueryTest extends TestCase
             [
                 '$id' => 'description',
                 'key' => 'description',
-                'type' => Database::VAR_STRING,
+                'type' => ColumnType::String->value,
                 'size' => 1000000,
                 'required' => true,
                 'signed' => true,
@@ -45,7 +49,7 @@ class QueryTest extends TestCase
             [
                 '$id' => 'rating',
                 'key' => 'rating',
-                'type' => Database::VAR_INTEGER,
+                'type' => ColumnType::Integer->value,
                 'size' => 5,
                 'required' => true,
                 'signed' => true,
@@ -55,7 +59,7 @@ class QueryTest extends TestCase
             [
                 '$id' => 'price',
                 'key' => 'price',
-                'type' => Database::VAR_FLOAT,
+                'type' => ColumnType::Double->value,
                 'size' => 5,
                 'required' => true,
                 'signed' => true,
@@ -65,7 +69,7 @@ class QueryTest extends TestCase
             [
                 '$id' => 'published',
                 'key' => 'published',
-                'type' => Database::VAR_BOOLEAN,
+                'type' => ColumnType::Boolean->value,
                 'size' => 5,
                 'required' => true,
                 'signed' => true,
@@ -75,7 +79,7 @@ class QueryTest extends TestCase
             [
                 '$id' => 'tags',
                 'key' => 'tags',
-                'type' => Database::VAR_STRING,
+                'type' => ColumnType::String->value,
                 'size' => 55,
                 'required' => true,
                 'signed' => true,
@@ -85,7 +89,7 @@ class QueryTest extends TestCase
             [
                 '$id' => 'birthDay',
                 'key' => 'birthDay',
-                'type' => Database::VAR_DATETIME,
+                'type' => ColumnType::Datetime->value,
                 'size' => 0,
                 'required' => false,
                 'signed' => false,
@@ -99,16 +103,17 @@ class QueryTest extends TestCase
         }
     }
 
-    public function tearDown(): void
+    #[\Override]
+    protected function tearDown(): void
     {
     }
 
     /**
      * @throws Exception
      */
-    public function testQuery(): void
+    public function test_query(): void
     {
-        $validator = new Documents($this->attributes, [], Database::VAR_INTEGER);
+        $validator = new Documents($this->attributes, [], Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::OrderRandom]));
 
         $this->assertEquals(true, $validator->isValid([Query::equal('$id', ['Iron Man', 'Ant Man'])]));
         $this->assertEquals(true, $validator->isValid([Query::equal('$id', ['Iron Man'])]));
@@ -117,8 +122,8 @@ class QueryTest extends TestCase
         $this->assertEquals(true, $validator->isValid([Query::notEqual('title', 'Iron Man')]));
         $this->assertEquals(true, $validator->isValid([Query::lessThan('price', 6.50)]));
         $this->assertEquals(true, $validator->isValid([Query::lessThanEqual('price', 6)]));
-        $this->assertEquals(true, $validator->isValid([Query::contains('tags', ['action1', 'action2'])]));
-        $this->assertEquals(true, $validator->isValid([Query::contains('tags', ['action1'])]));
+        $this->assertEquals(true, $validator->isValid([Query::containsAny('tags', ['action1', 'action2'])]));
+        $this->assertEquals(true, $validator->isValid([Query::containsAny('tags', ['action1'])]));
         $this->assertEquals(true, $validator->isValid([Query::cursorAfter(new Document(['$id' => 'docId']))]));
         $this->assertEquals(true, $validator->isValid([Query::cursorBefore(new Document(['$id' => 'docId']))]));
         $this->assertEquals(true, $validator->isValid([Query::orderAsc('title')]));
@@ -136,9 +141,9 @@ class QueryTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testAttributeNotFound(): void
+    public function test_attribute_not_found(): void
     {
-        $validator = new Documents($this->attributes, [], Database::VAR_INTEGER);
+        $validator = new Documents($this->attributes, [], Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::OrderRandom]));
 
         $response = $validator->isValid([Query::equal('name', ['Iron Man'])]);
         $this->assertEquals(false, $response);
@@ -152,9 +157,9 @@ class QueryTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testAttributeWrongType(): void
+    public function test_attribute_wrong_type(): void
     {
-        $validator = new Documents($this->attributes, [], Database::VAR_INTEGER);
+        $validator = new Documents($this->attributes, [], Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::OrderRandom]));
 
         $response = $validator->isValid([Query::equal('title', [1776])]);
         $this->assertEquals(false, $response);
@@ -164,9 +169,9 @@ class QueryTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testQueryDate(): void
+    public function test_query_date(): void
     {
-        $validator = new Documents($this->attributes, [], Database::VAR_INTEGER);
+        $validator = new Documents($this->attributes, [], Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::OrderRandom]));
 
         $response = $validator->isValid([Query::greaterThan('birthDay', '1960-01-01 10:10:10')]);
         $this->assertEquals(true, $response);
@@ -175,9 +180,9 @@ class QueryTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testQueryLimit(): void
+    public function test_query_limit(): void
     {
-        $validator = new Documents($this->attributes, [], Database::VAR_INTEGER);
+        $validator = new Documents($this->attributes, [], Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::OrderRandom]));
 
         $response = $validator->isValid([Query::limit(25)]);
         $this->assertEquals(true, $response);
@@ -189,9 +194,9 @@ class QueryTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testQueryOffset(): void
+    public function test_query_offset(): void
     {
-        $validator = new Documents($this->attributes, [], Database::VAR_INTEGER);
+        $validator = new Documents($this->attributes, [], Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::OrderRandom]));
 
         $response = $validator->isValid([Query::offset(25)]);
         $this->assertEquals(true, $response);
@@ -203,9 +208,9 @@ class QueryTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testQueryOrder(): void
+    public function test_query_order(): void
     {
-        $validator = new Documents($this->attributes, [], Database::VAR_INTEGER);
+        $validator = new Documents($this->attributes, [], Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::OrderRandom]));
 
         $response = $validator->isValid([Query::orderAsc('title')]);
         $this->assertEquals(true, $response);
@@ -223,9 +228,9 @@ class QueryTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testQueryCursor(): void
+    public function test_query_cursor(): void
     {
-        $validator = new Documents($this->attributes, [], Database::VAR_INTEGER);
+        $validator = new Documents($this->attributes, [], Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::OrderRandom]));
 
         $response = $validator->isValid([Query::cursorAfter(new Document(['$id' => 'asdf']))]);
         $this->assertEquals(true, $response);
@@ -234,7 +239,7 @@ class QueryTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testQueryGetByType(): void
+    public function test_query_get_by_type(): void
     {
         $queries = [
             Query::equal('key', ['value']),
@@ -242,29 +247,26 @@ class QueryTest extends TestCase
             Query::cursorAfter(new Document([])),
         ];
 
-        $queries1 = Query::getByType($queries, [Query::TYPE_CURSOR_AFTER, Query::TYPE_CURSOR_BEFORE]);
+        $queries1 = Query::getByType($queries, [Method::CursorAfter, Method::CursorBefore]);
 
         $this->assertCount(2, $queries1);
         foreach ($queries1 as $query) {
-            $this->assertEquals(true, in_array($query->getMethod(), [Query::TYPE_CURSOR_AFTER, Query::TYPE_CURSOR_BEFORE]));
+            $this->assertEquals(true, in_array($query->getMethod(), [Method::CursorAfter, Method::CursorBefore]));
         }
 
         $cursor = reset($queries1);
-
-        $this->assertInstanceOf(Query::class, $cursor);
-
         $cursor->setValue(new Document(['$id' => 'hello1']));
 
         $query1 = $queries[1];
 
-        $this->assertEquals(Query::TYPE_CURSOR_BEFORE, $query1->getMethod());
+        $this->assertEquals(Method::CursorBefore, $query1->getMethod());
         $this->assertInstanceOf(Document::class, $query1->getValue());
         $this->assertTrue($query1->getValue()->isEmpty()); // Cursor Document is not updated
 
         /**
          * Using reference $queries2 => $queries
          */
-        $queries2 = Query::getByType($queries, [Query::TYPE_CURSOR_AFTER, Query::TYPE_CURSOR_BEFORE], false);
+        $queries2 = Query::getByType($queries, [Method::CursorAfter, Method::CursorBefore], false);
 
         $cursor = reset($queries2);
         $this->assertInstanceOf(Query::class, $cursor);
@@ -274,7 +276,7 @@ class QueryTest extends TestCase
         $query2 = $queries[1];
 
         $this->assertCount(2, $queries2);
-        $this->assertEquals(Query::TYPE_CURSOR_BEFORE, $query2->getMethod());
+        $this->assertEquals(Method::CursorBefore, $query2->getMethod());
         $this->assertInstanceOf(Document::class, $query2->getValue());
         $this->assertEquals('hello1', $query2->getValue()->getId()); // Cursor Document is updated
 
@@ -297,7 +299,7 @@ class QueryTest extends TestCase
         $query3 = $queries[1];
 
         $this->assertCount(2, $queries3);
-        $this->assertEquals(Query::TYPE_CURSOR_BEFORE, $query3->getMethod());
+        $this->assertEquals(Method::CursorBefore, $query3->getMethod());
         $this->assertInstanceOf(Document::class, $query3->getValue());
         $this->assertEquals('hello3', $query3->getValue()->getId()); // Cursor Document is updated
     }
@@ -305,9 +307,9 @@ class QueryTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testQueryEmpty(): void
+    public function test_query_empty(): void
     {
-        $validator = new Documents($this->attributes, [], Database::VAR_INTEGER);
+        $validator = new Documents($this->attributes, [], Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::OrderRandom]));
 
         $response = $validator->isValid([Query::equal('title', [''])]);
         $this->assertEquals(true, $response);
@@ -334,9 +336,9 @@ class QueryTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testOrQuery(): void
+    public function test_or_query(): void
     {
-        $validator = new Documents($this->attributes, [], Database::VAR_INTEGER);
+        $validator = new Documents($this->attributes, [], Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt, Capability::OrderRandom]));
 
         $this->assertFalse($validator->isValid(
             [Query::or(
@@ -351,7 +353,7 @@ class QueryTest extends TestCase
                 Query::or(
                     [
                         Query::equal('price', [0]),
-                        Query::equal('not_found', [''])
+                        Query::equal('not_found', ['']),
                     ]
                 )]
         ));
@@ -364,7 +366,7 @@ class QueryTest extends TestCase
                 Query::or(
                     [
                         Query::select(['price']),
-                        Query::limit(1)
+                        Query::limit(1),
                     ]
                 )]
         ));

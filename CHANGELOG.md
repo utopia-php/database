@@ -2,13 +2,30 @@
 
 ## 8.0.2
 
+8.0.1 reverted six deliberate 8.0.0 changes as if they were regressions. 8.0.2 brings them back; everything else in
+8.0.1 stays.
+
 ### Fixed
 
 - On PostgreSQL an exact search (`search('title', '"foo bar"')`) matches the adjacent phrase again, as on MariaDB,
   MySQL, SQLite, MongoDB, Memory and Redis, and `notSearch()` with an exact term excludes only that phrase. 8.0.1
-  reverted it to every word in any order by mistake: the phrase match was a deliberate 8.0.0 change, not a
-  regression. Words in a search term are still split on every character other than a letter, a number or an
-  underscore, as in 7.x (`foo/bar` and `foo,bar` search `foo` and `bar`).
+  reverted it to every word in any order by mistake. Words in a search term are still split on every character
+  other than a letter, a number or an underscore, as in 7.x (`foo/bar` and `foo,bar` search `foo` and `bar`).
+- `increaseDocumentAttribute()` and `decreaseDocumentAttribute()` refuse a fractional change value, `max` or `min`
+  on an integer attribute with `Exception\Type` again, before anything is written, and a change value of 0 or less
+  throws `Exception\Type` (`Value must be numeric and greater than 0`) again, which `catch (DatabaseException)`
+  catches. 8.0.1 passed fractional values to the engine (rounded on MariaDB and MySQL, truncated on MongoDB, an
+  error on PostgreSQL) and threw `\InvalidArgumentException` by mistake.
+- Numeric operators on integer attributes refuse a fractional `max` or `min` limit with `Exception\Structure` again,
+  as 8.0.0 did. Numeric text such as `power('2')` stays accepted. 8.0.1 accepted fractional limits by mistake.
+- The `UID` validator description names every character it accepts again (`a-z, A-Z, 0-9, period, hyphen, and
+  underscore`, none of the last three leading). 8.0.1 returned 7.x's text, which leaves out periods and hyphens.
+- An update does not validate again the stored values it leaves unchanged, whatever their type, so a value stored
+  before a range, enum or other rule was narrowed never blocks an update of another attribute. 8.0.1 validated them
+  again (leaving only object values alone) by mistake.
+- `document_purge` fires after the outermost transaction commits again, and never for a write that rolled back.
+  The cache entry is still purged inside the write's transaction, so a cache failure rolls the write back. 8.0.1
+  fired the event just before the commit by mistake.
 
 ## 8.0.1
 
@@ -32,7 +49,7 @@ unchanged. It also holds nested relationship links to the permission rule UPGRAD
   raw query from a string reads `Invalid query method: raw`.
 - `select('$tenant')` passes query validation again without shared tables, and the read refuses it with `Cannot
   select attributes: $tenant`, as in 7.x.
-- The `UID` validator description is the 7.x text again, also inside `Invalid cursor: …`.
+- The `UID` validator description is the 7.x text again, also inside `Invalid cursor: …`. Reverted in 8.0.2.
 - On PostgreSQL an exact search (`"foo bar"`) matches every word in any order again, not the adjacent phrase.
   Reverted in 8.0.2: this was a deliberate 8.0.0 change.
 - `containsAll()` on an attribute that is not an array matches each value as a whole-value `LIKE` (`ILIKE` on
@@ -40,12 +57,12 @@ unchanged. It also holds nested relationship links to the permission rule UPGRAD
 - A read whose orders include `orderRandom()` ignores its cursor instead of failing with `Order attribute '' is
   empty`.
 - `document_purge` fires inside the write's outermost transaction, just before it commits, so a listener that throws
-  rolls the write back and its failure reaches the caller, as in 7.x.
+  rolls the write back and its failure reaches the caller, as in 7.x. Reverted in 8.0.2.
 - `increaseDocumentAttribute()` and `decreaseDocumentAttribute()` pass a fractional change, `max` or `min` on an
   integer attribute to the engine again and return the exact sum, and refuse a change that is not above zero with
-  `\InvalidArgumentException`, as in 7.x.
+  `\InvalidArgumentException`, as in 7.x. Reverted in 8.0.2.
 - Numeric operators on integer and double attributes are checked as in 7.x: a fractional change or limit, or a
-  fractional item appended to an integer array, is no longer refused.
+  fractional item appended to an integer array, is no longer refused. Reverted in 8.0.2.
 - A mismatched attribute default reads `Default value x does not match given type <type>` (and `is not a valid
   integer string for type bigint`) without JSON quoting, as in 7.x.
 - `Index::fromArray()` refuses an unknown index type with `Exception\Index` (`Unknown index type: …`) instead of
@@ -59,7 +76,7 @@ unchanged. It also holds nested relationship links to the permission rule UPGRAD
   as in 7.x, and `select(['*', '*.*'])` reads every column instead of failing on MariaDB, MySQL and PostgreSQL.
 - A single read returns `$sequence` ahead of `$id`, in 7.x's key order, on every adapter.
 - An update validates the stored values it leaves unchanged again, as 7.x did; a stored object value is held to
-  7.x's object rules.
+  7.x's object rules. Reverted in 8.0.2.
 - On MongoDB a transaction that lost a write conflict runs again up to 20 times, so concurrent increments of one
   document all land.
 - With dates preserved, linking existing children through their one-to-many parent keeps each child's stored

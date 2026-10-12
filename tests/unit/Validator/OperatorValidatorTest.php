@@ -163,11 +163,13 @@ final class OperatorValidatorTest extends TestCase
         $this->assertTrue($validator->isValid(new Operator(OperatorType::Increment, 'count', [1])), $validator->getDescription());
     }
 
-    public function testAFractionalResultInRangeIsLeftToTheEngineAs7xDid(): void
+    public function testAResultThatCannotBePredictedIsRejected(): void
     {
         $validator = $this->numericValidator(new Document(['count' => 2]));
 
-        $this->assertTrue($validator->isValid(new Operator(OperatorType::Power, 'count', [-1])), $validator->getDescription());
+        $this->assertFalse($validator->isValid(new Operator(OperatorType::Power, 'count', [-1])));
+        $this->assertSame('Cannot apply power operator: result is outside the attribute range', $validator->getDescription());
+
         $this->assertTrue($validator->isValid(new Operator(OperatorType::Power, 'count', [3])), $validator->getDescription());
     }
 
@@ -251,8 +253,7 @@ final class OperatorValidatorTest extends TestCase
         $this->assertFalse($validator->isValid(new Operator(OperatorType::Increment, 'count', [6.0])));
         $this->assertStringContainsString('would overflow maximum value', $validator->getDescription());
         $this->assertFalse($validator->isValid(new Operator(OperatorType::Increment, 'count', [5.5])));
-        $this->assertSame('Cannot apply increment operator: would overflow maximum value of 2147483647', $validator->getDescription());
-        $this->assertTrue($validator->isValid(new Operator(OperatorType::Increment, 'count', [4.5])), $validator->getDescription());
+        $this->assertStringStartsWith('Cannot apply increment operator: value must be numeric', $validator->getDescription());
         $this->assertFalse($validator->isValid(new Operator(OperatorType::Divide, 'count', [0.0])));
         $this->assertSame('Cannot apply divide operator: division by zero', $validator->getDescription());
     }

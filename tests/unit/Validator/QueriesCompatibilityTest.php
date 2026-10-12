@@ -94,11 +94,17 @@ class QueriesCompatibilityTest extends TestCase
         $this->assertTrue($this->documents(sharedTables: true)->isValid(['{"method":"select","values":["$tenant"]}']));
     }
 
-    public function test_uid_description(): void
+    public function test_uid_description_names_every_character_it_accepts(): void
     {
+        $uid = new UID();
+
+        $this->assertTrue($uid->isValid('a.b-c_d'));
+        $this->assertFalse($uid->isValid('.abc'));
+        $this->assertFalse($uid->isValid('-abc'));
+        $this->assertFalse($uid->isValid('_abc'));
         $this->assertSame(
-            'UID must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, and underscore. Can\'t start with a leading underscore',
-            (new UID())->getDescription(),
+            'UID must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a leading period, hyphen, or underscore',
+            $uid->getDescription(),
         );
     }
 }

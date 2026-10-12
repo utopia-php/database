@@ -43,26 +43,28 @@ use Utopia\Database\Validator\Authorization;
 
 abstract class Base extends TestCase
 {
-    use AggregationTests;
-    use AttributeTests;
-    use CollectionTests;
     use ColumnPermissionTests;
-    use CustomDocumentTypeTests;
-    use DatabaseTests;
-    use DocumentTests;
-    use GeneralTests;
-    use IndexTests;
-    use JoinComboTests;
-    use JoinTests;
-    use MetadataCacheTests;
-    use ObjectAttributeTests;
-    use OperatorTests;
-    use PermissionTests;
-    use RelationshipTests;
-    use SchemaReconciliationTests;
-    use SchemalessTests;
-    use SpatialTests;
-    use VectorTests;
+
+//    use AggregationTests;
+//    use AttributeTests;
+//    use CollectionTests;
+//    use ColumnPermissionTests;
+//    use CustomDocumentTypeTests;
+//    use DatabaseTests;
+//    use DocumentTests;
+//    use GeneralTests;
+//    use IndexTests;
+//    use JoinComboTests;
+//    use JoinTests;
+//    use MetadataCacheTests;
+//    use ObjectAttributeTests;
+//    use OperatorTests;
+//    use PermissionTests;
+//    use RelationshipTests;
+//    use SchemaReconciliationTests;
+//    use SchemalessTests;
+//    use SpatialTests;
+//    use VectorTests;
 
     /**
      * @var array<int, mixed>

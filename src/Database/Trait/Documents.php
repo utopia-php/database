@@ -1229,18 +1229,13 @@ trait Documents
 
         $document = $this->encode($collection, $document);
 
-        // A metadata document is a collection definition, whose permissions name that
-        // collection's columns rather than _metadata's, and createCollection() and
-        // updateCollection() have already judged them against the right list.
-        // withForeignColumnPermissions() says the same of any other document a caller keeps a
-        // collection's settings in. Both are records of permissions enforced elsewhere, so
-        // judging them here would only ever compare them to the wrong schema.
-        $recordsForeignPermissions = $collection->getId() === Database::METADATA
-            || $this->hasForeignColumnPermissions();
-
-        if ($this->validation()->get() && ! $recordsForeignPermissions) {
-            // No column list on purpose: column permissions are set on the collection, so a
-            // document naming one is refused rather than stored and never enforced.
+        if ($this->validation()->get()) {
+            // No column list on purpose, and no exemption: a column-scoped permission belongs to
+            // a collection, and a row naming one is refused rather than stored somewhere nothing
+            // enforces it. It is also what every read gate matches against -- a side table of
+            // roles, a JSONB containment, a Mongo `$in` -- so a column stored here would hide the
+            // row from the role it was granted to.
+            //
             $validator = new Permissions(columns: null);
             if (! $validator->isValid($document->getPermissions())) {
                 throw new DatabaseException($validator->getDescription());

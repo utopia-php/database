@@ -2,6 +2,7 @@
 
 namespace Utopia\Database;
 
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Structure as StructureException;
@@ -16,7 +17,22 @@ class Collection extends Document
 
     public const string DOCUMENT_SECURITY = 'documentSecurity';
 
-    private const array CORE_KEYS = [self::ATTRIBUTES, self::INDEXES, self::DOCUMENT_SECURITY];
+    /**
+     * The collection's permissions as they were written, kept only when one of them names a column.
+     *
+     * $permissions holds the same set with every column dropped, because that is the form every
+     * read gate matches against -- the `_perms` side table, Postgres' JSONB containment, Mongo's
+     * `$in`. Keeping the column there would make a collection granted `read("any", "name")`
+     * invisible to `any`, since no gate would find the `read("any")` it looks for.
+     *
+     * So this field is the collection's permissions and $permissions is a derived index of them.
+     * Read them through getPermissions(); nothing outside a gate should read $permissions directly.
+     * Empty whenever no permission names a column, which is almost every collection, and then
+     * $permissions is already the verbatim set.
+     */
+    public const string COLUMN_PERMISSIONS = 'columnPermissions';
+
+    private const array CORE_KEYS = [self::ATTRIBUTES, self::INDEXES, self::DOCUMENT_SECURITY, self::COLUMN_PERMISSIONS];
 
     /** @var list<Attribute>|null */
     private ?array $attributeModels = null;
@@ -80,7 +96,7 @@ class Collection extends Document
         ];
 
         if ($permissions !== null) {
-            $data[self::PERMISSIONS] = $permissions;
+            $data = \array_merge($data, self::splitPermissions($permissions));
         }
 
         return new self(\array_merge($data, $metadata));
@@ -122,6 +138,44 @@ class Collection extends Document
     public static function fromDocument(Document $document): self
     {
         return $document instanceof self ? $document : self::fromArray($document->getArrayCopy());
+    }
+
+    /**
+     * Replace the permission set, writing the gate and the verbatim list together.
+     *
+     * The only place the two fields are set, so they cannot drift: a caller that writes
+     * $permissions alone would leave a stale verbatim list behind it, and getPermissions()
+     * would keep answering with the permissions the collection used to have.
+     *
+     * @param  list<string>  $permissions
+     *
+     * @throws DatabaseException
+     */
+    public function setPermissions(array $permissions): self
+    {
+        foreach (self::splitPermissions($permissions) as $key => $value) {
+            $this->setAttribute($key, $value);
+        }
+
+        return $this;
+    }
+
+    /**
+     * @param  list<string>  $permissions
+     * @return array<string, list<string>>
+     *
+     * @throws DatabaseException
+     */
+    private static function splitPermissions(array $permissions): array
+    {
+        $scoped = Permission::hasColumns($permissions);
+
+        return [
+            self::PERMISSIONS => $scoped ? Permission::withoutColumns($permissions) : $permissions,
+            // Cleared rather than left alone, so dropping the last column-scoped grant from a
+            // collection also drops the list that used to describe it.
+            self::COLUMN_PERMISSIONS => $scoped ? $permissions : [],
+        ];
     }
 
     public function toDocument(): Document
@@ -265,11 +319,48 @@ class Collection extends Document
     }
 
     /**
-     * @return list<string>|null
+     * The collection's permissions as they were written, columns included.
+     *
+     * getPermissions() answers with what is stored, which is the role-only projection of these:
+     * every read gate matches that form, so a column stored there would hide the collection from
+     * the role it was granted to. Ask here for the grants themselves -- validation, enforcement
+     * and anything reporting them to a caller -- and ask getPermissions() for what the gate sees.
+     *
+     * @return list<string>|null null when the collection declares no permissions
+     *
+     * @throws StructureException when the stored grants are not a list of permission strings
      */
     public function declaredPermissions(): ?array
     {
-        return $this->offsetExists(self::PERMISSIONS) ? $this->getPermissions() : null;
+        if (! $this->offsetExists(self::PERMISSIONS) && ! $this->offsetExists(self::COLUMN_PERMISSIONS)) {
+            return null;
+        }
+
+        $verbatim = $this->getAttribute(self::COLUMN_PERMISSIONS, []);
+
+        // A definition read straight from storage reaches here before the json filter has run.
+        if (\is_string($verbatim) && $verbatim !== '') {
+            $verbatim = \json_decode($verbatim, true);
+        }
+
+        if ($verbatim === null || $verbatim === '' || $verbatim === []) {
+            return $this->getPermissions();
+        }
+
+        // Never fall back on a value that is present but unreadable. $permissions holds the same
+        // grants widened to the whole row, so answering with it would quietly report more access
+        // than the collection was given.
+        if (! \is_array($verbatim)) {
+            throw new StructureException('Collection '.self::COLUMN_PERMISSIONS.' must be a list of permission strings');
+        }
+
+        foreach ($verbatim as $permission) {
+            if (! \is_string($permission)) {
+                throw new StructureException('Collection '.self::COLUMN_PERMISSIONS.' must be a list of permission strings');
+            }
+        }
+
+        return \array_values($verbatim);
     }
 
     #[\Override]

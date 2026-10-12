@@ -9,6 +9,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Permission;
+use Utopia\Database\PermissionType;
 use Utopia\Database\Role;
 
 /**
@@ -40,9 +41,144 @@ trait ColumnPermissionTests
 
         $stored = $database->getCollection('columnGrants');
 
-        $this->assertContains('read("any", "name")', $stored->getPermissions());
-        $this->assertContains('read("team:hr", "salary")', $stored->getPermissions());
-        $this->assertContains('create("any")', $stored->getPermissions());
+        $this->assertContains('read("any", "name")', $stored->declaredPermissions());
+        $this->assertContains('read("team:hr", "salary")', $stored->declaredPermissions());
+        $this->assertContains('create("any")', $stored->declaredPermissions());
+    }
+
+    /**
+     * Regression: a column-scoped grant must not hide the collection from the role it names.
+     *
+     * Listing applies the permission gate, and two adapters answer it from the row's own
+     * permission list rather than a side table of roles -- Postgres by JSONB containment,
+     * Mongo by an exact `$in`. Both look for `read("any")`, so a stored `read("any", "name")`
+     * matched nothing and the collection vanished for the very role it was granted to, while
+     * getCollection() -- which carries no gate -- still returned it.
+     */
+    public function testACollectionWithAColumnScopedGrantIsStillListed(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $authorization = $database->getAuthorization();
+
+        $database->createCollection(Collection::create(
+            id: 'columnGrantsListed',
+            attributes: [Attribute::string(key: 'name', size: 64)],
+            permissions: [Permission::read(Role::any(), 'name')],
+        ));
+
+        $previous = $authorization->getRoles();
+        $authorization->cleanRoles();
+        $authorization->addRole(Role::any()->toString());
+
+        try {
+            $ids = \array_map(
+                static fn (Collection $collection): string => $collection->getId(),
+                $database->listCollections(100),
+            );
+        } finally {
+            $authorization->cleanRoles();
+            foreach ($previous as $role) {
+                $authorization->addRole($role);
+            }
+        }
+
+        $this->assertContains('columnGrantsListed', $ids);
+    }
+
+    /**
+     * The grants are stored as they were written; only the gate is narrowed to roles.
+     */
+    public function testAColumnScopedGrantIsReadBackAsItWasWritten(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->createCollection(Collection::create(
+            id: 'columnGrantsVerbatim',
+            attributes: [
+                Attribute::string(key: 'name', size: 64),
+                Attribute::integer(key: 'salary'),
+            ],
+            permissions: [
+                Permission::read(Role::any(), 'name'),
+                Permission::read(Role::team('hr'), 'salary'),
+                Permission::create(Role::any()),
+            ],
+        ));
+
+        $stored = $database->getCollection('columnGrantsVerbatim');
+
+        $this->assertSame([
+            'read("any", "name")',
+            'read("team:hr", "salary")',
+            'create("any")',
+        ], $stored->declaredPermissions());
+
+        // The gate keeps the roles and drops the columns, which is what every adapter matches.
+        $this->assertSame(['any', 'team:hr'], $stored->getPermissionsByType(PermissionType::Read));
+
+        // And the column the gates read holds the projection, not the grants. Postgres matches
+        // it by JSONB containment and Mongo by an exact `$in`, so a column stored here would
+        // hide the collection from the role it names while getCollection() still returned it.
+        $this->assertSame([
+            'read("any")',
+            'read("team:hr")',
+            'create("any")',
+        ], $stored->getPermissions());
+    }
+
+    /**
+     * A collection naming no column stores what it has always stored: nothing is duplicated
+     * for the collections that do not use the feature.
+     */
+    public function testACollectionWithoutColumnGrantsStoresNothingExtra(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->createCollection(Collection::create(
+            id: 'columnGrantsAbsent',
+            attributes: [Attribute::string(key: 'name', size: 64)],
+            permissions: [Permission::read(Role::any()), Permission::create(Role::any())],
+        ));
+
+        $stored = $database->getCollection('columnGrantsAbsent');
+
+        $this->assertSame(['read("any")', 'create("any")'], $stored->declaredPermissions());
+        $this->assertSame([], $stored->getAttribute(Collection::COLUMN_PERMISSIONS));
+    }
+
+    /**
+     * Dropping the last column-scoped grant also drops the list that used to describe it,
+     * so a later read does not answer with permissions the collection no longer has.
+     */
+    public function testRemovingTheLastColumnGrantClearsTheStoredGrants(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $collection = $database->createCollection(Collection::create(
+            id: 'columnGrantsCleared',
+            attributes: [Attribute::string(key: 'name', size: 64)],
+            permissions: [Permission::read(Role::any(), 'name'), Permission::create(Role::any())],
+        ));
+
+        $this->assertSame(['read("any", "name")', 'create("any")'], $collection->declaredPermissions());
+        $this->assertSame(['read("any")', 'create("any")'], $collection->getPermissions());
+
+        $collection = $database->updateCollection('columnGrantsCleared', new CollectionUpdate(permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ]));
+
+        $this->assertSame(['read("any")', 'create("any")'], $collection->declaredPermissions());
+        $this->assertSame(['read("any")', 'create("any")'], $collection->getPermissions());
+
+        $stored = $database->getCollection('columnGrantsCleared');
+
+        $this->assertSame([], $stored->getAttribute(Collection::COLUMN_PERMISSIONS));
+        $this->assertSame(['read("any")', 'create("any")'], $stored->declaredPermissions());
     }
 
     public function testACollectionPermissionMayNotNameAColumnThatDoesNotExist(): void
@@ -83,7 +219,7 @@ trait ColumnPermissionTests
 
         $this->assertContains(
             'read("any", "name")',
-            $database->getCollection('columnGrantsUpdate')->getPermissions(),
+            $database->getCollection('columnGrantsUpdate')->declaredPermissions(),
         );
 
         try {
@@ -98,7 +234,7 @@ trait ColumnPermissionTests
         // The rejected update left the collection as it was.
         $this->assertContains(
             'read("any", "name")',
-            $database->getCollection('columnGrantsUpdate')->getPermissions(),
+            $database->getCollection('columnGrantsUpdate')->declaredPermissions(),
         );
     }
 
@@ -135,14 +271,20 @@ trait ColumnPermissionTests
         // The rejected write left nothing behind.
         $this->assertTrue($database->getDocument('columnGrantsDocument', 'row')->isEmpty());
     }
-
-    public function testADocumentMayRecordAnotherCollectionsColumnPermissions(): void
+    /**
+     * A row that records another collection's grants is refused like any other.
+     *
+     * Appwrite keeps one of these per table, and the grants it records name that table's
+     * columns rather than the row's. There is no waiver for it: a column stored in a row's
+     * permissions is enforced nowhere, and the read gate -- which matches roles, not grants --
+     * would hide the row from the role it names. The caller splits them instead, keeping the
+     * verbatim grants in a column of their own and the roles in the permissions.
+     */
+    public function testADocumentMayNotRecordAnotherCollectionsColumnPermissions(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        // Stands in for a row a caller keeps another collection's settings in -- Appwrite's
-        // table list does this. Its own columns are nothing like the ones its permissions name.
         $database->createCollection(Collection::create(
             id: 'columnGrantsRecords',
             attributes: [
@@ -153,106 +295,22 @@ trait ColumnPermissionTests
             documentSecurity: true,
         ));
 
-        $recorded = [
-            Permission::read(Role::any(), 'name'),
-            Permission::read(Role::team('hr'), 'salary'),
-        ];
-
         try {
             $database->createDocument('columnGrantsRecords', new Document([
                 '$id' => 'row',
                 'tableId' => 'employees',
                 'label' => 'Employees',
-                '$permissions' => $recorded,
+                '$permissions' => [
+                    Permission::read(Role::any(), 'name'),
+                    Permission::read(Role::team('hr'), 'salary'),
+                ],
             ]));
             $this->fail('Expected createDocument() to reject columns belonging to another collection');
         } catch (DatabaseException $e) {
             $this->assertStringContainsString('is scoped to a column', $e->getMessage());
         }
 
-        $database->withForeignColumnPermissions(fn () => $database->createDocument('columnGrantsRecords', new Document([
-            '$id' => 'row',
-            'tableId' => 'employees',
-            'label' => 'Employees',
-            '$permissions' => $recorded,
-        ])));
-
-        $stored = $database->getDocument('columnGrantsRecords', 'row');
-
-        $this->assertSame('employees', $stored->getAttribute('tableId'));
-        $this->assertContains('read("any", "name")', $stored->getPermissions());
-        $this->assertContains('read("team:hr", "salary")', $stored->getPermissions());
-
-        // Scoped to the callback: the next write is judged as strictly as the first.
-        $this->assertFalse($database->hasForeignColumnPermissions());
-    }
-
-    public function testARecordedColumnGrantStillDecidesRowVisibilityByRoleAlone(): void
-    {
-        /** @var Database $database */
-        $database = $this->getDatabase();
-        $authorization = $database->getAuthorization();
-
-        // Appwrite's table list: each row records one table's permissions, column grants and
-        // all. Whether a caller may see the row is a question about the role alone, so a column
-        // narrows what the permission reaches without narrowing who holds it.
-        $database->createCollection(Collection::create(
-            id: 'columnGrantsListing',
-            attributes: [Attribute::string(key: 'tableId', size: 64)],
-            permissions: [Permission::create(Role::any())],
-            documentSecurity: true,
-        ));
-
-        $database->withForeignColumnPermissions(function () use ($database) {
-            $database->createDocument('columnGrantsListing', new Document([
-                '$id' => 'employees',
-                'tableId' => 'employees',
-                '$permissions' => [
-                    Permission::read(Role::any(), 'name'),
-                    Permission::read(Role::team('hr'), 'salary'),
-                ],
-            ]));
-            $database->createDocument('columnGrantsListing', new Document([
-                '$id' => 'invoices',
-                'tableId' => 'invoices',
-                '$permissions' => [Permission::read(Role::team('finance'))],
-            ]));
-        });
-
-        $listed = function (array $roles) use ($database, $authorization): array {
-            $previous = $authorization->getRoles();
-            $authorization->cleanRoles();
-            foreach ($roles as $role) {
-                $authorization->addRole($role);
-            }
-
-            try {
-                $ids = \array_map(
-                    static fn (Document $document): string => $document->getId(),
-                    $database->find('columnGrantsListing'),
-                );
-            } finally {
-                $authorization->cleanRoles();
-                foreach ($previous as $role) {
-                    $authorization->addRole($role);
-                }
-            }
-
-            \sort($ids);
-
-            return $ids;
-        };
-
-        $this->assertSame(
-            ['employees'],
-            $listed([Role::any()->toString()]),
-            'A grant scoped to a column still admits its role to the row',
-        );
-        $this->assertSame(
-            ['invoices'],
-            $listed([Role::team('finance')->toString()]),
-            'A role named by no grant on a row does not see it',
-        );
+        $this->assertTrue($database->getDocument('columnGrantsRecords', 'row')->isEmpty());
     }
 
     public function testADocumentPermissionNamingNoColumnIsUnaffected(): void

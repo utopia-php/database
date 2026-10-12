@@ -255,6 +255,58 @@ class Permission
     }
 
     /**
+     * Does any of these permissions name a column?
+     *
+     * @param  list<string>  $permissions
+     *
+     * @throws DatabaseException
+     */
+    public static function hasColumns(array $permissions): bool
+    {
+        foreach ($permissions as $permission) {
+            if (! self::parse($permission)->isForAllColumns()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * The same permissions with every column dropped, deduplicated.
+     *
+     * Whether a caller may reach a row is a question about the role alone: a column narrows what
+     * a permission reaches, not who holds it. This is the form a read gate matches against --
+     * a side table of roles, a JSONB containment, a Mongo `$in` -- so the column is kept only
+     * where the scope is enforced and never where access is decided. A gate handed the column
+     * would be comparing `read("any", "name")` against `read("any")` and finding nothing.
+     *
+     * @param  list<string>  $permissions
+     * @return list<string>
+     *
+     * @throws DatabaseException
+     */
+    public static function withoutColumns(array $permissions): array
+    {
+        $stripped = [];
+
+        foreach ($permissions as $permission) {
+            $parsed = self::parse($permission);
+
+            $stripped[] = $parsed->isForAllColumns()
+                ? $permission
+                : (new self(
+                    $parsed->getPermission(),
+                    $parsed->getRole(),
+                    $parsed->getIdentifier(),
+                    $parsed->getDimension()
+                ))->toString();
+        }
+
+        return \array_values(\array_unique($stripped));
+    }
+
+    /**
      * Create a read permission string from the given Role.
      *
      * @param Role $role The role to grant read permission to

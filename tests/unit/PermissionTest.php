@@ -405,4 +405,57 @@ class PermissionTest extends TestCase
             'delete("any", "salary")',
         ], $parsed);
     }
+
+    /**
+     * The form a read gate matches against: every grant with its column dropped.
+     *
+     * @throws \Exception
+     */
+    public function test_without_columns(): void
+    {
+        $this->assertSame(
+            ['read("any")', 'read("team:hr")', 'create("any")'],
+            Permission::withoutColumns([
+                'read("any", "name")',
+                'read("team:hr", "salary")',
+                'create("any")',
+            ]),
+        );
+    }
+
+    /**
+     * Two grants narrowing the same role to different columns admit that role once.
+     *
+     * @throws \Exception
+     */
+    public function test_without_columns_deduplicates(): void
+    {
+        $this->assertSame(
+            ['read("any")'],
+            Permission::withoutColumns(['read("any", "name")', 'read("any", "salary")']),
+        );
+    }
+
+    /**
+     * A set naming no column is its own projection, so a collection that does not use the
+     * feature stores exactly what it stores today.
+     *
+     * @throws \Exception
+     */
+    public function test_without_columns_leaves_unscoped_permissions_alone(): void
+    {
+        $permissions = ['read("any")', 'update("user:alice")', 'create("users")'];
+
+        $this->assertSame($permissions, Permission::withoutColumns($permissions));
+    }
+
+    /**
+     * @throws \Exception
+     */
+    public function test_has_columns(): void
+    {
+        $this->assertTrue(Permission::hasColumns(['create("any")', 'read("any", "name")']));
+        $this->assertFalse(Permission::hasColumns(['create("any")', 'read("any")']));
+        $this->assertFalse(Permission::hasColumns([]));
+    }
 }

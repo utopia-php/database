@@ -177,7 +177,7 @@ trait Collections
         }
 
         if ($update->permissions !== null) {
-            $definition->setAttribute(Document::PERMISSIONS, $update->permissions);
+            $definition->setPermissions($update->permissions);
         }
 
         if ($update->documentSecurity !== null) {

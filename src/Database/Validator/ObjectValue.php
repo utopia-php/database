@@ -6,6 +6,14 @@ use Utopia\Validator;
 
 class ObjectValue extends Validator
 {
+    /**
+     * @param  bool  $stored  Whether the value is one already stored, which 7.x accepted as any JSON string or any
+     *                        empty value too
+     */
+    public function __construct(private readonly bool $stored = false)
+    {
+    }
+
     #[\Override]
     public function getDescription(): string
     {
@@ -15,6 +23,10 @@ class ObjectValue extends Validator
     #[\Override]
     public function isValid(mixed $value): bool
     {
+        if ($this->stored && (empty($value) || (\is_string($value) && \json_validate($value)))) {
+            return true;
+        }
+
         if (is_string($value)) {
             $decoded = json_decode($value);
 

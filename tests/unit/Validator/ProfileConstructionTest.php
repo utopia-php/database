@@ -117,7 +117,7 @@ final class ProfileConstructionTest extends TestCase
 
         $plain = new Documents($attributes, [], Profiles::of(capabilities: [Capability::DefinedAttributes]));
         $this->assertFalse($plain->isValid($count));
-        $this->assertSame('Invalid query method: count', $plain->getDescription());
+        $this->assertSame('Invalid query: Invalid query method: count', $plain->getDescription());
         $this->assertFalse($plain->isValid($join));
 
         $grammar = new Documents($attributes, [], Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::Aggregations, Capability::Joins]));
@@ -135,11 +135,11 @@ final class ProfileConstructionTest extends TestCase
         $this->assertTrue(Narrow::of($cursor, $attributes, Profiles::of(uidLength: 255), 5000)?->isValid($cursor) ?? false);
     }
 
-    public function testADocumentValidatorAcceptsTheTenantOnlyUnderSharedTables(): void
+    public function testADocumentValidatorLetsTheTenantThroughToTheRead(): void
     {
         $select = [Query::select(['$tenant'])];
 
-        $this->assertFalse(new DocumentValidator([], Profiles::of(capabilities: [Capability::DefinedAttributes]))->isValid($select));
+        $this->assertTrue(new DocumentValidator([], Profiles::of(capabilities: [Capability::DefinedAttributes]))->isValid($select));
         $this->assertTrue(new DocumentValidator([], Profiles::of(capabilities: [Capability::DefinedAttributes], sharedTables: true))->isValid($select));
     }
 

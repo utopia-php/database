@@ -12,13 +12,14 @@ use Utopia\Query\Query;
 use Utopia\Query\Schema\ColumnType;
 
 /**
- * The PostgreSQL builder, which also compiles filters on their own, prepares search terms as 7.x did, writes a
- * filter on a path into an object attribute only when every key of the path is a plain key, and lets a
- * distanceLessThan() filter use the spatial index.
+ * The PostgreSQL builder, which also compiles filters on their own, prepares and matches search terms and containsAll()
+ * as 7.x did, writes a filter on a path into an object attribute only when every key of the path is a plain key, and
+ * lets a distanceLessThan() filter use the spatial index.
  */
 class Postgres extends Base implements Filtering, Scoping
 {
     use CompilesFilters;
+    use MatchesContainsAllPatterns;
     use PreparesSearchTerms;
     use ScopesCollections;
 
@@ -46,6 +47,29 @@ class Postgres extends Base implements Filtering, Scoping
         $this->requireUnbound("delete using table '{$table}'");
 
         return parent::deleteUsing($table, $condition, ...$bindings);
+    }
+
+    /**
+     * 7.x handed websearch_to_tsquery() an exact term in single quotes, which match every word in any order where
+     * double quotes would match the adjacent phrase, and any other term with its words joined by `or`.
+     *
+     * @param  array<mixed>  $values
+     */
+    #[\Override]
+    protected function compileSearchExpression(string $attribute, array $values, bool $not): string
+    {
+        $term = $values[0] ?? '';
+        $term = \is_string($term) ? $term : '';
+        $words = $this->searchWords($term);
+
+        if ($words === '') {
+            return $not ? '1 = 1' : '1 = 0';
+        }
+
+        $this->addBinding("'".($this->isExactSearch($term) ? $words : \str_replace(' ', ' or ', $words))."'");
+        $match = "to_tsvector(regexp_replace({$attribute}, '[^\\w]+', ' ', 'g')) @@ websearch_to_tsquery(?)";
+
+        return $not ? "NOT ({$match})" : $match;
     }
 
     /**

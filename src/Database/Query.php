@@ -82,6 +82,10 @@ class Query extends BaseQuery
     #[\Override]
     public static function parseQuery(array $query, bool $allowRaw = false): static
     {
+        if (! $allowRaw && ($query['method'] ?? null) === Method::Raw->value) {
+            throw new QueryException('Invalid query method: '.Method::Raw->value);
+        }
+
         try {
             $parsed = parent::parseQuery(self::decodeNestedValues($query, $allowRaw), $allowRaw);
 

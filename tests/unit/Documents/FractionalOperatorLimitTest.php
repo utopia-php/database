@@ -19,34 +19,36 @@ final class FractionalOperatorLimitTest extends TestCase
 {
     private const string COLLECTION = 'counters';
 
-    private const string REFUSAL = "Invalid document structure: Cannot apply increment operator: max/min limit must be a whole number for integer attribute 'count', got 102.4";
 
-    public function testUpdateDocumentRefusesAFractionalLimitBeforeTheWrite(): void
+    public function testUpdateDocumentAppliesAFractionalLimitOnAnIntegerAs7xDid(): void
     {
         $database = $this->database();
 
-        try {
-            $database->updateDocument(self::COLLECTION, 'counter', new Document(['count' => Operator::increment(5, 102.4)]));
-            $this->fail('A fractional limit on an integer attribute must be refused');
-        } catch (StructureException $exception) {
-            $this->assertSame(self::REFUSAL, $exception->getMessage());
-        }
+        $updated = $database->updateDocument(self::COLLECTION, 'counter', new Document(['count' => Operator::increment(5, 102.4)]));
 
-        $this->assertSame(100, $database->getDocument(self::COLLECTION, 'counter')->getAttribute('count'));
+        $this->assertSame($database->getDocument(self::COLLECTION, 'counter')->getAttribute('count'), $updated->getAttribute('count'));
     }
 
-    public function testUpdateDocumentsRefusesAFractionalLimitBeforeTheWrite(): void
+    public function testUpdateDocumentsAppliesAFractionalLimitOnAnIntegerAs7xDid(): void
+    {
+        $database = $this->database();
+
+        $this->assertSame(1, $database->updateDocuments(self::COLLECTION, new Document(['count' => Operator::increment(1, 102.4)])));
+        $this->assertSame(101, $database->getDocument(self::COLLECTION, 'counter')->getAttribute('count'));
+    }
+
+    public function testUpdateDocumentRefusesAFractionalLimitOnABigIntegerBeforeTheWrite(): void
     {
         $database = $this->database();
 
         try {
-            $database->updateDocuments(self::COLLECTION, new Document(['count' => Operator::increment(1, 102.4)]));
-            $this->fail('A fractional limit on an integer attribute must be refused');
+            $database->updateDocument(self::COLLECTION, 'counter', new Document(['big' => Operator::increment(5, 4.0e15 + 0.5)]));
+            $this->fail('A fractional limit on a bigint attribute must be refused');
         } catch (StructureException $exception) {
-            $this->assertSame(self::REFUSAL, $exception->getMessage());
+            $this->assertStringStartsWith("Invalid document structure: Cannot apply increment operator: max/min limit must be a whole number for integer attribute 'big'", $exception->getMessage());
         }
 
-        $this->assertSame(100, $database->getDocument(self::COLLECTION, 'counter')->getAttribute('count'));
+        $this->assertSame(0, $database->getDocument(self::COLLECTION, 'counter')->getAttribute('big'));
     }
 
     public function testAWholeFloatLimitHoldsABigIntegerAtTheSignedEdge(): void

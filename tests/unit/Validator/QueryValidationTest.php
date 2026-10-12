@@ -389,7 +389,7 @@ final class QueryValidationTest extends TestCase
             $this->assertTrue($enabled->isValid([$join]), $shape.': '.$enabled->getDescription());
 
             $this->assertFalse($disabled->isValid([$join]), $shape);
-            $this->assertSame('Invalid query method: join', $disabled->getDescription(), $shape);
+            $this->assertSame('Invalid query: Invalid query method: join', $disabled->getDescription(), $shape);
         }
 
         $this->assertTrue($disabled->isValid([Query::select(['name'])]), $disabled->getDescription());
@@ -463,7 +463,7 @@ final class QueryValidationTest extends TestCase
         $this->database->createCollection(Collection::create(
             id: $id,
             attributes: $attributes,
-            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())],
             documentSecurity: false,
         ));
     }

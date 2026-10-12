@@ -148,7 +148,6 @@ final class JoinInternalColumnsTest extends TestCase
         foreach ([
             'count' => [[Query::count('$tenant', 'total')], '$tenant'],
             'groupBy' => [[Query::count('*', 'rows'), Query::groupBy(['$tenant'])], '$tenant'],
-            'select' => [[Query::select(['name', '$tenant'])], '$tenant'],
             'joined count' => [[$note, Query::count('note.$tenant', 'total')], 'note.$tenant'],
             'joined groupBy' => [[$note, Query::count('*', 'rows'), Query::groupBy(['note.$tenant'])], 'note.$tenant'],
             'joined select' => [[$note, Query::select(['name', 'note.$tenant'])], 'note.$tenant'],
@@ -163,6 +162,12 @@ final class JoinInternalColumnsTest extends TestCase
                 Query::select(['name', 'note.$tenant']),
             ]),
         );
+    }
+
+    public function testSelectingTheTenantWithoutSharedTablesIsRefusedByTheRead(): void
+    {
+        $this->assertInvalidQuery('Cannot select attributes: $tenant', fn (): mixed => $this->database->find('customers', [Query::select(['name', '$tenant'])]));
+        $this->assertInvalidQuery('Cannot select attributes: $tenant', fn (): mixed => $this->database->getDocument('customers', 'c1', [Query::select(['name', '$tenant'])]));
     }
 
     public function testTenantIsReadUnderSharedTables(): void

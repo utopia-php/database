@@ -7,5 +7,5 @@ namespace Utopia\Database\Exception;
  */
 class Unique extends Duplicate
 {
-    public const string MESSAGE = 'Document with the requested unique attributes already exists';
+    public const string MESSAGE = 'Unique index violation';
 }

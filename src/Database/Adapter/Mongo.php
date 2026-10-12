@@ -93,6 +93,18 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     private const int DEFAULT_BATCH_SIZE = 1000;
 
     /**
+     * How many times a transaction that lost a write conflict (112) runs again. Concurrent writes to one document,
+     * such as counters, conflict on every attempt but one, and 7.x's increments did not fail under that load.
+     */
+    private const int WRITE_CONFLICT_RETRIES = 20;
+
+    /**
+     * Microseconds of the shortest wait before a transaction that lost a write conflict runs again; the wait is
+     * randomised so the writers that conflicted do not retry in step.
+     */
+    private const int WRITE_CONFLICT_SLEEP = 5_000;
+
+    /**
      * The collation of the `_uid` index: a lookup or upsert by id must use it to match what the
      * index treats as the same id.
      */
@@ -561,7 +573,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         $sleep = 50_000;
         $retries = 2;
 
-        for ($attempts = 0; $attempts <= $retries; $attempts++) {
+        for ($attempts = 0; ; $attempts++) {
             try {
                 $this->startTransaction();
                 $result = $callback();
@@ -582,6 +594,12 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
                     throw $action;
                 }
 
+                if (self::isWriteConflict($action) && $attempts < self::WRITE_CONFLICT_RETRIES) {
+                    \usleep(\random_int(self::WRITE_CONFLICT_SLEEP, 4 * self::WRITE_CONFLICT_SLEEP) * \min($attempts + 1, 5));
+
+                    continue;
+                }
+
                 if ($attempts < $retries) {
                     \usleep($sleep * ($attempts + 1));
 
@@ -591,8 +609,17 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
                 throw $action;
             }
         }
+    }
 
-        throw new TransactionException('Transaction retry loop exited unexpectedly');
+    private static function isWriteConflict(Throwable $failure): bool
+    {
+        for ($error = $failure; $error !== null; $error = $error->getPrevious()) {
+            if ($error->getCode() === 112) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

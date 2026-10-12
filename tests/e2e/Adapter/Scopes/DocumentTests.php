@@ -9,8 +9,13 @@ use Throwable;
 use Utopia\Cache\Adapter\None as NoneCacheAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Adapter\MariaDB;
+use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\Mongo;
+use Utopia\Database\Adapter\Postgres;
+use Utopia\Database\Adapter\Redis;
 use Utopia\Database\Adapter\SQL;
+use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\AttributeUpdate;
 use Utopia\Database\Capability;
@@ -1981,6 +1986,85 @@ trait DocumentTests
         $this->assertNotContains('comet', $found);
     }
 
+    public function testContainsAllOnAStringMatchesAnyWholeValueAs7xDid(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if ($adapter instanceof SQLite || $adapter instanceof Memory || $adapter instanceof Redis) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'contains_all_string';
+
+        $database->createCollection(Collection::create(id: $collection, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ]));
+        $database->createAttribute($collection, Attribute::string(key: 'name', size: 64, required: true));
+
+        foreach (['lower' => 'alpha', 'longer' => 'alphabet', 'other' => 'beta', 'unrelated' => 'gamma'] as $id => $name) {
+            $database->createDocument($collection, new Document([
+                '$id' => $id,
+                '$permissions' => [Permission::read(Role::any())],
+                'name' => $name,
+            ]));
+        }
+
+        $ids = function (array $values) use ($database, $collection): array {
+            $ids = \array_map(
+                static fn (Document $document): string => $document->getId(),
+                $database->find($collection, [Query::containsAll('name', $values)]),
+            );
+            \sort($ids);
+
+            return $ids;
+        };
+
+        $this->assertSame([], $ids(['lph']));
+        $this->assertSame(['lower'], $ids(['alpha']));
+        $this->assertSame($adapter instanceof Mongo ? [] : ['lower', 'other'], $ids(['alpha', 'beta']));
+    }
+
+    public function testFindFulltextExactTermOnPostgresMatchesEveryWordInAnyOrder(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter() instanceof Postgres) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'full_text_exact_words';
+        $database->createCollection(Collection::create(id: $collection, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ]));
+        $database->createAttribute($collection, Attribute::string(key: 'text', size: 128, required: true));
+        $database->createIndex($collection, Index::fulltext(key: 'text-ft', attributes: ['text']));
+
+        foreach (['phrase' => 'donald trump', 'reversed' => 'trump donald', 'apart' => 'donald j trump', 'one' => 'donald duck'] as $id => $text) {
+            $database->createDocument($collection, new Document([
+                '$id' => $id,
+                '$permissions' => [Permission::read(Role::any())],
+                'text' => $text,
+            ]));
+        }
+
+        $this->assertSame(['apart', 'phrase', 'reversed'], $this->searchedIds($database, $collection, '"donald trump"'));
+
+        $excluded = \array_map(
+            static fn (Document $document): string => $document->getId(),
+            $database->find($collection, [Query::notSearch('text', '"donald trump"')]),
+        );
+        $this->assertSame(['one'], $excluded);
+    }
+
     /**
      * @return list<string>
      */
@@ -2540,6 +2624,126 @@ trait DocumentTests
         ]);
         $this->assertGreaterThan(0, count($documents));
         $this->assertLessThanOrEqual(25, count($documents)); // Default limit is 25
+    }
+
+    public function testConcurrentIncrementsOnMongoDBAllLand(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if (! $adapter instanceof Mongo || $database->hasSharedTables() || ! $adapter->supports(Capability::DefinedAttributes)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'concurrent_counters';
+        $database->createCollection(Collection::create(id: $collection, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+        ], documentSecurity: false));
+        $database->createAttribute($collection, Attribute::integer(key: 'count'));
+        $database->createDocument($collection, new Document(['$id' => 'counter', 'count' => 5]));
+
+        $failures = [];
+        try {
+            \Swoole\Coroutine\run(function () use ($database, $collection, &$failures): void {
+                for ($writer = 0; $writer < 8; $writer++) {
+                    \Swoole\Coroutine::create(function () use ($database, $collection, &$failures): void {
+                        $client = new \Utopia\Mongo\Client($database->getDatabase(), 'mongo', 27017, 'root', 'password', true);
+                        $writerDatabase = (new Database(new Mongo($client), new Cache(new NoneCacheAdapter())))
+                            ->setAuthorization($database->getAuthorization())
+                            ->setDatabase($database->getDatabase())
+                            ->setNamespace($database->getNamespace());
+                        $writerDatabase->setSchemaless(false);
+                        for ($increment = 0; $increment < 10; $increment++) {
+                            try {
+                                $writerDatabase->increaseDocumentAttribute($collection, 'counter', 'count', 1);
+                            } catch (Throwable $error) {
+                                $failures[] = $error->getMessage();
+                            }
+                        }
+                    });
+                }
+            });
+
+            $this->assertSame([], $failures);
+            $this->assertSame(85, $database->getDocument($collection, 'counter')->getAttribute('count'));
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
+    public function testFloatsAreStoredAs7xBoundThem(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $family = $this->engineFamily($database);
+        if ($family === null) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'float_binding';
+        $database->createCollection(Collection::create(id: $collection, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+        ], documentSecurity: false));
+        $database->createAttribute($collection, Attribute::double(key: 'f'));
+        $database->createAttribute($collection, Attribute::double(key: 'fa', array: true));
+
+        $values = [
+            'tiny' => [1e-300, 1e-300],
+            'negative' => [-2.5e-20, -2.5e-20],
+            'digits' => [1.2345678901234567e-10, $family === 'mongo' ? 1.2345678901234567e-10 : 1.2345678901235e-10],
+            'avogadro' => [6.02214076e23, 6.02214076e23],
+            'sum' => [0.1 + 0.2, $family === 'mongo' ? 0.1 + 0.2 : 0.3],
+            'max' => [1.7976931348623157e308, $family === 'mongo' ? 1.7976931348623157e308 : 1.7976931348623e308],
+        ];
+        foreach ($values as $id => [$written]) {
+            $database->createDocument($collection, new Document(['$id' => $id, 'f' => $written, 'fa' => [$written]]));
+        }
+
+        foreach ($values as $id => [$written, $stored]) {
+            $document = $database->getDocument($collection, $id);
+            $this->assertSame($stored, $document->getAttribute('f'), $id);
+            $this->assertSame([$written], $document->getAttribute('fa'), $id);
+        }
+
+        $database->updateDocument($collection, 'tiny', new Document(['f' => -1e-300]));
+        $this->assertSame(-1e-300, $database->getDocument($collection, 'tiny')->getAttribute('f'));
+
+        $small = \array_map(
+            static fn (Document $document): string => $document->getId(),
+            $database->find($collection, [Query::lessThan('f', 1e-5), Query::greaterThan('f', -1), Query::orderAsc('$id')]),
+        );
+        $this->assertSame(['digits', 'negative', 'tiny'], $small);
+    }
+
+    public function testFindOrderRandomIgnoresACursorAs7xDid(): void
+    {
+        $this->initMoviesFixture();
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::OrderRandom)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $all = $database->find($this->getMoviesCollection(), [Query::limit(100)]);
+        $cursor = $all[0];
+
+        $after = $database->find($this->getMoviesCollection(), [Query::orderRandom(), Query::cursorAfter($cursor), Query::limit(100)]);
+        $before = $database->find($this->getMoviesCollection(), [Query::orderRandom(), Query::cursorBefore($cursor), Query::limit(100)]);
+
+        $this->assertCount(\count($all), $after);
+        $this->assertCount(\count($all), $before);
     }
 
     public function testSum(): void
@@ -7817,7 +8021,7 @@ trait DocumentTests
             $this->fail('Expected UniqueException for unique index violation');
         } catch (DuplicateException $e) {
             $this->assertInstanceOf(UniqueException::class, $e);
-            $this->assertStringContainsString('unique attributes', $e->getMessage());
+            $this->assertSame('Unique index violation', $e->getMessage());
         }
 
         // '_uid' is the document ID column, so a conflicting value containing it must not be read as an ID conflict.
@@ -7840,7 +8044,7 @@ trait DocumentTests
             $this->fail('Expected UniqueException for unique index violation on a value containing _uid');
         } catch (DuplicateException $e) {
             $this->assertInstanceOf(UniqueException::class, $e);
-            $this->assertStringContainsString('unique attributes', $e->getMessage());
+            $this->assertSame('Unique index violation', $e->getMessage());
         }
 
         $database->deleteCollection('duplicateMessages');
@@ -10663,10 +10867,11 @@ trait DocumentTests
         return [$result, $statements];
     }
 
-    public function testIncreaseAndDecreaseRefuseAFractionalBoundOnAnInteger(): void
+    public function testIncreaseAndDecreaseCompareAFractionalBoundOnAnIntegerAs7xDid(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
         $collection = 'fractional_bound_'.uniqid();
 
         $database->createCollection(Collection::create(id: $collection, permissions: [
@@ -10675,35 +10880,42 @@ trait DocumentTests
             Permission::update(Role::any()),
         ], documentSecurity: false));
         $database->createAttribute($collection, Attribute::integer(key: 'count', required: true));
-        $database->createDocument($collection, new Document(['$id' => 'counter', 'count' => 100]));
+        foreach (['up', 'past', 'down', 'whole'] as $id) {
+            $database->createDocument($collection, new Document(['$id' => $id, 'count' => 5]));
+        }
 
         try {
             try {
-                $database->increaseDocumentAttribute($collection, 'counter', 'count', 1, 102.4);
-                $this->fail('A fractional maximum on an integer attribute was accepted');
-            } catch (TypeException $error) {
-                $this->assertSame('Max must be an integer.', $error->getMessage());
+                $database->increaseDocumentAttribute($collection, 'past', 'count', 2, 6.4);
+                $this->fail('An increase past a fractional maximum was accepted');
+            } catch (LimitException $error) {
+                $this->assertSame('Attribute value exceeds maximum limit: 6.4', $error->getMessage());
+            }
+            $this->assertSame(5, $database->getDocument($collection, 'past')->getAttribute('count'));
+
+            if ($adapter instanceof Postgres) {
+                $this->assertInstanceOf(\PDOException::class, $this->failureOf(fn () => $database->increaseDocumentAttribute($collection, 'up', 'count', 1, 6.4)));
+                $this->assertInstanceOf(\PDOException::class, $this->failureOf(fn () => $database->decreaseDocumentAttribute($collection, 'down', 'count', 1, 0.5)));
+                $this->assertSame(5, $database->getDocument($collection, 'up')->getAttribute('count'));
+            } else {
+                $this->assertSame(6, $database->increaseDocumentAttribute($collection, 'up', 'count', 1, 6.4)->getAttribute('count'));
+                $this->assertSame(4, $database->decreaseDocumentAttribute($collection, 'down', 'count', 1, 0.5)->getAttribute('count'));
+                $this->assertSame(6, $database->getDocument($collection, 'up')->getAttribute('count'));
+                $this->assertSame(4, $database->getDocument($collection, 'down')->getAttribute('count'));
             }
 
-            try {
-                $database->decreaseDocumentAttribute($collection, 'counter', 'count', 1, 0.5);
-                $this->fail('A fractional minimum on an integer attribute was accepted');
-            } catch (TypeException $error) {
-                $this->assertSame('Min must be an integer.', $error->getMessage());
-            }
-
-            $this->assertSame(100, $database->getDocument($collection, 'counter')->getAttribute('count'));
-            $this->assertSame(101, $database->increaseDocumentAttribute($collection, 'counter', 'count', 1, 102.0)->getAttribute('count'));
-            $this->assertSame(100, $database->decreaseDocumentAttribute($collection, 'counter', 'count', 1, 99.0)->getAttribute('count'));
+            $this->assertSame(6, $database->increaseDocumentAttribute($collection, 'whole', 'count', 1, 6.0)->getAttribute('count'));
+            $this->assertSame(5, $database->decreaseDocumentAttribute($collection, 'whole', 'count', 1, 5.0)->getAttribute('count'));
         } finally {
             $database->deleteCollection($collection);
         }
     }
 
-    public function testIncreaseAndDecreaseRefuseAFractionalChangeValueOnAnInteger(): void
+    public function testIncreaseAndDecreaseApplyAFractionalChangeOnAnIntegerAs7xDid(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
         $collection = 'fractional_change_'.uniqid();
 
         $database->createCollection(Collection::create(id: $collection, permissions: [
@@ -10712,28 +10924,41 @@ trait DocumentTests
             Permission::update(Role::any()),
         ], documentSecurity: false));
         $database->createAttribute($collection, Attribute::integer(key: 'count', required: true));
-        $database->createDocument($collection, new Document(['$id' => 'counter', 'count' => 100]));
+        foreach (['up', 'down', 'whole'] as $id) {
+            $database->createDocument($collection, new Document(['$id' => $id, 'count' => 5]));
+        }
 
         try {
-            try {
-                $database->increaseDocumentAttribute($collection, 'counter', 'count', 1.5);
-                $this->fail('A fractional increase of an integer attribute was accepted');
-            } catch (TypeException $error) {
-                $this->assertSame('Change value must be an integer.', $error->getMessage());
+            if ($adapter instanceof Postgres) {
+                $this->assertInstanceOf(\PDOException::class, $this->failureOf(fn () => $database->increaseDocumentAttribute($collection, 'up', 'count', 1.5)));
+                $this->assertInstanceOf(\PDOException::class, $this->failureOf(fn () => $database->decreaseDocumentAttribute($collection, 'down', 'count', 0.5)));
+                $this->assertSame(5, $database->getDocument($collection, 'up')->getAttribute('count'));
+            } else {
+                $this->assertSame(6.5, $database->increaseDocumentAttribute($collection, 'up', 'count', 1.5)->getAttribute('count'));
+                $this->assertSame(4.5, $database->decreaseDocumentAttribute($collection, 'down', 'count', 0.5)->getAttribute('count'));
+
+                if ($adapter instanceof MariaDB || $adapter instanceof Mongo) {
+                    $this->assertSame(6, $database->getDocument($collection, 'up')->getAttribute('count'));
+                    $this->assertSame(4, $database->getDocument($collection, 'down')->getAttribute('count'));
+                }
             }
 
-            try {
-                $database->decreaseDocumentAttribute($collection, 'counter', 'count', 0.5);
-                $this->fail('A fractional decrease of an integer attribute was accepted');
-            } catch (TypeException $error) {
-                $this->assertSame('Change value must be an integer.', $error->getMessage());
-            }
-
-            $this->assertSame(100, $database->getDocument($collection, 'counter')->getAttribute('count'));
-            $this->assertSame(102, $database->increaseDocumentAttribute($collection, 'counter', 'count', 2)->getAttribute('count'));
+            $this->assertSame(7.0, $database->increaseDocumentAttribute($collection, 'whole', 'count', 2.0)->getAttribute('count'));
+            $this->assertSame(7, $database->getDocument($collection, 'whole')->getAttribute('count'));
         } finally {
             $database->deleteCollection($collection);
         }
+    }
+
+    private function failureOf(callable $call): ?Throwable
+    {
+        try {
+            $call();
+        } catch (Throwable $error) {
+            return $error;
+        }
+
+        return null;
     }
 
     public function testDistinctIsRefusedWhereTheAdapterCannotDeduplicate(): void

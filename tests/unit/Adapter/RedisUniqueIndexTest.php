@@ -77,7 +77,7 @@ final class RedisUniqueIndexTest extends TestCase
             $database->updateDocuments(self::USERS, new Document(['email' => 'first@example.test']), [Query::equal('$id', ['second'])]);
             $this->fail('A batch update onto another document\'s unique value must be rejected');
         } catch (UniqueException $exception) {
-            $this->assertSame('Document with the requested unique attributes already exists', $exception->getMessage());
+            $this->assertSame('Unique index violation', $exception->getMessage());
         }
 
         $this->assertSame(['first@example.test', 'second@example.test', 'third@example.test'], $this->emails($database));
@@ -94,7 +94,7 @@ final class RedisUniqueIndexTest extends TestCase
             $database->upsertDocuments(self::USERS, [new Document(['$id' => 'second', 'email' => 'first@example.test'])]);
             $this->fail('An upsert that updates onto another document\'s unique value must be rejected');
         } catch (UniqueException $exception) {
-            $this->assertSame('Document with the requested unique attributes already exists', $exception->getMessage());
+            $this->assertSame('Unique index violation', $exception->getMessage());
         }
 
         $this->assertSame(['first@example.test', 'second@example.test', 'third@example.test'], $this->emails($database));
@@ -110,7 +110,7 @@ final class RedisUniqueIndexTest extends TestCase
             $database->updateDocuments(self::USERS, new Document(['email' => 'shared@example.test']), [Query::equal('$id', ['second', 'third'])]);
             $this->fail('A batch update that gives two documents one unique value must be rejected');
         } catch (UniqueException $exception) {
-            $this->assertSame('Document with the requested unique attributes already exists', $exception->getMessage());
+            $this->assertSame('Unique index violation', $exception->getMessage());
         }
 
         try {
@@ -120,7 +120,7 @@ final class RedisUniqueIndexTest extends TestCase
             ]);
             $this->fail('An upsert batch that gives two documents one unique value must be rejected');
         } catch (UniqueException $exception) {
-            $this->assertSame('Document with the requested unique attributes already exists', $exception->getMessage());
+            $this->assertSame('Unique index violation', $exception->getMessage());
         }
 
         $this->assertSame(['first@example.test', 'second@example.test', 'third@example.test'], $this->emails($database));
@@ -156,7 +156,7 @@ final class RedisUniqueIndexTest extends TestCase
             ]);
             $this->fail('A new document that takes a unique value before the document holding it gives it up must be rejected');
         } catch (UniqueException $exception) {
-            $this->assertSame('Document with the requested unique attributes already exists', $exception->getMessage());
+            $this->assertSame('Unique index violation', $exception->getMessage());
         }
         $this->assertSame(['first@example.test', 'second@example.test', 'third@example.test'], $this->emails($database));
 
@@ -182,7 +182,7 @@ final class RedisUniqueIndexTest extends TestCase
             $database->createDocument(self::USERS, $this->user('second', 'taken@example.test')->setAttribute('$tenant', self::TENANT));
             $this->fail('A duplicate under the document\'s own tenant must be rejected while another tenant is selected');
         } catch (UniqueException $exception) {
-            $this->assertSame('Document with the requested unique attributes already exists', $exception->getMessage());
+            $this->assertSame('Unique index violation', $exception->getMessage());
         }
 
         $database->createDocument(self::USERS, $this->user('second', 'taken@example.test')->setAttribute('$tenant', self::OTHER_TENANT));

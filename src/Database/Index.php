@@ -133,7 +133,7 @@ final readonly class Index
     public static function fromDocument(Document $document): self
     {
         return self::hydrate(
-            $document->getAttribute(self::KEY, $document->getId()),
+            self::storedKey($document),
             $document->getAttribute(self::TYPE, IndexType::Key->value),
             $document->getAttribute(self::ATTRIBUTES, []),
             $document->getAttribute(self::LENGTHS, []),
@@ -149,6 +149,11 @@ final readonly class Index
      */
     public static function fromArray(array $data): self
     {
+        $type = $data[self::TYPE] ?? null;
+        if (\is_string($type) && IndexType::tryFrom($type) === null) {
+            throw new IndexException(self::unknownTypeMessage($type));
+        }
+
         return self::hydrate(
             $data[self::KEY] ?? $data[Document::ID] ?? '',
             $data[self::TYPE] ?? IndexType::Key->value,
@@ -157,6 +162,26 @@ final readonly class Index
             $data[self::ORDERS] ?? [],
             $data[self::TTL] ?? null,
         );
+    }
+
+    /**
+     * The key an index is stored under. 7.x wrote a many-to-many junction's first index with `$id` `_index_<key>`,
+     * the name the engine holds, but `key` `index_<key>`; that index is read by its `$id`.
+     */
+    private static function storedKey(Document $document): mixed
+    {
+        $key = $document->getAttribute(self::KEY, $document->getId());
+        $id = $document->getId();
+
+        return \is_string($key) && $id === '_'.$key && \str_starts_with($id, '_index_') ? $id : $key;
+    }
+
+    /**
+     * @internal
+     */
+    public static function unknownTypeMessage(string $type): string
+    {
+        return 'Unknown index type: '.$type.'. Must be one of '.IndexType::Key->value.', '.IndexType::Unique->value.', '.IndexType::Fulltext->value.', '.IndexType::Spatial->value.', '.IndexType::Object->value.', '.IndexType::HnswEuclidean->value.', '.IndexType::HnswCosine->value.', '.IndexType::HnswDot->value.', '.IndexType::Trigram->value.', '.IndexType::Ttl->value;
     }
 
     public function toDocument(): Document

@@ -14,29 +14,36 @@ use Utopia\Database\Validator\Operator as OperatorValidator;
 final class OperatorLimitTest extends TestCase
 {
     /**
-     * @return array<string, array{OperatorType, string, int|float|string}>
+     * @return array<string, array{OperatorType, int|float|string}>
      */
     public static function fractionalLimits(): array
     {
         return [
-            'increment max' => [OperatorType::Increment, 'count', 102.4],
-            'decrement min' => [OperatorType::Decrement, 'count', -0.5],
-            'multiply max' => [OperatorType::Multiply, 'count', 99.9],
-            'divide min' => [OperatorType::Divide, 'count', 1.5],
-            'power max' => [OperatorType::Power, 'count', 1000.01],
-            'numeric string' => [OperatorType::Increment, 'count', '102.4'],
-            'big integer' => [OperatorType::Increment, 'big', 4.0e15 + 0.5],
+            'increment max' => [OperatorType::Increment, 102.4],
+            'decrement min' => [OperatorType::Decrement, -0.5],
+            'multiply max' => [OperatorType::Multiply, 99.9],
+            'divide min' => [OperatorType::Divide, 1.5],
+            'power max' => [OperatorType::Power, 1000.01],
+            'numeric string' => [OperatorType::Increment, '102.4'],
         ];
     }
 
     #[DataProvider('fractionalLimits')]
-    public function testAFractionalLimitOnAnIntegerAttributeIsRefused(OperatorType $method, string $attribute, int|float|string $limit): void
+    public function testAFractionalLimitOnAnIntegerAttributeIsLeftToTheEngineAs7xDid(OperatorType $method, int|float|string $limit): void
     {
         $validator = $this->validator();
 
-        $this->assertFalse($validator->isValid(new Operator($method, $attribute, [2, $limit])));
+        $this->assertTrue($validator->isValid(new Operator($method, 'count', [2, $limit])), $validator->getDescription());
+    }
+
+    public function testAFractionalLimitOnABigIntegerAttributeIsRefused(): void
+    {
+        $validator = $this->validator();
+        $limit = 4.0e15 + 0.5;
+
+        $this->assertFalse($validator->isValid(new Operator(OperatorType::Increment, 'big', [2, $limit])));
         $this->assertSame(
-            "Cannot apply {$method->value} operator: max/min limit must be a whole number for integer attribute '{$attribute}', got {$limit}",
+            "Cannot apply increment operator: max/min limit must be a whole number for integer attribute 'big', got {$limit}",
             $validator->getDescription(),
         );
     }

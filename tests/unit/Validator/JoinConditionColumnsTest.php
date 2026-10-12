@@ -150,7 +150,6 @@ final class JoinConditionColumnsTest extends TestCase
         yield '$collection grouped' => [[Query::count('*', 'rows'), Query::groupBy(['$collection'])], '$collection', false];
         yield '$tenant counted' => [[Query::count('$tenant', 'total')], '$tenant', true];
         yield '$tenant grouped' => [[Query::count('*', 'rows'), Query::groupBy(['$tenant'])], '$tenant', true];
-        yield '$tenant selected' => [[Query::select(['name', '$tenant'])], '$tenant', true];
         yield 'a joined $tenant counted' => [[$note, Query::count('note.$tenant', 'total')], 'note.$tenant', true];
         yield 'a joined $tenant grouped' => [[$note, Query::count('*', 'rows'), Query::groupBy(['note.$tenant'])], 'note.$tenant', true];
         yield 'a joined $tenant selected' => [[$note, Query::select(['name', 'note.$tenant'])], 'note.$tenant', true];
@@ -190,8 +189,15 @@ final class JoinConditionColumnsTest extends TestCase
         $this->assertFalse((new Aggregate($attributes, sharedTables: true))->isValid(Query::count('$collection', 'total')));
         $this->assertFalse((new GroupBy($attributes))->isValid(Query::groupBy(['$tenant'])));
         $this->assertTrue((new GroupBy($attributes, sharedTables: true))->isValid(Query::groupBy(['$tenant'])));
-        $this->assertFalse((new Select($attributes))->isValid(Query::select(['$tenant'])));
+    }
+
+    public function testSelectLetsTheMainTenantThroughWithoutSharedTables(): void
+    {
+        $attributes = $this->customers();
+
+        $this->assertTrue((new Select($attributes))->isValid(Query::select(['$tenant'])));
         $this->assertTrue((new Select($attributes, sharedTables: true))->isValid(Query::select(['$tenant'])));
+        $this->assertTrue($this->documents(sharedTables: false)->isValid([Query::select(['name', '$tenant'])]));
     }
 
     public function testEncryptedJoinedAttributeCannotBeFiltered(): void

@@ -120,8 +120,8 @@ final class NumericUpdateGuardsTest extends TestCase
         $this->assertSame(12, $database->decreaseDocumentAttribute(self::COLLECTION, 'ledger', 'count', '3')->getAttribute('count'));
 
         foreach (['0', '-4'] as $change) {
-            $this->assertRefused(TypeException::class, 'Value must be numeric and greater than 0', fn (): Document => $database->increaseDocumentAttribute(self::COLLECTION, 'ledger', 'count', $change));
-            $this->assertRefused(TypeException::class, 'Value must be numeric and greater than 0', fn (): Document => $database->decreaseDocumentAttribute(self::COLLECTION, 'ledger', 'count', $change));
+            $this->assertRefused(\InvalidArgumentException::class, 'Value must be numeric and greater than 0', fn (): Document => $database->increaseDocumentAttribute(self::COLLECTION, 'ledger', 'count', $change));
+            $this->assertRefused(\InvalidArgumentException::class, 'Value must be numeric and greater than 0', fn (): Document => $database->decreaseDocumentAttribute(self::COLLECTION, 'ledger', 'count', $change));
         }
         $this->assertSame(12, $database->getDocument(self::COLLECTION, 'ledger')->getAttribute('count'));
     }

@@ -13,7 +13,6 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Limit as LimitException;
-use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Operator;
 use Utopia\Database\Permission;
 use Utopia\Database\Role;
@@ -35,44 +34,38 @@ final class FractionalBoundTest extends TestCase
     }
 
     #[DataProvider('lanes')]
-    public function testIncreaseWithAFractionalMaximumOnAnIntegerIsRefused(bool $definedAttributes): void
+    public function testAFractionalMaximumOnAnIntegerIsComparedAs7xDid(bool $definedAttributes): void
     {
         $database = $this->database($definedAttributes);
 
+        $this->assertSame(101, $database->increaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', 1, 102.4)->getAttribute('count'));
+        $this->assertSame(102, $database->increaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', 1, '102.5')->getAttribute('count'));
+
         try {
-            $database->increaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', 1, 102.4);
-            $this->fail('A fractional maximum on an integer attribute was accepted');
-        } catch (TypeException $error) {
-            $this->assertSame('Max must be an integer.', $error->getMessage());
+            $database->increaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', 1, 102.5);
+            $this->fail('An increase past a fractional maximum was accepted');
+        } catch (LimitException $error) {
+            $this->assertSame('Attribute value exceeds maximum limit: 102.5', $error->getMessage());
         }
 
-        $this->assertSame(100, $this->stored($database, 'count'));
+        $this->assertSame(102, $this->stored($database, 'count'));
     }
 
     #[DataProvider('lanes')]
-    public function testDecreaseWithAFractionalMinimumOnAnIntegerIsRefused(bool $definedAttributes): void
+    public function testAFractionalMinimumOnAnIntegerIsComparedAs7xDid(bool $definedAttributes): void
     {
         $database = $this->database($definedAttributes);
+
+        $this->assertSame(99, $database->decreaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', 1, 0.5)->getAttribute('count'));
 
         try {
-            $database->decreaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', 1, 0.5);
-            $this->fail('A fractional minimum on an integer attribute was accepted');
-        } catch (TypeException $error) {
-            $this->assertSame('Min must be an integer.', $error->getMessage());
+            $database->decreaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', 99, 0.5);
+            $this->fail('A decrease past a fractional minimum was accepted');
+        } catch (LimitException $error) {
+            $this->assertSame('Attribute value exceeds minimum limit: 0.5', $error->getMessage());
         }
 
-        $this->assertSame(100, $this->stored($database, 'count'));
-    }
-
-    #[DataProvider('lanes')]
-    public function testANonNumericBoundOnAnIntegerIsRefused(bool $definedAttributes): void
-    {
-        $database = $this->database($definedAttributes);
-
-        $this->expectException(TypeException::class);
-        $this->expectExceptionMessage('Max must be an integer.');
-
-        $database->increaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', 1, '102.5');
+        $this->assertSame(99, $this->stored($database, 'count'));
     }
 
     #[DataProvider('lanes')]
@@ -118,24 +111,14 @@ final class FractionalBoundTest extends TestCase
     }
 
     #[DataProvider('lanes')]
-    public function testAFractionalChangeValueOnAnIntegerIsRefused(bool $definedAttributes): void
+    public function testAFractionalChangeOnAnIntegerReturnsTheSumAs7xDid(bool $definedAttributes): void
     {
+        $this->assertSame(101.5, $this->database($definedAttributes)->increaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', 1.5)->getAttribute('count'));
+        $this->assertSame(99.5, $this->database($definedAttributes)->decreaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', 0.5)->getAttribute('count'));
+        $this->assertSame(101.5, $this->database($definedAttributes)->increaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', '1.5')->getAttribute('count'));
+        $this->assertSame(102.0, $this->database($definedAttributes)->increaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', 2.0)->getAttribute('count'));
+
         $database = $this->database($definedAttributes);
-
-        foreach ([
-            'increase' => static fn (): Document => $database->increaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', 1.5),
-            'decrease' => static fn (): Document => $database->decreaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', 0.5),
-            'increase by a numeric string' => static fn (): Document => $database->increaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', '1.5'),
-        ] as $case => $change) {
-            try {
-                $change();
-                $this->fail("A fractional change value on an integer attribute was accepted ({$case})");
-            } catch (TypeException $error) {
-                $this->assertSame('Change value must be an integer.', $error->getMessage(), $case);
-            }
-        }
-
-        $this->assertSame(100, $this->stored($database, 'count'));
         $this->assertSame(102, $database->increaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', 2)->getAttribute('count'));
         $this->assertSame(3.0, $database->increaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'ratio', 1.5)->getAttribute('ratio'));
     }

@@ -54,7 +54,9 @@ final class PreparedCreateTest extends TestCase
     private const array SHARED = ['shared tables' => 7, 'shared tables with an existing related document' => 7];
 
     /**
-     * The scenarios that create only new related documents and succeed, so their related documents are prepared.
+     * The scenarios that create only new related documents and succeed, so their related documents are prepared, and
+     * whose related documents a one-by-one write reads, so the reads tell the two apart. Related documents with
+     * generated ids are prepared too, but relating them one by one reads none of them either.
      */
     private const array PREPARED = [
         'one to many',
@@ -66,7 +68,6 @@ final class PreparedCreateTest extends TestCase
         'many to one',
         'one to one',
         'one to one one way',
-        'generated ids and own permissions',
         'documents mixed with ids',
         'one to many documents mixed with ids',
         'one to one by id',

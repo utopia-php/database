@@ -99,7 +99,7 @@ final class PostgresSchemaTest extends TestCase
         $this->adapter()->createIndex('books', Index::object('meta_index', 'meta.inner.leaf-key'), ['meta.inner.leaf-key' => ColumnType::Object->value]);
 
         $this->assertSame(
-            ['CREATE INDEX "namespace__books_meta_index" ON "database"."namespace_books" USING GIN ((("meta"->\'inner\'->>\'leaf-key\')::text))'],
+            ['CREATE INDEX CONCURRENTLY "namespace__books_meta_index" ON "database"."namespace_books" USING GIN ((("meta"->\'inner\'->>\'leaf-key\')::text))'],
             $this->statements,
         );
     }

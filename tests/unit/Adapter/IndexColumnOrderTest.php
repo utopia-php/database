@@ -60,8 +60,8 @@ final class IndexColumnOrderTest extends TestCase
     public static function objectPathIndexes(): array
     {
         return [
-            'dedicated tables' => [false, 'CREATE INDEX "namespace__places_countryfirst" ON "database"."namespace_places" ((("data"->>\'country\')::text) DESC, "status")'],
-            'shared tables' => [true, 'CREATE INDEX "namespace_7_places_countryfirst" ON "database"."namespace_places" ("_tenant", (("data"->>\'country\')::text) DESC, "status")'],
+            'dedicated tables' => [false, 'CREATE INDEX CONCURRENTLY "namespace__places_countryfirst" ON "database"."namespace_places" ((("data"->>\'country\')::text) DESC, "status")'],
+            'shared tables' => [true, 'CREATE INDEX CONCURRENTLY "namespace_7_places_countryfirst" ON "database"."namespace_places" ("_tenant", (("data"->>\'country\')::text) DESC, "status")'],
         ];
     }
 
@@ -92,7 +92,7 @@ final class IndexColumnOrderTest extends TestCase
         $this->statements = [];
         $postgres = $this->createAdapter(Postgres::class, false);
         $postgres->createIndex('places', Index::key(key: 'twice', attributes: ['name', 'name'], orders: [OrderDirection::Asc, OrderDirection::Desc]));
-        $this->assertSame(['CREATE INDEX "namespace__places_twice" ON "database"."namespace_places" ("name" ASC, "name" DESC)'], $this->statements);
+        $this->assertSame(['CREATE INDEX CONCURRENTLY "namespace__places_twice" ON "database"."namespace_places" ("name" ASC, "name" DESC)'], $this->statements);
     }
 
     public function testPostgresOperatorClassFollowsEveryColumn(): void
@@ -103,8 +103,8 @@ final class IndexColumnOrderTest extends TestCase
         $adapter->createIndex('places', Index::hnswCosine(key: 'embeddings', attribute: 'embedding'));
 
         $this->assertSame([
-            'CREATE INDEX "namespace__places_names" ON "database"."namespace_places" USING GIN ("name" gin_trgm_ops, "status" gin_trgm_ops)',
-            'CREATE INDEX "namespace__places_embeddings" ON "database"."namespace_places" USING HNSW ("embedding" vector_cosine_ops)',
+            'CREATE INDEX CONCURRENTLY "namespace__places_names" ON "database"."namespace_places" USING GIN ("name" gin_trgm_ops, "status" gin_trgm_ops)',
+            'CREATE INDEX CONCURRENTLY "namespace__places_embeddings" ON "database"."namespace_places" USING HNSW ("embedding" vector_cosine_ops)',
         ], $this->statements);
     }
 

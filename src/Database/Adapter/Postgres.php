@@ -6,6 +6,7 @@ use Exception;
 use PDO;
 use PDOException;
 use PDOStatement;
+use Swoole\Coroutine;
 use Swoole\Database\PDOStatementProxy;
 use Throwable;
 use Utopia\Database\Adapter\SQL\Expression;
@@ -72,6 +73,28 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         ' WITHOUT TIME ZONE' => '',
         ', ' => ',',
     ];
+
+    /**
+     * The events whose statements alter a table, taking an ACCESS EXCLUSIVE lock on it.
+     */
+    private const array ALTER_EVENTS = [
+        Event::AttributeCreate,
+        Event::AttributesCreate,
+        Event::AttributeUpdate,
+        Event::AttributeDelete,
+    ];
+
+    /**
+     * Milliseconds a statement altering a table waits for its lock before giving up. Every later query on the
+     * table queues behind the waiting statement, so this bounds how long it holds up the table's traffic.
+     */
+    private const int LOCK_TIMEOUT = 1_000;
+
+    /**
+     * Microseconds to wait before a statement that gave up on its lock runs again, multiplied by the attempt
+     * number up to ten.
+     */
+    private const int LOCK_RETRY_SLEEP = 1_000_000;
 
     /**
      * @return array<Capability>
@@ -771,7 +794,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
             JOIN pg_catalog.pg_class i ON i.oid = x.indexrelid
             JOIN pg_catalog.pg_am am ON am.oid = i.relam
             CROSS JOIN LATERAL pg_catalog.generate_series(1, x.indnkeyatts) AS k(position)
-            WHERE x.indrelid = to_regclass(?)
+            WHERE x.indrelid = to_regclass(?) AND x.indisvalid
             ORDER BY i.relname, k.position',
             Event::CollectionRead,
         );
@@ -913,6 +936,11 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
             default => '',
         };
 
+        // A plain build holds a SHARE lock on the table until it finishes, refusing every write. A concurrent
+        // build lets writes through but cannot run in a transaction, and leaves an invalid index behind when it
+        // fails. An index created with its collection is built on an empty table.
+        $concurrently = $event !== Event::CollectionCreate && $this->inTransaction === 0;
+
         $sql = $schema->createIndex(
             $tableRaw,
             $keyName,
@@ -920,11 +948,18 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
             unique: $unique,
             method: $method,
             rawColumns: $columns,
+            concurrently: $concurrently,
         )->query;
 
         try {
             return $this->executeStatement($sql, $event);
         } catch (PDOException $error) {
+            // The name may be held by the invalid index of a build whose connection was lost before it could
+            // drop it: the build runs again once it is gone.
+            if ($concurrently && $this->dropInvalidIndex($keyName) && $error->getCode() === '42P07') {
+                return $this->createIndex($collection, $index, $indexAttributeTypes, $collation, $event);
+            }
+
             if ($error->getCode() === '23505' && isset($error->errorInfo[1]) && $error->errorInfo[1] === 7) {
                 throw new UniqueException(UniqueException::MESSAGE, $error->getCode(), $error);
             }
@@ -946,11 +981,43 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         $schemaQualifiedName = $this->getDatabase().'.'.$keyName;
 
         $schema = $this->schema();
-        $sql = $schema->dropIndex($this->getTableRaw($collection), $schemaQualifiedName)->query;
-        // Add IF EXISTS since the schema builder's dropIndex does not include it
-        $sql = str_replace('DROP INDEX', 'DROP INDEX IF EXISTS', $sql);
+
+        // Add IF EXISTS since the schema builder's drop statements do not include it. Outside a transaction the
+        // index is dropped concurrently, without locking the table's reads and writes out.
+        if ($this->inTransaction === 0) {
+            $sql = \str_replace('DROP INDEX CONCURRENTLY', 'DROP INDEX CONCURRENTLY IF EXISTS', $schema->dropIndexConcurrently($schemaQualifiedName)->query);
+        } else {
+            $sql = \str_replace('DROP INDEX', 'DROP INDEX IF EXISTS', $schema->dropIndex($this->getTableRaw($collection), $schemaQualifiedName)->query);
+        }
 
         return $this->executeStatement($sql, Event::IndexDelete);
+    }
+
+    /**
+     * Drops the index a failed concurrent build left behind, reporting whether there was one: reads never use an
+     * invalid index, but writes still maintain it and it holds the index's name.
+     */
+    private function dropInvalidIndex(string $name): bool
+    {
+        try {
+            $statement = $this->prepareStatement(
+                'SELECT 1 FROM pg_catalog.pg_index WHERE indexrelid = to_regclass(?) AND NOT indisvalid',
+                Event::CollectionRead,
+            );
+            $statement->bindValue(1, $this->quote($this->getDatabase()).'.'.$this->quote($name));
+            $this->execute($statement);
+            $invalid = $statement->fetchColumn() !== false;
+            $statement->closeCursor();
+
+            if (! $invalid) {
+                return false;
+            }
+
+            return $this->executeStatement($this->schema()->dropIndexConcurrently($this->getDatabase().'.'.$name)->query, Event::IndexDelete);
+        } catch (Throwable) {
+            // The build's own failure is the one reported; the next build drops the index.
+            return false;
+        }
     }
 
     /**
@@ -1561,6 +1628,48 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
                 if ($exception === null) {
                     throw $error;
                 }
+            }
+        }
+    }
+
+    /**
+     * Outside a transaction, a statement altering a table gives up on its lock after LOCK_TIMEOUT: waiting behind a
+     * long query, it would queue every later query on the table behind itself. It runs again after a pause that
+     * lets them through, until its event's timeout passes.
+     */
+    #[\Override]
+    protected function executeStatement(string $sql, Event $event): bool
+    {
+        if ($this->inTransaction > 0 || ! \in_array($event, self::ALTER_EVENTS, true)) {
+            return parent::executeStatement($sql, $event);
+        }
+
+        $timeout = $this->getTimeout($event);
+        $deadline = \microtime(true) + $timeout / 1000;
+        $pdo = $this->getDriver();
+
+        for ($attempt = 1; ; $attempt++) {
+            $pdo->exec("SET lock_timeout = '".self::LOCK_TIMEOUT."ms'");
+
+            try {
+                return parent::executeStatement($sql, $event);
+            } catch (PDOException $error) {
+                if ($error->getCode() !== '55P03') {
+                    throw $error;
+                }
+
+                $sleep = self::LOCK_RETRY_SLEEP * \min($attempt, 10);
+                if ($timeout > 0 && \microtime(true) + $sleep / 1_000_000 > $deadline) {
+                    throw new TimeoutException('Query timed out', $error->getCode(), $error);
+                }
+            } finally {
+                $pdo->exec('RESET lock_timeout');
+            }
+
+            if (\extension_loaded('swoole') && Coroutine::getCid() > 0) {
+                Coroutine::sleep($sleep / 1_000_000);
+            } else {
+                \usleep($sleep);
             }
         }
     }

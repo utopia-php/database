@@ -1663,6 +1663,45 @@ trait GeneralTests
         }
     }
 
+    /**
+     * The server ends an idle session, as a database restart does to every pooled
+     * connection. The next read must run on a new connection instead of failing.
+     */
+    public function testReadAfterTheServerEndedAnIdleSession(): void
+    {
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if (! ($adapter instanceof MariaDB || $adapter instanceof Postgres) || ! $adapter->getDriver() instanceof PDO) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'endedIdleSession';
+        $database->createCollection(Collection::create(id: $collection));
+        $database->createAttribute($collection, Attribute::string(key: 'title', size: 16, required: true));
+        $database->createDocument($collection, new Document([
+            '$id' => 'kept',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'title' => 'kept',
+        ]));
+        $database->purgeCachedDocument($collection, 'kept');
+
+        try {
+            $adapter->getDriver()->exec($adapter instanceof Postgres
+                ? 'SET idle_session_timeout = 1000'
+                : 'SET SESSION wait_timeout = 1');
+            \sleep(2);
+
+            $this->assertSame('kept', $database->getDocument($collection, 'kept')->getAttribute('title'));
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
     public function testWritesReadTheirCollectionDefinitionFromTheCache(): void
     {
         $database = $this->getDatabase();

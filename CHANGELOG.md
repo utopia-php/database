@@ -1,5 +1,15 @@
 # Changelog
 
+## 8.0.2
+
+### Fixed
+
+- On PostgreSQL an exact search (`search('title', '"foo bar"')`) matches the adjacent phrase again, as on MariaDB,
+  MySQL, SQLite, MongoDB, Memory and Redis, and `notSearch()` with an exact term excludes only that phrase. 8.0.1
+  reverted it to every word in any order by mistake: the phrase match was a deliberate 8.0.0 change, not a
+  regression. Words in a search term are still split on every character other than a letter, a number or an
+  underscore, as in 7.x (`foo/bar` and `foo,bar` search `foo` and `bar`).
+
 ## 8.0.1
 
 8.0.1 restores the 7.4.1 behaviour that 8.0.0 changed for callers of features 7.x already had. New 8.0 features are
@@ -24,6 +34,7 @@ unchanged. It also holds nested relationship links to the permission rule UPGRAD
   select attributes: $tenant`, as in 7.x.
 - The `UID` validator description is the 7.x text again, also inside `Invalid cursor: …`.
 - On PostgreSQL an exact search (`"foo bar"`) matches every word in any order again, not the adjacent phrase.
+  Reverted in 8.0.2: this was a deliberate 8.0.0 change.
 - `containsAll()` on an attribute that is not an array matches each value as a whole-value `LIKE` (`ILIKE` on
   PostgreSQL) pattern, any of them, on MariaDB, MySQL and PostgreSQL, as in 7.x.
 - A read whose orders include `orderRandom()` ignores its cursor instead of failing with `Order attribute '' is

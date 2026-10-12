@@ -223,8 +223,11 @@ $permissions = [Permission::read(Role::user(Id::unique()))];
 - A filter on a path into an object attribute (`meta.address.city`) takes keys of `a-z`, `A-Z`, `0-9`, `_` and `-`
   only. The query validator refuses any other key with `Utopia\Database\Exception\Query` on every adapter (7.x
   refused such keys on PostgreSQL only), and on PostgreSQL the query is refused also when validation is skipped.
-- On PostgreSQL, an exact search (`search('title', '"foo bar"')`) matches documents holding every word in any order,
-  as in 7.x, where MariaDB, MySQL and SQLite match the adjacent phrase.
+- On PostgreSQL, an exact search (`search('title', '"foo bar"')`) matches the words as an adjacent phrase, as on
+  MariaDB, MySQL and SQLite, and `notSearch()` with an exact term excludes only that phrase. In 7.x PostgreSQL
+  matched every word in any order, and so did 8.0.1, which reverted the phrase match by mistake; 8.0.0 and 8.0.2
+  match the phrase. To match every word in any order, pass a `search()` for each word. A term without quotes still
+  matches any of its words.
 - `containsAll()` on an attribute that is not an array matches as in 7.x: on MariaDB, MySQL and PostgreSQL each value
   is a `LIKE` (`ILIKE`) pattern on the whole value and a document matching any of them is returned; on MongoDB it is
   `$all`. Use `containsString()` for substrings.

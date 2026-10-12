@@ -1227,6 +1227,29 @@ trait Documents
             }
         }
 
+        // Before encode(), which turns both of these into JSON strings.
+        //
+        // A collection definition records the grants it was given, columns and all, beside the
+        // role-only projection of them that goes in $permissions. The rule below never sees them
+        // -- by the time they reach a row they are not in $permissions any more -- so they are
+        // judged here, against the columns the definition itself declares. Without this, a write
+        // that reaches past createCollection() could record a grant on a column that does not
+        // exist, and nothing would ever say so.
+        if ($this->validation()->get() && $collection->getId() === Database::METADATA) {
+            $columns = [];
+            foreach ($document->getAttribute(Collection::ATTRIBUTES, []) as $attribute) {
+                $key = $attribute instanceof Document ? $attribute->getAttribute('key') : ($attribute['key'] ?? null);
+                if (\is_string($key) && $key !== '') {
+                    $columns[] = $key;
+                }
+            }
+
+            $validator = new Permissions(columns: $columns);
+            if (! $validator->isValid($document->getAttribute(Collection::COLUMN_PERMISSIONS, []))) {
+                throw new DatabaseException($validator->getDescription());
+            }
+        }
+
         $document = $this->encode($collection, $document);
 
         if ($this->validation()->get()) {

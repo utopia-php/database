@@ -87,6 +87,12 @@ class Relationships implements Attachable, Hook
      */
     private array $replays = [];
 
+    /**
+     * @var array<int, array<string, array<string, true>>> The new documents each coroutine is relating before writing
+     *                                                    them, by coroutine id, collection id and document id
+     */
+    private array $relating = [];
+
     private Database $database;
 
     /**
@@ -116,6 +122,7 @@ class Relationships implements Attachable, Hook
         $this->deleteStacks = [];
         $this->prepared = [];
         $this->replays = [];
+        $this->relating = [];
     }
 
     /**
@@ -805,6 +812,41 @@ class Relationships implements Attachable, Hook
      */
     private function relate(Document $collection, Document $document, int $coroutine, ?PreparedCreate $prepared, ?array &$copies = null): Document
     {
+        $collectionId = $collection->getId();
+        $id = $document->getId();
+        if (isset($this->relating[$coroutine][$collectionId][$id])) {
+            return $this->relateAttributes($collection, $document, $coroutine, $prepared, $copies);
+        }
+
+        $this->relating[$coroutine][$collectionId][$id] = true;
+
+        try {
+            return $this->relateAttributes($collection, $document, $coroutine, $prepared, $copies);
+        } finally {
+            unset($this->relating[$coroutine][$collectionId][$id]);
+            if ($this->relating[$coroutine][$collectionId] === []) {
+                unset($this->relating[$coroutine][$collectionId]);
+            }
+            if ($this->relating[$coroutine] === []) {
+                unset($this->relating[$coroutine]);
+            }
+        }
+    }
+
+    /**
+     * Whether $id is a new document of $collection this coroutine is relating before writing it: a related document
+     * linked to it is pointed at it although it is not stored yet.
+     */
+    private function isRelating(int $coroutine, Document $collection, string $id): bool
+    {
+        return isset($this->relating[$coroutine][$collection->getId()][$id]);
+    }
+
+    /**
+     * @param  array<int, array{Document, array<string, mixed>}>|null  $copies
+     */
+    private function relateAttributes(Document $collection, Document $document, int $coroutine, ?PreparedCreate $prepared, ?array &$copies = null): Document
+    {
         $writeStack = $this->writeStacks[$coroutine] ?? [];
         $stackCount = \count($writeStack);
 
@@ -1063,6 +1105,10 @@ class Relationships implements Attachable, Hook
                         }
 
                         if (\is_string($value)) {
+                            if ($this->isRelating($coroutine, $relatedCollection, $value)) {
+                                break;
+                            }
+
                             $related = $this->database->skipRelationships(
                                 fn () => $this->database->getDocument($relatedCollection->getId(), $value, [Query::select([Document::ID])])
                             );
@@ -1239,6 +1285,10 @@ class Relationships implements Attachable, Hook
                         }
 
                         if (\is_string($value)) {
+                            if ($this->isRelating($coroutine, $relatedCollection, $value)) {
+                                break;
+                            }
+
                             $related = $this->database->skipRelationships(
                                 fn () => $this->database->getDocument($relatedCollection->getId(), $value, [Query::select([Document::ID])])
                             );

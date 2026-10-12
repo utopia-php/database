@@ -582,6 +582,57 @@ trait RelationshipTests
         }
     }
 
+    public function testAStoredRelatedDocumentSentAsADocumentIsUpdatedAndLinked(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (! $database->getAdapter()->hasFeature(Feature\Relationships::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $authorization = $database->getAuthorization();
+        foreach ([RelationshipType::OneToOne, RelationshipType::OneToMany, RelationshipType::ManyToOne, RelationshipType::ManyToMany] as $type) {
+            $parents = 'stored_link_parents_'.$type->value;
+            $related = 'stored_link_related_'.$type->value;
+
+            $authorization->skip(function () use ($database, $type, $parents, $related): void {
+                try {
+                    $database->createCollection(Collection::create(id: $parents, attributes: [Attribute::string(key: 'name', size: 64)]));
+                    $database->createCollection(Collection::create(id: $related, attributes: [Attribute::string(key: 'name', size: 64)]));
+                    $database->createRelationship($parents, match ($type) {
+                        RelationshipType::OneToOne => Relationship::oneToOne($related, 'related', twoWay: true, twoWayKey: 'back', onDelete: RelationshipDeleteAction::SetNull),
+                        RelationshipType::OneToMany => Relationship::oneToMany($related, 'related', twoWay: true, twoWayKey: 'back', onDelete: RelationshipDeleteAction::SetNull),
+                        RelationshipType::ManyToOne => Relationship::manyToOne($related, 'related', twoWay: true, twoWayKey: 'back', onDelete: RelationshipDeleteAction::SetNull),
+                        RelationshipType::ManyToMany => Relationship::manyToMany($related, 'related', twoWay: true, twoWayKey: 'back', onDelete: RelationshipDeleteAction::SetNull),
+                    });
+                    $database->createDocument($related, new Document(['$id' => 'stored', 'name' => 'Stored']));
+
+                    $value = new Document(['$id' => 'stored', 'name' => 'Changed']);
+                    $database->withTransaction(fn (): int => $database->createDocuments($parents, [new Document([
+                        '$id' => 'parent',
+                        'name' => 'Parent',
+                        'related' => \in_array($type, [RelationshipType::OneToOne, RelationshipType::ManyToOne], true) ? $value : [$value],
+                    ])]));
+
+                    $ids = static fn (mixed $value): array => \array_values(\array_map(
+                        static fn (mixed $item): string => $item instanceof Document ? $item->getId() : (string) $item,
+                        \is_array($value) ? $value : ($value === null ? [] : [$value]),
+                    ));
+                    $stored = $database->getDocument($related, 'stored');
+                    $this->assertSame('Changed', $stored->getAttribute('name'), $type->value);
+                    $this->assertSame(['parent'], $ids($stored->getAttribute('back')), $type->value.': the stored document points back at its new parent');
+                    $this->assertSame(['stored'], $ids($database->getDocument($parents, 'parent')->getAttribute('related')), $type->value);
+                } finally {
+                    $database->deleteCollection($parents);
+                    $database->deleteCollection($related);
+                }
+            });
+        }
+    }
+
     public function testSimpleRelationshipPopulation(): void
     {
         /** @var Database $database */

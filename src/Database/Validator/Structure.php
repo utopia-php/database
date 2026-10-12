@@ -60,9 +60,8 @@ class Structure extends Validator
 
     /**
      * @param  list<string>  $storedAttributes  Attributes whose values are the stored ones, unchanged by the
-     *                                         write. They are validated again, as 7.x did, so a value a
-     *                                         narrowed definition no longer admits fails the update, but an
-     *                                         object value is held to what 7.x accepted when it was stored.
+     *                                         write: they are not validated again, as the rules may have
+     *                                         tightened since those values were stored.
      */
     public function __construct(
         protected readonly Document $collection,
@@ -276,6 +275,10 @@ class Structure extends Validator
                 continue;
             }
 
+            if (isset($this->storedAttributes[$key])) {
+                continue;
+            }
+
             $attribute = $definitions[$key] ?? null;
             if ($attribute === null) {
                 continue;
@@ -361,7 +364,7 @@ class Structure extends Validator
                     break;
 
                 case ColumnType::Object:
-                    $validators[] = new ObjectValue(stored: isset($this->storedAttributes[$key]));
+                    $validators[] = new ObjectValue();
                     break;
 
                 case ColumnType::Point:

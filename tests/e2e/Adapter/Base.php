@@ -11,6 +11,7 @@ use Tests\E2E\Adapter\Scopes\CursorTests;
 use Tests\E2E\Adapter\Scopes\CustomDocumentTypeTests;
 use Tests\E2E\Adapter\Scopes\DatabaseTests;
 use Tests\E2E\Adapter\Scopes\DocumentTests;
+use Tests\E2E\Adapter\Scopes\FeatureTests;
 use Tests\E2E\Adapter\Scopes\FractionalIntegerTests;
 use Tests\E2E\Adapter\Scopes\GeneralTests;
 use Tests\E2E\Adapter\Scopes\IndexTests;
@@ -54,6 +55,7 @@ abstract class Base extends TestCase
     use CustomDocumentTypeTests;
     use DatabaseTests;
     use DocumentTests;
+    use FeatureTests;
     use FractionalIntegerTests;
     use GeneralTests;
     use IndexTests;

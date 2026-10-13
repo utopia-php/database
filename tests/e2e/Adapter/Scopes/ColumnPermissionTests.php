@@ -233,6 +233,37 @@ trait ColumnPermissionTests
         );
     }
 
+    /**
+     * The toggle travels in a snapshot, like every other scoped flag.
+     *
+     * A snapshot captured inside the opt-in has to restore it, or a caller replaying that state
+     * elsewhere -- another coroutine, a queued job -- is refused despite having captured the
+     * permission to do exactly this.
+     */
+    public function testTheColumnPermissionsToggleSurvivesASnapshot(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $snapshot = $database->withColumnPermissions(fn () => $database->snapshot());
+
+        // The scope has closed, so the toggle is off again...
+        $this->assertFalse($database->hasColumnPermissions());
+
+        // ...but the snapshot still carries it.
+        $database->withSnapshot($snapshot, fn () => $database->createCollection(Collection::create(
+            id: 'columnGrantsSnapshot',
+            attributes: [Attribute::string(key: 'name', size: 64)],
+            permissions: [Permission::read(Role::any(), 'name')],
+        )));
+
+        $this->assertContains(
+            'read("any", "name")',
+            $database->getCollection('columnGrantsSnapshot')->grants() ?? [],
+        );
+        $this->assertFalse($database->hasColumnPermissions());
+    }
+
     public function testACollectionPermissionMayNotNameAColumnThatDoesNotExist(): void
     {
         /** @var Database $database */

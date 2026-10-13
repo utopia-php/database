@@ -1583,6 +1583,7 @@ class Database
             preserveDates: $this->datePreservation()->get(),
             preserveSequence: $this->sequencePreservation()->get(),
             ignoreDuplicates: $this->ignoringDuplicates()->get(),
+            columnPermissions: $this->columnPermissions()->get(),
             requestTimestamp: $this->requestTimestamp()->get(),
         );
     }
@@ -1625,7 +1626,8 @@ class Database
     private function withToggles(Snapshot $snapshot, callable $callback): mixed
     {
         $timestamped = fn (): mixed => $this->requestTimestamp()->with($snapshot->requestTimestamp, $callback);
-        $deduplicated = fn (): mixed => $this->ignoringDuplicates()->with($snapshot->ignoreDuplicates, $timestamped);
+        $scoped = fn (): mixed => $this->columnPermissions()->with($snapshot->columnPermissions, $timestamped);
+        $deduplicated = fn (): mixed => $this->ignoringDuplicates()->with($snapshot->ignoreDuplicates, $scoped);
         $sequenced = fn (): mixed => $this->sequencePreservation()->with($snapshot->preserveSequence, $deduplicated);
         $dated = fn (): mixed => $this->datePreservation()->with($snapshot->preserveDates, $sequenced);
         $validated = fn (): mixed => $this->validation()->with($snapshot->validation, $dated);

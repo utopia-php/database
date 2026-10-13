@@ -26,6 +26,7 @@ final readonly class Snapshot
      * @param  bool  $preserveDates  Whether writes keep the dates they are given
      * @param  bool  $preserveSequence  Whether writes keep the sequences they are given
      * @param  bool  $ignoreDuplicates  Whether creating a document that exists is skipped instead of failing
+     * @param  bool  $columnPermissions  Whether a collection's permissions may name one of its columns
      * @param  DateTime|null  $requestTimestamp  The time an update conflicts after
      */
     public function __construct(
@@ -43,6 +44,7 @@ final readonly class Snapshot
         public bool $preserveDates,
         public bool $preserveSequence,
         public bool $ignoreDuplicates,
+        public bool $columnPermissions,
         public ?DateTime $requestTimestamp,
     ) {
     }

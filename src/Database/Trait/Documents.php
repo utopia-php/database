@@ -405,8 +405,10 @@ trait Documents
         $resolved = [];
         foreach ($keys as $key) {
             $operator = $document->getAttribute($key);
+            $current = $stored->getAttribute($key);
             if ($operator instanceof Operator) {
-                $resolved[$key] = $fractional->operator($operator, $stored->getAttribute($key))->setAttribute($key);
+                $answerable = $current === null || \is_int($current) || \is_float($current) || \is_string($current);
+                $resolved[$key] = ($answerable ? $fractional->operator($operator, $current) : $operator)->setAttribute($key);
             }
         }
 
@@ -2657,11 +2659,12 @@ trait Documents
                         throw new DatabaseException('Adapter does not support upserts');
                     }
 
+                    $adapter = $this->adapter;
+
                     if ($fractionalIds !== []) {
                         $this->resolveUpsertFractions($collection, $chunk, $fractionalIds);
                     }
 
-                    $adapter = $this->adapter;
                     $batch = $this->authorization->skip(fn () => $adapter->upsertDocuments(
                         $collection,
                         $chunk,

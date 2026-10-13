@@ -95,6 +95,9 @@ class Operator extends Validator
         return $numeric >= $bounds->min && $numeric <= $bounds->max;
     }
 
+    /**
+     * @phpstan-assert-if-true float|numeric-string $value
+     */
     private function isFraction(mixed $value, Attribute $attribute): bool
     {
         return $this->fractions && $attribute->isInteger() && Fractional::isFractional($value);
@@ -116,7 +119,6 @@ class Operator extends Validator
         $bounds = $attribute->bounds();
 
         if ($bounds !== null && $this->isFraction($limit, $attribute)) {
-            /** @var float|string $limit */
             if ($this->isFractionInBounds($limit, $attribute)) {
                 return true;
             }

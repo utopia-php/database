@@ -27,6 +27,8 @@ final readonly class Fractional
 
     /**
      * Whether a value is a finite number with a fractional part.
+     *
+     * @phpstan-assert-if-true float|numeric-string $value
      */
     public static function isFractional(mixed $value): bool
     {

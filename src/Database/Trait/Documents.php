@@ -4020,7 +4020,7 @@ trait Documents
         $cursor = $parsed->cursor;
         $cursorDirection = $parsed->cursorDirection ?? CursorDirection::After;
 
-        $isAggregation = $parsed->isAggregation();
+        $isAggregation = ! empty($aggregations) || ! empty($groupByAttrs);
 
         if ($isAggregation !== $aggregate) {
             throw new QueryException($aggregate
@@ -4850,7 +4850,7 @@ trait Documents
         $parsed = Query::groupByType($queries);
         $joins = $parsed->joins;
         $distinct = $parsed->distinct;
-        if (($joins === [] && ! $distinct) || $parsed->isAggregation()) {
+        if (($joins === [] && ! $distinct) || $parsed->aggregations !== [] || $parsed->groupBy !== []) {
             return static function (Document $cursor): void {
             };
         }

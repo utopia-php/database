@@ -8,8 +8,10 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
+use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Id;
 use Utopia\Database\Permission;
+use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationshipDeleteAction;
 use Utopia\Database\Role;
@@ -177,6 +179,54 @@ trait NestedPreparationTests
         $this->assertCount(1, $created);
         $this->assertNotSame(Id::PLACEHOLDER, $created[0]);
         $this->assertTrue($database->getDocument($children, Id::PLACEHOLDER)->isEmpty());
+    }
+
+    public function testNestedPreparationRefusesRelatedDocumentsInABulkUpdate(): void
+    {
+        $database = $this->getDatabase();
+        if (! $database->getAdapter()->hasFeature(Feature\Relationships::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        [$parents, $children, $owners] = $this->createNestedPreparationCollections($database);
+        $database->createDocument($parents, new Document([Document::ID => 'bulk', 'name' => 'bulk']));
+        $scopes = [
+            'placeholders replaced' => static fn (callable $callback): mixed => $database->withReplacePlaceholders(true, $callback),
+            'grants checked' => static fn (callable $callback): mixed => $database->withCheckGrants(true, $callback),
+        ];
+        $permissions = [Permission::update(Role::user('nestedPreparationUnheld'))];
+        $values = [
+            'children' => [new Document([Document::ID => Id::PLACEHOLDER, 'name' => 'bulk child', Document::PERMISSIONS => $permissions])],
+            'owner' => ['name' => 'bulk owner', Document::PERMISSIONS => $permissions],
+        ];
+
+        foreach ($scopes as $toggle => $scope) {
+            foreach ($values as $key => $value) {
+                try {
+                    $scope(fn (): mixed => $database->updateDocuments($parents, new Document([$key => $value])));
+                    $this->fail("A bulk update with {$key} given as a document is refused while {$toggle}");
+                } catch (RelationshipException $error) {
+                    $this->assertSame('Invalid relationship value. A bulk update takes related documents by ID while placeholders are replaced or grants are checked.', $error->getMessage());
+                }
+            }
+        }
+
+        $this->assertSame([], $database->find($children));
+        $this->assertSame([], $database->find($owners));
+        $stored = $database->getDocument($parents, 'bulk');
+        $this->assertSame([], $this->nestedPreparationIds($stored->getAttribute('children')));
+        $this->assertNull($stored->getAttribute('owner'));
+
+        $database->createDocument($owners, new Document([Document::ID => 'linked owner', 'name' => 'linked owner']));
+        $scopes['placeholders replaced'](fn (): mixed => $scopes['grants checked'](fn (): mixed => $database->updateDocuments(
+            $parents,
+            new Document(['owner' => 'linked owner']),
+            [Query::equal(Document::ID, ['bulk'])],
+        )));
+
+        $this->assertSame(['linked owner'], $this->nestedPreparationIds($database->getDocument($parents, 'bulk')->getAttribute('owner')));
     }
 
     /**

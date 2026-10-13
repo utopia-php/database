@@ -1165,6 +1165,8 @@ class Database
      * covers the documents given to createDocument(), createDocuments(), upsertDocument() and upsertDocuments(), and
      * every related document they or updateDocument() are given as a document, as deep as the write relates them. A
      * related document given as the string Id::PLACEHOLDER stays a reference to the document stored under that ID.
+     * While it is on, updateDocuments() refuses a related document given as a document with a relationship
+     * exception: one generated ID could not serve every document it updates.
      *
      * @return $this
      */
@@ -1199,6 +1201,13 @@ class Database
      * may only add permissions for roles the caller holds, as deep as the write relates it. Permissions it already
      * has may be sent back, and permissions it inherits from its parent are never checked. Malformed permissions
      * throw a structure exception and an unheld role an authorization exception, before anything is written.
+     * While it is on, updateDocuments() refuses a related document given as a document with a relationship
+     * exception, as it is not checked there.
+     *
+     * createDocument() and updateDocument() read the permissions a related document already has locked, in the
+     * transaction that writes it. createDocuments(), upsertDocument() and upsertDocuments() write related documents
+     * before the transaction of the documents relating them, so they read them without a lock: a change committed
+     * between the check and the related write is not seen. A Mirror checks on its source only.
      *
      * @return $this
      */

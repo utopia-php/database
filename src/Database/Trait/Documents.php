@@ -39,6 +39,7 @@ use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Hook\Lifecycle;
+use Utopia\Database\Hook\Preparation;
 use Utopia\Database\Id;
 use Utopia\Database\Operator;
 use Utopia\Database\PermissionType;
@@ -1244,7 +1245,7 @@ trait Documents
         }
 
         if ($this->relationshipHook?->isEnabled()) {
-            $this->relationshipHook->authorize($definition, $this->prepareNestedCopy($definition, $document, $resolve), resolve: $resolve);
+            $this->relationshipHook->authorize($definition, $this->prepareNestedCopy($definition, $document, $this->nestedPreparation($resolve)), resolve: $resolve);
         }
     }
 
@@ -1277,7 +1278,7 @@ trait Documents
         }
 
         if ($this->relationshipHook?->isEnabled()) {
-            $this->relationshipHook->authorize($definition, $this->prepareNestedCopy($definition, $document, $resolve), $old, $resolve);
+            $this->relationshipHook->authorize($definition, $this->prepareNestedCopy($definition, $document, $this->nestedPreparation($resolve)), $old, $resolve);
         }
     }
 
@@ -1296,18 +1297,19 @@ trait Documents
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        $document = $this->prepareNested($collection, $document);
         $document = $this->prepareDocument($collection, $document);
+        $preparation = $this->nestedPreparation(lock: true);
 
         /** @var array<int, array{Document, array<string, mixed>}> $copies */
         $copies = [];
         try {
-            $document = $this->withMutation(Event::DocumentCreate, $document, function () use ($collection, $document, &$copies) {
+            $document = $this->withMutation(Event::DocumentCreate, $document, function () use ($collection, $document, $preparation, &$copies) {
                 $hook = $this->relationshipHook;
                 if ($hook?->isEnabled()) {
                     if ($copies !== [] && $copies !== null) {
                         $hook->restore($copies);
                     }
+                    $document = $this->prepareNestedCopy($collection, $document, $preparation);
                     $document = $this->silent(function () use ($hook, $collection, $document, &$copies): Document {
                         return $hook->afterDocumentCreate($collection, $document, $copies);
                     });
@@ -1405,56 +1407,71 @@ trait Documents
         });
     }
 
-    /**
-     * Whether a document given $id is created under a generated ID.
-     */
     private function generatesId(string $id): bool
     {
         return empty($id) || (Id::isPlaceholder($id) && $this->placeholderReplacement()->get());
     }
 
-    private function preparesNested(): bool
-    {
-        return $this->placeholderReplacement()->get() || $this->grantChecking()->get();
-    }
-
     /**
-     * The document with its related documents prepared by the relationship hook, when placeholders are replaced or
-     * grants checked.
-     *
-     * @param  (Closure(string, string): ?Document)|null  $resolve
-     *
-     * @throws AuthorizationException
-     * @throws RelationshipException
-     * @throws StructureException
-     */
-    private function prepareNested(Document $collection, Document $document, ?Closure $resolve = null): Document
-    {
-        $hook = $this->relationshipHook;
-        if ($hook === null || ! $this->preparesNested() || ! $hook->isEnabled()) {
-            return $document;
-        }
-
-        return $this->silent(fn (): Document => $hook->prepareNested($collection, $document, $resolve));
-    }
-
-    /**
-     * A copy of $document as prepareNested() prepares it, leaving $document unchanged; $document itself when
-     * neither placeholders are replaced nor grants checked.
+     * Null when the write leaves its related documents as given.
      *
      * @param  (callable(string, string): ?Document)|null  $resolve
+     */
+    private function nestedPreparation(?callable $resolve = null, bool $lock = false): ?Preparation
+    {
+        $replace = $this->placeholderReplacement()->get();
+        $check = $this->grantChecking()->get() && $this->authorization->getStatus();
+        if ((! $replace && ! $check) || ! $this->relationshipHook?->isEnabled()) {
+            return null;
+        }
+
+        return new Preparation($replace, $check, $lock, $resolve === null ? null : $resolve(...));
+    }
+
+    /**
+     * @throws AuthorizationException
+     * @throws RelationshipException
+     * @throws StructureException
+     */
+    private function prepareNested(Document $collection, Document $document, Preparation $preparation): Document
+    {
+        $hook = $this->relationshipHook;
+        if ($hook === null) {
+            return $document;
+        }
+
+        return $this->silent(fn (): Document => $hook->prepareNested($collection, $document, $preparation));
+    }
+
+    /**
+     * Prepares a copy, so a write that runs again, as a retried transaction does, starts from the document given.
      *
      * @throws AuthorizationException
      * @throws RelationshipException
      * @throws StructureException
      */
-    private function prepareNestedCopy(Document $collection, Document $document, ?callable $resolve): Document
+    private function prepareNestedCopy(Document $collection, Document $document, ?Preparation $preparation): Document
     {
-        if (! $this->preparesNested()) {
+        if ($preparation === null) {
             return $document;
         }
 
-        return $this->prepareNested($collection, clone $document, $resolve === null ? null : $resolve(...));
+        return $this->prepareNested($collection, clone $document, $preparation);
+    }
+
+    private static function holdsRelatedDocument(Collection $collection, Document $document): bool
+    {
+        foreach (self::relationshipAttributes($collection) as $attribute) {
+            $value = $document->getAttribute($attribute->key);
+            $values = \is_array($value) && \array_is_list($value) ? $value : [$value];
+            foreach ($values as $related) {
+                if ($related instanceof Document || (\is_array($related) && ! \array_is_list($related))) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -1596,9 +1613,10 @@ trait Documents
         $modified = 0;
         $hasRelationships = self::relationshipAttributes($collection) !== [];
 
-        if ($hasRelationships && $this->preparesNested()) {
+        $preparation = $hasRelationships ? $this->nestedPreparation() : null;
+        if ($preparation !== null) {
             foreach ($documents as $index => $document) {
-                $documents[$index] = $this->prepareNested($collection, $document);
+                $documents[$index] = $this->prepareNested($collection, $document, $preparation);
             }
         }
 
@@ -1726,20 +1744,21 @@ trait Documents
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
-        $document = $this->prepareNested($collection, $document);
+        $preparation = $this->nestedPreparation(lock: true);
         $newUpdatedAt = $document->getUpdatedAt();
         $hasOperators = false;
         $round = $this->fractionRounding()->get();
         $cacheTarget = $collection->getId() === self::METADATA
             ? new Document([Document::ID => $id, Document::COLLECTION => self::METADATA])
             : $collection->getId();
-        $document = $this->withMutation(Event::DocumentUpdate, $cacheTarget, function () use ($collection, $id, $document, $newUpdatedAt, $round, &$hasOperators) {
+        $document = $this->withMutation(Event::DocumentUpdate, $cacheTarget, function () use ($collection, $id, $document, $preparation, $newUpdatedAt, $round, &$hasOperators) {
             $old = $this->authorization->skip(fn () => $this->silent(
                 fn () => $this->readDocument($collection, $id, forUpdate: true)
             ));
             if ($old->isEmpty()) {
                 return new Document();
             }
+            $document = $this->prepareNestedCopy($collection, $document, $preparation);
             $time = DateTime::nowAfter($old->getUpdatedAt() ?: null);
 
             $skipPermissionsUpdate = true;
@@ -2060,6 +2079,10 @@ trait Documents
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        if ($this->nestedPreparation() !== null && self::holdsRelatedDocument($collection, $updates)) {
+            throw new RelationshipException('Invalid relationship value. A bulk update takes related documents by ID while placeholders are replaced or grants are checked.');
+        }
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
         $skipAuth = $this->authorization->isValid(new Input(PermissionType::Update, $collection->getPermissionsByType(PermissionType::Update)));
@@ -2432,14 +2455,14 @@ trait Documents
         $seenIds = [];
         $hasRelationships = self::relationshipAttributes($collection) !== [];
         $replacing = $this->placeholderReplacement()->get();
-        $preparesNested = $hasRelationships && $this->preparesNested();
-        if ($replacing || $preparesNested) {
+        $preparation = $hasRelationships ? $this->nestedPreparation() : null;
+        if ($replacing || $preparation !== null) {
             foreach ($documents as $key => $document) {
                 if ($replacing && Id::isPlaceholder($document->getId())) {
                     $document->setAttribute(Document::ID, Id::unique());
                 }
-                if ($preparesNested) {
-                    $documents[$key] = $this->prepareNested($collection, $document);
+                if ($preparation !== null) {
+                    $documents[$key] = $this->prepareNested($collection, $document, $preparation);
                 }
             }
         }

@@ -490,10 +490,14 @@ class Mirror extends Database
         return parent::setReplacePlaceholders($replace);
     }
 
+    /**
+     * Only the source checks grants: the destination replays what the source already allowed, and judging it against
+     * the destination's own copies would refuse writes the source made whenever the destination is behind.
+     */
     #[\Override]
     public function setCheckGrants(bool $check): static
     {
-        $this->delegate(__FUNCTION__, \func_get_args());
+        $this->source->setCheckGrants($check);
 
         return parent::setCheckGrants($check);
     }
@@ -566,10 +570,7 @@ class Mirror extends Database
     #[\Override]
     public function withCheckGrants(bool $check, callable $callback): mixed
     {
-        $destination = $this->destination;
-        $scoped = $destination === null ? $callback : fn (): mixed => $destination->withCheckGrants($check, $callback);
-
-        return parent::withCheckGrants($check, fn (): mixed => $this->source->withCheckGrants($check, $scoped));
+        return parent::withCheckGrants($check, fn (): mixed => $this->source->withCheckGrants($check, $callback));
     }
 
     #[\Override]
@@ -1701,10 +1702,10 @@ class Mirror extends Database
 
     /**
      * Applies a write to the destination under the authorization, relationship, silence, tenant and toggle state the
-     * caller has at the time of the call, without its request timestamp (the source checked it), and reports a
-     * failure through onError(). Inside a coroutine the write runs in a coroutine of its own, in order with every other
-     * destination change made through the mirror (see inOrder()); outside one it runs before this returns, since a
-     * task that yields outside a scheduler never resumes.
+     * caller has at the time of the call, without its request timestamp or grant check (the source checked both),
+     * and reports a failure through onError(). Inside a coroutine the write runs in a coroutine of its own, in order
+     * with every other destination change made through the mirror (see inOrder()); outside one it runs before this
+     * returns, since a task that yields outside a scheduler never resumes.
      *
      * @param  Closure(): void  $write
      */
@@ -1719,7 +1720,9 @@ class Mirror extends Database
         $apply = function () use ($action, $destination, $snapshot, $write): void {
             try {
                 $destination->withSnapshot($snapshot, function () use ($destination, $write): void {
-                    $destination->withRequestTimestamp(null, $write);
+                    $destination->withCheckGrants(false, function () use ($destination, $write): void {
+                        $destination->withRequestTimestamp(null, $write);
+                    });
                 });
             } catch (Throwable $error) {
                 $this->logError($action, $error);

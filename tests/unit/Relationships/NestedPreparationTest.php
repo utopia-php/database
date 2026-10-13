@@ -22,6 +22,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
+use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Hook\Relationships;
@@ -58,6 +59,8 @@ final class NestedPreparationTest extends TestCase
     private const string UNHELD_REFUSAL = 'Permissions must be one of: (any, users, user:u1)';
 
     private const string MALFORMED = 'Wildcard permission "*" has been replaced. Use "any" instead.';
+
+    private const string BULK_REFUSAL = 'Invalid relationship value. A bulk update takes related documents by ID while placeholders are replaced or grants are checked.';
 
     private Authorization $authorization;
 
@@ -415,6 +418,59 @@ final class NestedPreparationTest extends TestCase
         $database->createDocument(self::FIRST, $root('user:'.self::USER));
         $childId = $this->assertGeneratedId($database, self::SECOND, 'child');
         $this->assertSame([Permission::read(Role::user(self::USER))], $database->getDocument(self::SECOND, $childId)->getPermissions());
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('types')]
+    public function testABulkUpdateRefusesARelatedDocumentGivenAsADocument(Closure $adapter, RelationshipType $type): void
+    {
+        $toggles = [
+            'placeholders replaced' => static fn (Database $database): Database => $database->setReplacePlaceholders(true),
+            'grants checked' => static fn (Database $database): Database => $database->setCheckGrants(true),
+        ];
+
+        foreach ($toggles as $toggle => $enable) {
+            $database = $this->database($adapter(), $type);
+            $database->createDocuments(self::FIRST, [new Document([Document::ID => 'one', 'name' => 'one']), new Document([Document::ID => 'two', 'name' => 'two'])]);
+            $enable($database);
+            $related = ['name' => 'child', Document::PERMISSIONS => [Permission::update(Role::team('admin'))]];
+            $toMany = \in_array($type, [RelationshipType::OneToMany, RelationshipType::ManyToMany], true);
+            $values = [
+                'document' => self::value($type, new Document([Document::ID => Id::PLACEHOLDER, ...$related])),
+                'array' => $toMany ? [$related] : $related,
+            ];
+
+            foreach ($values as $form => $value) {
+                $failure = $this->failure(fn () => $database->updateDocuments(self::FIRST, new Document([self::NEXT => $value])));
+
+                $this->assertInstanceOf(RelationshipException::class, $failure, "{$toggle}, {$form}");
+                $this->assertSame(self::BULK_REFUSAL, $failure->getMessage(), "{$toggle}, {$form}");
+            }
+
+            $this->assertSame(['one', 'two'], self::names($database, self::FIRST), $toggle);
+            $this->assertSame([], self::names($database, self::SECOND), $toggle);
+            $this->assertSame([], self::ids($database->getDocument(self::FIRST, 'one')->getAttribute(self::NEXT)), $toggle);
+            $this->assertSame([], self::ids($database->getDocument(self::FIRST, 'two')->getAttribute(self::NEXT)), $toggle);
+        }
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testABulkUpdateLinksARelatedDocumentByIdWhileBothTogglesAreOn(Closure $adapter): void
+    {
+        $database = $this->database($adapter(), RelationshipType::ManyToOne);
+        $database->createDocument(self::SECOND, new Document([Document::ID => 'stored', 'name' => 'stored']));
+        $database->createDocuments(self::FIRST, [new Document([Document::ID => 'one', 'name' => 'one']), new Document([Document::ID => 'two', 'name' => 'two'])]);
+        $database->setReplacePlaceholders(true)->setCheckGrants(true);
+
+        $this->assertSame(2, $database->updateDocuments(self::FIRST, new Document([self::NEXT => 'stored'])));
+
+        $this->assertSame(['stored'], self::ids($database->getDocument(self::FIRST, 'one')->getAttribute(self::NEXT)));
+        $this->assertSame(['stored'], self::ids($database->getDocument(self::FIRST, 'two')->getAttribute(self::NEXT)));
     }
 
     /**

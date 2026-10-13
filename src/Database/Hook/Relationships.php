@@ -3168,16 +3168,11 @@ class Relationships implements Attachable, Hook
     }
 
     /**
-     * Prepare the related documents $document holds as documents for a write of it to $collection, as deep as the
-     * write relates them, replacing its relationship values with prepared copies once every one is prepared; the
-     * related documents given are not changed. Where the database replaces placeholders, each whose ID is empty or
-     * Id::PLACEHOLDER gets a generated ID, so the write creates it. Where the database checks grants and
-     * authorization is enabled, each that carries permissions may only add permissions for roles the caller holds:
-     * a new one has none yet, any other has those of the document $resolve(collection, ID) gives, or of the stored
-     * one when $resolve gives null or is null. A write nested in another relationship write is left as given, as the
-     * outermost write prepared it.
-     *
-     * @param  (Closure(string, string): ?Document)|null  $resolve
+     * Prepare the related documents $document holds as documents, as deep as the write relates them, replacing its
+     * relationship values with prepared copies so the caller's related documents are not changed. A related document
+     * that does not exist yet has no permissions to keep, so all of its permissions are checked; any other keeps
+     * those of its staged view, else of the stored one. A write nested in another relationship write is left as
+     * given: the outermost write prepared it.
      *
      * @throws AuthorizationException When a related document adds a permission for a role the caller does not hold
      * @throws RelationshipException When a related document given as an array is not a valid document
@@ -3185,15 +3180,13 @@ class Relationships implements Attachable, Hook
      *
      * @internal
      */
-    public function prepareNested(Document $collection, Document $document, ?Closure $resolve = null): Document
+    public function prepareNested(Document $collection, Document $document, Preparation $preparation): Document
     {
-        $replace = $this->database->isReplacingPlaceholders();
-        $check = $this->database->isCheckingGrants() && $this->database->getAuthorization()->getStatus();
-        if ((! $replace && ! $check) || isset($this->writeStacks[$this->coroutine()])) {
+        if (isset($this->writeStacks[$this->coroutine()])) {
             return $document;
         }
 
-        foreach ($this->prepareNestedValues($collection, $document, [], $replace, $check, $resolve) as $key => $value) {
+        foreach ($this->prepareNestedValues($collection, $document, [], $preparation) as $key => $value) {
             $document->setAttribute($key, $value);
         }
 
@@ -3201,18 +3194,14 @@ class Relationships implements Attachable, Hook
     }
 
     /**
-     * The relationship values of $document that hold related documents as documents, with copies of those
-     * documents prepared.
-     *
      * @param  list<string>  $writeStack  The collections of the writes relating $document, innermost last
-     * @param  (Closure(string, string): ?Document)|null  $resolve
      * @return array<string, mixed>
      *
      * @throws AuthorizationException
      * @throws RelationshipException
      * @throws StructureException
      */
-    private function prepareNestedValues(Document $collection, Document $document, array $writeStack, bool $replace, bool $check, ?Closure $resolve): array
+    private function prepareNestedValues(Document $collection, Document $document, array $writeStack, Preparation $preparation): array
     {
         $depth = \count($writeStack);
         $prepared = [];
@@ -3242,9 +3231,7 @@ class Relationships implements Attachable, Hook
                     $relatedCollection,
                     $nested instanceof Document ? clone $nested : self::toDocument($nested),
                     [...$writeStack, $collection->getId()],
-                    $replace,
-                    $check,
-                    $resolve,
+                    $preparation,
                 );
             }
 
@@ -3256,26 +3243,25 @@ class Relationships implements Attachable, Hook
 
     /**
      * @param  list<string>  $writeStack
-     * @param  (Closure(string, string): ?Document)|null  $resolve
      *
      * @throws AuthorizationException
      * @throws RelationshipException
      * @throws StructureException
      */
-    private function prepareNestedDocument(Document $collection, Document $document, array $writeStack, bool $replace, bool $check, ?Closure $resolve): Document
+    private function prepareNestedDocument(Document $collection, Document $document, array $writeStack, Preparation $preparation): Document
     {
         $id = $document->getId();
         $new = $id === '';
-        if ($replace && ($new || Id::isPlaceholder($id))) {
+        if ($preparation->replace && ($new || Id::isPlaceholder($id))) {
             $document->setAttribute(Document::ID, Id::unique());
             $new = true;
         }
 
-        if ($check) {
-            $this->authorizeGrants($collection, $document, $new, $resolve);
+        if ($preparation->check) {
+            $this->authorizeGrants($collection, $document, $new, $preparation);
         }
 
-        foreach ($this->prepareNestedValues($collection, $document, $writeStack, $replace, $check, $resolve) as $key => $value) {
+        foreach ($this->prepareNestedValues($collection, $document, $writeStack, $preparation) as $key => $value) {
             $document->setAttribute($key, $value);
         }
 
@@ -3283,14 +3269,10 @@ class Relationships implements Attachable, Hook
     }
 
     /**
-     * Refuse permissions $document adds over its current ones for a role the caller does not hold.
-     *
-     * @param  (Closure(string, string): ?Document)|null  $resolve
-     *
      * @throws AuthorizationException
      * @throws StructureException
      */
-    private function authorizeGrants(Document $collection, Document $document, bool $new, ?Closure $resolve): void
+    private function authorizeGrants(Document $collection, Document $document, bool $new, Preparation $preparation): void
     {
         $permissions = $document->getAttribute(Document::PERMISSIONS);
         if ($permissions === null) {
@@ -3302,7 +3284,7 @@ class Relationships implements Attachable, Hook
             throw new StructureException($validator->getDescription());
         }
 
-        $current = $new ? [] : (Permission::aggregate($this->grantedView($collection, $document->getId(), $resolve)->getPermissions()) ?? []);
+        $current = $new ? [] : (Permission::aggregate($this->grantedView($collection, $document->getId(), $preparation)->getPermissions()) ?? []);
         $authorization = $this->database->getAuthorization();
 
         foreach (\array_diff(Permission::aggregate($document->getPermissions()) ?? [], $current) as $granted) {
@@ -3315,17 +3297,14 @@ class Relationships implements Attachable, Hook
     }
 
     /**
-     * The related document $id as a write would find it, whether or not the caller can read it: the document
-     * $resolve gives for it, else the stored one.
-     *
-     * @param  (Closure(string, string): ?Document)|null  $resolve
+     * Read whether or not the caller can read the document, as the write that changes it will find it.
      */
-    private function grantedView(Document $collection, string $id, ?Closure $resolve): Document
+    private function grantedView(Document $collection, string $id, Preparation $preparation): Document
     {
-        $staged = $resolve === null ? null : $resolve($collection->getId(), $id);
+        $staged = $preparation->resolve === null ? null : ($preparation->resolve)($collection->getId(), $id);
 
         return $staged ?? $this->database->getAuthorization()->skip(fn (): Document => $this->database->skipRelationships(
-            fn (): Document => $this->database->getDocument($collection->getId(), $id, [Query::select([Document::PERMISSIONS])])
+            fn (): Document => $this->database->getDocument($collection->getId(), $id, [Query::select([Document::PERMISSIONS])], $preparation->lock)
         ));
     }
 

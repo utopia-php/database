@@ -5,6 +5,7 @@ namespace Utopia\Database;
 use Exception;
 use Throwable;
 use Utopia\Database\Adapter\Limits;
+use Utopia\Database\Arithmetic\Rounding;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Contention as ContentionException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
@@ -810,6 +811,21 @@ abstract class Adapter
     abstract public function getSequences(Document $collection, array $documents): array;
 
     abstract public function limits(): Limits;
+
+    /**
+     * How this adapter's engine stored a fractional result in an integer column on database 7.4.1. MariaDB and
+     * MySQL computed a fractional operand in DOUBLE, rounded half to even, and a division by a whole number in
+     * exact DECIMAL, rounded half away from zero; adapters without a 7.4.1 engine of their own answer the same.
+     */
+    public function arithmetic(): Arithmetic
+    {
+        return new Arithmetic(
+            counter: Rounding::HalfEven,
+            operators: Rounding::HalfEven,
+            division: Rounding::HalfAwayFromZero,
+            power: Rounding::HalfEven,
+        );
+    }
 
     /**
      * Get Collection Size of the raw data

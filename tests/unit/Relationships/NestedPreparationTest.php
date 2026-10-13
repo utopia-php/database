@@ -425,14 +425,11 @@ final class NestedPreparationTest extends TestCase
     {
         $database = $this->database($adapter(), RelationshipType::ManyToOne);
 
-        $this->assertFalse($database->isReplacingPlaceholders());
-        $this->assertFalse($database->isCheckingGrants());
-        $this->assertSame([true, true], $database->withReplacePlaceholders(true, fn (): array => $database->withCheckGrants(true, fn (): array => [
-            $database->isReplacingPlaceholders(),
-            $database->isCheckingGrants(),
-        ])));
-        $this->assertFalse($database->isReplacingPlaceholders());
-        $this->assertFalse($database->isCheckingGrants());
+        $toggles = static fn (): array => [$database->isReplacingPlaceholders(), $database->isCheckingGrants()];
+
+        $this->assertSame([false, false], $toggles());
+        $this->assertSame([true, true], $database->withReplacePlaceholders(true, fn (): array => $database->withCheckGrants(true, $toggles)));
+        $this->assertSame([false, false], $toggles());
     }
 
     public function testASnapshotCarriesBothTogglesIntoAChildCoroutine(): void

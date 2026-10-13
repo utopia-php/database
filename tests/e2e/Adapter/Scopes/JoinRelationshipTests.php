@@ -78,7 +78,7 @@ trait JoinRelationshipTests
                 Query::select(['name', 'purchase.amount']),
                 Query::orderAsc('purchase.amount'),
             ]);
-            $this->assertSame([10, 20, 30, 40], \array_map(static fn (Document $row): int => (int) $row->getAttribute('purchase.amount'), $rows));
+            $this->assertSame([10, 20, 30, 40], \array_map(static fn (Document $row): ?int => self::joinRelationshipInteger($row->getAttribute('purchase.amount')), $rows));
             $this->assertSame(['Ada', 'Ada', 'Bob', 'Bob'], \array_map(static fn (Document $row): mixed => $row->getAttribute('name'), $rows));
         } finally {
             $this->deleteJoinRelationshipCollections($database, ...self::JOIN_RELATIONSHIP_COLLECTIONS);
@@ -130,16 +130,16 @@ trait JoinRelationshipTests
             $this->assertSame(
                 [['Ada', 30], ['Bob', 70]],
                 \array_map(
-                    static fn (array $row): array => [$row['name'], (int) $row['total']],
+                    static fn (array $row): array => [$row['name'], self::joinRelationshipInteger($row['total'])],
                     $database->aggregate(self::JOIN_RELATIONSHIP_CUSTOMERS, [$join, Query::sum('purchase.amount', 'total'), Query::groupBy(['name']), Query::orderAsc('name')]),
                 ),
             );
             $this->assertSame(
                 20,
-                (int) $database->getDocument(self::JOIN_RELATIONSHIP_CUSTOMERS, 'c1', [
+                self::joinRelationshipInteger($database->getDocument(self::JOIN_RELATIONSHIP_CUSTOMERS, 'c1', [
                     Query::join(self::JOIN_RELATIONSHIP_ORDERS, 'purchase', [Query::on('orders', '$id'), Query::equal('purchase.status', ['open'])]),
                     Query::select(['name', 'purchase.amount']),
-                ])->getAttribute('purchase.amount'),
+                ])->getAttribute('purchase.amount')),
             );
         } finally {
             $this->deleteJoinRelationshipCollections($database, ...self::JOIN_RELATIONSHIP_COLLECTIONS);
@@ -208,7 +208,7 @@ trait JoinRelationshipTests
             });
 
             $rows = $database->getAuthorization()->skip(fn (): array => $database->aggregate($main, $queries));
-            $this->assertSame(2, (int) $rows[0]['rows'], 'with authorization disabled every joined row is read');
+            $this->assertSame(2, self::joinRelationshipInteger($rows[0]['rows']), 'with authorization disabled every joined row is read');
         } finally {
             $this->deleteJoinRelationshipCollections($database, $main, $joined);
         }
@@ -234,8 +234,8 @@ trait JoinRelationshipTests
                     Query::sum('entry.amount', 'total'),
                 ]);
 
-                $this->assertSame([1, 5], [(int) $joinedRows[0]['rows'], (int) $joinedRows[0]['total']], 'a direct aggregate reads only the rows the caller holds read on');
-                $this->assertSame([1, 5], [(int) $rows[0]['rows'], (int) $rows[0]['total']], 'an aggregate over the join reads the same rows');
+                $this->assertSame([1, 5], [self::joinRelationshipInteger($joinedRows[0]['rows']), self::joinRelationshipInteger($joinedRows[0]['total'])], 'a direct aggregate reads only the rows the caller holds read on');
+                $this->assertSame([1, 5], [self::joinRelationshipInteger($rows[0]['rows']), self::joinRelationshipInteger($rows[0]['total'])], 'an aggregate over the join reads the same rows');
             });
         } finally {
             $this->deleteJoinRelationshipCollections($database, $main, $joined);
@@ -387,5 +387,10 @@ trait JoinRelationshipTests
                 $authorization->addRole($role);
             }
         }
+    }
+
+    private static function joinRelationshipInteger(mixed $value): ?int
+    {
+        return \is_numeric($value) ? (int) $value : null;
     }
 }

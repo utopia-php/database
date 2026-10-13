@@ -246,7 +246,7 @@ final class RelationshipJoinTest extends TestCase
         yield 'sum' => [static fn (Database $database): int => (int) $database->sum('customers', 'ord.amount', [$join]), 100];
         yield 'aggregate' => [
             static fn (Database $database): array => \array_map(
-                static fn (array $row): array => [$row['name'], (int) $row['total']],
+                static fn (array $row): array => [$row['name'], self::integer($row['total'])],
                 $database->aggregate('customers', [$join, Query::sum('ord.amount', 'total'), Query::groupBy(['name']), Query::orderAsc('name')]),
             ),
             [['Ada', 30], ['Bob', 70]],
@@ -330,5 +330,10 @@ final class RelationshipJoinTest extends TestCase
             '$permissions' => [Permission::read(Role::any())],
             ...$attributes,
         ]));
+    }
+
+    private static function integer(mixed $value): ?int
+    {
+        return \is_numeric($value) ? (int) $value : null;
     }
 }

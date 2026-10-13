@@ -1,5 +1,20 @@
 # Changelog
 
+## 8.1.1
+
+### Added
+
+- `Database::authorizeGrants(string $collection, Document $document, ?callable $resolve = null): void` runs only the
+  grant check of `authorizeCreate()` and `authorizeUpdate()`, and writes nothing. It refuses a related document given
+  as a document that adds a permission for a role the caller does not hold, with the same `Exception\Authorization`
+  (`Permissions must be one of: (<roles>)`), and malformed permissions with the same `Exception\Structure`. Related
+  documents are first prepared by the `Hook\Nested` hooks, and `$resolve` gives their staged view, as for
+  `authorizeCreate()`. It checks no create or update permission on the collection, the document or any related
+  collection or document, so a caller can report an unheld grant before those checks, such as for a staged upsert.
+  `$document` is the document or the changes a later write would be given. It does nothing, and reads nothing, unless
+  grants are checked (`setCheckGrants(true)`), authorization is enabled and the relationship hook is attached and
+  enabled; while they are, a missing collection throws `Exception\NotFound`.
+
 ## 8.1.0
 
 8.1.0 adds opt-in and additive APIs for work that callers had to do themselves. With no `Hook\Nested` hook registered

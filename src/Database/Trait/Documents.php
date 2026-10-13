@@ -1115,6 +1115,38 @@ trait Documents
     }
 
     /**
+     * Check, without writing anything, only the grants of the related documents nested in $document: the part of
+     * authorizeCreate() and authorizeUpdate() that refuses a related document adding a permission for a role the
+     * caller does not hold. It checks neither create nor update on $collection, on $document or on any related
+     * collection or document, so it can run before them, as for a staged upsert that is not known to create or update
+     * yet. Related documents are first prepared by the registered {@see \Utopia\Database\Hook\Nested} hooks, and
+     * $resolve gives their staged view, both as for authorizeCreate(). The grants judged are the same whether the
+     * later write creates or updates the document that relates them.
+     *
+     * It does nothing, and reads nothing, unless grants are checked ({@see Database::setCheckGrants()}), authorization
+     * is enabled, and the relationship hook is attached and enabled.
+     *
+     * @param  string  $collection  The collection identifier
+     * @param  Document  $document  The document, or the changes, a later write would be given; it is not changed
+     * @param  (callable(string, string): ?Document)|null  $resolve  The staged view of a related document; null judges every one as stored
+     *
+     * @throws AuthorizationException When a related document adds a permission for a role the caller does not hold
+     * @throws NotFoundException When the collection does not exist
+     * @throws RelationshipException When a related document given as an array is not a valid document
+     * @throws StructureException When a related document's permissions are malformed
+     */
+    public function authorizeGrants(string $collection, Document $document, ?callable $resolve = null): void
+    {
+        if (! $this->checksGrants() || ! $this->relationshipHook?->isEnabled()) {
+            return;
+        }
+
+        $definition = $this->silent(fn () => $this->getCollection($collection));
+
+        $this->prepareNestedCopy($definition, $document, $this->nestedPreparation($resolve));
+    }
+
+    /**
      * @param  string  $collection  The collection identifier
      * @param  Document  $document  The document to create
      * @return Document The created document with generated ID and timestamps

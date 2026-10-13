@@ -42,7 +42,7 @@ Register it with `$database->addHook($hook)`. Remove it with `removeHook($hook)`
 - **What it is given.** Each related document that `createDocument()`, `createDocuments()`, `updateDocument()`,
   `upsertDocument()`, `upsertDocuments()`, `authorizeCreate()` or `authorizeUpdate()` is given as a document (a
   `Document` or an associative array), at every depth the write relates. `$collection` is the collection the related
-  document belongs to.
+  document belongs to. Since 8.1.1, `authorizeGrants()` gives it the same documents, only while it checks grants.
 - **When it runs.** Before the write checks the document's grants and relates it, a parent before its children.
   Several hooks run in the order they were registered, each given the document the previous one returned.
 - **What it returns.** It is given a copy, never the caller's document. The write checks and relates the document it
@@ -104,9 +104,9 @@ Opt-in. By default 8.1 never compares the permissions a write grants with the ro
 
 With `setCheckGrants(true)`, the check covers related documents written through a parent: every related document
 given as a document to `createDocument()`, `createDocuments()`, `updateDocument()`, `upsertDocument()`,
-`upsertDocuments()`, `authorizeCreate()` or `authorizeUpdate()`, as deep as the write relates them, each as the
-[`Hook\Nested` hooks](#preparing-nested-related-documents) return it. The document the write is given is not checked.
-For each related document whose `$permissions` is not null:
+`upsertDocuments()`, `authorizeCreate()`, `authorizeUpdate()` or `authorizeGrants()`, as deep as the write relates
+them, each as the [`Hook\Nested` hooks](#preparing-nested-related-documents) return it. The document the write is given
+is not checked. For each related document whose `$permissions` is not null:
 
 - Malformed permissions throw `Exception\Structure` with the `Validator\Permissions` description.
 - The permissions it adds must name roles the caller holds (`Authorization::hasRole()`). Otherwise the write throws
@@ -132,6 +132,24 @@ A related document's current permissions are read whether or not the caller can 
   is new.
 - A related document whose `$id` a `Hook\Nested` hook assigned is new to this check: none of its permissions are read,
   locked or resolved, so all of them are checked.
+
+Since 8.1.1, `authorizeGrants(string $collection, Document $document, ?callable $resolve = null): void` runs this check
+alone, without writing anything. It judges the related documents of `$document` exactly as `authorizeCreate()` and
+`authorizeUpdate()` do, after the `Hook\Nested` hooks and through `$resolve`, and throws the same exceptions, but it
+checks no create or update permission. Call it first when an unheld grant must be reported even if the caller also
+lacks permission on the parent, for example for a staged upsert that is not yet known to create or update:
+
+```php
+$database->authorizeGrants('books', $book, $resolve);
+if ($stored->isEmpty()) {
+    $database->authorizeCreate('books', $book, $resolve);
+} else {
+    $database->authorizeUpdate('books', $stored, $book, $resolve);
+}
+```
+
+It does nothing, and reads nothing, unless grants are checked, authorization is enabled and the relationship hook is
+attached and enabled.
 
 While grants are checked, `updateDocuments()` refuses a related document given as a document with
 `Exception\Relationship` (`Invalid relationship value. A bulk update takes related documents by ID while grants are

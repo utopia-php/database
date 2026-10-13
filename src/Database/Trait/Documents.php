@@ -494,7 +494,6 @@ trait Documents
         $attributes = $collection->attributes();
 
         $this->checkQueryTypes($queries);
-        $queries = $this->rewriteRelationshipJoins($collection, $queries);
 
         $joinedCollections = null;
 
@@ -3985,7 +3984,6 @@ trait Documents
         $queryCacheQueries = $queries;
 
         $this->checkQueryTypes($queries);
-        $queries = $this->rewriteRelationshipJoins($collection, $queries);
 
         $joinedCollectionsById = null;
 
@@ -4356,7 +4354,6 @@ trait Documents
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $this->checkQueryTypes($queries);
-        $queries = $this->rewriteRelationshipJoins($collection, $queries);
 
         $joinedCollections = null;
 
@@ -4413,7 +4410,6 @@ trait Documents
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $this->checkQueryTypes($queries);
-        $queries = $this->rewriteRelationshipJoins($collection, $queries);
 
         $joinedCollections = null;
 

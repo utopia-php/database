@@ -10,110 +10,13 @@ use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
-use Utopia\Database\RelationshipSide;
-use Utopia\Database\RelationshipType;
 use Utopia\Database\Validator\Authorization\Input;
 use Utopia\Database\Validator\Query\Join as JoinValidator;
 use Utopia\Query\Method;
-use Utopia\Query\Query as BaseQuery;
 use Utopia\Query\Schema\IndexType;
 
 trait Joins
 {
-    /**
-     * A one-to-many parent attribute, or the child side of a two-way many-to-one, has no column: the related
-     * collection stores this document's ID under the two-way key. A join comparing such an attribute with the related
-     * `$id` compares this document's `$id` with that key instead. Rewritten joins are copies of the caller's.
-     *
-     * @param  array<Query>  $queries
-     * @return array<Query>
-     */
-    private function rewriteRelationshipJoins(Collection $collection, array $queries): array
-    {
-        $relationships = null;
-
-        foreach ($queries as $index => $query) {
-            if (! $query->getMethod()->isJoin()) {
-                continue;
-            }
-
-            $relationships ??= self::joinableRelationships($collection);
-            if ($relationships === []) {
-                return $queries;
-            }
-
-            $joined = $query->getAttribute();
-            $alias = $query->getAlias();
-            $rewritten = null;
-
-            foreach ($query->getJoinOnQueries() as $position => $condition) {
-                $column = self::relationshipJoinColumn($condition, $joined, $alias, $relationships);
-                if ($column === null) {
-                    continue;
-                }
-
-                $rewritten ??= clone $query;
-                $rewritten->getJoinOnQueries()[$position]->setValues([Document::ID, $condition->getValues()[1] ?? '=', $alias.'.'.$column]);
-            }
-
-            if ($rewritten !== null) {
-                $queries[$index] = $rewritten;
-            }
-        }
-
-        return $queries;
-    }
-
-    /**
-     * @return array<string, Attribute>
-     */
-    private static function joinableRelationships(Collection $collection): array
-    {
-        $relationships = [];
-        foreach (self::relationshipAttributes($collection) as $attribute) {
-            $relationship = $attribute->relationship;
-            if ($relationship === null || $relationship->twoWayKey === null || $relationship->twoWayKey === '') {
-                continue;
-            }
-
-            $storedByRelated = match ($relationship->type) {
-                RelationshipType::OneToMany => $attribute->side === RelationshipSide::Parent,
-                RelationshipType::ManyToOne => $attribute->side === RelationshipSide::Child && $relationship->twoWay,
-                RelationshipType::OneToOne, RelationshipType::ManyToMany => false,
-            };
-
-            if ($storedByRelated) {
-                $relationships[$attribute->key] = $attribute;
-            }
-        }
-
-        return $relationships;
-    }
-
-    /**
-     * @param  array<string, Attribute>  $relationships
-     */
-    private static function relationshipJoinColumn(BaseQuery $condition, string $joined, string $alias, array $relationships): ?string
-    {
-        if ($condition->getMethod() !== Method::On) {
-            return null;
-        }
-
-        $values = $condition->getValues();
-        $left = $values[0] ?? null;
-        $right = $values[2] ?? null;
-        if (! \is_string($left) || ($right !== Document::ID && $right !== $alias.'.'.Document::ID)) {
-            return null;
-        }
-
-        $relationship = ($relationships[$left] ?? null)?->relationship;
-        if ($relationship === null || $relationship->relatedCollection !== $joined) {
-            return null;
-        }
-
-        return $relationship->twoWayKey;
-    }
-
     /**
      * The collections the join queries name, each loaded once, by the id the join names it with. A
      * read resolves them once and hands them to validation, authorization, the adapter and decoding.

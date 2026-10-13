@@ -14,10 +14,8 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Hook\Permissions;
-use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Permission;
 use Utopia\Database\Query;
-use Utopia\Database\Relationship;
 use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\CursorDirection;
@@ -48,7 +46,6 @@ final class ResolveCursorTest extends TestCase
             ->setAuthorization($authorization)
             ->setDatabase('resolve_cursor')
             ->setNamespace('resolve_cursor_'.\uniqid());
-        $this->database->addHook(new Relationships());
         $this->database->addHook(new Permissions());
         $this->database->create();
 
@@ -293,27 +290,6 @@ final class ResolveCursorTest extends TestCase
         $this->assertSame(['a-second'], $this->ids($this->database->find(self::ORDERS, [...$queries, Query::cursorAfter($cursor)])));
     }
 
-    public function testCursorOverAJoinOnAOneToManyRelationshipPagesEveryRowOnce(): void
-    {
-        $this->database->createRelationship(self::CUSTOMERS, Relationship::oneToMany(relatedCollection: self::ORDERS, key: 'orders', twoWayKey: 'customer'));
-        $this->customer('alice', readable: true);
-        $this->customer('bob', readable: true);
-        $this->customer('carol', readable: true);
-        $this->order('a-first', 'alice', 10, readable: true, customer: 'alice');
-        $this->order('a-second', 'alice', 20, readable: true, customer: 'alice');
-        $this->order('b-first', 'bob', 30, readable: true, customer: 'bob');
-        $this->order('b-second', 'bob', 40, readable: true, customer: 'bob');
-        $this->order('c-hidden', 'carol', 5, readable: false, customer: 'carol');
-        $this->order('c-only', 'carol', 50, readable: true, customer: 'carol');
-
-        $queries = [Query::join(self::ORDERS, 'ord', [Query::on('orders', '$id')]), Query::orderAsc('ord.amount')];
-
-        $this->assertSame(20, $this->database->resolveCursor(self::CUSTOMERS, 'alice', CursorDirection::After, $queries)->getAttribute('ord.amount'));
-        $this->assertSame(50, $this->database->resolveCursor(self::CUSTOMERS, 'carol', CursorDirection::Before, $queries)->getAttribute('ord.amount'), 'the hidden order never pairs with carol');
-        $this->assertWalksEveryRowOnce($queries, ['alice', 'alice', 'bob', 'bob', 'carol'], 2);
-        $this->assertCursorSplitsTheList($queries);
-    }
-
     public function testCursorCarriesOnlyTheValuesTheListPagesBy(): void
     {
         $this->customer('alice', readable: true);
@@ -486,7 +462,6 @@ final class ResolveCursorTest extends TestCase
         string $status = 'paid',
         ?string $placedAt = null,
         ?string $productId = null,
-        ?string $customer = null,
     ): void {
         $this->create(self::ORDERS, $id, [
             'customerId' => $customerId,
@@ -494,7 +469,6 @@ final class ResolveCursorTest extends TestCase
             'status' => $status,
             'amount' => $amount,
             'placedAt' => $placedAt,
-            ...($customer === null ? [] : ['customer' => $customer]),
         ], $readable);
     }
 

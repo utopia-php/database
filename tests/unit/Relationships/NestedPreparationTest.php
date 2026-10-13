@@ -450,6 +450,36 @@ final class NestedPreparationTest extends TestCase
      * @param  Closure(): Adapter  $adapter
      */
     #[DataProvider('types')]
+    public function testAnIdTheHookAssignsIsJudgedNewWithoutReadingTheStoredPermissions(Closure $adapter, RelationshipType $type): void
+    {
+        $database = $this->twoWayDatabase($adapter(), $type);
+        $foreign = [Permission::read(Role::user('u2'))];
+        $database->createDocument(self::SECOND, new Document([Document::ID => 'stored', 'name' => 'stored', Document::PERMISSIONS => $foreign]));
+        $database->createDocument(self::FIRST, new Document([Document::ID => 'updated', 'name' => 'updated']));
+        $database->setCheckGrants(true)->addHook($this->hook(static fn (string $id): string => $id === self::MARKER ? 'stored' : $id));
+        $child = static fn (string $id): Document => new Document([Document::ID => $id, 'name' => 'stored', Document::PERMISSIONS => $foreign]);
+
+        $this->assertSame(
+            self::UNHELD_REFUSAL,
+            $this->refusal(fn () => $database->createDocument(self::FIRST, new Document([Document::ID => 'created', 'name' => 'created', self::NEXT => self::value($type, $child(self::MARKER))]))),
+            'The stored permissions of an ID the hook assigns are not read, so sending them back grants them anew',
+        );
+        $this->assertSame(
+            self::UNHELD_REFUSAL,
+            $this->refusal(fn () => $database->updateDocument(self::FIRST, 'updated', new Document([self::NEXT => self::value($type, $child(self::MARKER))]))),
+        );
+        $this->assertSame(['updated'], self::names($database, self::FIRST));
+        $this->assertSame([], self::ids($database->getDocument(self::FIRST, 'updated')->getAttribute(self::NEXT)));
+
+        $database->createDocument(self::FIRST, new Document([Document::ID => 'kept', 'name' => 'kept', self::NEXT => self::value($type, $child('stored'))]));
+        $this->assertSame(['stored'], self::ids($database->getDocument(self::FIRST, 'kept')->getAttribute(self::NEXT)), 'An ID the hook keeps is judged by its stored permissions');
+        $this->assertSame($foreign, $this->authorization->skip(fn (): Document => $database->getDocument(self::SECOND, 'stored'))->getPermissions());
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('types')]
     public function testAnUnheldRoleIsRefusedAtEachDepth(Closure $adapter, RelationshipType $type): void
     {
         $database = $this->database($adapter(), $type)->setCheckGrants(true);

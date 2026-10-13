@@ -127,6 +127,8 @@ A related document's current permissions are read whether or not the caller can 
 - `authorizeCreate()` and `authorizeUpdate()` take them from `$resolve($collection, $id)` when it returns a document,
   and from the stored document when it returns `null`. A document `$resolve` returns empty (staged for deletion)
   is new.
+- A related document whose `$id` a `Hook\Nested` hook assigned is new to this check: none of its permissions are read,
+  locked or resolved, so all of them are checked.
 
 While grants are checked, `updateDocuments()` refuses a related document given as a document with
 `Exception\Relationship` (`Invalid relationship value. A bulk update takes related documents by ID while grants are

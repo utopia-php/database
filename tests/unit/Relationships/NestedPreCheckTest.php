@@ -221,6 +221,54 @@ final class NestedPreCheckTest extends TestCase
     }
 
     /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('types')]
+    public function testAnIdTheHookAssignsIsJudgedNewWithoutTheStoredOrStagedPermissions(Closure $adapter, RelationshipType $type): void
+    {
+        $foreign = [Permission::read(Role::user('u2'))];
+        $this->seed($adapter(), $type, [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())], $foreign);
+        $this->database->setCheckGrants(true)->addHook($this->assigning(self::STORED));
+        $staged = static fn (string $collection, string $id): ?Document => $collection === self::RELATED && $id === self::STORED
+            ? new Document([Document::ID => self::STORED, Document::COLLECTION => self::RELATED, 'name' => 'Stored', Document::PERMISSIONS => $foreign])
+            : null;
+        $kept = $this->parent($type, new Document([Document::ID => self::STORED, 'name' => 'Stored', Document::PERMISSIONS => $foreign]));
+        $assigned = $this->parent($type, new Document([Document::ID => self::MARKER, 'name' => 'Stored', Document::PERMISSIONS => $foreign]));
+
+        $this->assertNull($this->refusal(fn () => $this->database->authorizeCreate('parents', $kept)), 'An ID the hook keeps is judged by its stored permissions');
+        $this->assertNull($this->refusal(fn () => $this->database->authorizeCreate('parents', $kept, $staged)), 'An ID the hook keeps is judged by its staged permissions');
+        $this->assertSame(self::UNHELD_REFUSAL, $this->refusal(fn () => $this->database->authorizeCreate('parents', $assigned)), 'The stored permissions of an ID the hook assigns are not read');
+        $this->assertSame(self::UNHELD_REFUSAL, $this->refusal(fn () => $this->database->authorizeCreate('parents', $assigned, $staged)), 'The staged permissions of an ID the hook assigns are not resolved');
+        $this->assertSame(self::UNHELD_REFUSAL, $this->refusal(fn () => $this->database->authorizeUpdate('parents', $this->storedParent(), new Document([self::RELATED => $assigned->getAttribute(self::RELATED)]), $staged)));
+        $this->assertSame([], $this->relatedNames());
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('types')]
+    public function testAnIdTheHookAssignsNeedsCreateWhileGrantsAreChecked(Closure $adapter, RelationshipType $type): void
+    {
+        $held = [Permission::read(Role::user(self::USER))];
+        $related = new Document([Document::ID => self::MARKER, 'name' => 'Created', Document::PERMISSIONS => $held]);
+
+        $this->chain($adapter(), $type, [Permission::read(Role::any()), Permission::update(Role::any())]);
+        $this->database->setCheckGrants(true)->addHook($this->marker());
+        $this->assertSame(self::NO_CREATE, $this->refusal(fn () => $this->database->authorizeCreate('parents', $this->parent($type, $related))));
+        $this->assertSame(self::NO_CREATE, $this->refusal(fn () => $this->database->createDocument('parents', $this->parent($type, $related))));
+        $this->assertSame([], $this->relatedNames());
+
+        $this->chain($adapter(), $type, [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())]);
+        $this->database->setCheckGrants(true)->addHook($this->marker());
+        $this->assertNull($this->refusal(fn () => $this->database->authorizeCreate('parents', $this->parent($type, $related))));
+        $created = self::ids($this->database->createDocument('parents', $this->parent($type, $related))->getAttribute(self::RELATED));
+        $this->assertCount(1, $created);
+        $this->assertNotSame(self::MARKER, $created[0]);
+        $this->assertSame($held, $this->authorization->skip(fn (): Document => $this->database->getDocument(self::RELATED, $created[0]))->getPermissions());
+        $this->assertSame(['Created'], $this->relatedNames());
+    }
+
+    /**
      * @param  list<string>  $collectionPermissions
      * @param  list<string>|null  $storedPermissions  The related document's permissions; null stores none
      */
@@ -326,6 +374,26 @@ final class NestedPreCheckTest extends TestCase
                 ($this->record)($collection->getId(), $document->getId());
 
                 return $document->getId() === $this->marker ? $document->setAttribute(Document::ID, Id::unique()) : $document;
+            }
+        };
+    }
+
+    /**
+     * A hook that replaces a MARKER ID with $id.
+     */
+    private function assigning(string $id): Nested
+    {
+        return new class (self::MARKER, $id) implements Nested {
+            public function __construct(
+                private readonly string $marker,
+                private readonly string $id,
+            ) {
+            }
+
+            #[\Override]
+            public function prepare(Document $collection, Document $document): Document
+            {
+                return $document->getId() === $this->marker ? $document->setAttribute(Document::ID, $this->id) : $document;
             }
         };
     }

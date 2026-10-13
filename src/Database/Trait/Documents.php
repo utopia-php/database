@@ -12,6 +12,7 @@ use Utopia\Console;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\ReadWritePool;
+use Utopia\Database\Arithmetic\Fractional;
 use Utopia\Database\Attribute;
 use Utopia\Database\Cache\Epoch;
 use Utopia\Database\Cache\Owners;
@@ -280,6 +281,173 @@ trait Documents
     private function integerBound(int|float|string $bound, string $name): int|string
     {
         return BigInt::integralValue($bound) ?? throw new TypeException($name.' must be an integer.');
+    }
+
+    /**
+     * A bound on an integer attribute as the whole number it allows: with fractions rounded, a fractional maximum
+     * rounds down and a fractional minimum up.
+     *
+     * @throws TypeException
+     */
+    private function integerLimit(int|float|string $bound, bool $maximum, bool $round): int|string
+    {
+        if ($round) {
+            $bound = ($maximum ? Fractional::maximum($bound) : Fractional::minimum($bound)) ?? $bound;
+        }
+
+        return $this->integerBound($bound, $maximum ? 'Max' : 'Min');
+    }
+
+    /**
+     * With fractions rounded, whether a change on an integer attribute is answered from the stored value it
+     * changes: a float or decimal text change, which returns its exact result, or a whole change whose bound is
+     * not a whole number on an engine that refused a fractional counter.
+     */
+    private function isExactChange(int|float|string $value, int|float|string|null $bound): bool
+    {
+        if (BigInt::integralValue($value) === null && ! Fractional::isFractional($value)) {
+            return false;
+        }
+
+        if (! BigInt::isIntegerValue($value)) {
+            return true;
+        }
+
+        return $bound !== null
+            && \is_numeric($bound)
+            && BigInt::integralValue($bound) === null
+            && $this->adapter->arithmetic()->refusesCounterFractions;
+    }
+
+    /**
+     * @throws TypeException
+     */
+    private function assertNumericBound(int|float|string $bound, string $name): void
+    {
+        if (! \is_numeric($bound) || (\is_float($bound) && \is_nan($bound))) {
+            throw new TypeException($name.' must be an integer.');
+        }
+    }
+
+    /**
+     * The whole-number change that stores what the engine stored for $value added to or taken from the stored
+     * value, with the exact result. The exact result is held to the bound as given, before the engine's own
+     * refusals, in the order database 7.4.1 checked them.
+     *
+     * @return array{int|string, float}
+     *
+     * @throws LimitException
+     * @throws TypeException
+     */
+    private function exactChange(mixed $stored, int|float|string $value, int|float|string|null $bound, bool $increase): array
+    {
+        $stored ??= 0;
+        if (! BigInt::isIntegerValue($stored)) {
+            throw new TypeException('Attribute value must be an integer.');
+        }
+
+        $exact = $increase ? (float) $stored + (float) $value : (float) $stored - (float) $value;
+        if ($bound !== null && ($increase ? $exact > (float) $bound : $exact < (float) $bound)) {
+            throw new LimitException('Attribute value exceeds '.($increase ? 'maximum' : 'minimum').' limit: '.$bound);
+        }
+
+        $arithmetic = $this->adapter->arithmetic();
+        $change = (new Fractional($arithmetic))->counter(BigInt::toNative($stored), $value, $increase);
+
+        if ($bound !== null && $arithmetic->refusesCounterFractions && BigInt::integralValue($bound) === null) {
+            throw new TypeException(($increase ? 'Max' : 'Min').' must be an integer.');
+        }
+
+        return [$change, $exact];
+    }
+
+    /**
+     * The keys of the single-valued integer attributes a document changes with a numeric operator whose amount or
+     * limit is fractional.
+     *
+     * @return list<string>
+     */
+    private static function fractionalKeys(Collection $collection, Document $document): array
+    {
+        $keys = [];
+        foreach ($collection->attributes() as $attribute) {
+            $value = $document->getAttribute($attribute->key);
+            if ($value instanceof Operator && ! $attribute->array && $attribute->isInteger() && Fractional::needsStored($value)) {
+                $keys[] = $attribute->key;
+            }
+        }
+
+        return $keys;
+    }
+
+    /**
+     * Cut each fractional item a document adds to an integer array toward zero, as every engine read it back.
+     */
+    private static function wholeItems(Collection $collection, Document $document): void
+    {
+        foreach ($collection->attributes() as $attribute) {
+            $value = $document->getAttribute($attribute->key);
+            if ($value instanceof Operator && $attribute->array && $attribute->isInteger()) {
+                $document->setAttribute($attribute->key, Fractional::whole($value));
+            }
+        }
+    }
+
+    /**
+     * The operators under $keys answered from the stored document as the engine answered them; one the engine
+     * refused comes back unchanged.
+     *
+     * @param  list<string>  $keys
+     * @return array<string, Operator>
+     */
+    private static function resolveFractions(Document $document, array $keys, Document $stored, Fractional $fractional): array
+    {
+        $resolved = [];
+        foreach ($keys as $key) {
+            $operator = $document->getAttribute($key);
+            if ($operator instanceof Operator) {
+                $resolved[$key] = $fractional->operator($operator, $stored->getAttribute($key))->setAttribute($key);
+            }
+        }
+
+        return $resolved;
+    }
+
+    /**
+     * @param  array<string, Operator>  $operators
+     *
+     * @throws StructureException when the engine refused an operator, which still carries its fraction
+     */
+    private function assertResolvedFractions(Collection $collection, array $operators, Document $stored): void
+    {
+        if (! $this->validation()->get()) {
+            return;
+        }
+
+        $validator = new PartialStructure(
+            collection: $collection,
+            profile: $this->profile(),
+            currentDocument: $stored->isEmpty() ? null : $stored,
+        );
+        if (! $validator->isValid(new Document($operators))) {
+            throw new StructureException($validator->getDescription());
+        }
+    }
+
+    /**
+     * The stored document, read locked for the write's transaction under its own tenant, whatever the caller may
+     * read.
+     */
+    private function readLocked(Collection $collection, Document $document): Document
+    {
+        $read = fn (): Document => $this->authorization->skip(fn () => $this->silent(
+            fn () => $this->readDocument($collection, $document->getId(), forUpdate: true)
+        ));
+        $tenant = $document->getTenant();
+
+        return $this->hasSharedTables() && $this->isTenantPerDocument() && $tenant !== null
+            ? $this->withTenant($tenant, $read)
+            : $read();
     }
 
     /**
@@ -1559,10 +1727,11 @@ trait Documents
         $document = $this->prepareNested($collection, $document);
         $newUpdatedAt = $document->getUpdatedAt();
         $hasOperators = false;
+        $round = $this->fractionRounding()->get();
         $cacheTarget = $collection->getId() === self::METADATA
             ? new Document([Document::ID => $id, Document::COLLECTION => self::METADATA])
             : $collection->getId();
-        $document = $this->withMutation(Event::DocumentUpdate, $cacheTarget, function () use ($collection, $id, $document, $newUpdatedAt, &$hasOperators) {
+        $document = $this->withMutation(Event::DocumentUpdate, $cacheTarget, function () use ($collection, $id, $document, $newUpdatedAt, $round, &$hasOperators) {
             $old = $this->authorization->skip(fn () => $this->silent(
                 fn () => $this->readDocument($collection, $id, forUpdate: true)
             ));
@@ -1601,6 +1770,14 @@ trait Documents
             // counting it as a change would bump $updatedAt and fire an update event
             // for a write that leaves the stored document identical.
             $document = $this->removeUnknownAttributes($collection, $document);
+
+            if ($round) {
+                self::wholeItems($collection, $document);
+                $keys = self::fractionalKeys($collection, $document);
+                if ($keys !== []) {
+                    $document->setAttributes(self::resolveFractions($document, $keys, $old, new Fractional($this->adapter->arithmetic())));
+                }
+            }
 
             $shouldUpdate = false;
 
@@ -1923,6 +2100,13 @@ trait Documents
         $updatedAt = $updates->getUpdatedAt();
         $updates[Document::UPDATED_AT] = ($updatedAt === null || ! $this->datePreservation()->get()) ? DateTime::now() : $updatedAt;
 
+        $fractionalKeys = [];
+        if ($this->fractionRounding()->get()) {
+            self::wholeItems($collection, $updates);
+            $fractionalKeys = self::fractionalKeys($collection, $updates);
+        }
+        $fractional = $fractionalKeys === [] ? null : new Fractional($this->adapter->arithmetic());
+
         $decodedUpdates = clone $updates;
         $updates = $this->encode(
             $collection,
@@ -1934,6 +2118,7 @@ trait Documents
             $validator = new PartialStructure(
                 collection: $collection,
                 profile: $this->profile(),
+                fractions: $fractional !== null,
             );
 
             if (! $validator->isValid($updates)) {
@@ -1992,8 +2177,9 @@ trait Documents
 
             $cacheTarget = $collection->getId() === self::METADATA ? $batch : $collection->getId();
             $found = $batch;
-            $this->withMutation(Event::DocumentsUpdate, $cacheTarget, function () use ($collection, $updates, $decodedUpdates, $adapterUpdates, &$batch, $found, $currentPermissions) {
+            $this->withMutation(Event::DocumentsUpdate, $cacheTarget, function () use ($collection, $updates, $decodedUpdates, $adapterUpdates, $adapterData, $fractionalKeys, $fractional, &$batch, $found, $currentPermissions) {
                 $keepsPermissions = [];
+                $groups = [];
                 foreach ($found as $index => $document) {
                     $skipPermissionsUpdate = true;
 
@@ -2013,9 +2199,19 @@ trait Documents
                     // keeps the permission rows of every document under that id rewritten.
                     $keepsPermissions[$document->getId()] = $skipPermissionsUpdate && ($keepsPermissions[$document->getId()] ?? true);
 
+                    $resolved = [];
+                    if ($fractional !== null) {
+                        $stored = $this->readLocked($collection, $document);
+                        $resolved = self::resolveFractions($decodedUpdates, $fractionalKeys, $stored, $fractional);
+                        $this->assertResolvedFractions($collection, $resolved, $stored);
+                        $signature = \serialize(\array_map(static fn (Operator $operator): array => $operator->toArray(), $resolved));
+                        $groups[$signature]['operators'] = $resolved;
+                        $groups[$signature]['indexes'][] = $index;
+                    }
+
                     $updateData = [];
                     foreach ($decodedUpdates->getArrayCopy() as $key => $value) {
-                        $updateData[$key] = $value instanceof Operator ? clone $value : $value;
+                        $updateData[$key] = $resolved[$key] ?? ($value instanceof Operator ? clone $value : $value);
                     }
                     $new = new Document(\array_merge($document->getArrayCopy(), $updateData));
 
@@ -2041,12 +2237,23 @@ trait Documents
                     $batch[$index] = $this->castBefore($collection, $encoded);
                 }
 
-                $this->adapter->updateDocuments(
-                    $collection,
-                    $adapterUpdates,
-                    $batch,
-                    \array_filter($keepsPermissions),
-                );
+                if ($groups === []) {
+                    $this->adapter->updateDocuments(
+                        $collection,
+                        $adapterUpdates,
+                        $batch,
+                        \array_filter($keepsPermissions),
+                    );
+                }
+
+                foreach ($groups as ['operators' => $operators, 'indexes' => $indexes]) {
+                    $this->adapter->updateDocuments(
+                        $collection,
+                        $this->castBefore($collection, new Document([...$adapterData, ...$operators])),
+                        \array_values(\array_intersect_key($batch, \array_flip($indexes))),
+                        \array_filter($keepsPermissions),
+                    );
+                }
 
                 foreach ($batch as $document) {
                     $this->withDocumentTenant(
@@ -2239,11 +2446,19 @@ trait Documents
             self::internalAttributesFor(true)
         ));
         $existing = $this->findDocumentsToUpsert($collection->getId(), $documents);
+        $round = $this->fractionRounding()->get();
+        $fractionalIds = [];
 
         foreach ($documents as $key => $document) {
             $old = $existing[$this->upsertKey($document)] ?? new Document();
 
             $document = $this->removeUnknownAttributes($collection, $document);
+
+            $fractions = false;
+            if ($round) {
+                self::wholeItems($collection, $document);
+                $fractions = self::fractionalKeys($collection, $document) !== [];
+            }
 
             // Extract operators early to avoid comparison issues
             $documentArray = $document->getArrayCopy();
@@ -2372,7 +2587,8 @@ trait Documents
                 $validator = new Structure(
                     collection: $collection,
                     profile: $this->profile(),
-                    currentDocument: $old->isEmpty() ? null : $old
+                    currentDocument: $old->isEmpty() ? null : $old,
+                    fractions: $fractions,
                 );
 
                 if (! $validator->isValid($document)) {
@@ -2404,6 +2620,9 @@ trait Documents
             if (! empty($operators)) {
                 $operatorIds[$identity] = true;
             }
+            if ($fractions) {
+                $fractionalIds[$identity] = true;
+            }
             $old = $this->castBefore($collection, $old);
             $document = $this->castBefore($collection, $document);
 
@@ -2433,9 +2652,13 @@ trait Documents
             $batch = $this->withMutation(
                 Event::DocumentsUpsert,
                 \array_map(static fn (Change $change): Document => $change->new, $chunk),
-                function () use ($collection, $increase, $chunk): array {
+                function () use ($collection, $increase, $chunk, $fractionalIds): array {
                     if (! $this->adapterHasFeature(Feature\Upserts::class)) {
                         throw new DatabaseException('Adapter does not support upserts');
+                    }
+
+                    if ($fractionalIds !== []) {
+                        $this->resolveUpsertFractions($collection, $chunk, $fractionalIds);
                     }
 
                     $adapter = $this->adapter;
@@ -2510,6 +2733,30 @@ trait Documents
         }
 
         return [$created, $updated];
+    }
+
+    /**
+     * Answer the fractional operators of the upserted documents under $identities from their stored versions, read
+     * locked in the write's transaction; a document not stored yet is answered from zero.
+     *
+     * @param  array<Change>  $chunk
+     * @param  array<string, true>  $identities
+     *
+     * @throws StructureException when the engine refused an operator
+     */
+    private function resolveUpsertFractions(Collection $collection, array $chunk, array $identities): void
+    {
+        $fractional = new Fractional($this->adapter->arithmetic());
+        foreach ($chunk as $change) {
+            if (! isset($identities[$this->getDocumentIdentity($change->new)])) {
+                continue;
+            }
+
+            $stored = $this->readLocked($collection, $change->new);
+            $resolved = self::resolveFractions($change->new, self::fractionalKeys($collection, $change->new), $stored, $fractional);
+            $this->assertResolvedFractions($collection, $resolved, $stored);
+            $change->new->setAttributes($this->castBefore($collection, new Document($resolved))->getArrayCopy());
+        }
     }
 
     /**
@@ -2603,18 +2850,27 @@ trait Documents
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $numericAttribute = $this->numericAttribute($collection, $attribute);
+        $exact = false;
 
         if ($this->isDeclaredInteger($numericAttribute ?? $this->declaredAttribute($collection, $attribute))) {
-            $this->assertIntegerChange($value);
-            if ($max !== null) {
-                $max = $this->integerBound($max, 'Max');
+            $round = $this->fractionRounding()->get();
+            $exact = $round && $this->isExactChange($value, $max);
+            if ($exact) {
+                if ($max !== null) {
+                    $this->assertNumericBound($max, 'Max');
+                }
+            } else {
+                $this->assertIntegerChange($value);
+                if ($max !== null) {
+                    $max = $this->integerLimit($max, true, $round);
+                }
             }
         }
 
         $cacheTarget = $collection->getId() === self::METADATA
             ? new Document([Document::ID => $id, Document::COLLECTION => self::METADATA])
             : $collection->getId();
-        $document = $this->withMutation(Event::DocumentIncrease, $cacheTarget, function () use ($collection, $id, $attribute, $value, $max, $numericAttribute) {
+        $document = $this->withMutation(Event::DocumentIncrease, $cacheTarget, function () use ($collection, $id, $attribute, $value, $max, $numericAttribute, $exact) {
             /** @var Document $document */
             $document = $this->authorization->skip(fn () => $this->silent(fn () => $this->readDocument($collection, $id, forUpdate: true))); // Skip ensures user does not need read permission for this
 
@@ -2634,17 +2890,22 @@ trait Documents
             }
 
             $attributeExists = $document->offsetExists($attribute);
-            $currentVal = $document->getAttribute($attribute);
+            $current = $document->getAttribute($attribute);
+            $returned = null;
+            if ($exact) {
+                [$value, $returned] = $this->exactChange($current, $value, $max, true);
+                $max = null;
+            }
             if ($numericAttribute instanceof Attribute) {
-                $result = $this->getNumericResult($numericAttribute, $currentVal, $value, true);
+                $result = $this->getNumericResult($numericAttribute, $current, $value, true);
             } else {
                 if (! $attributeExists) {
-                    $currentVal = 0;
+                    $current = 0;
                 }
-                if (! \is_int($currentVal) && ! \is_float($currentVal)) {
+                if (! \is_int($current) && ! \is_float($current)) {
                     throw new TypeException('Attribute value must be numeric.');
                 }
-                $result = $currentVal + $this->getNativeNumber($value);
+                $result = $current + $this->getNativeNumber($value);
             }
             $exceedsMaximum = ! \is_null($max) && (
                 $numericAttribute?->isInteger() === true
@@ -2678,7 +2939,7 @@ trait Documents
             $this->purgeCachedDocumentInternal($collection->getId(), $id);
             $this->queueDocumentPurge($collection->getId(), $id);
 
-            return $document->setAttribute($attribute, $result);
+            return $document->setAttribute($attribute, $returned ?? $result);
         });
 
         $listeners = $this->listens(Event::DocumentIncrease);
@@ -2727,18 +2988,27 @@ trait Documents
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $numericAttribute = $this->numericAttribute($collection, $attribute);
+        $exact = false;
 
         if ($this->isDeclaredInteger($numericAttribute ?? $this->declaredAttribute($collection, $attribute))) {
-            $this->assertIntegerChange($value);
-            if ($min !== null) {
-                $min = $this->integerBound($min, 'Min');
+            $round = $this->fractionRounding()->get();
+            $exact = $round && $this->isExactChange($value, $min);
+            if ($exact) {
+                if ($min !== null) {
+                    $this->assertNumericBound($min, 'Min');
+                }
+            } else {
+                $this->assertIntegerChange($value);
+                if ($min !== null) {
+                    $min = $this->integerLimit($min, false, $round);
+                }
             }
         }
 
         $cacheTarget = $collection->getId() === self::METADATA
             ? new Document([Document::ID => $id, Document::COLLECTION => self::METADATA])
             : $collection->getId();
-        $document = $this->withMutation(Event::DocumentDecrease, $cacheTarget, function () use ($collection, $id, $attribute, $value, $min, $numericAttribute) {
+        $document = $this->withMutation(Event::DocumentDecrease, $cacheTarget, function () use ($collection, $id, $attribute, $value, $min, $numericAttribute, $exact) {
             /** @var Document $document */
             $document = $this->authorization->skip(fn () => $this->silent(fn () => $this->readDocument($collection, $id, forUpdate: true))); // Skip ensures user does not need read permission for this
 
@@ -2758,17 +3028,22 @@ trait Documents
             }
 
             $attributeExists = $document->offsetExists($attribute);
-            $currentDecVal = $document->getAttribute($attribute);
+            $current = $document->getAttribute($attribute);
+            $returned = null;
+            if ($exact) {
+                [$value, $returned] = $this->exactChange($current, $value, $min, false);
+                $min = null;
+            }
             if ($numericAttribute instanceof Attribute) {
-                $result = $this->getNumericResult($numericAttribute, $currentDecVal, $value, false);
+                $result = $this->getNumericResult($numericAttribute, $current, $value, false);
             } else {
                 if (! $attributeExists) {
-                    $currentDecVal = 0;
+                    $current = 0;
                 }
-                if (! \is_int($currentDecVal) && ! \is_float($currentDecVal)) {
+                if (! \is_int($current) && ! \is_float($current)) {
                     throw new TypeException('Attribute value must be numeric.');
                 }
-                $result = $currentDecVal - $this->getNativeNumber($value);
+                $result = $current - $this->getNativeNumber($value);
             }
             $belowMinimum = ! \is_null($min) && (
                 $numericAttribute?->isInteger() === true
@@ -2802,7 +3077,7 @@ trait Documents
             $this->purgeCachedDocumentInternal($collection->getId(), $id);
             $this->queueDocumentPurge($collection->getId(), $id);
 
-            return $document->setAttribute($attribute, $result);
+            return $document->setAttribute($attribute, $returned ?? $result);
         });
 
         $listeners = $this->listens(Event::DocumentDecrease);

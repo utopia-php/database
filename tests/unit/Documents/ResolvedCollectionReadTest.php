@@ -292,7 +292,7 @@ final class ResolvedCollectionReadTest extends TestCase
 
         $definition = Database::collectionDefinition();
         $this->assertSame('collections', $definition->getAttribute(Collection::NAME));
-        $this->assertCount(4, $definition->attributes());
+        $this->assertCount(5, $definition->attributes());
         $this->assertSame(['name', 'count'], \array_map(
             static fn (Attribute $attribute): string => $attribute->key,
             $database->getCollection(self::COLLECTION)->attributes(),
@@ -348,7 +348,7 @@ final class ResolvedCollectionReadTest extends TestCase
         $this->assertSame(self::COLLECTION, $stored->getId());
         $definition = Database::collectionDefinition();
         $this->assertSame('collections', $definition->getAttribute(Collection::NAME), 'The decorator changed the shared metadata definition');
-        $this->assertCount(4, $definition->attributes());
+        $this->assertCount(5, $definition->attributes());
     }
 
     private function metadataMutatingDecorator(): Decorator

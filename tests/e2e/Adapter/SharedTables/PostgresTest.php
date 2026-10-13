@@ -4,6 +4,7 @@ namespace Tests\E2E\Adapter\SharedTables;
 
 use Redis;
 use Tests\E2E\Adapter\Base;
+use Tests\Unit\Support\FractionalEngine;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Postgres;
@@ -91,5 +92,11 @@ class PostgresTest extends Base
         self::$pdo->exec($sql);
 
         return true;
+    }
+
+    #[\Override]
+    protected static function fractionalEngine(): FractionalEngine
+    {
+        return FractionalEngine::PostgreSQL;
     }
 }

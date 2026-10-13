@@ -258,9 +258,6 @@ final class CoroutineStateTest extends TestCase
             preserveSequence: false,
             ignoreDuplicates: false,
             requestTimestamp: null,
-            replacePlaceholders: false,
-            checkGrants: false,
-            roundFractions: false,
         );
     }
 

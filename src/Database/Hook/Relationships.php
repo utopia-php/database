@@ -20,7 +20,6 @@ use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Structure as StructureException;
-use Utopia\Database\Id;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
 use Utopia\Database\Permission;
@@ -3169,10 +3168,11 @@ class Relationships implements Attachable, Hook
 
     /**
      * Prepare the related documents $document holds as documents, as deep as the write relates them, replacing its
-     * relationship values with prepared copies so the caller's related documents are not changed. A related document
-     * that does not exist yet has no permissions to keep, so all of its permissions are checked; any other keeps
-     * those of its staged view, else of the stored one. A write nested in another relationship write is left as
-     * given: the outermost write prepared it.
+     * relationship values with prepared copies so the caller's related documents are not changed. Each copy is first
+     * given to the {@see Nested} hooks, in order, parent before children, and the document they return is the one
+     * whose grants are checked and that is related. A related document that does not exist yet has no permissions
+     * to keep, so all of its permissions are checked; any other keeps those of its staged view, else of the stored
+     * one. A write nested in another relationship write is left as given: the outermost write prepared it.
      *
      * @throws AuthorizationException When a related document adds a permission for a role the caller does not hold
      * @throws RelationshipException When a related document given as an array is not a valid document
@@ -3250,15 +3250,12 @@ class Relationships implements Attachable, Hook
      */
     private function prepareNestedDocument(Document $collection, Document $document, array $writeStack, Preparation $preparation): Document
     {
-        $id = $document->getId();
-        $new = $id === '';
-        if ($preparation->replace && ($new || Id::isPlaceholder($id))) {
-            $document->setAttribute(Document::ID, Id::unique());
-            $new = true;
+        foreach ($preparation->hooks as $hook) {
+            $document = $hook->prepare($collection, $document);
         }
 
         if ($preparation->check) {
-            $this->authorizeGrants($collection, $document, $new, $preparation);
+            $this->authorizeGrants($collection, $document, $document->getId() === '', $preparation);
         }
 
         foreach ($this->prepareNestedValues($collection, $document, $writeStack, $preparation) as $key => $value) {

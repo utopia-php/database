@@ -24,7 +24,9 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Hook\Nested;
 use Utopia\Database\Hook\Relationships;
+use Utopia\Database\Id;
 use Utopia\Database\Index;
 use Utopia\Database\Mirror;
 use Utopia\Database\Mirror\Failure;
@@ -52,6 +54,8 @@ final class MirrorReplicationTest extends TestCase
     public const string LOCKED = 'read for update';
 
     public const string INCREASED = 'increased';
+
+    public const string MARKER = 'marker';
 
     private Authorization $authorization;
 
@@ -433,6 +437,62 @@ final class MirrorReplicationTest extends TestCase
         $this->assertSame([true, true, false], [$this->mirror->isCheckingGrants(), $source->isCheckingGrants(), $this->destination->isCheckingGrants()]);
     }
 
+    public function testANestedHookRunsOnTheSourceAndTheDestinationKeepsItsIds(): void
+    {
+        $this->relate();
+        $hook = new class () implements Nested {
+            /**
+             * @var list<array{string, string}>
+             */
+            public array $seen = [];
+
+            #[\Override]
+            public function prepare(Document $collection, Document $document): Document
+            {
+                $this->seen[] = [$collection->getId(), $document->getId()];
+                if ($document->getId() === MirrorReplicationTest::MARKER) {
+                    $document->setAttribute(Document::ID, Id::unique());
+                }
+
+                return $document;
+            }
+        };
+        $this->mirror->addHook($hook);
+        $child = static fn (string $title): Document => new Document([Document::ID => self::MARKER, 'title' => $title]);
+        $parent = static fn (string $id): Document => new Document([Document::ID => $id, 'title' => $id, 'children' => [$child($id.' child')]]);
+
+        $this->mirror->createDocument(self::PARENTS, $parent('created'));
+        $this->mirror->createDocuments(self::PARENTS, [$parent('batched')]);
+        $this->mirror->updateDocument(self::PARENTS, 'created', new Document(['children' => [$child('updated child')]]));
+        $this->mirror->upsertDocument(self::PARENTS, $parent('upserted'));
+        $this->mirror->upsertDocuments(self::PARENTS, [$parent('upserts')]);
+        $this->mirror->authorizeCreate(self::PARENTS, $parent('checked'));
+
+        $this->assertSame([], $this->errors);
+        $titles = ['created child', 'batched child', 'updated child', 'upserted child', 'upserts child'];
+        $ids = [];
+        foreach ($titles as $title) {
+            $stored = $this->childTitled($this->mirror->getSource(), $title);
+            $this->assertFalse($stored->isEmpty(), $title);
+            $this->assertNotSame(self::MARKER, $stored->getId(), $title);
+            $this->assertSame($stored->getId(), $this->childTitled($this->destination, $title)->getId(), $title);
+            $ids[] = $stored->getId();
+        }
+        $this->assertCount(\count($titles), \array_unique($ids));
+        $this->assertTrue($this->childTitled($this->mirror->getSource(), 'checked child')->isEmpty());
+        foreach ([$this->mirror->getSource(), $this->destination] as $database) {
+            $this->assertTrue($this->authorization->skip(static fn (): Document => $database->getDocument(self::CHILDREN, self::MARKER))->isEmpty());
+        }
+        $this->assertSame(\array_fill(0, \count($titles) + 1, [self::CHILDREN, self::MARKER]), $hook->seen);
+
+        $this->mirror->removeHook(Nested::class);
+        $this->mirror->createDocument(self::PARENTS, $parent('unprepared'));
+
+        foreach ([$this->mirror->getSource(), $this->destination] as $database) {
+            $this->assertSame(self::MARKER, $this->childTitled($database, 'unprepared child')->getId());
+        }
+    }
+
     /**
      * @return iterable<string, array{Closure(Mirror): mixed}>
      */
@@ -730,6 +790,11 @@ final class MirrorReplicationTest extends TestCase
                 twoWayKey: 'parent',
             ));
         });
+    }
+
+    private function childTitled(Database $database, string $title): Document
+    {
+        return $this->authorization->skip(static fn (): Document => $database->findOne(self::CHILDREN, [Query::equal('title', [$title])]));
     }
 
     /**

@@ -11,6 +11,8 @@ use Throwable;
 use Utopia\Database\Adapter\SQL\Expression;
 use Utopia\Database\Adapter\SQL\Hook\Permission;
 use Utopia\Database\Adapter\SQL\Wkt;
+use Utopia\Database\Arithmetic;
+use Utopia\Database\Arithmetic\Rounding;
 use Utopia\Database\Attribute;
 use Utopia\Database\Builder\Postgres as PostgresBuilder;
 use Utopia\Database\Builder\Scoping;
@@ -72,6 +74,25 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         ' WITHOUT TIME ZONE' => '',
         ', ' => ',',
     ];
+
+    /**
+     * PostgreSQL computed in NUMERIC, rounding half away from zero, except POWER() in double precision, rounded half
+     * to even. Next to an integer column it read a bound amount as an integer, so it refused a fractional counter
+     * change, and a fractional increment, decrement, multiplication or division without a limit.
+     */
+    #[\Override]
+    public function arithmetic(): Arithmetic
+    {
+        return new Arithmetic(
+            counter: Rounding::HalfEven,
+            operators: Rounding::HalfAwayFromZero,
+            division: Rounding::HalfAwayFromZero,
+            power: Rounding::HalfEven,
+            refusesCounterFractions: true,
+            exact: [OperatorType::Multiply, OperatorType::Divide, OperatorType::Modulo],
+            refusedWithoutLimit: [OperatorType::Increment, OperatorType::Decrement, OperatorType::Multiply, OperatorType::Divide],
+        );
+    }
 
     /**
      * @return array<Capability>

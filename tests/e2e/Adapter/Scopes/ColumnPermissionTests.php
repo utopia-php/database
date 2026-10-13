@@ -26,7 +26,7 @@ trait ColumnPermissionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $database->createCollection(Collection::create(
+        $database->withColumnPermissions(fn () => $database->createCollection(Collection::create(
             id: 'columnGrants',
             attributes: [
                 Attribute::string(key: 'name', size: 64),
@@ -37,7 +37,7 @@ trait ColumnPermissionTests
                 Permission::read(Role::team('hr'), 'salary'),
                 Permission::create(Role::any()),
             ],
-        ));
+        )));
 
         $stored = $database->getCollection('columnGrants');
 
@@ -64,11 +64,11 @@ trait ColumnPermissionTests
         $database = $this->getDatabase();
         $authorization = $database->getAuthorization();
 
-        $database->createCollection(Collection::create(
+        $database->withColumnPermissions(fn () => $database->createCollection(Collection::create(
             id: 'columnGrantsListed',
             attributes: [Attribute::string(key: 'name', size: 64)],
             permissions: [Permission::read(Role::any(), 'name')],
-        ));
+        )));
 
         $previous = $authorization->getRoles();
         $authorization->cleanRoles();
@@ -97,7 +97,7 @@ trait ColumnPermissionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $database->createCollection(Collection::create(
+        $database->withColumnPermissions(fn () => $database->createCollection(Collection::create(
             id: 'columnGrantsVerbatim',
             attributes: [
                 Attribute::string(key: 'name', size: 64),
@@ -108,7 +108,7 @@ trait ColumnPermissionTests
                 Permission::read(Role::team('hr'), 'salary'),
                 Permission::create(Role::any()),
             ],
-        ));
+        )));
 
         $stored = $database->getCollection('columnGrantsVerbatim');
 
@@ -161,11 +161,11 @@ trait ColumnPermissionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $collection = $database->createCollection(Collection::create(
+        $collection = $database->withColumnPermissions(fn () => $database->createCollection(Collection::create(
             id: 'columnGrantsCleared',
             attributes: [Attribute::string(key: 'name', size: 64)],
             permissions: [Permission::read(Role::any(), 'name'), Permission::create(Role::any())],
-        ));
+        )));
 
         $this->assertSame(['read("any", "name")', 'create("any")'], $collection->columnPermissions());
         $this->assertSame(['read("any")', 'create("any")'], $collection->getPermissions());
@@ -184,17 +184,65 @@ trait ColumnPermissionTests
         $this->assertSame(['read("any")', 'create("any")'], $stored->columnPermissions());
     }
 
-    public function testACollectionPermissionMayNotNameAColumnThatDoesNotExist(): void
+    /**
+     * The feature is off until the column is enforced.
+     *
+     * A scoped grant admits its role to the row -- that is what every gate matches -- and
+     * nothing yet holds that role to the column, so the grant widens access rather than
+     * narrowing it. Refused by default so no one writes one by accident; withColumnPermissions()
+     * is the deliberate way in, and goes away once masking and query refusal land.
+     */
+    public function testAColumnScopedGrantIsRefusedUnlessAskedFor(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
 
         try {
             $database->createCollection(Collection::create(
+                id: 'columnGrantsGated',
+                attributes: [Attribute::string(key: 'name', size: 64)],
+                permissions: [Permission::read(Role::any(), 'name')],
+            ));
+            $this->fail('Expected createCollection() to refuse a column-scoped grant');
+        } catch (DatabaseException $e) {
+            $this->assertStringContainsString('Column-scoped permissions are not enabled', $e->getMessage());
+        }
+
+        $this->assertNull($database->findCollection('columnGrantsGated'));
+
+        // An update may not introduce one either.
+        $database->createCollection(Collection::create(
+            id: 'columnGrantsGatedUpdate',
+            attributes: [Attribute::string(key: 'name', size: 64)],
+            permissions: [Permission::read(Role::any())],
+        ));
+
+        try {
+            $database->updateCollection('columnGrantsGatedUpdate', new CollectionUpdate(permissions: [
+                Permission::read(Role::any(), 'name'),
+            ]));
+            $this->fail('Expected updateCollection() to refuse a column-scoped grant');
+        } catch (DatabaseException $e) {
+            $this->assertStringContainsString('Column-scoped permissions are not enabled', $e->getMessage());
+        }
+
+        $this->assertSame(
+            ['read("any")'],
+            $database->getCollection('columnGrantsGatedUpdate')->columnPermissions(),
+        );
+    }
+
+    public function testACollectionPermissionMayNotNameAColumnThatDoesNotExist(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        try {
+            $database->withColumnPermissions(fn () => $database->createCollection(Collection::create(
                 id: 'columnGrantsUnknown',
                 attributes: [Attribute::string(key: 'name', size: 64)],
                 permissions: [Permission::read(Role::any(), 'nope')],
-            ));
+            )));
             $this->fail('Expected createCollection() to reject a permission naming an unknown column');
         } catch (DatabaseException $e) {
             $this->assertStringContainsString('Column "nope" does not exist.', $e->getMessage());
@@ -215,10 +263,10 @@ trait ColumnPermissionTests
             permissions: [Permission::create(Role::any())],
         ));
 
-        $database->updateCollection('columnGrantsUpdate', new CollectionUpdate(permissions: [
+        $database->withColumnPermissions(fn () => $database->updateCollection('columnGrantsUpdate', new CollectionUpdate(permissions: [
             Permission::read(Role::any(), 'name'),
             Permission::create(Role::any()),
-        ]));
+        ])));
 
         $updated = $database->getCollection('columnGrantsUpdate')->columnPermissions();
 
@@ -226,9 +274,9 @@ trait ColumnPermissionTests
         $this->assertContains('read("any", "name")', $updated);
 
         try {
-            $database->updateCollection('columnGrantsUpdate', new CollectionUpdate(permissions: [
+            $database->withColumnPermissions(fn () => $database->updateCollection('columnGrantsUpdate', new CollectionUpdate(permissions: [
                 Permission::read(Role::any(), 'nope'),
-            ]));
+            ])));
             $this->fail('Expected updateCollection() to reject a permission naming an unknown column');
         } catch (DatabaseException $e) {
             $this->assertStringContainsString('Column "nope" does not exist.', $e->getMessage());
@@ -334,7 +382,7 @@ trait ColumnPermissionTests
         $authorization = $database->getAuthorization();
 
         // The table itself, under the id Appwrite gives it. Its grants name its own columns.
-        $database->createCollection(Collection::create(
+        $database->withColumnPermissions(fn () => $database->createCollection(Collection::create(
             id: 'database_1_collection_1',
             attributes: [
                 Attribute::string(key: 'name', size: 64),
@@ -344,7 +392,7 @@ trait ColumnPermissionTests
                 Permission::read(Role::any(), 'name'),
                 Permission::read(Role::team('hr'), 'salary'),
             ],
-        ));
+        )));
 
         $grants = $database->getCollection('database_1_collection_1')->columnPermissions();
         $this->assertNotNull($grants);

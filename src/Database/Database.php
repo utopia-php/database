@@ -261,6 +261,9 @@ class Database
     private ?Value $validation = null;
 
     /** @var Value<bool>|null */
+    private ?Value $columnPermissions = null;
+
+    /** @var Value<bool>|null */
     private ?Value $datePreservation = null;
 
     /** @var Value<bool>|null */
@@ -1303,6 +1306,29 @@ class Database
     }
 
     /**
+     * Run the callback accepting collection permissions that name a column.
+     *
+     * Off by default, and deliberately so until the column is enforced. A grant naming a column
+     * is recorded, and the role it names is admitted to the row -- which is what every gate
+     * matches -- but nothing yet limits that role to the column. So a grant written to narrow
+     * access currently widens it, and the only safe thing to do with a feature in that state is
+     * to make it unreachable by accident.
+     *
+     * Scoped to the callback rather than stored, because this gates writing such a grant, not
+     * holding one: a collection created through here keeps its grant, and keeps widening, until
+     * masking and query refusal land and the gate comes off.
+     *
+     * @template T
+     *
+     * @param  callable(): T  $callback
+     * @return T
+     */
+    public function withColumnPermissions(callable $callback): mixed
+    {
+        return $this->columnPermissions()->with(true, $callback);
+    }
+
+    /**
      * Run the callback without validation for the calling coroutine and the coroutines it starts.
      *
      * @template T
@@ -1651,6 +1677,22 @@ class Database
     private function validation(): Value
     {
         return $this->validation ??= new Value(true);
+    }
+
+    /**
+     * @return Value<bool>
+     */
+    private function columnPermissions(): Value
+    {
+        return $this->columnPermissions ??= new Value(false);
+    }
+
+    /**
+     * Whether a collection's permissions may name one of its columns.
+     */
+    public function hasColumnPermissions(): bool
+    {
+        return $this->columnPermissions()->get();
     }
 
     /**

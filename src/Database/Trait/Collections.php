@@ -54,6 +54,13 @@ trait Collections
             $typeValidator->checkType($attribute);
         }
 
+        // Off until the column is enforced: the role a scoped grant names is admitted to the
+        // row, and nothing yet holds it to the column, so such a grant widens access instead of
+        // narrowing it. Refused rather than recorded, so no one meets that by accident.
+        if (! $this->hasColumnPermissions() && Permission::hasColumns($permissions)) {
+            throw new DatabaseException('Column-scoped permissions are not enabled');
+        }
+
         if ($this->validation()->get()) {
             $validator = new Permissions(columns: \array_map(fn (Attribute $attribute) => $attribute->key, $attributes));
             if (! $validator->isValid($permissions)) {
@@ -165,6 +172,10 @@ trait Collections
         // After the read, not before: a column-scoped permission is judged against this
         // collection's columns, so there is nothing to judge it with until the definition
         // is in hand.
+        if ($update->permissions !== null && ! $this->hasColumnPermissions() && Permission::hasColumns($update->permissions)) {
+            throw new DatabaseException('Column-scoped permissions are not enabled');
+        }
+
         if ($update->permissions !== null && $this->validation()->get()) {
             $validator = new Permissions(columns: \array_map(fn (Attribute $attribute) => $attribute->key, $definition->attributes()));
             if (! $validator->isValid($update->permissions)) {

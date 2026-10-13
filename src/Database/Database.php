@@ -1165,8 +1165,8 @@ class Database
 
     /**
      * Set whether, while authorization is enabled, a related document given as a document to createDocument(),
-     * createDocuments(), updateDocument(), upsertDocument(), upsertDocuments(), authorizeCreate() or authorizeUpdate()
-     * may only add permissions for roles the caller holds, as deep as the write relates it. Permissions it already
+     * createDocuments(), updateDocument(), upsertDocument(), upsertDocuments(), authorizeCreate(), authorizeUpdate()
+     * or authorizeGrants() may only add permissions for roles the caller holds, as deep as the write relates it. Permissions it already
      * has may be sent back, and permissions it inherits from its parent are never checked. Malformed permissions
      * throw a structure exception and an unheld role an authorization exception, before anything is written.
      * While it is on, updateDocuments() refuses a related document given as a document with a relationship

@@ -58,7 +58,6 @@ class Database
     use Trait\Documents;
     use Trait\Fractions;
     use Trait\Indexes;
-    use Trait\Joins;
     use Trait\Relationships;
     use Trait\Transactions;
 

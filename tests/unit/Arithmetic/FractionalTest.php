@@ -8,6 +8,7 @@ use stdClass;
 use Tests\Unit\Support\FractionalEngine;
 use Tests\Unit\Support\FractionalResults;
 use Utopia\Database\Adapter\MariaDB;
+use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Arithmetic\Fractional;
@@ -174,6 +175,36 @@ final class FractionalTest extends TestCase
     public function testNumericTextPaddedWithWhitespaceIsReadByItsValue(Operator $operator, int $expected): void
     {
         $this->assertSame($expected, self::stores(10, self::fractional(FractionalEngine::PostgreSQL)->operator($operator, 10)));
+    }
+
+    /**
+     * @return iterable<string, array{int|string, Operator, int|string|null}>
+     */
+    public static function truncatedModuli(): iterable
+    {
+        yield 'a modulus cut toward zero' => [11, Operator::modulo(4.5), 3];
+        yield 'a negative modulus cut toward zero' => [7, Operator::modulo(-2.5), 1];
+        yield 'a negative value keeps its sign' => [-11, Operator::modulo(3.5), -2];
+        yield 'modulus text cut toward zero' => [13, Operator::modulo('3.5'), 1];
+        yield 'a value beyond float precision' => ['9007199254740993', Operator::modulo(2.5), 1];
+        yield 'a modulus cut to zero is left for the caller to refuse' => [10, Operator::modulo(0.5), null];
+        yield 'a negative modulus cut to zero is left for the caller to refuse' => [10, Operator::modulo('-0.75'), null];
+    }
+
+    #[DataProvider('truncatedModuli')]
+    public function testAnEngineThatCutAFractionalModulusTakesTheRemainderOfItsWholePart(int|string $stored, Operator $operator, int|string|null $expected): void
+    {
+        $resolved = self::fractional(FractionalEngine::Memory)->operator($operator, $stored);
+
+        if ($expected === null) {
+            $this->assertSame($operator, $resolved);
+
+            return;
+        }
+
+        $change = $resolved->getValue();
+        $this->assertTrue(BigInt::isIntegerValue($change));
+        $this->assertSame($expected, $resolved->getMethod() === OperatorType::Increment ? BigInt::add($stored, $change) : BigInt::subtract($stored, $change));
     }
 
     /**
@@ -436,6 +467,7 @@ final class FractionalTest extends TestCase
         $adapter = match ($engine) {
             FractionalEngine::MariaDB => new MariaDB(new stdClass()),
             FractionalEngine::PostgreSQL => new Postgres(new stdClass()),
+            FractionalEngine::Memory => new Memory(),
             FractionalEngine::MongoDB => new Mongo(new class () extends Client {
                 public function __construct()
                 {

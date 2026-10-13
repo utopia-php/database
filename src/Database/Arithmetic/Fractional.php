@@ -97,6 +97,13 @@ final readonly class Fractional
         }
 
         $whole = ! self::isFractional($amount);
+        if ($method === OperatorType::Modulo && ! $whole && $this->arithmetic->truncatesModulus) {
+            $modulus = self::integer($amount);
+
+            return $modulus === null || BigInt::compare($modulus, 0) === 0
+                ? $operator
+                : self::change($operator, BigInt::subtract(BigInt::modulo($current, $modulus), $current));
+        }
         if ($limit === null && ! $whole && \in_array($method, $this->arithmetic->refusedWithoutLimit, true)) {
             return $operator;
         }

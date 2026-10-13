@@ -6,7 +6,8 @@ use Utopia\Database\OperatorType;
 
 /**
  * What appwrite on database 7.4.1 stored for a fractional operand or limit on an INT column, read back from
- * MariaDB 10.11, PostgreSQL (appwrite/postgres 0.1.0) and MongoDB 8.2.5; null where that engine refused it.
+ * MariaDB 10.11, PostgreSQL (appwrite/postgres 0.1.0) and MongoDB 8.2.5, and what 7.4.1's Memory adapter stored;
+ * null where that engine refused it.
  */
 final class FractionalResults
 {
@@ -219,13 +220,82 @@ final class FractionalResults
         yield 'MongoDB: mod -11%3.5' => [FractionalEngine::MongoDB, -11, OperatorType::Modulo, [3.5], 0];
         yield 'MongoDB: inc 10+2 max10.5' => [FractionalEngine::MongoDB, 10, OperatorType::Increment, [2, 10.5], 10];
         yield 'MongoDB: mul 5*3 max15.5' => [FractionalEngine::MongoDB, 5, OperatorType::Multiply, [3, 15.5], 15];
+        yield 'Memory: inc 11+1.5' => [FractionalEngine::Memory, 11, OperatorType::Increment, [1.5], 12];
+        yield 'Memory: inc 10+1.5' => [FractionalEngine::Memory, 10, OperatorType::Increment, [1.5], 11];
+        yield 'Memory: inc 10+1.25' => [FractionalEngine::Memory, 10, OperatorType::Increment, [1.25], 11];
+        yield 'Memory: inc 10+1.75' => [FractionalEngine::Memory, 10, OperatorType::Increment, [1.75], 11];
+        yield 'Memory: inc -11+0.5' => [FractionalEngine::Memory, -11, OperatorType::Increment, [0.5], -10];
+        yield 'Memory: inc -12+0.5' => [FractionalEngine::Memory, -12, OperatorType::Increment, [0.5], -11];
+        yield 'Memory: dec 11-0.5' => [FractionalEngine::Memory, 11, OperatorType::Decrement, [0.5], 10];
+        yield 'Memory: dec 12-0.5' => [FractionalEngine::Memory, 12, OperatorType::Decrement, [0.5], 11];
+        yield 'Memory: dec -10-0.5' => [FractionalEngine::Memory, -10, OperatorType::Decrement, [0.5], -10];
+        yield 'Memory: inc 10+2 max13.9' => [FractionalEngine::Memory, 10, OperatorType::Increment, [2, 13.9], 12];
+        yield 'Memory: inc 12+2 max13.9' => [FractionalEngine::Memory, 12, OperatorType::Increment, [2, 13.9], 12];
+        yield 'Memory: inc 12+1.5 max13.9' => [FractionalEngine::Memory, 12, OperatorType::Increment, [1.5, 13.9], 13];
+        yield 'Memory: inc 12+1.5 max13.5' => [FractionalEngine::Memory, 12, OperatorType::Increment, [1.5, 13.5], 13];
+        yield 'Memory: dec 12-1 min11.1' => [FractionalEngine::Memory, 12, OperatorType::Decrement, [1, 11.1], 12];
+        yield 'Memory: dec 13-1 min11.1' => [FractionalEngine::Memory, 13, OperatorType::Decrement, [1, 11.1], 12];
+        yield 'Memory: dec 12-0.5 min11.5' => [FractionalEngine::Memory, 12, OperatorType::Decrement, [0.5, 11.5], 11];
+        yield 'Memory: mul 11*1.5' => [FractionalEngine::Memory, 11, OperatorType::Multiply, [1.5], 16];
+        yield 'Memory: mul 5*2.5' => [FractionalEngine::Memory, 5, OperatorType::Multiply, [2.5], 12];
+        yield 'Memory: mul 7*1.5' => [FractionalEngine::Memory, 7, OperatorType::Multiply, [1.5], 10];
+        yield 'Memory: mul 7*-1.5' => [FractionalEngine::Memory, 7, OperatorType::Multiply, [-1.5], -10];
+        yield 'Memory: mul 3*1.25' => [FractionalEngine::Memory, 3, OperatorType::Multiply, [1.25], 3];
+        yield 'Memory: mul 12*2 max25.5' => [FractionalEngine::Memory, 12, OperatorType::Multiply, [2, 25.5], 24];
+        yield 'Memory: mul 13*2 max25.5' => [FractionalEngine::Memory, 13, OperatorType::Multiply, [2, 25.5], 13];
+        yield 'Memory: mul 10*1.5 max15' => [FractionalEngine::Memory, 10, OperatorType::Multiply, [1.5, 15], 15];
+        yield 'Memory: div 10/1.5' => [FractionalEngine::Memory, 10, OperatorType::Divide, [1.5], 6];
+        yield 'Memory: div 9/2.5' => [FractionalEngine::Memory, 9, OperatorType::Divide, [2.5], 3];
+        yield 'Memory: div 10/2 min5.5' => [FractionalEngine::Memory, 10, OperatorType::Divide, [2, 5.5], 10];
+        yield 'Memory: div 10/0.5' => [FractionalEngine::Memory, 10, OperatorType::Divide, [0.5], 20];
+        yield 'Memory: mod 10%2.75' => [FractionalEngine::Memory, 10, OperatorType::Modulo, [2.75], 0];
+        yield 'Memory: mod 11%4.5' => [FractionalEngine::Memory, 11, OperatorType::Modulo, [4.5], 3];
+        yield 'Memory: pow 16^0.5' => [FractionalEngine::Memory, 16, OperatorType::Power, [0.5], 4];
+        yield 'Memory: pow 10^0.5' => [FractionalEngine::Memory, 10, OperatorType::Power, [0.5], 3];
+        yield 'Memory: pow 2^2.5' => [FractionalEngine::Memory, 2, OperatorType::Power, [2.5], 5];
+        yield 'Memory: pow 4^1.5' => [FractionalEngine::Memory, 4, OperatorType::Power, [1.5], 8];
+        yield 'Memory: pow 3^2 max8.5' => [FractionalEngine::Memory, 3, OperatorType::Power, [2, 8.5], 3];
+        yield 'Memory: pow 2^3 max8.5' => [FractionalEngine::Memory, 2, OperatorType::Power, [3, 8.5], 8];
+        yield 'Memory: inc 11+1.5 max20' => [FractionalEngine::Memory, 11, OperatorType::Increment, [1.5, 20], 12];
+        yield 'Memory: inc 10+1.5 max20' => [FractionalEngine::Memory, 10, OperatorType::Increment, [1.5, 20], 11];
+        yield 'Memory: inc -12+0.5 max20' => [FractionalEngine::Memory, -12, OperatorType::Increment, [0.5, 20], -11];
+        yield 'Memory: inc 10+1.25 max20' => [FractionalEngine::Memory, 10, OperatorType::Increment, [1.25, 20], 11];
+        yield 'Memory: dec 11-0.5 min0' => [FractionalEngine::Memory, 11, OperatorType::Decrement, [0.5, 0], 10];
+        yield 'Memory: dec 12-0.5 min0' => [FractionalEngine::Memory, 12, OperatorType::Decrement, [0.5, 0], 11];
+        yield 'Memory: dec -10-0.5 min-100' => [FractionalEngine::Memory, -10, OperatorType::Decrement, [0.5, -100], -10];
+        yield 'Memory: mul 5*2.5 max100' => [FractionalEngine::Memory, 5, OperatorType::Multiply, [2.5, 100], 12];
+        yield 'Memory: mul 11*1.5 max100' => [FractionalEngine::Memory, 11, OperatorType::Multiply, [1.5, 100], 16];
+        yield 'Memory: mul 7*-1.5 max100' => [FractionalEngine::Memory, 7, OperatorType::Multiply, [-1.5, 100], -10];
+        yield 'Memory: mul 3*1.25 max100' => [FractionalEngine::Memory, 3, OperatorType::Multiply, [1.25, 100], 3];
+        yield 'Memory: div 9/2.5 min0' => [FractionalEngine::Memory, 9, OperatorType::Divide, [2.5, 0], 3];
+        yield 'Memory: div 10/1.5 min0' => [FractionalEngine::Memory, 10, OperatorType::Divide, [1.5, 0], 6];
+        yield 'Memory: div 5/0.4 min0' => [FractionalEngine::Memory, 5, OperatorType::Divide, [0.4, 0], 12];
+        yield 'Memory: pow 2^2.5 max100' => [FractionalEngine::Memory, 2, OperatorType::Power, [2.5, 100], 5];
+        yield 'Memory: pow 10^0.5 max100' => [FractionalEngine::Memory, 10, OperatorType::Power, [0.5, 100], 3];
+        yield 'Memory: mod -10%2.75' => [FractionalEngine::Memory, -10, OperatorType::Modulo, [2.75], 0];
+        yield 'Memory: mod 10%2.5' => [FractionalEngine::Memory, 10, OperatorType::Modulo, [2.5], 0];
+        yield 'Memory: mod 11%2.5' => [FractionalEngine::Memory, 11, OperatorType::Modulo, [2.5], 1];
+        yield 'Memory: mod 7%-2.5' => [FractionalEngine::Memory, 7, OperatorType::Modulo, [-2.5], 1];
+        yield 'Memory: pow 4^-0.5' => [FractionalEngine::Memory, 4, OperatorType::Power, [-0.5], 0];
+        yield 'Memory: pow 4^-0.5 max100' => [FractionalEngine::Memory, 4, OperatorType::Power, [-0.5, 100], 0];
+        yield 'Memory: pow 16^-0.25' => [FractionalEngine::Memory, 16, OperatorType::Power, [-0.25], 0];
+        yield 'Memory: div 5/2 min0.5' => [FractionalEngine::Memory, 5, OperatorType::Divide, [2, 0.5], 2];
+        yield 'Memory: div 7/2 min0.5' => [FractionalEngine::Memory, 7, OperatorType::Divide, [2, 0.5], 3];
+        yield 'Memory: div -5/2 min-10.5' => [FractionalEngine::Memory, -5, OperatorType::Divide, [2, -10.5], -2];
+        yield 'Memory: div 5/2 min2.6' => [FractionalEngine::Memory, 5, OperatorType::Divide, [2, 2.6], 5];
+        yield 'Memory: mod 11%3.5' => [FractionalEngine::Memory, 11, OperatorType::Modulo, [3.5], 2];
+        yield 'Memory: mod 13%3.5' => [FractionalEngine::Memory, 13, OperatorType::Modulo, [3.5], 1];
+        yield 'Memory: mod -11%3.5' => [FractionalEngine::Memory, -11, OperatorType::Modulo, [3.5], -2];
+        yield 'Memory: inc 10+2 max10.5' => [FractionalEngine::Memory, 10, OperatorType::Increment, [2, 10.5], 10];
+        yield 'Memory: mul 5*3 max15.5' => [FractionalEngine::Memory, 5, OperatorType::Multiply, [3, 15.5], 15];
     }
 
     /**
      * Fractional counter changes: the engine, whether it increases, the start, the change, the bound and the value
      * stored, or null where the engine refused the change. MariaDB rounded half to even. PostgreSQL bound the
-     * change next to an integer column and refused any fraction. MongoDB stored the double and every read cut it
-     * toward zero; these rows cut each change on its own, which matches it while one change is applied at a time.
+     * change next to an integer column and refused any fraction. MongoDB and Memory stored the double and every
+     * read cut it toward zero; these rows cut each change on its own, which matches them while one change is
+     * applied at a time.
      *
      * @return iterable<string, array{FractionalEngine, bool, int, float, int|float|null, int|null}>
      */
@@ -258,6 +328,7 @@ final class FractionalResults
             yield "MariaDB: {$name}" => [FractionalEngine::MariaDB, $increase, $start, $value, $bound, $mariaDB];
             yield "PostgreSQL: {$name}" => [FractionalEngine::PostgreSQL, $increase, $start, $value, $bound, null];
             yield "MongoDB: {$name}" => [FractionalEngine::MongoDB, $increase, $start, $value, $bound, $mongoDB];
+            yield "Memory: {$name}" => [FractionalEngine::Memory, $increase, $start, $value, $bound, $mongoDB];
         }
 
         foreach (FractionalEngine::cases() as $engine) {

@@ -3,6 +3,7 @@
 namespace Tests\E2E\Adapter;
 
 use Redis;
+use Tests\Unit\Support\FractionalEngine;
 use Utopia\Cache\Adapter\None as NoneCacheAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Redis as RedisAdapter;
@@ -202,5 +203,11 @@ class RedisTest extends Base
         } while ($iterator > 0);
 
         return $payloads;
+    }
+
+    #[\Override]
+    protected static function fractionalEngine(): FractionalEngine
+    {
+        return FractionalEngine::Memory;
     }
 }

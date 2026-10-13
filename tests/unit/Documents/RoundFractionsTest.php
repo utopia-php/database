@@ -15,6 +15,7 @@ use Throwable;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
+use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\Postgres;
@@ -896,7 +897,7 @@ final class RoundFractionsTest extends TestCase
         $authorization = new Authorization();
         $authorization->addRole(Role::any()->toString());
 
-        $database = (new Database($adapter ?? new Memory(), new Cache(new None())))
+        $database = (new Database($adapter ?? self::engine(FractionalEngine::MariaDB), new Cache(new None())))
             ->setAuthorization($authorization)
             ->setDatabase('round_fractions')
             ->setNamespace('round_fractions_'.\uniqid());
@@ -955,7 +956,8 @@ final class RoundFractionsTest extends TestCase
     private static function arithmetic(FractionalEngine $engine): Arithmetic
     {
         return match ($engine) {
-            FractionalEngine::MariaDB => (new Memory())->arithmetic(),
+            FractionalEngine::MariaDB => (new MariaDB(new stdClass()))->arithmetic(),
+            FractionalEngine::Memory => (new Memory())->arithmetic(),
             FractionalEngine::PostgreSQL => (new Postgres(new stdClass()))->arithmetic(),
             FractionalEngine::MongoDB => (new Mongo(new class () extends Client {
                 public function __construct()

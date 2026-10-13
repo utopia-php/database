@@ -7,6 +7,8 @@ namespace Utopia\Database\Adapter;
 use Redis as RedisClient;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\Redis\Write;
+use Utopia\Database\Arithmetic;
+use Utopia\Database\Arithmetic\Rounding;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Change;
@@ -1628,6 +1630,22 @@ class Redis extends Adapter implements
 
             return true;
         });
+    }
+
+    /**
+     * Redis stored a fractional result as a float and every read cast it to an integer, cutting it toward zero; a
+     * fractional modulus was cut toward zero before the remainder was taken.
+     */
+    #[\Override]
+    public function arithmetic(): Arithmetic
+    {
+        return new Arithmetic(
+            counter: Rounding::TowardZero,
+            operators: Rounding::TowardZero,
+            division: Rounding::TowardZero,
+            power: Rounding::TowardZero,
+            truncatesModulus: true,
+        );
     }
 
     #[\Override]

@@ -122,7 +122,7 @@ trait FractionalIntegerTests
 
         $collection = $this->fractionalCollection($database, 'fractional_big');
         $expected = match (static::fractionalEngine()) {
-            FractionalEngine::MariaDB, FractionalEngine::MongoDB => 9007199254740994,
+            FractionalEngine::MariaDB, FractionalEngine::MongoDB, FractionalEngine::Memory => 9007199254740994,
             FractionalEngine::PostgreSQL => 9007199254740995,
         };
 
@@ -153,7 +153,7 @@ trait FractionalIntegerTests
         $expected = match (static::fractionalEngine()) {
             FractionalEngine::MariaDB => ['first' => 12, 'second' => 12, 'third' => 14],
             FractionalEngine::PostgreSQL => ['first' => 12, 'second' => 13, 'third' => 14],
-            FractionalEngine::MongoDB => ['first' => 11, 'second' => 12, 'third' => 13],
+            FractionalEngine::MongoDB, FractionalEngine::Memory => ['first' => 11, 'second' => 12, 'third' => 13],
         };
 
         try {
@@ -190,7 +190,7 @@ trait FractionalIntegerTests
 
         $collection = $this->fractionalCollection($database, 'fractional_upsert');
         $expected = match (static::fractionalEngine()) {
-            FractionalEngine::MariaDB, FractionalEngine::MongoDB => ['first' => 12, 'second' => 2],
+            FractionalEngine::MariaDB, FractionalEngine::MongoDB, FractionalEngine::Memory => ['first' => 12, 'second' => 2],
             FractionalEngine::PostgreSQL => ['first' => 13, 'second' => 3],
         };
 

@@ -400,6 +400,39 @@ final class MirrorReplicationTest extends TestCase
         $this->assertFalse($this->destination->getDocument(self::PARENTS, 'parent')->isEmpty());
     }
 
+    public function testTheGrantCheckRunsOnTheSourceOnly(): void
+    {
+        $this->relate();
+        $kept = [Permission::read(Role::any()), Permission::update(Role::any()), Permission::read(Role::user('alice'))];
+        $source = $this->mirror->getSource();
+        $child = static fn (string $id): Document => new Document([Document::ID => $id, 'title' => $id, Document::PERMISSIONS => $kept]);
+        $this->authorization->skip(function () use ($source, $child): void {
+            $source->createDocument(self::CHILDREN, $child('single child'));
+            $source->createDocument(self::CHILDREN, $child('batched child'));
+        });
+
+        $this->mirror->withCheckGrants(true, fn (): Document => $this->mirror->createDocument(self::PARENTS, new Document([
+            Document::ID => 'single',
+            'title' => 'single',
+            'children' => [$child('single child')],
+        ])));
+        $this->mirror->setCheckGrants(true);
+        $this->mirror->createDocuments(self::PARENTS, [new Document([
+            Document::ID => 'batched',
+            'title' => 'batched',
+            'children' => [$child('batched child')],
+        ])]);
+
+        $this->assertSame([], $this->errors);
+        foreach (['single child', 'batched child'] as $id) {
+            $replicated = $this->authorization->skip(fn (): Document => $this->destination->getDocument(self::CHILDREN, $id));
+            $this->assertSame($kept, $replicated->getPermissions(), $id);
+        }
+        $this->assertFalse($this->authorization->skip(fn (): Document => $this->destination->getDocument(self::PARENTS, 'single'))->isEmpty());
+        $this->assertFalse($this->authorization->skip(fn (): Document => $this->destination->getDocument(self::PARENTS, 'batched'))->isEmpty());
+        $this->assertSame([true, true, false], [$this->mirror->isCheckingGrants(), $source->isCheckingGrants(), $this->destination->isCheckingGrants()]);
+    }
+
     /**
      * @return iterable<string, array{Closure(Mirror): mixed}>
      */

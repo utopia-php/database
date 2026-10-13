@@ -62,12 +62,15 @@ class Structure extends Validator
      * @param  list<string>  $storedAttributes  Attributes whose values are the stored ones, unchanged by the
      *                                         write: they are not validated again, as the rules may have
      *                                         tightened since those values were stored.
+     * @param  bool  $fractions  Whether numeric operators on integer attributes may carry fractional amounts and
+     *                           limits, see Validator\Operator
      */
     public function __construct(
         protected readonly Document $collection,
         private readonly Profile $profile,
         private readonly ?Document $currentDocument = null,
         array $storedAttributes = [],
+        private readonly bool $fractions = false,
     ) {
         $this->storedAttributes = \array_fill_keys($storedAttributes, true);
         $this->supportForAttributes = $profile->supports(Capability::DefinedAttributes);
@@ -265,6 +268,7 @@ class Structure extends Validator
                     $this->collection,
                     $this->currentDocument,
                     $this->supportUnsignedBigInt,
+                    $this->fractions,
                 );
                 if (! $operatorValidator->isValid($value)) {
                     $this->message = $operatorValidator->getDescription();

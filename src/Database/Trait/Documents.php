@@ -2670,7 +2670,14 @@ trait Documents
         $exact = false;
 
         if ($this->isDeclaredInteger($numericAttribute ?? $this->declaredAttribute($collection, $attribute))) {
-            [$exact, $max] = $this->prepareIntegerChange($value, $max, true);
+            if ($this->fractionRounding()->get()) {
+                [$exact, $max] = $this->prepareIntegerChange($value, $max, true);
+            } else {
+                $this->assertIntegerChange($value);
+                if ($max !== null) {
+                    $max = $this->integerBound($max, 'Max');
+                }
+            }
         }
 
         $cacheTarget = $collection->getId() === self::METADATA
@@ -2696,22 +2703,22 @@ trait Documents
             }
 
             $attributeExists = $document->offsetExists($attribute);
-            $current = $document->getAttribute($attribute);
+            $currentVal = $document->getAttribute($attribute);
             $returned = null;
             if ($exact) {
-                [$value, $returned] = $this->exactChange($current, $value, $max, true);
+                [$value, $returned] = $this->exactChange($currentVal, $value, $max, true);
                 $max = null;
             }
             if ($numericAttribute instanceof Attribute) {
-                $result = $this->getNumericResult($numericAttribute, $current, $value, true);
+                $result = $this->getNumericResult($numericAttribute, $currentVal, $value, true);
             } else {
                 if (! $attributeExists) {
-                    $current = 0;
+                    $currentVal = 0;
                 }
-                if (! \is_int($current) && ! \is_float($current)) {
+                if (! \is_int($currentVal) && ! \is_float($currentVal)) {
                     throw new TypeException('Attribute value must be numeric.');
                 }
-                $result = $current + $this->getNativeNumber($value);
+                $result = $currentVal + $this->getNativeNumber($value);
             }
             $exceedsMaximum = ! \is_null($max) && (
                 $numericAttribute?->isInteger() === true
@@ -2797,7 +2804,14 @@ trait Documents
         $exact = false;
 
         if ($this->isDeclaredInteger($numericAttribute ?? $this->declaredAttribute($collection, $attribute))) {
-            [$exact, $min] = $this->prepareIntegerChange($value, $min, false);
+            if ($this->fractionRounding()->get()) {
+                [$exact, $min] = $this->prepareIntegerChange($value, $min, false);
+            } else {
+                $this->assertIntegerChange($value);
+                if ($min !== null) {
+                    $min = $this->integerBound($min, 'Min');
+                }
+            }
         }
 
         $cacheTarget = $collection->getId() === self::METADATA
@@ -2823,22 +2837,22 @@ trait Documents
             }
 
             $attributeExists = $document->offsetExists($attribute);
-            $current = $document->getAttribute($attribute);
+            $currentDecVal = $document->getAttribute($attribute);
             $returned = null;
             if ($exact) {
-                [$value, $returned] = $this->exactChange($current, $value, $min, false);
+                [$value, $returned] = $this->exactChange($currentDecVal, $value, $min, false);
                 $min = null;
             }
             if ($numericAttribute instanceof Attribute) {
-                $result = $this->getNumericResult($numericAttribute, $current, $value, false);
+                $result = $this->getNumericResult($numericAttribute, $currentDecVal, $value, false);
             } else {
                 if (! $attributeExists) {
-                    $current = 0;
+                    $currentDecVal = 0;
                 }
-                if (! \is_int($current) && ! \is_float($current)) {
+                if (! \is_int($currentDecVal) && ! \is_float($currentDecVal)) {
                     throw new TypeException('Attribute value must be numeric.');
                 }
-                $result = $current - $this->getNativeNumber($value);
+                $result = $currentDecVal - $this->getNativeNumber($value);
             }
             $belowMinimum = ! \is_null($min) && (
                 $numericAttribute?->isInteger() === true

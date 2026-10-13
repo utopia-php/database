@@ -233,6 +233,13 @@ class Operator extends Validator
         $type = $attribute->type;
         $isArray = $attribute->array;
 
+        // Operators run on the stored value, which for an encrypted attribute is the ciphertext
+        if (\in_array('encrypt', $attribute->filters, true)) {
+            $this->message = "Cannot apply {$methodName} operator to encrypted attribute '{$operator->getAttribute()}'";
+
+            return false;
+        }
+
         // Array operators that carry a caller-supplied value list are capped to guard against
         // memory exhaustion. Enforced here so every adapter rejects an oversized list the same way.
         // The payload may be spread across $values or wrapped in $values[0] (the same shape the

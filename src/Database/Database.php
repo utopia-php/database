@@ -236,6 +236,11 @@ class Database
      */
     protected array $decorators = [];
 
+    /**
+     * @var list<Hook\Nested>
+     */
+    protected array $nestedHooks = [];
+
     /** @var Value<bool>|null Whether every lifecycle hook is silenced. */
     private ?Value $silenced = null;
 
@@ -268,9 +273,6 @@ class Database
 
     /** @var Value<bool>|null */
     private ?Value $ignoringDuplicates = null;
-
-    /** @var Value<bool>|null */
-    private ?Value $placeholderReplacement = null;
 
     /** @var Value<bool>|null */
     private ?Value $grantChecking = null;
@@ -1163,41 +1165,6 @@ class Database
     }
 
     /**
-     * Set whether a document whose ID is Id::PLACEHOLDER gets a generated ID, as one whose ID is empty does. This
-     * covers the documents given to createDocument(), createDocuments(), upsertDocument() and upsertDocuments(), and
-     * every related document they or updateDocument() are given as a document, as deep as the write relates them. A
-     * related document given as the string Id::PLACEHOLDER stays a reference to the document stored under that ID.
-     * While it is on, updateDocuments() refuses a related document given as a document with a relationship
-     * exception: one generated ID could not serve every document it updates.
-     *
-     * @return $this
-     */
-    public function setReplacePlaceholders(bool $replace): static
-    {
-        $this->placeholderReplacement()->set($replace);
-
-        return $this;
-    }
-
-    public function isReplacingPlaceholders(): bool
-    {
-        return $this->placeholderReplacement()->get();
-    }
-
-    /**
-     * Run the callback with placeholder replacement on or off for the calling coroutine and the coroutines it starts.
-     *
-     * @template T
-     *
-     * @param  callable(): T  $callback
-     * @return T
-     */
-    public function withReplacePlaceholders(bool $replace, callable $callback): mixed
-    {
-        return $this->placeholderReplacement()->with($replace, $callback);
-    }
-
-    /**
      * Set whether, while authorization is enabled, a related document given as a document to createDocument(),
      * createDocuments(), updateDocument(), upsertDocument(), upsertDocuments(), authorizeCreate() or authorizeUpdate()
      * may only add permissions for roles the caller holds, as deep as the write relates it. Permissions it already
@@ -1445,6 +1412,7 @@ class Database
      *   {@see Named} one replaces the lifecycle hook registered under its name
      * - {@see Hook\Decorator} — document transformation on read/write results
      * - {@see Hook\Relationships} — relationship resolution and mutation
+     * - {@see Hook\Nested} — preparation of each nested related document before a write relates it, run in registration order
      * - {@see Hook\Write} — row-level write interception (permissions, tenant)
      * - {@see Hook\Transform} — raw SQL transformation before execution
      * - {@see Invalidator} — the query cache invalidation, replacing the one setQueryCache() made
@@ -1460,6 +1428,7 @@ class Database
             && ! $hook instanceof Invalidator
             && ! $hook instanceof Hook\Decorator
             && ! $hook instanceof Relationships
+            && ! $hook instanceof Hook\Nested
             && ! $hook instanceof Hook\Write
             && ! $hook instanceof Transform
         ) {
@@ -1484,6 +1453,10 @@ class Database
 
         if ($hook instanceof Relationships) {
             $this->relationshipHook = $hook;
+        }
+
+        if ($hook instanceof Hook\Nested) {
+            $this->nestedHooks[] = $hook;
         }
 
         if ($hook instanceof Hook\Write) {
@@ -1514,6 +1487,7 @@ class Database
 
         $this->lifecycleHooks = \array_values(\array_filter($this->lifecycleHooks, $kept));
         $this->decorators = \array_values(\array_filter($this->decorators, $kept));
+        $this->nestedHooks = \array_values(\array_filter($this->nestedHooks, $kept));
 
         if ($this->invalidator !== null && ! $kept($this->invalidator)) {
             $this->invalidator = null;
@@ -1680,7 +1654,6 @@ class Database
             preserveSequence: $this->sequencePreservation()->get(),
             ignoreDuplicates: $this->ignoringDuplicates()->get(),
             requestTimestamp: $this->requestTimestamp()->get(),
-            replacePlaceholders: $this->placeholderReplacement()->get(),
             checkGrants: $this->grantChecking()->get(),
             roundFractions: $this->fractionRounding()->get(),
         );
@@ -1725,8 +1698,7 @@ class Database
     {
         $rounded = fn (): mixed => $this->fractionRounding()->with($snapshot->roundFractions, $callback);
         $checked = fn (): mixed => $this->grantChecking()->with($snapshot->checkGrants, $rounded);
-        $replaced = fn (): mixed => $this->placeholderReplacement()->with($snapshot->replacePlaceholders, $checked);
-        $timestamped = fn (): mixed => $this->requestTimestamp()->with($snapshot->requestTimestamp, $replaced);
+        $timestamped = fn (): mixed => $this->requestTimestamp()->with($snapshot->requestTimestamp, $checked);
         $deduplicated = fn (): mixed => $this->ignoringDuplicates()->with($snapshot->ignoreDuplicates, $timestamped);
         $sequenced = fn (): mixed => $this->sequencePreservation()->with($snapshot->preserveSequence, $deduplicated);
         $dated = fn (): mixed => $this->datePreservation()->with($snapshot->preserveDates, $sequenced);
@@ -1803,14 +1775,6 @@ class Database
     private function ignoringDuplicates(): Value
     {
         return $this->ignoringDuplicates ??= new Value(false);
-    }
-
-    /**
-     * @return Value<bool>
-     */
-    private function placeholderReplacement(): Value
-    {
-        return $this->placeholderReplacement ??= new Value(false);
     }
 
     /**

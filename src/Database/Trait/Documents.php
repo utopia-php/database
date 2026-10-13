@@ -1049,7 +1049,8 @@ trait Documents
      * document needs create on its collection; linking a stored one, by ID or as a document, needs update on it
      * (on its collection, or on the document under document security); a stored document the caller cannot read is
      * refused. For staging a write that runs later, such as an operation of a transaction committed by another
-     * request; createDocument() runs the same checks when it writes.
+     * request; createDocument() runs the same checks when it writes. Related documents are first prepared by the
+     * registered {@see \Utopia\Database\Hook\Nested} hooks, as createDocument() prepares them.
      *
      * Writes staged before the later one change what it finds. With $resolve, every related document is judged as
      * the later write would find it: $resolve(collection, ID) is given the collection identifier and the document ID
@@ -1084,7 +1085,8 @@ trait Documents
      * authorizeCreate() checks for it. A related document $old already links needs no link check, only update when
      * it is sent as a document with attributes to change. Unlike updateDocument(), which lets an update that changes
      * nothing through with read permission, this always needs update. $resolve gives the staged view of related
-     * documents as for authorizeCreate(); $old is the document as the staged writes leave it.
+     * documents as for authorizeCreate(); $old is the document as the staged writes leave it. Related documents are
+     * first prepared by the registered {@see \Utopia\Database\Hook\Nested} hooks, as updateDocument() prepares them.
      *
      * @param  string  $collection  The collection identifier
      * @param  Document  $old  The stored document the update changes, as the caller reads it
@@ -1236,9 +1238,9 @@ trait Documents
         });
     }
 
-    private function generatesId(string $id): bool
+    private function checksGrants(): bool
     {
-        return empty($id) || (Id::isPlaceholder($id) && $this->placeholderReplacement()->get());
+        return $this->grantChecking()->get() && $this->authorization->getStatus();
     }
 
     /**
@@ -1248,13 +1250,12 @@ trait Documents
      */
     private function nestedPreparation(?callable $resolve = null, bool $lock = false): ?Preparation
     {
-        $replace = $this->placeholderReplacement()->get();
-        $check = $this->grantChecking()->get() && $this->authorization->getStatus();
-        if ((! $replace && ! $check) || ! $this->relationshipHook?->isEnabled()) {
+        $check = $this->checksGrants();
+        if (($this->nestedHooks === [] && ! $check) || ! $this->relationshipHook?->isEnabled()) {
             return null;
         }
 
-        return new Preparation($replace, $check, $lock, $resolve === null ? null : $resolve(...));
+        return new Preparation($this->nestedHooks, $check, $lock, $resolve === null ? null : $resolve(...));
     }
 
     /**
@@ -1346,7 +1347,7 @@ trait Documents
 
         $id = $document->getId();
         $document
-            ->setAttribute(Document::ID, $this->generatesId($id) ? Id::unique() : $id)
+            ->setAttribute(Document::ID, empty($id) ? Id::unique() : $id)
             ->setAttribute(Document::COLLECTION, $collection->getId())
             ->setAttribute(Document::CREATED_AT, ($createdAt === null || ! $this->datePreservation()->get()) ? $time : $createdAt)
             ->setAttribute(Document::UPDATED_AT, ($updatedAt === null || ! $this->datePreservation()->get()) ? $time : $updatedAt);
@@ -1465,7 +1466,7 @@ trait Documents
             $updatedAt = $document->getUpdatedAt();
 
             $document
-                ->setAttribute(Document::ID, $this->generatesId($document->getId()) ? Id::unique() : $document->getId())
+                ->setAttribute(Document::ID, empty($document->getId()) ? Id::unique() : $document->getId())
                 ->setAttribute(Document::COLLECTION, $collection->getId())
                 ->setAttribute(Document::CREATED_AT, ($createdAt === null || ! $this->datePreservation()->get()) ? $time : $createdAt)
                 ->setAttribute(Document::UPDATED_AT, ($updatedAt === null || ! $this->datePreservation()->get()) ? $time : $updatedAt);
@@ -1905,8 +1906,8 @@ trait Documents
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        if ($this->nestedPreparation() !== null && self::holdsRelatedDocument($collection, $updates)) {
-            throw new RelationshipException('Invalid relationship value. A bulk update takes related documents by ID while placeholders are replaced or grants are checked.');
+        if ($this->checksGrants() && $this->relationshipHook?->isEnabled() && self::holdsRelatedDocument($collection, $updates)) {
+            throw new RelationshipException('Invalid relationship value. A bulk update takes related documents by ID while grants are checked.');
         }
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
@@ -2273,16 +2274,10 @@ trait Documents
         $operatorIds = [];
         $seenIds = [];
         $hasRelationships = self::relationshipAttributes($collection) !== [];
-        $replacing = $this->placeholderReplacement()->get();
         $preparation = $hasRelationships ? $this->nestedPreparation() : null;
-        if ($replacing || $preparation !== null) {
+        if ($preparation !== null) {
             foreach ($documents as $key => $document) {
-                if ($replacing && Id::isPlaceholder($document->getId())) {
-                    $document->setAttribute(Document::ID, Id::unique());
-                }
-                if ($preparation !== null) {
-                    $documents[$key] = $this->prepareNested($collection, $document, $preparation);
-                }
+                $documents[$key] = $this->prepareNested($collection, $document, $preparation);
             }
         }
         $internalKeys = \array_flip(\array_map(

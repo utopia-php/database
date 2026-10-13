@@ -16,6 +16,7 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit;
 use Utopia\Database\Filter\Registry;
 use Utopia\Database\Hook\Lifecycle;
+use Utopia\Database\Hook\Nested;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Hook\Write;
 use Utopia\Database\Mirror\Failure;
@@ -482,14 +483,6 @@ class Mirror extends Database
         return parent::setPreserveSequence($preserve);
     }
 
-    #[\Override]
-    public function setReplacePlaceholders(bool $replace): static
-    {
-        $this->delegate(__FUNCTION__, \func_get_args());
-
-        return parent::setReplacePlaceholders($replace);
-    }
-
     /**
      * Only the source checks grants: the destination replays what the source already allowed, and judging it against
      * the destination's own copies would refuse writes the source made whenever the destination is behind.
@@ -556,15 +549,6 @@ class Mirror extends Database
         $scoped = $destination === null ? $callback : fn (): mixed => $destination->withPreserveSequence($preserve, $callback);
 
         return parent::withPreserveSequence($preserve, fn (): mixed => $this->source->withPreserveSequence($preserve, $scoped));
-    }
-
-    #[\Override]
-    public function withReplacePlaceholders(bool $replace, callable $callback): mixed
-    {
-        $destination = $this->destination;
-        $scoped = $destination === null ? $callback : fn (): mixed => $destination->withReplacePlaceholders($replace, $callback);
-
-        return parent::withReplacePlaceholders($replace, fn (): mixed => $this->source->withReplacePlaceholders($replace, $scoped));
     }
 
     #[\Override]
@@ -1864,7 +1848,9 @@ class Mirror extends Database
     /**
      * A relationships hook is the mirror's own, and the source and the destination each attach a copy of it, so
      * both sides relate documents exactly as it is configured to. A write hook also intercepts the destination's
-     * writes.
+     * writes. A nested hook runs on the mirror, for its pre-checks, and on the source, but never on the destination:
+     * the destination replicates the related documents the source already prepared, so preparing them again would
+     * give it IDs the source does not have.
      */
     #[\Override]
     public function addHook(\Utopia\Query\Hook $hook): static
@@ -1876,6 +1862,10 @@ class Mirror extends Database
             $this->addLifecycleHook($hook);
         } else {
             parent::addHook($hook);
+        }
+
+        if ($hook instanceof Nested) {
+            $this->source->addHook($hook);
         }
 
         if ($hook instanceof Relationships) {
@@ -1899,6 +1889,10 @@ class Mirror extends Database
         parent::removeHook($hook);
 
         if ($hook instanceof Lifecycle || (\is_string($hook) && \is_a($hook, Lifecycle::class, true))) {
+            $this->source->removeHook($hook);
+        }
+
+        if ($hook instanceof Nested || (\is_string($hook) && \is_a($hook, Nested::class, true))) {
             $this->source->removeHook($hook);
         }
 

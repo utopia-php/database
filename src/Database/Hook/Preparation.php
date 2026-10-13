@@ -13,13 +13,13 @@ use Utopia\Database\Document;
 final readonly class Preparation
 {
     /**
-     * @param  bool  $replace  Whether a related document whose ID is empty or Id::PLACEHOLDER gets a generated ID
+     * @param  list<Nested>  $hooks  The hooks each related document is given to, in order, before it is checked
      * @param  bool  $check  Whether a related document may only add permissions for roles the caller holds
      * @param  bool  $lock  Whether stored permissions are read locked, holding them until the write's transaction ends
      * @param  (Closure(string, string): ?Document)|null  $resolve  The staged view of a related document by collection and ID; null reads the stored one
      */
     public function __construct(
-        public bool $replace,
+        public array $hooks,
         public bool $check,
         public bool $lock = false,
         public ?Closure $resolve = null,

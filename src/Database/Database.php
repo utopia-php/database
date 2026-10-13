@@ -2571,7 +2571,7 @@ class Database
                 Attribute::string(self::COLLECTION_ATTRIBUTES, 1_000_000, filters: [Filter::Json]),
                 Attribute::string(self::COLLECTION_INDEXES, 1_000_000, filters: [Filter::Json]),
                 Attribute::boolean(self::COLLECTION_DOCUMENT_SECURITY, required: true),
-                Attribute::string(self::COLLECTION_COLUMN_PERMISSIONS, 1_000_000, filters: [Filter::Json]),
+                Attribute::string(self::COLLECTION_COLUMN_PERMISSIONS, 1_000_000, default: [], filters: [Filter::Json]),
             ],
             documentSecurity: false,
             metadata: [Document::COLLECTION => self::METADATA],

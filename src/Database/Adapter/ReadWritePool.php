@@ -31,6 +31,7 @@ class ReadWritePool extends Pool
      * the sticky window, so a call that writes, or must see the latest write, never belongs here.
      */
     final protected const array METADATA_METHODS = [
+        'arithmetic',
         'supports',
         'capabilities',
         'hasFeature',

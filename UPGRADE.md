@@ -1,3 +1,312 @@
+# Upgrading from 8.0 to 8.1
+
+8.1 is a minor release. Every change in it is additive or opt-in, with one exception: it runs
+[joins on a one-to-many relationship](#joins-on-a-one-to-many-relationship) that 8.0.3 refused. With no `Hook\Nested`
+hook registered and with `setCheckGrants()` and `setRoundFractions()` off, which is the default, a `Database` behaves
+exactly as in 8.0.3 apart from that join.
+[CHANGELOG.md](CHANGELOG.md) lists every new signature.
+
+- [Preparing nested related documents](#preparing-nested-related-documents)
+- [Grant check on related documents](#grant-check-on-related-documents)
+- [Fractional operands on integer attributes](#fractional-operands-on-integer-attributes)
+- [Cursor from an ID](#cursor-from-an-id)
+- [One read for documents and aggregates](#one-read-for-documents-and-aggregates)
+- [Joins on a one-to-many relationship](#joins-on-a-one-to-many-relationship)
+- [Spatial support behind a pool](#spatial-support-behind-a-pool)
+- [`State\Snapshot`](#statesnapshot)
+
+The two new toggles follow the 8.0 toggle idiom (see [Configuration toggles](#configuration-toggles)). Each one is
+scoped to the calling coroutine and the coroutines it starts. `withSnapshot()` carries it into relationship writes and
+other work that runs in another coroutine.
+
+| Toggle | Set | Read | Scope |
+|---|---|---|---|
+| Grant check | `setCheckGrants(bool $check): static` | `isCheckingGrants(): bool` | `withCheckGrants(bool $check, callable $callback): mixed` |
+| Fractions | `setRoundFractions(bool $round): static` | `isRoundingFractions(): bool` | `withRoundFractions(bool $round, callable $callback): mixed` |
+
+## Preparing nested related documents
+
+Additive. An application that rewrites nested related documents before they are written, such as filling in an
+attribute the caller left out, implements a `Utopia\Database\Hook\Nested` hook:
+
+```php
+interface Nested extends Hook
+{
+    public function prepare(Document $collection, Document $document): Document;
+}
+```
+
+Register it with `$database->addHook($hook)`. Remove it with `removeHook($hook)`, or remove every one with
+`removeHook(Nested::class)`.
+
+- **What it is given.** Each related document that `createDocument()`, `createDocuments()`, `updateDocument()`,
+  `upsertDocument()`, `upsertDocuments()`, `authorizeCreate()` or `authorizeUpdate()` is given as a document (a
+  `Document` or an associative array), at every depth the write relates. `$collection` is the collection the related
+  document belongs to.
+- **When it runs.** Before the write checks the document's grants and relates it, a parent before its children.
+  Several hooks run in the order they were registered, each given the document the previous one returned.
+- **What it returns.** It is given a copy, never the caller's document. The write checks and relates the document it
+  returns, so links and junction rows use the IDs it returns. In `createDocuments()`, `upsertDocument()` and
+  `upsertDocuments()`, the prepared related documents replace the relationship values of the caller's top-level
+  documents in place, as those writes prepare the documents they are given.
+- **What it is not given.** The top-level document, a related document given as an ID string, and anything from
+  `updateDocuments()`. A string stays a reference to the document stored under that ID, as in 8.0.
+- **Running more than once.** One logical write can run it more than once: `authorizeCreate()` or `authorizeUpdate()`
+  and then the write, or a retried transaction. A pre-check prepares a copy, and the write prepares the document again.
+  So the hook must return the same document when it is given its own output.
+- **Conditions.** It runs while the relationship hook is attached and enabled, so not inside `skipRelationships()`,
+  whether or not events are silenced. Its exceptions abort the write before anything is written.
+- **New documents.** A related document whose returned ID is not stored is new. Relating it, in the write and in
+  `authorizeCreate()` and `authorizeUpdate()`, needs create permission on its collection, and with the
+  [grant check](#grant-check-on-related-documents) on, all of its permissions are checked.
+- **Malformed values.** While a hook is registered or grants are checked, a related document given as an associative
+  array that is not a valid document throws `Exception\Relationship` (`Invalid relationship value. <reason>`) before
+  anything is written.
+- **Mirror.** `Mirror::addHook()` registers it on the mirror itself, for its pre-checks, and on the source, never on
+  the destination. The destination replicates what the source wrote, as the hook returned it there.
+  `removeHook()` removes it from both.
+
+```php
+use Utopia\Database\Document;
+use Utopia\Database\Hook\Nested;
+
+final readonly class DefaultStatus implements Nested
+{
+    public function __construct(private string $status)
+    {
+    }
+
+    public function prepare(Document $collection, Document $document): Document
+    {
+        if ($collection->getId() === 'books' && $document->getAttribute('status') === null) {
+            $document->setAttribute('status', $this->status);
+        }
+
+        return $document;
+    }
+}
+
+$database->addHook(new DefaultStatus('draft'));
+
+$database->createDocument('authors', new Document([
+    '$id' => 'ada',
+    'name' => 'Ada',
+    'books' => [
+        ['$id' => 'notes', 'title' => 'Notes'], // stored with status 'draft'
+        'sketches',                             // a reference to a stored book, not given to the hook
+    ],
+]));
+```
+
+## Grant check on related documents
+
+Opt-in. By default 8.1 never compares the permissions a write grants with the roles the caller holds, as in 8.0.
+
+With `setCheckGrants(true)`, the check covers related documents written through a parent: every related document
+given as a document to `createDocument()`, `createDocuments()`, `updateDocument()`, `upsertDocument()`,
+`upsertDocuments()`, `authorizeCreate()` or `authorizeUpdate()`, as deep as the write relates them, each as the
+[`Hook\Nested` hooks](#preparing-nested-related-documents) return it. The document the write is given is not checked.
+For each related document whose `$permissions` is not null:
+
+- Malformed permissions throw `Exception\Structure` with the `Validator\Permissions` description.
+- The permissions it adds must name roles the caller holds (`Authorization::hasRole()`). Otherwise the write throws
+  `Exception\Authorization` (`Permissions must be one of: (<the caller's roles>)`). The added permissions are
+  `Permission::aggregate()` of the sent permissions minus those the document already has. A document that is not
+  stored yet, with an empty `$id` or an ID no stored document has, has none. Permissions sent back unchanged pass,
+  and so does an empty list.
+- Permissions a related document inherits from its parent are never checked.
+- Both refusals happen before anything is written.
+
+The check is skipped while authorization is disabled (`$authorization->skip()` or `setStatus(false)`), and it runs only
+while the relationship hook is attached and enabled. To write without it while authorization stays enabled, use
+`withCheckGrants(false, $callback)`.
+
+A related document's current permissions are read whether or not the caller can read the document:
+
+- `createDocument()` and `updateDocument()` read them locked, inside the write's transaction.
+- `createDocuments()`, `upsertDocument()` and `upsertDocuments()` write related documents before the transaction of
+  the documents that relate them. They read the permissions without a lock, so a permission change committed between
+  the check and the related write is not seen.
+- `authorizeCreate()` and `authorizeUpdate()` take them from `$resolve($collection, $id)` when it returns a document,
+  and from the stored document when it returns `null`. A document `$resolve` returns empty (staged for deletion)
+  is new.
+- A related document whose `$id` a `Hook\Nested` hook assigned is new to this check: none of its permissions are read,
+  locked or resolved, so all of them are checked.
+
+While grants are checked, `updateDocuments()` refuses a related document given as a document with
+`Exception\Relationship` (`Invalid relationship value. A bulk update takes related documents by ID while grants are
+checked.`), because it is not checked there. Related documents given by ID still link.
+
+`Mirror` checks on its source only. The destination replays what the source allowed with the check off, so a
+destination that is behind never refuses it.
+
+Because the current permissions are read regardless of the caller's read permission, the error can reveal one fact to
+a caller who cannot read a related document: whether a permission it sends is already on that document. If it is, this
+check passes and the relationship write refuses the document for its read or update reason instead. Both refusals are
+`Exception\Authorization`. If that difference matters to you, answer every `Exception\Authorization` with the same
+response.
+
+## Fractional operands on integer attributes
+
+Opt-in. By default 8.1 refuses fractions on integer attributes exactly as 8.0.2 and 8.0.3 do:
+`increaseDocumentAttribute()` and `decreaseDocumentAttribute()` throw `Exception\Type`, and fractional operator limits
+throw `Exception\Structure`.
+
+With `setRoundFractions(true)`, fractions on single-valued integer and big integer attributes are stored as the
+adapter's engine stored them on 7.4.1, which handed them to the engine. This covers:
+
+- the change value and the `max` or `min` of `increaseDocumentAttribute()` and `decreaseDocumentAttribute()`;
+- the amount and limit of `Operator::increment()`, `decrement()`, `multiply()`, `divide()`, `modulo()` and `power()`
+  given to `updateDocument()`, `updateDocuments()`, `upsertDocument()` and `upsertDocuments()`;
+- fractional items added to an integer array by `arrayAppend()`, `arrayPrepend()` or `arrayInsert()`, which are cut
+  toward zero, as every engine read them back.
+
+Float and double attributes are unchanged.
+
+Each fractional operator is resolved from the stored value into the whole-number increment or decrement that stores
+the engine's result. The stored value is read locked, inside the write's transaction. `updateDocuments()` and the
+upserts read each row locked inside its batch's transaction, then send one update per group of rows with the same
+resolved change. A row an upsert creates is resolved from 0. A write without a fractional operator on an integer
+attribute takes the 8.0 path. Big integers stay exact beyond 2^53: the stored value never passes through a float.
+
+`Adapter::arithmetic()` declares each engine's rules:
+
+| Adapter | Counter change | Divide by a whole number | Power | Other operators | Refused |
+|---|---|---|---|---|---|
+| MariaDB, MySQL | Half to even | Exact, half away from zero | Half to even | Computed in `DOUBLE`, half to even | — |
+| PostgreSQL | Refused | Exact, half away from zero | Double precision, half to even | `NUMERIC`, half away from zero; multiply, divide and modulo exact | A fractional counter change; a fractional amount of increment, decrement, multiply or divide without a limit |
+| MongoDB | Toward zero | Toward zero | Toward zero | Toward zero | — |
+| SQLite, Memory, Redis | Toward zero | Toward zero | Toward zero | Toward zero; a fractional modulus is cut toward zero first | A modulus that cuts to zero (`modulo(0.5)`) |
+
+An adapter that did not exist in 7.4.1 answers with the MariaDB and MySQL rules unless it overrides `arithmetic()`.
+`Pool` asks the pooled adapter once per pool, and `ReadWritePool` answers wherever reads go.
+
+**Operator limits.** A limit is compared with the exact result, as given, and is never rounded. A result past the limit
+leaves the stored value unchanged, as on 7.4.1. So does a power that has no value under a limit: 0 to a negative power,
+or a negative base to a fractional power. Because the engine rounded after comparing, a stored whole number can pass a
+fractional limit: on MariaDB, `increment(1.5, 13.5)` on 12 stores 14.
+
+**Counters.**
+
+- A whole change is an integer, integer text, numeric text with a whole value such as `'1e3'`, or a float without a
+  fraction. With a whole change, a fractional `max` is rounded down and a fractional `min` rounded up, reading text
+  exactly. Then the change runs as in 8.0. On PostgreSQL, a whole change with a fractional bound is refused as 7.4.1
+  refused it: `Exception\Limit` if the exact result passes the bound, otherwise `Exception\Type` (`Max must be an
+  integer.` or `Min must be an integer.`).
+- With a fractional change, the bound is used as given. The stored value is read locked. If the exact result passes
+  the bound, the call throws `Exception\Limit` before writing. Otherwise it writes the whole-number change the engine
+  would have stored, and the returned document carries the exact result as a float. On MariaDB, 5 + 1.5 with
+  `max` 6.5 returns 6.5 and stores 6, and 5 − 1.5 with `min` 3.5 returns 3.5 and stores 4.
+- A whole-number change of 0 still writes. On MariaDB, 4 + 0.5 stores 4, moves `$updatedAt`, purges the caches and
+  fires the events.
+- On PostgreSQL a fractional change throws `Exception\Type` (`Change value must be an integer.`), with or without a
+  bound. A bound the exact result passes throws `Exception\Limit` first.
+- A change of 0 or less still throws `Exception\Type` (`Value must be numeric and greater than 0`).
+
+**Refusals.** An operator an engine refused, or one whose amount or limit is infinite or not a number, comes back
+unresolved. Validation then refuses it with `Exception\Structure`, as by default. So does an amount or limit on
+PostgreSQL's exact operators that is too long to compute exactly (more than 128 significant digits). A counter change
+that is infinite or not a number throws `Exception\Type`.
+
+**MongoDB.** 7.4.1 stored the fractional double, every read cut it toward zero, and later operations continued from the
+double. 8.1 stores the whole number after each operation, which is what every 7.4.1 read returned. This approximates
+7.4.1 rather than reproducing it: two increments of 0.5 from 1 stored 2.0 on 7.4.1 and store 1 on 8.1. **SQLite.**
+7.4.1 compared a fractional operator limit as text, so a fractional maximum never held and a fractional minimum always
+held. 8.1 does not reproduce this: limits hold as on Memory and Redis.
+
+**Mirror.** `Mirror` forwards the toggle to its source and destination.
+
+- `increaseDocumentAttribute()`, `decreaseDocumentAttribute()`, `updateDocuments()` and the upserts are replayed on
+  the destination with the caller's arguments. The destination resolves them with its own adapter's rules and its own
+  stored values. If it refuses one, for example a fractional counter on a PostgreSQL destination, the failure only
+  reaches `onError()`.
+- `updateDocument()` replicates the values the source stored.
+
+`Validator\Operator` and `Validator\Structure` (and `Validator\PartialStructure`) take a trailing
+`bool $fractions = false` for code that validates operators itself. When it is set, a finite fractional amount or limit
+within the attribute's range passes, and the caller resolves it into a whole one before writing.
+
+```php
+$database->setRoundFractions(true);
+
+// MariaDB: stores 6 and returns 6.5. PostgreSQL: throws Exception\Type, as 7.4.1 did.
+$document = $database->increaseDocumentAttribute('posts', 'p1', 'likes', 1.5, max: 6.5);
+```
+
+## Cursor from an ID
+
+Additive. `Database::resolveCursor(string $collection, string $id, CursorDirection $direction, array $queries = []):
+Document` returns the cursor a list pages from when a client names its last row by document ID. Pass the list's
+`$queries` (its cursor queries are left out) and put the result in the list's `cursorAfter()` or `cursorBefore()`.
+
+- The document is read with authorization skipped, so a list can page past a document its caller cannot read.
+- The cursor holds only `$id`, `$sequence`, `$collection`, the values the list orders by and the `alias.$id`
+  tie-breaks `find()` adds for a join. An order on a joined attribute takes its value from the joined rows the caller
+  can read that the list pairs with the document. A page after the document starts behind the last of those rows, and
+  a page before it ends ahead of the first. With no such row, the value is null.
+- It returns an empty `Document` when no document has the ID. It throws `Exception\NotFound` for a missing collection,
+  and `Exception\Query` for invalid queries or joins.
+
+The caller chooses the orders, and the values come from a document it may not be allowed to read. Never return the
+cursor, or any value in it, to an end user. Only pass it to `cursorAfter()` or `cursorBefore()`.
+
+```php
+$cursor = $database->resolveCursor('posts', $lastId, CursorDirection::After, $queries);
+if ($cursor->isEmpty()) {
+    // no such document
+}
+$page = $database->find('posts', [...$queries, Query::cursorAfter($cursor)]);
+```
+
+## One read for documents and aggregates
+
+Additive. `find()` still refuses aggregate and `groupBy()` queries, as 8.0 decided. A caller that serves both through
+one list can use `Database::read(string $collection, array $queries = [], PermissionType $forPermission =
+PermissionType::Read): array`. It returns a list of `Document`:
+
+- aggregate or `groupBy()` queries return the rows of `aggregate()`, each wrapped in a `Document`. Aggregates are read
+  under the read permission only, so another `$forPermission` throws `Exception\Query`.
+- any other queries return what `find($collection, $queries, $forPermission)` returns.
+
+`ParsedQuery::isAggregation(): bool` (from `Query::groupByType($queries)`) tells which of the two a list is.
+
+## Joins on a one-to-many relationship
+
+Changed. The parent side of a one-to-many relationship holds no column: each child stores the parent's ID under the
+relationship's two-way key. 8.0.3 refused a join condition whose left column is such an attribute
+(`Cannot join on virtual relationship attribute`). 8.1 compares the main `$id` with the two-way key in the joined
+collection instead.
+
+```php
+// customers: Relationship::oneToMany(relatedCollection: 'orders', key: 'orders', twoWayKey: 'customer')
+$rows = $database->find('customers', [
+    Query::leftJoin('orders', 'ord', [Query::on('orders', '$id')]), // runs as Query::on('$id', 'customer')
+    Query::select(['name', 'ord.amount']),
+]);
+```
+
+- The condition keeps its operator, and its right column becomes the two-way key. Other conditions of the join are
+  unchanged, and the caller's `Query` objects are not modified.
+- `getDocument()`, `find()`, `findOne()`, `read()`, `aggregate()`, `count()`, `sum()` and `resolveCursor()` run it, so
+  `cursorAfter()` and `cursorBefore()` page over the joined rows.
+- Only an unqualified left column that is the parent side of a one-to-many with a two-way key is resolved. Every
+  other relationship attribute joins, or is refused, exactly as in 8.0.3; so is a left column under a join's alias.
+- The joined collection is read under the same permission and tenant rules as any join.
+
+## Spatial support behind a pool
+
+No change. 8.0.3 already answers correctly, and 8.1 adds tests for it. Ask
+`$adapter->hasFeature(Feature\Spatial::class)` or `$database->profile()->hasFeature(Feature\Spatial::class)`, never
+`instanceof Feature\Spatial`. `Pool` and `ReadWritePool` do not implement the feature interfaces; they answer
+`hasFeature()` for the adapter they pool. A `Mirror`'s `getAdapter()` is its source's adapter, so it answers for the
+source. Creating a `point` attribute fails exactly when `hasFeature(Feature\Spatial::class)` is false.
+
+## `State\Snapshot`
+
+Additive. The `State\Snapshot` constructor takes two more trailing arguments, `bool $checkGrants = false` and
+`bool $roundFractions = false`, which `Database::snapshot()` fills in. Code that builds a `Snapshot` itself still
+works; a snapshot built without them runs its callback with both toggles off.
+
 # Upgrading from 7.x to 8.0
 
 This guide lists the changes you may need to make when you move from utopia-php/database 7.x (last release 7.4.1)

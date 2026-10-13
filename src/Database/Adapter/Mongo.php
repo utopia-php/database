@@ -12,6 +12,8 @@ use stdClass;
 use Swoole\Coroutine;
 use Throwable;
 use Utopia\Database\Adapter;
+use Utopia\Database\Arithmetic;
+use Utopia\Database\Arithmetic\Rounding;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Change;
@@ -2910,6 +2912,20 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         $tenant = $tenant === null ? '' : $this->stringifyIdentifier($tenant);
 
         return $tenant."\0".$id;
+    }
+
+    /**
+     * MongoDB stored a fractional result as a double, and every read cast it to an integer, cutting it toward zero.
+     */
+    #[\Override]
+    public function arithmetic(): Arithmetic
+    {
+        return new Arithmetic(
+            counter: Rounding::TowardZero,
+            operators: Rounding::TowardZero,
+            division: Rounding::TowardZero,
+            power: Rounding::TowardZero,
+        );
     }
 
     /**

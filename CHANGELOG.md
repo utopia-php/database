@@ -1,5 +1,75 @@
 # Changelog
 
+## 8.1.0
+
+8.1.0 adds opt-in and additive APIs for work that callers had to do themselves. With no `Hook\Nested` hook registered
+and with `setCheckGrants()` and `setRoundFractions()` off, which is the default, a `Database` behaves exactly as in
+8.0.3, except that it runs a join on the parent side of a one-to-many relationship attribute, which 8.0.3 refused
+(listed under Changed). See [Upgrading from 8.0 to 8.1](UPGRADE.md#upgrading-from-80-to-81).
+
+### Added
+
+- `Utopia\Database\Hook\Nested`, a hook with `prepare(Document $collection, Document $document): Document`. Register
+  it with `Database::addHook()` and remove it with `removeHook()`. It is given a copy of each related document that
+  `createDocument()`, `createDocuments()`, `updateDocument()`, `upsertDocument()`, `upsertDocuments()`,
+  `authorizeCreate()` or `authorizeUpdate()` is given as a document, at every depth the write relates. A parent is
+  prepared before its children, and hooks run in the order they were registered. The write checks grants on, and
+  relates, the document the hook returns. The hook is not given the top-level document, a related document given as
+  an ID, or anything from `updateDocuments()`. A `Mirror` runs it on itself, for the pre-checks, and on its source.
+  Its destination receives the IDs the source wrote.
+- `Database::setCheckGrants(bool $check): static`, `isCheckingGrants(): bool` and
+  `withCheckGrants(bool $check, callable $callback): mixed`, off by default. While on and while authorization is
+  enabled, a related document given as a document to `createDocument()`, `createDocuments()`, `updateDocument()`,
+  `upsertDocument()`, `upsertDocuments()`, `authorizeCreate()` or `authorizeUpdate()` may add permissions only for
+  roles the caller holds. The check judges the document the `Hook\Nested` hooks return. A related document whose
+  `$id` a `Hook\Nested` hook assigned is judged new: none of its permissions are read or locked, and it needs create
+  permission. An unheld role throws `Exception\Authorization` (`Permissions must be one of: (<roles>)`) and malformed
+  permissions throw `Exception\Structure`, before anything is written.
+- While grants are checked, `updateDocuments()` refuses a related document given as a document with
+  `Exception\Relationship` (`Invalid relationship value. A bulk update takes related documents by ID while grants are
+  checked.`). Related documents given by ID still link.
+- `Database::setRoundFractions(bool $round): static`, `isRoundingFractions(): bool` and
+  `withRoundFractions(bool $round, callable $callback): mixed`, off by default. While on, a fractional change, amount
+  or limit on a single-valued integer or big integer attribute is stored as the adapter's engine stored it on 7.4.1,
+  instead of being refused. This covers `increaseDocumentAttribute()`, `decreaseDocumentAttribute()` and the numeric
+  operators of `updateDocument()`, `updateDocuments()`, `upsertDocument()` and `upsertDocuments()`. Fractional items
+  added to an integer array are cut toward zero. What the engine refused is still refused.
+- `Adapter::arithmetic(): Arithmetic` declares how the adapter's engine stored a fractional result in an integer
+  column on 7.4.1. The base answer is MariaDB's and MySQL's. `Postgres`, `Mongo`, `SQLite`, `Memory` and `Redis`
+  override it. `Pool` asks the pooled adapter once per pool, and `ReadWritePool` answers it wherever reads go, without
+  opening the sticky window.
+- `Utopia\Database\Arithmetic`, a `final readonly` class:
+  `new Arithmetic(Rounding $counter, Rounding $operators, Rounding $division, Rounding $power, bool
+  $refusesCounterFractions = false, array $exactOperators = [], array $refusedWithoutLimit = [], bool
+  $truncatesModulus = false)`, and `rounding(OperatorType $method, bool $whole): Rounding`.
+- `Utopia\Database\Arithmetic\Rounding`, an enum with the cases `HalfEven`, `HalfAwayFromZero` and `TowardZero`, and
+  the methods `apply(int|string $base, float $fraction): int|string`, `round(float $value): int|string` and
+  `ratio(int|string $numerator, int|string $denominator): int|string`.
+- `Validator\Operator` and `Validator\Structure` (and so `Validator\PartialStructure`) take a trailing
+  `bool $fractions = false`. When it is set, a numeric operator on an integer attribute may carry a finite fractional
+  amount or limit within the attribute's range, for a caller that resolves it into a whole one before writing.
+- `Database::resolveCursor(string $collection, string $id, CursorDirection $direction, array $queries = []):
+  Document` returns the cursor that a list with `$queries` pages from when it names a document by ID. The document is
+  read with authorization skipped, and only the cursor fields are returned: `$id`, `$sequence`, `$collection` and
+  the values the list orders by, including values from joined rows. Pass the result only to `cursorAfter()` or
+  `cursorBefore()`. It returns an empty `Document` when no document has the ID.
+- `Database::read(string $collection, array $queries = [], PermissionType $forPermission = PermissionType::Read):
+  array` returns a list of `Document`. For aggregate or `groupBy()` queries these are the rows of `aggregate()`;
+  otherwise they are what `find()` returns. Aggregate queries under a permission other than read throw
+  `Exception\Query`. `find()` still refuses aggregate queries.
+- `ParsedQuery::isAggregation(): bool` tells whether the queries aggregate or group.
+- The `State\Snapshot` constructor takes two more trailing arguments, `bool $checkGrants = false` and
+  `bool $roundFractions = false`. `Database::snapshot()` fills them in.
+
+### Changed
+
+- A join condition whose left column is the parent side of a one-to-many relationship of the main collection, such
+  as `Query::on('orders', '$id')`, compares the main `$id` with the relationship's two-way key in the joined
+  collection. The condition keeps its operator. `getDocument()`, `find()`, `findOne()`, `read()`, `aggregate()`,
+  `count()`, `sum()` and `resolveCursor()` run it; 8.0.3 refused it with `Cannot join on virtual relationship
+  attribute`. The joined collection is read under the same permission and tenant rules as any join. The child side of
+  a one-to-many and every other relationship type join, or are refused, as before.
+
 ## 8.0.3
 
 ### Added

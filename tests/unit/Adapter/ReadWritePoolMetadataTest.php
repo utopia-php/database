@@ -41,6 +41,7 @@ final class ReadWritePoolMetadataTest extends TestCase
     public static function metadataCalls(): iterable
     {
         $calls = [
+            'arithmetic' => [],
             'supports' => [Capability::IndexKey],
             'capabilities' => [],
             'getAttributeWidth' => [new Document()],
@@ -94,6 +95,9 @@ final class ReadWritePoolMetadataTest extends TestCase
         $answer = $replica->expects($this->once())->method($method);
         if ($method === 'builder') {
             $answer->willReturn(new SQLiteBuilder());
+        }
+        if ($method === 'arithmetic') {
+            $answer->willReturn((new Memory())->arithmetic());
         }
         $primary->expects($this->never())->method($method);
         $replica->expects($this->once())->method('ping')->willReturn(true);

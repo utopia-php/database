@@ -16,6 +16,7 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit;
 use Utopia\Database\Filter\Registry;
 use Utopia\Database\Hook\Lifecycle;
+use Utopia\Database\Hook\Nested;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Hook\Write;
 use Utopia\Database\Mirror\Failure;
@@ -482,6 +483,26 @@ class Mirror extends Database
         return parent::setPreserveSequence($preserve);
     }
 
+    /**
+     * Only the source checks grants: the destination replays what the source already allowed, and judging it against
+     * the destination's own copies would refuse writes the source made whenever the destination is behind.
+     */
+    #[\Override]
+    public function setCheckGrants(bool $check): static
+    {
+        $this->source->setCheckGrants($check);
+
+        return parent::setCheckGrants($check);
+    }
+
+    #[\Override]
+    public function setRoundFractions(bool $round): static
+    {
+        $this->delegate(__FUNCTION__, \func_get_args());
+
+        return parent::setRoundFractions($round);
+    }
+
     #[\Override]
     public function setValidation(bool $validation): static
     {
@@ -528,6 +549,21 @@ class Mirror extends Database
         $scoped = $destination === null ? $callback : fn (): mixed => $destination->withPreserveSequence($preserve, $callback);
 
         return parent::withPreserveSequence($preserve, fn (): mixed => $this->source->withPreserveSequence($preserve, $scoped));
+    }
+
+    #[\Override]
+    public function withCheckGrants(bool $check, callable $callback): mixed
+    {
+        return parent::withCheckGrants($check, fn (): mixed => $this->source->withCheckGrants($check, $callback));
+    }
+
+    #[\Override]
+    public function withRoundFractions(bool $round, callable $callback): mixed
+    {
+        $destination = $this->destination;
+        $scoped = $destination === null ? $callback : fn (): mixed => $destination->withRoundFractions($round, $callback);
+
+        return parent::withRoundFractions($round, fn (): mixed => $this->source->withRoundFractions($round, $scoped));
     }
 
     #[\Override]
@@ -1650,10 +1686,10 @@ class Mirror extends Database
 
     /**
      * Applies a write to the destination under the authorization, relationship, silence, tenant and toggle state the
-     * caller has at the time of the call, without its request timestamp (the source checked it), and reports a
-     * failure through onError(). Inside a coroutine the write runs in a coroutine of its own, in order with every other
-     * destination change made through the mirror (see inOrder()); outside one it runs before this returns, since a
-     * task that yields outside a scheduler never resumes.
+     * caller has at the time of the call, without its request timestamp or grant check (the source checked both),
+     * and reports a failure through onError(). Inside a coroutine the write runs in a coroutine of its own, in order
+     * with every other destination change made through the mirror (see inOrder()); outside one it runs before this
+     * returns, since a task that yields outside a scheduler never resumes.
      *
      * @param  Closure(): void  $write
      */
@@ -1668,7 +1704,9 @@ class Mirror extends Database
         $apply = function () use ($action, $destination, $snapshot, $write): void {
             try {
                 $destination->withSnapshot($snapshot, function () use ($destination, $write): void {
-                    $destination->withRequestTimestamp(null, $write);
+                    $destination->withCheckGrants(false, function () use ($destination, $write): void {
+                        $destination->withRequestTimestamp(null, $write);
+                    });
                 });
             } catch (Throwable $error) {
                 $this->logError($action, $error);
@@ -1810,7 +1848,9 @@ class Mirror extends Database
     /**
      * A relationships hook is the mirror's own, and the source and the destination each attach a copy of it, so
      * both sides relate documents exactly as it is configured to. A write hook also intercepts the destination's
-     * writes.
+     * writes. A nested hook runs on the mirror, for its pre-checks, and on the source, but never on the destination:
+     * the destination replicates the related documents the source already prepared, so preparing them again would
+     * give it IDs the source does not have.
      */
     #[\Override]
     public function addHook(\Utopia\Query\Hook $hook): static
@@ -1820,8 +1860,16 @@ class Mirror extends Database
             $this->source->addHook($hook);
         } elseif ($hook instanceof Lifecycle) {
             $this->addLifecycleHook($hook);
+
+            if ($hook instanceof Nested) {
+                $this->nestedHooks[] = $hook;
+            }
         } else {
             parent::addHook($hook);
+
+            if ($hook instanceof Nested) {
+                $this->source->nestedHooks[] = $hook;
+            }
         }
 
         if ($hook instanceof Relationships) {
@@ -1845,6 +1893,10 @@ class Mirror extends Database
         parent::removeHook($hook);
 
         if ($hook instanceof Lifecycle || (\is_string($hook) && \is_a($hook, Lifecycle::class, true))) {
+            $this->source->removeHook($hook);
+        }
+
+        if ($hook instanceof Nested || (\is_string($hook) && \is_a($hook, Nested::class, true))) {
             $this->source->removeHook($hook);
         }
 

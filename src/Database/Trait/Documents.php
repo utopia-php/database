@@ -4861,14 +4861,15 @@ trait Documents
     private function nextPageCheck(string $collection, array $queries): Closure
     {
         $parsed = Query::groupByType($queries);
-        $joins = $parsed->joins;
-        $distinct = $parsed->distinct;
-        if (($joins === [] && ! $distinct) || $parsed->aggregations !== [] || $parsed->groupBy !== []) {
+        if (($parsed->joins === [] && ! $parsed->distinct) || $parsed->aggregations !== [] || $parsed->groupBy !== []) {
             return static function (Document $cursor): void {
             };
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
+        $parsed = Query::groupByType(self::resolveOneToManyJoins($collection, $queries));
+        $joins = $parsed->joins;
+        $distinct = $parsed->distinct;
         $joinedCollections = $this->joinedCollectionsByAlias($joins, $this->resolveJoinedCollections($joins));
         $selects = $parsed->selections;
         $filters = $parsed->filters;

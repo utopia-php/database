@@ -10,6 +10,7 @@ use Utopia\Database\CollectionUpdate;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
+use Utopia\Database\Exception\Order as OrderException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Permission;
 use Utopia\Database\Query;
@@ -270,6 +271,43 @@ trait JoinRelationshipTests
                 $cursor = $rows[\count($rows) - 1]->getId();
             }
             $this->assertSame(['c1/o1', 'c1/o2', 'c2/o3', 'c2/o4'], $forward, 'paging by the ID of each page\'s last row returns every row once');
+        } finally {
+            $this->deleteJoinRelationshipCollections($database);
+        }
+    }
+
+    public function testJoinRelationshipIteratesEveryJoinedRowOnceOrFailsBeforeYieldingARow(): void
+    {
+        $database = $this->getDatabase();
+        if (! $this->supportsJoinRelationships($database)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->seedJoinRelationships($database);
+
+        try {
+            $join = Query::join(self::JOIN_RELATIONSHIP_ORDERS, 'purchase', [Query::on('orders', '$id')]);
+
+            $rows = $database->cursor(self::JOIN_RELATIONSHIP_CUSTOMERS, [$join, Query::select(['name', 'purchase.amount']), Query::orderAsc('purchase.amount')], 2);
+            /** @var int $yielded */
+            $yielded = 0;
+            try {
+                foreach ($rows as $row) {
+                    $yielded++;
+                }
+                $this->fail('a one-to-many join pairs a customer with several orders, so its next page orders by the joined $id the rows lack');
+            } catch (OrderException $exception) {
+                $this->assertSame('purchase.$id', $exception->getAttribute());
+            }
+            $this->assertSame(0, $yielded, 'the read is refused before the caller acts on any of its rows');
+
+            $rows = $database->cursor(self::JOIN_RELATIONSHIP_CUSTOMERS, [$join, Query::select(['name', 'purchase.$id', 'purchase.amount']), Query::orderAsc('purchase.amount')], 2);
+            $this->assertSame(
+                ['c1/o1', 'c1/o2', 'c2/o3', 'c2/o4'],
+                \array_map(static fn (Document $row): string => self::joinRelationshipPair($row, 'purchase'), \iterator_to_array($rows, false)),
+            );
         } finally {
             $this->deleteJoinRelationshipCollections($database);
         }

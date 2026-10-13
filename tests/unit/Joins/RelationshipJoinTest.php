@@ -14,6 +14,7 @@ use Utopia\Database\Collection;
 use Utopia\Database\CollectionUpdate;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Order as OrderException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Hook\Relationships;
@@ -349,6 +350,42 @@ final class RelationshipJoinTest extends TestCase
 
         $before = $this->database->find('customers', [...$queries, Query::cursorBefore($this->database->resolveCursor('customers', 'c2', CursorDirection::Before, $queries))]);
         $this->assertSame(['c1/o1', 'c1/o2'], \array_map(static fn (Document $row): string => self::pair($row, 'ord'), $before));
+    }
+
+    public function testPagingAOneToManyJoinItCannotPageFailsBeforeYieldingARow(): void
+    {
+        $rows = $this->database->cursor('customers', [
+            Query::join('orders', 'purchase', [Query::on('orders', '$id')]),
+            Query::select(['name', 'purchase.amount']),
+            Query::orderAsc('purchase.amount'),
+        ], 2);
+        /** @var int $yielded */
+        $yielded = 0;
+
+        try {
+            foreach ($rows as $row) {
+                $yielded++;
+            }
+            $this->fail('A one-to-many join pairs a customer with several orders, so its next page orders by the joined $id the rows lack');
+        } catch (OrderException $exception) {
+            $this->assertSame('purchase.$id', $exception->getAttribute());
+        }
+
+        $this->assertSame(0, $yielded, 'The read must be refused before the caller acts on any of its rows');
+    }
+
+    public function testPagingAOneToManyJoinPagesEveryJoinedRowOnce(): void
+    {
+        $rows = $this->database->cursor('customers', [
+            Query::join('orders', 'purchase', [Query::on('orders', '$id')]),
+            Query::select(['name', 'purchase.$id', 'purchase.amount']),
+            Query::orderAsc('purchase.amount'),
+        ], 2);
+
+        $this->assertSame(
+            ['c1/o1', 'c1/o2', 'c2/o3', 'c2/o4'],
+            \array_map(static fn (Document $row): string => self::pair($row, 'purchase'), \iterator_to_array($rows, false)),
+        );
     }
 
     /**

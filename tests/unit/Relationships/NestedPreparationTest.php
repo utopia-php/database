@@ -82,6 +82,9 @@ final class NestedPreparationTest extends TestCase
         yield 'sqlite' => [static fn (): Adapter => new SQLite(new PDO('sqlite::memory:'))];
     }
 
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
     #[DataProvider('types')]
     public function testPlaceholdersGetGeneratedIdsAtEveryDepth(Closure $adapter, RelationshipType $type): void
     {
@@ -102,6 +105,9 @@ final class NestedPreparationTest extends TestCase
         $this->assertSame(Id::PLACEHOLDER, $grandchild->getId(), 'The caller\'s nested document is not changed');
     }
 
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
     #[DataProvider('adapters')]
     public function testAPlaceholderThreeLevelsDownGetsAGeneratedId(Closure $adapter): void
     {
@@ -125,6 +131,9 @@ final class NestedPreparationTest extends TestCase
         $this->assertGeneratedId($database, self::THIRD, 'grandchild');
     }
 
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
     #[DataProvider('types')]
     public function testAnEmptyIdIsGeneratedAndAnExplicitIdIsKept(Closure $adapter, RelationshipType $type): void
     {
@@ -143,6 +152,9 @@ final class NestedPreparationTest extends TestCase
         $this->assertGeneratedId($database, self::THIRD, 'grandchild');
     }
 
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
     #[DataProvider('types')]
     public function testAStringPlaceholderStaysAReference(Closure $adapter, RelationshipType $type): void
     {
@@ -156,6 +168,9 @@ final class NestedPreparationTest extends TestCase
         $this->assertSame(['literal'], self::names($database, self::SECOND), 'Linking by the string creates nothing');
     }
 
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
     #[DataProvider('types')]
     public function testAStringPlaceholderWithoutALiteralDocumentLinksNothing(Closure $adapter, RelationshipType $type): void
     {
@@ -167,6 +182,9 @@ final class NestedPreparationTest extends TestCase
         $this->assertSame([], self::names($database, self::SECOND));
     }
 
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
     #[DataProvider('types')]
     public function testEveryWriteGeneratesNewIds(Closure $adapter, RelationshipType $type): void
     {
@@ -186,6 +204,9 @@ final class NestedPreparationTest extends TestCase
         $this->assertSame([$two], self::ids($database->getDocument(self::FIRST, 'two')->getAttribute(self::NEXT)));
     }
 
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
     #[DataProvider('adapters')]
     public function testTopLevelPlaceholdersAreGenerated(Closure $adapter): void
     {
@@ -204,6 +225,9 @@ final class NestedPreparationTest extends TestCase
         $this->assertGeneratedId($database, self::SECOND, 'batched');
     }
 
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
     #[DataProvider('types')]
     public function testAnUpdateGeneratesIdsForNestedPlaceholders(Closure $adapter, RelationshipType $type): void
     {
@@ -224,6 +248,9 @@ final class NestedPreparationTest extends TestCase
         $this->assertSame([$childId], self::ids($database->getDocument(self::FIRST, 'root')->getAttribute(self::NEXT)));
     }
 
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
     #[DataProvider('types')]
     public function testAnUpsertGeneratesIdsForNestedPlaceholders(Closure $adapter, RelationshipType $type): void
     {
@@ -247,6 +274,9 @@ final class NestedPreparationTest extends TestCase
         $this->assertSame([$this->assertGeneratedId($database, self::SECOND, 'bulk child')], self::ids($database->getDocument(self::FIRST, 'bulk')->getAttribute(self::NEXT)));
     }
 
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
     #[DataProvider('types')]
     public function testAnUnheldRoleIsRefusedAtEachDepth(Closure $adapter, RelationshipType $type): void
     {
@@ -268,6 +298,9 @@ final class NestedPreparationTest extends TestCase
         $this->assertWroteNothing($database);
     }
 
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
     #[DataProvider('adapters')]
     public function testAnUnheldRoleOnANewToManyItemIsRefused(Closure $adapter): void
     {
@@ -284,6 +317,9 @@ final class NestedPreparationTest extends TestCase
         }
     }
 
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
     #[DataProvider('types')]
     public function testHeldUnchangedAndClearedPermissionsAreAllowed(Closure $adapter, RelationshipType $type): void
     {
@@ -302,6 +338,9 @@ final class NestedPreparationTest extends TestCase
         $this->assertSame([], $this->related($database, 'cleared')->getPermissions());
     }
 
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
     #[DataProvider('types')]
     public function testAbsentOrNullPermissionsInheritTheParentsUnchecked(Closure $adapter, RelationshipType $type): void
     {
@@ -317,6 +356,9 @@ final class NestedPreparationTest extends TestCase
         $this->assertSame($inherited, $this->related($database, 'nulled')->getPermissions());
     }
 
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
     #[DataProvider('adapters')]
     public function testMalformedPermissionsAreAStructureError(Closure $adapter): void
     {
@@ -334,6 +376,9 @@ final class NestedPreparationTest extends TestCase
         $this->assertWroteNothing($database);
     }
 
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
     #[DataProvider('types')]
     public function testDisabledAuthorizationOrTheToggleOffAllowsAnyRole(Closure $adapter, RelationshipType $type): void
     {
@@ -352,6 +397,9 @@ final class NestedPreparationTest extends TestCase
         $this->assertTrue($database->isCheckingGrants());
     }
 
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
     #[DataProvider('types')]
     public function testAPlaceholderWithAnUnheldRoleWritesNothingAndWithAHeldRoleIsCreated(Closure $adapter, RelationshipType $type): void
     {
@@ -369,6 +417,9 @@ final class NestedPreparationTest extends TestCase
         $this->assertSame([Permission::read(Role::user(self::USER))], $database->getDocument(self::SECOND, $childId)->getPermissions());
     }
 
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
     #[DataProvider('adapters')]
     public function testTheTogglesAreScopedAndOffByDefault(Closure $adapter): void
     {
@@ -525,10 +576,14 @@ final class NestedPreparationTest extends TestCase
      */
     private static function names(Database $database, string $collection): array
     {
-        return $database->getAuthorization()->skip(fn (): array => \array_map(
-            static fn (Document $document): string => (string) $document->getAttribute('name', $document->getId()),
+        return $database->getAuthorization()->skip(fn (): array => \array_values(\array_map(
+            static function (Document $document): string {
+                $name = $document->getAttribute('name');
+
+                return \is_string($name) ? $name : $document->getId();
+            },
             $database->find($collection),
-        ));
+        )));
     }
 
     /**
@@ -538,7 +593,7 @@ final class NestedPreparationTest extends TestCase
     {
         $values = \is_array($value) ? $value : ($value === null ? [] : [$value]);
 
-        $ids = \array_map(static fn (mixed $item): string => $item instanceof Document ? $item->getId() : (string) $item, $values);
+        $ids = \array_map(static fn (mixed $item): string => $item instanceof Document ? $item->getId() : (\is_string($item) ? $item : ''), $values);
 
         return \array_values(\array_filter($ids, static fn (string $id): bool => $id !== ''));
     }

@@ -227,7 +227,7 @@ final class NestedPreCheckTest extends TestCase
     private function relatedNames(): array
     {
         $names = $this->authorization->skip(fn (): array => \array_map(
-            static fn (Document $document): string => (string) $document->getAttribute('name'),
+            static fn (Document $document): string => \is_string($name = $document->getAttribute('name')) ? $name : '',
             $this->database->find(self::RELATED),
         ));
 
@@ -241,7 +241,7 @@ final class NestedPreCheckTest extends TestCase
     {
         $values = \is_array($value) ? $value : [$value];
 
-        return \array_values(\array_map(static fn (mixed $item): string => $item instanceof Document ? $item->getId() : (string) $item, $values));
+        return \array_values(\array_map(static fn (mixed $item): string => $item instanceof Document ? $item->getId() : (\is_string($item) ? $item : ''), $values));
     }
 
     private function refusal(callable $check): ?string

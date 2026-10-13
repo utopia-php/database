@@ -19,6 +19,7 @@ use Tests\E2E\Adapter\Scopes\MetadataCacheTests;
 use Tests\E2E\Adapter\Scopes\ObjectAttributeTests;
 use Tests\E2E\Adapter\Scopes\OperatorTests;
 use Tests\E2E\Adapter\Scopes\PermissionTests;
+use Tests\E2E\Adapter\Scopes\ReadTests;
 use Tests\E2E\Adapter\Scopes\RelationshipTests;
 use Tests\E2E\Adapter\Scopes\SchemalessTests;
 use Tests\E2E\Adapter\Scopes\SchemaReconciliationTests;
@@ -58,6 +59,7 @@ abstract class Base extends TestCase
     use ObjectAttributeTests;
     use OperatorTests;
     use PermissionTests;
+    use ReadTests;
     use RelationshipTests;
     use SchemaReconciliationTests;
     use SchemalessTests;

@@ -15,8 +15,7 @@ and with `setCheckGrants()` and `setRoundFractions()` off, which is the default,
   prepared before its children, and hooks run in the order they were registered. The write checks grants on, and
   relates, the document the hook returns. The hook is not given the top-level document, a related document given as
   an ID, or anything from `updateDocuments()`. A `Mirror` runs it on itself, for the pre-checks, and on its source.
-  Its destination receives the IDs the source wrote. The library still never interprets `'unique()'`: an ID is stored
-  as given, as in 8.0.
+  Its destination receives the IDs the source wrote.
 - `Database::setCheckGrants(bool $check): static`, `isCheckingGrants(): bool` and
   `withCheckGrants(bool $check, callable $callback): mixed`, off by default. While on and while authorization is
   enabled, a related document given as a document to `createDocument()`, `createDocuments()`, `updateDocument()`,

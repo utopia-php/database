@@ -23,10 +23,8 @@ other work that runs in another coroutine.
 
 ## Preparing nested related documents
 
-Additive. 8.1 still never interprets `'unique()'`. A `$id` of `'unique()'` is stored as given, at the top level and
-nested, exactly as in 8.0: only an empty `$id` asks for a generated one. An application that gives some IDs of nested
-related documents a meaning of its own, such as an ID that asks for a generated one, implements it as a
-`Utopia\Database\Hook\Nested` hook:
+Additive. An application that rewrites nested related documents before they are written, such as filling in an
+attribute the caller left out, implements a `Utopia\Database\Hook\Nested` hook:
 
 ```php
 interface Nested extends Hook
@@ -62,38 +60,37 @@ Register it with `$database->addHook($hook)`. Remove it with `removeHook($hook)`
   array that is not a valid document throws `Exception\Relationship` (`Invalid relationship value. <reason>`) before
   anything is written.
 - **Mirror.** `Mirror::addHook()` registers it on the mirror itself, for its pre-checks, and on the source, never on
-  the destination. The destination replicates what the source wrote, with the IDs the hook gave there.
+  the destination. The destination replicates what the source wrote, as the hook returned it there.
   `removeHook()` removes it from both.
 
 ```php
 use Utopia\Database\Document;
 use Utopia\Database\Hook\Nested;
-use Utopia\Database\Id;
 
-final readonly class GeneratedIds implements Nested
+final readonly class DefaultStatus implements Nested
 {
-    public function __construct(private string $marker)
+    public function __construct(private string $status)
     {
     }
 
     public function prepare(Document $collection, Document $document): Document
     {
-        if ($document->getId() === $this->marker) {
-            $document->setAttribute(Document::ID, Id::unique());
+        if ($collection->getId() === 'books' && $document->getAttribute('status') === null) {
+            $document->setAttribute('status', $this->status);
         }
 
         return $document;
     }
 }
 
-$database->addHook(new GeneratedIds('new'));
+$database->addHook(new DefaultStatus('draft'));
 
 $database->createDocument('authors', new Document([
     '$id' => 'ada',
     'name' => 'Ada',
     'books' => [
-        ['$id' => 'new', 'title' => 'Notes'], // created under a generated ID
-        'new',                                // still a reference to the document stored as 'new'
+        ['$id' => 'notes', 'title' => 'Notes'], // stored with status 'draft'
+        'sketches',                             // a reference to a stored book, not given to the hook
     ],
 ]));
 ```

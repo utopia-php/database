@@ -4,8 +4,8 @@
 
 8.1.0 adds opt-in and additive APIs for work that callers had to do themselves. With no `Hook\Nested` hook registered
 and with `setCheckGrants()` and `setRoundFractions()` off, which is the default, a `Database` behaves exactly as in
-8.0.3, except that it runs joins on a one-to-many relationship attribute that 8.0.3 refused. See
-[Upgrading from 8.0 to 8.1](UPGRADE.md#upgrading-from-80-to-81).
+8.0.3, except that it runs a join on the parent side of a one-to-many relationship attribute, which 8.0.3 refused
+(listed under Changed). See [Upgrading from 8.0 to 8.1](UPGRADE.md#upgrading-from-80-to-81).
 
 ### Added
 
@@ -21,9 +21,10 @@ and with `setCheckGrants()` and `setRoundFractions()` off, which is the default,
   `withCheckGrants(bool $check, callable $callback): mixed`, off by default. While on and while authorization is
   enabled, a related document given as a document to `createDocument()`, `createDocuments()`, `updateDocument()`,
   `upsertDocument()`, `upsertDocuments()`, `authorizeCreate()` or `authorizeUpdate()` may add permissions only for
-  roles the caller holds. The check judges the document the `Hook\Nested` hooks return. An unheld role throws
-  `Exception\Authorization` (`Permissions must be one of: (<roles>)`) and malformed permissions throw
-  `Exception\Structure`, before anything is written.
+  roles the caller holds. The check judges the document the `Hook\Nested` hooks return. A related document whose
+  `$id` a `Hook\Nested` hook assigned is judged new: none of its permissions are read or locked, and it needs create
+  permission. An unheld role throws `Exception\Authorization` (`Permissions must be one of: (<roles>)`) and malformed
+  permissions throw `Exception\Structure`, before anything is written.
 - While grants are checked, `updateDocuments()` refuses a related document given as a document with
   `Exception\Relationship` (`Invalid relationship value. A bulk update takes related documents by ID while grants are
   checked.`). Related documents given by ID still link.
@@ -57,14 +58,17 @@ and with `setCheckGrants()` and `setRoundFractions()` off, which is the default,
   otherwise they are what `find()` returns. Aggregate queries under a permission other than read throw
   `Exception\Query`. `find()` still refuses aggregate queries.
 - `ParsedQuery::isAggregation(): bool` tells whether the queries aggregate or group.
+- The `State\Snapshot` constructor takes two more trailing arguments, `bool $checkGrants = false` and
+  `bool $roundFractions = false`. `Database::snapshot()` fills them in.
+
+### Changed
+
 - A join condition whose left column is the parent side of a one-to-many relationship of the main collection, such
   as `Query::on('orders', '$id')`, compares the main `$id` with the relationship's two-way key in the joined
   collection. The condition keeps its operator. `getDocument()`, `find()`, `findOne()`, `read()`, `aggregate()`,
   `count()`, `sum()` and `resolveCursor()` run it; 8.0.3 refused it with `Cannot join on virtual relationship
   attribute`. The joined collection is read under the same permission and tenant rules as any join. The child side of
   a one-to-many and every other relationship type join, or are refused, as before.
-- The `State\Snapshot` constructor takes two more trailing arguments, `bool $checkGrants = false` and
-  `bool $roundFractions = false`. `Database::snapshot()` fills them in.
 
 ## 8.0.3
 

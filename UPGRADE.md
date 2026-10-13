@@ -1,8 +1,9 @@
 # Upgrading from 8.0 to 8.1
 
-8.1 is a minor release. Every change in it is additive or opt-in. With no `Hook\Nested` hook registered and with
-`setCheckGrants()` and `setRoundFractions()` off, which is the default, a `Database` behaves exactly as in 8.0.3,
-except that it runs [joins on a one-to-many relationship](#joins-on-a-one-to-many-relationship) that 8.0.3 refused.
+8.1 is a minor release. Every change in it is additive or opt-in, with one exception: it runs
+[joins on a one-to-many relationship](#joins-on-a-one-to-many-relationship) that 8.0.3 refused. With no `Hook\Nested`
+hook registered and with `setCheckGrants()` and `setRoundFractions()` off, which is the default, a `Database` behaves
+exactly as in 8.0.3 apart from that join.
 [CHANGELOG.md](CHANGELOG.md) lists every new signature.
 
 - [Preparing nested related documents](#preparing-nested-related-documents)
@@ -271,7 +272,7 @@ PermissionType::Read): array`. It returns a list of `Document`:
 
 ## Joins on a one-to-many relationship
 
-Additive. The parent side of a one-to-many relationship holds no column: each child stores the parent's ID under the
+Changed. The parent side of a one-to-many relationship holds no column: each child stores the parent's ID under the
 relationship's two-way key. 8.0.3 refused a join condition whose left column is such an attribute
 (`Cannot join on virtual relationship attribute`). 8.1 compares the main `$id` with the two-way key in the joined
 collection instead.

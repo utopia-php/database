@@ -32,13 +32,14 @@ final class ArithmeticTest extends TestCase
      */
     public static function adapters(): iterable
     {
-        $mariaDB = [Rounding::HalfEven, Rounding::HalfEven, Rounding::HalfAwayFromZero, Rounding::HalfEven, false, [], []];
+        $mariaDB = [Rounding::HalfEven, Rounding::HalfEven, Rounding::HalfAwayFromZero, Rounding::HalfEven, false, [], [], false];
+        $memory = [Rounding::TowardZero, Rounding::TowardZero, Rounding::TowardZero, Rounding::TowardZero, false, [], [], true];
 
         yield 'MariaDB' => [static fn (): Adapter => new MariaDB(new stdClass()), $mariaDB];
         yield 'MySQL' => [static fn (): Adapter => new MySQL(new stdClass()), $mariaDB];
-        yield 'SQLite' => [static fn (): Adapter => new SQLite(new PDO('sqlite::memory:')), $mariaDB];
-        yield 'Memory' => [static fn (): Adapter => new Memory(), $mariaDB];
-        yield 'Redis' => [static fn (): Adapter => new Redis(new RedisClient()), $mariaDB];
+        yield 'SQLite' => [static fn (): Adapter => new SQLite(new PDO('sqlite::memory:')), $memory];
+        yield 'Memory' => [static fn (): Adapter => new Memory(), $memory];
+        yield 'Redis' => [static fn (): Adapter => new Redis(new RedisClient()), $memory];
         yield 'PostgreSQL' => [static fn (): Adapter => new Postgres(new stdClass()), [
             Rounding::HalfEven,
             Rounding::HalfAwayFromZero,
@@ -47,8 +48,9 @@ final class ArithmeticTest extends TestCase
             true,
             [OperatorType::Multiply, OperatorType::Divide, OperatorType::Modulo],
             [OperatorType::Increment, OperatorType::Decrement, OperatorType::Multiply, OperatorType::Divide],
+            false,
         ]];
-        yield 'MongoDB' => [self::mongo(...), [Rounding::TowardZero, Rounding::TowardZero, Rounding::TowardZero, Rounding::TowardZero, false, [], []]];
+        yield 'MongoDB' => [self::mongo(...), [Rounding::TowardZero, Rounding::TowardZero, Rounding::TowardZero, Rounding::TowardZero, false, [], [], false]];
     }
 
     /**
@@ -126,8 +128,9 @@ final class ArithmeticTest extends TestCase
             $arithmetic->division,
             $arithmetic->power,
             $arithmetic->refusesCounterFractions,
-            $arithmetic->exact,
+            $arithmetic->exactOperators,
             $arithmetic->refusedWithoutLimit,
+            $arithmetic->truncatesModulus,
         ];
     }
 

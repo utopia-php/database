@@ -815,7 +815,7 @@ abstract class Adapter
     /**
      * How this adapter's engine stored a fractional result in an integer column on database 7.4.1. MariaDB and
      * MySQL computed a fractional operand in DOUBLE, rounded half to even, and a division by a whole number in
-     * exact DECIMAL, rounded half away from zero; adapters without a 7.4.1 engine of their own answer the same.
+     * exact DECIMAL, rounded half away from zero; an adapter that had no 7.4.1 engine answers the same.
      */
     public function arithmetic(): Arithmetic
     {

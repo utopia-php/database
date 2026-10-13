@@ -8,6 +8,7 @@ use stdClass;
 use Tests\Unit\Support\FractionalEngine;
 use Tests\Unit\Support\FractionalResults;
 use Utopia\Database\Adapter\MariaDB;
+use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Arithmetic\Fractional;
@@ -111,6 +112,102 @@ final class FractionalTest extends TestCase
     }
 
     /**
+     * @return iterable<string, array{Operator}>
+     */
+    public static function nonFiniteOperands(): iterable
+    {
+        foreach (['an infinite' => \INF, 'a negative infinite' => -\INF, 'a not-a-number' => \NAN] as $name => $value) {
+            yield "{$name} increment under a fractional maximum" => [new Operator(OperatorType::Increment, 'count', [$value, 10.5])];
+            yield "{$name} multiplication under a fractional maximum" => [new Operator(OperatorType::Multiply, 'count', [$value, 10.5])];
+            yield "{$name} division above a fractional minimum" => [new Operator(OperatorType::Divide, 'count', [$value, 0.5])];
+            yield "a fractional increment under {$name} maximum" => [new Operator(OperatorType::Increment, 'count', [1.5, $value])];
+            yield "a fractional multiplication under {$name} maximum" => [new Operator(OperatorType::Multiply, 'count', [1.5, $value])];
+            yield "a fractional division above {$name} minimum" => [new Operator(OperatorType::Divide, 'count', [0.5, $value])];
+            yield "a fractional power under {$name} maximum" => [new Operator(OperatorType::Power, 'count', [0.5, $value])];
+        }
+    }
+
+    #[DataProvider('nonFiniteOperands')]
+    public function testANonFiniteOperandOrLimitIsLeftForTheCallerToRefuse(Operator $operator): void
+    {
+        foreach (FractionalEngine::cases() as $engine) {
+            $this->assertSame($operator, self::fractional($engine)->operator($operator, 10), $engine->name);
+        }
+    }
+
+    /**
+     * @return iterable<string, array{Operator}>
+     */
+    public static function overlongOperands(): iterable
+    {
+        yield 'a factor' => [Operator::multiply('1.' . \str_repeat('3', 10000), 100)];
+        yield 'a divisor' => [Operator::divide('1.' . \str_repeat('3', 10000), 0)];
+        yield 'a modulus' => [Operator::modulo('1.' . \str_repeat('3', 10000))];
+        yield 'a maximum' => [Operator::multiply(1.5, '15.' . \str_repeat('9', 200))];
+        yield 'a minimum' => [Operator::divide(0.5, '-1.' . \str_repeat('9', 200))];
+    }
+
+    #[DataProvider('overlongOperands')]
+    public function testANumberWithMoreDigitsThanAnExactEngineReadIsLeftForTheCallerToRefuse(Operator $operator): void
+    {
+        $this->assertSame($operator, self::fractional(FractionalEngine::PostgreSQL)->operator($operator, 10));
+    }
+
+    public function testTrailingZerosPastTheFractionAreReadByTheirValue(): void
+    {
+        $resolved = self::fractional(FractionalEngine::PostgreSQL)->operator(Operator::multiply('1.5' . \str_repeat('0', 10000), 100), 10);
+
+        $this->assertSame(15, self::stores(10, $resolved));
+    }
+
+    /**
+     * @return iterable<string, array{Operator, int}>
+     */
+    public static function whitespacePaddedOperands(): iterable
+    {
+        yield 'a factor led by a form feed' => [Operator::multiply("\f1.5", 100), 15];
+        yield 'a factor padded with every numeric whitespace' => [Operator::multiply(" \t\n\r\v\f1.5 \t\n\r\v\f", 100), 15];
+        yield 'a huge negative maximum led by a form feed' => [Operator::multiply(1.5, "\f-1e1000000000"), 10];
+        yield 'a tiny negative minimum led by a form feed' => [Operator::divide(0.5, "\f-1e-1000000000"), 20];
+    }
+
+    #[DataProvider('whitespacePaddedOperands')]
+    public function testNumericTextPaddedWithWhitespaceIsReadByItsValue(Operator $operator, int $expected): void
+    {
+        $this->assertSame($expected, self::stores(10, self::fractional(FractionalEngine::PostgreSQL)->operator($operator, 10)));
+    }
+
+    /**
+     * @return iterable<string, array{int|string, Operator, int|string|null}>
+     */
+    public static function truncatedModuli(): iterable
+    {
+        yield 'a modulus cut toward zero' => [11, Operator::modulo(4.5), 3];
+        yield 'a negative modulus cut toward zero' => [7, Operator::modulo(-2.5), 1];
+        yield 'a negative value keeps its sign' => [-11, Operator::modulo(3.5), -2];
+        yield 'modulus text cut toward zero' => [13, Operator::modulo('3.5'), 1];
+        yield 'a value beyond float precision' => ['9007199254740993', Operator::modulo(2.5), 1];
+        yield 'a modulus cut to zero is left for the caller to refuse' => [10, Operator::modulo(0.5), null];
+        yield 'a negative modulus cut to zero is left for the caller to refuse' => [10, Operator::modulo('-0.75'), null];
+    }
+
+    #[DataProvider('truncatedModuli')]
+    public function testAnEngineThatCutAFractionalModulusTakesTheRemainderOfItsWholePart(int|string $stored, Operator $operator, int|string|null $expected): void
+    {
+        $resolved = self::fractional(FractionalEngine::Memory)->operator($operator, $stored);
+
+        if ($expected === null) {
+            $this->assertSame($operator, $resolved);
+
+            return;
+        }
+
+        $change = $resolved->getValue();
+        $this->assertTrue(BigInt::isIntegerValue($change));
+        $this->assertSame($expected, $resolved->getMethod() === OperatorType::Increment ? BigInt::add($stored, $change) : BigInt::subtract($stored, $change));
+    }
+
+    /**
      * @return iterable<string, array{Operator, int}>
      */
     public static function oversizedLimits(): iterable
@@ -186,6 +283,9 @@ final class FractionalTest extends TestCase
         yield 'whole float' => [2.0, 2];
         yield 'integer text' => ['2', 2];
         yield 'integer text beyond the native range' => ['18446744073709551615', '18446744073709551615'];
+        yield 'exponent text' => ['1e3', 1000];
+        yield 'whole decimal exponent text' => ['2.50e1', 25];
+        yield 'exponent text beyond the native range' => ['1e19', '10000000000000000000'];
     }
 
     #[DataProvider('wholeCounterChanges')]
@@ -367,6 +467,7 @@ final class FractionalTest extends TestCase
         $adapter = match ($engine) {
             FractionalEngine::MariaDB => new MariaDB(new stdClass()),
             FractionalEngine::PostgreSQL => new Postgres(new stdClass()),
+            FractionalEngine::Memory => new Memory(),
             FractionalEngine::MongoDB => new Mongo(new class () extends Client {
                 public function __construct()
                 {

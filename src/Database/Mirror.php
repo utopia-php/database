@@ -1860,12 +1860,16 @@ class Mirror extends Database
             $this->source->addHook($hook);
         } elseif ($hook instanceof Lifecycle) {
             $this->addLifecycleHook($hook);
+
+            if ($hook instanceof Nested) {
+                $this->nestedHooks[] = $hook;
+            }
         } else {
             parent::addHook($hook);
-        }
 
-        if ($hook instanceof Nested) {
-            $this->source->addHook($hook);
+            if ($hook instanceof Nested) {
+                $this->source->nestedHooks[] = $hook;
+            }
         }
 
         if ($hook instanceof Relationships) {

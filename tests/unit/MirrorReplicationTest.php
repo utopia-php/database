@@ -23,9 +23,14 @@ use Utopia\Database\CollectionUpdate;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
+use Utopia\Database\Event\Document\Created;
+use Utopia\Database\Event\Domain;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Hook\Interceptor;
+use Utopia\Database\Hook\Lifecycle;
 use Utopia\Database\Hook\Nested;
 use Utopia\Database\Hook\Relationships;
+use Utopia\Database\Hook\WriteContext;
 use Utopia\Database\Id;
 use Utopia\Database\Index;
 use Utopia\Database\Mirror;
@@ -491,6 +496,99 @@ final class MirrorReplicationTest extends TestCase
         foreach ([$this->mirror->getSource(), $this->destination] as $database) {
             $this->assertSame(self::MARKER, $this->childTitled($database, 'unprepared child')->getId());
         }
+    }
+
+    public function testALifecycleHookThatIsAlsoNestedRunsOnceInEachRole(): void
+    {
+        $this->relate();
+        $hook = new class () implements Lifecycle, Nested {
+            /**
+             * @var list<array{string, string}>
+             */
+            public array $created = [];
+
+            /**
+             * @var list<string>
+             */
+            public array $prepared = [];
+
+            #[\Override]
+            public function handle(Domain $event): void
+            {
+                if ($event instanceof Created) {
+                    $this->created[] = [$event->collection, $event->document->getId()];
+                }
+            }
+
+            #[\Override]
+            public function prepare(Document $collection, Document $document): Document
+            {
+                $this->prepared[] = $document->getId();
+
+                return $document;
+            }
+        };
+        $this->mirror->addHook($hook);
+        $parent = static fn (string $id): Document => new Document([
+            Document::ID => $id,
+            'title' => $id,
+            'children' => [new Document([Document::ID => $id.'-child', 'title' => $id.' child'])],
+        ]);
+
+        $this->mirror->authorizeCreate(self::PARENTS, $parent('checked'));
+        $this->assertSame(['checked-child'], $hook->prepared);
+
+        $this->mirror->createDocument(self::PARENTS, $parent('created'));
+
+        $this->assertSame([], $this->errors);
+        $this->assertSame(['checked-child', 'created-child'], $hook->prepared);
+        $this->assertSame([[self::PARENTS, 'created']], $hook->created);
+        $this->assertSame('created-child', $this->childTitled($this->destination, 'created child')->getId());
+    }
+
+    public function testAWriteHookThatIsAlsoNestedRunsOnceInEachRole(): void
+    {
+        $this->relate();
+        $hook = new class () extends Interceptor implements Nested {
+            /**
+             * @var list<list<string>>
+             */
+            public array $created = [];
+
+            /**
+             * @var list<string>
+             */
+            public array $prepared = [];
+
+            #[\Override]
+            public function afterDocumentCreate(string $collection, array $documents, WriteContext $context): void
+            {
+                $this->created[] = \array_values(\array_map(static fn (Document $document): string => $document->getId(), $documents));
+            }
+
+            #[\Override]
+            public function prepare(Document $collection, Document $document): Document
+            {
+                $this->prepared[] = $document->getId();
+
+                return $document;
+            }
+        };
+        $this->mirror->addHook($hook);
+
+        $this->mirror->createDocument(self::NOTES, new Document([Document::ID => 'note', 'title' => 'note']));
+        $this->mirror->createDocument(self::PARENTS, new Document([
+            Document::ID => 'parent',
+            'title' => 'parent',
+            'children' => [new Document([Document::ID => 'child', 'title' => 'child'])],
+        ]));
+
+        $this->assertSame([], $this->errors);
+        $this->assertSame(['child'], $hook->prepared);
+        $this->assertSame([['note'], ['note']], \array_values(\array_filter(
+            $hook->created,
+            static fn (array $ids): bool => $ids === ['note'],
+        )), 'one call from the source adapter and one from the destination adapter');
     }
 
     /**

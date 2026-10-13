@@ -96,7 +96,7 @@ class Operator extends Validator
     }
 
     /**
-     * @phpstan-assert-if-true float|numeric-string $value
+     * @phpstan-assert-if-true =float|numeric-string $value
      */
     private function isFraction(mixed $value, Attribute $attribute): bool
     {
@@ -116,14 +116,14 @@ class Operator extends Validator
     private function isValidLimit(mixed $limit, Attribute $attribute, DatabaseOperator $operator): bool
     {
         $methodName = $operator->getMethod()->value;
-        $bounds = $attribute->bounds();
 
-        if ($bounds !== null && $this->isFraction($limit, $attribute)) {
+        if ($this->isFraction($limit, $attribute)) {
             if ($this->isFractionInBounds($limit, $attribute)) {
                 return true;
             }
 
-            $this->message = "Cannot apply {$methodName} operator: max/min limit must be between {$bounds->min} and {$bounds->max}";
+            $bounds = $attribute->bounds();
+            $this->message = "Cannot apply {$methodName} operator: max/min limit must be between {$bounds?->min} and {$bounds?->max}";
 
             return false;
         }
@@ -148,6 +148,7 @@ class Operator extends Validator
             return false;
         }
 
+        $bounds = $attribute->bounds();
         if ($bounds === null) {
             $this->message = "Cannot apply {$methodName} operator: max/min limit must be numeric, got ".\gettype($limit);
 

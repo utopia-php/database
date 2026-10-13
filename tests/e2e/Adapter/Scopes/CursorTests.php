@@ -2,7 +2,6 @@
 
 namespace Tests\E2E\Adapter\Scopes;
 
-use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
@@ -10,7 +9,6 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Permission;
 use Utopia\Database\Query;
-use Utopia\Database\Relationship;
 use Utopia\Database\Role;
 use Utopia\Query\CursorDirection;
 
@@ -96,74 +94,6 @@ trait CursorTests
             $this->assertSame([['alice', 'a-first']], $this->cursorPage($database, $queries, 'carol', CursorDirection::Before));
             $this->assertSame([['alice', 'a-second']], $this->cursorPage($database, $queries, 'bob', CursorDirection::After), 'bob is not listed, and the list resumes behind the order of 20 the caller can read');
             $this->assertSame([['alice', 'a-first'], ['carol', 'c-only']], $this->cursorPage($database, $queries, 'bob', CursorDirection::Before));
-        } finally {
-            $this->deleteCursorCollections($database);
-        }
-    }
-
-    public function testResolveCursorOverAJoinOnAOneToManyRelationshipPagesEveryRowOnce(): void
-    {
-        $database = $this->getDatabase();
-        if (! $database->getAdapter()->supports(Capability::Joins) || ! $database->getAdapter()->hasFeature(Feature\Relationships::class)) {
-            $this->expectNotToPerformAssertions();
-
-            return;
-        }
-
-        $this->seedCursorCollections($database);
-
-        try {
-            $database->createRelationship(self::CURSOR_CUSTOMERS, Relationship::oneToMany(relatedCollection: self::CURSOR_ORDERS, key: 'orders', twoWayKey: 'customer'));
-
-            foreach (['alice' => 'Alice', 'bob' => 'Bob', 'carol' => 'Carol'] as $id => $name) {
-                $this->createCursorDocument($database, self::CURSOR_CUSTOMERS, $id, ['name' => $name], readable: true);
-            }
-            foreach ([
-                ['a-first', 'alice', 10, true],
-                ['a-second', 'alice', 20, true],
-                ['b-first', 'bob', 30, true],
-                ['b-second', 'bob', 40, true],
-                ['c-hidden', 'carol', 5, false],
-                ['c-only', 'carol', 50, true],
-            ] as [$id, $customer, $amount, $readable]) {
-                $this->createCursorDocument($database, self::CURSOR_ORDERS, $id, ['customer' => $customer, 'amount' => $amount, 'status' => 'paid'], $readable);
-            }
-
-            $queries = [Query::join(self::CURSOR_ORDERS, 'ord', [Query::on('orders', '$id')]), Query::orderAsc('ord.amount')];
-            $all = $this->cursorRows($database->find(self::CURSOR_CUSTOMERS, [...$queries, Query::limit(100)]));
-            $this->assertSame([['alice', 'a-first'], ['alice', 'a-second'], ['bob', 'b-first'], ['bob', 'b-second'], ['carol', 'c-only']], $all);
-
-            $forward = [];
-            $cursor = null;
-            for ($page = 0; $page <= \count($all); $page++) {
-                $rows = $this->cursorRows($database->find(self::CURSOR_CUSTOMERS, [
-                    ...$queries,
-                    Query::limit(2),
-                    ...($cursor === null ? [] : [Query::cursorAfter($database->resolveCursor(self::CURSOR_CUSTOMERS, $cursor, CursorDirection::After, $queries))]),
-                ]));
-                if ($rows === []) {
-                    break;
-                }
-                \array_push($forward, ...$rows);
-                $cursor = $rows[\count($rows) - 1][0];
-            }
-            $this->assertSame($all, $forward, 'paging forward by the ID of each page\'s last row returns every row once');
-
-            $backward = [['carol', 'c-only']];
-            $cursor = 'carol';
-            for ($page = 0; $page <= \count($all); $page++) {
-                $rows = $this->cursorRows($database->find(self::CURSOR_CUSTOMERS, [
-                    ...$queries,
-                    Query::limit(2),
-                    Query::cursorBefore($database->resolveCursor(self::CURSOR_CUSTOMERS, $cursor, CursorDirection::Before, $queries)),
-                ]));
-                if ($rows === []) {
-                    break;
-                }
-                $backward = [...$rows, ...$backward];
-                $cursor = $rows[0][0];
-            }
-            $this->assertSame($all, $backward, 'paging backward by the ID of each page\'s first row returns every row once');
         } finally {
             $this->deleteCursorCollections($database);
         }

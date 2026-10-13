@@ -29,8 +29,7 @@ trait Fractions
      */
     private function prepareIntegerChange(int|float|string $value, int|float|string|null $bound, bool $increase): array
     {
-        $round = $this->fractionRounding()->get();
-        if ($round && $this->isExactChange($value, $bound)) {
+        if ($this->isExactChange($value, $bound)) {
             if ($bound !== null) {
                 $this->assertNumericBound($bound, $increase ? 'Max' : 'Min');
             }
@@ -40,7 +39,7 @@ trait Fractions
 
         $this->assertIntegerChange($value);
 
-        return [false, $bound === null ? null : $this->integerLimit($bound, $increase, $round)];
+        return [false, $bound === null ? null : $this->integerLimit($bound, $increase)];
     }
 
     /**
@@ -66,13 +65,11 @@ trait Fractions
     /**
      * @throws TypeException
      */
-    private function integerLimit(int|float|string $bound, bool $maximum, bool $round): int|string
+    private function integerLimit(int|float|string $bound, bool $maximum): int|string
     {
-        if ($round) {
-            $bound = ($maximum ? Fractional::maximum($bound) : Fractional::minimum($bound)) ?? $bound;
-        }
+        $whole = ($maximum ? Fractional::maximum($bound) : Fractional::minimum($bound)) ?? $bound;
 
-        return $this->integerBound($bound, $maximum ? 'Max' : 'Min');
+        return $this->integerBound($whole, $maximum ? 'Max' : 'Min');
     }
 
     /**

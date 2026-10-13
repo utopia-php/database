@@ -49,10 +49,10 @@ trait Cursors
         $definition = $this->silent(fn (): Collection => $this->getCollection($collection));
 
         $this->checkQueryTypes($queries);
-        $queries = $this->rewriteRelationshipJoins($definition, \array_values(\array_filter(
+        $queries = \array_values(\array_filter(
             $queries,
             static fn (Query $query): bool => $query->getMethod() !== Method::CursorAfter && $query->getMethod() !== Method::CursorBefore,
-        )));
+        ));
 
         $joinedById = $this->resolveJoinedCollections($queries);
         if ($this->validation()->get()) {

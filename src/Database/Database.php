@@ -1200,6 +1200,11 @@ class Database
      * has may be sent back, and permissions it inherits from its parent are never checked. Malformed permissions
      * throw a structure exception and an unheld role an authorization exception, before anything is written.
      *
+     * createDocument() and updateDocument() read the permissions a related document already has locked, in the
+     * transaction that writes it. createDocuments(), upsertDocument() and upsertDocuments() write related documents
+     * before the transaction of the documents relating them, so they read them without a lock: a change committed
+     * between the check and the related write is not seen. A Mirror checks on its source only.
+     *
      * @return $this
      */
     public function setCheckGrants(bool $check): static

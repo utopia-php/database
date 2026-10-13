@@ -1728,13 +1728,13 @@ class Database
         $rounded = fn (): mixed => $this->fractionRounding()->with($snapshot->roundFractions, $callback);
         $checked = fn (): mixed => $this->grantChecking()->with($snapshot->checkGrants, $rounded);
         $timestamped = fn (): mixed => $this->requestTimestamp()->with($snapshot->requestTimestamp, $checked);
-        $deduplicated = fn (): mixed => $this->ignoringDuplicates()->with($snapshot->ignoreDuplicates, $timestamped);
+        $scoped = fn (): mixed => $this->columnPermissions()->with($snapshot->columnPermissions, $timestamped);
+        $deduplicated = fn (): mixed => $this->ignoringDuplicates()->with($snapshot->ignoreDuplicates, $scoped);
         $sequenced = fn (): mixed => $this->sequencePreservation()->with($snapshot->preserveSequence, $deduplicated);
         $dated = fn (): mixed => $this->datePreservation()->with($snapshot->preserveDates, $sequenced);
         $validated = fn (): mixed => $this->validation()->with($snapshot->validation, $dated);
         $excluded = fn (): mixed => $this->filterExclusions()->with($snapshot->disabledFilters, $validated);
         $filtered = fn (): mixed => $this->filtering()->with($snapshot->filters, $excluded);
-        $scoped = fn (): mixed => $this->columnPermissions()->with($snapshot->columnPermissions, $timestamped);
 
         return $this->adapter->withTenant($snapshot->tenant, $filtered);
     }

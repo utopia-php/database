@@ -69,13 +69,12 @@ trait ReadTests
         try {
             $totals = $database->read(self::READ_POSTS, [Query::count('*', 'posts'), Query::sum('views', 'views')]);
             $this->assertCount(1, $totals);
-            $this->assertInstanceOf(Document::class, $totals[0]);
-            $this->assertSame([3, 6], [(int) $totals[0]->getAttribute('posts'), (int) $totals[0]->getAttribute('views')]);
+            $this->assertSame([3, 6], [self::readInteger($totals[0]->getAttribute('posts')), self::readInteger($totals[0]->getAttribute('views'))]);
 
             $groups = $database->read(self::READ_POSTS, [Query::groupBy(['category']), Query::count('*', 'posts'), Query::orderAsc('category')]);
             $this->assertSame(
                 [['news', 2], ['sport', 1]],
-                \array_map(static fn (Document $row): array => [$row->getAttribute('category'), (int) $row->getAttribute('posts')], $groups),
+                \array_map(static fn (Document $row): array => [$row->getAttribute('category'), self::readInteger($row->getAttribute('posts'))], $groups),
             );
         } finally {
             $this->deleteReadPosts($database);
@@ -102,14 +101,13 @@ trait ReadTests
         $database = $this->getDatabase();
         $this->seedReadPosts($database);
 
+        $this->expectException(QueryException::class);
+        if ($database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectExceptionMessage('find() does not run aggregate or groupBy queries: use aggregate()');
+        }
+
         try {
             $database->find(self::READ_POSTS, [Query::count()]);
-            $this->fail('find() must refuse an aggregate query');
-        } catch (QueryException $exception) {
-            $this->assertInstanceOf(QueryException::class, $exception);
-            if ($database->getAdapter()->supports(Capability::Aggregations)) {
-                $this->assertSame('find() does not run aggregate or groupBy queries: use aggregate()', $exception->getMessage());
-            }
         } finally {
             $this->deleteReadPosts($database);
         }
@@ -155,5 +153,10 @@ trait ReadTests
         if ($database->collectionExists(self::READ_POSTS)) {
             $database->deleteCollection(self::READ_POSTS);
         }
+    }
+
+    private static function readInteger(mixed $value): ?int
+    {
+        return \is_numeric($value) ? (int) $value : null;
     }
 }

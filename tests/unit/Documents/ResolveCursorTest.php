@@ -444,10 +444,10 @@ final class ResolveCursorTest extends TestCase
     {
         $cursor = $this->database->resolveCursor(self::CUSTOMERS, $id, $direction, $queries);
 
-        return $this->database->find(self::CUSTOMERS, [
+        return \array_values($this->database->find(self::CUSTOMERS, [
             ...$queries,
             $direction === CursorDirection::After ? Query::cursorAfter($cursor) : Query::cursorBefore($cursor),
-        ]);
+        ]));
     }
 
     /**

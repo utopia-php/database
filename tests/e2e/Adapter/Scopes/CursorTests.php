@@ -86,9 +86,9 @@ trait CursorTests
                 [['alice', 'a-first'], ['carol', 'c-only'], ['alice', 'a-second']],
                 $this->cursorRows($database->find(self::CURSOR_CUSTOMERS, [...$queries, Query::limit(100)])),
             );
-            $this->assertSame(25, (int) $database->resolveCursor(self::CURSOR_CUSTOMERS, 'alice', CursorDirection::After, $queries)->getAttribute('ord.amount'), 'after alice the list resumes behind its last paid order the caller can read');
-            $this->assertSame(10, (int) $database->resolveCursor(self::CURSOR_CUSTOMERS, 'alice', CursorDirection::Before, $queries)->getAttribute('ord.amount'));
-            $this->assertSame(20, (int) $database->resolveCursor(self::CURSOR_CUSTOMERS, 'bob', CursorDirection::After, $queries)->getAttribute('ord.amount'), 'the joined values of a document the caller cannot read come from the rows it can read');
+            $this->assertSame(25, self::cursorInteger($database->resolveCursor(self::CURSOR_CUSTOMERS, 'alice', CursorDirection::After, $queries)->getAttribute('ord.amount')), 'after alice the list resumes behind its last paid order the caller can read');
+            $this->assertSame(10, self::cursorInteger($database->resolveCursor(self::CURSOR_CUSTOMERS, 'alice', CursorDirection::Before, $queries)->getAttribute('ord.amount')));
+            $this->assertSame(20, self::cursorInteger($database->resolveCursor(self::CURSOR_CUSTOMERS, 'bob', CursorDirection::After, $queries)->getAttribute('ord.amount')), 'the joined values of a document the caller cannot read come from the rows it can read');
 
             $this->assertSame([], $this->cursorPage($database, $queries, 'alice', CursorDirection::After));
             $this->assertSame([], $this->cursorPage($database, $queries, 'alice', CursorDirection::Before));
@@ -243,5 +243,10 @@ trait CursorTests
     private function cursorRows(array $documents): array
     {
         return \array_values(\array_map(static fn (Document $document): array => [$document->getId(), $document->getAttribute('ord.$id')], $documents));
+    }
+
+    private static function cursorInteger(mixed $value): ?int
+    {
+        return \is_numeric($value) ? (int) $value : null;
     }
 }

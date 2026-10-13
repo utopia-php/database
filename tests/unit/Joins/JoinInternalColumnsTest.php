@@ -237,10 +237,17 @@ final class JoinInternalColumnsTest extends TestCase
         $this->assertSame([['rows' => 2]], $this->database->aggregate('persons', [Query::join('books', 'book', [Query::on('$id', 'owner')]), Query::count('*', 'rows')]), 'the child side of a one-to-many relationship holds a column');
         $this->assertSame(2, $this->database->count('books', [Query::join('persons', 'person', [Query::on('owner', '$id')])]));
 
-        $this->assertInvalidQuery(
-            'Invalid query: Cannot join on virtual relationship attribute: books',
-            fn (): mixed => $this->database->find('persons', [Query::join('books', 'book', [Query::on('books', '$id')])]),
+        $owned = $this->database->find('persons', [
+            Query::join('books', 'book', [Query::on('books', '$id')]),
+            Query::select(['name', 'book.title']),
+            Query::orderAsc('book.title'),
+        ]);
+        $this->assertSame(
+            [['Ada', 'One'], ['Ada', 'Two']],
+            \array_map(static fn (Document $person): array => [$person->getAttribute('name'), $person->getAttribute('book.title')], $owned),
+            'the parent side of a one-to-many relationship joins on the two-way key its children store',
         );
+
         $this->assertInvalidQuery(
             'Invalid query: Cannot join on virtual relationship attribute: person',
             fn (): mixed => $this->database->find('persons', [Query::join('libraries', 'lib', [Query::on('$id', 'person')])]),

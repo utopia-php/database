@@ -495,6 +495,7 @@ trait Documents
         $attributes = $collection->attributes();
 
         $this->checkQueryTypes($queries);
+        $queries = self::resolveOneToManyJoins($collection, $queries);
 
         $joinedCollections = null;
 
@@ -3994,6 +3995,7 @@ trait Documents
         $queryCacheQueries = $queries;
 
         $this->checkQueryTypes($queries);
+        $queries = self::resolveOneToManyJoins($collection, $queries);
 
         $joinedCollectionsById = null;
 
@@ -4364,6 +4366,7 @@ trait Documents
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $this->checkQueryTypes($queries);
+        $queries = self::resolveOneToManyJoins($collection, $queries);
 
         $joinedCollections = null;
 
@@ -4420,6 +4423,7 @@ trait Documents
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $this->checkQueryTypes($queries);
+        $queries = self::resolveOneToManyJoins($collection, $queries);
 
         $joinedCollections = null;
 
@@ -5079,6 +5083,71 @@ trait Documents
         }
 
         return $collections;
+    }
+
+    /**
+     * The parent side of a one-to-many relationship holds no column: each child stores the parent's ID under the
+     * relationship's two-way key. A join condition whose left column is such an attribute compares the main `$id`
+     * with that key instead, keeping its operator. The joins returned are copies; the caller's are left as given.
+     *
+     * @param  array<Query>  $queries
+     * @return array<Query>
+     */
+    private static function resolveOneToManyJoins(Collection $collection, array $queries): array
+    {
+        $twoWayKeys = null;
+
+        foreach ($queries as $index => $query) {
+            if (! $query->getMethod()->isJoin()) {
+                continue;
+            }
+
+            $twoWayKeys ??= self::oneToManyTwoWayKeys($collection);
+            if ($twoWayKeys === []) {
+                return $queries;
+            }
+
+            $resolved = null;
+            foreach ($query->getJoinOnQueries() as $position => $condition) {
+                $values = $condition->getValues();
+                $left = $values[0] ?? null;
+                if ($condition->getMethod() !== Method::On || ! \is_string($left) || ! isset($twoWayKeys[$left])) {
+                    continue;
+                }
+
+                $values[0] = Document::ID;
+                $values[2] = $twoWayKeys[$left];
+                $resolved ??= clone $query;
+                $resolved->getJoinOnQueries()[$position]->setValues($values);
+            }
+
+            if ($resolved !== null) {
+                $queries[$index] = $resolved;
+            }
+        }
+
+        return $queries;
+    }
+
+    /**
+     * @return array<string, string> The two-way key of each one-to-many relationship the collection is the parent of
+     */
+    private static function oneToManyTwoWayKeys(Collection $collection): array
+    {
+        $twoWayKeys = [];
+        foreach (self::relationshipAttributes($collection) as $attribute) {
+            $relationship = $attribute->relationship;
+            if (
+                $relationship?->type === RelationshipType::OneToMany
+                && $attribute->side === RelationshipSide::Parent
+                && $relationship->twoWayKey !== null
+                && $relationship->twoWayKey !== ''
+            ) {
+                $twoWayKeys[$attribute->key] = $relationship->twoWayKey;
+            }
+        }
+
+        return $twoWayKeys;
     }
 
     /**

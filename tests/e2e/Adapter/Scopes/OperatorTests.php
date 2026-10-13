@@ -706,8 +706,12 @@ trait OperatorTests
 
         $database->addFilter(
             'encrypt',
-            fn (mixed $value) => \is_null($value) ? null : \json_encode(['data' => \base64_encode((string) $value)]),
-            fn (mixed $value) => \is_null($value) ? null : \base64_decode(\json_decode((string) $value, true)['data'] ?? ''),
+            fn (mixed $value): ?string => \is_string($value) ? (string) \json_encode(['data' => \base64_encode($value)]) : null,
+            function (mixed $value): ?string {
+                $decoded = \is_string($value) ? \json_decode($value, true) : null;
+
+                return \is_array($decoded) && \is_string($decoded['data'] ?? null) ? (string) \base64_decode($decoded['data']) : null;
+            },
         );
 
         $collectionId = 'test_operator_encrypted';

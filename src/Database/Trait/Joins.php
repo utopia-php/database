@@ -21,10 +21,9 @@ use Utopia\Query\Schema\IndexType;
 trait Joins
 {
     /**
-     * A one-to-many relationship attribute, and the child side of a two-way many-to-one, holds no column: the
-     * related collection stores this document's ID. A join of that related collection comparing such an attribute
-     * with the related `$id` is rewritten to compare this document's `$id` with the column storing it, keeping the
-     * operator and alias. The rewritten joins are copies; the caller's queries are left as given.
+     * A one-to-many parent attribute, or the child side of a two-way many-to-one, has no column: the related
+     * collection stores this document's ID under the two-way key. A join comparing such an attribute with the related
+     * `$id` compares this document's `$id` with that key instead. Rewritten joins are copies of the caller's.
      *
      * @param  array<Query>  $queries
      * @return array<Query>
@@ -66,8 +65,6 @@ trait Joins
     }
 
     /**
-     * The relationship attributes whose ID the related collection stores, by key.
-     *
      * @return array<string, Attribute>
      */
     private static function joinableRelationships(Collection $collection): array
@@ -94,9 +91,6 @@ trait Joins
     }
 
     /**
-     * The related column a join condition compares with this document's `$id`, or null when the condition does not
-     * compare a relationship attribute of this collection with the `$id` of the collection that relationship relates.
-     *
      * @param  array<string, Attribute>  $relationships
      */
     private static function relationshipJoinColumn(BaseQuery $condition, string $joined, string $alias, array $relationships): ?string

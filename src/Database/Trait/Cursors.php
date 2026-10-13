@@ -136,8 +136,6 @@ trait Cursors
     }
 
     /**
-     * The join alias an order reads and the attribute it reads there, or the main alias and the order as given.
-     *
      * @param  array<string, Document>  $joinedCollections
      * @return array{0: string, 1: string}
      */
@@ -152,7 +150,7 @@ trait Cursors
     }
 
     /**
-     * The ordered joins and every join their conditions reach through, in the order the list declares them.
+     * Keeps the list's join order: a paired row reads the rows paired for the joins before it.
      *
      * @param  array<string, Query>  $joins
      * @param  array<string, list<Query>>  $orders
@@ -180,9 +178,7 @@ trait Cursors
     }
 
     /**
-     * The joined row the list pairs with the document first in the given orders, read with the caller's permissions:
-     * the join's conditions become filters on the joined collection with the values of the document or of the rows
-     * resolved for earlier joins, next to the list's filters that constrain only this join and the join's own filters.
+     * Read with the caller's permissions, so the row is the one the caller's list pairs with the document.
      *
      * @param  array<string, Document>  $rows  The rows resolved for earlier joins, by alias
      * @param  array<Query>  $filters
@@ -223,8 +219,6 @@ trait Cursors
     }
 
     /**
-     * Each column comparison of a join as its left column, operator and right column.
-     *
      * @return list<array{0: string, 1: string, 2: string}>
      */
     private static function joinConditions(Query $join): array
@@ -245,8 +239,6 @@ trait Cursors
     }
 
     /**
-     * The alias a join column belongs to and its attribute, the given alias for a bare column.
-     *
      * @return array{0: string, 1: string}
      */
     private static function columnOwner(string $column, string $alias): array
@@ -272,7 +264,7 @@ trait Cursors
     }
 
     /**
-     * A join condition as a filter on the joined column, or null when no row can satisfy it.
+     * Null when no row can satisfy the condition.
      *
      * @throws QueryException
      */
@@ -294,7 +286,7 @@ trait Cursors
     }
 
     /**
-     * A filter on the joined collection when the given filter constrains only this alias, else null.
+     * Null unless the filter constrains only this alias.
      */
     private static function aliasFilter(BaseQuery $filter, string $alias): ?Query
     {
@@ -322,6 +314,11 @@ trait Cursors
             return null;
         }
 
-        return clone new Query($method, $attribute, $filter->getValues());
+        $values = \array_map(
+            static fn (mixed $value): mixed => $value instanceof BaseQuery ? clone $value : $value,
+            $filter->getValues(),
+        );
+
+        return new Query($method, $attribute, $values);
     }
 }

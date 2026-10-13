@@ -16,6 +16,7 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
+use Utopia\Database\Hook\Nested;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Id;
@@ -28,9 +29,9 @@ use Utopia\Database\Validator\Authorization;
 
 /**
  * Database::authorizeCreate() and authorizeUpdate() prepare the related documents they are given as the write
- * would: a placeholder ID is generated, so the related document is judged new, and with grants checked a related
- * document may only add permissions for roles the caller holds, its current permissions being those of the staged
- * view when a resolver gives one.
+ * would: the registered Hook\Nested hooks run first, so a related document they give an ID that is not stored is
+ * judged new, and with grants checked a related document may only add permissions for roles the caller holds, its
+ * current permissions being those of the staged view when a resolver gives one.
  */
 final class NestedPreCheckTest extends TestCase
 {
@@ -44,9 +45,27 @@ final class NestedPreCheckTest extends TestCase
 
     private const string STORED = 'stored';
 
+    private const string LEAVES = 'leaves';
+
+    private const string NEXT = 'next';
+
+    private const string BACK = 'back';
+
+    private const string MARKER = 'marker';
+
     private Authorization $authorization;
 
     private Database $database;
+
+    /**
+     * @var list<array{string, string}> The collection and ID of each related document the hook was given, in order
+     */
+    private array $seen = [];
+
+    /**
+     * @var list<array{string, string}> The collection and ID of each related document resolved, in order
+     */
+    private array $resolved = [];
 
     /**
      * @return iterable<string, array{Closure(): Adapter, RelationshipType}>
@@ -122,32 +141,83 @@ final class NestedPreCheckTest extends TestCase
      * @param  Closure(): Adapter  $adapter
      */
     #[DataProvider('types')]
-    public function testAPlaceholderIsJudgedNewWithItsGrantsChecked(Closure $adapter, RelationshipType $type): void
+    public function testANestedHookRewritesInThePreChecks(Closure $adapter, RelationshipType $type): void
     {
-        $this->seed($adapter(), $type, [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())], null);
-        $this->database->setReplacePlaceholders(true)->setCheckGrants(true);
-        $placeholder = static fn (string $role): Document => new Document([Document::ID => Id::PLACEHOLDER, 'name' => 'new', Document::PERMISSIONS => [Permission::read(Role::parse($role))]]);
-        $parent = $this->parent($type, $placeholder('user:u2'));
+        $this->chain($adapter(), $type, [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())]);
+        $old = $this->storedParent();
+        $this->database->addHook($this->marker());
+        $resolve = $this->resolveAsStored(...);
+        $leaf = new Document([Document::ID => self::MARKER, 'name' => 'leaf']);
+        $related = new Document([Document::ID => self::MARKER, 'name' => 'related', self::NEXT => self::value($type, $leaf)]);
+        $parent = $this->parent($type, $related);
 
-        $this->assertSame(self::UNHELD_REFUSAL, $this->refusal(fn () => $this->database->authorizeCreate('parents', $parent)));
-        $this->assertSame(self::UNHELD_REFUSAL, $this->refusal(fn () => $this->database->authorizeUpdate('parents', $this->storedParent(), new Document([self::RELATED => $parent->getAttribute(self::RELATED)]))));
-        $this->assertNull($this->refusal(fn () => $this->database->authorizeCreate('parents', $this->parent($type, $placeholder('user:'.self::USER)))));
+        $this->database->authorizeCreate('parents', $parent, $resolve);
+        $this->database->authorizeUpdate('parents', $old, new Document([self::RELATED => self::value($type, $related)]), $resolve);
+        $this->database->authorizeCreate(self::LEAVES, new Document([
+            Document::ID => 'leaf',
+            self::BACK => self::reverse($type, new Document([
+                Document::ID => self::MARKER,
+                'name' => 'inverse related',
+                self::BACK => self::reverse($type, new Document([Document::ID => self::MARKER])),
+            ])),
+        ]), $resolve);
+
+        $forward = [[self::RELATED, self::MARKER], [self::LEAVES, self::MARKER]];
+        $this->assertSame([...$forward, ...$forward, [self::RELATED, self::MARKER], ['parents', self::MARKER]], $this->seen);
+        $this->assertSame([self::RELATED, self::LEAVES, self::RELATED, self::LEAVES, self::RELATED, 'parents'], \array_column($this->resolved, 0), 'Each related document is resolved once, by its rewritten ID');
+        $ids = \array_column($this->resolved, 1);
+        $this->assertNotContains(self::MARKER, $ids);
+        $this->assertNotContains('', $ids);
+        $this->assertCount(\count($ids), \array_unique($ids));
+        $this->assertSame([self::MARKER], self::ids($parent->getAttribute(self::RELATED)), 'The document checked is not changed');
+        $this->assertSame(self::MARKER, $related->getId());
+        $this->assertSame(self::MARKER, $leaf->getId());
         $this->assertSame([], $this->relatedNames());
-        $this->assertSame([Id::PLACEHOLDER], self::ids($parent->getAttribute(self::RELATED)), 'The document checked is not changed');
+        $this->assertSame([], $this->leafNames());
     }
 
     /**
      * @param  Closure(): Adapter  $adapter
      */
     #[DataProvider('types')]
-    public function testAPlaceholderNeedsCreateWhereALiteralDocumentNeedsUpdate(Closure $adapter, RelationshipType $type): void
+    public function testARewrittenIdNeedsCreateWhereTheMarkedDocumentNeedsUpdate(Closure $adapter, RelationshipType $type): void
     {
-        $this->seed($adapter(), $type, [Permission::read(Role::any()), Permission::update(Role::any())], null);
-        $this->authorization->skip(fn () => $this->database->createDocument(self::RELATED, new Document([Document::ID => Id::PLACEHOLDER, 'name' => 'Literal'])));
-        $parent = $this->parent($type, new Document([Document::ID => Id::PLACEHOLDER, 'name' => 'Changed']));
+        $this->chain($adapter(), $type, [Permission::read(Role::any()), Permission::update(Role::any())]);
+        $this->authorization->skip(fn () => $this->database->createDocument(self::RELATED, new Document([Document::ID => self::MARKER, 'name' => 'Literal'])));
+        $parent = $this->parent($type, new Document([Document::ID => self::MARKER, 'name' => 'Changed']));
 
-        $this->assertNull($this->refusal(fn () => $this->database->authorizeCreate('parents', $parent)), 'The literal document is linked and changed, which needs update');
-        $this->assertSame(self::NO_CREATE, $this->refusal(fn () => $this->database->withReplacePlaceholders(true, fn () => $this->database->authorizeCreate('parents', $parent))), 'A generated ID is new, which needs create');
+        $this->assertNull($this->refusal(fn () => $this->database->authorizeCreate('parents', $parent)), 'The marked document is stored, so it is linked and changed, which needs update');
+        $this->database->addHook($this->marker());
+        $this->assertSame(self::NO_CREATE, $this->refusal(fn () => $this->database->authorizeCreate('parents', $parent)), 'A rewritten ID is new, which needs create');
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('types')]
+    public function testTheGrantCheckRunsAfterTheRewrite(Closure $adapter, RelationshipType $type): void
+    {
+        $foreign = [Permission::read(Role::user('u2'))];
+        $this->chain($adapter(), $type, [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())]);
+        $this->authorization->skip(fn () => $this->database->createDocument(self::RELATED, new Document([Document::ID => self::MARKER, 'name' => 'Stored', Document::PERMISSIONS => $foreign])));
+        $old = $this->storedParent();
+        $this->database->setCheckGrants(true);
+        $related = new Document([Document::ID => self::MARKER, 'name' => 'Stored', Document::PERMISSIONS => $foreign]);
+        $parent = $this->parent($type, $related);
+        $changes = new Document([self::RELATED => self::value($type, $related)]);
+        $staged = static fn (string $collection, string $id): ?Document => $collection === self::RELATED && $id === self::MARKER
+            ? new Document([Document::ID => self::MARKER, Document::COLLECTION => self::RELATED, 'name' => 'Stored', Document::PERMISSIONS => $foreign])
+            : null;
+
+        $this->assertNull($this->refusal(fn () => $this->database->authorizeCreate('parents', $parent)), 'Judged as the marked document, the role is sent back unchanged');
+        $this->assertNull($this->refusal(fn () => $this->database->authorizeUpdate('parents', $old, $changes)));
+
+        $this->database->addHook($this->marker());
+
+        $this->assertSame(self::UNHELD_REFUSAL, $this->refusal(fn () => $this->database->authorizeCreate('parents', $parent)), 'Judged after the rewrite, the document is new and every role is granted anew');
+        $this->assertSame(self::UNHELD_REFUSAL, $this->refusal(fn () => $this->database->authorizeUpdate('parents', $old, $changes)));
+        $this->assertSame(self::UNHELD_REFUSAL, $this->refusal(fn () => $this->database->authorizeCreate('parents', $parent, $staged)), 'A staged view of the marker is not the rewritten document');
+        $this->assertSame([], $this->relatedNames());
     }
 
     /**
@@ -155,6 +225,40 @@ final class NestedPreCheckTest extends TestCase
      * @param  list<string>|null  $storedPermissions  The related document's permissions; null stores none
      */
     private function seed(Adapter $adapter, RelationshipType $type, array $collectionPermissions, ?array $storedPermissions): void
+    {
+        $this->connect($adapter);
+
+        $this->authorization->skip(function () use ($type, $collectionPermissions, $storedPermissions): void {
+            $this->createCollections([self::RELATED], $collectionPermissions);
+            $this->database->createRelationship('parents', match ($type) {
+                RelationshipType::OneToOne => Relationship::oneToOne(self::RELATED, self::RELATED, onDelete: RelationshipDeleteAction::SetNull),
+                RelationshipType::ManyToOne => Relationship::manyToOne(self::RELATED, self::RELATED, onDelete: RelationshipDeleteAction::SetNull),
+                RelationshipType::OneToMany => Relationship::oneToMany(self::RELATED, self::RELATED, twoWay: true, twoWayKey: self::BACK, onDelete: RelationshipDeleteAction::SetNull),
+                RelationshipType::ManyToMany => Relationship::manyToMany(self::RELATED, self::RELATED, twoWay: true, twoWayKey: self::BACK, onDelete: RelationshipDeleteAction::SetNull),
+            });
+            if ($storedPermissions !== null) {
+                $this->database->createDocument(self::RELATED, new Document([Document::ID => self::STORED, 'name' => 'Stored', Document::PERMISSIONS => $storedPermissions]));
+            }
+        });
+    }
+
+    /**
+     * Parents relate RELATED, which relate LEAVES, the same way, each related back by BACK.
+     *
+     * @param  list<string>  $relatedPermissions  The permissions of the RELATED and LEAVES collections
+     */
+    private function chain(Adapter $adapter, RelationshipType $type, array $relatedPermissions): void
+    {
+        $this->connect($adapter);
+
+        $this->authorization->skip(function () use ($type, $relatedPermissions): void {
+            $this->createCollections([self::RELATED, self::LEAVES], $relatedPermissions);
+            $this->database->createRelationship('parents', self::twoWayRelationship($type, self::RELATED, self::RELATED));
+            $this->database->createRelationship(self::RELATED, self::twoWayRelationship($type, self::LEAVES, self::NEXT));
+        });
+    }
+
+    private function connect(Adapter $adapter): void
     {
         $this->authorization = new Authorization();
         $this->authorization->addRole(Role::users()->toString());
@@ -165,30 +269,77 @@ final class NestedPreCheckTest extends TestCase
             ->setNamespace('nested_pre_check_'.\uniqid());
         $this->database->addHook(new Permissions());
         $this->database->addHook(new Relationships());
+    }
 
-        $this->authorization->skip(function () use ($type, $collectionPermissions, $storedPermissions): void {
-            $this->database->create();
+    /**
+     * Creates the parents collection and the $related collections, which have $permissions.
+     *
+     * @param  list<string>  $related
+     * @param  list<string>  $permissions
+     */
+    private function createCollections(array $related, array $permissions): void
+    {
+        $this->database->create();
+        $this->database->createCollection(Collection::create(
+            'parents',
+            attributes: [Attribute::string('name', size: 64)],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())],
+        ));
+        foreach ($related as $collection) {
             $this->database->createCollection(Collection::create(
-                'parents',
+                $collection,
                 attributes: [Attribute::string('name', size: 64)],
-                permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())],
-            ));
-            $this->database->createCollection(Collection::create(
-                self::RELATED,
-                attributes: [Attribute::string('name', size: 64)],
-                permissions: $collectionPermissions,
+                permissions: $permissions,
                 documentSecurity: false,
             ));
-            $this->database->createRelationship('parents', match ($type) {
-                RelationshipType::OneToOne => Relationship::oneToOne(self::RELATED, self::RELATED, onDelete: RelationshipDeleteAction::SetNull),
-                RelationshipType::ManyToOne => Relationship::manyToOne(self::RELATED, self::RELATED, onDelete: RelationshipDeleteAction::SetNull),
-                RelationshipType::OneToMany => Relationship::oneToMany(self::RELATED, self::RELATED, twoWay: true, twoWayKey: 'back', onDelete: RelationshipDeleteAction::SetNull),
-                RelationshipType::ManyToMany => Relationship::manyToMany(self::RELATED, self::RELATED, twoWay: true, twoWayKey: 'back', onDelete: RelationshipDeleteAction::SetNull),
-            });
-            if ($storedPermissions !== null) {
-                $this->database->createDocument(self::RELATED, new Document([Document::ID => self::STORED, 'name' => 'Stored', Document::PERMISSIONS => $storedPermissions]));
+        }
+    }
+
+    private static function twoWayRelationship(RelationshipType $type, string $related, string $key): Relationship
+    {
+        return match ($type) {
+            RelationshipType::OneToOne => Relationship::oneToOne($related, $key, twoWay: true, twoWayKey: self::BACK, onDelete: RelationshipDeleteAction::SetNull),
+            RelationshipType::ManyToOne => Relationship::manyToOne($related, $key, twoWay: true, twoWayKey: self::BACK, onDelete: RelationshipDeleteAction::SetNull),
+            RelationshipType::OneToMany => Relationship::oneToMany($related, $key, twoWay: true, twoWayKey: self::BACK, onDelete: RelationshipDeleteAction::SetNull),
+            RelationshipType::ManyToMany => Relationship::manyToMany($related, $key, twoWay: true, twoWayKey: self::BACK, onDelete: RelationshipDeleteAction::SetNull),
+        };
+    }
+
+    /**
+     * A hook that records each related document it is given and replaces a MARKER ID with a generated one.
+     */
+    private function marker(): Nested
+    {
+        return new class (self::MARKER, $this->record(...)) implements Nested {
+            /**
+             * @param  Closure(string, string): void  $record
+             */
+            public function __construct(
+                private readonly string $marker,
+                private readonly Closure $record,
+            ) {
             }
-        });
+
+            #[\Override]
+            public function prepare(Document $collection, Document $document): Document
+            {
+                ($this->record)($collection->getId(), $document->getId());
+
+                return $document->getId() === $this->marker ? $document->setAttribute(Document::ID, Id::unique()) : $document;
+            }
+        };
+    }
+
+    private function record(string $collection, string $id): void
+    {
+        $this->seen[] = [$collection, $id];
+    }
+
+    private function resolveAsStored(string $collection, string $id): ?Document
+    {
+        $this->resolved[] = [$collection, $id];
+
+        return null;
     }
 
     private function parent(RelationshipType $type, Document $related): Document
@@ -219,6 +370,27 @@ final class NestedPreCheckTest extends TestCase
     private static function value(RelationshipType $type, Document $related): Document|array
     {
         return \in_array($type, [RelationshipType::OneToMany, RelationshipType::ManyToMany], true) ? [$related] : $related;
+    }
+
+    /**
+     * The value of BACK, the inverse side of a relationship of $type, holding $related.
+     *
+     * @return Document|list<Document>
+     */
+    private static function reverse(RelationshipType $type, Document $related): Document|array
+    {
+        return \in_array($type, [RelationshipType::ManyToOne, RelationshipType::ManyToMany], true) ? [$related] : $related;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function leafNames(): array
+    {
+        return $this->authorization->skip(fn (): array => \array_values(\array_map(
+            static fn (Document $document): string => \is_string($name = $document->getAttribute('name')) ? $name : '',
+            $this->database->find(self::LEAVES),
+        )));
     }
 
     /**

@@ -1459,6 +1459,21 @@ trait Documents
         return $this->prepareNested($collection, clone $document, $preparation);
     }
 
+    private static function holdsRelatedDocument(Collection $collection, Document $document): bool
+    {
+        foreach (self::relationshipAttributes($collection) as $attribute) {
+            $value = $document->getAttribute($attribute->key);
+            $values = \is_array($value) && \array_is_list($value) ? $value : [$value];
+            foreach ($values as $related) {
+                if ($related instanceof Document || (\is_array($related) && ! \array_is_list($related))) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     /**
      * @throws DatabaseException
      */
@@ -2064,6 +2079,10 @@ trait Documents
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        if ($this->nestedPreparation() !== null && self::holdsRelatedDocument($collection, $updates)) {
+            throw new RelationshipException('Invalid relationship value. A bulk update takes related documents by ID while placeholders are replaced or grants are checked.');
+        }
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
         $skipAuth = $this->authorization->isValid(new Input(PermissionType::Update, $collection->getPermissionsByType(PermissionType::Update)));

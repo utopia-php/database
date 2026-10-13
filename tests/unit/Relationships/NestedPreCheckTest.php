@@ -335,7 +335,7 @@ final class NestedPreCheckTest extends TestCase
         $this->seen[] = [$collection, $id];
     }
 
-    private function resolveAsStored(string $collection, string $id): ?Document
+    private function resolveAsStored(string $collection, string $id): null
     {
         $this->resolved[] = [$collection, $id];
 

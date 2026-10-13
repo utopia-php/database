@@ -168,7 +168,6 @@ trait NestedPreparationTests
         }
 
         [$parents, $children, $owners, $profiles, $tags] = $this->createNestedPreparationHookCollections($database);
-        $marked = static fn (string $name, array $attributes = []): Document => new Document([Document::ID => self::NESTED_PREPARATION_MARKER, 'name' => $name, ...$attributes]);
         $hook = $this->nestedPreparationHook();
 
         $database->addHook($hook);

@@ -53,6 +53,7 @@ class Database
 {
     use Trait\Attributes;
     use Trait\Collections;
+    use Trait\Cursors;
     use Trait\Databases;
     use Trait\Documents;
     use Trait\Indexes;

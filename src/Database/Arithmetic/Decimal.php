@@ -6,6 +6,8 @@ use Utopia\Database\Validator\BigInt;
 
 /**
  * A number read exactly from its text, at any size, without passing through a float.
+ *
+ * @internal
  */
 final readonly class Decimal
 {

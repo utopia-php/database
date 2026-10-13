@@ -12,6 +12,8 @@ use Utopia\Database\Validator\BigInt;
  * Fractional amounts and limits on an integer column, answered as database 7.4.1 answered them: it handed them to
  * the engine, which stored the result rounded its own way. Each is resolved from the stored value into the
  * whole-number change that stores the same result.
+ *
+ * @internal
  */
 final readonly class Fractional
 {

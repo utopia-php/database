@@ -29,6 +29,7 @@ final readonly class Snapshot
      * @param  DateTime|null  $requestTimestamp  The time an update conflicts after
      * @param  bool  $replacePlaceholders  Whether a related document sent with an Id::PLACEHOLDER ID gets a generated one
      * @param  bool  $checkGrants  Whether a related document may only be given permissions for roles the caller holds
+     * @param  bool  $roundFractions  Whether a fractional amount or limit on an integer attribute is stored as the engine rounded it
      */
     public function __construct(
         public bool $authorization,
@@ -48,6 +49,7 @@ final readonly class Snapshot
         public ?DateTime $requestTimestamp,
         public bool $replacePlaceholders = false,
         public bool $checkGrants = false,
+        public bool $roundFractions = false,
     ) {
     }
 }

@@ -1072,7 +1072,7 @@ trait Documents
         }
 
         if ($this->relationshipHook?->isEnabled()) {
-            $this->relationshipHook->authorize($definition, $document, resolve: $resolve);
+            $this->relationshipHook->authorize($definition, $this->prepareNestedCopy($definition, $document, $resolve), resolve: $resolve);
         }
     }
 
@@ -1105,7 +1105,7 @@ trait Documents
         }
 
         if ($this->relationshipHook?->isEnabled()) {
-            $this->relationshipHook->authorize($definition, $document, $old, $resolve);
+            $this->relationshipHook->authorize($definition, $this->prepareNestedCopy($definition, $document, $resolve), $old, $resolve);
         }
     }
 
@@ -1124,6 +1124,7 @@ trait Documents
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
+        $document = $this->prepareNested($collection, $document);
         $document = $this->prepareDocument($collection, $document);
 
         /** @var array<int, array{Document, array<string, mixed>}> $copies */
@@ -1233,6 +1234,58 @@ trait Documents
     }
 
     /**
+     * Whether a document given $id is created under a generated ID.
+     */
+    private function generatesId(string $id): bool
+    {
+        return empty($id) || (Id::isPlaceholder($id) && $this->placeholderReplacement()->get());
+    }
+
+    private function preparesNested(): bool
+    {
+        return $this->placeholderReplacement()->get() || $this->grantChecking()->get();
+    }
+
+    /**
+     * The document with its related documents prepared by the relationship hook, when placeholders are replaced or
+     * grants checked.
+     *
+     * @param  (Closure(string, string): ?Document)|null  $resolve
+     *
+     * @throws AuthorizationException
+     * @throws RelationshipException
+     * @throws StructureException
+     */
+    private function prepareNested(Document $collection, Document $document, ?Closure $resolve = null): Document
+    {
+        $hook = $this->relationshipHook;
+        if ($hook === null || ! $this->preparesNested() || ! $hook->isEnabled()) {
+            return $document;
+        }
+
+        return $this->silent(fn (): Document => $hook->prepareNested($collection, $document, $resolve));
+    }
+
+    /**
+     * A copy of $document as prepareNested() prepares it, leaving $document unchanged; $document itself when
+     * neither placeholders are replaced nor grants checked.
+     *
+     * @param  (callable(string, string): ?Document)|null  $resolve
+     *
+     * @throws AuthorizationException
+     * @throws RelationshipException
+     * @throws StructureException
+     */
+    private function prepareNestedCopy(Document $collection, Document $document, ?callable $resolve): Document
+    {
+        if (! $this->preparesNested()) {
+            return $document;
+        }
+
+        return $this->prepareNested($collection, clone $document, $resolve === null ? null : $resolve(...));
+    }
+
+    /**
      * @throws DatabaseException
      */
     private function assertCreateTenancy(string $collection): void
@@ -1275,7 +1328,7 @@ trait Documents
 
         $id = $document->getId();
         $document
-            ->setAttribute(Document::ID, empty($id) ? Id::unique() : $id)
+            ->setAttribute(Document::ID, $this->generatesId($id) ? Id::unique() : $id)
             ->setAttribute(Document::COLLECTION, $collection->getId())
             ->setAttribute(Document::CREATED_AT, ($createdAt === null || ! $this->datePreservation()->get()) ? $time : $createdAt)
             ->setAttribute(Document::UPDATED_AT, ($updatedAt === null || ! $this->datePreservation()->get()) ? $time : $updatedAt);
@@ -1371,6 +1424,12 @@ trait Documents
         $modified = 0;
         $hasRelationships = self::relationshipAttributes($collection) !== [];
 
+        if ($hasRelationships && $this->preparesNested()) {
+            foreach ($documents as $index => $document) {
+                $documents[$index] = $this->prepareNested($collection, $document);
+            }
+        }
+
         // Hoisted: validator only depends on the collection + adapter properties,
         // both stable for this call. Allocating once and reusing across all
         // documents avoids per-document construction and (with the in-class
@@ -1387,7 +1446,7 @@ trait Documents
             $updatedAt = $document->getUpdatedAt();
 
             $document
-                ->setAttribute(Document::ID, empty($document->getId()) ? Id::unique() : $document->getId())
+                ->setAttribute(Document::ID, $this->generatesId($document->getId()) ? Id::unique() : $document->getId())
                 ->setAttribute(Document::COLLECTION, $collection->getId())
                 ->setAttribute(Document::CREATED_AT, ($createdAt === null || ! $this->datePreservation()->get()) ? $time : $createdAt)
                 ->setAttribute(Document::UPDATED_AT, ($updatedAt === null || ! $this->datePreservation()->get()) ? $time : $updatedAt);
@@ -1495,6 +1554,7 @@ trait Documents
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
+        $document = $this->prepareNested($collection, $document);
         $newUpdatedAt = $document->getUpdatedAt();
         $hasOperators = false;
         $cacheTarget = $collection->getId() === self::METADATA
@@ -2160,6 +2220,18 @@ trait Documents
         $operatorIds = [];
         $seenIds = [];
         $hasRelationships = self::relationshipAttributes($collection) !== [];
+        $replacing = $this->placeholderReplacement()->get();
+        $preparesNested = $hasRelationships && $this->preparesNested();
+        if ($replacing || $preparesNested) {
+            foreach ($documents as $key => $document) {
+                if ($replacing && Id::isPlaceholder($document->getId())) {
+                    $document->setAttribute(Document::ID, Id::unique());
+                }
+                if ($preparesNested) {
+                    $documents[$key] = $this->prepareNested($collection, $document);
+                }
+            }
+        }
         $internalKeys = \array_flip(\array_map(
             static fn (Attribute $attribute): string => $attribute->key,
             self::internalAttributesFor(true)

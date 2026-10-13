@@ -20,6 +20,7 @@ use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Structure as StructureException;
+use Utopia\Database\Id;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
 use Utopia\Database\Permission;
@@ -33,6 +34,7 @@ use Utopia\Database\Role;
 use Utopia\Database\State\Snapshot;
 use Utopia\Database\State\Value;
 use Utopia\Database\Validator\Authorization\Input;
+use Utopia\Database\Validator\Permissions as PermissionsValidator;
 use Utopia\Query\Hook;
 use Utopia\Query\Method;
 
@@ -3162,6 +3164,187 @@ class Relationships implements Attachable, Hook
 
         if (! $authorization->isValid(self::permissionInput($collection, $related, PermissionType::Update))) {
             throw new AuthorizationException($authorization->getDescription());
+        }
+    }
+
+    /**
+     * Prepare the related documents $document holds as documents for a write of it to $collection, as deep as the
+     * write relates them, replacing its relationship values with prepared copies once every one is prepared; the
+     * related documents given are not changed. Where the database replaces placeholders, each whose ID is empty or
+     * Id::PLACEHOLDER gets a generated ID, so the write creates it. Where the database checks grants and
+     * authorization is enabled, each that carries permissions may only add permissions for roles the caller holds:
+     * a new one has none yet, any other has those of the document $resolve(collection, ID) gives, or of the stored
+     * one when $resolve gives null or is null. A write nested in another relationship write is left as given, as the
+     * outermost write prepared it.
+     *
+     * @param  (Closure(string, string): ?Document)|null  $resolve
+     *
+     * @throws AuthorizationException When a related document adds a permission for a role the caller does not hold
+     * @throws RelationshipException When a related document given as an array is not a valid document
+     * @throws StructureException When a related document's permissions are malformed
+     *
+     * @internal
+     */
+    public function prepareNested(Document $collection, Document $document, ?Closure $resolve = null): Document
+    {
+        $replace = $this->database->isReplacingPlaceholders();
+        $check = $this->database->isCheckingGrants() && $this->database->getAuthorization()->getStatus();
+        if ((! $replace && ! $check) || isset($this->writeStacks[$this->coroutine()])) {
+            return $document;
+        }
+
+        foreach ($this->prepareNestedValues($collection, $document, [], $replace, $check, $resolve) as $key => $value) {
+            $document->setAttribute($key, $value);
+        }
+
+        return $document;
+    }
+
+    /**
+     * The relationship values of $document that hold related documents as documents, with copies of those
+     * documents prepared.
+     *
+     * @param  list<string>  $writeStack  The collections of the writes relating $document, innermost last
+     * @param  (Closure(string, string): ?Document)|null  $resolve
+     * @return array<string, mixed>
+     *
+     * @throws AuthorizationException
+     * @throws RelationshipException
+     * @throws StructureException
+     */
+    private function prepareNestedValues(Document $collection, Document $document, array $writeStack, bool $replace, bool $check, ?Closure $resolve): array
+    {
+        $depth = \count($writeStack);
+        $prepared = [];
+
+        foreach (self::relationships($collection) as $attribute) {
+            $relationship = $attribute->relationship;
+            if ($relationship === null) {
+                continue;
+            }
+
+            $value = $document->getAttribute($attribute->key);
+            $list = \is_array($value) && \array_is_list($value);
+            $values = $list ? $value : [$value];
+            /** @var array<int, Document|array<string, mixed>> $related */
+            $related = \array_filter($values, self::isDocumentValue(...));
+            if ($related === []) {
+                continue;
+            }
+
+            $relatedCollection = $this->database->getCollection($relationship->relatedCollection);
+            if ($depth >= Database::RELATION_MAX_DEPTH - 1 && $writeStack[$depth - 1] !== $relatedCollection->getId()) {
+                continue;
+            }
+
+            foreach ($related as $index => $nested) {
+                $values[$index] = $this->prepareNestedDocument(
+                    $relatedCollection,
+                    $nested instanceof Document ? clone $nested : self::toDocument($nested),
+                    [...$writeStack, $collection->getId()],
+                    $replace,
+                    $check,
+                    $resolve,
+                );
+            }
+
+            $prepared[$attribute->key] = $list ? $values : $values[0];
+        }
+
+        return $prepared;
+    }
+
+    /**
+     * @param  list<string>  $writeStack
+     * @param  (Closure(string, string): ?Document)|null  $resolve
+     *
+     * @throws AuthorizationException
+     * @throws RelationshipException
+     * @throws StructureException
+     */
+    private function prepareNestedDocument(Document $collection, Document $document, array $writeStack, bool $replace, bool $check, ?Closure $resolve): Document
+    {
+        $id = $document->getId();
+        $new = $id === '';
+        if ($replace && ($new || Id::isPlaceholder($id))) {
+            $document->setAttribute(Document::ID, Id::unique());
+            $new = true;
+        }
+
+        if ($check) {
+            $this->authorizeGrants($collection, $document, $new, $resolve);
+        }
+
+        foreach ($this->prepareNestedValues($collection, $document, $writeStack, $replace, $check, $resolve) as $key => $value) {
+            $document->setAttribute($key, $value);
+        }
+
+        return $document;
+    }
+
+    /**
+     * Refuse permissions $document adds over its current ones for a role the caller does not hold.
+     *
+     * @param  (Closure(string, string): ?Document)|null  $resolve
+     *
+     * @throws AuthorizationException
+     * @throws StructureException
+     */
+    private function authorizeGrants(Document $collection, Document $document, bool $new, ?Closure $resolve): void
+    {
+        $permissions = $document->getAttribute(Document::PERMISSIONS);
+        if ($permissions === null) {
+            return;
+        }
+
+        $validator = new PermissionsValidator();
+        if (! $validator->isValid($permissions)) {
+            throw new StructureException($validator->getDescription());
+        }
+
+        $current = $new ? [] : (Permission::aggregate($this->grantedView($collection, $document->getId(), $resolve)->getPermissions()) ?? []);
+        $authorization = $this->database->getAuthorization();
+
+        foreach (\array_diff(Permission::aggregate($document->getPermissions()) ?? [], $current) as $granted) {
+            $permission = Permission::parse($granted);
+            $role = new Role($permission->getRole(), $permission->getIdentifier(), $permission->getDimension());
+            if (! $authorization->hasRole($role->toString())) {
+                throw new AuthorizationException('Permissions must be one of: ('.\implode(', ', $authorization->getRoles()).')');
+            }
+        }
+    }
+
+    /**
+     * The related document $id as a write would find it, whether or not the caller can read it: the document
+     * $resolve gives for it, else the stored one.
+     *
+     * @param  (Closure(string, string): ?Document)|null  $resolve
+     */
+    private function grantedView(Document $collection, string $id, ?Closure $resolve): Document
+    {
+        $staged = $resolve === null ? null : $resolve($collection->getId(), $id);
+
+        return $staged ?? $this->database->getAuthorization()->skip(fn (): Document => $this->database->skipRelationships(
+            fn (): Document => $this->database->getDocument($collection->getId(), $id, [Query::select([Document::PERMISSIONS])])
+        ));
+    }
+
+    private static function isDocumentValue(mixed $value): bool
+    {
+        return $value instanceof Document || (\is_array($value) && ! \array_is_list($value));
+    }
+
+    /**
+     * @param  array<string, mixed>  $value
+     *
+     * @throws RelationshipException
+     */
+    private static function toDocument(array $value): Document
+    {
+        try {
+            return new Document($value);
+        } catch (StructureException $error) {
+            throw new RelationshipException('Invalid relationship value. '.$error->getMessage());
         }
     }
 

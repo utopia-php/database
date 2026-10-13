@@ -483,6 +483,22 @@ class Mirror extends Database
     }
 
     #[\Override]
+    public function setReplacePlaceholders(bool $replace): static
+    {
+        $this->delegate(__FUNCTION__, \func_get_args());
+
+        return parent::setReplacePlaceholders($replace);
+    }
+
+    #[\Override]
+    public function setCheckGrants(bool $check): static
+    {
+        $this->delegate(__FUNCTION__, \func_get_args());
+
+        return parent::setCheckGrants($check);
+    }
+
+    #[\Override]
     public function setValidation(bool $validation): static
     {
         $this->delegate(__FUNCTION__, \func_get_args());
@@ -528,6 +544,24 @@ class Mirror extends Database
         $scoped = $destination === null ? $callback : fn (): mixed => $destination->withPreserveSequence($preserve, $callback);
 
         return parent::withPreserveSequence($preserve, fn (): mixed => $this->source->withPreserveSequence($preserve, $scoped));
+    }
+
+    #[\Override]
+    public function withReplacePlaceholders(bool $replace, callable $callback): mixed
+    {
+        $destination = $this->destination;
+        $scoped = $destination === null ? $callback : fn (): mixed => $destination->withReplacePlaceholders($replace, $callback);
+
+        return parent::withReplacePlaceholders($replace, fn (): mixed => $this->source->withReplacePlaceholders($replace, $scoped));
+    }
+
+    #[\Override]
+    public function withCheckGrants(bool $check, callable $callback): mixed
+    {
+        $destination = $this->destination;
+        $scoped = $destination === null ? $callback : fn (): mixed => $destination->withCheckGrants($check, $callback);
+
+        return parent::withCheckGrants($check, fn (): mixed => $this->source->withCheckGrants($check, $scoped));
     }
 
     #[\Override]

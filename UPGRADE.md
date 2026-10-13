@@ -1,7 +1,8 @@
 # Upgrading from 8.0 to 8.1
 
 8.1 is a minor release. Every change in it is additive or opt-in. With no `Hook\Nested` hook registered and with
-`setCheckGrants()` and `setRoundFractions()` off, which is the default, a `Database` behaves exactly as in 8.0.3.
+`setCheckGrants()` and `setRoundFractions()` off, which is the default, a `Database` behaves exactly as in 8.0.3,
+except that it runs [joins on a one-to-many relationship](#joins-on-a-one-to-many-relationship) that 8.0.3 refused.
 [CHANGELOG.md](CHANGELOG.md) lists every new signature.
 
 - [Preparing nested related documents](#preparing-nested-related-documents)
@@ -9,6 +10,7 @@
 - [Fractional operands on integer attributes](#fractional-operands-on-integer-attributes)
 - [Cursor from an ID](#cursor-from-an-id)
 - [One read for documents and aggregates](#one-read-for-documents-and-aggregates)
+- [Joins on a one-to-many relationship](#joins-on-a-one-to-many-relationship)
 - [Spatial support behind a pool](#spatial-support-behind-a-pool)
 - [`State\Snapshot`](#statesnapshot)
 
@@ -264,6 +266,30 @@ PermissionType::Read): array`. It returns a list of `Document`:
 - any other queries return what `find($collection, $queries, $forPermission)` returns.
 
 `ParsedQuery::isAggregation(): bool` (from `Query::groupByType($queries)`) tells which of the two a list is.
+
+## Joins on a one-to-many relationship
+
+Additive. The parent side of a one-to-many relationship holds no column: each child stores the parent's ID under the
+relationship's two-way key. 8.0.3 refused a join condition whose left column is such an attribute
+(`Cannot join on virtual relationship attribute`). 8.1 compares the main `$id` with the two-way key in the joined
+collection instead.
+
+```php
+// customers: Relationship::oneToMany(relatedCollection: 'orders', key: 'orders', twoWayKey: 'customer')
+$rows = $database->find('customers', [
+    Query::leftJoin('orders', 'ord', [Query::on('orders', '$id')]), // runs as Query::on('$id', 'customer')
+    Query::select(['name', 'ord.amount']),
+]);
+```
+
+- The condition keeps its operator, and its right column becomes the two-way key. Other conditions of the join are
+  unchanged, and the caller's `Query` objects are not modified.
+- `getDocument()`, `find()`, `findOne()`, `read()`, `aggregate()`, `count()`, `sum()` and `resolveCursor()` run it, so
+  `cursorAfter()` and `cursorBefore()` page over the joined rows.
+- Only an unqualified left column that is the parent side of a one-to-many with a two-way key is resolved. The child
+  side holds a column and joins as before. Other relationship types, and a left column under a join's alias, are
+  refused as before.
+- The joined collection is read under the same permission and tenant rules as any join.
 
 ## Spatial support behind a pool
 

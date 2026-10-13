@@ -2,27 +2,31 @@
 
 ## 8.1.0
 
-8.1.0 adds opt-in and additive APIs for work that callers had to do themselves. With none of the new toggles set, a
-`Database` behaves as in 8.0.3, except for the joins listed under Changed. See
-[Upgrading from 8.0 to 8.1](UPGRADE.md#upgrading-from-80-to-81).
+8.1.0 adds opt-in and additive APIs for work that callers had to do themselves. With no `Hook\Nested` hook registered
+and with `setCheckGrants()` and `setRoundFractions()` off, which is the default, a `Database` behaves exactly as in
+8.0.3. See [Upgrading from 8.0 to 8.1](UPGRADE.md#upgrading-from-80-to-81).
 
 ### Added
 
-- `Id::PLACEHOLDER` (`'unique()'`) and `Id::isPlaceholder(string $id): bool`.
-- `Database::setReplacePlaceholders(bool $replace): static`, `isReplacingPlaceholders(): bool` and
-  `withReplacePlaceholders(bool $replace, callable $callback): mixed`, off by default. While on, a document whose `$id`
-  is `Id::PLACEHOLDER` gets a generated ID, as one with an empty `$id` does: the documents given to
-  `createDocument()`, `createDocuments()`, `upsertDocument()` and `upsertDocuments()`, and every related document
-  given as a document to those and to `updateDocument()`, at every depth the write relates. A related document given
-  as the string `'unique()'` is still a reference to the document stored under that ID.
+- `Utopia\Database\Hook\Nested`, a hook with `prepare(Document $collection, Document $document): Document`. Register
+  it with `Database::addHook()` and remove it with `removeHook()`. It is given a copy of each related document that
+  `createDocument()`, `createDocuments()`, `updateDocument()`, `upsertDocument()`, `upsertDocuments()`,
+  `authorizeCreate()` or `authorizeUpdate()` is given as a document, at every depth the write relates. A parent is
+  prepared before its children, and hooks run in the order they were registered. The write checks grants on, and
+  relates, the document the hook returns. The hook is not given the top-level document, a related document given as
+  an ID, or anything from `updateDocuments()`. A `Mirror` runs it on itself, for the pre-checks, and on its source.
+  Its destination receives the IDs the source wrote. The library still never interprets `'unique()'`: an ID is stored
+  as given, as in 8.0.
 - `Database::setCheckGrants(bool $check): static`, `isCheckingGrants(): bool` and
   `withCheckGrants(bool $check, callable $callback): mixed`, off by default. While on and while authorization is
   enabled, a related document given as a document to `createDocument()`, `createDocuments()`, `updateDocument()`,
   `upsertDocument()`, `upsertDocuments()`, `authorizeCreate()` or `authorizeUpdate()` may add permissions only for
-  roles the caller holds. An unheld role throws `Exception\Authorization` (`Permissions must be one of: (<roles>)`)
-  and malformed permissions throw `Exception\Structure`, before anything is written.
-- While either toggle is on, `updateDocuments()` refuses a related document given as a document with
-  `Exception\Relationship`. Related documents given by ID still link.
+  roles the caller holds. The check judges the document the `Hook\Nested` hooks return. An unheld role throws
+  `Exception\Authorization` (`Permissions must be one of: (<roles>)`) and malformed permissions throw
+  `Exception\Structure`, before anything is written.
+- While grants are checked, `updateDocuments()` refuses a related document given as a document with
+  `Exception\Relationship` (`Invalid relationship value. A bulk update takes related documents by ID while grants are
+  checked.`). Related documents given by ID still link.
 - `Database::setRoundFractions(bool $round): static`, `isRoundingFractions(): bool` and
   `withRoundFractions(bool $round, callable $callback): mixed`, off by default. While on, a fractional change, amount
   or limit on a single-valued integer or big integer attribute is stored as the adapter's engine stored it on 7.4.1,
@@ -40,23 +44,9 @@
 - `Utopia\Database\Arithmetic\Rounding`, an enum with the cases `HalfEven`, `HalfAwayFromZero` and `TowardZero`, and
   the methods `apply(int|string $base, float $fraction): int|string`, `round(float $value): int|string` and
   `ratio(int|string $numerator, int|string $denominator): int|string`.
-- `Utopia\Database\Arithmetic\Decimal`, a number read exactly from its text:
-  `Decimal::parse(int|float|string $value): ?Decimal`, `floor(): int|string`, `ceil(): int|string`,
-  `integer(): int|string|null`, `Decimal::fraction(int|float|string $value): ?array`,
-  `Decimal::isOverlong(int|float|string $value): bool`, `Decimal::isNegative(int|float|string $value): bool`,
-  `Decimal::isTiny(int|float|string $value): bool` and `Decimal::order(int|float|string $value): ?int`.
-- `Utopia\Database\Arithmetic\Fractional`, which resolves fractional amounts and limits from a stored value:
-  `new Fractional(Arithmetic $arithmetic)`,
-  `operator(Operator $operator, int|float|string|null $stored): Operator`,
-  `counter(int|string $stored, int|float|string $value, bool $increase): int|string`, and the static methods
-  `isFractional(mixed $value): bool`, `isWhole(int|float|string $value): bool`,
-  `wholeValue(int|float|string $value): int|string|null`, `needsStored(Operator $operator): bool`,
-  `exceeds(int|string $stored, int|float|string $value, int|float|string $bound, bool $increase): bool`,
-  `maximum(int|float|string|null $bound): int|float|string|null`,
-  `minimum(int|float|string|null $bound): int|float|string|null` and `whole(Operator $operator): Operator`.
 - `Validator\Operator` and `Validator\Structure` (and so `Validator\PartialStructure`) take a trailing
   `bool $fractions = false`. When it is set, a numeric operator on an integer attribute may carry a finite fractional
-  amount or limit within the attribute's range, for a caller that resolves it before writing.
+  amount or limit within the attribute's range, for a caller that resolves it into a whole one before writing.
 - `Database::resolveCursor(string $collection, string $id, CursorDirection $direction, array $queries = []):
   Document` returns the cursor that a list with `$queries` pages from when it names a document by ID. The document is
   read with authorization skipped, and only the cursor fields are returned: `$id`, `$sequence`, `$collection` and
@@ -67,15 +57,8 @@
   otherwise they are what `find()` returns. Aggregate queries under a permission other than read throw
   `Exception\Query`. `find()` still refuses aggregate queries.
 - `ParsedQuery::isAggregation(): bool` tells whether the queries aggregate or group.
-
-### Changed
-
-- A join condition that compares the parent side of a one-to-many relationship, or the child side of a two-way
-  many-to-one relationship, with the `$id` of the related collection is now read through the two-way key the related
-  documents store. In 8.0 it threw `Exception\Query` (`Cannot join on virtual relationship attribute: <key>`). Every
-  other join on a relationship side that holds no column is still refused.
-- `State\Snapshot` is `@internal`. Its constructor takes three more required arguments, `replacePlaceholders`,
-  `checkGrants` and `roundFractions`. `Database::snapshot()` fills them in.
+- The `State\Snapshot` constructor takes two more trailing arguments, `bool $checkGrants = false` and
+  `bool $roundFractions = false`. `Database::snapshot()` fills them in.
 
 ## 8.0.3
 

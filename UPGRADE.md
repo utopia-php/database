@@ -1,65 +1,99 @@
 # Upgrading from 8.0 to 8.1
 
-8.1 is a minor release. Every change in it is additive or opt-in. With none of the new toggles set, a `Database`
-behaves exactly as in 8.0.3, with two exceptions: joins on a to-many relationship attribute (see
-[Joining on a to-many relationship](#joining-on-a-to-many-relationship)) and the `@internal` `State\Snapshot`
-constructor. [CHANGELOG.md](CHANGELOG.md) lists every new signature.
+8.1 is a minor release. Every change in it is additive or opt-in. With no `Hook\Nested` hook registered and with
+`setCheckGrants()` and `setRoundFractions()` off, which is the default, a `Database` behaves exactly as in 8.0.3.
+[CHANGELOG.md](CHANGELOG.md) lists every new signature.
 
-- [Placeholder IDs](#placeholder-ids)
+- [Preparing nested related documents](#preparing-nested-related-documents)
 - [Grant check on related documents](#grant-check-on-related-documents)
 - [Fractional operands on integer attributes](#fractional-operands-on-integer-attributes)
 - [Cursor from an ID](#cursor-from-an-id)
 - [One read for documents and aggregates](#one-read-for-documents-and-aggregates)
-- [Joining on a to-many relationship](#joining-on-a-to-many-relationship)
 - [Spatial support behind a pool](#spatial-support-behind-a-pool)
 - [`State\Snapshot`](#statesnapshot)
 
-The three new toggles follow the 8.0 toggle idiom (see [Configuration toggles](#configuration-toggles)). Each one is
+The two new toggles follow the 8.0 toggle idiom (see [Configuration toggles](#configuration-toggles)). Each one is
 scoped to the calling coroutine and the coroutines it starts. `withSnapshot()` carries it into relationship writes and
 other work that runs in another coroutine.
 
 | Toggle | Set | Read | Scope |
 |---|---|---|---|
-| Placeholder IDs | `setReplacePlaceholders(bool $replace): static` | `isReplacingPlaceholders(): bool` | `withReplacePlaceholders(bool $replace, callable $callback): mixed` |
 | Grant check | `setCheckGrants(bool $check): static` | `isCheckingGrants(): bool` | `withCheckGrants(bool $check, callable $callback): mixed` |
 | Fractions | `setRoundFractions(bool $round): static` | `isRoundingFractions(): bool` | `withRoundFractions(bool $round, callable $callback): mixed` |
 
-## Placeholder IDs
+## Preparing nested related documents
 
-Opt-in. By default 8.1 stores a `$id` of `'unique()'` as given, as 8.0 deliberately does: only an empty `$id` asks for
-a generated one. `Id::PLACEHOLDER` names the placeholder (`'unique()'`), and `Id::isPlaceholder(string $id): bool`
-checks for it.
-
-With `setReplacePlaceholders(true)`, a document whose `$id` is `Id::PLACEHOLDER` gets a generated ID, just as a
-document with an empty `$id` does:
-
-- the documents given to `createDocument()`, `createDocuments()`, `upsertDocument()` and `upsertDocuments()`. An
-  upsert with a placeholder ID always creates a new document.
-- every related document given as a document (a `Document` or an associative array) to those methods and to
-  `updateDocument()`, as deep as the write relates them. This needs the relationship hook to be attached and enabled.
-  A related document with an empty `$id` also gets its ID before anything is written, so links and junction rows see
-  the final ID.
-
-A related document given as the string `'unique()'` is still a reference to the document stored under that ID: it
-links that document, or it is refused as missing, as in 8.0. While the toggle is on, a document stored with the
-literal ID `'unique()'` can no longer be created or changed through a nested document. A string reference still links
-it.
-
-`authorizeCreate()` and `authorizeUpdate()` give the related documents they check the same IDs, on a copy. A
-placeholder related document is judged as new, so it needs create permission on its collection. While the toggle is
-on, `updateDocuments()` refuses a related document given as a document with `Exception\Relationship`, because one
-generated ID cannot serve every document the update changes. Related documents given by ID still link. `Mirror`
-forwards the toggle to its source and destination.
+Additive. 8.1 still never interprets `'unique()'`. A `$id` of `'unique()'` is stored as given, at the top level and
+nested, exactly as in 8.0: only an empty `$id` asks for a generated one. An application that gives some IDs of nested
+related documents a meaning of its own, such as an ID that asks for a generated one, implements it as a
+`Utopia\Database\Hook\Nested` hook:
 
 ```php
-$database->setReplacePlaceholders(true);
+interface Nested extends Hook
+{
+    public function prepare(Document $collection, Document $document): Document;
+}
+```
+
+Register it with `$database->addHook($hook)`. Remove it with `removeHook($hook)`, or remove every one with
+`removeHook(Nested::class)`.
+
+- **What it is given.** Each related document that `createDocument()`, `createDocuments()`, `updateDocument()`,
+  `upsertDocument()`, `upsertDocuments()`, `authorizeCreate()` or `authorizeUpdate()` is given as a document (a
+  `Document` or an associative array), at every depth the write relates. `$collection` is the collection the related
+  document belongs to.
+- **When it runs.** Before the write checks the document's grants and relates it, a parent before its children.
+  Several hooks run in the order they were registered, each given the document the previous one returned.
+- **What it returns.** It is given a copy, never the caller's document. The write checks and relates the document it
+  returns, so links and junction rows use the IDs it returns. In `createDocuments()`, `upsertDocument()` and
+  `upsertDocuments()`, the prepared related documents replace the relationship values of the caller's top-level
+  documents in place, as those writes prepare the documents they are given.
+- **What it is not given.** The top-level document, a related document given as an ID string, and anything from
+  `updateDocuments()`. A string stays a reference to the document stored under that ID, as in 8.0.
+- **Running more than once.** One logical write can run it more than once: `authorizeCreate()` or `authorizeUpdate()`
+  and then the write, or a retried transaction. A pre-check prepares a copy, and the write prepares the document again.
+  So the hook must return the same document when it is given its own output.
+- **Conditions.** It runs while the relationship hook is attached and enabled, so not inside `skipRelationships()`,
+  whether or not events are silenced. Its exceptions abort the write before anything is written.
+- **New documents.** A related document whose returned ID is not stored is new. Relating it, in the write and in
+  `authorizeCreate()` and `authorizeUpdate()`, needs create permission on its collection, and with the
+  [grant check](#grant-check-on-related-documents) on, all of its permissions are checked.
+- **Malformed values.** While a hook is registered or grants are checked, a related document given as an associative
+  array that is not a valid document throws `Exception\Relationship` (`Invalid relationship value. <reason>`) before
+  anything is written.
+- **Mirror.** `Mirror::addHook()` registers it on the mirror itself, for its pre-checks, and on the source, never on
+  the destination. The destination replicates what the source wrote, with the IDs the hook gave there.
+  `removeHook()` removes it from both.
+
+```php
+use Utopia\Database\Document;
+use Utopia\Database\Hook\Nested;
+use Utopia\Database\Id;
+
+final readonly class GeneratedIds implements Nested
+{
+    public function __construct(private string $marker)
+    {
+    }
+
+    public function prepare(Document $collection, Document $document): Document
+    {
+        if ($document->getId() === $this->marker) {
+            $document->setAttribute(Document::ID, Id::unique());
+        }
+
+        return $document;
+    }
+}
+
+$database->addHook(new GeneratedIds('new'));
 
 $database->createDocument('authors', new Document([
-    '$id' => Id::PLACEHOLDER,
+    '$id' => 'ada',
     'name' => 'Ada',
     'books' => [
-        ['$id' => Id::PLACEHOLDER, 'title' => 'Notes'], // created under a generated ID
-        'unique()',                                      // links the stored document 'unique()'
+        ['$id' => 'new', 'title' => 'Notes'], // created under a generated ID
+        'new',                                // still a reference to the document stored as 'new'
     ],
 ]));
 ```
@@ -70,19 +104,22 @@ Opt-in. By default 8.1 never compares the permissions a write grants with the ro
 
 With `setCheckGrants(true)`, the check covers related documents written through a parent: every related document
 given as a document to `createDocument()`, `createDocuments()`, `updateDocument()`, `upsertDocument()`,
-`upsertDocuments()`, `authorizeCreate()` or `authorizeUpdate()`, as deep as the write relates them. The document the
-write is given is not checked. For each related document whose `$permissions` is not null:
+`upsertDocuments()`, `authorizeCreate()` or `authorizeUpdate()`, as deep as the write relates them, each as the
+[`Hook\Nested` hooks](#preparing-nested-related-documents) return it. The document the write is given is not checked.
+For each related document whose `$permissions` is not null:
 
 - Malformed permissions throw `Exception\Structure` with the `Validator\Permissions` description.
 - The permissions it adds must name roles the caller holds (`Authorization::hasRole()`). Otherwise the write throws
   `Exception\Authorization` (`Permissions must be one of: (<the caller's roles>)`). The added permissions are
-  `Permission::aggregate()` of the sent permissions minus those the document already has. A new document has none.
-  Permissions sent back unchanged pass, and so does an empty list.
+  `Permission::aggregate()` of the sent permissions minus those the document already has. A document that is not
+  stored yet, with an empty `$id` or an ID no stored document has, has none. Permissions sent back unchanged pass,
+  and so does an empty list.
 - Permissions a related document inherits from its parent are never checked.
 - Both refusals happen before anything is written.
 
-The check is skipped while authorization is disabled (`$authorization->skip()` or `setStatus(false)`). To write
-without it while authorization stays enabled, use `withCheckGrants(false, $callback)`.
+The check is skipped while authorization is disabled (`$authorization->skip()` or `setStatus(false)`), and it runs only
+while the relationship hook is attached and enabled. To write without it while authorization stays enabled, use
+`withCheckGrants(false, $callback)`.
 
 A related document's current permissions are read whether or not the caller can read the document:
 
@@ -94,9 +131,12 @@ A related document's current permissions are read whether or not the caller can 
   and from the stored document when it returns `null`. A document `$resolve` returns empty (staged for deletion)
   is new.
 
-While the toggle is on, `updateDocuments()` refuses a related document given as a document with
-`Exception\Relationship`, because it is not checked there. `Mirror` checks on its source only. The destination replays
-what the source allowed with the check off, so a destination that is behind never refuses it.
+While grants are checked, `updateDocuments()` refuses a related document given as a document with
+`Exception\Relationship` (`Invalid relationship value. A bulk update takes related documents by ID while grants are
+checked.`), because it is not checked there. Related documents given by ID still link.
+
+`Mirror` checks on its source only. The destination replays what the source allowed with the check off, so a
+destination that is behind never refuses it.
 
 Because the current permissions are read regardless of the caller's read permission, the error can reveal one fact to
 a caller who cannot read a related document: whether a permission it sends is already on that document. If it is, this
@@ -182,8 +222,7 @@ held. 8.1 does not reproduce this: limits hold as on Memory and Redis.
 
 `Validator\Operator` and `Validator\Structure` (and `Validator\PartialStructure`) take a trailing
 `bool $fractions = false` for code that validates operators itself. When it is set, a finite fractional amount or limit
-within the attribute's range passes, and the caller resolves it before writing, for example with
-`Arithmetic\Fractional::operator()`.
+within the attribute's range passes, and the caller resolves it into a whole one before writing.
 
 ```php
 $database->setRoundFractions(true);
@@ -229,34 +268,6 @@ PermissionType::Read): array`. It returns a list of `Document`:
 
 `ParsedQuery::isAggregation(): bool` (from `Query::groupByType($queries)`) tells which of the two a list is.
 
-## Joining on a to-many relationship
-
-Changed for joins that 8.0 refused. Nothing else changes. The parent side of a one-to-many relationship, and the child
-side of a two-way many-to-one relationship, hold no column: the related documents store this document's ID under the
-two-way key. 8.0 refused a join on such an attribute (`Cannot join on virtual relationship attribute: <key>`). 8.1
-reads it when all of the following hold:
-
-- the condition is `Query::on(<that attribute>, '$id')` or `Query::on(<that attribute>, '<alias>.$id')` in the
-  join's ON list;
-- the joined collection is the relationship's related collection;
-- the relationship has a two-way key.
-
-The condition then compares this document's `$id` with `<alias>.<two-way key>`, keeping its operator and alias. The
-caller's queries are not changed. `find()`, `count()`, `sum()`, `aggregate()`, `getDocument()` and `resolveCursor()`
-all do this.
-
-The parent side of a many-to-one, one-to-one and many-to-many relationships, a one-way many-to-one child side, a join
-of another collection and a column of an earlier join are refused as in 8.0. The read rule for joined collections is
-unchanged (see [Joins](#joins)).
-
-```php
-// authors.books is the parent side of a one-to-many relationship with books.author
-$database->find('authors', [
-    Query::join('books', 'b', [Query::on('books', '$id')]), // reads as $id = b.author
-    Query::select(['name', 'b.title']),
-]);
-```
-
 ## Spatial support behind a pool
 
 No change. 8.0.3 already answers correctly, and 8.1 adds tests for it. Ask
@@ -267,9 +278,9 @@ source. Creating a `point` attribute fails exactly when `hasFeature(Feature\Spat
 
 ## `State\Snapshot`
 
-`State\Snapshot` is `@internal`, as `Database::snapshot()` and `withSnapshot()` already were. Its constructor takes
-three more required arguments, `replacePlaceholders`, `checkGrants` and `roundFractions`, which `Database::snapshot()`
-fills in. Code that builds a `Snapshot` itself has to pass them.
+Additive. The `State\Snapshot` constructor takes two more trailing arguments, `bool $checkGrants = false` and
+`bool $roundFractions = false`, which `Database::snapshot()` fills in. Code that builds a `Snapshot` itself still
+works; a snapshot built without them runs its callback with both toggles off.
 
 # Upgrading from 7.x to 8.0
 

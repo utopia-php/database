@@ -33,6 +33,10 @@ trait Cursors
      * after the document starts behind the last of them in the list's order, a page before it ends ahead of the first,
      * and without such a row the value is null, as it is in the list.
      *
+     * The order values, joined ones included, come from or are chosen by a document the caller may not be allowed to
+     * read, and the caller picks which attributes the list orders by. Pass the cursor only to cursorAfter() or
+     * cursorBefore(); never return it, or any of its values, to an end user.
+     *
      * @param  array<Query>  $queries  The list's queries; its cursor queries are left out
      * @return Document Empty when the collection holds no document with the ID
      *

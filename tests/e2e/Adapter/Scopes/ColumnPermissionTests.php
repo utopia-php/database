@@ -8,6 +8,7 @@ use Utopia\Database\CollectionUpdate;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Filter;
 use Utopia\Database\Permission;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Role;
@@ -41,7 +42,7 @@ trait ColumnPermissionTests
 
         $stored = $database->getCollection('columnGrants');
 
-        $permissions = $stored->columnPermissions();
+        $permissions = $stored->grants();
 
         $this->assertNotNull($permissions);
         $this->assertContains('read("any", "name")', $permissions);
@@ -116,7 +117,7 @@ trait ColumnPermissionTests
             'read("any", "name")',
             'read("team:hr", "salary")',
             'create("any")',
-        ], $stored->columnPermissions());
+        ], $stored->grants());
 
         // The gate keeps the roles and drops the columns, which is what every adapter matches.
         $this->assertSame(['any', 'team:hr'], $stored->getPermissionsByType(PermissionType::Read));
@@ -148,7 +149,7 @@ trait ColumnPermissionTests
 
         $stored = $database->getCollection('columnGrantsAbsent');
 
-        $this->assertSame(['read("any")', 'create("any")'], $stored->columnPermissions());
+        $this->assertSame(['read("any")', 'create("any")'], $stored->grants());
         $this->assertSame([], $stored->getAttribute(Collection::COLUMN_PERMISSIONS));
     }
 
@@ -167,7 +168,7 @@ trait ColumnPermissionTests
             permissions: [Permission::read(Role::any(), 'name'), Permission::create(Role::any())],
         )));
 
-        $this->assertSame(['read("any", "name")', 'create("any")'], $collection->columnPermissions());
+        $this->assertSame(['read("any", "name")', 'create("any")'], $collection->grants());
         $this->assertSame(['read("any")', 'create("any")'], $collection->getPermissions());
 
         $collection = $database->updateCollection('columnGrantsCleared', new CollectionUpdate(permissions: [
@@ -175,13 +176,13 @@ trait ColumnPermissionTests
             Permission::create(Role::any()),
         ]));
 
-        $this->assertSame(['read("any")', 'create("any")'], $collection->columnPermissions());
+        $this->assertSame(['read("any")', 'create("any")'], $collection->grants());
         $this->assertSame(['read("any")', 'create("any")'], $collection->getPermissions());
 
         $stored = $database->getCollection('columnGrantsCleared');
 
         $this->assertSame([], $stored->getAttribute(Collection::COLUMN_PERMISSIONS));
-        $this->assertSame(['read("any")', 'create("any")'], $stored->columnPermissions());
+        $this->assertSame(['read("any")', 'create("any")'], $stored->grants());
     }
 
     /**
@@ -228,7 +229,7 @@ trait ColumnPermissionTests
 
         $this->assertSame(
             ['read("any")'],
-            $database->getCollection('columnGrantsGatedUpdate')->columnPermissions(),
+            $database->getCollection('columnGrantsGatedUpdate')->grants(),
         );
     }
 
@@ -268,7 +269,7 @@ trait ColumnPermissionTests
             Permission::create(Role::any()),
         ])));
 
-        $updated = $database->getCollection('columnGrantsUpdate')->columnPermissions();
+        $updated = $database->getCollection('columnGrantsUpdate')->grants();
 
         $this->assertNotNull($updated);
         $this->assertContains('read("any", "name")', $updated);
@@ -283,7 +284,7 @@ trait ColumnPermissionTests
         }
 
         // The rejected update left the collection as it was.
-        $updated = $database->getCollection('columnGrantsUpdate')->columnPermissions();
+        $updated = $database->getCollection('columnGrantsUpdate')->grants();
 
         $this->assertNotNull($updated);
         $this->assertContains('read("any", "name")', $updated);
@@ -394,16 +395,17 @@ trait ColumnPermissionTests
             ],
         )));
 
-        $grants = $database->getCollection('database_1_collection_1')->columnPermissions();
+        $grants = $database->getCollection('database_1_collection_1')->grants();
         $this->assertNotNull($grants);
 
-        // Appwrite's list of the database's tables, one row per table. Its columns -- tableId,
-        // grants -- are nothing like the ones those grants name.
+        // Appwrite's list of the database's tables, one row per table, shaped like the real
+        // thing: databaseId beside a columnPermissions column. Neither resembles the columns
+        // the grants it records name.
         $database->createCollection(Collection::create(
             id: 'database_1',
             attributes: [
-                Attribute::string(key: 'tableId', size: 64),
-                Attribute::string(key: 'grants', size: 4096, array: true),
+                Attribute::string(key: 'databaseId', size: Database::LENGTH_KEY),
+                Attribute::string(key: 'columnPermissions', size: 1_000_000, filters: [Filter::Json]),
             ],
             permissions: [Permission::create(Role::any())],
             documentSecurity: true,
@@ -413,8 +415,8 @@ trait ColumnPermissionTests
         try {
             $database->createDocument('database_1', new Document([
                 '$id' => 'wrong',
-                'tableId' => 'database_1_collection_1',
-                'grants' => $grants,
+                'databaseId' => 'database_1',
+                'columnPermissions' => $grants,
                 '$permissions' => $grants,
             ]));
             $this->fail('Expected createDocument() to reject grants naming another collection\'s columns');
@@ -423,17 +425,18 @@ trait ColumnPermissionTests
         }
 
         // Splitting them is not.
+        // The row's id is the table's id, as Appwrite writes it.
         $database->createDocument('database_1', new Document([
-            '$id' => 'employees',
-            'tableId' => 'database_1_collection_1',
-            'grants' => $grants,
+            '$id' => 'database_1_collection_1',
+            'databaseId' => 'database_1',
+            'columnPermissions' => $grants,
             '$permissions' => Permission::withoutColumns($grants),
         ]));
 
-        $stored = $database->getDocument('database_1', 'employees');
+        $stored = $database->getDocument('database_1', 'database_1_collection_1');
 
         // The grants come back as the table has them, ready to report to a caller...
-        $this->assertSame($grants, $stored->getAttribute('grants'));
+        $this->assertSame($grants, $stored->getAttribute('columnPermissions'));
 
         // ...while the row answers the gate with roles alone.
         $this->assertSame(['any', 'team:hr'], $stored->getPermissionsByType(PermissionType::Read));

@@ -47,7 +47,7 @@ trait Collections
 
         $id = $collection->getId();
         $attributes = \array_map(self::normalise(...), $collection->attributes());
-        $permissions = $collection->columnPermissions() ?? [Permission::create(Role::any())];
+        $permissions = $collection->grants() ?? [Permission::create(Role::any())];
 
         $typeValidator = $this->typeValidator();
         foreach ($attributes as $attribute) {

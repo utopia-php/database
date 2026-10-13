@@ -330,7 +330,7 @@ class Collection extends Document
      *
      * @throws StructureException when the stored grants are not a list of permission strings
      */
-    public function columnPermissions(): ?array
+    public function grants(): ?array
     {
         if (! $this->offsetExists(self::PERMISSIONS) && ! $this->offsetExists(self::COLUMN_PERMISSIONS)) {
             return null;

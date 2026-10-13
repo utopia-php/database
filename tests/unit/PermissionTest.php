@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Id;
@@ -363,6 +364,50 @@ class PermissionTest extends TestCase
         $this->assertEquals('123', $permission->getIdentifier());
         $this->assertEmpty($permission->getDimension());
         $this->assertEquals('name', $permission->getColumn());
+    }
+
+    /**
+     * The role ends at its closing quote, whatever spacing the caller put after the comma.
+     *
+     * These strings arrive from API clients, not only from toString(). Matching the canonical
+     * spacing alone read read("any","name") as the role any","name -- a role matching nobody,
+     * reported as "Role "any","name" is not allowed" for input that is perfectly reasonable.
+     *
+     * @throws \Exception
+     */
+    #[DataProvider('spacings')]
+    public function test_column_tolerates_spacing(string $permission): void
+    {
+        $parsed = Permission::parse($permission);
+
+        $this->assertEquals('any', $parsed->getRole());
+        $this->assertEquals('name', $parsed->getColumn());
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function spacings(): array
+    {
+        return [
+            'canonical' => ['read("any", "name")'],
+            'no space' => ['read("any","name")'],
+            'space before the comma' => ['read("any" , "name")'],
+            'two spaces after' => ['read("any",  "name")'],
+        ];
+    }
+
+    /**
+     * A second argument that is not a quoted column is malformed, not a role with a quote in it.
+     *
+     * @throws \Exception
+     */
+    public function test_a_malformed_second_argument_is_rejected(): void
+    {
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Invalid permission');
+
+        Permission::parse('read("any" "name")');
     }
 
     /**

@@ -145,16 +145,33 @@ class Permission
         // every branch below parses a bare role exactly as it did before -- the role grammar
         // (identifier, dimension) is unchanged by the column, and keeping them separate stops
         // the two from having to know about each other.
+        //
+        // The role ends at its closing quote, whatever spacing follows the comma. Matching the
+        // canonical '", "' alone would read read("any","name") as the role any","name, which is
+        // a role that matches nobody -- and these strings come from callers, not only from
+        // toString().
         $column = self::ALL_COLUMNS;
-        $separator = \strpos($fullRole, '", "');
+        $quote = \strpos($fullRole, '"');
 
-        if ($separator !== false) {
-            $column = \substr($fullRole, $separator + 4);
-            $fullRole = \substr($fullRole, 0, $separator);
+        if ($quote !== false) {
+            $rest = \ltrim(\substr($fullRole, $quote + 1));
 
-            if ($column === '') {
+            if (! \str_starts_with($rest, ',')) {
+                throw new DatabaseException('Invalid permission: "'.$permission.'".');
+            }
+
+            $rest = \ltrim(\substr($rest, 1));
+
+            if (! \str_starts_with($rest, '"')) {
+                throw new DatabaseException('Invalid permission: "'.$permission.'".');
+            }
+
+            if ($rest === '"') {
                 throw new DatabaseException('Column must not be empty');
             }
+
+            $column = \substr($rest, 1);
+            $fullRole = \substr($fullRole, 0, $quote);
         }
 
         $roleParts = \explode(':', $fullRole);

@@ -62,7 +62,7 @@ and with `setCheckGrants()` and `setRoundFractions()` off, which is the default,
   collection. The condition keeps its operator. `getDocument()`, `find()`, `findOne()`, `read()`, `aggregate()`,
   `count()`, `sum()` and `resolveCursor()` run it; 8.0.3 refused it with `Cannot join on virtual relationship
   attribute`. The joined collection is read under the same permission and tenant rules as any join. The child side of
-  a one-to-many and every other relationship type join as before.
+  a one-to-many and every other relationship type join, or are refused, as before.
 - The `State\Snapshot` constructor takes two more trailing arguments, `bool $checkGrants = false` and
   `bool $roundFractions = false`. `Database::snapshot()` fills them in.
 

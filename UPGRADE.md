@@ -288,9 +288,8 @@ $rows = $database->find('customers', [
   unchanged, and the caller's `Query` objects are not modified.
 - `getDocument()`, `find()`, `findOne()`, `read()`, `aggregate()`, `count()`, `sum()` and `resolveCursor()` run it, so
   `cursorAfter()` and `cursorBefore()` page over the joined rows.
-- Only an unqualified left column that is the parent side of a one-to-many with a two-way key is resolved. The child
-  side holds a column and joins as before. Other relationship types, and a left column under a join's alias, are
-  refused as before.
+- Only an unqualified left column that is the parent side of a one-to-many with a two-way key is resolved. Every
+  other relationship attribute joins, or is refused, exactly as in 8.0.3; so is a left column under a join's alias.
 - The joined collection is read under the same permission and tenant rules as any join.
 
 ## Spatial support behind a pool

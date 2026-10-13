@@ -9,6 +9,7 @@ use Swoole\Runtime;
 use Tests\E2E\Adapter\Scopes\Relationships\ChildSideTests;
 use Tests\E2E\Adapter\Scopes\Relationships\ManyToManyTests;
 use Tests\E2E\Adapter\Scopes\Relationships\ManyToOneTests;
+use Tests\E2E\Adapter\Scopes\Relationships\NestedPreparationTests;
 use Tests\E2E\Adapter\Scopes\Relationships\OneToManyTests;
 use Tests\E2E\Adapter\Scopes\Relationships\OneToOneTests;
 use Tests\E2E\Adapter\Support\EventRecorder;
@@ -42,6 +43,7 @@ trait RelationshipTests
     use ChildSideTests;
     use ManyToManyTests;
     use ManyToOneTests;
+    use NestedPreparationTests;
     use OneToManyTests;
     use OneToOneTests;
 

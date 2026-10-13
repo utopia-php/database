@@ -1189,6 +1189,35 @@ trait Documents
      * @throws DatabaseException
      * @throws StructureException
      */
+    /**
+     * A row's permissions may not name a column.
+     *
+     * No column list on purpose, and no exemption: a column-scoped permission belongs to a
+     * collection, and a row naming one would be stored where nothing enforces it. It is also
+     * what every read gate matches against -- the `_perms` side table, Postgres' JSONB
+     * containment, Mongo's `$in` -- so a column stored here hides the row from the role it was
+     * granted to, while getDocument() still returns it.
+     *
+     * Every path that writes permissions calls this. It used to live inline in
+     * prepareDocument(), which only createDocument() reaches, so the rule held on one entry
+     * point out of six and a batch create, an update or an upsert stored the grant happily.
+     *
+     * @throws DatabaseException
+     * @throws StructureException
+     */
+    private function assertRowPermissions(Document $document): void
+    {
+        if (! $this->validation()->get()) {
+            return;
+        }
+
+        $validator = new Permissions(columns: null);
+
+        if (! $validator->isValid($document->getPermissions())) {
+            throw new DatabaseException($validator->getDescription());
+        }
+    }
+
     private function prepareDocument(Document $collection, Document $document): Document
     {
         if ($collection->getId() !== self::METADATA) {
@@ -1259,18 +1288,7 @@ trait Documents
 
         $document = $this->encode($collection, $document);
 
-        if ($this->validation()->get()) {
-            // No column list on purpose, and no exemption: a column-scoped permission belongs to
-            // a collection, and a row naming one is refused rather than stored somewhere nothing
-            // enforces it. It is also what every read gate matches against -- a side table of
-            // roles, a JSONB containment, a Mongo `$in` -- so a column stored here would hide the
-            // row from the role it was granted to.
-            //
-            $validator = new Permissions(columns: null);
-            if (! $validator->isValid($document->getPermissions())) {
-                throw new DatabaseException($validator->getDescription());
-            }
-        }
+        $this->assertRowPermissions($document);
 
         if ($this->validation()->get()) {
             $structure = new Structure(
@@ -1331,6 +1349,10 @@ trait Documents
             if (! $this->authorization->isValid(new Input(PermissionType::Create, $collection->getPermissionsByType(PermissionType::Create)))) {
                 throw new AuthorizationException($this->authorization->getDescription());
             }
+        }
+
+        foreach ($documents as $document) {
+            $this->assertRowPermissions($document);
         }
 
         $time = DateTime::now();
@@ -1459,6 +1481,8 @@ trait Documents
         if (! $id) {
             throw new DatabaseException('Must define $id attribute');
         }
+
+        $this->assertRowPermissions($document);
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $newUpdatedAt = $document->getUpdatedAt();
@@ -1780,6 +1804,8 @@ trait Documents
 
         $this->rejectJoins($queries, 'Join queries are not supported for bulk updates');
 
+        $this->assertRowPermissions($updates);
+
         if ($updates->isEmpty()) {
             return 0;
         }
@@ -2099,6 +2125,10 @@ trait Documents
     ): array {
         if (! $this->adapterHasFeature(Feature\Upserts::class)) {
             throw new DatabaseException('Adapter does not support upserts');
+        }
+
+        foreach ($documents as $document) {
+            $this->assertRowPermissions($document);
         }
 
         if (

@@ -458,7 +458,79 @@ trait ColumnPermissionTests
             }
         }
 
-        $this->assertSame(['employees'], $ids);
+        $this->assertSame(['database_1_collection_1'], $ids);
+    }
+
+    /**
+     * Every write path refuses it, not just createDocument().
+     *
+     * The rule lived inline in prepareDocument() at first, which only createDocument() reaches,
+     * so a batch create, an update or an upsert stored the grant happily -- and a row holding a
+     * column in its permissions is hidden from the role it names by the gates that match that
+     * field directly. One case per entry point, so the rule cannot quietly shrink back to one.
+     */
+    public function testEveryWritePathRefusesAColumnScopedPermission(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->createCollection(Collection::create(
+            id: 'columnGrantsWrites',
+            attributes: [Attribute::string(key: 'name', size: 64)],
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            documentSecurity: true,
+        ));
+
+        $database->createDocument('columnGrantsWrites', new Document([
+            '$id' => 'row',
+            'name' => 'Ada',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+        ]));
+
+        $scoped = [Permission::read(Role::any(), 'name')];
+
+        $writes = [
+            'createDocument' => fn () => $database->createDocument('columnGrantsWrites', new Document([
+                '$id' => 'created', 'name' => 'x', '$permissions' => $scoped,
+            ])),
+            'createDocuments' => fn () => $database->createDocuments('columnGrantsWrites', [new Document([
+                '$id' => 'batched', 'name' => 'x', '$permissions' => $scoped,
+            ])]),
+            'updateDocument' => fn () => $database->updateDocument('columnGrantsWrites', 'row', new Document([
+                '$permissions' => $scoped,
+            ])),
+            'updateDocuments' => fn () => $database->updateDocuments('columnGrantsWrites', new Document([
+                '$permissions' => $scoped,
+            ])),
+            'upsertDocument' => fn () => $database->upsertDocument('columnGrantsWrites', new Document([
+                '$id' => 'upserted', 'name' => 'x', '$permissions' => $scoped,
+            ])),
+            'upsertDocuments' => fn () => $database->upsertDocuments('columnGrantsWrites', [new Document([
+                '$id' => 'upserted', 'name' => 'x', '$permissions' => $scoped,
+            ])]),
+        ];
+
+        foreach ($writes as $path => $write) {
+            try {
+                $write();
+                $this->fail($path.'() stored a column-scoped permission on a row');
+            } catch (DatabaseException $e) {
+                $this->assertStringContainsString('is scoped to a column', $e->getMessage(), $path);
+            }
+        }
+
+        // None of them left anything behind, and the row it tried to rewrite is untouched.
+        $this->assertSame(
+            ['read("any")', 'update("any")'],
+            $database->getDocument('columnGrantsWrites', 'row')->getPermissions(),
+        );
+        $this->assertTrue($database->getDocument('columnGrantsWrites', 'created')->isEmpty());
+        $this->assertTrue($database->getDocument('columnGrantsWrites', 'batched')->isEmpty());
+        $this->assertTrue($database->getDocument('columnGrantsWrites', 'upserted')->isEmpty());
     }
 
     public function testADocumentPermissionNamingNoColumnIsUnaffected(): void

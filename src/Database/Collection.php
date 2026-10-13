@@ -354,13 +354,17 @@ class Collection extends Document
             throw new StructureException('Collection '.self::COLUMN_PERMISSIONS.' must be a list of permission strings');
         }
 
+        $grants = [];
+
         foreach ($verbatim as $permission) {
             if (! \is_string($permission)) {
                 throw new StructureException('Collection '.self::COLUMN_PERMISSIONS.' must be a list of permission strings');
             }
+
+            $grants[] = $permission;
         }
 
-        return \array_values($verbatim);
+        return $grants;
     }
 
     #[\Override]

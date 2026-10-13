@@ -521,6 +521,20 @@ class Mirror extends Database
     }
 
     /**
+     * Opened on the mirror, its source and its destination alike: a collection the mirror
+     * replicates is written to both, and the second write would be refused if only the first
+     * had asked for column-scoped permissions.
+     */
+    #[\Override]
+    public function withColumnPermissions(callable $callback): mixed
+    {
+        $destination = $this->destination;
+        $scoped = $destination === null ? $callback : fn (): mixed => $destination->withColumnPermissions($callback);
+
+        return parent::withColumnPermissions(fn (): mixed => $this->source->withColumnPermissions($scoped));
+    }
+
+    /**
      * Opens the scope on the mirror, its source and its destination, so the writes the mirror replicates before
      * returning use the tenant too; the replications it queues carry it (see replicate()).
      */

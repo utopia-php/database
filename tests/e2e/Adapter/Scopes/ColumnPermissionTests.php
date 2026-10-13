@@ -2,6 +2,7 @@
 
 namespace Tests\E2E\Adapter\Scopes;
 
+use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\CollectionUpdate;
@@ -9,6 +10,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Filter;
+use Utopia\Database\Mirror;
 use Utopia\Database\Permission;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Role;
@@ -244,6 +246,12 @@ trait ColumnPermissionTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
+
+        if ($database instanceof Mirror) {
+            // True of every toggle, not this one: replicate() propagates a snapshot explicitly
+            // where it needs to, so there is nothing here for this test to pin.
+            $this->markTestSkipped('Mirror does not override withSnapshot(), so a restored snapshot reaches the wrapper and not its source or destination.');
+        }
 
         $snapshot = $database->withColumnPermissions(fn () => $database->snapshot());
 
@@ -537,13 +545,18 @@ trait ColumnPermissionTests
             'updateDocuments' => fn () => $database->updateDocuments('columnGrantsWrites', new Document([
                 '$permissions' => $scoped,
             ])),
-            'upsertDocument' => fn () => $database->upsertDocument('columnGrantsWrites', new Document([
-                '$id' => 'upserted', 'name' => 'x', '$permissions' => $scoped,
-            ])),
-            'upsertDocuments' => fn () => $database->upsertDocuments('columnGrantsWrites', [new Document([
-                '$id' => 'upserted', 'name' => 'x', '$permissions' => $scoped,
-            ])]),
         ];
+
+        // The upsert paths share one guard, and an adapter without upserts refuses the call
+        // before reaching it.
+        if ($database->getAdapter()->hasFeature(Feature\Upserts::class)) {
+            $writes['upsertDocument'] = fn () => $database->upsertDocument('columnGrantsWrites', new Document([
+                '$id' => 'upserted', 'name' => 'x', '$permissions' => $scoped,
+            ]));
+            $writes['upsertDocuments'] = fn () => $database->upsertDocuments('columnGrantsWrites', [new Document([
+                '$id' => 'upserted', 'name' => 'x', '$permissions' => $scoped,
+            ])]);
+        }
 
         foreach ($writes as $path => $write) {
             try {
@@ -561,7 +574,10 @@ trait ColumnPermissionTests
         );
         $this->assertTrue($database->getDocument('columnGrantsWrites', 'created')->isEmpty());
         $this->assertTrue($database->getDocument('columnGrantsWrites', 'batched')->isEmpty());
-        $this->assertTrue($database->getDocument('columnGrantsWrites', 'upserted')->isEmpty());
+
+        if ($database->getAdapter()->hasFeature(Feature\Upserts::class)) {
+            $this->assertTrue($database->getDocument('columnGrantsWrites', 'upserted')->isEmpty());
+        }
     }
 
     public function testADocumentPermissionNamingNoColumnIsUnaffected(): void

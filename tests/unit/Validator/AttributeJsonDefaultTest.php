@@ -33,7 +33,7 @@ class AttributeJsonDefaultTest extends TestCase
         return [
             'integer' => [12345, 'Default value 12345 does not match given type string'],
             'float' => [1.5, 'Default value 1.5 does not match given type string'],
-            'boolean' => [true, 'Default value true does not match given type string'],
+            'boolean' => [true, 'Default value 1 does not match given type string'],
         ];
     }
 

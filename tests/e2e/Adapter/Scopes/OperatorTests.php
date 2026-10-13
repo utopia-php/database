@@ -694,6 +694,44 @@ trait OperatorTests
         $database->deleteCollection($collectionId);
     }
 
+    public function testOperatorEncryptedAttribute(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->addFilter(
+            'encrypt',
+            fn (mixed $value): ?string => \is_string($value) ? (string) \json_encode(['data' => \base64_encode($value)]) : null,
+            function (mixed $value): ?string {
+                $decoded = \is_string($value) ? \json_decode($value, true) : null;
+
+                return \is_array($decoded) && \is_string($decoded['data'] ?? null) ? (string) \base64_decode($decoded['data']) : null;
+            },
+        );
+
+        $collectionId = 'test_operator_encrypted';
+        $database->createCollection(Collection::create(id: $collectionId));
+        $database->createAttribute($collectionId, Attribute::string(key: 'secret', size: 128, filters: ['encrypt']));
+
+        $database->createDocument($collectionId, new Document([
+            '$id' => 'doc1',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'secret' => 'banana',
+        ]));
+
+        $this->expectException(StructureException::class);
+        $this->expectExceptionMessage("Cannot apply stringReplace operator to encrypted attribute 'secret'");
+
+        $database->updateDocument($collectionId, 'doc1', new Document([
+            'secret' => Operator::stringReplace('a', 'o'),
+        ]));
+    }
+
     public function testOperatorInsertErrorHandling(): void
     {
         /** @var Database $database */

@@ -23,8 +23,15 @@ use Utopia\Database\CollectionUpdate;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
+use Utopia\Database\Event\Document\Created;
+use Utopia\Database\Event\Domain;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Hook\Interceptor;
+use Utopia\Database\Hook\Lifecycle;
+use Utopia\Database\Hook\Nested;
 use Utopia\Database\Hook\Relationships;
+use Utopia\Database\Hook\WriteContext;
+use Utopia\Database\Id;
 use Utopia\Database\Index;
 use Utopia\Database\Mirror;
 use Utopia\Database\Mirror\Failure;
@@ -52,6 +59,8 @@ final class MirrorReplicationTest extends TestCase
     public const string LOCKED = 'read for update';
 
     public const string INCREASED = 'increased';
+
+    public const string MARKER = 'marker';
 
     private Authorization $authorization;
 
@@ -400,6 +409,188 @@ final class MirrorReplicationTest extends TestCase
         $this->assertFalse($this->destination->getDocument(self::PARENTS, 'parent')->isEmpty());
     }
 
+    public function testTheGrantCheckRunsOnTheSourceOnly(): void
+    {
+        $this->relate();
+        $kept = [Permission::read(Role::any()), Permission::update(Role::any()), Permission::read(Role::user('alice'))];
+        $source = $this->mirror->getSource();
+        $child = static fn (string $id): Document => new Document([Document::ID => $id, 'title' => $id, Document::PERMISSIONS => $kept]);
+        $this->authorization->skip(function () use ($source, $child): void {
+            $source->createDocument(self::CHILDREN, $child('single child'));
+            $source->createDocument(self::CHILDREN, $child('batched child'));
+        });
+
+        $this->mirror->withCheckGrants(true, fn (): Document => $this->mirror->createDocument(self::PARENTS, new Document([
+            Document::ID => 'single',
+            'title' => 'single',
+            'children' => [$child('single child')],
+        ])));
+        $this->mirror->setCheckGrants(true);
+        $this->mirror->createDocuments(self::PARENTS, [new Document([
+            Document::ID => 'batched',
+            'title' => 'batched',
+            'children' => [$child('batched child')],
+        ])]);
+
+        $this->assertSame([], $this->errors);
+        foreach (['single child', 'batched child'] as $id) {
+            $replicated = $this->authorization->skip(fn (): Document => $this->destination->getDocument(self::CHILDREN, $id));
+            $this->assertSame($kept, $replicated->getPermissions(), $id);
+        }
+        $this->assertFalse($this->authorization->skip(fn (): Document => $this->destination->getDocument(self::PARENTS, 'single'))->isEmpty());
+        $this->assertFalse($this->authorization->skip(fn (): Document => $this->destination->getDocument(self::PARENTS, 'batched'))->isEmpty());
+        $this->assertSame([true, true, false], [$this->mirror->isCheckingGrants(), $source->isCheckingGrants(), $this->destination->isCheckingGrants()]);
+    }
+
+    public function testANestedHookRunsOnTheSourceAndTheDestinationKeepsItsIds(): void
+    {
+        $this->relate();
+        $hook = new class () implements Nested {
+            /**
+             * @var list<array{string, string}>
+             */
+            public array $seen = [];
+
+            #[\Override]
+            public function prepare(Document $collection, Document $document): Document
+            {
+                $this->seen[] = [$collection->getId(), $document->getId()];
+                if ($document->getId() === MirrorReplicationTest::MARKER) {
+                    $document->setAttribute(Document::ID, Id::unique());
+                }
+
+                return $document;
+            }
+        };
+        $this->mirror->addHook($hook);
+        $child = static fn (string $title): Document => new Document([Document::ID => self::MARKER, 'title' => $title]);
+        $parent = static fn (string $id): Document => new Document([Document::ID => $id, 'title' => $id, 'children' => [$child($id.' child')]]);
+
+        $this->mirror->createDocument(self::PARENTS, $parent('created'));
+        $this->mirror->createDocuments(self::PARENTS, [$parent('batched')]);
+        $this->mirror->updateDocument(self::PARENTS, 'created', new Document(['children' => [$child('updated child')]]));
+        $this->mirror->upsertDocument(self::PARENTS, $parent('upserted'));
+        $this->mirror->upsertDocuments(self::PARENTS, [$parent('upserts')]);
+        $this->mirror->authorizeCreate(self::PARENTS, $parent('checked'));
+
+        $this->assertSame([], $this->errors);
+        $titles = ['created child', 'batched child', 'updated child', 'upserted child', 'upserts child'];
+        $ids = [];
+        foreach ($titles as $title) {
+            $stored = $this->childTitled($this->mirror->getSource(), $title);
+            $this->assertFalse($stored->isEmpty(), $title);
+            $this->assertNotSame(self::MARKER, $stored->getId(), $title);
+            $this->assertSame($stored->getId(), $this->childTitled($this->destination, $title)->getId(), $title);
+            $ids[] = $stored->getId();
+        }
+        $this->assertCount(\count($titles), \array_unique($ids));
+        $this->assertTrue($this->childTitled($this->mirror->getSource(), 'checked child')->isEmpty());
+        foreach ([$this->mirror->getSource(), $this->destination] as $database) {
+            $this->assertTrue($this->authorization->skip(static fn (): Document => $database->getDocument(self::CHILDREN, self::MARKER))->isEmpty());
+        }
+        $this->assertSame(\array_fill(0, \count($titles) + 1, [self::CHILDREN, self::MARKER]), $hook->seen);
+
+        $this->mirror->removeHook(Nested::class);
+        $this->mirror->createDocument(self::PARENTS, $parent('unprepared'));
+
+        foreach ([$this->mirror->getSource(), $this->destination] as $database) {
+            $this->assertSame(self::MARKER, $this->childTitled($database, 'unprepared child')->getId());
+        }
+    }
+
+    public function testALifecycleHookThatIsAlsoNestedRunsOnceInEachRole(): void
+    {
+        $this->relate();
+        $hook = new class () implements Lifecycle, Nested {
+            /**
+             * @var list<array{string, string}>
+             */
+            public array $created = [];
+
+            /**
+             * @var list<string>
+             */
+            public array $prepared = [];
+
+            #[\Override]
+            public function handle(Domain $event): void
+            {
+                if ($event instanceof Created) {
+                    $this->created[] = [$event->collection, $event->document->getId()];
+                }
+            }
+
+            #[\Override]
+            public function prepare(Document $collection, Document $document): Document
+            {
+                $this->prepared[] = $document->getId();
+
+                return $document;
+            }
+        };
+        $this->mirror->addHook($hook);
+        $parent = static fn (string $id): Document => new Document([
+            Document::ID => $id,
+            'title' => $id,
+            'children' => [new Document([Document::ID => $id.'-child', 'title' => $id.' child'])],
+        ]);
+
+        $this->mirror->authorizeCreate(self::PARENTS, $parent('checked'));
+        $this->assertSame(['checked-child'], $hook->prepared);
+
+        $this->mirror->createDocument(self::PARENTS, $parent('created'));
+
+        $this->assertSame([], $this->errors);
+        $this->assertSame(['checked-child', 'created-child'], $hook->prepared);
+        $this->assertSame([[self::PARENTS, 'created']], $hook->created);
+        $this->assertSame('created-child', $this->childTitled($this->destination, 'created child')->getId());
+    }
+
+    public function testAWriteHookThatIsAlsoNestedRunsOnceInEachRole(): void
+    {
+        $this->relate();
+        $hook = new class () extends Interceptor implements Nested {
+            /**
+             * @var list<list<string>>
+             */
+            public array $created = [];
+
+            /**
+             * @var list<string>
+             */
+            public array $prepared = [];
+
+            #[\Override]
+            public function afterDocumentCreate(string $collection, array $documents, WriteContext $context): void
+            {
+                $this->created[] = \array_values(\array_map(static fn (Document $document): string => $document->getId(), $documents));
+            }
+
+            #[\Override]
+            public function prepare(Document $collection, Document $document): Document
+            {
+                $this->prepared[] = $document->getId();
+
+                return $document;
+            }
+        };
+        $this->mirror->addHook($hook);
+
+        $this->mirror->createDocument(self::NOTES, new Document([Document::ID => 'note', 'title' => 'note']));
+        $this->mirror->createDocument(self::PARENTS, new Document([
+            Document::ID => 'parent',
+            'title' => 'parent',
+            'children' => [new Document([Document::ID => 'child', 'title' => 'child'])],
+        ]));
+
+        $this->assertSame([], $this->errors);
+        $this->assertSame(['child'], $hook->prepared);
+        $this->assertSame([['note'], ['note']], \array_values(\array_filter(
+            $hook->created,
+            static fn (array $ids): bool => $ids === ['note'],
+        )), 'one call from the source adapter and one from the destination adapter');
+    }
+
     /**
      * @return iterable<string, array{Closure(Mirror): mixed}>
      */
@@ -697,6 +888,11 @@ final class MirrorReplicationTest extends TestCase
                 twoWayKey: 'parent',
             ));
         });
+    }
+
+    private function childTitled(Database $database, string $title): Document
+    {
+        return $this->authorization->skip(static fn (): Document => $database->findOne(self::CHILDREN, [Query::equal('title', [$title])]));
     }
 
     /**

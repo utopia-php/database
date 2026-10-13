@@ -33,6 +33,7 @@ use Utopia\Database\Role;
 use Utopia\Database\State\Snapshot;
 use Utopia\Database\State\Value;
 use Utopia\Database\Validator\Authorization\Input;
+use Utopia\Database\Validator\Permissions as PermissionsValidator;
 use Utopia\Query\Hook;
 use Utopia\Query\Method;
 
@@ -87,6 +88,12 @@ class Relationships implements Attachable, Hook
      */
     private array $replays = [];
 
+    /**
+     * @var array<int, array<string, array<string, true>>> The new documents each coroutine is relating before writing
+     *                                                    them, by coroutine id, collection id and document id
+     */
+    private array $relating = [];
+
     private Database $database;
 
     /**
@@ -116,6 +123,7 @@ class Relationships implements Attachable, Hook
         $this->deleteStacks = [];
         $this->prepared = [];
         $this->replays = [];
+        $this->relating = [];
     }
 
     /**
@@ -805,6 +813,41 @@ class Relationships implements Attachable, Hook
      */
     private function relate(Document $collection, Document $document, int $coroutine, ?PreparedCreate $prepared, ?array &$copies = null): Document
     {
+        $collectionId = $collection->getId();
+        $id = $document->getId();
+        if (isset($this->relating[$coroutine][$collectionId][$id])) {
+            return $this->relateAttributes($collection, $document, $coroutine, $prepared, $copies);
+        }
+
+        $this->relating[$coroutine][$collectionId][$id] = true;
+
+        try {
+            return $this->relateAttributes($collection, $document, $coroutine, $prepared, $copies);
+        } finally {
+            unset($this->relating[$coroutine][$collectionId][$id]);
+            if ($this->relating[$coroutine][$collectionId] === []) {
+                unset($this->relating[$coroutine][$collectionId]);
+            }
+            if ($this->relating[$coroutine] === []) {
+                unset($this->relating[$coroutine]);
+            }
+        }
+    }
+
+    /**
+     * Whether $id is a new document of $collection this coroutine is relating before writing it: a related document
+     * linked to it is pointed at it although it is not stored yet.
+     */
+    private function isRelating(int $coroutine, Document $collection, string $id): bool
+    {
+        return isset($this->relating[$coroutine][$collection->getId()][$id]);
+    }
+
+    /**
+     * @param  array<int, array{Document, array<string, mixed>}>|null  $copies
+     */
+    private function relateAttributes(Document $collection, Document $document, int $coroutine, ?PreparedCreate $prepared, ?array &$copies = null): Document
+    {
         $writeStack = $this->writeStacks[$coroutine] ?? [];
         $stackCount = \count($writeStack);
 
@@ -877,6 +920,7 @@ class Relationships implements Attachable, Hook
                                 $twoWay,
                                 $twoWayKey,
                                 $side,
+                                $coroutine,
                                 $prepared,
                             );
                         } else {
@@ -934,6 +978,7 @@ class Relationships implements Attachable, Hook
                         $twoWay,
                         $twoWayKey,
                         $side,
+                        $coroutine,
                         $prepared,
                     );
                 } elseif ($value === null) {
@@ -984,6 +1029,7 @@ class Relationships implements Attachable, Hook
             $value = $this->coerceToDocument($document, $key, $value);
 
             $oldValue = $old->getAttribute($key);
+            $oldId = $oldValue instanceof Document ? $oldValue->getId() : (\is_string($oldValue) ? $oldValue : null);
             $relatedCollection = $this->database->getCollection($relationship->relatedCollection);
             $relationType = $relationship->type;
             $twoWay = $relationship->twoWay;
@@ -1038,7 +1084,10 @@ class Relationships implements Attachable, Hook
                             if (\is_string($value)) {
                                 $related = $this->database->skipRelationships(fn () => $this->database->getDocument($relatedCollection->getId(), $value, [Query::select([Document::ID])]));
                                 if ($related->isEmpty()) {
+                                    $this->refuseUnreadable($relatedCollection, $value, PermissionType::Read);
                                     $document->setAttribute($key, null);
+                                } elseif ($value !== $oldId) {
+                                    $this->authorizeLink($relatedCollection, $related);
                                 }
                             } elseif ($value instanceof Document) {
                                 $relationId = $this->relateDocuments(
@@ -1053,6 +1102,7 @@ class Relationships implements Attachable, Hook
                                     $side,
                                     $coroutine,
                                     null,
+                                    linked: $value->getId() === $oldId,
                                 );
                                 $document->setAttribute($key, $relationId);
                             } elseif (is_array($value)) {
@@ -1063,11 +1113,16 @@ class Relationships implements Attachable, Hook
                         }
 
                         if (\is_string($value)) {
+                            if ($this->isRelating($coroutine, $relatedCollection, $value)) {
+                                break;
+                            }
+
                             $related = $this->database->skipRelationships(
                                 fn () => $this->database->getDocument($relatedCollection->getId(), $value, [Query::select([Document::ID])])
                             );
 
                             if ($related->isEmpty()) {
+                                $this->refuseUnreadable($relatedCollection, $value, PermissionType::Read);
                                 $document->setAttribute($key, null);
                             } else {
                                 /** @var Document|null $oldValueDoc */
@@ -1098,6 +1153,7 @@ class Relationships implements Attachable, Hook
                             }
 
                             if ($related->isEmpty()) {
+                                $this->refuseUnreadable($relatedCollection, $value->getId(), PermissionType::Update);
                                 if (! isset($value[Document::PERMISSIONS])) {
                                     $value->setAttribute(Document::PERMISSIONS, $document->getAttribute(Document::PERMISSIONS));
                                 }
@@ -1198,6 +1254,10 @@ class Relationships implements Attachable, Hook
                                     }
                                 }
 
+                                foreach (\array_diff($stringRelations, $unlinkedIds, $oldIds) as $relation) {
+                                    $this->refuseUnreadable($relatedCollection, $relation, PermissionType::Read);
+                                }
+
                                 $this->linkRelatedDocuments($relatedCollection, $twoWayKey, $document->getId(), $unlinkedIds);
                             }
 
@@ -1217,6 +1277,7 @@ class Relationships implements Attachable, Hook
                                     );
 
                                     if ($related->isEmpty()) {
+                                        $this->refuseUnreadable($relatedCollection, $relation->getId(), PermissionType::Update);
                                         if (! isset($relation[Document::PERMISSIONS])) {
                                             $relation->setAttribute(Document::PERMISSIONS, $document->getAttribute(Document::PERMISSIONS));
                                         }
@@ -1239,12 +1300,19 @@ class Relationships implements Attachable, Hook
                         }
 
                         if (\is_string($value)) {
+                            if ($this->isRelating($coroutine, $relatedCollection, $value)) {
+                                break;
+                            }
+
                             $related = $this->database->skipRelationships(
                                 fn () => $this->database->getDocument($relatedCollection->getId(), $value, [Query::select([Document::ID])])
                             );
 
                             if ($related->isEmpty()) {
+                                $this->refuseUnreadable($relatedCollection, $value, PermissionType::Read);
                                 $document->setAttribute($key, null);
+                            } elseif ($value !== $oldId) {
+                                $this->authorizeLink($relatedCollection, $related);
                             }
                             $this->database->purgeCachedDocument($relatedCollection->getId(), $value);
                         } elseif ($value instanceof Document) {
@@ -1257,6 +1325,7 @@ class Relationships implements Attachable, Hook
                             );
 
                             if ($related->isEmpty()) {
+                                $this->refuseUnreadable($relatedCollection, $value->getId(), PermissionType::Update);
                                 if (! isset($value[Document::PERMISSIONS])) {
                                     $value->setAttribute(Document::PERMISSIONS, $document->getAttribute(Document::PERMISSIONS));
                                 }
@@ -1264,7 +1333,11 @@ class Relationships implements Attachable, Hook
                                     $relatedCollection->getId(),
                                     $value
                                 );
-                            } elseif ($related->getAttributes() != $value->getAttributes()) {
+                            } elseif ($value->getId() !== $oldId) {
+                                $this->authorizeLink($relatedCollection, $related);
+                            }
+
+                            if (! $related->isEmpty() && $related->getAttributes() != $value->getAttributes()) {
                                 $this->database->updateDocument(
                                     $relatedCollection->getId(),
                                     $related->getId(),
@@ -1368,6 +1441,8 @@ class Relationships implements Attachable, Hook
                                     $related = $this->database->getDocument($relatedCollection->getId(), $relation, [Query::select([Document::ID])]);
 
                                     if ($related->isEmpty()) {
+                                        $this->refuseUnreadable($relatedCollection, $relation, PermissionType::Read);
+
                                         continue;
                                     }
 
@@ -1380,6 +1455,7 @@ class Relationships implements Attachable, Hook
                                     }
 
                                     if ($related->isEmpty()) {
+                                        $this->refuseUnreadable($relatedCollection, $relation->getId(), PermissionType::Update);
                                         if (! isset($relation[Document::PERMISSIONS])) {
                                             $relation->setAttribute(Document::PERMISSIONS, $document->getAttribute(Document::PERMISSIONS));
                                         }
@@ -1705,6 +1781,22 @@ class Relationships implements Attachable, Hook
     }
 
     /**
+     * The attributes a related document keeps for the selects passed down to it, as 7.x read them: a nested path
+     * through one of its relationships keeps that relationship, or nothing more, and a select left with nothing kept
+     * keeps every attribute. The selects themselves are left as they are for the next level.
+     *
+     * @param  array<Query>  $selectQueries
+     * @return array<Query>
+     */
+    private function selectsOfRelated(Document $relatedCollection, array $selectQueries): array
+    {
+        $selects = \array_map(static fn (Query $query): Query => clone $query, $selectQueries);
+        $this->processQueries(self::relationships($relatedCollection), $selects);
+
+        return $selects;
+    }
+
+    /**
      * @param  array<Attribute>  $relationships  The relationship attributes of the collection the queries read
      * @param  array<Query>  $queries
      * @return array<string, array<Query>>
@@ -1981,6 +2073,7 @@ class Relationships implements Attachable, Hook
         RelationshipSide $side,
         int $coroutine,
         ?PreparedCreate $prepared,
+        bool $linked = false,
     ): string {
         switch ($relationType) {
             case RelationshipType::OneToOne:
@@ -2006,7 +2099,9 @@ class Relationships implements Attachable, Hook
 
         $related = $this->database->getDocument($relatedCollection->getId(), $relation->getId());
 
-        if ($relationType === RelationshipType::ManyToMany && ! $related->isEmpty()) {
+        if ($related->isEmpty()) {
+            $this->refuseUnreadable($relatedCollection, $relation->getId(), PermissionType::Update);
+        } elseif (! $linked) {
             $this->authorizeLink($relatedCollection, $related);
         }
 
@@ -2091,25 +2186,31 @@ class Relationships implements Attachable, Hook
         bool $twoWay,
         string $twoWayKey,
         RelationshipSide $side,
+        int $coroutine,
         ?PreparedCreate $prepared,
     ): void {
+        // A new document still being related or prepared is written after this read and was not stored before:
+        // linking to it links to a document this write creates.
+        $creating = isset($prepared?->preparing[$relatedCollection->getId()][$relationId])
+            || $this->isRelating($coroutine, $relatedCollection, $relationId);
+        if ($creating && ($this->checkExist->get() || ! $this->writesById($relationType, $twoWay, $side))) {
+            return;
+        }
+
         if ($prepared !== null) {
-            if (! $this->writesById($relationType, $twoWay, $side)) {
-                return;
-            }
-
-            // One by one, a document still being prepared is written after this read, and it was not stored before.
-            if ($this->checkExist->get() && isset($prepared->preparing[$relatedCollection->getId()][$relationId])) {
-                return;
-            }
-
             $this->writePrepared($prepared);
         }
 
         $related = $this->database->skipRelationships(fn () => $this->database->getDocument($relatedCollection->getId(), $relationId));
 
-        if ($related->isEmpty() && $this->checkExist->get()) {
-            return;
+        if ($related->isEmpty()) {
+            $this->refuseUnreadable($relatedCollection, $relationId, PermissionType::Read);
+
+            if ($this->checkExist->get()) {
+                return;
+            }
+        } else {
+            $this->authorizeLink($relatedCollection, $related);
         }
 
         switch ($relationType) {
@@ -2132,10 +2233,6 @@ class Relationships implements Attachable, Hook
                 }
                 break;
             case RelationshipType::ManyToMany:
-                if (! $related->isEmpty()) {
-                    $this->authorizeLink($relatedCollection, $related);
-                }
-
                 $this->database->purgeCachedDocument($relatedCollection->getId(), $relationId);
 
                 $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
@@ -2310,7 +2407,7 @@ class Relationships implements Attachable, Hook
             $relatedById[$related->getId()] = $related;
         }
 
-        $this->database->applySelectFiltersToDocuments($relatedDocuments, $selectQueries);
+        $this->database->applySelectFiltersToDocuments($relatedDocuments, $this->selectsOfRelated($relatedCollection, $selectQueries));
 
         foreach ($documentsByRelatedId as $relatedId => $docs) {
             if (isset($relatedById[$relatedId])) {
@@ -2398,7 +2495,7 @@ class Relationships implements Attachable, Hook
             $relatedByParentId[$parentKey][] = $related;
         }
 
-        $this->database->applySelectFiltersToDocuments($relatedDocuments, $selectQueries);
+        $this->database->applySelectFiltersToDocuments($relatedDocuments, $this->selectsOfRelated($relatedCollection, $selectQueries));
 
         foreach ($documents as $document) {
             $parentId = $document->getId();
@@ -2480,7 +2577,7 @@ class Relationships implements Attachable, Hook
             $relatedByChildId[$childKey][] = $related;
         }
 
-        $this->database->applySelectFiltersToDocuments($relatedDocuments, $selectQueries);
+        $this->database->applySelectFiltersToDocuments($relatedDocuments, $this->selectsOfRelated($relatedCollection, $selectQueries));
 
         foreach ($documents as $document) {
             $childId = $document->getId();
@@ -2580,7 +2677,7 @@ class Relationships implements Attachable, Hook
                 $relatedById[$doc->getId()] = $doc;
             }
 
-            $this->database->applySelectFiltersToDocuments($allRelatedDocs, $selectQueries);
+            $this->database->applySelectFiltersToDocuments($allRelatedDocs, $this->selectsOfRelated($relatedCollection, $selectQueries));
 
             foreach ($junctionsByDocumentId as $documentId => $relatedDocIds) {
                 $documentRelated = [];
@@ -2989,6 +3086,15 @@ class Relationships implements Attachable, Hook
      */
     private function linkRelatedDocuments(Document $collection, string $twoWayKey, string $documentId, array $ids): void
     {
+        // 7.x linked each document on its own, so with dates preserved each kept its stored $updatedAt.
+        if ($this->database->isPreservingDates()) {
+            foreach (\array_values(\array_unique($ids)) as $id) {
+                $this->linkRelatedDocument($collection, $id, $twoWayKey, $documentId);
+            }
+
+            return;
+        }
+
         foreach (\array_chunk(\array_values(\array_unique($ids)), $this->relationQueryChunkSize()) as $chunk) {
             $linked = $this->database->skipRelationships(fn () => $this->database->updateDocuments(
                 $collection->getId(),
@@ -3033,10 +3139,15 @@ class Relationships implements Attachable, Hook
 
         $this->authorizeLink($collection, $related);
 
+        $link = [$twoWayKey => $documentId];
+        if ($this->database->isPreservingDates()) {
+            $link[Document::UPDATED_AT] = $related->getUpdatedAt();
+        }
+
         $this->database->skipRelationships(fn () => $this->database->updateDocument(
             $collection->getId(),
             $id,
-            new Document([$twoWayKey => $documentId]),
+            new Document($link),
         ));
     }
 
@@ -3050,12 +3161,422 @@ class Relationships implements Attachable, Hook
     {
         $authorization = $this->database->getAuthorization();
 
-        if (! $authorization->isValid(new Input(PermissionType::Update, [
-            ...$collection->getPermissionsByType(PermissionType::Update),
-            ...($collection->getAttribute('documentSecurity', false) ? $related->getPermissionsByType(PermissionType::Update) : []),
-        ]))) {
+        if (! $authorization->isValid(self::permissionInput($collection, $related, PermissionType::Update))) {
             throw new AuthorizationException($authorization->getDescription());
         }
+    }
+
+    /**
+     * Prepare the related documents $document holds as documents, as deep as the write relates them, replacing its
+     * relationship values with prepared copies so the caller's related documents are not changed. Each copy is first
+     * given to the {@see Nested} hooks, in order, parent before children, and the document they return is the one
+     * whose grants are checked and that is related. A related document that does not exist yet, or whose ID a hook
+     * assigned, has no permissions to keep, so all of its permissions are checked without reading any; any other
+     * keeps those of its staged view, else of the stored one. A write nested in another relationship write is left
+     * as given: the outermost write prepared it.
+     *
+     * @throws AuthorizationException When a related document adds a permission for a role the caller does not hold
+     * @throws RelationshipException When a related document given as an array is not a valid document
+     * @throws StructureException When a related document's permissions are malformed
+     *
+     * @internal
+     */
+    public function prepareNested(Document $collection, Document $document, Preparation $preparation): Document
+    {
+        if (isset($this->writeStacks[$this->coroutine()])) {
+            return $document;
+        }
+
+        foreach ($this->prepareNestedValues($collection, $document, [], $preparation) as $key => $value) {
+            $document->setAttribute($key, $value);
+        }
+
+        return $document;
+    }
+
+    /**
+     * @param  list<string>  $writeStack  The collections of the writes relating $document, innermost last
+     * @return array<string, mixed>
+     *
+     * @throws AuthorizationException
+     * @throws RelationshipException
+     * @throws StructureException
+     */
+    private function prepareNestedValues(Document $collection, Document $document, array $writeStack, Preparation $preparation): array
+    {
+        $depth = \count($writeStack);
+        $prepared = [];
+
+        foreach (self::relationships($collection) as $attribute) {
+            $relationship = $attribute->relationship;
+            if ($relationship === null) {
+                continue;
+            }
+
+            $value = $document->getAttribute($attribute->key);
+            $list = \is_array($value) && \array_is_list($value);
+            $values = $list ? $value : [$value];
+            /** @var array<int, Document|array<string, mixed>> $related */
+            $related = \array_filter($values, self::isDocumentValue(...));
+            if ($related === []) {
+                continue;
+            }
+
+            $relatedCollection = $this->database->getCollection($relationship->relatedCollection);
+            if ($depth >= Database::RELATION_MAX_DEPTH - 1 && $writeStack[$depth - 1] !== $relatedCollection->getId()) {
+                continue;
+            }
+
+            foreach ($related as $index => $nested) {
+                $values[$index] = $this->prepareNestedDocument(
+                    $relatedCollection,
+                    $nested instanceof Document ? clone $nested : self::toDocument($nested),
+                    [...$writeStack, $collection->getId()],
+                    $preparation,
+                );
+            }
+
+            $prepared[$attribute->key] = $list ? $values : $values[0];
+        }
+
+        return $prepared;
+    }
+
+    /**
+     * @param  list<string>  $writeStack
+     *
+     * @throws AuthorizationException
+     * @throws RelationshipException
+     * @throws StructureException
+     */
+    private function prepareNestedDocument(Document $collection, Document $document, array $writeStack, Preparation $preparation): Document
+    {
+        $given = $document->getId();
+        foreach ($preparation->hooks as $hook) {
+            $document = $hook->prepare($collection, $document);
+        }
+
+        if ($preparation->check) {
+            $id = $document->getId();
+            $this->authorizeGrants($collection, $document, $id === '' || $id !== $given, $preparation);
+        }
+
+        foreach ($this->prepareNestedValues($collection, $document, $writeStack, $preparation) as $key => $value) {
+            $document->setAttribute($key, $value);
+        }
+
+        return $document;
+    }
+
+    /**
+     * @throws AuthorizationException
+     * @throws StructureException
+     */
+    private function authorizeGrants(Document $collection, Document $document, bool $new, Preparation $preparation): void
+    {
+        $permissions = $document->getAttribute(Document::PERMISSIONS);
+        if ($permissions === null) {
+            return;
+        }
+
+        $validator = new PermissionsValidator();
+        if (! $validator->isValid($permissions)) {
+            throw new StructureException($validator->getDescription());
+        }
+
+        $current = $new ? [] : (Permission::aggregate($this->grantedView($collection, $document->getId(), $preparation)->getPermissions()) ?? []);
+        $authorization = $this->database->getAuthorization();
+
+        foreach (\array_diff(Permission::aggregate($document->getPermissions()) ?? [], $current) as $granted) {
+            $permission = Permission::parse($granted);
+            $role = new Role($permission->getRole(), $permission->getIdentifier(), $permission->getDimension());
+            if (! $authorization->hasRole($role->toString())) {
+                throw new AuthorizationException('Permissions must be one of: ('.\implode(', ', $authorization->getRoles()).')');
+            }
+        }
+    }
+
+    /**
+     * Read whether or not the caller can read the document, as the write that changes it will find it.
+     */
+    private function grantedView(Document $collection, string $id, Preparation $preparation): Document
+    {
+        $staged = $preparation->resolve === null ? null : ($preparation->resolve)($collection->getId(), $id);
+
+        return $staged ?? $this->database->getAuthorization()->skip(fn (): Document => $this->database->skipRelationships(
+            fn (): Document => $this->database->getDocument($collection->getId(), $id, [Query::select([Document::PERMISSIONS])], $preparation->lock)
+        ));
+    }
+
+    private static function isDocumentValue(mixed $value): bool
+    {
+        return $value instanceof Document || (\is_array($value) && ! \array_is_list($value));
+    }
+
+    /**
+     * @param  array<string, mixed>  $value
+     *
+     * @throws RelationshipException
+     */
+    private static function toDocument(array $value): Document
+    {
+        try {
+            return new Document($value);
+        } catch (StructureException $error) {
+            throw new RelationshipException('Invalid relationship value. '.$error->getMessage());
+        }
+    }
+
+    /**
+     * Check, without writing, that the caller may relate the related documents $document carries the way writing it
+     * relates them, as deep as a write relates them: create on the related collection for a new document, update
+     * (collection-level, or document-level under document security) to link a stored one or to change one sent as a
+     * document, and never a stored document the caller cannot read. With $old, the stored document an update
+     * changes, a related document $old already links is not linked again, so only changing it needs update.
+     *
+     * With $resolve, every related document is judged as a later write would find it: $resolve(collection, ID)
+     * returns the document as it will be when the write runs, with its permissions and without the caller's read
+     * applied, an empty document when it will be gone, or null to judge the stored one.
+     *
+     * @param  (callable(string, string): ?Document)|null  $resolve
+     *
+     * @throws AuthorizationException When writing $document would be refused
+     * @throws RelationshipException When a relationship value is not a document, an ID or a list of them
+     *
+     * @internal
+     */
+    public function authorize(Document $collection, Document $document, ?Document $old = null, ?callable $resolve = null): void
+    {
+        $this->authorizeRelated($collection, $document, $old, [], $resolve === null
+            ? null
+            : static fn (string $collection, string $id): ?Document => $resolve($collection, $id));
+    }
+
+    /**
+     * @param  list<string>  $writeStack  The collections of the writes relating $document, innermost last
+     * @param  (Closure(string, string): ?Document)|null  $resolve
+     *
+     * @throws AuthorizationException
+     * @throws RelationshipException
+     */
+    private function authorizeRelated(Document $collection, Document $document, ?Document $old, array $writeStack, ?Closure $resolve): void
+    {
+        $depth = \count($writeStack);
+
+        foreach (self::relationships($collection) as $attribute) {
+            $relationship = $attribute->relationship;
+            $key = $attribute->key;
+            if ($relationship === null || ! $document->offsetExists($key)) {
+                continue;
+            }
+
+            $relatedCollection = $this->database->getCollection($relationship->relatedCollection);
+            if ($depth >= Database::RELATION_MAX_DEPTH - 1 && $writeStack[$depth - 1] !== $relatedCollection->getId()) {
+                continue;
+            }
+
+            $linked = self::relatedIds($old?->getAttribute($key));
+            $value = $document->getAttribute($key);
+            if ($value instanceof Operator) {
+                $value = $value->isArrayOperation() ? $this->applyRelationshipOperator($value, $linked) : [];
+            }
+
+            foreach (self::relatedValues($value) as $related) {
+                if (\is_string($related)) {
+                    $this->authorizeLinkById($relatedCollection, $related, $linked, $resolve);
+
+                    continue;
+                }
+
+                $this->authorizeRelatedDocument($collection, $relatedCollection, $related, $linked, $writeStack, $resolve);
+            }
+        }
+    }
+
+    /**
+     * @param  list<string>  $linked
+     * @param  (Closure(string, string): ?Document)|null  $resolve
+     *
+     * @throws AuthorizationException
+     */
+    private function authorizeLinkById(Document $relatedCollection, string $id, array $linked, ?Closure $resolve): void
+    {
+        if (\in_array($id, $linked, true)) {
+            return;
+        }
+
+        $stored = $this->viewRelated($relatedCollection, $id, PermissionType::Read, $resolve, [Query::select([Document::ID])]);
+        if ($stored->isEmpty()) {
+            return;
+        }
+
+        $this->authorizeLink($relatedCollection, $stored);
+    }
+
+    /**
+     * @param  list<string>  $linked
+     * @param  list<string>  $writeStack
+     * @param  (Closure(string, string): ?Document)|null  $resolve
+     *
+     * @throws AuthorizationException
+     * @throws RelationshipException
+     */
+    private function authorizeRelatedDocument(Document $collection, Document $relatedCollection, Document $related, array $linked, array $writeStack, ?Closure $resolve): void
+    {
+        $id = $related->getId();
+        $stored = $id === ''
+            ? new Document()
+            : $this->viewRelated($relatedCollection, $id, PermissionType::Update, $resolve);
+
+        if ($stored->isEmpty()) {
+            $authorization = $this->database->getAuthorization();
+            if (! $authorization->isValid(new Input(PermissionType::Create, $relatedCollection->getPermissionsByType(PermissionType::Create)))) {
+                throw new AuthorizationException($authorization->getDescription());
+            }
+
+            $this->authorizeRelated($relatedCollection, $related, null, [...$writeStack, $collection->getId()], $resolve);
+
+            return;
+        }
+
+        $changes = \array_diff(\array_keys($related->getArrayCopy()), [Document::ID]) !== [];
+        if (! \in_array($id, $linked, true) || $changes) {
+            $this->authorizeLink($relatedCollection, $stored);
+        }
+
+        $this->authorizeRelated($relatedCollection, $related, $stored, [...$writeStack, $collection->getId()], $resolve);
+    }
+
+    /**
+     * The related document $id as a write would find it: the document $resolve gives for it, else the stored one,
+     * either empty when there is none. One the caller cannot read is refused for the reason of $check, or of read
+     * when the caller passes $check.
+     *
+     * @param  (Closure(string, string): ?Document)|null  $resolve
+     * @param  array<Query>  $queries  The queries reading the stored document
+     *
+     * @throws AuthorizationException
+     */
+    private function viewRelated(Document $collection, string $id, PermissionType $check, ?Closure $resolve, array $queries = []): Document
+    {
+        $staged = $resolve === null ? null : $resolve($collection->getId(), $id);
+        if ($staged === null) {
+            $stored = $this->database->skipRelationships(fn () => $this->database->getDocument($collection->getId(), $id, $queries));
+            if ($stored->isEmpty()) {
+                $this->refuseUnreadable($collection, $id, $check);
+            }
+
+            return $stored;
+        }
+
+        if (! $staged->isEmpty() && ! $this->database->getAuthorization()->isValid(self::permissionInput($collection, $staged, PermissionType::Read))) {
+            $this->refuseHidden($collection, $staged, $check);
+        }
+
+        return $staged;
+    }
+
+    /**
+     * The IDs of the related documents a relationship value holds.
+     *
+     * @return list<string>
+     */
+    private static function relatedIds(mixed $value): array
+    {
+        $ids = [];
+        foreach (\is_array($value) && \array_is_list($value) ? $value : [$value] as $related) {
+            if ($related instanceof Document) {
+                $ids[] = $related->getId();
+            } elseif (\is_string($related)) {
+                $ids[] = $related;
+            }
+        }
+
+        return $ids;
+    }
+
+    /**
+     * The related documents and IDs a relationship value holds, a document given as an array read as a document.
+     *
+     * @return list<Document|string>
+     *
+     * @throws RelationshipException
+     */
+    private static function relatedValues(mixed $value): array
+    {
+        if ($value === null) {
+            return [];
+        }
+
+        $values = [];
+        foreach (\is_array($value) && \array_is_list($value) ? $value : [$value] as $related) {
+            if (\is_array($related)) {
+                try {
+                    $related = new Document($related); // @phpstan-ignore argument.type
+                } catch (StructureException $e) {
+                    throw new RelationshipException('Invalid relationship value. '.$e->getMessage());
+                }
+            }
+
+            if (! $related instanceof Document && ! \is_string($related)) {
+                throw new RelationshipException('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
+            }
+
+            $values[] = $related;
+        }
+
+        return $values;
+    }
+
+    /**
+     * Refuse a related document the caller's read came back empty for although it is stored: a nested write never
+     * links, changes or creates over a document the caller cannot read, nor tells it apart from a missing one by
+     * failing to create it. The refusal gives the reason of $check, or of read when the caller passes $check.
+     *
+     * @throws AuthorizationException
+     */
+    private function refuseUnreadable(Document $collection, string $id, PermissionType $check): void
+    {
+        $authorization = $this->database->getAuthorization();
+        if ($id === '' || ! $authorization->getStatus()) {
+            return;
+        }
+
+        $stored = $authorization->skip(fn () => $this->database->skipRelationships(
+            fn () => $this->database->getDocument($collection->getId(), $id, [Query::select([Document::ID])])
+        ));
+        if ($stored->isEmpty()) {
+            return;
+        }
+
+        $this->refuseHidden($collection, $stored, $check);
+    }
+
+    /**
+     * Refuse $hidden, a related document the caller cannot read, for the reason of $check, or of read when the
+     * caller passes $check.
+     *
+     * @throws AuthorizationException
+     */
+    private function refuseHidden(Document $collection, Document $hidden, PermissionType $check): void
+    {
+        $authorization = $this->database->getAuthorization();
+        foreach ($check === PermissionType::Read ? [$check] : [$check, PermissionType::Read] as $type) {
+            if (! $authorization->isValid(self::permissionInput($collection, $hidden, $type))) {
+                throw new AuthorizationException($authorization->getDescription());
+            }
+        }
+    }
+
+    /**
+     * The permissions granting $type on $document: its collection's, and its own under document security.
+     */
+    private static function permissionInput(Document $collection, Document $document, PermissionType $type): Input
+    {
+        return new Input($type, [
+            ...$collection->getPermissionsByType($type),
+            ...($collection->getAttribute('documentSecurity', false) ? $document->getPermissionsByType($type) : []),
+        ]);
     }
 
     private function notReferencing(string $twoWayKey, string $documentId): Query

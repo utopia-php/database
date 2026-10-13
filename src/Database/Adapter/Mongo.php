@@ -12,6 +12,8 @@ use stdClass;
 use Swoole\Coroutine;
 use Throwable;
 use Utopia\Database\Adapter;
+use Utopia\Database\Arithmetic;
+use Utopia\Database\Arithmetic\Rounding;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Change;
@@ -91,6 +93,18 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     protected array $readHooks = [];
 
     private const int DEFAULT_BATCH_SIZE = 1000;
+
+    /**
+     * How many times a transaction that lost a write conflict (112) runs again. Concurrent writes to one document,
+     * such as counters, conflict on every attempt but one, and 7.x's increments did not fail under that load.
+     */
+    private const int WRITE_CONFLICT_RETRIES = 20;
+
+    /**
+     * Microseconds of the shortest wait before a transaction that lost a write conflict runs again; the wait is
+     * randomised so the writers that conflicted do not retry in step.
+     */
+    private const int WRITE_CONFLICT_SLEEP = 5_000;
 
     /**
      * The collation of the `_uid` index: a lookup or upsert by id must use it to match what the
@@ -561,7 +575,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         $sleep = 50_000;
         $retries = 2;
 
-        for ($attempts = 0; $attempts <= $retries; $attempts++) {
+        for ($attempts = 0; ; $attempts++) {
             try {
                 $this->startTransaction();
                 $result = $callback();
@@ -582,6 +596,12 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
                     throw $action;
                 }
 
+                if (self::isWriteConflict($action) && $attempts < self::WRITE_CONFLICT_RETRIES) {
+                    \usleep(\random_int(self::WRITE_CONFLICT_SLEEP, 4 * self::WRITE_CONFLICT_SLEEP) * \min($attempts + 1, 5));
+
+                    continue;
+                }
+
                 if ($attempts < $retries) {
                     \usleep($sleep * ($attempts + 1));
 
@@ -591,8 +611,17 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
                 throw $action;
             }
         }
+    }
 
-        throw new TransactionException('Transaction retry loop exited unexpectedly');
+    private static function isWriteConflict(Throwable $failure): bool
+    {
+        for ($error = $failure; $error !== null; $error = $error->getPrevious()) {
+            if ($error->getCode() === 112) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -2883,6 +2912,20 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         $tenant = $tenant === null ? '' : $this->stringifyIdentifier($tenant);
 
         return $tenant."\0".$id;
+    }
+
+    /**
+     * MongoDB stored a fractional result as a double, and every read cast it to an integer, cutting it toward zero.
+     */
+    #[\Override]
+    public function arithmetic(): Arithmetic
+    {
+        return new Arithmetic(
+            counter: Rounding::TowardZero,
+            operators: Rounding::TowardZero,
+            division: Rounding::TowardZero,
+            power: Rounding::TowardZero,
+        );
     }
 
     /**

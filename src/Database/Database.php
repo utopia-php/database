@@ -53,8 +53,10 @@ class Database
 {
     use Trait\Attributes;
     use Trait\Collections;
+    use Trait\Cursors;
     use Trait\Databases;
     use Trait\Documents;
+    use Trait\Fractions;
     use Trait\Indexes;
     use Trait\Relationships;
     use Trait\Transactions;
@@ -236,6 +238,11 @@ class Database
      */
     protected array $decorators = [];
 
+    /**
+     * @var list<Hook\Nested>
+     */
+    protected array $nestedHooks = [];
+
     /** @var Value<bool>|null Whether every lifecycle hook is silenced. */
     private ?Value $silenced = null;
 
@@ -271,6 +278,12 @@ class Database
 
     /** @var Value<bool>|null */
     private ?Value $ignoringDuplicates = null;
+
+    /** @var Value<bool>|null */
+    private ?Value $grantChecking = null;
+
+    /** @var Value<bool>|null */
+    private ?Value $fractionRounding = null;
 
     protected ?Relationships $relationshipHook = null;
 
@@ -1157,6 +1170,84 @@ class Database
     }
 
     /**
+     * Set whether, while authorization is enabled, a related document given as a document to createDocument(),
+     * createDocuments(), updateDocument(), upsertDocument(), upsertDocuments(), authorizeCreate() or authorizeUpdate()
+     * may only add permissions for roles the caller holds, as deep as the write relates it. Permissions it already
+     * has may be sent back, and permissions it inherits from its parent are never checked. Malformed permissions
+     * throw a structure exception and an unheld role an authorization exception, before anything is written.
+     * While it is on, updateDocuments() refuses a related document given as a document with a relationship
+     * exception, as it is not checked there.
+     *
+     * createDocument() and updateDocument() read the permissions a related document already has locked, in the
+     * transaction that writes it. createDocuments(), upsertDocument() and upsertDocuments() write related documents
+     * before the transaction of the documents relating them, so they read them without a lock: a change committed
+     * between the check and the related write is not seen. A Mirror checks on its source only.
+     *
+     * @return $this
+     */
+    public function setCheckGrants(bool $check): static
+    {
+        $this->grantChecking()->set($check);
+
+        return $this;
+    }
+
+    public function isCheckingGrants(): bool
+    {
+        return $this->grantChecking()->get();
+    }
+
+    /**
+     * Run the callback with the grant check on related documents on or off for the calling coroutine and the
+     * coroutines it starts.
+     *
+     * @template T
+     *
+     * @param  callable(): T  $callback
+     * @return T
+     */
+    public function withCheckGrants(bool $check, callable $callback): mixed
+    {
+        return $this->grantChecking()->with($check, $callback);
+    }
+
+    /**
+     * Set whether a fractional amount or limit on a single-valued integer attribute is stored as the adapter's
+     * engine stored it on database 7.4.1 (see Adapter::arithmetic()), instead of being refused. This covers
+     * increaseDocumentAttribute() and decreaseDocumentAttribute(), whose float change returns its exact result, and
+     * the numeric operators given to updateDocument(), updateDocuments(), upsertDocument() and upsertDocuments(),
+     * each answered from the stored value it changes, read locked in the write's transaction. Fractional items
+     * added to an integer array are cut toward zero. What the engine refused stays refused.
+     *
+     * @return $this
+     */
+    public function setRoundFractions(bool $round): static
+    {
+        $this->fractionRounding()->set($round);
+
+        return $this;
+    }
+
+    public function isRoundingFractions(): bool
+    {
+        return $this->fractionRounding()->get();
+    }
+
+    /**
+     * Run the callback with fractions on integer attributes rounded or refused for the calling coroutine and the
+     * coroutines it starts.
+     *
+     * @template T
+     *
+     * @param  callable(): T  $callback
+     * @return T
+     */
+    public function withRoundFractions(bool $round, callable $callback): mixed
+    {
+        return $this->fractionRounding()->with($round, $callback);
+    }
+
+    /**
      * Set the migration mode flag, which relaxes certain constraints during data migrations.
      *
      * @return $this
@@ -1349,6 +1440,7 @@ class Database
      *   {@see Named} one replaces the lifecycle hook registered under its name
      * - {@see Hook\Decorator} — document transformation on read/write results
      * - {@see Hook\Relationships} — relationship resolution and mutation
+     * - {@see Hook\Nested} — preparation of each nested related document before a write relates it, run in registration order
      * - {@see Hook\Write} — row-level write interception (permissions, tenant)
      * - {@see Hook\Transform} — raw SQL transformation before execution
      * - {@see Invalidator} — the query cache invalidation, replacing the one setQueryCache() made
@@ -1364,6 +1456,7 @@ class Database
             && ! $hook instanceof Invalidator
             && ! $hook instanceof Hook\Decorator
             && ! $hook instanceof Relationships
+            && ! $hook instanceof Hook\Nested
             && ! $hook instanceof Hook\Write
             && ! $hook instanceof Transform
         ) {
@@ -1388,6 +1481,10 @@ class Database
 
         if ($hook instanceof Relationships) {
             $this->relationshipHook = $hook;
+        }
+
+        if ($hook instanceof Hook\Nested) {
+            $this->nestedHooks[] = $hook;
         }
 
         if ($hook instanceof Hook\Write) {
@@ -1418,6 +1515,7 @@ class Database
 
         $this->lifecycleHooks = \array_values(\array_filter($this->lifecycleHooks, $kept));
         $this->decorators = \array_values(\array_filter($this->decorators, $kept));
+        $this->nestedHooks = \array_values(\array_filter($this->nestedHooks, $kept));
 
         if ($this->invalidator !== null && ! $kept($this->invalidator)) {
             $this->invalidator = null;
@@ -1585,6 +1683,8 @@ class Database
             ignoreDuplicates: $this->ignoringDuplicates()->get(),
             columnPermissions: $this->columnPermissions()->get(),
             requestTimestamp: $this->requestTimestamp()->get(),
+            checkGrants: $this->grantChecking()->get(),
+            roundFractions: $this->fractionRounding()->get(),
         );
     }
 
@@ -1625,14 +1725,16 @@ class Database
      */
     private function withToggles(Snapshot $snapshot, callable $callback): mixed
     {
-        $timestamped = fn (): mixed => $this->requestTimestamp()->with($snapshot->requestTimestamp, $callback);
-        $scoped = fn (): mixed => $this->columnPermissions()->with($snapshot->columnPermissions, $timestamped);
-        $deduplicated = fn (): mixed => $this->ignoringDuplicates()->with($snapshot->ignoreDuplicates, $scoped);
+        $rounded = fn (): mixed => $this->fractionRounding()->with($snapshot->roundFractions, $callback);
+        $checked = fn (): mixed => $this->grantChecking()->with($snapshot->checkGrants, $rounded);
+        $timestamped = fn (): mixed => $this->requestTimestamp()->with($snapshot->requestTimestamp, $checked);
+        $deduplicated = fn (): mixed => $this->ignoringDuplicates()->with($snapshot->ignoreDuplicates, $timestamped);
         $sequenced = fn (): mixed => $this->sequencePreservation()->with($snapshot->preserveSequence, $deduplicated);
         $dated = fn (): mixed => $this->datePreservation()->with($snapshot->preserveDates, $sequenced);
         $validated = fn (): mixed => $this->validation()->with($snapshot->validation, $dated);
         $excluded = fn (): mixed => $this->filterExclusions()->with($snapshot->disabledFilters, $validated);
         $filtered = fn (): mixed => $this->filtering()->with($snapshot->filters, $excluded);
+        $scoped = fn (): mixed => $this->columnPermissions()->with($snapshot->columnPermissions, $timestamped);
 
         return $this->adapter->withTenant($snapshot->tenant, $filtered);
     }
@@ -1719,6 +1821,22 @@ class Database
     private function ignoringDuplicates(): Value
     {
         return $this->ignoringDuplicates ??= new Value(false);
+    }
+
+    /**
+     * @return Value<bool>
+     */
+    private function grantChecking(): Value
+    {
+        return $this->grantChecking ??= new Value(false);
+    }
+
+    /**
+     * @return Value<bool>
+     */
+    private function fractionRounding(): Value
+    {
+        return $this->fractionRounding ??= new Value(false);
     }
 
     protected function isIgnoringDuplicates(): bool

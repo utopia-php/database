@@ -9,6 +9,7 @@ use Swoole\Runtime;
 use Tests\E2E\Adapter\Scopes\Relationships\ChildSideTests;
 use Tests\E2E\Adapter\Scopes\Relationships\ManyToManyTests;
 use Tests\E2E\Adapter\Scopes\Relationships\ManyToOneTests;
+use Tests\E2E\Adapter\Scopes\Relationships\NestedPreparationTests;
 use Tests\E2E\Adapter\Scopes\Relationships\OneToManyTests;
 use Tests\E2E\Adapter\Scopes\Relationships\OneToOneTests;
 use Tests\E2E\Adapter\Support\EventRecorder;
@@ -42,6 +43,7 @@ trait RelationshipTests
     use ChildSideTests;
     use ManyToManyTests;
     use ManyToOneTests;
+    use NestedPreparationTests;
     use OneToManyTests;
     use OneToOneTests;
 
@@ -506,6 +508,133 @@ trait RelationshipTests
         $this->assertEquals('Bronx Zoo', $animal->getDocument('zoo')->getAttribute('name')); // Check zoo is an object
     }
 
+    private function librarySchema(Database $database): void
+    {
+        $any = [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any()), Permission::delete(Role::any())];
+        foreach (['lib_authors', 'lib_profiles', 'lib_books', 'lib_libraries', 'lib_tags'] as $collection) {
+            $database->createCollection(Collection::create(id: $collection, permissions: $any, documentSecurity: false));
+            $database->createAttribute($collection, Attribute::string(key: 'name', size: 64, required: true));
+        }
+        $database->createRelationship('lib_authors', Relationship::oneToOne('lib_profiles', key: 'profile', twoWay: true, twoWayKey: 'author', onDelete: RelationshipDeleteAction::Cascade));
+        $database->createRelationship('lib_authors', Relationship::oneToMany('lib_books', key: 'books', twoWay: true, twoWayKey: 'author', onDelete: RelationshipDeleteAction::SetNull));
+        $database->createRelationship('lib_books', Relationship::manyToOne('lib_libraries', key: 'library', twoWayKey: 'books_inverse'));
+        $database->createRelationship('lib_books', Relationship::manyToMany('lib_tags', key: 'tags', twoWay: true, twoWayKey: 'books', onDelete: RelationshipDeleteAction::SetNull));
+        $database->createRelationship('lib_libraries', Relationship::oneToMany('lib_tags', key: 'featured', twoWayKey: 'featured_inverse', onDelete: RelationshipDeleteAction::Cascade));
+
+        foreach ([1, 2] as $number) {
+            $database->createDocument('lib_libraries', new Document(['$id' => "lib{$number}", 'name' => "Library {$number}", 'featured' => [['$id' => "feat{$number}", 'name' => "Featured {$number}"]]]));
+        }
+        foreach ([1, 2] as $number) {
+            $database->createDocument('lib_tags', new Document(['$id' => "tag{$number}", 'name' => "Tag {$number}"]));
+        }
+        $database->createDocument('lib_authors', new Document([
+            '$id' => 'author1',
+            'name' => 'Ada',
+            'profile' => ['$id' => 'profile1', 'name' => 'Ada profile'],
+            'books' => [['$id' => 'book1', 'name' => 'Notes', 'library' => 'lib1', 'tags' => ['tag1', 'tag2']]],
+        ]));
+        $database->createDocument('lib_books', new Document(['$id' => 'book2', 'name' => 'Orphan']));
+    }
+
+    public function testNestedRelationshipSelectsReturnWhat7xReturned(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (! $database->getAdapter()->hasFeature(Feature\Relationships::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->librarySchema($database);
+
+        try {
+            $books = $database->find('lib_books', [Query::select(['name', 'author.name', 'author.profile.*']), Query::equal('$id', ['book1'])]);
+            $author = $books[0]->getAttribute('author');
+            $this->assertInstanceOf(Document::class, $author);
+            $this->assertSame('Ada', $author->getAttribute('name'));
+            $profile = $author->getAttribute('profile');
+            $this->assertInstanceOf(Document::class, $profile);
+            $this->assertSame('Ada profile', $profile->getAttribute('name'));
+
+            $books = $database->find('lib_books', [Query::select(['tags.books.name']), Query::equal('$id', ['book1'])]);
+            $tags = $books[0]->getAttribute('tags');
+            $this->assertIsArray($tags);
+            $this->assertSame(['Tag 1', 'Tag 2'], \array_map(static fn (mixed $tag): mixed => $tag instanceof Document ? $tag->getAttribute('name') : null, $tags));
+
+            $library = $database->getDocument('lib_books', 'book1', [Query::select(['name', 'library.featured.*'])])->getAttribute('library');
+            $this->assertInstanceOf(Document::class, $library);
+            $this->assertSame('Library 1', $library->getAttribute('name'));
+            $featured = $library->getAttribute('featured');
+            $this->assertIsArray($featured);
+            $this->assertInstanceOf(Document::class, $featured[0]);
+            $this->assertSame('Featured 1', $featured[0]->getAttribute('name'));
+
+            $books = $database->find('lib_books', [Query::select(['*', '*.*']), Query::orderAsc('$id')]);
+            $this->assertSame(['book1', 'book2'], \array_map(static fn (Document $book): string => $book->getId(), $books));
+            $this->assertSame('Notes', $books[0]->getAttribute('name'));
+
+            $keys = \array_keys($database->getDocument('lib_authors', 'author1')->getArrayCopy());
+            $this->assertLessThan(\array_search('$id', $keys, true), \array_search('$sequence', $keys, true), 'a single read returns $sequence ahead of $id, as in 7.x');
+        } finally {
+            foreach (['lib_books', 'lib_authors', 'lib_profiles', 'lib_libraries', 'lib_tags'] as $collection) {
+                $database->deleteCollection($collection);
+            }
+        }
+    }
+
+    public function testAStoredRelatedDocumentSentAsADocumentIsUpdatedAndLinked(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (! $database->getAdapter()->hasFeature(Feature\Relationships::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $authorization = $database->getAuthorization();
+        foreach ([RelationshipType::OneToOne, RelationshipType::OneToMany, RelationshipType::ManyToOne, RelationshipType::ManyToMany] as $type) {
+            $parents = 'stored_link_parents_'.$type->value;
+            $related = 'stored_link_related_'.$type->value;
+
+            $authorization->skip(function () use ($database, $type, $parents, $related): void {
+                try {
+                    $database->createCollection(Collection::create(id: $parents, attributes: [Attribute::string(key: 'name', size: 64)]));
+                    $database->createCollection(Collection::create(id: $related, attributes: [Attribute::string(key: 'name', size: 64)]));
+                    $database->createRelationship($parents, match ($type) {
+                        RelationshipType::OneToOne => Relationship::oneToOne($related, 'related', twoWay: true, twoWayKey: 'back', onDelete: RelationshipDeleteAction::SetNull),
+                        RelationshipType::OneToMany => Relationship::oneToMany($related, 'related', twoWay: true, twoWayKey: 'back', onDelete: RelationshipDeleteAction::SetNull),
+                        RelationshipType::ManyToOne => Relationship::manyToOne($related, 'related', twoWay: true, twoWayKey: 'back', onDelete: RelationshipDeleteAction::SetNull),
+                        RelationshipType::ManyToMany => Relationship::manyToMany($related, 'related', twoWay: true, twoWayKey: 'back', onDelete: RelationshipDeleteAction::SetNull),
+                    });
+                    $database->createDocument($related, new Document(['$id' => 'stored', 'name' => 'Stored']));
+
+                    $value = new Document(['$id' => 'stored', 'name' => 'Changed']);
+                    $database->withTransaction(fn (): int => $database->createDocuments($parents, [new Document([
+                        '$id' => 'parent',
+                        'name' => 'Parent',
+                        'related' => \in_array($type, [RelationshipType::OneToOne, RelationshipType::ManyToOne], true) ? $value : [$value],
+                    ])]));
+
+                    $ids = static fn (mixed $value): array => \array_values(\array_map(
+                        static fn (mixed $item): string => $item instanceof Document ? $item->getId() : (\is_string($item) ? $item : ''),
+                        \is_array($value) ? $value : ($value === null ? [] : [$value]),
+                    ));
+                    $stored = $database->getDocument($related, 'stored');
+                    $this->assertSame('Changed', $stored->getAttribute('name'), $type->value);
+                    $this->assertSame(['parent'], $ids($stored->getAttribute('back')), $type->value.': the stored document points back at its new parent');
+                    $this->assertSame(['stored'], $ids($database->getDocument($parents, 'parent')->getAttribute('related')), $type->value);
+                } finally {
+                    $database->deleteCollection($parents);
+                    $database->deleteCollection($related);
+                }
+            });
+        }
+    }
+
     public function testSimpleRelationshipPopulation(): void
     {
         /** @var Database $database */
@@ -534,20 +663,20 @@ trait RelationshipTests
         // Create some data
         $user = $database->createDocument('usersSimple', new Document([
             '$id' => 'user1',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'name' => 'John Doe',
         ]));
 
         $post1 = $database->createDocument('postsSimple', new Document([
             '$id' => 'post1',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'title' => 'First Post',
             'author' => 'user1',
         ]));
 
         $post2 = $database->createDocument('postsSimple', new Document([
             '$id' => 'post2',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'title' => 'Second Post',
             'author' => 'user1',
         ]));
@@ -2551,14 +2680,14 @@ trait RelationshipTests
         // Create test data
         $author1 = $database->createDocument('authorsFilter', new Document([
             '$id' => 'author1',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'name' => 'Alice',
             'age' => 30,
         ]));
 
         $author2 = $database->createDocument('authorsFilter', new Document([
             '$id' => 'author2',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'name' => 'Bob',
             'age' => 25,
         ]));
@@ -2566,7 +2695,7 @@ trait RelationshipTests
         // Create posts
         $database->createDocument('postsFilter', new Document([
             '$id' => 'post1',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'title' => 'Alice Post 1',
             'published' => true,
             'author' => 'author1',
@@ -2574,7 +2703,7 @@ trait RelationshipTests
 
         $database->createDocument('postsFilter', new Document([
             '$id' => 'post2',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'title' => 'Alice Post 2',
             'published' => true,
             'author' => 'author1',
@@ -2582,7 +2711,7 @@ trait RelationshipTests
 
         $database->createDocument('postsFilter', new Document([
             '$id' => 'post3',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'title' => 'Bob Post',
             'published' => true,
             'author' => 'author2',
@@ -3265,7 +3394,7 @@ trait RelationshipTests
         // Create suppliers with spatial data (coordinates are [longitude, latitude])
         $supplier1 = $database->createDocument('suppliersSpatial', new Document([
             '$id' => 'supplier1',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'company' => 'Fresh Foods Inc',
             'warehouseLocation' => [-74.0060, 40.7128], // New York
             'deliveryArea' => [
@@ -3284,7 +3413,7 @@ trait RelationshipTests
 
         $supplier2 = $database->createDocument('suppliersSpatial', new Document([
             '$id' => 'supplier2',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'company' => 'Ocean Seafood',
             'warehouseLocation' => [-118.2437, 34.0522], // Los Angeles
             'deliveryArea' => [
@@ -3303,7 +3432,7 @@ trait RelationshipTests
 
         $supplier3 = $database->createDocument('suppliersSpatial', new Document([
             '$id' => 'supplier3',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'company' => 'Mountain Meats',
             'warehouseLocation' => [-104.9903, 39.7392], // Denver
             'deliveryArea' => [
@@ -3323,7 +3452,7 @@ trait RelationshipTests
         // Create restaurants
         $database->createDocument('restaurantsSpatial', new Document([
             '$id' => 'rest1',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'name' => 'NYC Diner',
             'location' => [-74.0060, 40.7128],
             'supplier' => 'supplier1',
@@ -3331,7 +3460,7 @@ trait RelationshipTests
 
         $database->createDocument('restaurantsSpatial', new Document([
             '$id' => 'rest2',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'name' => 'LA Bistro',
             'location' => [-118.2437, 34.0522],
             'supplier' => 'supplier2',
@@ -3339,7 +3468,7 @@ trait RelationshipTests
 
         $database->createDocument('restaurantsSpatial', new Document([
             '$id' => 'rest3',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'name' => 'Denver Steakhouse',
             'location' => [-104.9903, 39.7392],
             'supplier' => 'supplier3',
@@ -3866,35 +3995,35 @@ trait RelationshipTests
         // Create test data
         $dept1 = $database->createDocument('departmentsNested', new Document([
             '$id' => 'dept1',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'name' => 'Engineering',
             'budget' => 100000,
         ]));
 
         $dept2 = $database->createDocument('departmentsNested', new Document([
             '$id' => 'dept2',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'name' => 'Marketing',
             'budget' => 50000,
         ]));
 
         $company1 = $database->createDocument('companiesNested', new Document([
             '$id' => 'company1',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'name' => 'TechCorp',
             'industry' => 'Technology',
         ]));
 
         $company2 = $database->createDocument('companiesNested', new Document([
             '$id' => 'company2',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'name' => 'MarketCo',
             'industry' => 'Marketing',
         ]));
 
         $employee1 = $database->createDocument('employeesNested', new Document([
             '$id' => 'emp1',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'name' => 'Alice Johnson',
             'role' => 'Developer',
             'company' => 'company1',
@@ -3903,7 +4032,7 @@ trait RelationshipTests
 
         $employee2 = $database->createDocument('employeesNested', new Document([
             '$id' => 'emp2',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'name' => 'Bob Smith',
             'role' => 'Marketer',
             'company' => 'company2',
@@ -3912,7 +4041,7 @@ trait RelationshipTests
 
         $project1 = $database->createDocument('projectsNested', new Document([
             '$id' => 'proj1',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'title' => 'Website Redesign',
             'status' => 'active',
             'employee' => 'emp1',
@@ -3920,7 +4049,7 @@ trait RelationshipTests
 
         $project2 = $database->createDocument('projectsNested', new Document([
             '$id' => 'proj2',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'title' => 'Campaign Launch',
             'status' => 'planning',
             'employee' => 'emp2',
@@ -3928,7 +4057,7 @@ trait RelationshipTests
 
         $task1 = $database->createDocument('tasksNested', new Document([
             '$id' => 'task1',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'description' => 'Design homepage',
             'priority' => 'high',
             'completed' => false,
@@ -3937,7 +4066,7 @@ trait RelationshipTests
 
         $task2 = $database->createDocument('tasksNested', new Document([
             '$id' => 'task2',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'description' => 'Write copy',
             'priority' => 'medium',
             'completed' => true,
@@ -3946,7 +4075,7 @@ trait RelationshipTests
 
         $task3 = $database->createDocument('tasksNested', new Document([
             '$id' => 'task3',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'description' => 'Implement backend',
             'priority' => 'high',
             'completed' => false,
@@ -4069,21 +4198,21 @@ trait RelationshipTests
         // Create test data
         $author1 = $database->createDocument('authorsCount', new Document([
             '$id' => 'author1',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'name' => 'Alice',
             'age' => 30,
         ]));
 
         $author2 = $database->createDocument('authorsCount', new Document([
             '$id' => 'author2',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'name' => 'Bob',
             'age' => 25,
         ]));
 
         $author3 = $database->createDocument('authorsCount', new Document([
             '$id' => 'author3',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'name' => 'Charlie',
             'age' => 35,
         ]));
@@ -4091,7 +4220,7 @@ trait RelationshipTests
         // Create posts
         $database->createDocument('postsCount', new Document([
             '$id' => 'post1',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'title' => 'Alice Post 1',
             'views' => 100,
             'published' => true,
@@ -4100,7 +4229,7 @@ trait RelationshipTests
 
         $database->createDocument('postsCount', new Document([
             '$id' => 'post2',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'title' => 'Alice Post 2',
             'views' => 200,
             'published' => true,
@@ -4109,7 +4238,7 @@ trait RelationshipTests
 
         $database->createDocument('postsCount', new Document([
             '$id' => 'post3',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'title' => 'Alice Draft',
             'views' => 50,
             'published' => false,
@@ -4118,7 +4247,7 @@ trait RelationshipTests
 
         $database->createDocument('postsCount', new Document([
             '$id' => 'post4',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'title' => 'Bob Post',
             'views' => 150,
             'published' => true,
@@ -4127,7 +4256,7 @@ trait RelationshipTests
 
         $database->createDocument('postsCount', new Document([
             '$id' => 'post5',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'title' => 'Bob Draft',
             'views' => 75,
             'published' => false,
@@ -4228,6 +4357,7 @@ trait RelationshipTests
         $alice = $database->createDocument('authorsOrder', new Document([
             '$permissions' => [
                 Permission::read(Role::any()),
+                Permission::update(Role::any()),
             ],
             'name' => 'Alice',
             'age' => 30,
@@ -4236,6 +4366,7 @@ trait RelationshipTests
         $bob = $database->createDocument('authorsOrder', new Document([
             '$permissions' => [
                 Permission::read(Role::any()),
+                Permission::update(Role::any()),
             ],
             'name' => 'Bob',
             'age' => 25,
@@ -4243,21 +4374,21 @@ trait RelationshipTests
 
         // Create posts
         $database->createDocument('postsOrder', new Document([
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'title' => 'Post 1',
             'views' => 100,
             'author' => $alice->getId(),
         ]));
 
         $database->createDocument('postsOrder', new Document([
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'title' => 'Post 2',
             'views' => 200,
             'author' => $bob->getId(),
         ]));
 
         $database->createDocument('postsOrder', new Document([
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'title' => 'Post 3',
             'views' => 150,
             'author' => $alice->getId(),

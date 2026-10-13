@@ -3,6 +3,7 @@
 namespace Tests\E2E\Adapter;
 
 use Redis;
+use Tests\Unit\Support\FractionalEngine;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory;
@@ -918,5 +919,11 @@ class MemoryTest extends Base
         $assertOnlyValueRow('notSearch', $database->find('nullable', [
             Query::notSearch('bio', 'unrelated'),
         ]));
+    }
+
+    #[\Override]
+    protected static function fractionalEngine(): FractionalEngine
+    {
+        return FractionalEngine::Memory;
     }
 }

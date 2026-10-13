@@ -375,6 +375,44 @@ final class DocumentPurgeTest extends TestCase
      * @param  Closure(Database): mixed  $write
      */
     #[DataProvider('writes')]
+    public function testACachePurgeFailureRollsTheWriteBackAndFiresNoPurgeEvent(Closure $write): void
+    {
+        $cache = new class () extends MemoryCache {
+            public bool $unreachable = false;
+
+            #[\Override]
+            public function purge(string $key, string $hash = ''): bool
+            {
+                if ($this->unreachable) {
+                    throw new RuntimeException('cache went away');
+                }
+
+                return parent::purge($key, $hash);
+            }
+        };
+        $database = HookFixture::sqlite();
+        $database->setCache(new Cache($cache));
+        [$database, $recorder] = $this->seeded($database, ['first']);
+        $stored = static fn (): array => \array_map(
+            static fn (Document $document): array => [$document->getId(), $document->getAttribute('title'), $document->getAttribute('views')],
+            $database->find(HookFixture::COLLECTION),
+        );
+        $before = $stored();
+
+        $cache->unreachable = true;
+        $thrown = $this->failureOf(static fn (): mixed => $write($database));
+        $cache->unreachable = false;
+
+        $this->assertInstanceOf(RuntimeException::class, $thrown);
+        $this->assertSame('cache went away', $thrown->getMessage());
+        $this->assertSame($before, $stored());
+        $this->assertSame([], $this->purged($recorder));
+    }
+
+    /**
+     * @param  Closure(Database): mixed  $write
+     */
+    #[DataProvider('writes')]
     public function testPurgeEventsAreDroppedWhenTheCallerTransactionRollsBack(Closure $write): void
     {
         [$database, $recorder] = $this->seeded(HookFixture::sqlite(), ['first']);

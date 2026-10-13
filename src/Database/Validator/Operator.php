@@ -3,6 +3,7 @@
 namespace Utopia\Database\Validator;
 
 use Throwable;
+use Utopia\Database\Arithmetic\Fractional;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Document;
@@ -28,11 +29,15 @@ class Operator extends Validator
 
     /**
      * @param  Document|null  $currentDocument  Current document for runtime validation (e.g., array bounds checking)
+     * @param  bool  $fractions  Whether a numeric operator on an integer attribute may carry a finite fractional
+     *                           amount or limit within the attribute's range, which the caller resolves into a whole
+     *                           one from the stored value before it is written
      */
     public function __construct(
         Document $collection,
         ?Document $currentDocument = null,
         private readonly bool $supportUnsignedBigInt = true,
+        private readonly bool $fractions = false,
     ) {
         $this->collection = $collection;
         $this->currentDocument = $currentDocument;
@@ -90,9 +95,39 @@ class Operator extends Validator
         return $numeric >= $bounds->min && $numeric <= $bounds->max;
     }
 
+    /**
+     * @phpstan-assert-if-true =float|numeric-string $value
+     */
+    private function isFraction(mixed $value, Attribute $attribute): bool
+    {
+        return $this->fractions && $attribute->isInteger() && Fractional::isFractional($value);
+    }
+
+    /**
+     * @param  int|float|string  $value  A finite fractional number
+     */
+    private function isFractionInBounds(int|float|string $value, Attribute $attribute): bool
+    {
+        $bounds = $attribute->bounds();
+
+        return $bounds !== null && (float) $value >= (float) $bounds->min && (float) $value <= (float) $bounds->max;
+    }
+
     private function isValidLimit(mixed $limit, Attribute $attribute, DatabaseOperator $operator): bool
     {
         $methodName = $operator->getMethod()->value;
+
+        if ($this->isFraction($limit, $attribute)) {
+            if ($this->isFractionInBounds($limit, $attribute)) {
+                return true;
+            }
+
+            $bounds = $attribute->bounds();
+            $this->message = "Cannot apply {$methodName} operator: max/min limit must be between {$bounds?->min} and {$bounds?->max}";
+
+            return false;
+        }
+
         $finite = \is_int($limit) || (\is_float($limit) && \is_finite($limit)) || (\is_string($limit) && \is_numeric($limit));
 
         if (! $attribute->isInteger() || ! $finite) {
@@ -233,6 +268,13 @@ class Operator extends Validator
         $type = $attribute->type;
         $isArray = $attribute->array;
 
+        // Operators run on the stored value, which for an encrypted attribute is the ciphertext
+        if (\in_array('encrypt', $attribute->filters, true)) {
+            $this->message = "Cannot apply {$methodName} operator to encrypted attribute '{$operator->getAttribute()}'";
+
+            return false;
+        }
+
         // Array operators that carry a caller-supplied value list are capped to guard against
         // memory exhaustion. Enforced here so every adapter rejects an oversized list the same way.
         // The payload may be spread across $values or wrapped in $values[0] (the same shape the
@@ -274,16 +316,19 @@ class Operator extends Validator
                     return false;
                 }
 
-                if (! isset($values[0]) || ! $this->isNumericValueInBounds($values[0], $attribute)) {
+                $fraction = isset($values[0]) && $this->isFraction($values[0], $attribute);
+                if (! isset($values[0]) || ! ($fraction ? $this->isFractionInBounds($values[0], $attribute) : $this->isNumericValueInBounds($values[0], $attribute))) {
                     $this->message = "Cannot apply {$methodName} operator: value must be numeric, got ".gettype($operator->getValue());
 
                     return false;
                 }
 
                 $integerType = $attribute->isInteger();
-                $operatorValue = $integerType
-                    ? $this->getIntegerValue($values[0])
-                    : $this->getNumericValue($values[0]);
+                $operatorValue = match (true) {
+                    $fraction => (float) $values[0],
+                    $integerType => $this->getIntegerValue($values[0]),
+                    default => $this->getNumericValue($values[0]),
+                };
                 if ($operatorValue === null) {
                     return false;
                 }
@@ -298,7 +343,7 @@ class Operator extends Validator
                     return false;
                 }
 
-                if ($this->currentDocument !== null && $integerType && ! isset($values[1])) {
+                if ($this->currentDocument !== null && $integerType && ! $fraction && ! isset($values[1])) {
                     $currentValue = $this->getIntegerValue($this->currentDocument->getAttribute($operator->getAttribute()) ?? 0);
 
                     if ($currentValue === null || ! $this->isNumericValueInBounds($currentValue, $attribute)) {

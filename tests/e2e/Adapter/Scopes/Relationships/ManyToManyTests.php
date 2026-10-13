@@ -25,6 +25,49 @@ use Utopia\Query\Schema\ColumnType;
 
 trait ManyToManyTests
 {
+    public function testRenamingAManyToManyRelationshipCreatedBy7x(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $database->createCollection(Collection::create(id: 'legacy_books', permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())], documentSecurity: false));
+        $database->createCollection(Collection::create(id: 'legacy_tags', permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())], documentSecurity: false));
+        $database->createAttribute('legacy_books', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('legacy_tags', Attribute::string(key: 'name', required: true));
+        $database->createRelationship('legacy_books', Relationship::manyToMany(relatedCollection: 'legacy_tags', key: 'tags', twoWay: true, twoWayKey: 'books'));
+        $database->createDocument('legacy_books', new Document(['$id' => 'book1', 'name' => 'Notes', 'tags' => [['$id' => 'tag1', 'name' => 'Tag 1']]]));
+
+        $junction = '_'.$database->getCollection('legacy_books')->getSequence().'_'.$database->getCollection('legacy_tags')->getSequence();
+        $database->getAuthorization()->skip(fn () => $database->silent(function () use ($database, $junction): void {
+            $definition = $database->getDocument(Database::METADATA, $junction);
+            $stored = $definition->getAttribute('indexes', []);
+            $indexes = \array_map(
+                static fn (mixed $index): mixed => $index instanceof Document && $index->getId() === '_index_tags' ? $index->setAttribute('key', 'index_tags') : $index,
+                \is_array($stored) ? $stored : [],
+            );
+            $database->updateDocument(Database::METADATA, $junction, $definition->setAttribute('indexes', $indexes));
+        }));
+        $database->purgeCachedCollection($junction);
+
+        $database->updateRelationship('legacy_books', 'tags', new RelationshipUpdate(key: 'labels'));
+
+        $keys = \array_map(static fn ($index): string => $index->key, $database->getCollection($junction)->indexes());
+        $this->assertContains('_index_labels', $keys);
+        $this->assertNotContains('_index_tags', $keys);
+        $labels = $database->getDocument('legacy_books', 'book1')->getAttribute('labels');
+        $this->assertIsArray($labels);
+        $this->assertSame(['tag1'], \array_map(static fn (mixed $tag): mixed => $tag instanceof Document ? $tag->getId() : null, $labels));
+
+        $database->deleteCollection('legacy_books');
+        $database->deleteCollection('legacy_tags');
+    }
+
     public function testManyToManyOneWayRelationship(): void
     {
         /** @var Database $database */

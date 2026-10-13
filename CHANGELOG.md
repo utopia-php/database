@@ -1,5 +1,179 @@
 # Changelog
 
+## 8.1.0
+
+8.1.0 adds opt-in and additive APIs for work that callers had to do themselves. With no `Hook\Nested` hook registered
+and with `setCheckGrants()` and `setRoundFractions()` off, which is the default, a `Database` behaves exactly as in
+8.0.3, except that it runs a join on the parent side of a one-to-many relationship attribute, which 8.0.3 refused
+(listed under Changed). See [Upgrading from 8.0 to 8.1](UPGRADE.md#upgrading-from-80-to-81).
+
+### Added
+
+- `Utopia\Database\Hook\Nested`, a hook with `prepare(Document $collection, Document $document): Document`. Register
+  it with `Database::addHook()` and remove it with `removeHook()`. It is given a copy of each related document that
+  `createDocument()`, `createDocuments()`, `updateDocument()`, `upsertDocument()`, `upsertDocuments()`,
+  `authorizeCreate()` or `authorizeUpdate()` is given as a document, at every depth the write relates. A parent is
+  prepared before its children, and hooks run in the order they were registered. The write checks grants on, and
+  relates, the document the hook returns. The hook is not given the top-level document, a related document given as
+  an ID, or anything from `updateDocuments()`. A `Mirror` runs it on itself, for the pre-checks, and on its source.
+  Its destination receives the IDs the source wrote.
+- `Database::setCheckGrants(bool $check): static`, `isCheckingGrants(): bool` and
+  `withCheckGrants(bool $check, callable $callback): mixed`, off by default. While on and while authorization is
+  enabled, a related document given as a document to `createDocument()`, `createDocuments()`, `updateDocument()`,
+  `upsertDocument()`, `upsertDocuments()`, `authorizeCreate()` or `authorizeUpdate()` may add permissions only for
+  roles the caller holds. The check judges the document the `Hook\Nested` hooks return. A related document whose
+  `$id` a `Hook\Nested` hook assigned is judged new: none of its permissions are read or locked, and it needs create
+  permission. An unheld role throws `Exception\Authorization` (`Permissions must be one of: (<roles>)`) and malformed
+  permissions throw `Exception\Structure`, before anything is written.
+- While grants are checked, `updateDocuments()` refuses a related document given as a document with
+  `Exception\Relationship` (`Invalid relationship value. A bulk update takes related documents by ID while grants are
+  checked.`). Related documents given by ID still link.
+- `Database::setRoundFractions(bool $round): static`, `isRoundingFractions(): bool` and
+  `withRoundFractions(bool $round, callable $callback): mixed`, off by default. While on, a fractional change, amount
+  or limit on a single-valued integer or big integer attribute is stored as the adapter's engine stored it on 7.4.1,
+  instead of being refused. This covers `increaseDocumentAttribute()`, `decreaseDocumentAttribute()` and the numeric
+  operators of `updateDocument()`, `updateDocuments()`, `upsertDocument()` and `upsertDocuments()`. Fractional items
+  added to an integer array are cut toward zero. What the engine refused is still refused.
+- `Adapter::arithmetic(): Arithmetic` declares how the adapter's engine stored a fractional result in an integer
+  column on 7.4.1. The base answer is MariaDB's and MySQL's. `Postgres`, `Mongo`, `SQLite`, `Memory` and `Redis`
+  override it. `Pool` asks the pooled adapter once per pool, and `ReadWritePool` answers it wherever reads go, without
+  opening the sticky window.
+- `Utopia\Database\Arithmetic`, a `final readonly` class:
+  `new Arithmetic(Rounding $counter, Rounding $operators, Rounding $division, Rounding $power, bool
+  $refusesCounterFractions = false, array $exactOperators = [], array $refusedWithoutLimit = [], bool
+  $truncatesModulus = false)`, and `rounding(OperatorType $method, bool $whole): Rounding`.
+- `Utopia\Database\Arithmetic\Rounding`, an enum with the cases `HalfEven`, `HalfAwayFromZero` and `TowardZero`, and
+  the methods `apply(int|string $base, float $fraction): int|string`, `round(float $value): int|string` and
+  `ratio(int|string $numerator, int|string $denominator): int|string`.
+- `Validator\Operator` and `Validator\Structure` (and so `Validator\PartialStructure`) take a trailing
+  `bool $fractions = false`. When it is set, a numeric operator on an integer attribute may carry a finite fractional
+  amount or limit within the attribute's range, for a caller that resolves it into a whole one before writing.
+- `Database::resolveCursor(string $collection, string $id, CursorDirection $direction, array $queries = []):
+  Document` returns the cursor that a list with `$queries` pages from when it names a document by ID. The document is
+  read with authorization skipped, and only the cursor fields are returned: `$id`, `$sequence`, `$collection` and
+  the values the list orders by, including values from joined rows. Pass the result only to `cursorAfter()` or
+  `cursorBefore()`. It returns an empty `Document` when no document has the ID.
+- `Database::read(string $collection, array $queries = [], PermissionType $forPermission = PermissionType::Read):
+  array` returns a list of `Document`. For aggregate or `groupBy()` queries these are the rows of `aggregate()`;
+  otherwise they are what `find()` returns. Aggregate queries under a permission other than read throw
+  `Exception\Query`. `find()` still refuses aggregate queries.
+- `ParsedQuery::isAggregation(): bool` tells whether the queries aggregate or group.
+- The `State\Snapshot` constructor takes two more trailing arguments, `bool $checkGrants = false` and
+  `bool $roundFractions = false`. `Database::snapshot()` fills them in.
+
+### Changed
+
+- A join condition whose left column is the parent side of a one-to-many relationship of the main collection, such
+  as `Query::on('orders', '$id')`, compares the main `$id` with the relationship's two-way key in the joined
+  collection. The condition keeps its operator. `getDocument()`, `find()`, `findOne()`, `read()`, `aggregate()`,
+  `count()`, `sum()` and `resolveCursor()` run it; 8.0.3 refused it with `Cannot join on virtual relationship
+  attribute`. The joined collection is read under the same permission and tenant rules as any join. The child side of
+  a one-to-many and every other relationship type join, or are refused, as before.
+
+## 8.0.3
+
+### Added
+
+- `Database::authorizeCreate()` and `Database::authorizeUpdate()` take an optional resolver,
+  `?callable $resolve = null`, so a write staged after other writes is judged as it will run, after them.
+  `$resolve(string $collection, string $id): ?Document` returns a related document as the earlier staged writes leave
+  it: the document with its permissions (whether or not the caller can read it), an empty `Document` when they delete
+  it, or `null` when they leave it as stored. Every related-document lookup of the checks uses it: a document staged
+  for deletion is new to the write and needs create on its collection, a staged update or create is judged by its
+  staged permissions and links, and a `null` answer reads the stored document as before. Without `$resolve` the
+  checks are unchanged, and they still write nothing.
+
+## 8.0.2
+
+8.0.1 reverted six deliberate 8.0.0 changes as if they were regressions. 8.0.2 brings them back; everything else in
+8.0.1 stays.
+
+### Fixed
+
+- On PostgreSQL an exact search (`search('title', '"foo bar"')`) matches the adjacent phrase again, as on MariaDB,
+  MySQL, SQLite, MongoDB, Memory and Redis, and `notSearch()` with an exact term excludes only that phrase. 8.0.1
+  reverted it to every word in any order by mistake. Words in a search term are still split on every character
+  other than a letter, a number or an underscore, as in 7.x (`foo/bar` and `foo,bar` search `foo` and `bar`).
+- `increaseDocumentAttribute()` and `decreaseDocumentAttribute()` refuse a fractional change value, `max` or `min`
+  on an integer attribute with `Exception\Type` again, before anything is written, and a change value of 0 or less
+  throws `Exception\Type` (`Value must be numeric and greater than 0`) again, which `catch (DatabaseException)`
+  catches. 8.0.1 passed fractional values to the engine (rounded on MariaDB and MySQL, truncated on MongoDB, an
+  error on PostgreSQL) and threw `\InvalidArgumentException` by mistake.
+- Numeric operators on integer attributes refuse a fractional `max` or `min` limit with `Exception\Structure` again,
+  as 8.0.0 did. Numeric text such as `power('2')` stays accepted. 8.0.1 accepted fractional limits by mistake.
+- The `UID` validator description names every character it accepts again (`a-z, A-Z, 0-9, period, hyphen, and
+  underscore`, none of the last three leading). 8.0.1 returned 7.x's text, which leaves out periods and hyphens.
+- An update does not validate again the stored values it leaves unchanged, whatever their type, so a value stored
+  before a range, enum or other rule was narrowed never blocks an update of another attribute. 8.0.1 validated them
+  again (leaving only object values alone) by mistake.
+- `document_purge` fires after the outermost transaction commits again, and never for a write that rolled back.
+  The cache entry is still purged inside the write's transaction, so a cache failure rolls the write back. 8.0.1
+  fired the event just before the commit by mistake.
+
+## 8.0.1
+
+8.0.1 restores the 7.4.1 behaviour that 8.0.0 changed for callers of features 7.x already had. New 8.0 features are
+unchanged. It also holds nested relationship links to the permission rule UPGRADE.md states.
+
+### Added
+
+- `Database::authorizeCreate(string $collection, Document $document)` and `Database::authorizeUpdate(string
+  $collection, Document $old, Document $document)` run the permission checks of a later `createDocument()` or
+  `updateDocument()` without writing: create on the collection (update on the document for an update, document-level
+  under document security) and, when the relationship hook is attached and enabled, every nested related document
+  as deep as the write relates it. They throw `Exception\Authorization` with the reason the write would give. Use
+  them to refuse a write you stage to run later, such as a transaction operation, when it is staged.
+
+### Fixed
+
+- Query validation reports what 7.x reported: the children of `and()`, `or()` and `elemMatch()` are validated before
+  the query itself, the first invalid query in reading order sets the message even when a later one does not parse,
+  a method 7.x could not parse that no validator takes reads `Invalid query: Invalid query method: <method>`, and a
+  raw query from a string reads `Invalid query method: raw`.
+- `select('$tenant')` passes query validation again without shared tables, and the read refuses it with `Cannot
+  select attributes: $tenant`, as in 7.x.
+- The `UID` validator description is the 7.x text again, also inside `Invalid cursor: …`. Reverted in 8.0.2.
+- On PostgreSQL an exact search (`"foo bar"`) matches every word in any order again, not the adjacent phrase.
+  Reverted in 8.0.2: this was a deliberate 8.0.0 change.
+- `containsAll()` on an attribute that is not an array matches each value as a whole-value `LIKE` (`ILIKE` on
+  PostgreSQL) pattern, any of them, on MariaDB, MySQL and PostgreSQL, as in 7.x.
+- A read whose orders include `orderRandom()` ignores its cursor instead of failing with `Order attribute '' is
+  empty`.
+- `document_purge` fires inside the write's outermost transaction, just before it commits, so a listener that throws
+  rolls the write back and its failure reaches the caller, as in 7.x. Reverted in 8.0.2.
+- `increaseDocumentAttribute()` and `decreaseDocumentAttribute()` pass a fractional change, `max` or `min` on an
+  integer attribute to the engine again and return the exact sum, and refuse a change that is not above zero with
+  `\InvalidArgumentException`, as in 7.x. Reverted in 8.0.2.
+- Numeric operators on integer and double attributes are checked as in 7.x: a fractional change or limit, or a
+  fractional item appended to an integer array, is no longer refused. Reverted in 8.0.2.
+- A mismatched attribute default reads `Default value x does not match given type <type>` (and `is not a valid
+  integer string for type bigint`) without JSON quoting, as in 7.x.
+- `Index::fromArray()` refuses an unknown index type with `Exception\Index` (`Unknown index type: …`) instead of
+  creating a key index.
+- `Exception\Unique::MESSAGE` is `Unique index violation` again.
+- A many-to-many relationship created by 7.x can be renamed again: its junction index, which 7.x stored with `key`
+  `index_<key>`, is read under its `$id` `_index_<key>`.
+- The SQL adapters bind floats as 7.x did: fixed-point only in `find()`, as PHP writes them elsewhere, so a write
+  no longer stores `1e-300` or `-2.5e-20` as `0`.
+- Two-level relationship selects (`author.profile.*`, `tags.books.name`) return the related documents' attributes
+  as in 7.x, and `select(['*', '*.*'])` reads every column instead of failing on MariaDB, MySQL and PostgreSQL.
+- A single read returns `$sequence` ahead of `$id`, in 7.x's key order, on every adapter.
+- An update validates the stored values it leaves unchanged again, as 7.x did; a stored object value is held to
+  7.x's object rules. Reverted in 8.0.2.
+- On MongoDB a transaction that lost a write conflict runs again up to 20 times, so concurrent increments of one
+  document all land.
+- With dates preserved, linking existing children through their one-to-many parent keeps each child's stored
+  `$updatedAt`, as 7.x did; unlinking still stamps the child.
+- Linking a stored related document by ID needs update permission on it for every relationship type, as UPGRADE.md
+  states: a one-way one-to-one link, a many-to-one link and a one-to-many child pointing at its parent linked with
+  read permission alone in 8.0.0, as in 7.x.
+- A nested write refuses a stored related document the caller cannot read with `Exception\Authorization`: with the
+  read check's reason when it is given by ID, with the update check's reason (or the read check's when the caller may
+  update) when it is given as a document. 8.0.0 left a half link to it (one-to-one, many-to-one), dropped it
+  silently (one-to-many, many-to-many) or tried to create it, failing with `Exception\Duplicate`.
+- A stored two-way one-to-one or one-to-many related document given as a document in a new parent is linked to
+  it; 8.0.0 and 7.x updated it but left its reference to the parent empty.
+
 ## 8.0.0 (unreleased)
 
 8.0 is a major release. Read [UPGRADE.md](UPGRADE.md) before you upgrade from 7.x: it lists every change you may

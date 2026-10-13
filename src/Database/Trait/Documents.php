@@ -12,6 +12,7 @@ use Utopia\Console;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\ReadWritePool;
+use Utopia\Database\Arithmetic\Fractional;
 use Utopia\Database\Attribute;
 use Utopia\Database\Cache\Epoch;
 use Utopia\Database\Cache\Owners;
@@ -38,6 +39,7 @@ use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Hook\Lifecycle;
+use Utopia\Database\Hook\Preparation;
 use Utopia\Database\Id;
 use Utopia\Database\Operator;
 use Utopia\Database\PermissionType;
@@ -493,6 +495,7 @@ trait Documents
         $attributes = $collection->attributes();
 
         $this->checkQueryTypes($queries);
+        $queries = self::resolveOneToManyJoins($collection, $queries);
 
         $joinedCollections = null;
 
@@ -694,6 +697,7 @@ trait Documents
         }
 
         $document = $this->castAfterDocument($collection, $document);
+        self::placeSequenceBeforeId($document);
 
         // Convert to custom document type if mapped
         if (isset($this->documentTypes[$collection->getId()])) {
@@ -1040,6 +1044,77 @@ trait Documents
     }
 
     /**
+     * Check, without writing anything, that the caller may create $document in $collection: what createDocument()
+     * checks for the document itself (create on the collection) and for every related document nested in it, as
+     * deep as createDocument() relates them, when the relationship hook is attached and enabled. A new related
+     * document needs create on its collection; linking a stored one, by ID or as a document, needs update on it
+     * (on its collection, or on the document under document security); a stored document the caller cannot read is
+     * refused. For staging a write that runs later, such as an operation of a transaction committed by another
+     * request; createDocument() runs the same checks when it writes. Related documents are first prepared by the
+     * registered {@see \Utopia\Database\Hook\Nested} hooks, as createDocument() prepares them.
+     *
+     * Writes staged before the later one change what it finds. With $resolve, every related document is judged as
+     * the later write would find it: $resolve(collection, ID) is given the collection identifier and the document ID
+     * and returns the document as the staged writes leave it, with its permissions and whether or not the caller can
+     * read it, an empty document when they delete it, or null when they leave it as stored. A related document the
+     * staged writes delete is new to the later write, so it needs create rather than update.
+     *
+     * @param  string  $collection  The collection identifier
+     * @param  Document  $document  The document a later createDocument() would be given; it is not changed
+     * @param  (callable(string, string): ?Document)|null  $resolve  The staged view of a related document; null judges every one as stored
+     *
+     * @throws AuthorizationException When createDocument() would refuse the caller
+     * @throws NotFoundException When the collection does not exist
+     * @throws RelationshipException When a relationship value is not a document, an ID or a list of them
+     */
+    public function authorizeCreate(string $collection, Document $document, ?callable $resolve = null): void
+    {
+        $definition = $this->silent(fn () => $this->getCollection($collection));
+
+        if ($definition->getId() !== self::METADATA && ! $this->authorization->isValid(new Input(PermissionType::Create, $definition->getPermissionsByType(PermissionType::Create)))) {
+            throw new AuthorizationException($this->authorization->getDescription());
+        }
+
+        if ($this->relationshipHook?->isEnabled()) {
+            $this->relationshipHook->authorize($definition, $this->prepareNestedCopy($definition, $document, $this->nestedPreparation($resolve)), resolve: $resolve);
+        }
+    }
+
+    /**
+     * Check, without writing anything, that the caller may update $old with $document: update on the document (on its
+     * collection, or on $old under document security) and, for every related document $document carries, what
+     * authorizeCreate() checks for it. A related document $old already links needs no link check, only update when
+     * it is sent as a document with attributes to change. Unlike updateDocument(), which lets an update that changes
+     * nothing through with read permission, this always needs update. $resolve gives the staged view of related
+     * documents as for authorizeCreate(); $old is the document as the staged writes leave it. Related documents are
+     * first prepared by the registered {@see \Utopia\Database\Hook\Nested} hooks, as updateDocument() prepares them.
+     *
+     * @param  string  $collection  The collection identifier
+     * @param  Document  $old  The stored document the update changes, as the caller reads it
+     * @param  Document  $document  The changes a later updateDocument() would be given; it is not changed
+     * @param  (callable(string, string): ?Document)|null  $resolve  The staged view of a related document; null judges every one as stored
+     *
+     * @throws AuthorizationException When updateDocument() would refuse the caller
+     * @throws NotFoundException When the collection does not exist
+     * @throws RelationshipException When a relationship value is not a document, an ID or a list of them
+     */
+    public function authorizeUpdate(string $collection, Document $old, Document $document, ?callable $resolve = null): void
+    {
+        $definition = $this->silent(fn () => $this->getCollection($collection));
+
+        if ($definition->getId() !== self::METADATA && ! $this->authorization->isValid(new Input(PermissionType::Update, [
+            ...$definition->getPermissionsByType(PermissionType::Update),
+            ...($definition->getAttribute('documentSecurity', false) ? $old->getPermissionsByType(PermissionType::Update) : []),
+        ]))) {
+            throw new AuthorizationException($this->authorization->getDescription());
+        }
+
+        if ($this->relationshipHook?->isEnabled()) {
+            $this->relationshipHook->authorize($definition, $this->prepareNestedCopy($definition, $document, $this->nestedPreparation($resolve)), $old, $resolve);
+        }
+    }
+
+    /**
      * @param  string  $collection  The collection identifier
      * @param  Document  $document  The document to create
      * @return Document The created document with generated ID and timestamps
@@ -1055,16 +1130,18 @@ trait Documents
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $document = $this->prepareDocument($collection, $document);
+        $preparation = $this->nestedPreparation(lock: true);
 
         /** @var array<int, array{Document, array<string, mixed>}> $copies */
         $copies = [];
         try {
-            $document = $this->withMutation(Event::DocumentCreate, $document, function () use ($collection, $document, &$copies) {
+            $document = $this->withMutation(Event::DocumentCreate, $document, function () use ($collection, $document, $preparation, &$copies) {
                 $hook = $this->relationshipHook;
                 if ($hook?->isEnabled()) {
                     if ($copies !== [] && $copies !== null) {
                         $hook->restore($copies);
                     }
+                    $document = $this->prepareNestedCopy($collection, $document, $preparation);
                     $document = $this->silent(function () use ($hook, $collection, $document, &$copies): Document {
                         return $hook->afterDocumentCreate($collection, $document, $copies);
                     });
@@ -1160,6 +1237,72 @@ trait Documents
                 );
             }
         });
+    }
+
+    private function checksGrants(): bool
+    {
+        return $this->grantChecking()->get() && $this->authorization->getStatus();
+    }
+
+    /**
+     * Null when the write leaves its related documents as given.
+     *
+     * @param  (callable(string, string): ?Document)|null  $resolve
+     */
+    private function nestedPreparation(?callable $resolve = null, bool $lock = false): ?Preparation
+    {
+        $check = $this->checksGrants();
+        if (($this->nestedHooks === [] && ! $check) || ! $this->relationshipHook?->isEnabled()) {
+            return null;
+        }
+
+        return new Preparation($this->nestedHooks, $check, $lock, $resolve === null ? null : $resolve(...));
+    }
+
+    /**
+     * @throws AuthorizationException
+     * @throws RelationshipException
+     * @throws StructureException
+     */
+    private function prepareNested(Document $collection, Document $document, Preparation $preparation): Document
+    {
+        $hook = $this->relationshipHook;
+        if ($hook === null) {
+            return $document;
+        }
+
+        return $this->silent(fn (): Document => $hook->prepareNested($collection, $document, $preparation));
+    }
+
+    /**
+     * Prepares a copy, so a write that runs again, as a retried transaction does, starts from the document given.
+     *
+     * @throws AuthorizationException
+     * @throws RelationshipException
+     * @throws StructureException
+     */
+    private function prepareNestedCopy(Document $collection, Document $document, ?Preparation $preparation): Document
+    {
+        if ($preparation === null) {
+            return $document;
+        }
+
+        return $this->prepareNested($collection, clone $document, $preparation);
+    }
+
+    private static function holdsRelatedDocument(Collection $collection, Document $document): bool
+    {
+        foreach (self::relationshipAttributes($collection) as $attribute) {
+            $value = $document->getAttribute($attribute->key);
+            $values = \is_array($value) && \array_is_list($value) ? $value : [$value];
+            foreach ($values as $related) {
+                if ($related instanceof Document || (\is_array($related) && ! \array_is_list($related))) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -1359,6 +1502,13 @@ trait Documents
         $modified = 0;
         $hasRelationships = self::relationshipAttributes($collection) !== [];
 
+        $preparation = $hasRelationships ? $this->nestedPreparation() : null;
+        if ($preparation !== null) {
+            foreach ($documents as $index => $document) {
+                $documents[$index] = $this->prepareNested($collection, $document, $preparation);
+            }
+        }
+
         // Hoisted: validator only depends on the collection + adapter properties,
         // both stable for this call. Allocating once and reusing across all
         // documents avoids per-document construction and (with the in-class
@@ -1485,18 +1635,21 @@ trait Documents
         $this->assertRowPermissions($document);
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
+        $preparation = $this->nestedPreparation(lock: true);
         $newUpdatedAt = $document->getUpdatedAt();
         $hasOperators = false;
+        $round = $this->fractionRounding()->get();
         $cacheTarget = $collection->getId() === self::METADATA
             ? new Document([Document::ID => $id, Document::COLLECTION => self::METADATA])
             : $collection->getId();
-        $document = $this->withMutation(Event::DocumentUpdate, $cacheTarget, function () use ($collection, $id, $document, $newUpdatedAt, &$hasOperators) {
+        $document = $this->withMutation(Event::DocumentUpdate, $cacheTarget, function () use ($collection, $id, $document, $preparation, $newUpdatedAt, $round, &$hasOperators) {
             $old = $this->authorization->skip(fn () => $this->silent(
                 fn () => $this->readDocument($collection, $id, forUpdate: true)
             ));
             if ($old->isEmpty()) {
                 return new Document();
             }
+            $document = $this->prepareNestedCopy($collection, $document, $preparation);
             $time = DateTime::nowAfter($old->getUpdatedAt() ?: null);
 
             $skipPermissionsUpdate = true;
@@ -1529,6 +1682,10 @@ trait Documents
             // counting it as a change would bump $updatedAt and fire an update event
             // for a write that leaves the stored document identical.
             $document = $this->removeUnknownAttributes($collection, $document);
+
+            if ($round) {
+                $this->resolveFractions($collection, $document, $old);
+            }
 
             $shouldUpdate = false;
 
@@ -1812,6 +1969,10 @@ trait Documents
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
+        if ($this->checksGrants() && $this->relationshipHook?->isEnabled() && self::holdsRelatedDocument($collection, $updates)) {
+            throw new RelationshipException('Invalid relationship value. A bulk update takes related documents by ID while grants are checked.');
+        }
+
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
         $skipAuth = $this->authorization->isValid(new Input(PermissionType::Update, $collection->getPermissionsByType(PermissionType::Update)));
 
@@ -1853,6 +2014,9 @@ trait Documents
         $updatedAt = $updates->getUpdatedAt();
         $updates[Document::UPDATED_AT] = ($updatedAt === null || ! $this->datePreservation()->get()) ? DateTime::now() : $updatedAt;
 
+        $fractionalKeys = $this->fractionRounding()->get() ? $this->prepareFractions($collection, $updates) : [];
+        $fractional = $fractionalKeys === [] ? null : new Fractional($this->adapter->arithmetic());
+
         $decodedUpdates = clone $updates;
         $updates = $this->encode(
             $collection,
@@ -1864,6 +2028,7 @@ trait Documents
             $validator = new PartialStructure(
                 collection: $collection,
                 profile: $this->profile(),
+                fractions: $fractional !== null,
             );
 
             if (! $validator->isValid($updates)) {
@@ -1922,8 +2087,9 @@ trait Documents
 
             $cacheTarget = $collection->getId() === self::METADATA ? $batch : $collection->getId();
             $found = $batch;
-            $this->withMutation(Event::DocumentsUpdate, $cacheTarget, function () use ($collection, $updates, $decodedUpdates, $adapterUpdates, &$batch, $found, $currentPermissions) {
+            $this->withMutation(Event::DocumentsUpdate, $cacheTarget, function () use ($collection, $updates, $decodedUpdates, $adapterUpdates, $adapterData, $fractionalKeys, $fractional, &$batch, $found, $currentPermissions) {
                 $keepsPermissions = [];
+                $groups = [];
                 foreach ($found as $index => $document) {
                     $skipPermissionsUpdate = true;
 
@@ -1943,9 +2109,17 @@ trait Documents
                     // keeps the permission rows of every document under that id rewritten.
                     $keepsPermissions[$document->getId()] = $skipPermissionsUpdate && ($keepsPermissions[$document->getId()] ?? true);
 
+                    $resolved = [];
+                    if ($fractional !== null) {
+                        $resolved = $this->lockedFractions($collection, $decodedUpdates, $fractionalKeys, $document, $fractional);
+                        $signature = \serialize(\array_map(static fn (Operator $operator): array => $operator->toArray(), $resolved));
+                        $groups[$signature]['operators'] = $resolved;
+                        $groups[$signature]['indexes'][] = $index;
+                    }
+
                     $updateData = [];
                     foreach ($decodedUpdates->getArrayCopy() as $key => $value) {
-                        $updateData[$key] = $value instanceof Operator ? clone $value : $value;
+                        $updateData[$key] = $resolved[$key] ?? ($value instanceof Operator ? clone $value : $value);
                     }
                     $new = new Document(\array_merge($document->getArrayCopy(), $updateData));
 
@@ -1971,12 +2145,23 @@ trait Documents
                     $batch[$index] = $this->castBefore($collection, $encoded);
                 }
 
-                $this->adapter->updateDocuments(
-                    $collection,
-                    $adapterUpdates,
-                    $batch,
-                    \array_filter($keepsPermissions),
-                );
+                if ($groups === []) {
+                    $this->adapter->updateDocuments(
+                        $collection,
+                        $adapterUpdates,
+                        $batch,
+                        \array_filter($keepsPermissions),
+                    );
+                }
+
+                foreach ($groups as ['operators' => $operators, 'indexes' => $indexes]) {
+                    $this->adapter->updateDocuments(
+                        $collection,
+                        $this->castBefore($collection, new Document([...$adapterData, ...$operators])),
+                        \array_values(\array_intersect_key($batch, \array_flip($indexes))),
+                        \array_filter($keepsPermissions),
+                    );
+                }
 
                 foreach ($batch as $document) {
                     $this->withDocumentTenant(
@@ -2156,16 +2341,26 @@ trait Documents
         $operatorIds = [];
         $seenIds = [];
         $hasRelationships = self::relationshipAttributes($collection) !== [];
+        $preparation = $hasRelationships ? $this->nestedPreparation() : null;
+        if ($preparation !== null) {
+            foreach ($documents as $key => $document) {
+                $documents[$key] = $this->prepareNested($collection, $document, $preparation);
+            }
+        }
         $internalKeys = \array_flip(\array_map(
             static fn (Attribute $attribute): string => $attribute->key,
             self::internalAttributesFor(true)
         ));
         $existing = $this->findDocumentsToUpsert($collection->getId(), $documents);
+        $round = $this->fractionRounding()->get();
+        $fractionalKeys = [];
 
         foreach ($documents as $key => $document) {
             $old = $existing[$this->upsertKey($document)] ?? new Document();
 
             $document = $this->removeUnknownAttributes($collection, $document);
+
+            $keys = $round ? $this->prepareFractions($collection, $document) : [];
 
             // Extract operators early to avoid comparison issues
             $documentArray = $document->getArrayCopy();
@@ -2294,7 +2489,8 @@ trait Documents
                 $validator = new Structure(
                     collection: $collection,
                     profile: $this->profile(),
-                    currentDocument: $old->isEmpty() ? null : $old
+                    currentDocument: $old->isEmpty() ? null : $old,
+                    fractions: $keys !== [],
                 );
 
                 if (! $validator->isValid($document)) {
@@ -2326,6 +2522,9 @@ trait Documents
             if (! empty($operators)) {
                 $operatorIds[$identity] = true;
             }
+            if ($keys !== []) {
+                $fractionalKeys[$identity] = $keys;
+            }
             $old = $this->castBefore($collection, $old);
             $document = $this->castBefore($collection, $document);
 
@@ -2355,12 +2554,17 @@ trait Documents
             $batch = $this->withMutation(
                 Event::DocumentsUpsert,
                 \array_map(static fn (Change $change): Document => $change->new, $chunk),
-                function () use ($collection, $increase, $chunk): array {
+                function () use ($collection, $increase, $chunk, $fractionalKeys): array {
                     if (! $this->adapterHasFeature(Feature\Upserts::class)) {
                         throw new DatabaseException('Adapter does not support upserts');
                     }
 
                     $adapter = $this->adapter;
+
+                    if ($fractionalKeys !== []) {
+                        $this->resolveUpsertFractions($collection, $chunk, $fractionalKeys);
+                    }
+
                     $batch = $this->authorization->skip(fn () => $adapter->upsertDocuments(
                         $collection,
                         $chunk,
@@ -2525,18 +2729,23 @@ trait Documents
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $numericAttribute = $this->numericAttribute($collection, $attribute);
+        $exact = false;
 
         if ($this->isDeclaredInteger($numericAttribute ?? $this->declaredAttribute($collection, $attribute))) {
-            $this->assertIntegerChange($value);
-            if ($max !== null) {
-                $max = $this->integerBound($max, 'Max');
+            if ($this->fractionRounding()->get()) {
+                [$exact, $max] = $this->prepareIntegerChange($value, $max, true);
+            } else {
+                $this->assertIntegerChange($value);
+                if ($max !== null) {
+                    $max = $this->integerBound($max, 'Max');
+                }
             }
         }
 
         $cacheTarget = $collection->getId() === self::METADATA
             ? new Document([Document::ID => $id, Document::COLLECTION => self::METADATA])
             : $collection->getId();
-        $document = $this->withMutation(Event::DocumentIncrease, $cacheTarget, function () use ($collection, $id, $attribute, $value, $max, $numericAttribute) {
+        $document = $this->withMutation(Event::DocumentIncrease, $cacheTarget, function () use ($collection, $id, $attribute, $value, $max, $numericAttribute, $exact) {
             /** @var Document $document */
             $document = $this->authorization->skip(fn () => $this->silent(fn () => $this->readDocument($collection, $id, forUpdate: true))); // Skip ensures user does not need read permission for this
 
@@ -2557,6 +2766,11 @@ trait Documents
 
             $attributeExists = $document->offsetExists($attribute);
             $currentVal = $document->getAttribute($attribute);
+            $returned = null;
+            if ($exact) {
+                [$value, $returned] = $this->exactChange($currentVal, $value, $max, true);
+                $max = null;
+            }
             if ($numericAttribute instanceof Attribute) {
                 $result = $this->getNumericResult($numericAttribute, $currentVal, $value, true);
             } else {
@@ -2600,7 +2814,7 @@ trait Documents
             $this->purgeCachedDocumentInternal($collection->getId(), $id);
             $this->queueDocumentPurge($collection->getId(), $id);
 
-            return $document->setAttribute($attribute, $result);
+            return $document->setAttribute($attribute, $returned ?? $result);
         });
 
         $listeners = $this->listens(Event::DocumentIncrease);
@@ -2649,18 +2863,23 @@ trait Documents
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $numericAttribute = $this->numericAttribute($collection, $attribute);
+        $exact = false;
 
         if ($this->isDeclaredInteger($numericAttribute ?? $this->declaredAttribute($collection, $attribute))) {
-            $this->assertIntegerChange($value);
-            if ($min !== null) {
-                $min = $this->integerBound($min, 'Min');
+            if ($this->fractionRounding()->get()) {
+                [$exact, $min] = $this->prepareIntegerChange($value, $min, false);
+            } else {
+                $this->assertIntegerChange($value);
+                if ($min !== null) {
+                    $min = $this->integerBound($min, 'Min');
+                }
             }
         }
 
         $cacheTarget = $collection->getId() === self::METADATA
             ? new Document([Document::ID => $id, Document::COLLECTION => self::METADATA])
             : $collection->getId();
-        $document = $this->withMutation(Event::DocumentDecrease, $cacheTarget, function () use ($collection, $id, $attribute, $value, $min, $numericAttribute) {
+        $document = $this->withMutation(Event::DocumentDecrease, $cacheTarget, function () use ($collection, $id, $attribute, $value, $min, $numericAttribute, $exact) {
             /** @var Document $document */
             $document = $this->authorization->skip(fn () => $this->silent(fn () => $this->readDocument($collection, $id, forUpdate: true))); // Skip ensures user does not need read permission for this
 
@@ -2681,6 +2900,11 @@ trait Documents
 
             $attributeExists = $document->offsetExists($attribute);
             $currentDecVal = $document->getAttribute($attribute);
+            $returned = null;
+            if ($exact) {
+                [$value, $returned] = $this->exactChange($currentDecVal, $value, $min, false);
+                $min = null;
+            }
             if ($numericAttribute instanceof Attribute) {
                 $result = $this->getNumericResult($numericAttribute, $currentDecVal, $value, false);
             } else {
@@ -2724,7 +2948,7 @@ trait Documents
             $this->purgeCachedDocumentInternal($collection->getId(), $id);
             $this->queueDocumentPurge($collection->getId(), $id);
 
-            return $document->setAttribute($attribute, $result);
+            return $document->setAttribute($attribute, $returned ?? $result);
         });
 
         $listeners = $this->listens(Event::DocumentDecrease);
@@ -3793,6 +4017,36 @@ trait Documents
     }
 
     /**
+     * Read a list the way its queries ask: the documents find() reads, or, when the queries aggregate or group, the
+     * rows aggregate() reads, each as a document.
+     *
+     * @param  array<Query>  $queries
+     * @param  PermissionType  $forPermission  The permission documents are read under; aggregate rows read under the read permission only
+     * @return list<Document>
+     *
+     * @throws DatabaseException
+     * @throws QueryException When aggregate or groupBy queries are read under another permission than read
+     * @throws TimeoutException
+     */
+    public function read(string $collection, array $queries = [], PermissionType $forPermission = PermissionType::Read): array
+    {
+        $this->checkQueryTypes($queries);
+
+        if (! Query::groupByType($queries)->isAggregation()) {
+            return \array_values($this->find($collection, $queries, $forPermission));
+        }
+
+        if ($forPermission !== PermissionType::Read) {
+            throw new QueryException('Aggregate and groupBy queries read under the read permission only, not '.$forPermission->value);
+        }
+
+        return \array_map(
+            static fn (array $row): Document => new Document($row),
+            $this->aggregate($collection, $queries),
+        );
+    }
+
+    /**
      * @param  array<Query>  $queries
      * @param  bool  $aggregate  Whether the queries must aggregate (aggregate()) or must not (find())
      * @return array<Document>
@@ -3807,6 +4061,7 @@ trait Documents
         $queryCacheQueries = $queries;
 
         $this->checkQueryTypes($queries);
+        $queries = self::resolveOneToManyJoins($collection, $queries);
 
         $joinedCollectionsById = null;
 
@@ -3872,6 +4127,11 @@ trait Documents
 
         $joinedByAlias = $this->joinedCollectionsByAlias($joins, $joinedCollectionsById);
         $joinedCollections = $isAggregation ? [] : $joinedByAlias;
+
+        // 7.x read a random order with a cursor as a random order without one, so the cursor is dropped as it was.
+        if (\in_array(OrderDirection::Random, $orderTypes, true)) {
+            $cursor = null;
+        }
 
         if ($joinedCollections !== [] && $cursor !== null) {
             [$orderAttributes, $cursor] = $this->qualifyJoinedOrders($collection, $orderAttributes, $cursor, $joinedCollections);
@@ -4172,6 +4432,7 @@ trait Documents
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $this->checkQueryTypes($queries);
+        $queries = self::resolveOneToManyJoins($collection, $queries);
 
         $joinedCollections = null;
 
@@ -4228,6 +4489,7 @@ trait Documents
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $this->checkQueryTypes($queries);
+        $queries = self::resolveOneToManyJoins($collection, $queries);
 
         $joinedCollections = null;
 
@@ -4665,14 +4927,15 @@ trait Documents
     private function nextPageCheck(string $collection, array $queries): Closure
     {
         $parsed = Query::groupByType($queries);
-        $joins = $parsed->joins;
-        $distinct = $parsed->distinct;
-        if (($joins === [] && ! $distinct) || $parsed->aggregations !== [] || $parsed->groupBy !== []) {
+        if (($parsed->joins === [] && ! $parsed->distinct) || $parsed->aggregations !== [] || $parsed->groupBy !== []) {
             return static function (Document $cursor): void {
             };
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
+        $parsed = Query::groupByType(self::resolveOneToManyJoins($collection, $queries));
+        $joins = $parsed->joins;
+        $distinct = $parsed->distinct;
         $joinedCollections = $this->joinedCollectionsByAlias($joins, $this->resolveJoinedCollections($joins));
         $selects = $parsed->selections;
         $filters = $parsed->filters;
@@ -4887,6 +5150,71 @@ trait Documents
         }
 
         return $collections;
+    }
+
+    /**
+     * The parent side of a one-to-many relationship holds no column: each child stores the parent's ID under the
+     * relationship's two-way key. A join condition whose left column is such an attribute compares the main `$id`
+     * with that key instead, keeping its operator. The joins returned are copies; the caller's are left as given.
+     *
+     * @param  array<Query>  $queries
+     * @return array<Query>
+     */
+    private static function resolveOneToManyJoins(Collection $collection, array $queries): array
+    {
+        $twoWayKeys = null;
+
+        foreach ($queries as $index => $query) {
+            if (! $query->getMethod()->isJoin()) {
+                continue;
+            }
+
+            $twoWayKeys ??= self::oneToManyTwoWayKeys($collection);
+            if ($twoWayKeys === []) {
+                return $queries;
+            }
+
+            $resolved = null;
+            foreach ($query->getJoinOnQueries() as $position => $condition) {
+                $values = $condition->getValues();
+                $left = $values[0] ?? null;
+                if ($condition->getMethod() !== Method::On || ! \is_string($left) || ! isset($twoWayKeys[$left])) {
+                    continue;
+                }
+
+                $values[0] = Document::ID;
+                $values[2] = $twoWayKeys[$left];
+                $resolved ??= clone $query;
+                $resolved->getJoinOnQueries()[$position]->setValues($values);
+            }
+
+            if ($resolved !== null) {
+                $queries[$index] = $resolved;
+            }
+        }
+
+        return $queries;
+    }
+
+    /**
+     * @return array<string, string> The two-way key of each one-to-many relationship the collection is the parent of
+     */
+    private static function oneToManyTwoWayKeys(Collection $collection): array
+    {
+        $twoWayKeys = [];
+        foreach (self::relationshipAttributes($collection) as $attribute) {
+            $relationship = $attribute->relationship;
+            if (
+                $relationship?->type === RelationshipType::OneToMany
+                && $attribute->side === RelationshipSide::Parent
+                && $relationship->twoWayKey !== null
+                && $relationship->twoWayKey !== ''
+            ) {
+                $twoWayKeys[$attribute->key] = $relationship->twoWayKey;
+            }
+        }
+
+        return $twoWayKeys;
     }
 
     /**
@@ -5292,6 +5620,29 @@ trait Documents
         }
 
         return $this->adapter->castBefore($collection, $document);
+    }
+
+    /**
+     * A single read returns `$sequence` ahead of `$id`, in the key order 7.x returned it on every adapter.
+     */
+    private static function placeSequenceBeforeId(Document $document): void
+    {
+        if (! $document->offsetExists(Document::SEQUENCE) || ! $document->offsetExists(Document::ID)) {
+            return;
+        }
+
+        $ordered = [];
+        foreach ($document as $key => $value) {
+            if ($key === Document::SEQUENCE) {
+                continue;
+            }
+            if ($key === Document::ID) {
+                $ordered[Document::SEQUENCE] = $document->offsetGet(Document::SEQUENCE);
+            }
+            $ordered[$key] = $value;
+        }
+
+        $document->exchangeArray($ordered);
     }
 
     private function castAfterDocument(Document $collection, Document $document): Document

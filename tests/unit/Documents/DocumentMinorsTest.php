@@ -191,7 +191,7 @@ final class DocumentMinorsTest extends TestCase
         $database->setAuthorization($authorization)->setDatabase('minors')->setNamespace('minors_'.\uniqid());
         $database->create();
         $database->addHook(new Relationships());
-        $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
+        $permissions = [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())];
         $database->createCollection(Collection::create(id: 'books', attributes: [Attribute::integer(key: 'pages')], permissions: $permissions));
         $database->createCollection(Collection::create(id: 'authors', attributes: [Attribute::string(key: 'name', size: 32)], permissions: $permissions));
         $database->createRelationship('books', Relationship::manyToOne(relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books'));

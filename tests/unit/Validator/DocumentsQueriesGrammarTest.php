@@ -74,7 +74,7 @@ class DocumentsQueriesGrammarTest extends TestCase
         );
 
         $this->assertFalse($validator->isValid([$query]));
-        $this->assertSame('Invalid query method: '.$method, $validator->getDescription());
+        $this->assertSame('Invalid query: Invalid query method: '.$method, $validator->getDescription());
     }
 
     #[DataProvider('joinQueries')]
@@ -112,7 +112,7 @@ class DocumentsQueriesGrammarTest extends TestCase
         );
 
         $this->assertFalse($validator->isValid([$query]));
-        $this->assertSame('Invalid query method: '.$method, $validator->getDescription());
+        $this->assertSame('Invalid query: Invalid query method: '.$method, $validator->getDescription());
     }
 
     #[DataProvider('joinQueries')]
@@ -125,6 +125,6 @@ class DocumentsQueriesGrammarTest extends TestCase
         );
 
         $this->assertFalse($validator->isValid([$query]));
-        $this->assertSame('Invalid query method: '.$method, $validator->getDescription());
+        $this->assertSame('Invalid query: Invalid query method: '.$method, $validator->getDescription());
     }
 }

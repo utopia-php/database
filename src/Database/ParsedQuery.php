@@ -43,4 +43,12 @@ final readonly class ParsedQuery extends BaseParsedQuery
         public array $orderTypes = [],
     ) {
     }
+
+    /**
+     * Whether the queries read one row per group, through an aggregate or a groupBy, instead of documents.
+     */
+    public function isAggregation(): bool
+    {
+        return $this->aggregations !== [] || $this->groupBy !== [];
+    }
 }

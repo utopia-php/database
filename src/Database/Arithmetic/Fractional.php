@@ -82,7 +82,8 @@ final readonly class Fractional
     /**
      * The whole-number increment or decrement that stores what the engine stored for $operator applied to
      * $stored, or an increment by 0 where its limit held the value back. The operator comes back unchanged where
-     * the engine refused it, an operand is not a number, or the result is not finite, so the caller refuses it.
+     * the engine refused it, an operand or limit is not a finite number, or the result is not finite, so the caller
+     * refuses it.
      */
     public function operator(Operator $operator, int|float|string|null $stored): Operator
     {

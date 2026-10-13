@@ -342,6 +342,83 @@ final class RoundFractionsTest extends TestCase
         $this->assertSame(5, $this->stored($database, 'count'));
     }
 
+    /**
+     * @return iterable<string, array{bool, int|string, int|string|null}>
+     */
+    public static function boundsBeyondFloatPrecision(): iterable
+    {
+        yield 'an increase past a maximum' => [true, 9007199254740993, null];
+        yield 'an increase past a maximum given as text' => [true, '9007199254740993', null];
+        yield 'a decrease past a minimum' => [false, 9007199254740993, null];
+        yield 'an increase within a maximum' => [true, 9007199254740994, 9007199254740994];
+        yield 'a decrease within a minimum' => [false, 9007199254740992, 9007199254740992];
+    }
+
+    #[DataProvider('boundsBeyondFloatPrecision')]
+    public function testAFractionalChangeIsHeldToABoundBeyondFloatPrecisionExactly(bool $increase, int|string $bound, int|string|null $stored): void
+    {
+        $database = $this->database();
+        $this->create($database, ['big' => 9007199254740993]);
+        $change = fn (): Document => $increase
+            ? $database->increaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'big', 0.5, $bound)
+            : $database->decreaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'big', 0.5, $bound);
+
+        if ($stored === null) {
+            $this->assertLimited($change);
+            $this->assertSame(9007199254740993, $this->stored($database, 'big'));
+
+            return;
+        }
+
+        $change();
+        $this->assertSame($stored, $this->stored($database, 'big'));
+    }
+
+    /**
+     * @return iterable<string, array{FractionalEngine}>
+     */
+    public static function engines(): iterable
+    {
+        foreach (FractionalEngine::cases() as $engine) {
+            yield $engine->name => [$engine];
+        }
+    }
+
+    #[DataProvider('engines')]
+    public function testAWholeChangeWrittenWithAnExponentChangesByItsValue(FractionalEngine $engine): void
+    {
+        $database = $this->database(self::engine($engine));
+        $this->create($database, ['count' => 5]);
+
+        $this->assertSame(1005.0, $database->increaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', '1e3', '2e3')->getAttribute('count'));
+        $this->assertSame(980.0, $database->decreaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', '2.50e1')->getAttribute('count'));
+        $this->assertSame(980, $this->stored($database, 'count'));
+    }
+
+    /**
+     * @return iterable<string, array{FractionalEngine, Operator}>
+     */
+    public static function nonFiniteOperators(): iterable
+    {
+        foreach (FractionalEngine::cases() as $engine) {
+            yield "{$engine->name}: an infinite factor under a fractional maximum" => [$engine, Operator::multiply(\INF, 10.5)];
+            yield "{$engine->name}: a fractional factor under a not-a-number maximum" => [$engine, Operator::multiply(1.5, \NAN)];
+            yield "{$engine->name}: a fractional increment under an infinite maximum" => [$engine, Operator::increment(1.5, \INF)];
+            yield "{$engine->name}: a fractional decrement above a negative infinite minimum" => [$engine, Operator::decrement(1.5, -\INF)];
+        }
+    }
+
+    #[DataProvider('nonFiniteOperators')]
+    public function testANonFiniteOperandOrLimitIsRefused(FractionalEngine $engine, Operator $operator): void
+    {
+        $database = $this->database(self::engine($engine));
+        $this->create($database, ['count' => 10]);
+
+        $this->assertStructureRefused(fn () => $database->updateDocument(self::COLLECTION, self::DOCUMENT, new Document(['count' => $operator])));
+        $this->assertStructureRefused(fn () => $database->updateDocuments(self::COLLECTION, new Document(['count' => clone $operator])));
+        $this->assertSame(10, $this->stored($database, 'count'));
+    }
+
     public function testAFractionalChangeOnAMissingDocumentIsNotFound(): void
     {
         $this->expectException(NotFoundException::class);

@@ -3302,11 +3302,10 @@ class Relationships implements Attachable, Hook
             throw new StructureException($validator->getDescription());
         }
 
-        /** @var list<string> $permissions */
         $current = $new ? [] : (Permission::aggregate($this->grantedView($collection, $document->getId(), $resolve)->getPermissions()) ?? []);
         $authorization = $this->database->getAuthorization();
 
-        foreach (\array_diff(Permission::aggregate($permissions) ?? [], $current) as $granted) {
+        foreach (\array_diff(Permission::aggregate($document->getPermissions()) ?? [], $current) as $granted) {
             $permission = Permission::parse($granted);
             $role = new Role($permission->getRole(), $permission->getIdentifier(), $permission->getDimension());
             if (! $authorization->hasRole($role->toString())) {
@@ -3336,16 +3335,12 @@ class Relationships implements Attachable, Hook
     }
 
     /**
-     * @param  Document|array<string, mixed>  $value
+     * @param  array<string, mixed>  $value
      *
      * @throws RelationshipException
      */
-    private static function toDocument(Document|array $value): Document
+    private static function toDocument(array $value): Document
     {
-        if ($value instanceof Document) {
-            return $value;
-        }
-
         try {
             return new Document($value);
         } catch (StructureException $error) {

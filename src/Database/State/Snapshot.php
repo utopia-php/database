@@ -8,8 +8,6 @@ use DateTime;
  * The scoped state a database handle's reads depend on, as one coroutine sees it. Taken with
  * Database::snapshot() and applied with Database::withSnapshot(), it lets work started in another coroutine run
  * under its caller's state, however long the caller keeps that state.
- *
- * @internal
  */
 final readonly class Snapshot
 {
@@ -48,8 +46,8 @@ final readonly class Snapshot
         public bool $preserveSequence,
         public bool $ignoreDuplicates,
         public ?DateTime $requestTimestamp,
-        public bool $checkGrants,
-        public bool $roundFractions,
+        public bool $checkGrants = false,
+        public bool $roundFractions = false,
     ) {
     }
 }

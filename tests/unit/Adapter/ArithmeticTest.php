@@ -126,7 +126,7 @@ final class ArithmeticTest extends TestCase
             $arithmetic->division,
             $arithmetic->power,
             $arithmetic->refusesCounterFractions,
-            $arithmetic->exact,
+            $arithmetic->exactOperators,
             $arithmetic->refusedWithoutLimit,
         ];
     }

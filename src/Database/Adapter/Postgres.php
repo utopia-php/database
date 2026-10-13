@@ -89,7 +89,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
             division: Rounding::HalfAwayFromZero,
             power: Rounding::HalfEven,
             refusesCounterFractions: true,
-            exact: [OperatorType::Multiply, OperatorType::Divide, OperatorType::Modulo],
+            exactOperators: [OperatorType::Multiply, OperatorType::Divide, OperatorType::Modulo],
             refusedWithoutLimit: [OperatorType::Increment, OperatorType::Decrement, OperatorType::Multiply, OperatorType::Divide],
         );
     }

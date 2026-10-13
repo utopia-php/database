@@ -102,7 +102,7 @@ final readonly class Fractional
         }
 
         $rounding = $this->arithmetic->rounding($method, $whole);
-        if (\in_array($method, $this->arithmetic->exact, true)) {
+        if (\in_array($method, $this->arithmetic->exactOperators, true)) {
             $exact = self::rational($method, $current, $amount);
             if ($exact === null || ($limit !== null && Decimal::isOverlong($limit))) {
                 return $operator;

@@ -13,7 +13,7 @@ use Utopia\Database\Arithmetic\Rounding;
 final readonly class Arithmetic
 {
     /**
-     * @param  list<OperatorType>  $exact
+     * @param  list<OperatorType>  $exactOperators
      * @param  list<OperatorType>  $refusedWithoutLimit
      */
     public function __construct(
@@ -22,7 +22,7 @@ final readonly class Arithmetic
         public Rounding $division,
         public Rounding $power,
         public bool $refusesCounterFractions = false,
-        public array $exact = [],
+        public array $exactOperators = [],
         public array $refusedWithoutLimit = [],
     ) {
     }

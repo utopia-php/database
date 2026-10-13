@@ -149,6 +149,13 @@ class Operator extends Validator
         // Handle both Document objects and arrays
         $type = $attribute instanceof Document ? $attribute->getAttribute('type') : $attribute['type'];
         $isArray = $attribute instanceof Document ? ($attribute->getAttribute('array') ?? false) : ($attribute['array'] ?? false);
+        $filters = $attribute instanceof Document ? $attribute->getAttribute('filters', []) : ($attribute['filters'] ?? []);
+
+        // Operators run on the stored value, which for an encrypted attribute is the ciphertext
+        if (\in_array('encrypt', $filters, true)) {
+            $this->message = "Cannot apply {$method} operator to encrypted attribute '{$operator->getAttribute()}'";
+            return false;
+        }
 
         // Array operators that carry a caller-supplied value list are capped to guard against
         // memory exhaustion. Enforced here so every adapter rejects an oversized list the same way.

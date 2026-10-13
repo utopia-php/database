@@ -60,6 +60,7 @@ use Utopia\Database\Validator\UID;
 use Utopia\Query\CursorDirection;
 use Utopia\Query\Method;
 use Utopia\Query\OrderDirection;
+use Utopia\Query\Query as BaseQuery;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 use WeakMap;
@@ -493,6 +494,7 @@ trait Documents
         $attributes = $collection->attributes();
 
         $this->checkQueryTypes($queries);
+        $queries = $this->rewriteRelationshipJoins($collection, $queries);
 
         $joinedCollections = null;
 
@@ -3883,6 +3885,7 @@ trait Documents
         $queryCacheQueries = $queries;
 
         $this->checkQueryTypes($queries);
+        $queries = $this->rewriteRelationshipJoins($collection, $queries);
 
         $joinedCollectionsById = null;
 
@@ -4253,6 +4256,7 @@ trait Documents
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $this->checkQueryTypes($queries);
+        $queries = $this->rewriteRelationshipJoins($collection, $queries);
 
         $joinedCollections = null;
 
@@ -4309,6 +4313,7 @@ trait Documents
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $this->checkQueryTypes($queries);
+        $queries = $this->rewriteRelationshipJoins($collection, $queries);
 
         $joinedCollections = null;
 
@@ -4934,6 +4939,106 @@ trait Documents
         if (! $validator->isValid($queries)) {
             throw new QueryException($validator->getDescription());
         }
+    }
+
+    /**
+     * A one-to-many relationship attribute, and the child side of a two-way many-to-one, holds no column: the
+     * related collection stores this document's ID. A join of that related collection comparing such an attribute
+     * with the related `$id` is rewritten to compare this document's `$id` with the column storing it, keeping the
+     * operator and alias. The rewritten joins are copies; the caller's queries are left as given.
+     *
+     * @param  array<Query>  $queries
+     * @return array<Query>
+     */
+    private function rewriteRelationshipJoins(Collection $collection, array $queries): array
+    {
+        $relationships = null;
+
+        foreach ($queries as $index => $query) {
+            if (! $query->getMethod()->isJoin()) {
+                continue;
+            }
+
+            $relationships ??= self::joinableRelationships($collection);
+            if ($relationships === []) {
+                return $queries;
+            }
+
+            $joined = $query->getAttribute();
+            $alias = $query->getAlias();
+            $rewritten = null;
+
+            foreach ($query->getJoinOnQueries() as $position => $condition) {
+                $column = self::relationshipJoinColumn($condition, $joined, $alias, $relationships);
+                if ($column === null) {
+                    continue;
+                }
+
+                $rewritten ??= clone $query;
+                $rewritten->getJoinOnQueries()[$position]->setValues([Document::ID, $condition->getValues()[1] ?? '=', $alias.'.'.$column]);
+            }
+
+            if ($rewritten !== null) {
+                $queries[$index] = $rewritten;
+            }
+        }
+
+        return $queries;
+    }
+
+    /**
+     * The relationship attributes whose ID the related collection stores, by key.
+     *
+     * @return array<string, Attribute>
+     */
+    private static function joinableRelationships(Collection $collection): array
+    {
+        $relationships = [];
+        foreach (self::relationshipAttributes($collection) as $attribute) {
+            $relationship = $attribute->relationship;
+            if ($relationship === null || $relationship->twoWayKey === null || $relationship->twoWayKey === '') {
+                continue;
+            }
+
+            $storedByRelated = match ($relationship->type) {
+                RelationshipType::OneToMany => $attribute->side === RelationshipSide::Parent,
+                RelationshipType::ManyToOne => $attribute->side === RelationshipSide::Child && $relationship->twoWay,
+                RelationshipType::OneToOne, RelationshipType::ManyToMany => false,
+            };
+
+            if ($storedByRelated) {
+                $relationships[$attribute->key] = $attribute;
+            }
+        }
+
+        return $relationships;
+    }
+
+    /**
+     * The related column a join condition compares with this document's `$id`, or null when the condition does not
+     * compare a relationship attribute of this collection with the `$id` of the collection that relationship relates.
+     *
+     * @param  array<string, Attribute>  $relationships
+     */
+    private static function relationshipJoinColumn(BaseQuery $condition, string $joined, string $alias, array $relationships): ?string
+    {
+        if ($condition->getMethod() !== Method::On) {
+            return null;
+        }
+
+        $values = $condition->getValues();
+        $left = $values[0] ?? null;
+        $right = $values[2] ?? null;
+        if (! \is_string($left) || ($right !== Document::ID && $right !== $alias.'.'.Document::ID)) {
+            return null;
+        }
+
+        $relationship = ($relationships[$left] ?? null)?->relationship;
+        if ($relationship === null || $relationship->relatedCollection !== $joined) {
+            return null;
+        }
+
+        return $relationship->twoWayKey;
     }
 
     /**

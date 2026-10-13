@@ -13,6 +13,7 @@ use Tests\E2E\Adapter\Scopes\DocumentTests;
 use Tests\E2E\Adapter\Scopes\GeneralTests;
 use Tests\E2E\Adapter\Scopes\IndexTests;
 use Tests\E2E\Adapter\Scopes\JoinComboTests;
+use Tests\E2E\Adapter\Scopes\JoinRelationshipTests;
 use Tests\E2E\Adapter\Scopes\JoinTests;
 use Tests\E2E\Adapter\Scopes\MetadataCacheTests;
 use Tests\E2E\Adapter\Scopes\ObjectAttributeTests;
@@ -51,6 +52,7 @@ abstract class Base extends TestCase
     use GeneralTests;
     use IndexTests;
     use JoinComboTests;
+    use JoinRelationshipTests;
     use JoinTests;
     use MetadataCacheTests;
     use ObjectAttributeTests;

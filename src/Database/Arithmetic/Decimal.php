@@ -16,6 +16,12 @@ final readonly class Decimal
      */
     private const int MAXIMUM_DIGITS = 64;
 
+    /**
+     * The most significant digits fraction() reads, far past any engine's precision: exact arithmetic on more costs
+     * time quadratic in their count.
+     */
+    private const int MAXIMUM_SIGNIFICANT_DIGITS = 2 * self::MAXIMUM_DIGITS;
+
     private const int MAXIMUM_EXPONENT_DIGITS = 18;
 
     private const string WHITESPACE = " \t\n\r\v\f";
@@ -83,14 +89,23 @@ final readonly class Decimal
     }
 
     /**
+     * The integer a whole number writes; null for a number with a fraction.
+     */
+    public function integer(): int|string|null
+    {
+        return $this->fractional ? null : BigInt::toNative($this->truncated());
+    }
+
+    /**
      * A number as an integer numerator and the power of ten that divides it, from its text; null for text that is
-     * not numeric or a number whose leading digit is more than MAXIMUM_DIGITS powers of ten from the units.
+     * not numeric, a float that is not finite, a number whose leading digit is more than MAXIMUM_DIGITS powers of
+     * ten from the units, or one with more than MAXIMUM_SIGNIFICANT_DIGITS significant digits.
      *
      * @return array{int|string, int}|null
      */
     public static function fraction(int|float|string $value): ?array
     {
-        if (\is_string($value) && ! \is_numeric($value)) {
+        if ((\is_string($value) && ! \is_numeric($value)) || (\is_float($value) && ! \is_finite($value))) {
             return null;
         }
 
@@ -98,12 +113,13 @@ final readonly class Decimal
         if ($order === null) {
             return [0, 0];
         }
-        if (\abs($order) > self::MAXIMUM_DIGITS) {
+        if (\abs($order) > self::MAXIMUM_DIGITS || self::isOverlong($value)) {
             return null;
         }
 
         [$mantissa, $exponent] = self::split($value);
         [$whole, $fraction] = \explode('.', $mantissa, 2) + [1 => ''];
+        $fraction = \rtrim($fraction, '0');
         $scale = \strlen($fraction) - (int) $exponent;
         $digits = \ltrim($whole, '+') . $fraction;
 
@@ -113,6 +129,21 @@ final readonly class Decimal
         }
 
         return [BigInt::toNative(BigInt::normalizeInteger($digits)), $scale];
+    }
+
+    /**
+     * Whether a number carries more significant digits than fraction() reads.
+     */
+    public static function isOverlong(int|float|string $value): bool
+    {
+        [$mantissa] = self::split($value);
+
+        return \strlen(\trim(\str_replace('.', '', \ltrim($mantissa, '+-')), '0')) > self::MAXIMUM_SIGNIFICANT_DIGITS;
+    }
+
+    public static function isNegative(int|float|string $value): bool
+    {
+        return \str_starts_with(\ltrim((string) $value, self::WHITESPACE), '-');
     }
 
     /**
@@ -153,7 +184,7 @@ final readonly class Decimal
      */
     private static function split(int|float|string $value): array
     {
-        $parts = \explode('e', \strtolower(\trim((string) $value)), 2);
+        $parts = \explode('e', \strtolower(\trim((string) $value, self::WHITESPACE)), 2);
 
         return [$parts[0], $parts[1] ?? '0'];
     }

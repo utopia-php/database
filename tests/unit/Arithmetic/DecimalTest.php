@@ -88,6 +88,14 @@ final class DecimalTest extends TestCase
         yield 'beyond the native integer range' => ['18446744073709551615.5', ['184467440737095516155', 1]];
         yield 'too large to write out' => ['1e1000000000', null];
         yield 'too close to zero to write out' => ['1e-1000000000', null];
+        yield 'padded with every numeric whitespace' => [" \t\n\r\v\f-2.75 \t\n\r\v\f", [-275, 2]];
+        yield 'led by a form feed' => ["\f1.5", [15, 1]];
+        yield 'trailing zeros past the fraction' => ['1.5' . \str_repeat('0', 10000), [15, 1]];
+        yield 'as many significant digits as are read' => ['1.' . \str_repeat('3', 127), ['1' . \str_repeat('3', 127), 127]];
+        yield 'more significant digits than are read' => ['1.' . \str_repeat('3', 128), null];
+        yield 'infinite' => [\INF, null];
+        yield 'negative infinite' => [-\INF, null];
+        yield 'not a number' => [\NAN, null];
     }
 
     /**
@@ -115,6 +123,29 @@ final class DecimalTest extends TestCase
         yield 'just past the written-out range' => ['1e-65', -65, true];
         yield 'an exponent too long for an integer' => ['1e99999999999999999999', \PHP_INT_MAX, false];
         yield 'a negative exponent too long for an integer' => ['1e-99999999999999999999', \PHP_INT_MIN, true];
+        yield 'led by a form feed' => ["\f0.001", -3, false];
+    }
+
+    /**
+     * @return iterable<string, array{int|float|string, int|string|null}>
+     */
+    public static function integers(): iterable
+    {
+        yield 'an integer' => [7, 7];
+        yield 'integer text' => ['-7', -7];
+        yield 'exponent text' => ['1e3', 1000];
+        yield 'whole decimal exponent text' => ['2.50e1', 25];
+        yield 'whole decimal text' => ['10.000', 10];
+        yield 'exponent text beyond the native range' => ['1e19', '10000000000000000000'];
+        yield 'fractional text' => ['1.5', null];
+        yield 'fractional exponent text' => ['1e-3', null];
+        yield 'a fractional float' => [2.5, null];
+    }
+
+    #[DataProvider('integers')]
+    public function testOnlyAWholeNumberIsAnInteger(int|float|string $value, int|string|null $expected): void
+    {
+        $this->assertSame($expected, Decimal::parse($value)?->integer());
     }
 
     #[DataProvider('orders')]

@@ -52,6 +52,16 @@ final readonly class Fractional
     }
 
     /**
+     * The integer a whole number writes: an integer, a finite float without a fractional part, or numeric text
+     * such as 1e3; null for anything else.
+     */
+    public static function wholeValue(int|float|string $value): int|string|null
+    {
+        return BigInt::integralValue($value)
+            ?? (\is_string($value) && \is_numeric($value) ? Decimal::parse($value)?->integer() : null);
+    }
+
+    /**
      * Whether operator() needs the stored value: a numeric operator with a fractional amount or limit.
      */
     public static function needsStored(Operator $operator): bool
@@ -94,7 +104,7 @@ final readonly class Fractional
         $rounding = $this->arithmetic->rounding($method, $whole);
         if (\in_array($method, $this->arithmetic->exact, true)) {
             $exact = self::rational($method, $current, $amount);
-            if ($exact === null) {
+            if ($exact === null || ($limit !== null && Decimal::isOverlong($limit))) {
                 return $operator;
             }
             if ($limit !== null && self::isBeyondRational($method, $exact, $amount, $limit)) {
@@ -130,7 +140,7 @@ final readonly class Fractional
             throw new TypeException('Value must be numeric and greater than 0');
         }
 
-        $whole = BigInt::integralValue($value);
+        $whole = self::wholeValue($value);
         if ($whole !== null) {
             return $whole;
         }
@@ -147,6 +157,32 @@ final readonly class Fractional
             : $this->arithmetic->counter->apply(BigInt::subtract(BigInt::subtract($stored, $wholePart), 1), 1 - $fraction);
 
         return BigInt::compare($result, $stored) >= 0 ? BigInt::subtract($result, $stored) : BigInt::subtract($stored, $result);
+    }
+
+    /**
+     * Whether $stored plus or minus $value passes $bound, compared exactly at any size. A number Decimal::fraction()
+     * leaves out is compared in floating point.
+     */
+    public static function exceeds(int|string $stored, int|float|string $value, int|float|string $bound, bool $increase): bool
+    {
+        $change = Decimal::fraction($value);
+        $limit = Decimal::fraction($bound);
+        if ($change === null || $limit === null) {
+            $result = $increase ? (float) $stored + (float) $value : (float) $stored - (float) $value;
+
+            return $increase ? $result > (float) $bound : $result < (float) $bound;
+        }
+
+        [$amount, $scale] = $change;
+        [$boundary, $boundaryScale] = $limit;
+        $scaled = BigInt::multiply($stored, self::powerOfTen($scale));
+        $result = $increase ? BigInt::add($scaled, $amount) : BigInt::subtract($scaled, $amount);
+        $comparison = BigInt::compare(
+            BigInt::multiply($result, self::powerOfTen($boundaryScale)),
+            BigInt::multiply($boundary, self::powerOfTen($scale)),
+        );
+
+        return $increase ? $comparison > 0 : $comparison < 0;
     }
 
     /**
@@ -209,7 +245,7 @@ final readonly class Fractional
 
     private static function number(mixed $value): int|float|string|null
     {
-        return \is_int($value) || \is_float($value) || (\is_string($value) && \is_numeric($value)) ? $value : null;
+        return \is_int($value) || (\is_float($value) && \is_finite($value)) || (\is_string($value) && \is_numeric($value)) ? $value : null;
     }
 
     /**
@@ -301,7 +337,7 @@ final readonly class Fractional
      */
     private static function compareWithOversized(int|string $numerator, int|float|string $limit): int
     {
-        $negative = \str_starts_with(\ltrim((string) $limit), '-');
+        $negative = Decimal::isNegative($limit);
         if (! Decimal::isTiny($limit)) {
             return $negative ? 1 : -1;
         }

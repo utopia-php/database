@@ -11,6 +11,11 @@ use Utopia\Database\Exception as DatabaseException;
 class Id
 {
     /**
+     * The ID a caller sends to ask for a generated one, replaced only where the database replaces placeholders.
+     */
+    public const string PLACEHOLDER = 'unique()';
+
+    /**
      * Create a new unique ID using uniqid with optional random padding.
      *
      * @param int $padding Number of random hex characters to append for uniqueness
@@ -43,5 +48,10 @@ class Id
     public static function custom(string $id): string
     {
         return $id;
+    }
+
+    public static function isPlaceholder(string $id): bool
+    {
+        return $id === self::PLACEHOLDER;
     }
 }

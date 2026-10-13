@@ -27,6 +27,8 @@ final readonly class Snapshot
      * @param  bool  $preserveSequence  Whether writes keep the sequences they are given
      * @param  bool  $ignoreDuplicates  Whether creating a document that exists is skipped instead of failing
      * @param  DateTime|null  $requestTimestamp  The time an update conflicts after
+     * @param  bool  $replacePlaceholders  Whether a related document sent with an Id::PLACEHOLDER ID gets a generated one
+     * @param  bool  $checkGrants  Whether a related document may only be given permissions for roles the caller holds
      */
     public function __construct(
         public bool $authorization,
@@ -44,6 +46,8 @@ final readonly class Snapshot
         public bool $preserveSequence,
         public bool $ignoreDuplicates,
         public ?DateTime $requestTimestamp,
+        public bool $replacePlaceholders = false,
+        public bool $checkGrants = false,
     ) {
     }
 }

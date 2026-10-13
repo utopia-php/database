@@ -266,6 +266,12 @@ class Database
     /** @var Value<bool>|null */
     private ?Value $ignoringDuplicates = null;
 
+    /** @var Value<bool>|null */
+    private ?Value $placeholderReplacement = null;
+
+    /** @var Value<bool>|null */
+    private ?Value $grantChecking = null;
+
     protected ?Relationships $relationshipHook = null;
 
     protected bool $dropUnknownAttributes = false;
@@ -1151,6 +1157,74 @@ class Database
     }
 
     /**
+     * Set whether a document whose ID is Id::PLACEHOLDER gets a generated ID, as one whose ID is empty does. This
+     * covers the documents given to createDocument(), createDocuments(), upsertDocument() and upsertDocuments(), and
+     * every related document they or updateDocument() are given as a document, as deep as the write relates them. A
+     * related document given as the string Id::PLACEHOLDER stays a reference to the document stored under that ID.
+     *
+     * @return $this
+     */
+    public function setReplacePlaceholders(bool $replace): static
+    {
+        $this->placeholderReplacement()->set($replace);
+
+        return $this;
+    }
+
+    public function isReplacingPlaceholders(): bool
+    {
+        return $this->placeholderReplacement()->get();
+    }
+
+    /**
+     * Run the callback with placeholder replacement on or off for the calling coroutine and the coroutines it starts.
+     *
+     * @template T
+     *
+     * @param  callable(): T  $callback
+     * @return T
+     */
+    public function withReplacePlaceholders(bool $replace, callable $callback): mixed
+    {
+        return $this->placeholderReplacement()->with($replace, $callback);
+    }
+
+    /**
+     * Set whether, while authorization is enabled, a related document given as a document to createDocument(),
+     * createDocuments(), updateDocument(), upsertDocument(), upsertDocuments(), authorizeCreate() or authorizeUpdate()
+     * may only add permissions for roles the caller holds, as deep as the write relates it. Permissions it already
+     * has may be sent back, and permissions it inherits from its parent are never checked. Malformed permissions
+     * throw a structure exception and an unheld role an authorization exception, before anything is written.
+     *
+     * @return $this
+     */
+    public function setCheckGrants(bool $check): static
+    {
+        $this->grantChecking()->set($check);
+
+        return $this;
+    }
+
+    public function isCheckingGrants(): bool
+    {
+        return $this->grantChecking()->get();
+    }
+
+    /**
+     * Run the callback with the grant check on related documents on or off for the calling coroutine and the
+     * coroutines it starts.
+     *
+     * @template T
+     *
+     * @param  callable(): T  $callback
+     * @return T
+     */
+    public function withCheckGrants(bool $check, callable $callback): mixed
+    {
+        return $this->grantChecking()->with($check, $callback);
+    }
+
+    /**
      * Set the migration mode flag, which relaxes certain constraints during data migrations.
      *
      * @return $this
@@ -1555,6 +1629,8 @@ class Database
             preserveSequence: $this->sequencePreservation()->get(),
             ignoreDuplicates: $this->ignoringDuplicates()->get(),
             requestTimestamp: $this->requestTimestamp()->get(),
+            replacePlaceholders: $this->placeholderReplacement()->get(),
+            checkGrants: $this->grantChecking()->get(),
         );
     }
 
@@ -1595,7 +1671,9 @@ class Database
      */
     private function withToggles(Snapshot $snapshot, callable $callback): mixed
     {
-        $timestamped = fn (): mixed => $this->requestTimestamp()->with($snapshot->requestTimestamp, $callback);
+        $checked = fn (): mixed => $this->grantChecking()->with($snapshot->checkGrants, $callback);
+        $replaced = fn (): mixed => $this->placeholderReplacement()->with($snapshot->replacePlaceholders, $checked);
+        $timestamped = fn (): mixed => $this->requestTimestamp()->with($snapshot->requestTimestamp, $replaced);
         $deduplicated = fn (): mixed => $this->ignoringDuplicates()->with($snapshot->ignoreDuplicates, $timestamped);
         $sequenced = fn (): mixed => $this->sequencePreservation()->with($snapshot->preserveSequence, $deduplicated);
         $dated = fn (): mixed => $this->datePreservation()->with($snapshot->preserveDates, $sequenced);
@@ -1672,6 +1750,22 @@ class Database
     private function ignoringDuplicates(): Value
     {
         return $this->ignoringDuplicates ??= new Value(false);
+    }
+
+    /**
+     * @return Value<bool>
+     */
+    private function placeholderReplacement(): Value
+    {
+        return $this->placeholderReplacement ??= new Value(false);
+    }
+
+    /**
+     * @return Value<bool>
+     */
+    private function grantChecking(): Value
+    {
+        return $this->grantChecking ??= new Value(false);
     }
 
     protected function isIgnoringDuplicates(): bool

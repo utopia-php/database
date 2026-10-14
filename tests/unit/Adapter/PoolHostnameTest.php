@@ -8,6 +8,7 @@ use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\Pool;
+use Utopia\Database\Adapter\ReadWritePool;
 use Utopia\Database\Database;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Pools\Pool as UtopiaPool;
@@ -48,6 +49,23 @@ final class PoolHostnameTest extends TestCase
         $pool->setHostname('edge-1');
 
         $this->assertSame('edge-1', $database->getHostname());
+    }
+
+    public function testAReadWritePoolFollowsTheHostnameSetAfterItAnswered(): void
+    {
+        $pool = new ReadWritePool(
+            $this->connections(new HostnameSQLite('db-1')),
+            $this->connections(new HostnameSQLite('replica-1')),
+        );
+        $pool->setAuthorization(new Authorization());
+
+        $this->assertSame('db-1', $pool->hostname());
+
+        $pool->setHostname('edge-1');
+        $this->assertSame('edge-1', $pool->hostname());
+
+        $pool->setHostname('');
+        $this->assertSame('db-1', $pool->hostname());
     }
 
     public function testThePoolHandsBackTheConnectionsItWasBuiltWith(): void

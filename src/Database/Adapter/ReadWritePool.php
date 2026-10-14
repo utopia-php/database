@@ -122,6 +122,14 @@ class ReadWritePool extends Pool
         return $this->writePoolHostname ??= parent::hostname();
     }
 
+    #[\Override]
+    public function setHostname(string $hostname): static
+    {
+        $this->writePoolHostname = null;
+
+        return parent::setHostname($hostname);
+    }
+
     /**
      * Whether the calling coroutine's latest read was served by a replica, which may lag the
      * primary: what it returned must not be cached for other readers.

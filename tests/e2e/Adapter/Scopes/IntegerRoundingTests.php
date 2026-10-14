@@ -72,19 +72,21 @@ trait IntegerRoundingTests
         $collection = $this->roundingCollection($database, 'rounding_operators');
 
         try {
-            $update = fn (array $changes): Document => $database->updateDocument($collection, 'counter', new Document($changes));
-
-            $this->assertSame(102, $update(['count' => Operator::increment(1.5)])->getAttribute('count'));
-            $this->assertSame(99, $update(['count' => Operator::decrement('2.5')])->getAttribute('count'));
-            $this->assertSame(96, $update(['count' => Operator::increment(-2.5)])->getAttribute('count'));
-            $this->assertSame(98, $update(['count' => Operator::increment(2, 98.7)])->getAttribute('count'));
-            $this->assertSame(98, $update(['count' => Operator::increment(1, 98.7)])->getAttribute('count'));
-            $this->assertSame(98, $update(['count' => Operator::decrement(4, '94.2')])->getAttribute('count'));
-            $this->assertSame(95, $update(['count' => Operator::decrement(3, '94.2')])->getAttribute('count'));
-            $this->assertSame(9007199254740994, $update(['big' => Operator::increment('9007199254740993.5')])->getAttribute('big'));
-            $this->assertSame(2.0, $update(['ratio' => Operator::increment(0.5)])->getAttribute('ratio'));
+            $this->assertSame(102, $this->updateRoundingCounter($database, $collection, ['count' => Operator::increment(1.5)])->getAttribute('count'));
+            $this->assertSame(99, $this->updateRoundingCounter($database, $collection, ['count' => Operator::decrement('2.5')])->getAttribute('count'));
+            $this->assertSame(96, $this->updateRoundingCounter($database, $collection, ['count' => Operator::increment(-2.5)])->getAttribute('count'));
+            $updatedAt = $database->getDocument($collection, 'counter')->getUpdatedAt();
+            $this->assertSame(96, $this->updateRoundingCounter($database, $collection, ['count' => Operator::increment(0.4)])->getAttribute('count'));
+            $this->assertSame($updatedAt, $database->getDocument($collection, 'counter')->getUpdatedAt());
+            $this->assertSame(98, $this->updateRoundingCounter($database, $collection, ['count' => Operator::increment(2, 98.7)])->getAttribute('count'));
+            $this->assertSame(98, $this->updateRoundingCounter($database, $collection, ['count' => Operator::increment(1, 98.7)])->getAttribute('count'));
+            $this->assertSame(98, $this->updateRoundingCounter($database, $collection, ['count' => Operator::decrement(4, '94.2')])->getAttribute('count'));
+            $this->assertSame(95, $this->updateRoundingCounter($database, $collection, ['count' => Operator::decrement(3, '94.2')])->getAttribute('count'));
+            $this->assertSame(9007199254740994, $this->updateRoundingCounter($database, $collection, ['big' => Operator::increment('9007199254740993.5')])->getAttribute('big'));
+            $this->assertSame(2.0, $this->updateRoundingCounter($database, $collection, ['ratio' => Operator::increment(0.5)])->getAttribute('ratio'));
 
             $database->createDocument($collection, new Document([Document::ID => 'second', 'count' => 10, 'big' => 0, 'ratio' => 0.0]));
+            $this->assertSame(0, $database->updateDocuments($collection, new Document(['count' => Operator::increment(0.4)])));
             $this->assertSame(2, $database->updateDocuments($collection, new Document(['count' => Operator::increment(2.5)])));
             $this->assertSame(98, $database->getDocument($collection, 'counter')->getAttribute('count'));
             $this->assertSame(13, $database->getDocument($collection, 'second')->getAttribute('count'));
@@ -178,6 +180,14 @@ trait IntegerRoundingTests
         $database->createDocument($id, new Document([Document::ID => 'counter', 'count' => 100, 'big' => 0, 'ratio' => 1.5]));
 
         return $id;
+    }
+
+    /**
+     * @param  array<string, mixed>  $changes
+     */
+    private function updateRoundingCounter(Database $database, string $collection, array $changes): Document
+    {
+        return $database->updateDocument($collection, 'counter', new Document($changes));
     }
 
     private function assertRoundingLimited(string $message, callable $change): void

@@ -16,8 +16,8 @@ use Utopia\Database\Hook\Transform;
 use Utopia\Database\Index;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Relationship;
+use Utopia\Database\Relationship\Update;
 use Utopia\Database\RelationshipSide;
-use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\Schema\Column as SchemaColumn;
 use Utopia\Database\Schema\Index as SchemaIndex;
 use Utopia\Database\State\Value;
@@ -760,7 +760,7 @@ class Pool extends Adapter implements Feature\Timeouts
         return $result;
     }
 
-    public function updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, RelationshipUpdate $update): bool
+    public function updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, Update $update): bool
     {
         /** @var bool $result */
         $result = $this->delegateFeature(Feature\Relationships::class, __FUNCTION__, \func_get_args());

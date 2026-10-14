@@ -40,9 +40,9 @@ use Utopia\Database\PDOStatement as DatabasePDOStatement;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
+use Utopia\Database\Relationship\Update;
 use Utopia\Database\RelationshipSide;
 use Utopia\Database\RelationshipType;
-use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\Schema\Column as SchemaColumn;
 use Utopia\Database\Schema\Index as SchemaIndex;
 use Utopia\Database\Storage;
@@ -2482,7 +2482,7 @@ class SQLite extends SQL
     }
 
     #[\Override]
-    public function updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, RelationshipUpdate $update): bool
+    public function updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, Update $update): bool
     {
         $table = $this->getTable($this->filter($collection));
         $relatedTable = $this->getTable($this->filter($relationship->relatedCollection));

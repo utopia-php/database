@@ -1,8 +1,8 @@
 <?php
 
-namespace Utopia\Database;
+namespace Utopia\Database\Collection;
 
-final readonly class CollectionUpdate
+final readonly class Update
 {
     /**
      * @param  list<string>|null  $permissions

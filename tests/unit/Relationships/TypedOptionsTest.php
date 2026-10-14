@@ -19,9 +19,9 @@ use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Permission;
 use Utopia\Database\Relationship;
+use Utopia\Database\Relationship\Update;
 use Utopia\Database\RelationshipDeleteAction;
 use Utopia\Database\RelationshipSide;
-use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
 
@@ -61,7 +61,7 @@ final class TypedOptionsTest extends TestCase
         $database = $this->database($adapter());
         $database->createRelationship('artists', Relationship::oneToMany('albums', key: 'albums', twoWay: true, twoWayKey: 'artist'));
 
-        $updated = $database->updateRelationship('albums', 'artist', new RelationshipUpdate(onDelete: RelationshipDeleteAction::SetNull));
+        $updated = $database->updateRelationship('albums', 'artist', new Update(onDelete: RelationshipDeleteAction::SetNull));
 
         $this->assertSame('artists', $updated->relatedCollection);
         $this->assertSame('artist', $updated->key);
@@ -89,7 +89,7 @@ final class TypedOptionsTest extends TestCase
             $this->assertFalse($database->getDocument('artists', 'a1')->isEmpty());
         }
 
-        $database->updateRelationship('albums', 'artist', new RelationshipUpdate(onDelete: RelationshipDeleteAction::SetNull));
+        $database->updateRelationship('albums', 'artist', new Update(onDelete: RelationshipDeleteAction::SetNull));
         $database->deleteDocument('artists', 'a1');
 
         $album = $database->getDocument('albums', 'b1');

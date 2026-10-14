@@ -22,8 +22,8 @@ use Utopia\Database\Id;
 use Utopia\Database\Operator;
 use Utopia\Database\Permission;
 use Utopia\Database\Relationship;
+use Utopia\Database\Relationship\Update;
 use Utopia\Database\RelationshipType;
-use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\Role;
 use Utopia\Query\Schema\ColumnType;
 
@@ -587,7 +587,7 @@ class RelationshipValidationTest extends TestCase
         $this->expectException(DuplicateException::class);
         $this->expectExceptionMessage('Relationship already exists');
 
-        $db->updateRelationship('ovens', 'cakes', new RelationshipUpdate(key: 'owner'));
+        $db->updateRelationship('ovens', 'cakes', new Update(key: 'owner'));
     }
 
     public function testOneToOneRelationshipRejectsArrayOperators(): void

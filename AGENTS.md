@@ -37,7 +37,7 @@ docker compose exec tests vendor/bin/phpunit --configuration phpunit.xml tests/u
   - `Capability.php` -- behaviour flags an adapter reports through `supports()`
   - `Document.php` -- JSON document model (extends ArrayObject)
   - `Collection.php` -- the collection definition (a `Document`, built with `Collection::create()`)
-  - `Attribute.php`, `Index.php`, `Relationship.php` -- `final readonly` schema value objects with a factory per type; `AttributeUpdate`, `CollectionUpdate`, `RelationshipUpdate` are the update models
+  - `Attribute.php`, `Index.php`, `Relationship.php` -- `final readonly` schema value objects with a factory per type; `Attribute\Update`, `Collection\Update`, `Relationship\Update` are the update models
   - `Schema/` -- `Column` and `Index`, the physical schema read back from an engine
   - `Mirror.php`, `Mirror/` -- database mirroring/replication, its write `Filter` and `Failure`
   - `Query.php` -- query builder extension
@@ -66,7 +66,7 @@ docker compose exec tests vendor/bin/phpunit --configuration phpunit.xml tests/u
 
 **Hook system:** Pluggable hooks for permissions, relationships, tenancy filtering, and lifecycle events, registered with `Database::addHook()`. A database registers neither `Hook\Permissions` nor `Hook\Relationships` on its own.
 
-**Schema API:** Collection-first methods take value objects: `createCollection(Collection::create(...))`, `createAttribute($collection, Attribute::string(...))`, `createIndex($collection, Index::key(...))`, `createRelationship($collection, Relationship::oneToMany(...))`, and updates take `AttributeUpdate`, `CollectionUpdate`, `RelationshipUpdate`.
+**Schema API:** Collection-first methods take value objects: `createCollection(Collection::create(...))`, `createAttribute($collection, Attribute::string(...))`, `createIndex($collection, Index::key(...))`, `createRelationship($collection, Relationship::oneToMany(...))`, and updates take `Attribute\Update`, `Collection\Update`, `Relationship\Update`.
 
 **Adapter model:** Ask `supports(Capability::X)` for behaviour flags and `hasFeature(Feature\X::class)` for optional features (never `instanceof`: `Pool` forwards features without implementing them). Limits come from `limits()`; `Database::profile()` snapshots them for the validators.
 

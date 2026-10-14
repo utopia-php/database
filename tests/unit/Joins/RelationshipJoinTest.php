@@ -11,7 +11,7 @@ use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
-use Utopia\Database\CollectionUpdate;
+use Utopia\Database\Collection\Update;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Order as OrderException;
@@ -290,7 +290,7 @@ final class RelationshipJoinTest extends TestCase
     public function testJoinedRowsAreTheOnesTheCallerCanRead(): void
     {
         $authorization = $this->database->getAuthorization();
-        $this->database->updateCollection('orders', new CollectionUpdate(permissions: [Permission::create(Role::any())], documentSecurity: true));
+        $this->database->updateCollection('orders', new Update(permissions: [Permission::create(Role::any())], documentSecurity: true));
         $authorization->skip(fn (): Document => $this->database->updateDocument('orders', 'o2', new Document(['$permissions' => [Permission::read(Role::user('bob'))]])));
         $join = Query::leftJoin('orders', 'ord', [Query::on('orders', '$id')]);
 

@@ -6,7 +6,7 @@ use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Attribute;
-use Utopia\Database\AttributeUpdate;
+use Utopia\Database\Attribute\Update;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
@@ -334,7 +334,7 @@ trait SpatialTests
             $database->createAttribute($collectionName, Attribute::string(key: 'name', required: true));
             $database->createAttribute($collectionName, Attribute::point(key: 'location', required: true));
 
-            $updated = $database->updateAttribute($collectionName, 'location', new AttributeUpdate(required: false));
+            $updated = $database->updateAttribute($collectionName, 'location', new Update(required: false));
             $this->assertFalse($updated->required, 'the stored definition should no longer be required');
 
             // The stored definition flipping is not enough: the column keeps
@@ -962,7 +962,7 @@ trait SpatialTests
                 $database->createIndex($collUpdateNull, Index::spatial(key: 'idx_loc', attribute: 'loc'));
             }
 
-            $database->updateAttribute($collUpdateNull, 'loc', new AttributeUpdate(required: true));
+            $database->updateAttribute($collUpdateNull, 'loc', new Update(required: true));
 
             $database->createIndex($collUpdateNull, Index::spatial(key: 'idx_loc_req', attribute: 'loc'));
         } finally {
@@ -985,7 +985,7 @@ trait SpatialTests
                 $database->createIndex($collUpdateNull, Index::spatial(key: 'idx_loc', attribute: 'loc'));
             }
 
-            $database->updateAttribute($collUpdateNull, 'loc', new AttributeUpdate(required: true));
+            $database->updateAttribute($collUpdateNull, 'loc', new Update(required: true));
 
             $database->createIndex($collUpdateNull, Index::spatial(key: 'new index', attribute: 'loc'));
         } finally {
@@ -2007,14 +2007,14 @@ trait SpatialTests
 
             // 1) Disallow size and array updates on spatial attributes: expect DatabaseException
             try {
-                $database->updateAttribute($collectionName, 'geom', new AttributeUpdate(size: 10));
+                $database->updateAttribute($collectionName, 'geom', new Update(size: 10));
                 $this->fail('Expected DatabaseException when updating size on spatial attribute');
             } catch (\Throwable $e) {
                 $this->assertInstanceOf(Exception::class, $e);
             }
 
             try {
-                $database->updateAttribute($collectionName, 'geom', new AttributeUpdate(array: true));
+                $database->updateAttribute($collectionName, 'geom', new Update(array: true));
                 $this->fail('Expected DatabaseException when updating array on spatial attribute');
             } catch (\Throwable $e) {
                 $this->assertInstanceOf(Exception::class, $e);
@@ -2024,7 +2024,7 @@ trait SpatialTests
             $nullSupported = $database->getAdapter()->supports(Capability::IndexSpatialNull);
             if ($nullSupported) {
                 // Should succeed on adapters that allow nullable spatial indexes
-                $database->updateAttribute($collectionName, 'geom', new AttributeUpdate(required: false));
+                $database->updateAttribute($collectionName, 'geom', new Update(required: false));
                 $meta = $database->getCollection($collectionName);
                 $attributes = $meta->attributes();
                 $this->assertCount(1, $attributes);
@@ -2034,7 +2034,7 @@ trait SpatialTests
                 // Should error (index constraint) when making required=false while spatial index exists
                 $threw = false;
                 try {
-                    $database->updateAttribute($collectionName, 'geom', new AttributeUpdate(required: false));
+                    $database->updateAttribute($collectionName, 'geom', new Update(required: false));
                 } catch (\Throwable $e) {
                     $threw = true;
                 }
@@ -2129,12 +2129,12 @@ trait SpatialTests
             ]));
             $this->assertSpatialDefaults($overrides, $overridden, 'overridden');
 
-            $database->updateAttribute($collectionName, 'pt', new AttributeUpdate(default: [5.0, 6.0]));
-            $database->updateAttribute($collectionName, 'ln', new AttributeUpdate(default: [[10.0, 10.0], [20.0, 20.0]]));
-            $database->updateAttribute($collectionName, 'pg', new AttributeUpdate(default: [[[5.0, 5.0], [5.0, 7.0], [7.0, 7.0], [5.0, 5.0]]]));
-            $database->updateAttribute($collectionName, 'title', new AttributeUpdate(default: 'Updated'));
-            $database->updateAttribute($collectionName, 'count', new AttributeUpdate(default: 10));
-            $database->updateAttribute($collectionName, 'active', new AttributeUpdate(default: false));
+            $database->updateAttribute($collectionName, 'pt', new Update(default: [5.0, 6.0]));
+            $database->updateAttribute($collectionName, 'ln', new Update(default: [[10.0, 10.0], [20.0, 20.0]]));
+            $database->updateAttribute($collectionName, 'pg', new Update(default: [[[5.0, 5.0], [5.0, 7.0], [7.0, 7.0], [5.0, 5.0]]]));
+            $database->updateAttribute($collectionName, 'title', new Update(default: 'Updated'));
+            $database->updateAttribute($collectionName, 'count', new Update(default: 10));
+            $database->updateAttribute($collectionName, 'active', new Update(default: false));
 
             $newDefaults = [
                 'pt' => [5.0, 6.0],
@@ -2552,10 +2552,10 @@ trait SpatialTests
             } catch (\Throwable $e) {
                 $this->assertInstanceOf(Exception::class, $e);
             }
-            $database->updateAttribute($collUpdateNull, 'loc', new AttributeUpdate(required: true));
+            $database->updateAttribute($collUpdateNull, 'loc', new Update(required: true));
             $database->createIndex($collUpdateNull, Index::spatial(key: 'new index', attribute: 'loc'));
             $database->deleteIndex($collUpdateNull, 'new index');
-            $database->updateAttribute($collUpdateNull, 'loc', new AttributeUpdate(required: false));
+            $database->updateAttribute($collUpdateNull, 'loc', new Update(required: false));
 
             $database->createDocument($collUpdateNull, new Document(['loc' => null]));
         } finally {
@@ -3033,7 +3033,7 @@ trait SpatialTests
 
         try {
             foreach (\array_keys($shapes) as $key) {
-                $database->updateAttribute($updated, $key, new AttributeUpdate(required: true));
+                $database->updateAttribute($updated, $key, new Update(required: true));
             }
 
             foreach ([$declared, $updated] as $collection) {

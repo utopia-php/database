@@ -4,15 +4,15 @@ namespace Tests\Unit\Model;
 
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Relationship;
+use Utopia\Database\Relationship\Update;
 use Utopia\Database\RelationshipDeleteAction;
 use Utopia\Database\RelationshipType;
-use Utopia\Database\RelationshipUpdate;
 
 final class RelationshipUpdateTest extends TestCase
 {
     public function testDefaultsChangeNothing(): void
     {
-        $update = new RelationshipUpdate();
+        $update = new Update();
 
         $this->assertNull($update->key);
         $this->assertNull($update->twoWayKey);
@@ -24,7 +24,7 @@ final class RelationshipUpdateTest extends TestCase
     {
         $relationship = Relationship::oneToMany('comments', key: 'comments', twoWay: true, twoWayKey: 'post', onDelete: RelationshipDeleteAction::Cascade);
 
-        $updated = $relationship->apply(new RelationshipUpdate());
+        $updated = $relationship->apply(new Update());
 
         $this->assertSame('comments', $updated->relatedCollection);
         $this->assertSame(RelationshipType::OneToMany, $updated->type);
@@ -38,7 +38,7 @@ final class RelationshipUpdateTest extends TestCase
     {
         $relationship = Relationship::manyToOne('users', key: 'author', twoWay: true, twoWayKey: 'posts');
 
-        $updated = $relationship->apply(new RelationshipUpdate(key: 'writer', onDelete: RelationshipDeleteAction::SetNull));
+        $updated = $relationship->apply(new Update(key: 'writer', onDelete: RelationshipDeleteAction::SetNull));
 
         $this->assertSame('writer', $updated->key);
         $this->assertSame(RelationshipDeleteAction::SetNull, $updated->onDelete);
@@ -52,7 +52,7 @@ final class RelationshipUpdateTest extends TestCase
     {
         $relationship = Relationship::oneToOne('profiles', key: 'profile', twoWay: true, twoWayKey: 'user', onDelete: RelationshipDeleteAction::Cascade);
 
-        $updated = $relationship->apply(new RelationshipUpdate(
+        $updated = $relationship->apply(new Update(
             key: 'avatar',
             twoWayKey: 'owner',
             twoWay: false,
@@ -69,14 +69,14 @@ final class RelationshipUpdateTest extends TestCase
 
     public function testFalseTwoWayIsAChange(): void
     {
-        $updated = Relationship::manyToMany('tags', twoWay: true)->apply(new RelationshipUpdate(twoWay: false));
+        $updated = Relationship::manyToMany('tags', twoWay: true)->apply(new Update(twoWay: false));
 
         $this->assertFalse($updated->twoWay);
     }
 
     public function testApplyResolvesAnUnresolvedKey(): void
     {
-        $updated = Relationship::manyToOne('users')->apply(new RelationshipUpdate(key: 'author'));
+        $updated = Relationship::manyToOne('users')->apply(new Update(key: 'author'));
 
         $this->assertSame('author', $updated->key);
         $this->assertNull($updated->twoWayKey);
@@ -86,7 +86,7 @@ final class RelationshipUpdateTest extends TestCase
     {
         $relationship = Relationship::oneToMany('comments', key: 'comments', twoWayKey: 'post');
 
-        $relationship->apply(new RelationshipUpdate(key: 'replies', twoWayKey: 'thread', twoWay: true, onDelete: RelationshipDeleteAction::Cascade));
+        $relationship->apply(new Update(key: 'replies', twoWayKey: 'thread', twoWay: true, onDelete: RelationshipDeleteAction::Cascade));
 
         $this->assertSame('comments', $relationship->key);
         $this->assertSame('post', $relationship->twoWayKey);

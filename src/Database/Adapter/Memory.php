@@ -20,9 +20,9 @@ use Utopia\Database\OperatorType;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
+use Utopia\Database\Relationship\Update;
 use Utopia\Database\RelationshipSide;
 use Utopia\Database\RelationshipType;
-use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Query\CursorDirection;
@@ -856,7 +856,7 @@ class Memory extends Adapter implements Feature\Relationships
     }
 
     #[\Override]
-    public function updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, RelationshipUpdate $update): bool
+    public function updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, Update $update): bool
     {
         $relatedCollection = $relationship->relatedCollection;
         $key = $this->filter($relationship->key ?? '');

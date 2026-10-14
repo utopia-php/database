@@ -30,9 +30,9 @@ use Utopia\Database\Permission;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
+use Utopia\Database\Relationship\Update;
 use Utopia\Database\RelationshipDeleteAction;
 use Utopia\Database\RelationshipType;
-use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\CursorDirection;
@@ -527,7 +527,7 @@ final class RelationshipHookTest extends TestCase
         };
         $database->addHook($updates);
 
-        $updated = $database->updateRelationship('parent', 'children', new RelationshipUpdate(key: 'kids', onDelete: RelationshipDeleteAction::SetNull));
+        $updated = $database->updateRelationship('parent', 'children', new Update(key: 'kids', onDelete: RelationshipDeleteAction::SetNull));
         $this->assertSame('kids', $updated->key);
         $this->assertSame(RelationshipDeleteAction::SetNull, $updated->onDelete);
 

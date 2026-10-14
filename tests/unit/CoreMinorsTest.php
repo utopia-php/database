@@ -17,7 +17,7 @@ use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
-use Utopia\Database\AttributeUpdate;
+use Utopia\Database\Attribute\Update;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
@@ -485,7 +485,7 @@ final class CoreMinorsTest extends TestCase
         $this->configure($database);
         $database->createCollection(Collection::create(id: 'logs', attributes: [Attribute::bigInteger(key: 'total')]));
 
-        $error = $this->attempt(fn (): Attribute => $database->updateAttribute('logs', 'total', new AttributeUpdate(default: 'many')));
+        $error = $this->attempt(fn (): Attribute => $database->updateAttribute('logs', 'total', new Update(default: 'many')));
 
         $this->assertInstanceOf(DatabaseException::class, $error);
         $this->assertSame('Default value many is not a valid integer string for type bigint', $error->getMessage());

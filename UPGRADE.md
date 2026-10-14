@@ -1,7 +1,68 @@
 # Upgrading from 8.1.1 to 8.1.2
 
-8.1.2 replaces the opt-in emulation of 7.4.1's fractional arithmetic on integer attributes with one rounding rule that
-always applies. [CHANGELOG.md](CHANGELOG.md#812) lists every removed signature.
+8.1.2 is a patch release. It removes public API that nothing outside the library needed, replaces the opt-in emulation
+of 7.4.1's fractional arithmetic on integer attributes with one rounding rule that always applies, moves the update
+models into the namespace of the model they update, and a `Pool` answers with the hostname it is given.
+[CHANGELOG.md](CHANGELOG.md#812) lists every change.
+
+- [Removed API](#removed-api)
+- [`Database::read()` is removed](#databaseread-is-removed)
+- [Update models](#update-models)
+- [Integer rounding](#integer-rounding)
+- [Hostname of a pool](#hostname-of-a-pool)
+
+## Removed API
+
+Each removal has a replacement:
+
+| Removed | Use instead |
+|---|---|
+| `Database::read()` | `find()` for documents, `aggregate()` for aggregate or `groupBy()` queries; see [below](#databaseread-is-removed) |
+| `Database::rawQuery(string $query, array $bindings = []): array` | `Database::query(new \Utopia\Query\Builder\Statement($query, $bindings))`, inside `getAuthorization()->skip()` as before. It returns a list of `Document`. The adapter's `Feature\RawQuery::rawQuery()` stays. |
+| `Database::getRelationshipHook()` (internal) | Keep the `Hook\Relationships` you pass to `addHook()` |
+| `Database::getMaxIndexLength()`, `Database::getMaxVarcharLength()` | `$database->getAdapter()->limits()->indexLength`, `->varchar` |
+| `Database::getMinDateTime()`, `Database::getMaxDateTime()` | `$database->getAdapter()->limits()->minDateTime`, `->maxDateTime`; clone the `DateTime` before modifying it |
+| `Database::getCacheWriterTimeout()` | The value given to `setCacheWriterTimeout()`; without one, `Cache\Scope::WRITER_TIMEOUT` (3600 seconds) |
+| `Database::setRoundFractions()`, `Database::withRoundFractions()`, `Database::isRoundingFractions()` and the `Mirror` overrides | None: delete the calls. [Integer rounding](#integer-rounding) always applies. |
+| `Adapter::arithmetic()` and its adapter overrides | None: rounding happens once in `Database`, before the adapter is called |
+| `Utopia\Database\Arithmetic`, `Utopia\Database\Arithmetic\Rounding` | None |
+| The trailing `$fractions` argument of `Validator\Operator`, `Validator\Structure` and `Validator\PartialStructure` | Drop the argument |
+| The trailing `$roundFractions` argument of the `State\Snapshot` constructor | Drop the argument |
+| `Event\Permission\Created`, `Event\Permission\Read`, `Event\Permission\Deleted` | None: `Database` never dispatched them. `Event::PermissionsCreate`, `PermissionsRead` and `PermissionsDelete` stay as the labels of the statements a permissions write runs, for transforms and timeouts, and their `domain()` is `null`. |
+| `Adapter\SQL\Hook\Permission\AllowNullUid` | `Adapter\SQL\Hook\Column\AllowNull`, which takes the same `(Filter $filter, string $column, string $quoteCharacter)` arguments |
+| `Utopia\Database\AttributeUpdate`, `CollectionUpdate`, `RelationshipUpdate` | `Utopia\Database\Attribute\Update`, `Collection\Update`, `Relationship\Update`; see [Update models](#update-models) |
+
+## `Database::read()` is removed
+
+Call `find()` for documents and `aggregate()` for aggregate or `groupBy()` queries. A list that serves both picks one
+with `ParsedQuery::isAggregation()`:
+
+```php
+$rows = Query::groupByType($queries)->isAggregation()
+    ? \array_map(static fn (array $row): Document => new Document($row), $database->aggregate('posts', $queries))
+    : $database->find('posts', $queries, $forPermission);
+```
+
+`aggregate()` reads under the read permission only. `read()` refused aggregate queries under another permission with
+`Exception\Query`; a caller that relied on that refusal checks `$forPermission` itself.
+
+## Update models
+
+The update models moved into the namespace of the model they update. Their constructors and fields are unchanged, so
+only the imports change:
+
+| 8.1.1 | 8.1.2 |
+|---|---|
+| `Utopia\Database\AttributeUpdate` | `Utopia\Database\Attribute\Update` |
+| `Utopia\Database\CollectionUpdate` | `Utopia\Database\Collection\Update` |
+| `Utopia\Database\RelationshipUpdate` | `Utopia\Database\Relationship\Update` |
+
+A file that uses more than one of them imports each under an alias, which keeps the call sites unchanged:
+
+```php
+use Utopia\Database\Attribute\Update as AttributeUpdate;
+use Utopia\Database\Relationship\Update as RelationshipUpdate;
+```
 
 ## Integer rounding
 
@@ -34,40 +95,6 @@ If you relied on fractions being refused, check the value before you call. If yo
 - A fractional `max` or `min` is floored or ceiled before the comparison, instead of being compared as given.
 - The stored value is no longer read locked to resolve an operator, and `updateDocuments()` sends one update for all
   rows again.
-
-Code that called `Adapter::arithmetic()`, built an `Arithmetic` or `Arithmetic\Rounding`, passed `$fractions` to
-`Validator\Operator`, `Validator\Structure` or `Validator\PartialStructure`, or passed `$roundFractions` to the
-`State\Snapshot` constructor must drop it.
-8.1.2 removes public API that nothing outside the library called. Each removal has a replacement:
-
-| Removed | Use instead |
-|---|---|
-| `Database::rawQuery(string $query, array $bindings = []): array` | `Database::query(new \Utopia\Query\Builder\Statement($query, $bindings))`, inside `getAuthorization()->skip()` as before. It returns a list of `Document`. The adapter's `Feature\RawQuery::rawQuery()` stays. |
-| `Database::getRelationshipHook()` (internal) | Keep the `Hook\Relationships` you pass to `addHook()` |
-| `Database::getMaxIndexLength()`, `Database::getMaxVarcharLength()` | `$database->getAdapter()->limits()->indexLength`, `->varchar` |
-| `Database::getMinDateTime()`, `Database::getMaxDateTime()` | `$database->getAdapter()->limits()->minDateTime`, `->maxDateTime`; clone the `DateTime` before modifying it |
-| `Database::getCacheWriterTimeout()` | The value given to `setCacheWriterTimeout()`; without one, `Cache\Scope::WRITER_TIMEOUT` (3600 seconds) |
-| `Event\Permission\Created`, `Event\Permission\Read`, `Event\Permission\Deleted` | None: `Database` never dispatched them. `Event::PermissionsCreate`, `PermissionsRead` and `PermissionsDelete` stay as the labels of the statements a permissions write runs, for transforms and timeouts, and their `domain()` is `null`. |
-| `Adapter\SQL\Hook\Permission\AllowNullUid` | `Adapter\SQL\Hook\Column\AllowNull`, which takes the same `(Filter $filter, string $column, string $quoteCharacter)` arguments |
-8.1.2 is a patch release. It removes `Database::read()`, and a `Pool` answers with the hostname it is given.
-[CHANGELOG.md](CHANGELOG.md) lists every change.
-
-- [`Database::read()` is removed](#databaseread-is-removed)
-- [Hostname of a pool](#hostname-of-a-pool)
-
-## `Database::read()` is removed
-
-Call `find()` for documents and `aggregate()` for aggregate or `groupBy()` queries. A list that serves both picks one
-with `ParsedQuery::isAggregation()`:
-
-```php
-$rows = Query::groupByType($queries)->isAggregation()
-    ? \array_map(static fn (array $row): Document => new Document($row), $database->aggregate('posts', $queries))
-    : $database->find('posts', $queries, $forPermission);
-```
-
-`aggregate()` reads under the read permission only. `read()` refused aggregate queries under another permission with
-`Exception\Query`; a caller that relied on that refusal checks `$forPermission` itself.
 
 ## Hostname of a pool
 

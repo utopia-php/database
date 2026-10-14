@@ -7,7 +7,7 @@ use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Attribute;
-use Utopia\Database\AttributeUpdate;
+use Utopia\Database\Attribute\Update;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -53,7 +53,7 @@ final class QueriesValidatorTest extends TestCase
 
         $this->assertSame(1, $database->count(self::COLLECTION, $byYear));
 
-        $database->updateAttribute(self::COLLECTION, 'year', new AttributeUpdate(type: ColumnType::String, size: 8));
+        $database->updateAttribute(self::COLLECTION, 'year', new Update(type: ColumnType::String, size: 8));
         $this->assertRefused($database, $byYear, 'Invalid query: Query value is invalid for attribute "year"');
         $this->assertSame(0, $database->count(self::COLLECTION, [Query::equal('year', ['six'])]));
 
@@ -61,7 +61,7 @@ final class QueriesValidatorTest extends TestCase
         $this->assertRefused($database, [Query::equal('year', ['six'])], 'Invalid query: Attribute not found in schema: year');
         $this->assertSame(0, $database->count(self::COLLECTION, [Query::equal('published', ['six'])]));
 
-        $database->updateAttribute(self::COLLECTION, 'published', new AttributeUpdate(filters: ['encrypt']));
+        $database->updateAttribute(self::COLLECTION, 'published', new Update(filters: ['encrypt']));
         $this->assertRefused($database, [Query::equal('published', ['six'])], 'Invalid query: Cannot query encrypted attribute: published');
 
         $database->deleteAttribute(self::COLLECTION, 'published');

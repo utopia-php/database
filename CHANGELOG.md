@@ -2,10 +2,22 @@
 
 ## 8.1.2
 
-See [Upgrading from 8.1.1 to 8.1.2](UPGRADE.md#upgrading-from-811-to-812).
+8.1.2 removes public API that nothing outside the library needed, replaces the opt-in emulation of 7.4.1's fractional
+arithmetic on integer attributes with one rounding rule that always applies, and moves the update models into the
+namespace of the model they update. Every entry under Removed and Changed (breaking) needs a code change; see
+[Upgrading from 8.1.1 to 8.1.2](UPGRADE.md#upgrading-from-811-to-812) for each replacement.
 
-### Removed
+### Removed (breaking)
 
+- `Database::read()`, added in 8.1.0. Call `find()` for documents and `aggregate()` for aggregate or `groupBy()`
+  queries; `Query::groupByType($queries)->isAggregation()` tells which of the two a list is. `find()` still refuses
+  aggregate and `groupBy()` queries.
+- `Database::rawQuery()`. Use `Database::query(new Utopia\Query\Builder\Statement($query, $bindings))`, which runs
+  the same statement under the same authorization guard. `Feature\RawQuery` and the adapters' `rawQuery()` stay.
+- `Database::getRelationshipHook()`. Keep the `Hook\Relationships` given to `addHook()`.
+- `Database::getMaxIndexLength()`, `getMaxVarcharLength()`, `getMinDateTime()` and `getMaxDateTime()`. Read
+  `indexLength`, `varchar`, `minDateTime` and `maxDateTime` from `$database->getAdapter()->limits()`.
+- `Database::getCacheWriterTimeout()`.
 - `Database::setRoundFractions()`, `isRoundingFractions()` and `withRoundFractions()`, with the `Mirror` overrides.
   Integer rounding is always on (listed under Changed).
 - `Adapter::arithmetic()` and its overrides in `Postgres`, `Mongo`, `SQLite`, `Memory`, `Redis` and `Pool`;
@@ -15,6 +27,21 @@ See [Upgrading from 8.1.1 to 8.1.2](UPGRADE.md#upgrading-from-811-to-812).
 - The trailing `bool $fractions` argument of `Validator\Operator` and `Validator\Structure` (and so
   `Validator\PartialStructure`).
 - The trailing `bool $roundFractions` argument of the `State\Snapshot` constructor.
+- `Event\Permission\Created`, `Read` and `Deleted`, which `Database` never dispatched. `Event::PermissionsCreate`,
+  `PermissionsRead` and `PermissionsDelete` stay as statement labels; their `domain()` is `null`.
+- `Adapter\SQL\Hook\Permission\AllowNullUid`. Use `Adapter\SQL\Hook\Column\AllowNull`, which it wrapped.
+
+### Changed (breaking)
+
+- The update models moved into the namespace of the model they update. Replace the imports:
+
+  | 8.1.1 | 8.1.2 |
+  |---|---|
+  | `Utopia\Database\AttributeUpdate` | `Utopia\Database\Attribute\Update` |
+  | `Utopia\Database\CollectionUpdate` | `Utopia\Database\Collection\Update` |
+  | `Utopia\Database\RelationshipUpdate` | `Utopia\Database\Relationship\Update` |
+
+  Their constructors and fields are unchanged.
 
 ### Changed
 
@@ -29,20 +56,6 @@ See [Upgrading from 8.1.1 to 8.1.2](UPGRADE.md#upgrading-from-811-to-812).
 - Still refused with `Exception\Structure`, as in 8.0.3: a fractional amount or limit of `multiply()`, `divide()`,
   `modulo()` or `power()` on an integer attribute, and a fractional item added to an integer array. Float and double
   attributes are unchanged.
-### Removed
-
-- `Database::rawQuery()`. Use `Database::query(new Utopia\Query\Builder\Statement($query, $bindings))`, which runs
-  the same statement under the same authorization guard. `Feature\RawQuery` and the adapters' `rawQuery()` stay.
-- `Database::getRelationshipHook()`. Keep the `Hook\Relationships` given to `addHook()`.
-- `Database::getMaxIndexLength()`, `getMaxVarcharLength()`, `getMinDateTime()` and `getMaxDateTime()`. Read
-  `indexLength`, `varchar`, `minDateTime` and `maxDateTime` from `$database->getAdapter()->limits()`.
-- `Database::getCacheWriterTimeout()`.
-- `Event\Permission\Created`, `Read` and `Deleted`, which `Database` never dispatched. `Event::PermissionsCreate`,
-  `PermissionsRead` and `PermissionsDelete` stay as statement labels; their `domain()` is `null`.
-- `Adapter\SQL\Hook\Permission\AllowNullUid`. Use `Adapter\SQL\Hook\Column\AllowNull`, which it wrapped.
-- `Database::read()`, added in 8.1.0. Call `find()` for documents and `aggregate()` for aggregate or `groupBy()`
-  queries; `Query::groupByType($queries)->isAggregation()` tells which of the two a list is. `find()` still refuses
-  aggregate and `groupBy()` queries.
 
 ### Added
 

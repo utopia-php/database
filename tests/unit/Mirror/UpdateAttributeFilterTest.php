@@ -8,7 +8,7 @@ use PHPUnit\Framework\TestCase;
 use Tests\Unit\Event\HookFixture;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Attribute;
-use Utopia\Database\AttributeUpdate;
+use Utopia\Database\Attribute\Update;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -28,7 +28,7 @@ final class UpdateAttributeFilterTest extends TestCase
         });
         $errors = $this->errors($mirror);
 
-        $mirror->updateAttribute(HookFixture::COLLECTION, 'title', new AttributeUpdate(default: 'source'));
+        $mirror->updateAttribute(HookFixture::COLLECTION, 'title', new Update(default: 'source'));
 
         $this->assertSame([], $errors->getArrayCopy());
         $this->assertSame('source', $this->stored($mirror->getSource(), 'title')->default);
@@ -52,7 +52,7 @@ final class UpdateAttributeFilterTest extends TestCase
         });
         $errors = $this->errors($mirror);
 
-        $mirror->updateAttribute(HookFixture::COLLECTION, 'title', new AttributeUpdate(default: 'source', required: false));
+        $mirror->updateAttribute(HookFixture::COLLECTION, 'title', new Update(default: 'source', required: false));
 
         $this->assertSame([], $errors->getArrayCopy());
         $this->assertSame('mirrored', $this->stored($destination, 'title')->default);
@@ -69,7 +69,7 @@ final class UpdateAttributeFilterTest extends TestCase
         });
         $errors = $this->errors($mirror);
 
-        $mirror->updateAttribute(HookFixture::COLLECTION, 'title', new AttributeUpdate(default: 'source'));
+        $mirror->updateAttribute(HookFixture::COLLECTION, 'title', new Update(default: 'source'));
 
         $this->assertSame([], $errors->getArrayCopy());
         $this->assertSame(64, $this->stored($mirror->getSource(), 'title')->size);

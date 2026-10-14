@@ -5,7 +5,7 @@ namespace Tests\Unit\Model;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Attribute;
-use Utopia\Database\AttributeUpdate;
+use Utopia\Database\Attribute\Update;
 use Utopia\Database\Document;
 use Utopia\Database\Format;
 use Utopia\Database\IntegerWidth;
@@ -138,7 +138,7 @@ final class AttributeLegacyHydrationTest extends TestCase
     {
         $hydrated = Attribute::fromArray($stored);
 
-        $this->assertEquals($hydrated->apply(new AttributeUpdate()), $hydrated);
+        $this->assertEquals($hydrated->apply(new Update()), $hydrated);
         $this->assertEquals($created, $hydrated);
     }
 

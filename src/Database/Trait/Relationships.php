@@ -6,7 +6,7 @@ use Throwable;
 use Utopia\Console;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
-use Utopia\Database\AttributeUpdate;
+use Utopia\Database\Attribute\Update as AttributeUpdate;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Document;
@@ -21,9 +21,9 @@ use Utopia\Database\Exception\Refused as RefusedException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Index;
 use Utopia\Database\Relationship;
+use Utopia\Database\Relationship\Update as RelationshipUpdate;
 use Utopia\Database\RelationshipSide;
 use Utopia\Database\RelationshipType;
-use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\SetType;
 
 trait Relationships

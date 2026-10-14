@@ -1,5 +1,27 @@
 # Changelog
 
+## 8.1.3
+
+8.1.3 adds a hook that rewrites the queries of a read. It changes nothing for a database without one; see
+[Upgrading from 8.1.2 to 8.1.3](UPGRADE.md#upgrading-from-812-to-813).
+
+### Added
+
+- `Hook\Queries::rewrite(Event $event, Collection $collection, array $queries): array` rewrites the queries of a
+  read, registered with `addHook()` and removed with `removeHook()`. It is given the queries one read was given and
+  the definition of the collection being read, before the read checks, validates, parses, resolves joins or
+  authorizes anything, and the queries it returns replace the read's queries for the rest of the read, the query-cache
+  key included. It runs for `getDocument()` (`Event::DocumentRead`), `find()` and so `findOne()`, `cursor()` and
+  `resolveCursor()` (`Event::DocumentFind`), `count()` (`Event::DocumentCount`), `sum()` (`Event::DocumentSum`) and
+  `aggregate()` (`Event::DocumentAggregate`). Hooks run in registration order, each given the previous one's output.
+  Throwing refuses the read, with the exception reaching the caller unchanged before anything is read. It runs on the
+  reads the library makes itself, such as relationship population and each `cursor()` page, so it must return the same
+  queries when given its own output; it runs whether or not events are silenced. It never runs for reads of
+  `Database::METADATA`, for writes (`updateDocuments()` and `deleteDocuments()` included) or for the `query()`,
+  `mutate()` and `from()` builders. With such a hook registered, `cursor()` resolves the collection and rewrites its
+  queries when it is called, so a missing collection or a refusal throws then instead of when the generator is
+  iterated. A `Mirror` runs it on its own reads, also for a hook that is a `Hook\Lifecycle` too.
+
 ## 8.1.2
 
 8.1.2 removes public API that nothing outside the library needed, replaces the opt-in emulation of 7.4.1's fractional

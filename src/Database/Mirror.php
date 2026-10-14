@@ -19,6 +19,7 @@ use Utopia\Database\Exception\Limit;
 use Utopia\Database\Filter\Registry;
 use Utopia\Database\Hook\Lifecycle;
 use Utopia\Database\Hook\Nested;
+use Utopia\Database\Hook\Queries;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Hook\Write;
 use Utopia\Database\Mirror\Failure;
@@ -1836,7 +1837,8 @@ class Mirror extends Database
      * both sides relate documents exactly as it is configured to. A write hook also intercepts the destination's
      * writes. A nested hook runs on the mirror, for its pre-checks, and on the source, but never on the destination:
      * the destination replicates the related documents the source already prepared, so preparing them again would
-     * give it IDs the source does not have.
+     * give it IDs the source does not have. A queries hook runs on the mirror, which serves its reads, and is not
+     * forwarded to the destination.
      */
     #[\Override]
     public function addHook(\Utopia\Query\Hook $hook): static
@@ -1849,6 +1851,10 @@ class Mirror extends Database
 
             if ($hook instanceof Nested) {
                 $this->nestedHooks[] = $hook;
+            }
+
+            if ($hook instanceof Queries) {
+                $this->queryHooks[] = $hook;
             }
         } else {
             parent::addHook($hook);

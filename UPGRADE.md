@@ -1,3 +1,12 @@
+# Upgrading from 8.1.2 to 8.1.3
+
+8.1.3 is a patch release and needs no code change. It adds `Hook\Queries`, which rewrites the queries of a read
+before the read validates them, resolves their joins or authorizes anything; a database without one reads as in 8.1.2.
+To use it, implement `rewrite(Event $event, Collection $collection, array $queries): array` and register the hook with
+`addHook()`. Return the queries the read should use, cloning any query you change, and return the same queries when
+given your own output, as the hook also runs on the reads the library makes itself. Throw to refuse the read. See
+[Hooks](README.md#hooks) for an example and [CHANGELOG.md](CHANGELOG.md#813) for which reads it covers.
+
 # Upgrading from 8.1.1 to 8.1.2
 
 8.1.2 is a patch release. It removes public API that nothing outside the library needed, replaces the opt-in emulation

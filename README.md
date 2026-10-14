@@ -334,6 +334,30 @@ $database->silent(fn () => $database->ping(), ['audit-log']);
 
 A `Utopia\Database\Hook\Transform` rewrites SQL statements before they run, and a `Utopia\Database\Hook\Decorator` modifies the documents that reads and writes return. Both are registered with `addHook()` too, and `removeHook()` unregisters a hook. `Event\DispatcherHook` forwards events to listeners registered per event class and to a PSR-14 dispatcher.
 
+A `Utopia\Database\Hook\Queries` rewrites the queries of `getDocument()`, `find()`, `findOne()`, `cursor()`, `resolveCursor()`, `count()`, `sum()` and `aggregate()` before the read validates them, resolves their joins or authorizes anything; throwing refuses the read. It also runs on the reads the library makes itself, so it must return the same queries when given its own output:
+
+```php
+use Utopia\Database\Collection;
+use Utopia\Database\Event;
+use Utopia\Database\Hook\Queries;
+use Utopia\Database\Query;
+
+final class PublicNames implements Queries
+{
+    public function rewrite(Event $event, Collection $collection, array $queries): array
+    {
+        return \array_map(
+            static fn (Query $query): Query => $query->getMethod()->isJoin() && $query->getAttribute() === 'public-movies'
+                ? (clone $query)->setAttribute('movies')
+                : $query,
+            $queries,
+        );
+    }
+}
+
+$database->addHook(new PublicNames());
+```
+
 ### Database Methods
 
 ```php

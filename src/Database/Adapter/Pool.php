@@ -5,7 +5,6 @@ namespace Utopia\Database\Adapter;
 use Throwable;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\SQL\Wkt;
-use Utopia\Database\Arithmetic;
 use Utopia\Database\Attribute;
 use Utopia\Database\Builder\Scoping;
 use Utopia\Database\Capability;
@@ -68,11 +67,6 @@ class Pool extends Adapter implements Feature\Timeouts
      * @var \WeakMap<UtopiaPool<covariant Adapter>, array<class-string, bool>>|null
      */
     private static ?\WeakMap $features = null;
-
-    /**
-     * @var \WeakMap<UtopiaPool<covariant Adapter>, Arithmetic>|null
-     */
-    private static ?\WeakMap $arithmetic = null;
 
     /**
      * @var \WeakMap<UtopiaPool<covariant Adapter>, array<int, bool>>|null
@@ -903,22 +897,6 @@ class Pool extends Adapter implements Feature\Timeouts
     {
         /** @var int $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());
-        return $result;
-    }
-
-    #[\Override]
-    public function arithmetic(): Arithmetic
-    {
-        $remembered = self::$arithmetic[$this->pool] ?? null;
-        if ($remembered !== null) {
-            return $remembered;
-        }
-
-        /** @var Arithmetic $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
-        self::$arithmetic ??= new \WeakMap();
-        self::$arithmetic[$this->pool] = $result;
-
         return $result;
     }
 

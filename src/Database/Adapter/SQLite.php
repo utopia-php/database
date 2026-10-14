@@ -13,8 +13,6 @@ use Throwable;
 use Utopia\Database\Adapter\SQL\Expression;
 use Utopia\Database\Adapter\SQL\Hook\Permission;
 use Utopia\Database\Adapter\SQL\JoinAlias;
-use Utopia\Database\Arithmetic;
-use Utopia\Database\Arithmetic\Rounding;
 use Utopia\Database\Attribute;
 use Utopia\Database\Builder\Scoping;
 use Utopia\Database\Builder\SQLite as SQLiteBuilder;
@@ -144,24 +142,6 @@ class SQLite extends SQL
         parent::reconnect();
 
         $this->registerUserFunctions();
-    }
-
-    /**
-     * SQLite kept a fractional result as a REAL in the INTEGER column and every read cast it to an integer, cutting
-     * it toward zero, as it cut the quotient of two integers; % cast a fractional modulus to an integer first. Its
-     * comparison of a fractional operator limit as text, which never held a maximum and always held a minimum, is
-     * not reproduced: limits hold as on Memory and Redis.
-     */
-    #[\Override]
-    public function arithmetic(): Arithmetic
-    {
-        return new Arithmetic(
-            counter: Rounding::TowardZero,
-            operators: Rounding::TowardZero,
-            division: Rounding::TowardZero,
-            power: Rounding::TowardZero,
-            truncatesModulus: true,
-        );
     }
 
     /**

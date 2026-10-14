@@ -5238,7 +5238,7 @@ trait OperatorTests
         $database->deleteCollection($collectionId);
     }
 
-    public function testOperatorWholeFloatLimitHoldsAndAFractionalLimitIsRefused(): void
+    public function testOperatorWholeFloatLimitHoldsAndAFractionalLimitIsFloored(): void
     {
         $database = static::getDatabase();
 
@@ -5268,19 +5268,15 @@ trait OperatorTests
             $this->assertSame(PHP_INT_MAX - 5, $updated->getAttribute('counter'));
             $this->assertSame(PHP_INT_MAX - 5, $database->getDocument($collectionId, 'doc')->getAttribute('counter'));
 
-            try {
-                $database->updateDocument($collectionId, 'doc', new Document([
-                    'count' => Operator::increment(5, 102.4),
-                ]));
-                $this->fail('A fractional limit on an integer attribute must be refused');
-            } catch (StructureException $exception) {
-                $this->assertSame(
-                    "Invalid document structure: Cannot apply increment operator: max/min limit must be a whole number for integer attribute 'count', got 102.4",
-                    $exception->getMessage(),
-                );
-            }
-
+            $database->updateDocument($collectionId, 'doc', new Document([
+                'count' => Operator::increment(3, 102.4),
+            ]));
             $this->assertSame(100, $database->getDocument($collectionId, 'doc')->getAttribute('count'));
+
+            $database->updateDocument($collectionId, 'doc', new Document([
+                'count' => Operator::increment(2, 102.4),
+            ]));
+            $this->assertSame(102, $database->getDocument($collectionId, 'doc')->getAttribute('count'));
         } finally {
             $database->deleteCollection($collectionId);
         }

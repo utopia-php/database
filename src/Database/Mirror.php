@@ -496,14 +496,6 @@ class Mirror extends Database
     }
 
     #[\Override]
-    public function setRoundFractions(bool $round): static
-    {
-        $this->delegate(__FUNCTION__, \func_get_args());
-
-        return parent::setRoundFractions($round);
-    }
-
-    #[\Override]
     public function setValidation(bool $validation): static
     {
         $this->delegate(__FUNCTION__, \func_get_args());
@@ -555,15 +547,6 @@ class Mirror extends Database
     public function withCheckGrants(bool $check, callable $callback): mixed
     {
         return parent::withCheckGrants($check, fn (): mixed => $this->source->withCheckGrants($check, $callback));
-    }
-
-    #[\Override]
-    public function withRoundFractions(bool $round, callable $callback): mixed
-    {
-        $destination = $this->destination;
-        $scoped = $destination === null ? $callback : fn (): mixed => $destination->withRoundFractions($round, $callback);
-
-        return parent::withRoundFractions($round, fn (): mixed => $this->source->withRoundFractions($round, $scoped));
     }
 
     #[\Override]

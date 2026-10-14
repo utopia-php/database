@@ -279,8 +279,12 @@ trait Documents
         return BigInt::integralValue($bound) ?? throw new TypeException($name.' must be an integer.');
     }
 
-    private function roundOperators(Collection $collection, Document $document): void
+    /**
+     * @return list<string> The attributes whose fractional change rounds to nothing
+     */
+    private function roundOperators(Collection $collection, Document $document): array
     {
+        $unchanged = [];
         foreach ($collection->attributes() as $attribute) {
             $operator = $document->getAttribute($attribute->key);
             if (! $operator instanceof Operator || ! $this->isDeclaredInteger($attribute)) {
@@ -298,12 +302,32 @@ trait Documents
 
             $values = $operator->getValues();
             if (\array_key_exists(0, $values)) {
-                $values[0] = Rounding::HalfAwayFromZero->round($values[0]);
+                $amount = Rounding::HalfAwayFromZero->round($values[0]);
+                if ($amount === 0 && $amount !== $values[0]) {
+                    $unchanged[] = $attribute->key;
+                }
+                $values[0] = $amount;
             }
             if (isset($values[1])) {
                 $values[1] = $limitRounding->round($values[1]);
             }
             $document->setAttribute($attribute->key, (clone $operator)->setValues($values));
+        }
+
+        return $unchanged;
+    }
+
+    /**
+     * @param  list<string>  $keys
+     */
+    private static function keepStored(Document $document, Document $stored, array $keys): void
+    {
+        foreach ($keys as $key) {
+            if ($stored->offsetExists($key)) {
+                $document->setAttribute($key, $stored->getAttribute($key));
+            } else {
+                $document->removeAttribute($key);
+            }
         }
     }
 
@@ -1678,7 +1702,7 @@ trait Documents
             // for a write that leaves the stored document identical.
             $document = $this->removeUnknownAttributes($collection, $document);
 
-            $this->roundOperators($collection, $document);
+            self::keepStored($document, $old, $this->roundOperators($collection, $document));
 
             $shouldUpdate = false;
 
@@ -1960,6 +1984,14 @@ trait Documents
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
+        $unchanged = $this->roundOperators($collection, $updates);
+        if (\count($unchanged) === \count($updates)) {
+            return 0;
+        }
+        foreach ($unchanged as $key) {
+            $updates->removeAttribute($key);
+        }
+
         if ($this->checksGrants() && $this->relationshipHook?->isEnabled() && self::holdsRelatedDocument($collection, $updates)) {
             throw new RelationshipException('Invalid relationship value. A bulk update takes related documents by ID while grants are checked.');
         }
@@ -2004,8 +2036,6 @@ trait Documents
 
         $updatedAt = $updates->getUpdatedAt();
         $updates[Document::UPDATED_AT] = ($updatedAt === null || ! $this->datePreservation()->get()) ? DateTime::now() : $updatedAt;
-
-        $this->roundOperators($collection, $updates);
 
         $decodedUpdates = clone $updates;
         $updates = $this->encode(
@@ -2322,7 +2352,10 @@ trait Documents
             $old = $existing[$this->upsertKey($document)] ?? new Document();
 
             $document = $this->removeUnknownAttributes($collection, $document);
-            $this->roundOperators($collection, $document);
+            $unchanged = $this->roundOperators($collection, $document);
+            if (! $old->isEmpty()) {
+                self::keepStored($document, $old, $unchanged);
+            }
 
             // Extract operators early to avoid comparison issues
             $documentArray = $document->getArrayCopy();

@@ -15,7 +15,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Permission;
 use Utopia\Database\Relationship;
-use Utopia\Database\RelationshipUpdate;
+use Utopia\Database\Relationship\Update;
 use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
 
@@ -59,7 +59,7 @@ final class RelationshipRenameRecoveryTest extends TestCase
         $this->database->createDocument('books', new Document(['$id' => 'dune', 'name' => 'Dune', 'author' => 'herbert']));
         $this->addColumn('books', 'writer');
 
-        $this->assertRenameFails('books', 'author', new RelationshipUpdate(key: 'writer'));
+        $this->assertRenameFails('books', 'author', new Update(key: 'writer'));
 
         $this->assertSame(['author', 'name'], $this->attributeKeys('books'));
         $author = $this->database->getDocument('books', 'dune')->getAttribute('author');
@@ -72,7 +72,7 @@ final class RelationshipRenameRecoveryTest extends TestCase
         $this->database->createRelationship('books', Relationship::oneToOne(relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'book'));
         $this->addColumn('authors', 'novel');
 
-        $this->assertRenameFails('books', 'author', new RelationshipUpdate(twoWayKey: 'novel'));
+        $this->assertRenameFails('books', 'author', new Update(twoWayKey: 'novel'));
 
         $this->assertSame(['book', 'name'], $this->attributeKeys('authors'));
     }
@@ -83,7 +83,7 @@ final class RelationshipRenameRecoveryTest extends TestCase
         $this->database->createDocument('authors', new Document(['$id' => 'herbert', 'name' => 'Herbert']));
         $this->database->createDocument('books', new Document(['$id' => 'dune', 'name' => 'Dune', 'author' => 'herbert']));
         $this->addColumn('authors', 'novel');
-        $update = new RelationshipUpdate(key: 'writer', twoWayKey: 'novel');
+        $update = new Update(key: 'writer', twoWayKey: 'novel');
 
         $this->assertRenameFails('books', 'author', $update);
         $this->assertSame(['author', 'name'], $this->attributeKeys('books'));
@@ -106,7 +106,7 @@ final class RelationshipRenameRecoveryTest extends TestCase
         $this->pdo->exec('ALTER TABLE `'.self::NAMESPACE."_{$collection}` ADD COLUMN `{$column}` VARCHAR(255)");
     }
 
-    private function assertRenameFails(string $collection, string $key, RelationshipUpdate $update): void
+    private function assertRenameFails(string $collection, string $key, Update $update): void
     {
         try {
             $this->database->updateRelationship($collection, $key, $update);

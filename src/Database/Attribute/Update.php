@@ -1,10 +1,13 @@
 <?php
 
-namespace Utopia\Database;
+namespace Utopia\Database\Attribute;
 
+use Utopia\Database\Filter;
+use Utopia\Database\Format;
+use Utopia\Database\Unchanged;
 use Utopia\Query\Schema\ColumnType;
 
-final readonly class AttributeUpdate
+final readonly class Update
 {
     /**
      * @param  list<Filter|string>|null  $filters

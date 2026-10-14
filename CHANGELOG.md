@@ -1,5 +1,75 @@
 # Changelog
 
+## 8.1.2
+
+8.1.2 removes public API that nothing outside the library needed, replaces the opt-in emulation of 7.4.1's fractional
+arithmetic on integer attributes with one rounding rule that always applies, and moves the update models into the
+namespace of the model they update. Every entry under Removed and Changed (breaking) needs a code change; see
+[Upgrading from 8.1.1 to 8.1.2](UPGRADE.md#upgrading-from-811-to-812) for each replacement.
+
+### Removed (breaking)
+
+- `Database::read()`, added in 8.1.0. Call `find()` for documents and `aggregate()` for aggregate or `groupBy()`
+  queries; `Query::groupByType($queries)->isAggregation()` tells which of the two a list is. `find()` still refuses
+  aggregate and `groupBy()` queries.
+- `Database::rawQuery()`. Use `Database::query(new Utopia\Query\Builder\Statement($query, $bindings))`, which runs
+  the same statement under the same authorization guard. `Feature\RawQuery` and the adapters' `rawQuery()` stay.
+- `Database::getRelationshipHook()`. Keep the `Hook\Relationships` given to `addHook()`.
+- `Database::getMaxIndexLength()`, `getMaxVarcharLength()`, `getMinDateTime()` and `getMaxDateTime()`. Read
+  `indexLength`, `varchar`, `minDateTime` and `maxDateTime` from `$database->getAdapter()->limits()`.
+- `Database::getCacheWriterTimeout()`.
+- `Database::setRoundFractions()`, `isRoundingFractions()` and `withRoundFractions()`, with the `Mirror` overrides.
+  Integer rounding is always on (listed under Changed).
+- `Adapter::arithmetic()` and its overrides in `Postgres`, `Mongo`, `SQLite`, `Memory`, `Redis` and `Pool`;
+  `ReadWritePool` no longer lists it among the methods it answers wherever reads go.
+- `Utopia\Database\Arithmetic`, `Utopia\Database\Arithmetic\Rounding` and the internal `Arithmetic\Decimal` and
+  `Arithmetic\Fractional`.
+- The trailing `bool $fractions` argument of `Validator\Operator` and `Validator\Structure` (and so
+  `Validator\PartialStructure`).
+- The trailing `bool $roundFractions` argument of the `State\Snapshot` constructor.
+- `Event\Permission\Created`, `Read` and `Deleted`, which `Database` never dispatched. `Event::PermissionsCreate`,
+  `PermissionsRead` and `PermissionsDelete` stay as statement labels; their `domain()` is `null`.
+- `Adapter\SQL\Hook\Permission\AllowNullUid`. Use `Adapter\SQL\Hook\Column\AllowNull`, which it wrapped.
+
+### Changed (breaking)
+
+- The update models moved into the namespace of the model they update. Replace the imports:
+
+  | 8.1.1 | 8.1.2 |
+  |---|---|
+  | `Utopia\Database\AttributeUpdate` | `Utopia\Database\Attribute\Update` |
+  | `Utopia\Database\CollectionUpdate` | `Utopia\Database\Collection\Update` |
+  | `Utopia\Database\RelationshipUpdate` | `Utopia\Database\Relationship\Update` |
+
+  Their constructors and fields are unchanged.
+
+### Changed
+
+- On a single-valued integer or big integer attribute, `increaseDocumentAttribute()` and `decreaseDocumentAttribute()`
+  round a fractional change half away from zero (1.5 adds 2, 2.5 subtracts 3), floor a fractional `max` and ceil a
+  fractional `min`; `Operator::increment()` and `Operator::decrement()` given to `updateDocument()`,
+  `updateDocuments()`, `upsertDocument()` and `upsertDocuments()` round their amount and limit the same way, so
+  `increment(-2.5)` subtracts 3. Rounding happens once, in PHP, before validation and on every adapter alike. Decimal
+  text, which is what `is_numeric()` accepts without an exponent, such as `'9007199254740993.5'`, `' +.5'` or `'1.'`,
+  is rounded exactly at any size; text with an exponent is refused. A change that rounds to 0, such as 0.4, changes
+  nothing and skips the `max` or `min` check: a counter writes nothing and fires no event, and an operator is dropped
+  from the update, so `updateDocuments()` with nothing else to change returns 0. Before, these were refused, unless
+  `setRoundFractions(true)` stored what the adapter's engine stored on 7.4.1.
+- Refused with `Exception\Structure`, as in 8.0.3 and in 8.1.1 without `setRoundFractions(true)`: a fractional amount
+  or limit of `multiply()`, `divide()`, `modulo()` or `power()` on an integer attribute, and a fractional item added to
+  an integer array. `setRoundFractions(true)` resolved the operators and cut the array items toward zero. Float and
+  double attributes are unchanged.
+
+### Added
+
+- `Adapter\Pool::getPool(): Utopia\Pools\Pool` returns the pool of adapters the handle borrows from.
+
+### Fixed
+
+- `Adapter\Pool::hostname()` returns the hostname given to `setHostname()` when it is not empty, and asks the pooled
+  adapter only otherwise. 8.1.1 ignored it, so `Database::getHostname()` and the cache keys built from it named the
+  pooled adapter's host instead. `ReadWritePool` also follows a hostname set after its first answer.
+
 ## 8.1.1
 
 ### Added

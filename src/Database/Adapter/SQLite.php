@@ -13,8 +13,6 @@ use Throwable;
 use Utopia\Database\Adapter\SQL\Expression;
 use Utopia\Database\Adapter\SQL\Hook\Permission;
 use Utopia\Database\Adapter\SQL\JoinAlias;
-use Utopia\Database\Arithmetic;
-use Utopia\Database\Arithmetic\Rounding;
 use Utopia\Database\Attribute;
 use Utopia\Database\Builder\Scoping;
 use Utopia\Database\Builder\SQLite as SQLiteBuilder;
@@ -42,9 +40,9 @@ use Utopia\Database\PDOStatement as DatabasePDOStatement;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
+use Utopia\Database\Relationship\Update;
 use Utopia\Database\RelationshipSide;
 use Utopia\Database\RelationshipType;
-use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\Schema\Column as SchemaColumn;
 use Utopia\Database\Schema\Index as SchemaIndex;
 use Utopia\Database\Storage;
@@ -144,24 +142,6 @@ class SQLite extends SQL
         parent::reconnect();
 
         $this->registerUserFunctions();
-    }
-
-    /**
-     * SQLite kept a fractional result as a REAL in the INTEGER column and every read cast it to an integer, cutting
-     * it toward zero, as it cut the quotient of two integers; % cast a fractional modulus to an integer first. Its
-     * comparison of a fractional operator limit as text, which never held a maximum and always held a minimum, is
-     * not reproduced: limits hold as on Memory and Redis.
-     */
-    #[\Override]
-    public function arithmetic(): Arithmetic
-    {
-        return new Arithmetic(
-            counter: Rounding::TowardZero,
-            operators: Rounding::TowardZero,
-            division: Rounding::TowardZero,
-            power: Rounding::TowardZero,
-            truncatesModulus: true,
-        );
     }
 
     /**
@@ -2502,7 +2482,7 @@ class SQLite extends SQL
     }
 
     #[\Override]
-    public function updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, RelationshipUpdate $update): bool
+    public function updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, Update $update): bool
     {
         $table = $this->getTable($this->filter($collection));
         $relatedTable = $this->getTable($this->filter($relationship->relatedCollection));

@@ -7,8 +7,8 @@ use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Attribute;
 use Utopia\Database\Index;
 use Utopia\Database\Relationship;
+use Utopia\Database\Relationship\Update;
 use Utopia\Database\RelationshipSide;
-use Utopia\Database\RelationshipUpdate;
 
 /**
  * A Memory adapter whose schema methods answer with the verdict set for them, or apply the change when there is
@@ -119,7 +119,7 @@ final class VerdictMemory extends Memory
     }
 
     #[\Override]
-    public function updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, RelationshipUpdate $update): bool
+    public function updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, Update $update): bool
     {
         return $this->verdict(__FUNCTION__) ?? parent::updateRelationship($collection, $relationship, $side, $update);
     }

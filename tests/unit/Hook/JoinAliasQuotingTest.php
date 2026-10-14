@@ -4,6 +4,7 @@ namespace Tests\Unit\Hook;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Utopia\Database\Adapter\SQL\Hook\Column\AllowNull;
 use Utopia\Database\Adapter\SQL\Hook\Join;
 use Utopia\Database\Adapter\SQL\Hook\Permission;
 use Utopia\Database\Adapter\SQL\Hook\Tenant;
@@ -148,9 +149,9 @@ final class JoinAliasQuotingTest extends TestCase
     }
 
     #[DataProvider('quoteCharacters')]
-    public function testPermissionAllowNullUidQuotesTheMainTableOnBothSides(string $quote): void
+    public function testAllowNullPermissionQuotesTheMainTableOnBothSides(string $quote): void
     {
-        $hook = new Permission\AllowNullUid($this->permission(self::SOURCE, $quote), self::SOURCE.'.'.Storage::UID, $quote);
+        $hook = new AllowNull($this->permission(self::SOURCE, $quote), self::SOURCE.'.'.Storage::UID, $quote);
 
         $this->assertSame(
             $this->quoted('("Main"."_uid" IN (SELECT _document FROM "database"."namespace_books_perms" WHERE _permission IN (?) AND _type = ?) OR "Main"."_uid" IS NULL)', $quote),

@@ -124,6 +124,24 @@ final class BigIntTest extends TestCase
         $this->assertSame(0, BigInt::add(5, -5));
     }
 
+    public function testStringArithmeticCarriesAndBorrowsAcrossLongNumbers(): void
+    {
+        $nines = \str_repeat('9', 36);
+        $power = '1'.\str_repeat('0', 36);
+
+        $this->assertSame($power, BigInt::add($nines, 1));
+        $this->assertSame('1'.\str_repeat('9', 39).'8', BigInt::add(\str_repeat('9', 40), \str_repeat('9', 40)));
+        $this->assertSame('1111111110111111111011111111100', BigInt::add('123456789012345678901234567890', '987654321098765432109876543210'));
+        $this->assertSame($nines, BigInt::subtract($power, 1));
+        $this->assertSame(1, BigInt::subtract('1'.\str_repeat('0', 40), \str_repeat('9', 40)));
+        $this->assertSame(1, BigInt::add($power, '-'.$nines));
+        $this->assertSame('-'.$nines, BigInt::add('-'.$power, 1));
+        $this->assertSame('-'.$power, BigInt::subtract('-'.$nines, 1));
+        $this->assertSame('100000000000000000000000000000000000000000000000000000', BigInt::add('99999999999999999999999999999999999999', '99999999999999900000000000000000000000000000000000001'));
+        $this->assertSame('1'.\str_repeat('0', 1000000), BigInt::add(\str_repeat('9', 1000000), 1));
+        $this->assertSame(\str_repeat('9', 1000000), BigInt::subtract('1'.\str_repeat('0', 1000000), 1));
+    }
+
     public function testComparingNativeAndStringIntegersAgrees(): void
     {
         $this->assertSame(-1, BigInt::compare(-2, 1));

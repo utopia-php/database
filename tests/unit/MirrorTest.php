@@ -12,6 +12,7 @@ use RuntimeException;
 use Swoole\Runtime;
 use Tests\Unit\Event\RecordingLifecycle;
 use Tests\Unit\Support\CountingMemory;
+use Tests\Unit\Support\ScopedDatabase;
 use Throwable;
 use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Cache\Adapter\None;
@@ -21,13 +22,13 @@ use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Adapter\Timeout;
 use Utopia\Database\Attribute;
-use Utopia\Database\AttributeUpdate;
+use Utopia\Database\Attribute\Update as AttributeUpdate;
 use Utopia\Database\Cache\Invalidator;
 use Utopia\Database\Cache\Query as ResultCache;
 use Utopia\Database\Capability;
 use Utopia\Database\Change;
 use Utopia\Database\Collection;
-use Utopia\Database\CollectionUpdate;
+use Utopia\Database\Collection\Update as CollectionUpdate;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
@@ -39,6 +40,7 @@ use Utopia\Database\Index;
 use Utopia\Database\Mirror;
 use Utopia\Database\Mirror\Failure;
 use Utopia\Database\Mirror\Filter;
+use Utopia\Database\Operator;
 use Utopia\Database\Permission;
 use Utopia\Database\Query;
 use Utopia\Database\Role;
@@ -245,6 +247,23 @@ class MirrorTest extends TestCase
         $mirror->updateDocument(self::COLLECTION, 'first', new Document(['title' => 'updated']));
 
         $this->assertSame('updated', $this->title($mirror));
+    }
+
+    public function testUpdatesWithAnOperatorThatRoundsToNothingAreNotReplicated(): void
+    {
+        [$mirror, $source, $destination] = $this->pair();
+        $this->seed($mirror);
+        $recorder = new RecordingLifecycle();
+        $destination->addHook($recorder);
+        \usleep(2000);
+
+        $this->assertSame(0, $mirror->updateDocuments(self::COLLECTION, new Document(['views' => Operator::increment(0.4)])));
+
+        $this->assertSame([], $recorder->received(Event::DocumentsUpdate));
+        $this->assertSame(
+            $source->getDocument(self::COLLECTION, 'first')->getUpdatedAt(),
+            $destination->getDocument(self::COLLECTION, 'first')->getUpdatedAt(),
+        );
     }
 
     public function testAnEventThroughTheMirrorInvalidatesTheMirrorQueryCacheAndIsDispatchedOnce(): void
@@ -494,14 +513,14 @@ class MirrorTest extends TestCase
         ];
         yield 'skipRelationships' => [
             static fn (Mirror $mirror, Closure $callback): mixed => $mirror->skipRelationships($callback),
-            static fn (Database $database): mixed => $database->getRelationshipHook()?->isEnabled(),
+            static fn (Database $database): mixed => $database->snapshot()->relationships,
             false,
             true,
             true,
         ];
         yield 'skipRelationshipsExistCheck' => [
             static fn (Mirror $mirror, Closure $callback): mixed => $mirror->skipRelationshipsExistCheck($callback),
-            static fn (Database $database): mixed => $database->getRelationshipHook()?->shouldCheckExist(),
+            static fn (Database $database): mixed => $database->snapshot()->existCheck,
             false,
             true,
             true,
@@ -982,14 +1001,12 @@ class MirrorTest extends TestCase
 
     public function testCacheWriterTimeoutReachesSourceAndDestination(): void
     {
-        [$mirror, $source, $destination] = $this->pair();
+        $source = new ScopedDatabase(new Memory(), new Cache(new None()));
+        $destination = new ScopedDatabase(new Memory(), new Cache(new None()));
 
-        $mirror->setCacheWriterTimeout(30);
+        (new Mirror($source, $destination))->setCacheWriterTimeout(30);
 
-        $this->assertSame(
-            [30, 30, 30],
-            [$mirror->getCacheWriterTimeout(), $source->getCacheWriterTimeout(), $destination->getCacheWriterTimeout()],
-        );
+        $this->assertSame([30, 30], [$source->getScope()->writerTimeout, $destination->getScope()->writerTimeout]);
     }
 
     /**

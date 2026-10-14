@@ -12,8 +12,6 @@ use stdClass;
 use Swoole\Coroutine;
 use Throwable;
 use Utopia\Database\Adapter;
-use Utopia\Database\Arithmetic;
-use Utopia\Database\Arithmetic\Rounding;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Change;
@@ -42,9 +40,9 @@ use Utopia\Database\OperatorType;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
+use Utopia\Database\Relationship\Update;
 use Utopia\Database\RelationshipSide;
 use Utopia\Database\RelationshipType;
-use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Mongo\Client;
@@ -1214,7 +1212,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      * @throws MongoException
      */
     #[\Override]
-    public function updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, RelationshipUpdate $update): bool
+    public function updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, Update $update): bool
     {
         $collectionName = $this->getNamespace().'_'.$this->filter($collection);
         $relatedCollectionName = $this->getNamespace().'_'.$this->filter($relationship->relatedCollection);
@@ -2912,20 +2910,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         $tenant = $tenant === null ? '' : $this->stringifyIdentifier($tenant);
 
         return $tenant."\0".$id;
-    }
-
-    /**
-     * MongoDB stored a fractional result as a double, and every read cast it to an integer, cutting it toward zero.
-     */
-    #[\Override]
-    public function arithmetic(): Arithmetic
-    {
-        return new Arithmetic(
-            counter: Rounding::TowardZero,
-            operators: Rounding::TowardZero,
-            division: Rounding::TowardZero,
-            power: Rounding::TowardZero,
-        );
     }
 
     /**

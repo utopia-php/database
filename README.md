@@ -399,7 +399,7 @@ $profile->supports(Capability::Joins);
 ```php
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
-use Utopia\Database\CollectionUpdate;
+use Utopia\Database\Collection\Update;
 use Utopia\Database\Index;
 use Utopia\Database\Permission;
 use Utopia\Database\Role;
@@ -425,7 +425,7 @@ $database->createCollection(Collection::create(
 ));
 
 // Update Collection Permissions; a field left null keeps its stored value
-$database->updateCollection('users', new CollectionUpdate(
+$database->updateCollection('users', new Update(
     permissions: [
         Permission::create(Role::any()),
         Permission::read(Role::any()),
@@ -461,7 +461,7 @@ $database->deleteCollection('drafts');
 
 ```php
 use Utopia\Database\Attribute;
-use Utopia\Database\AttributeUpdate;
+use Utopia\Database\Attribute\Update;
 use Utopia\Database\Collection;
 use Utopia\Database\Format;
 use Utopia\Database\IntegerWidth;
@@ -512,12 +512,12 @@ Structure::addFormat(
 );
 
 // Updates an attribute. Only the fields given change; default: null and format: null remove them.
-$database->updateAttribute('movies', 'year', new AttributeUpdate(
+$database->updateAttribute('movies', 'year', new Update(
     required: true,
     format: new Format('year', ['min' => 1888, 'max' => 2100]),
 ));
 
-$database->updateAttribute('movies', 'director', new AttributeUpdate(default: 'Unknown'));
+$database->updateAttribute('movies', 'director', new Update(default: 'Unknown'));
 
 // Check if attribute can be added to a collection
 $database->checkAttribute('movies', Attribute::integer('rating'));
@@ -581,8 +581,8 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Permission;
 use Utopia\Database\Relationship;
+use Utopia\Database\Relationship\Update;
 use Utopia\Database\RelationshipDeleteAction;
-use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\Role;
 
 // Each relationship type has a factory: Relationship::oneToOne(), oneToMany(), manyToOne() and manyToMany().
@@ -609,12 +609,12 @@ $database->createRelationship('movies', Relationship::oneToMany(
 ));
 
 // Update the relationship with the default reference attributes
-$database->updateRelationship('movies', 'users', new RelationshipUpdate(
+$database->updateRelationship('movies', 'users', new Update(
     onDelete: RelationshipDeleteAction::SetNull
 ));
 
 // Update the relationship with custom reference attributes
-$database->updateRelationship('movies', 'users', new RelationshipUpdate(
+$database->updateRelationship('movies', 'users', new Update(
     key: 'viewer',
     twoWayKey: 'favoriteMovie',
     twoWay: true

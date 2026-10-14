@@ -12,7 +12,7 @@ use Utopia\Database\Adapter\Redis;
 use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
-use Utopia\Database\AttributeUpdate;
+use Utopia\Database\Attribute\Update;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
@@ -601,7 +601,7 @@ trait AttributeTests
 
         $this->assertNull($doc->getAttribute('inStock'));
 
-        $database->updateAttribute($this->getFlowersCollection(), 'inStock', new AttributeUpdate(default: 100));
+        $database->updateAttribute($this->getFlowersCollection(), 'inStock', new Update(default: 100));
 
         $doc = $database->createDocument($this->getFlowersCollection(), new Document([
             '$permissions' => [
@@ -616,7 +616,7 @@ trait AttributeTests
         $this->assertIsNumeric($doc->getAttribute('inStock'));
         $this->assertEquals(100, $doc->getAttribute('inStock'));
 
-        $database->updateAttribute($this->getFlowersCollection(), 'inStock', new AttributeUpdate(default: null));
+        $database->updateAttribute($this->getFlowersCollection(), 'inStock', new Update(default: null));
     }
 
     public function testRenameAttribute(): void
@@ -720,7 +720,7 @@ trait AttributeTests
             return;
         }
 
-        $database->updateAttribute($this->getFlowersCollection(), 'inStock', new AttributeUpdate(required: true));
+        $database->updateAttribute($this->getFlowersCollection(), 'inStock', new Update(required: true));
 
         $this->expectExceptionMessage('Invalid document structure: Missing required attribute "inStock"');
 
@@ -783,7 +783,7 @@ trait AttributeTests
             'reference' => '7',
         ]));
 
-        $updated = $database->updateAttribute($collection, 'reference', new AttributeUpdate(key: 'target'));
+        $updated = $database->updateAttribute($collection, 'reference', new Update(key: 'target'));
 
         $this->assertSame('target', $updated->key);
         $this->assertSame(ColumnType::Id, $updated->type);
@@ -806,7 +806,7 @@ trait AttributeTests
             'at' => '2024-01-01T00:00:00.000+00:00',
         ]));
 
-        $updated = $database->updateAttribute($collection, 'at', new AttributeUpdate(required: false));
+        $updated = $database->updateAttribute($collection, 'at', new Update(required: false));
         $this->assertFalse($updated->required);
 
         $document = $database->createDocument($collection, new Document([
@@ -843,7 +843,7 @@ trait AttributeTests
         $this->assertIsString($doc->getAttribute('cartModel'));
         $this->assertEquals('{"color":"string","size":"number"}', $doc->getAttribute('cartModel'));
 
-        $database->updateAttribute($this->getFlowersCollection(), 'cartModel', new AttributeUpdate(filters: [Filter::Json]));
+        $database->updateAttribute($this->getFlowersCollection(), 'cartModel', new Update(filters: [Filter::Json]));
 
         $doc = $database->getDocument($this->getFlowersCollection(), $doc->getId());
         $this->assertIsArray($doc->getAttribute('cartModel'));
@@ -893,7 +893,7 @@ trait AttributeTests
 
         Structure::addFormat('priceRange', $this->priceRangeFormat(...), ColumnType::Integer);
 
-        $database->updateAttribute($this->getFlowersCollection(), 'price', new AttributeUpdate(format: new Format('priceRange', ['min' => 1, 'max' => 10000])));
+        $database->updateAttribute($this->getFlowersCollection(), 'price', new Update(format: new Format('priceRange', ['min' => 1, 'max' => 10000])));
 
         $this->expectExceptionMessage('Invalid document structure: Attribute "price" has invalid format. Value must be a valid range between 1 and 10,000');
 
@@ -962,7 +962,7 @@ trait AttributeTests
 
         Structure::addFormat('priceRange', $this->priceRangeFormat(...), ColumnType::Integer);
 
-        $database->updateAttribute($this->getFlowersCollection(), 'price', new AttributeUpdate(format: new Format('priceRange', ['min' => 1, 'max' => 10000])));
+        $database->updateAttribute($this->getFlowersCollection(), 'price', new Update(format: new Format('priceRange', ['min' => 1, 'max' => 10000])));
 
         self::$flowersWithPriceFixtureInit = true;
     }
@@ -989,7 +989,7 @@ trait AttributeTests
         $this->assertEquals('priceRange', $attribute->format?->name);
         $this->assertEquals(['min' => 1, 'max' => 10000], $attribute->format->options ?? []);
 
-        $database->updateAttribute($this->getFlowersCollection(), 'price', new AttributeUpdate(default: 100));
+        $database->updateAttribute($this->getFlowersCollection(), 'price', new Update(default: 100));
         $collection = $database->getCollection($this->getFlowersCollection());
         $attribute = $collection->attributes()[4];
         $this->assertEquals(ColumnType::Integer, $attribute->type);
@@ -1001,7 +1001,7 @@ trait AttributeTests
         $this->assertEquals('priceRange', $attribute->format?->name);
         $this->assertEquals(['min' => 1, 'max' => 10000], $attribute->format->options ?? []);
 
-        $database->updateAttribute($this->getFlowersCollection(), 'price', new AttributeUpdate(format: new Format('priceRangeNew', ['min' => 1, 'max' => 10000])));
+        $database->updateAttribute($this->getFlowersCollection(), 'price', new Update(format: new Format('priceRangeNew', ['min' => 1, 'max' => 10000])));
         $collection = $database->getCollection($this->getFlowersCollection());
         $attribute = $collection->attributes()[4];
         $this->assertEquals(ColumnType::Integer, $attribute->type);
@@ -1013,7 +1013,7 @@ trait AttributeTests
         $this->assertEquals('priceRangeNew', $attribute->format?->name);
         $this->assertEquals(['min' => 1, 'max' => 10000], $attribute->format->options ?? []);
 
-        $database->updateAttribute($this->getFlowersCollection(), 'price', new AttributeUpdate(format: new Format('priceRangeNew', ['min' => 1, 'max' => 999])));
+        $database->updateAttribute($this->getFlowersCollection(), 'price', new Update(format: new Format('priceRangeNew', ['min' => 1, 'max' => 999])));
         $collection = $database->getCollection($this->getFlowersCollection());
         $attribute = $collection->attributes()[4];
         $this->assertEquals(ColumnType::Integer, $attribute->type);
@@ -1025,7 +1025,7 @@ trait AttributeTests
         $this->assertEquals('priceRangeNew', $attribute->format?->name);
         $this->assertEquals(['min' => 1, 'max' => 999], $attribute->format->options ?? []);
 
-        $database->updateAttribute($this->getFlowersCollection(), 'price', new AttributeUpdate(format: new Format('priceRangeNew')));
+        $database->updateAttribute($this->getFlowersCollection(), 'price', new Update(format: new Format('priceRangeNew')));
         $collection = $database->getCollection($this->getFlowersCollection());
         $attribute = $collection->attributes()[4];
         $this->assertEquals(ColumnType::Integer, $attribute->type);
@@ -1037,7 +1037,7 @@ trait AttributeTests
         $this->assertEquals('priceRangeNew', $attribute->format?->name);
         $this->assertEquals([], $attribute->format->options ?? []);
 
-        $database->updateAttribute($this->getFlowersCollection(), 'price', new AttributeUpdate(format: null));
+        $database->updateAttribute($this->getFlowersCollection(), 'price', new Update(format: null));
         $collection = $database->getCollection($this->getFlowersCollection());
         $attribute = $collection->attributes()[4];
         $this->assertEquals(ColumnType::Integer, $attribute->type);
@@ -1048,7 +1048,7 @@ trait AttributeTests
         $this->assertEquals(false, $attribute->required);
         $this->assertNull($attribute->format);
 
-        $database->updateAttribute($this->getFlowersCollection(), 'price', new AttributeUpdate(signed: false));
+        $database->updateAttribute($this->getFlowersCollection(), 'price', new Update(signed: false));
         $collection = $database->getCollection($this->getFlowersCollection());
         $attribute = $collection->attributes()[4];
         $this->assertEquals(ColumnType::Integer, $attribute->type);
@@ -1059,7 +1059,7 @@ trait AttributeTests
         $this->assertEquals(false, $attribute->required);
         $this->assertNull($attribute->format);
 
-        $database->updateAttribute($this->getFlowersCollection(), 'price', new AttributeUpdate(required: true));
+        $database->updateAttribute($this->getFlowersCollection(), 'price', new Update(required: true));
         $collection = $database->getCollection($this->getFlowersCollection());
         $attribute = $collection->attributes()[4];
         $this->assertEquals(ColumnType::Integer, $attribute->type);
@@ -1070,7 +1070,7 @@ trait AttributeTests
         $this->assertEquals(true, $attribute->required);
         $this->assertNull($attribute->format);
 
-        $database->updateAttribute($this->getFlowersCollection(), 'price', new AttributeUpdate(type: ColumnType::String, size: Database::LENGTH_KEY, format: null));
+        $database->updateAttribute($this->getFlowersCollection(), 'price', new Update(type: ColumnType::String, size: Database::LENGTH_KEY, format: null));
         $collection = $database->getCollection($this->getFlowersCollection());
         $attribute = $collection->attributes()[4];
         $this->assertEquals(ColumnType::String, $attribute->type);
@@ -1086,7 +1086,7 @@ trait AttributeTests
         $this->assertEquals(ColumnType::String, $attribute->type);
         $this->assertEquals(null, $attribute->default);
 
-        $database->updateAttribute($this->getFlowersCollection(), 'date', new AttributeUpdate(type: ColumnType::Datetime, size: 0, filters: [Filter::Datetime]));
+        $database->updateAttribute($this->getFlowersCollection(), 'date', new Update(type: ColumnType::Datetime, size: 0, filters: [Filter::Datetime]));
         $collection = $database->getCollection($this->getFlowersCollection());
         $attribute = $collection->attributes()[2];
         $this->assertEquals(ColumnType::Datetime, $attribute->type);
@@ -1138,7 +1138,7 @@ trait AttributeTests
         $database->updateAttribute(
             collection: 'rename_test',
             key: 'rename_me',
-            update: new AttributeUpdate(key: 'renamed'),
+            update: new Update(key: 'renamed'),
         );
 
         $doc = $database->getDocument('rename_test', $doc->getId());
@@ -1167,7 +1167,7 @@ trait AttributeTests
             $database->updateAttribute(
                 collection: 'rename_test',
                 key: 'renamed',
-                update: new AttributeUpdate(type: ColumnType::String),
+                update: new Update(type: ColumnType::String),
             );
 
             if (! $supportsIdenticalIndexes) {
@@ -1237,7 +1237,7 @@ trait AttributeTests
         $database->updateAttribute(
             collection: 'rename_test',
             key: 'renamed',
-            update: new AttributeUpdate(key: 'renamed-test'),
+            update: new Update(key: 'renamed-test'),
         );
 
         $doc = $database->getDocument('rename_test', $doc->getId());
@@ -1400,21 +1400,21 @@ trait AttributeTests
 
         // Test going down in size with data that is too big (Expect Failure)
         try {
-            $database->updateAttribute('resize_test', 'resize_me', new AttributeUpdate(type: ColumnType::String, size: 128, required: true));
+            $database->updateAttribute('resize_test', 'resize_me', new Update(type: ColumnType::String, size: 128, required: true));
             $this->fail('Succeeded updating attribute size to smaller size with data that is too big');
         } catch (TruncateException $e) {
         }
 
         // Test going down in size when data isn't too big.
         $database->updateDocument('resize_test', $document->getId(), $document->setAttribute('resize_me', $this->createRandomString(128)));
-        $database->updateAttribute('resize_test', 'resize_me', new AttributeUpdate(type: ColumnType::String, size: 128, required: true));
+        $database->updateAttribute('resize_test', 'resize_me', new Update(type: ColumnType::String, size: 128, required: true));
 
         // VARCHAR -> VARCHAR Truncation Test
-        $database->updateAttribute('resize_test', 'resize_me', new AttributeUpdate(type: ColumnType::String, size: 1000, required: true));
+        $database->updateAttribute('resize_test', 'resize_me', new Update(type: ColumnType::String, size: 1000, required: true));
         $database->updateDocument('resize_test', $document->getId(), $document->setAttribute('resize_me', $this->createRandomString(1000)));
 
         try {
-            $database->updateAttribute('resize_test', 'resize_me', new AttributeUpdate(type: ColumnType::String, size: 128, required: true));
+            $database->updateAttribute('resize_test', 'resize_me', new Update(type: ColumnType::String, size: 128, required: true));
             $this->fail('Succeeded updating attribute size to smaller size with data that is too big');
         } catch (TruncateException $e) {
         }
@@ -1431,7 +1431,7 @@ trait AttributeTests
             $database->createIndex('resize_test', Index::key(key: 'index1', attributes: ['attr1', 'attr2']));
 
             try {
-                $database->updateAttribute('resize_test', 'attr1', new AttributeUpdate(type: ColumnType::String, size: 5000));
+                $database->updateAttribute('resize_test', 'attr1', new Update(type: ColumnType::String, size: 5000));
                 $this->fail('Failed to throw exception');
             } catch (Throwable $e) {
                 $this->assertEquals('Index length is longer than the maximum: '.$database->getAdapter()->limits()->indexLength, $e->getMessage());
@@ -1451,7 +1451,7 @@ trait AttributeTests
             $this->assertEquals(null, $indexes[0]->lengths[1]);
 
             try {
-                $database->updateAttribute('resize_test', 'attr1', new AttributeUpdate(type: ColumnType::String, size: 5000));
+                $database->updateAttribute('resize_test', 'attr1', new Update(type: ColumnType::String, size: 5000));
                 $this->fail('Failed to throw exception');
             } catch (Throwable $e) {
                 $this->assertEquals('Index length is longer than the maximum: '.$database->getAdapter()->limits()->indexLength, $e->getMessage());
@@ -1470,7 +1470,7 @@ trait AttributeTests
             $this->assertEquals(50, $indexes[0]->lengths[0]);
             $this->assertEquals(50, $indexes[0]->lengths[1]);
 
-            $database->updateAttribute('resize_test', 'attr1', new AttributeUpdate(type: ColumnType::String, size: 5000));
+            $database->updateAttribute('resize_test', 'attr1', new Update(type: ColumnType::String, size: 5000));
         }
     }
 
@@ -1619,7 +1619,7 @@ trait AttributeTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $database->updateAttribute('resize_test', 'resize_me', new AttributeUpdate(type: ColumnType::String, size: $size, required: true));
+        $database->updateAttribute('resize_test', 'resize_me', new Update(type: ColumnType::String, size: $size, required: true));
 
         $document = $document->setAttribute('resize_me', $this->createRandomString($size));
 
@@ -1680,7 +1680,7 @@ trait AttributeTests
             }
         }
 
-        $database->updateAttribute($collection, 'booleans', new AttributeUpdate(required: false));
+        $database->updateAttribute($collection, 'booleans', new Update(required: false));
 
         $doc = $database->getCollection($collection);
         $attribute = $doc->attributes()[0];
@@ -1791,7 +1791,7 @@ trait AttributeTests
              * Update attribute
              */
             try {
-                $database->updateAttribute($collection, key: 'cards', update: new AttributeUpdate(key: 'cards_new'));
+                $database->updateAttribute($collection, key: 'cards', update: new Update(key: 'cards_new'));
                 $this->fail('Failed to throw exception');
             } catch (Throwable $e) {
                 $this->assertInstanceOf(DependencyException::class, $e);
@@ -1835,7 +1835,6 @@ trait AttributeTests
 
         if ($database->getAdapter()->supports(Capability::IndexArray)) {
             if ($database->getAdapter()->supports(Capability::DefinedAttributes) && $database->getAdapter()->limits()->indexLength > 0) {
-                // If getMaxIndexLength() > 0 We clear length for array attributes
                 $database->createIndex($collection, Index::key(key: 'indx1', attributes: ['long_size']));
                 $database->deleteIndex($collection, 'indx1');
                 $database->createIndex($collection, Index::key(key: 'indx2', attributes: ['long_size'], lengths: [1000]));
@@ -2249,7 +2248,7 @@ trait AttributeTests
         $this->assertSame('foo', $attribute->key);
         $this->assertNull($attribute->size);
 
-        $database->updateAttribute($collectionName, 'foo', new AttributeUpdate(type: ColumnType::BigInteger, size: 1));
+        $database->updateAttribute($collectionName, 'foo', new Update(type: ColumnType::BigInteger, size: 1));
         $collection = $database->getCollection($collectionName);
         $attrs = $collection->attributes();
         $this->assertCount(1, $attrs);
@@ -2323,7 +2322,7 @@ trait AttributeTests
         $database->createAttributes($collectionName, [Attribute::bigInteger(key: 'batch')]);
         $expected['batch'] = 'bigint';
 
-        $database->updateAttribute($collectionName, 'single', new AttributeUpdate(required: true));
+        $database->updateAttribute($collectionName, 'single', new Update(required: true));
 
         $stored = $database->skipFilters(fn (): Document => $database->getAuthorization()->skip(
             fn (): Document => $database->getDocument(Database::METADATA, $collectionName),
@@ -2916,7 +2915,7 @@ trait AttributeTests
             foreach ([$first, $second] as $tenant) {
                 $database->setTenant($tenant);
                 $database->renameAttribute($collection, 'age', 'years');
-                $this->assertSame('fullName', $database->updateAttribute($collection, 'name', new AttributeUpdate(size: 128, key: 'fullName'))->key);
+                $this->assertSame('fullName', $database->updateAttribute($collection, 'name', new Update(size: 128, key: 'fullName'))->key);
             }
 
             foreach ([$first, $second] as $index => $tenant) {
@@ -3059,7 +3058,7 @@ trait AttributeTests
             }
 
             try {
-                $database->updateAttribute($collection, 'nick', new AttributeUpdate(key: 'title'));
+                $database->updateAttribute($collection, 'nick', new Update(key: 'title'));
                 $this->fail('A key update onto another tenant\'s column must be refused while the old column holds values');
             } catch (DuplicateException $error) {
                 $this->assertSame('Attribute already exists', $error->getMessage());

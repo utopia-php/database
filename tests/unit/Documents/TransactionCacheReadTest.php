@@ -14,7 +14,7 @@ use Utopia\Database\Adapter as DatabaseAdapter;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
-use Utopia\Database\CollectionUpdate;
+use Utopia\Database\Collection\Update;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Hook\Relationships;
@@ -154,7 +154,7 @@ final class TransactionCacheReadTest extends TestCase
         [$writer, $reader] = $this->createSharedMemoryDatabases();
 
         $read = $writer->withTransaction(function () use ($writer, $reader): Document {
-            $writer->updateCollection('webhooks', new CollectionUpdate(permissions: [Permission::read(Role::any()), Permission::update(Role::any())], documentSecurity: false));
+            $writer->updateCollection('webhooks', new Update(permissions: [Permission::read(Role::any()), Permission::update(Role::any())], documentSecurity: false));
             $this->assertTrue($reader->getCollection('webhooks')->getAttribute('documentSecurity'));
 
             return $writer->getCollection('webhooks');

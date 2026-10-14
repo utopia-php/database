@@ -99,20 +99,6 @@ final class LimitsTest extends TestCase
         $this->assertSame($limits->indexLength - 1, $adapter->limits()->indexLength);
     }
 
-    public function testChangingADatetimeLimitTheDatabaseReturnsLeavesTheLimit(): void
-    {
-        $database = new Database(new MariaDB(new stdClass()), new Cache(new None()));
-        $min = $database->getMinDateTime()->format('Y-m-d H:i:s');
-        $max = $database->getMaxDateTime()->format('Y-m-d H:i:s');
-
-        $database->getMinDateTime()->modify('+1 year');
-        $database->getMaxDateTime()->modify('-1 year');
-
-        $this->assertSame($min, $database->getMinDateTime()->format('Y-m-d H:i:s'));
-        $this->assertSame($max, $database->getMaxDateTime()->format('Y-m-d H:i:s'));
-        $this->assertSame($min, $database->profile()->limits->minDateTime->format('Y-m-d H:i:s'));
-    }
-
     public function testSQLiteReservesItsOwnKeywords(): void
     {
         $mariadb = (new MariaDB(new stdClass()))->limits()->keywords;
@@ -174,11 +160,7 @@ final class LimitsTest extends TestCase
 
         $this->assertSame($limits->attributes - $limits->defaultAttributes, $database->getLimitForAttributes());
         $this->assertSame($limits->indexes - $limits->defaultIndexes, $database->getLimitForIndexes());
-        $this->assertSame(1024, $database->getMaxIndexLength());
-        $this->assertSame(16381, $database->getMaxVarcharLength());
         $this->assertSame(255, $database->getMaxUidLength());
-        $this->assertSame('0001-01-01', $database->getMinDateTime()->format('Y-m-d'));
-        $this->assertSame('9999-12-31', $database->getMaxDateTime()->format('Y-m-d'));
         $this->assertSame(ColumnType::Integer, $database->getIdAttributeType());
     }
 

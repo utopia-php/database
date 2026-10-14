@@ -5,7 +5,7 @@ namespace Tests\Unit\Model;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Attribute;
-use Utopia\Database\AttributeUpdate;
+use Utopia\Database\Attribute\Update;
 use Utopia\Database\Exception\Structure;
 use Utopia\Database\Filter;
 use Utopia\Database\Format;
@@ -19,7 +19,7 @@ final class AttributeUpdateTest extends TestCase
 {
     public function testDefaultsLeaveEverythingUnchanged(): void
     {
-        $update = new AttributeUpdate();
+        $update = new Update();
 
         $this->assertTrue($update->isEmpty());
         $this->assertFalse($update->changesDefault());
@@ -30,7 +30,7 @@ final class AttributeUpdateTest extends TestCase
 
     public function testNullDefaultIsAChange(): void
     {
-        $update = new AttributeUpdate(default: null);
+        $update = new Update(default: null);
 
         $this->assertTrue($update->changesDefault());
         $this->assertFalse($update->isEmpty());
@@ -39,16 +39,16 @@ final class AttributeUpdateTest extends TestCase
     public function testAnySingleFieldMakesTheUpdateNonEmpty(): void
     {
         $updates = [
-            new AttributeUpdate(type: ColumnType::Text),
-            new AttributeUpdate(size: 10),
-            new AttributeUpdate(required: false),
-            new AttributeUpdate(default: 'x'),
-            new AttributeUpdate(signed: false),
-            new AttributeUpdate(array: false),
-            new AttributeUpdate(format: new Format('email')),
-            new AttributeUpdate(format: null),
-            new AttributeUpdate(filters: []),
-            new AttributeUpdate(key: 'renamed'),
+            new Update(type: ColumnType::Text),
+            new Update(size: 10),
+            new Update(required: false),
+            new Update(default: 'x'),
+            new Update(signed: false),
+            new Update(array: false),
+            new Update(format: new Format('email')),
+            new Update(format: null),
+            new Update(filters: []),
+            new Update(key: 'renamed'),
         ];
 
         foreach ($updates as $update) {
@@ -60,7 +60,7 @@ final class AttributeUpdateTest extends TestCase
     {
         $original = Attribute::string('name', 64, required: true, default: 'x', array: true, format: new Format('email', ['a' => 1]), filters: ['lowercase']);
 
-        $updated = $original->apply(new AttributeUpdate());
+        $updated = $original->apply(new Update());
 
         $this->assertSame($original->toDocument()->getArrayCopy(), $updated->toDocument()->getArrayCopy());
     }
@@ -69,7 +69,7 @@ final class AttributeUpdateTest extends TestCase
     {
         $original = Attribute::string('name', 64, required: true, default: 'x', filters: ['lowercase']);
 
-        $updated = $original->apply(new AttributeUpdate(size: 128, required: false));
+        $updated = $original->apply(new Update(size: 128, required: false));
 
         $this->assertSame(128, $updated->size);
         $this->assertFalse($updated->required);
@@ -81,14 +81,14 @@ final class AttributeUpdateTest extends TestCase
 
     public function testZeroSizeClearsTheSize(): void
     {
-        $this->assertNull(Attribute::text('body', 500)->apply(new AttributeUpdate(size: 0))->size);
+        $this->assertNull(Attribute::text('body', 500)->apply(new Update(size: 0))->size);
     }
 
     public function testApplyLeavesTheOriginalUntouched(): void
     {
         $original = Attribute::string('name', 64);
 
-        $original->apply(new AttributeUpdate(size: 128, key: 'title', default: 'y'));
+        $original->apply(new Update(size: 128, key: 'title', default: 'y'));
 
         $this->assertSame(64, $original->size);
         $this->assertSame('name', $original->key);
@@ -97,44 +97,44 @@ final class AttributeUpdateTest extends TestCase
 
     public function testNullDefaultClearsTheDefault(): void
     {
-        $updated = Attribute::integer('count', default: 5)->apply(new AttributeUpdate(default: null));
+        $updated = Attribute::integer('count', default: 5)->apply(new Update(default: null));
 
         $this->assertNull($updated->default);
     }
 
     public function testDefaultCanBeSet(): void
     {
-        $updated = Attribute::integer('count')->apply(new AttributeUpdate(default: 7));
+        $updated = Attribute::integer('count')->apply(new Update(default: 7));
 
         $this->assertSame(7, $updated->default);
     }
 
     public function testKeyRenames(): void
     {
-        $this->assertSame('title', Attribute::string('name')->apply(new AttributeUpdate(key: 'title'))->key);
+        $this->assertSame('title', Attribute::string('name')->apply(new Update(key: 'title'))->key);
     }
 
     public function testFiltersAcceptEnumCasesAndStrings(): void
     {
-        $updated = Attribute::string('name')->apply(new AttributeUpdate(filters: [Filter::Json, 'encrypt']));
+        $updated = Attribute::string('name')->apply(new Update(filters: [Filter::Json, 'encrypt']));
 
         $this->assertSame(['json', 'encrypt'], $updated->filters);
     }
 
     public function testEmptyFiltersClearTheFilters(): void
     {
-        $this->assertSame([], Attribute::string('name', filters: ['lowercase'])->apply(new AttributeUpdate(filters: []))->filters);
+        $this->assertSame([], Attribute::string('name', filters: ['lowercase'])->apply(new Update(filters: []))->filters);
     }
 
     public function testClearingFiltersKeepsTheTypeFilter(): void
     {
-        $this->assertSame(['datetime'], Attribute::datetime('at')->apply(new AttributeUpdate(filters: []))->filters);
-        $this->assertSame(['point', 'encrypt'], Attribute::point('at')->apply(new AttributeUpdate(filters: ['encrypt']))->filters);
+        $this->assertSame(['datetime'], Attribute::datetime('at')->apply(new Update(filters: []))->filters);
+        $this->assertSame(['point', 'encrypt'], Attribute::point('at')->apply(new Update(filters: ['encrypt']))->filters);
     }
 
     public function testFormatReplacesTheFormat(): void
     {
-        $updated = Attribute::string('name', format: new Format('email'))->apply(new AttributeUpdate(format: new Format('url', ['scheme' => 'https'])));
+        $updated = Attribute::string('name', format: new Format('email'))->apply(new Update(format: new Format('url', ['scheme' => 'https'])));
 
         $this->assertSame('url', $updated->format?->name);
         $this->assertSame(['scheme' => 'https'], $updated->format->options);
@@ -142,7 +142,7 @@ final class AttributeUpdateTest extends TestCase
 
     public function testNullFormatIsAChange(): void
     {
-        $update = new AttributeUpdate(format: null);
+        $update = new Update(format: null);
 
         $this->assertTrue($update->changesFormat());
         $this->assertFalse($update->isEmpty());
@@ -150,7 +150,7 @@ final class AttributeUpdateTest extends TestCase
 
     public function testNullFormatRemovesTheFormat(): void
     {
-        $updated = Attribute::string('name', format: new Format('email', ['strict' => true]))->apply(new AttributeUpdate(format: null));
+        $updated = Attribute::string('name', format: new Format('email', ['strict' => true]))->apply(new Update(format: null));
 
         $this->assertNull($updated->format);
         $this->assertNull($updated->toDocument()->getAttribute('format'));
@@ -161,14 +161,14 @@ final class AttributeUpdateTest extends TestCase
     {
         $format = new Format('email', ['strict' => true]);
 
-        $updated = Attribute::string('name', format: $format)->apply(new AttributeUpdate(size: 32));
+        $updated = Attribute::string('name', format: $format)->apply(new Update(size: 32));
 
         $this->assertSame($format, $updated->format);
     }
 
     public function testSignedAndArrayChange(): void
     {
-        $updated = Attribute::integer('count')->apply(new AttributeUpdate(signed: false, array: true));
+        $updated = Attribute::integer('count')->apply(new Update(signed: false, array: true));
 
         $this->assertFalse($updated->signed);
         $this->assertTrue($updated->array);
@@ -176,7 +176,7 @@ final class AttributeUpdateTest extends TestCase
 
     public function testTypeChangesToAnotherAttributeType(): void
     {
-        $updated = Attribute::string('body', 100)->apply(new AttributeUpdate(type: ColumnType::Text));
+        $updated = Attribute::string('body', 100)->apply(new Update(type: ColumnType::Text));
 
         $this->assertSame(ColumnType::Text, $updated->type);
         $this->assertSame('text', $updated->toDocument()->getAttribute('type'));
@@ -228,7 +228,7 @@ final class AttributeUpdateTest extends TestCase
     #[DataProvider('typeChanges')]
     public function testTypeChangeProducesWhatTheTargetFactoryProduces(Attribute $source, ColumnType $type, Attribute $expected): void
     {
-        $updated = $source->apply(new AttributeUpdate(type: $type));
+        $updated = $source->apply(new Update(type: $type));
 
         $this->assertSame($expected->toDocument()->getArrayCopy(), $updated->toDocument()->getArrayCopy());
     }
@@ -236,46 +236,46 @@ final class AttributeUpdateTest extends TestCase
     public function testTypeChangeKeepsUserFiltersAndSwapsTheTypeFilter(): void
     {
         $updated = Attribute::string('field', filters: ['encrypt'])
-            ->apply(new AttributeUpdate(type: ColumnType::Datetime))
-            ->apply(new AttributeUpdate(type: ColumnType::Polygon));
+            ->apply(new Update(type: ColumnType::Datetime))
+            ->apply(new Update(type: ColumnType::Polygon));
 
         $this->assertSame(['polygon', 'encrypt'], $updated->filters);
     }
 
     public function testExplicitFiltersOnATypeChangeAreKept(): void
     {
-        $updated = Attribute::datetime('field')->apply(new AttributeUpdate(type: ColumnType::String, filters: ['datetime']));
+        $updated = Attribute::datetime('field')->apply(new Update(type: ColumnType::String, filters: ['datetime']));
 
         $this->assertSame(['datetime'], $updated->filters);
     }
 
     public function testUpdatesCannotBreakTheTypeInvariants(): void
     {
-        $this->assertTrue(Attribute::string('name')->apply(new AttributeUpdate(signed: false))->signed);
-        $this->assertFalse(Attribute::datetime('at')->apply(new AttributeUpdate(signed: true))->signed);
-        $this->assertFalse(Attribute::point('at')->apply(new AttributeUpdate(array: true))->array);
-        $this->assertNull(Attribute::boolean('flag')->apply(new AttributeUpdate(size: 4))->size);
-        $this->assertSame(8, Attribute::integer('count')->apply(new AttributeUpdate(size: 20))->size);
-        $this->assertNull(Attribute::integer('count', width: IntegerWidth::Bits64)->apply(new AttributeUpdate(size: 4))->size);
+        $this->assertTrue(Attribute::string('name')->apply(new Update(signed: false))->signed);
+        $this->assertFalse(Attribute::datetime('at')->apply(new Update(signed: true))->signed);
+        $this->assertFalse(Attribute::point('at')->apply(new Update(array: true))->array);
+        $this->assertNull(Attribute::boolean('flag')->apply(new Update(size: 4))->size);
+        $this->assertSame(8, Attribute::integer('count')->apply(new Update(size: 20))->size);
+        $this->assertNull(Attribute::integer('count', width: IntegerWidth::Bits64)->apply(new Update(size: 4))->size);
     }
 
     public function testTypeOutsideTheAttributeTypesIsRejected(): void
     {
         $this->expectException(Structure::class);
 
-        Attribute::string('body')->apply(new AttributeUpdate(type: ColumnType::Tuple));
+        Attribute::string('body')->apply(new Update(type: ColumnType::Tuple));
     }
 
     public function testTypeCannotBecomeRelationship(): void
     {
         $this->expectException(Structure::class);
 
-        Attribute::string('author')->apply(new AttributeUpdate(type: ColumnType::Relationship));
+        Attribute::string('author')->apply(new Update(type: ColumnType::Relationship));
     }
 
     public function testSameTypeIsAccepted(): void
     {
-        $this->assertSame(ColumnType::Integer, Attribute::integer('count')->apply(new AttributeUpdate(type: ColumnType::Integer))->type);
+        $this->assertSame(ColumnType::Integer, Attribute::integer('count')->apply(new Update(type: ColumnType::Integer))->type);
     }
 
     public function testRelationshipAttributeCannotChangeType(): void
@@ -284,14 +284,14 @@ final class AttributeUpdateTest extends TestCase
 
         $this->expectException(Structure::class);
 
-        $attribute->apply(new AttributeUpdate(type: ColumnType::String));
+        $attribute->apply(new Update(type: ColumnType::String));
     }
 
     public function testRenamingARelationshipAttributeRenamesItsRelationship(): void
     {
         $attribute = Attribute::relationship('author', Relationship::manyToOne('users'), RelationshipSide::Parent);
 
-        $renamed = $attribute->apply(new AttributeUpdate(key: 'writer'));
+        $renamed = $attribute->apply(new Update(key: 'writer'));
 
         $this->assertSame('writer', $renamed->key);
         $this->assertSame('writer', $renamed->relationship?->key);

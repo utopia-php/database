@@ -3,7 +3,6 @@
 namespace Tests\E2E\Adapter;
 
 use Redis;
-use Tests\Unit\Support\FractionalEngine;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\SQLite;
@@ -131,11 +130,5 @@ class SQLiteTest extends Base
         self::$pdo->exec($sql);
 
         return true;
-    }
-
-    #[\Override]
-    protected static function fractionalEngine(): FractionalEngine
-    {
-        return FractionalEngine::Memory;
     }
 }

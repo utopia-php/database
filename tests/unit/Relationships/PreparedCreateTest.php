@@ -15,7 +15,7 @@ use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
-use Utopia\Database\CollectionUpdate;
+use Utopia\Database\Collection\Update;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
@@ -680,13 +680,13 @@ final class PreparedCreateTest extends TestCase
             },
             'related collection the caller may not create in' => static function (Database $database) use ($create): array {
                 self::chain($database, RelationshipType::OneToMany, 2);
-                $database->updateCollection('level2', new CollectionUpdate(permissions: [Permission::read(Role::any())], documentSecurity: true));
+                $database->updateCollection('level2', new Update(permissions: [Permission::read(Role::any())], documentSecurity: true));
 
                 return [self::tree(RelationshipType::OneToMany, 'root', 0, 2), $create($database, 'level0')];
             },
             'many to many link the caller may not update' => static function (Database $database) use ($create): array {
                 self::chain($database, RelationshipType::ManyToMany, 2);
-                $database->updateCollection('level2', new CollectionUpdate(permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: true));
+                $database->updateCollection('level2', new Update(permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: true));
                 $database->createDocument('level2', new Document(['$id' => 'locked', 'name' => 'locked', '$permissions' => [Permission::read(Role::any())]]));
 
                 return [new Document([

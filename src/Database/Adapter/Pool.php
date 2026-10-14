@@ -5,7 +5,6 @@ namespace Utopia\Database\Adapter;
 use Throwable;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\SQL\Wkt;
-use Utopia\Database\Arithmetic;
 use Utopia\Database\Attribute;
 use Utopia\Database\Builder\Scoping;
 use Utopia\Database\Capability;
@@ -17,8 +16,8 @@ use Utopia\Database\Hook\Transform;
 use Utopia\Database\Index;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Relationship;
+use Utopia\Database\Relationship\Update;
 use Utopia\Database\RelationshipSide;
-use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\Schema\Column as SchemaColumn;
 use Utopia\Database\Schema\Index as SchemaIndex;
 use Utopia\Database\State\Value;
@@ -70,11 +69,6 @@ class Pool extends Adapter implements Feature\Timeouts
     private static ?\WeakMap $features = null;
 
     /**
-     * @var \WeakMap<UtopiaPool<covariant Adapter>, Arithmetic>|null
-     */
-    private static ?\WeakMap $arithmetic = null;
-
-    /**
      * @var \WeakMap<UtopiaPool<covariant Adapter>, array<int, bool>>|null
      */
     private static ?\WeakMap $definedAttributes = null;
@@ -85,6 +79,14 @@ class Pool extends Adapter implements Feature\Timeouts
     public function __construct(UtopiaPool $pool)
     {
         $this->pool = $pool;
+    }
+
+    /**
+     * @return UtopiaPool<covariant Adapter>
+     */
+    public function getPool(): UtopiaPool
+    {
+        return $this->pool;
     }
 
     /**
@@ -487,6 +489,10 @@ class Pool extends Adapter implements Feature\Timeouts
 
     public function hostname(): string
     {
+        if ($this->hostname !== '') {
+            return $this->hostname;
+        }
+
         /** @var string $result */
         $result = $this->delegateFeature(Feature\Connection::class, __FUNCTION__, \func_get_args());
 
@@ -754,7 +760,7 @@ class Pool extends Adapter implements Feature\Timeouts
         return $result;
     }
 
-    public function updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, RelationshipUpdate $update): bool
+    public function updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, Update $update): bool
     {
         /** @var bool $result */
         $result = $this->delegateFeature(Feature\Relationships::class, __FUNCTION__, \func_get_args());
@@ -903,22 +909,6 @@ class Pool extends Adapter implements Feature\Timeouts
     {
         /** @var int $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());
-        return $result;
-    }
-
-    #[\Override]
-    public function arithmetic(): Arithmetic
-    {
-        $remembered = self::$arithmetic[$this->pool] ?? null;
-        if ($remembered !== null) {
-            return $remembered;
-        }
-
-        /** @var Arithmetic $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
-        self::$arithmetic ??= new \WeakMap();
-        self::$arithmetic[$this->pool] = $result;
-
         return $result;
     }
 

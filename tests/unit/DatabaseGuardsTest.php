@@ -126,10 +126,12 @@ final class DatabaseGuardsTest extends TestCase
     {
         $database = $this->database(new Memory());
 
-        $this->assertNull($database->getRelationshipHook());
         $result = new stdClass();
-        $this->assertSame($result, $database->skipRelationships(static fn (): stdClass => $result));
-        $this->assertNull($database->getRelationshipHook(), 'skipping relationships does not install the hook');
+        $this->assertSame($result, $database->skipRelationships(function () use ($database, $result): stdClass {
+            $this->assertTrue($database->snapshot()->relationships, 'skipping relationships does not install the hook');
+
+            return $result;
+        }));
     }
 
     public function testSkipRelationshipsExistCheckWithoutTheHookRunsTheCallback(): void
@@ -137,18 +139,11 @@ final class DatabaseGuardsTest extends TestCase
         $database = $this->database(new Memory());
 
         $result = new stdClass();
-        $this->assertSame($result, $database->skipRelationshipsExistCheck(static fn (): stdClass => $result));
-        $this->assertNull($database->getRelationshipHook());
-    }
+        $this->assertSame($result, $database->skipRelationshipsExistCheck(function () use ($database, $result): stdClass {
+            $this->assertTrue($database->snapshot()->existCheck, 'skipping the exist check does not install the hook');
 
-    public function testRawQueryIsRefusedWithoutRawQueries(): void
-    {
-        $database = $this->database(new Memory());
-
-        $this->expectException(DatabaseException::class);
-        $this->expectExceptionMessage('Raw queries are not supported by this adapter');
-
-        $database->getAuthorization()->skip(fn (): array => $database->rawQuery('SELECT 1'));
+            return $result;
+        }));
     }
 
     private function database(Adapter $adapter): Database

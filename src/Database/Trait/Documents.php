@@ -46,6 +46,7 @@ use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\RelationshipSide;
 use Utopia\Database\RelationshipType;
+use Utopia\Database\Rounding;
 use Utopia\Database\Validator\Authorization\Input;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Database\Validator\PartialStructure;
@@ -278,10 +279,6 @@ trait Documents
         return BigInt::integralValue($bound) ?? throw new TypeException($name.' must be an integer.');
     }
 
-    /**
-     * An integer attribute takes a fractional increment or decrement amount rounded half away from zero, a
-     * fractional maximum floored and a fractional minimum ceiled.
-     */
     private function roundOperators(Collection $collection, Document $document): void
     {
         foreach ($collection->attributes() as $attribute) {
@@ -290,93 +287,24 @@ trait Documents
                 continue;
             }
 
-            $roundLimit = match ($operator->getMethod()) {
-                OperatorType::Increment => self::roundMaximum(...),
-                OperatorType::Decrement => self::roundMinimum(...),
+            $limitRounding = match ($operator->getMethod()) {
+                OperatorType::Increment => Rounding::Floor,
+                OperatorType::Decrement => Rounding::Ceil,
                 default => null,
             };
-            if ($roundLimit === null) {
+            if ($limitRounding === null) {
                 continue;
             }
 
             $values = $operator->getValues();
             if (\array_key_exists(0, $values)) {
-                $values[0] = self::roundAmount($values[0]);
+                $values[0] = Rounding::HalfAwayFromZero->round($values[0]);
             }
             if (isset($values[1])) {
-                $values[1] = $roundLimit($values[1]);
+                $values[1] = $limitRounding->round($values[1]);
             }
             $document->setAttribute($attribute->key, (clone $operator)->setValues($values));
         }
-    }
-
-    /**
-     * @template T
-     *
-     * @param  T  $value
-     * @return T|int|string
-     */
-    private static function roundAmount(mixed $value): mixed
-    {
-        return self::wholeNumber($value, static fn (bool $negative, bool $half, bool $fractional): bool => $half);
-    }
-
-    /**
-     * @template T
-     *
-     * @param  T  $value
-     * @return T|int|string
-     */
-    private static function roundMaximum(mixed $value): mixed
-    {
-        return self::wholeNumber($value, static fn (bool $negative, bool $half, bool $fractional): bool => $negative && $fractional);
-    }
-
-    /**
-     * @template T
-     *
-     * @param  T  $value
-     * @return T|int|string
-     */
-    private static function roundMinimum(mixed $value): mixed
-    {
-        return self::wholeNumber($value, static fn (bool $negative, bool $half, bool $fractional): bool => ! $negative && $fractional);
-    }
-
-    /**
-     * $value cut toward zero, then moved one further from zero where $away says so, exactly at any size. Anything
-     * but a finite float or a decimal string is returned as given, for the caller to accept or refuse.
-     *
-     * @template T
-     *
-     * @param  T  $value
-     * @param  Closure(bool, bool, bool): bool  $away  Given whether $value is negative, whether its fraction is at
-     *                                                least a half and whether it has one
-     * @return T|int|string
-     */
-    private static function wholeNumber(mixed $value, Closure $away): mixed
-    {
-        if (\is_float($value) && \is_finite($value)) {
-            $negative = $value < 0;
-            $magnitude = \floor(\abs($value));
-            $fraction = \abs($value) - $magnitude;
-            $whole = BigInt::integralValue($negative ? -$magnitude : $magnitude);
-            $half = $fraction >= 0.5;
-            $fractional = $fraction > 0;
-        } elseif (\is_string($value) && \preg_match('/^(-?)(\d+)\.(\d+)$/', $value, $parts) === 1) {
-            $negative = $parts[1] === '-';
-            $whole = BigInt::toNative($parts[1].$parts[2]);
-            $half = $parts[3][0] >= '5';
-            $fractional = \trim($parts[3], '0') !== '';
-        } else {
-            return $value;
-        }
-
-        if ($whole === null || ! $away($negative, $half, $fractional)) {
-            return $whole ?? $value;
-        }
-
-        return BigInt::add($whole, $negative ? -1 : 1);
     }
 
     /**
@@ -2758,10 +2686,10 @@ trait Documents
         $numericAttribute = $this->numericAttribute($collection, $attribute);
 
         if ($this->isDeclaredInteger($numericAttribute ?? $this->declaredAttribute($collection, $attribute))) {
-            $value = self::roundAmount($value);
+            $value = Rounding::HalfAwayFromZero->round($value);
             $this->assertIntegerChange($value);
             if ($max !== null) {
-                $max = $this->integerBound(self::roundMaximum($max), 'Max');
+                $max = $this->integerBound(Rounding::Floor->round($max), 'Max');
             }
         }
 
@@ -2889,10 +2817,10 @@ trait Documents
         $numericAttribute = $this->numericAttribute($collection, $attribute);
 
         if ($this->isDeclaredInteger($numericAttribute ?? $this->declaredAttribute($collection, $attribute))) {
-            $value = self::roundAmount($value);
+            $value = Rounding::HalfAwayFromZero->round($value);
             $this->assertIntegerChange($value);
             if ($min !== null) {
-                $min = $this->integerBound(self::roundMinimum($min), 'Min');
+                $min = $this->integerBound(Rounding::Ceil->round($min), 'Min');
             }
         }
 

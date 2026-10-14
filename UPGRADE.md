@@ -76,16 +76,23 @@ On a single-valued integer or big integer attribute:
 | A `min`, or the limit of `decrement()` | Ceiled | 99.1 is 100 |
 
 The operators are rounded in `updateDocument()`, `updateDocuments()`, `upsertDocument()` and `upsertDocuments()`.
-Rounding happens once, in PHP, before validation, so every adapter stores the same result. Decimal text is rounded
-exactly at any size: `'9007199254740993.5'` adds 9007199254740994. Text with an exponent, such as `'1.5e2'`, and
-values that are not finite are still refused as in 8.1.1.
+Rounding happens once, in PHP, before validation, so every adapter stores the same result. Decimal text is any text
+`is_numeric()` accepts without an exponent: an optional `+` or `-`, digits before or after the point or both, and
+surrounding whitespace, such as `' +.5'` or `'1.'`. It is rounded exactly at any size: `'9007199254740993.5'` adds
+9007199254740994. Text with an exponent, such as `'1.5e2'`, and values that are not finite are refused.
 
-A counter change that rounds to 0, such as 0.4, leaves the document unchanged: it writes nothing, keeps `$updatedAt`
-and fires no event. An operator amount that rounds to 0 changes nothing either.
+A change that rounds to 0, such as 0.4, changes nothing, and its `max` or `min` is not checked:
 
-Still refused with `Exception\Structure`, as by default in 8.1.1: a fractional amount or limit of `multiply()`,
-`divide()`, `modulo()` or `power()` on an integer attribute, and a fractional item added to an integer array. Float and
-double attributes are unchanged.
+- `increaseDocumentAttribute()` and `decreaseDocumentAttribute()` write nothing, keep `$updatedAt` and fire no event.
+- An `increment()` or `decrement()` is dropped from the update. `updateDocument()` treats the attribute as given its
+  stored value, so with nothing else changed it keeps `$updatedAt`, as for any update that changes nothing.
+  `updateDocuments()` given nothing else returns 0 and fires no event. An upsert of a stored document counts it as no
+  change; an upsert that creates the document stores what `increment(0)` or `decrement(0)` would.
+- An amount given as the integer 0 is not rounded and behaves as in 8.1.1.
+
+Refused with `Exception\Structure`, as in 8.1.1 without `setRoundFractions(true)`: a fractional amount or limit of
+`multiply()`, `divide()`, `modulo()` or `power()` on an integer attribute, and a fractional item added to an integer
+array. Float and double attributes are unchanged.
 
 If you relied on fractions being refused, check the value before you call. If you used `setRoundFractions(true)`:
 
@@ -95,11 +102,15 @@ If you relied on fractions being refused, check the value before you call. If yo
 - A fractional `max` or `min` is floored or ceiled before the comparison, instead of being compared as given.
 - The stored value is no longer read locked to resolve an operator, and `updateDocuments()` sends one update for all
   rows again.
+- A fractional item added to an integer array is refused with `Exception\Structure` instead of being cut toward zero.
+- A fractional amount or limit of `multiply()`, `divide()`, `modulo()` or `power()` on an integer attribute is refused
+  with `Exception\Structure` instead of being resolved against the stored value.
 
 ## Hostname of a pool
 
 - `Pool::hostname()` returns the hostname given to `Pool::setHostname()` when it is not empty. Otherwise it asks the
-  pooled adapter, as 8.1.1 always did. `Database::getHostname()` and the document and query cache keys follow it, so a
+  pooled adapter, as 8.1.1 always did. A `ReadWritePool` follows a later `setHostname()` too, instead of keeping the
+  hostname it answered first. `Database::getHostname()` and the document and query cache keys follow it, so a
   pool given a hostname reads and writes cache entries under that hostname from 8.1.2 on.
 - `Pool::getPool(): Utopia\Pools\Pool` returns the pool of adapters the handle borrows from. A subclass that
   exposed the protected `$pool` property, or overrode the hostname, for either purpose can be removed.

@@ -50,12 +50,15 @@ namespace of the model they update. Every entry under Removed and Changed (break
   fractional `min`; `Operator::increment()` and `Operator::decrement()` given to `updateDocument()`,
   `updateDocuments()`, `upsertDocument()` and `upsertDocuments()` round their amount and limit the same way, so
   `increment(-2.5)` subtracts 3. Rounding happens once, in PHP, before validation and on every adapter alike. Decimal
-  text such as `'9007199254740993.5'` is rounded exactly at any size; text with an exponent is still refused. A
-  counter change that rounds to 0, such as 0.4, leaves the document unchanged: it writes nothing and fires no event.
-  Before, these were refused, unless `setRoundFractions(true)` stored what the adapter's engine stored on 7.4.1.
-- Still refused with `Exception\Structure`, as in 8.0.3: a fractional amount or limit of `multiply()`, `divide()`,
-  `modulo()` or `power()` on an integer attribute, and a fractional item added to an integer array. Float and double
-  attributes are unchanged.
+  text, which is what `is_numeric()` accepts without an exponent, such as `'9007199254740993.5'`, `' +.5'` or `'1.'`,
+  is rounded exactly at any size; text with an exponent is refused. A change that rounds to 0, such as 0.4, changes
+  nothing and skips the `max` or `min` check: a counter writes nothing and fires no event, and an operator is dropped
+  from the update, so `updateDocuments()` with nothing else to change returns 0. Before, these were refused, unless
+  `setRoundFractions(true)` stored what the adapter's engine stored on 7.4.1.
+- Refused with `Exception\Structure`, as in 8.0.3 and in 8.1.1 without `setRoundFractions(true)`: a fractional amount
+  or limit of `multiply()`, `divide()`, `modulo()` or `power()` on an integer attribute, and a fractional item added to
+  an integer array. `setRoundFractions(true)` resolved the operators and cut the array items toward zero. Float and
+  double attributes are unchanged.
 
 ### Added
 
@@ -65,7 +68,7 @@ namespace of the model they update. Every entry under Removed and Changed (break
 
 - `Adapter\Pool::hostname()` returns the hostname given to `setHostname()` when it is not empty, and asks the pooled
   adapter only otherwise. 8.1.1 ignored it, so `Database::getHostname()` and the cache keys built from it named the
-  pooled adapter's host instead.
+  pooled adapter's host instead. `ReadWritePool` also follows a hostname set after its first answer.
 
 ## 8.1.1
 

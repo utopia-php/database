@@ -1,5 +1,35 @@
 # Changelog
 
+## 8.1.2
+
+See [Upgrading from 8.1.1 to 8.1.2](UPGRADE.md#upgrading-from-811-to-812).
+
+### Removed
+
+- `Database::setRoundFractions()`, `isRoundingFractions()` and `withRoundFractions()`, with the `Mirror` overrides.
+  Integer rounding is always on (listed under Changed).
+- `Adapter::arithmetic()` and its overrides in `Postgres`, `Mongo`, `SQLite`, `Memory`, `Redis` and `Pool`;
+  `ReadWritePool` no longer lists it among the methods it answers wherever reads go.
+- `Utopia\Database\Arithmetic`, `Utopia\Database\Arithmetic\Rounding` and the internal `Arithmetic\Decimal` and
+  `Arithmetic\Fractional`.
+- The trailing `bool $fractions` argument of `Validator\Operator` and `Validator\Structure` (and so
+  `Validator\PartialStructure`).
+- The trailing `bool $roundFractions` argument of the `State\Snapshot` constructor.
+
+### Changed
+
+- On a single-valued integer or big integer attribute, `increaseDocumentAttribute()` and `decreaseDocumentAttribute()`
+  round a fractional change half away from zero (1.5 adds 2, 2.5 subtracts 3), floor a fractional `max` and ceil a
+  fractional `min`; `Operator::increment()` and `Operator::decrement()` given to `updateDocument()`,
+  `updateDocuments()`, `upsertDocument()` and `upsertDocuments()` round their amount and limit the same way, so
+  `increment(-2.5)` subtracts 3. Rounding happens once, in PHP, before validation and on every adapter alike. Decimal
+  text such as `'9007199254740993.5'` is rounded exactly at any size; text with an exponent is still refused. A
+  counter change that rounds to 0, such as 0.4, leaves the document unchanged: it writes nothing and fires no event.
+  Before, these were refused, unless `setRoundFractions(true)` stored what the adapter's engine stored on 7.4.1.
+- Still refused with `Exception\Structure`, as in 8.0.3: a fractional amount or limit of `multiply()`, `divide()`,
+  `modulo()` or `power()` on an integer attribute, and a fractional item added to an integer array. Float and double
+  attributes are unchanged.
+
 ## 8.1.1
 
 ### Added

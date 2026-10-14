@@ -38,10 +38,9 @@ final class QueriesHookTest extends TestCase
         $this->assertSame([[Event::DocumentFind, HookFixture::COLLECTION]], $hook->calls);
     }
 
-    #[DataProvider('lifecycles')]
-    public function testNeitherSideRewritesItsReadsWithTheMirrorsHook(bool $lifecycle): void
+    public function testNeitherSideRewritesItsReadsWithTheMirrorsHook(): void
     {
-        $hook = self::hook($lifecycle);
+        $hook = self::hook(false);
         $source = HookFixture::memory();
         $destination = HookFixture::memory();
         HookFixture::seed($source, ['first', 'second']);

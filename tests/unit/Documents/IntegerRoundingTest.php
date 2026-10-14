@@ -145,6 +145,18 @@ final class IntegerRoundingTest extends TestCase
         $this->assertSame(107, $this->stored($database, 'count'));
     }
 
+    public function testAMillionDigitAmountIsRefusedWithoutDelay(): void
+    {
+        $database = $this->database(Engine::SQLite);
+        $amount = \str_repeat('1', 1000000).'.5';
+        $start = \hrtime(true);
+
+        $this->assertLimited('Attribute value exceeds maximum limit: 2147483647', fn () => $this->increase($database, 'count', $amount));
+
+        $this->assertLessThan(2.0, (\hrtime(true) - $start) / 1e9, 'Rounding a long amount must take time linear in its length');
+        $this->assertSame(100, $this->stored($database, 'count'));
+    }
+
     #[DataProvider('engines')]
     public function testTextWithAnExponentIsRefused(Engine $engine): void
     {

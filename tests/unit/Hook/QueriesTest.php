@@ -31,34 +31,34 @@ final class QueriesTest extends TestCase
     private const string PUBLIC_THEMES = 'public-themes';
 
     /**
-     * @return iterable<string, array{Closure(Database, array<Query>): mixed, mixed}>
+     * @return iterable<string, array{Closure(Database, Query ...): mixed, mixed}>
      */
     public static function joinedReads(): iterable
     {
-        yield 'find' => [static fn (Database $database, array $joins): mixed => self::ids($database->find('tickets', [...$joins, Query::orderAsc('$id')])), ['k1', 'k2', 'k3']];
-        yield 'count' => [static fn (Database $database, array $joins): mixed => $database->count('tickets', $joins), 3];
-        yield 'sum' => [static fn (Database $database, array $joins): mixed => $database->sum('tickets', 'amount', $joins), 111];
+        yield 'find' => [static fn (Database $database, Query ...$joins): mixed => self::ids($database->find('tickets', [...$joins, Query::orderAsc('$id')])), ['k1', 'k2', 'k3']];
+        yield 'count' => [static fn (Database $database, Query ...$joins): mixed => $database->count('tickets', $joins), 3];
+        yield 'sum' => [static fn (Database $database, Query ...$joins): mixed => $database->sum('tickets', 'amount', $joins), 111];
     }
 
     /**
-     * @return iterable<string, array{Closure(Database, string, array<Query>): mixed}>
+     * @return iterable<string, array{Closure(Database, string, Query ...): mixed}>
      */
     public static function reads(): iterable
     {
-        yield 'getDocument' => [static fn (Database $database, string $collection, array $queries): mixed => $database->getDocument($collection, 'k1', $queries)];
-        yield 'find' => [static fn (Database $database, string $collection, array $queries): mixed => $database->find($collection, $queries)];
-        yield 'findOne' => [static fn (Database $database, string $collection, array $queries): mixed => $database->findOne($collection, $queries)];
-        yield 'count' => [static fn (Database $database, string $collection, array $queries): mixed => $database->count($collection, $queries)];
-        yield 'sum' => [static fn (Database $database, string $collection, array $queries): mixed => $database->sum($collection, 'amount', $queries)];
-        yield 'aggregate' => [static fn (Database $database, string $collection, array $queries): mixed => $database->aggregate($collection, [...$queries, Query::count('*', 'total')])];
-        yield 'cursor' => [static fn (Database $database, string $collection, array $queries): mixed => \iterator_to_array($database->cursor($collection, $queries), false)];
-        yield 'resolveCursor' => [static fn (Database $database, string $collection, array $queries): mixed => $database->resolveCursor($collection, 'k1', CursorDirection::After, $queries)];
+        yield 'getDocument' => [static fn (Database $database, string $collection, Query ...$queries): mixed => $database->getDocument($collection, 'k1', $queries)];
+        yield 'find' => [static fn (Database $database, string $collection, Query ...$queries): mixed => $database->find($collection, $queries)];
+        yield 'findOne' => [static fn (Database $database, string $collection, Query ...$queries): mixed => $database->findOne($collection, $queries)];
+        yield 'count' => [static fn (Database $database, string $collection, Query ...$queries): mixed => $database->count($collection, $queries)];
+        yield 'sum' => [static fn (Database $database, string $collection, Query ...$queries): mixed => $database->sum($collection, 'amount', $queries)];
+        yield 'aggregate' => [static fn (Database $database, string $collection, Query ...$queries): mixed => $database->aggregate($collection, [...$queries, Query::count('*', 'total')])];
+        yield 'cursor' => [static fn (Database $database, string $collection, Query ...$queries): mixed => \iterator_to_array($database->cursor($collection, $queries), false)];
+        yield 'resolveCursor' => [static fn (Database $database, string $collection, Query ...$queries): mixed => $database->resolveCursor($collection, 'k1', CursorDirection::After, $queries)];
     }
 
     /**
      * The reads that authorize the collections they join; resolveCursor() reads with authorization skipped.
      *
-     * @return iterable<string, array{Closure(Database, string, array<Query>): mixed}>
+     * @return iterable<string, array{Closure(Database, string, Query ...): mixed}>
      */
     public static function authorizingReads(): iterable
     {
@@ -111,7 +111,7 @@ final class QueriesTest extends TestCase
             101,
         ];
         yield 'aggregate' => [
-            static fn (Database $database): mixed => \array_map(static fn (array $row): array => \array_map(\intval(...), $row), $database->aggregate($tickets, [Query::count('*', 'total')])),
+            static fn (Database $database): mixed => \array_map(static fn (array $row): array => \array_map(self::integer(...), $row), $database->aggregate($tickets, [Query::count('*', 'total')])),
             [[Event::DocumentAggregate, $tickets]],
             $open,
             [['total' => 2]],
@@ -123,7 +123,7 @@ final class QueriesTest extends TestCase
             ['k1', 'k3'],
         ];
         yield 'resolveCursor' => [
-            static fn (Database $database): mixed => (int) $database->resolveCursor($tickets, 'k2', CursorDirection::After)->getAttribute('amount'),
+            static fn (Database $database): mixed => self::integer($database->resolveCursor($tickets, 'k2', CursorDirection::After)->getAttribute('amount')),
             [[Event::DocumentFind, $tickets]],
             Query::orderDesc('amount'),
             10,
@@ -142,7 +142,7 @@ final class QueriesTest extends TestCase
     }
 
     /**
-     * @param  Closure(Database, array<Query>): mixed  $read
+     * @param  Closure(Database, Query ...): mixed  $read
      */
     #[DataProvider('joinedReads')]
     public function testAHookMappingAJoinNameLetsTheReadJoin(Closure $read, mixed $expected): void
@@ -150,7 +150,7 @@ final class QueriesTest extends TestCase
         $database = $this->joined();
 
         try {
-            $read($database, [$this->publicThemesJoin()]);
+            $read($database, $this->publicThemesJoin());
             $this->fail('A join of an unknown collection was read');
         } catch (QueryException $error) {
             $this->assertSame("Joined collection 'public-themes' not found", $error->getMessage());
@@ -158,11 +158,11 @@ final class QueriesTest extends TestCase
 
         $database->addHook(new QueriesRecorder(self::mapping(self::PUBLIC_THEMES, 'themes')));
 
-        $this->assertSame($expected, $read($database, [$this->publicThemesJoin()]));
+        $this->assertSame($expected, $read($database, $this->publicThemesJoin()));
     }
 
     /**
-     * @param  Closure(Database, string, array<Query>): mixed  $read
+     * @param  Closure(Database, string, Query ...): mixed  $read
      */
     #[DataProvider('authorizingReads')]
     public function testTheReadAuthorizesTheCollectionTheHookJoins(Closure $read): void
@@ -171,7 +171,7 @@ final class QueriesTest extends TestCase
         $database->addHook(new QueriesRecorder(self::mapping(self::PUBLIC_THEMES, 'closed')));
 
         try {
-            $read($database, 'tickets', [$this->publicThemesJoin()]);
+            $read($database, 'tickets', $this->publicThemesJoin());
             $this->fail('A join of an unreadable collection was read');
         } catch (AuthorizationException $error) {
             $this->assertSame("Unauthorized access to joined collection 'closed'", $error->getMessage());
@@ -179,17 +179,17 @@ final class QueriesTest extends TestCase
     }
 
     /**
-     * @param  Closure(Database, string, array<Query>): mixed  $read
+     * @param  Closure(Database, string, Query ...): mixed  $read
      */
     #[DataProvider('reads')]
     public function testARefusalReachesTheCallerBeforeTheReadChecksAnything(Closure $read): void
     {
         $database = $this->joined();
         $refusal = new DomainException('refused');
-        $database->addHook(new QueriesRecorder(static fn (array $queries): array => throw $refusal));
+        $database->addHook(new QueriesRecorder(static fn (Query ...$queries): array => throw $refusal));
 
         try {
-            $read($database, 'sealed', [Query::join('unknown', 'u', [Query::on('theme', '$id')])]);
+            $read($database, 'sealed', Query::join('unknown', 'u', [Query::on('theme', '$id')]));
             $this->fail('A refused read was read');
         } catch (DomainException $error) {
             $this->assertSame($refusal, $error);
@@ -238,13 +238,13 @@ final class QueriesTest extends TestCase
         $output = [];
         $given = [];
         $adding = QueriesRecorder::adding(Query::equal('title', ['first']));
-        $first = new QueriesRecorder(static function (array $queries) use ($adding, &$order, &$output): array {
+        $first = new QueriesRecorder(static function (Query ...$queries) use ($adding, &$order, &$output): array {
             $order[] = 'first';
-            $output = $adding($queries);
+            $output = $adding(...$queries);
 
             return $output;
         });
-        $second = new QueriesRecorder(static function (array $queries) use (&$order, &$given): array {
+        $second = new QueriesRecorder(static function (Query ...$queries) use (&$order, &$given): array {
             $order[] = 'second';
             $given = $queries;
 
@@ -289,7 +289,7 @@ final class QueriesTest extends TestCase
     public function testAHookReturningSomethingOtherThanAQueryIsRefused(): void
     {
         $database = $this->posts();
-        $database->addHook(new QueriesRecorder(static fn (array $queries): array => [...$queries, 'title']));
+        $database->addHook(new QueriesRecorder(static fn (Query ...$queries): array => [...$queries, 'title']));
 
         try {
             $database->find(HookFixture::COLLECTION);
@@ -344,11 +344,11 @@ final class QueriesTest extends TestCase
     }
 
     /**
-     * @return Closure(array<Query>): array<Query>
+     * @return Closure(Query ...): array<Query>
      */
     private static function mapping(string $from, string $to): Closure
     {
-        return static fn (array $queries): array => \array_map(
+        return static fn (Query ...$queries): array => \array_map(
             static fn (Query $query): Query => $query->getMethod()->isJoin() && $query->getAttribute() === $from
                 ? (clone $query)->setAttribute($to)
                 : $query,
@@ -363,6 +363,11 @@ final class QueriesTest extends TestCase
     private static function ids(array $documents): array
     {
         return \array_values(\array_map(static fn (Document $document): string => $document->getId(), $documents));
+    }
+
+    private static function integer(mixed $value): ?int
+    {
+        return \is_numeric($value) ? (int) $value : null;
     }
 
     private function publicThemesJoin(): Query

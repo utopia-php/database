@@ -16,26 +16,26 @@ class QueriesRecorder implements Queries
     /** @var list<array{Event, string}> */
     public array $calls = [];
 
-    /** @var Closure(array<Query>): array<mixed> */
+    /** @var Closure(Query ...): array<mixed> */
     private readonly Closure $rewriter;
 
     /**
-     * @param  (Closure(array<Query>): array<mixed>)|null  $rewriter  Returns the given queries when null
+     * @param  (Closure(Query ...): array<mixed>)|null  $rewriter  Returns the given queries when null
      */
     public function __construct(?Closure $rewriter = null)
     {
-        $this->rewriter = $rewriter ?? static fn (array $queries): array => $queries;
+        $this->rewriter = $rewriter ?? static fn (Query ...$queries): array => $queries;
     }
 
     /**
      * A rewriter that adds $added to the queries unless they already hold an equal query, so it returns the same
      * queries when given its own output.
      *
-     * @return Closure(array<Query>): array<Query>
+     * @return Closure(Query ...): array<Query>
      */
     public static function adding(Query $added): Closure
     {
-        return static function (array $queries) use ($added): array {
+        return static function (Query ...$queries) use ($added): array {
             foreach ($queries as $query) {
                 if ($query->toString() === $added->toString()) {
                     return $queries;
@@ -52,6 +52,6 @@ class QueriesRecorder implements Queries
         $this->calls[] = [$event, $collection->getId()];
 
         /** @var array<Query> */
-        return ($this->rewriter)($queries);
+        return ($this->rewriter)(...$queries);
     }
 }

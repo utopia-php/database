@@ -1,5 +1,25 @@
 # Changelog
 
+## 8.1.2
+
+See [Upgrading from 8.1.1 to 8.1.2](UPGRADE.md#upgrading-from-811-to-812).
+
+### Removed
+
+- `Database::read()`, added in 8.1.0. Call `find()` for documents and `aggregate()` for aggregate or `groupBy()`
+  queries; `Query::groupByType($queries)->isAggregation()` tells which of the two a list is. `find()` still refuses
+  aggregate and `groupBy()` queries.
+
+### Added
+
+- `Adapter\Pool::getPool(): Utopia\Pools\Pool` returns the pool of adapters the handle borrows from.
+
+### Fixed
+
+- `Adapter\Pool::hostname()` returns the hostname given to `setHostname()` when it is not empty, and asks the pooled
+  adapter only otherwise. 8.1.1 ignored it, so `Database::getHostname()` and the cache keys built from it named the
+  pooled adapter's host instead.
+
 ## 8.1.1
 
 ### Added

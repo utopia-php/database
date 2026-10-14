@@ -1,3 +1,33 @@
+# Upgrading from 8.1.1 to 8.1.2
+
+8.1.2 is a patch release. It removes `Database::read()`, and a `Pool` answers with the hostname it is given.
+[CHANGELOG.md](CHANGELOG.md) lists every change.
+
+- [`Database::read()` is removed](#databaseread-is-removed)
+- [Hostname of a pool](#hostname-of-a-pool)
+
+## `Database::read()` is removed
+
+Call `find()` for documents and `aggregate()` for aggregate or `groupBy()` queries. A list that serves both picks one
+with `ParsedQuery::isAggregation()`:
+
+```php
+$rows = Query::groupByType($queries)->isAggregation()
+    ? \array_map(static fn (array $row): Document => new Document($row), $database->aggregate('posts', $queries))
+    : $database->find('posts', $queries, $forPermission);
+```
+
+`aggregate()` reads under the read permission only. `read()` refused aggregate queries under another permission with
+`Exception\Query`; a caller that relied on that refusal checks `$forPermission` itself.
+
+## Hostname of a pool
+
+- `Pool::hostname()` returns the hostname given to `Pool::setHostname()` when it is not empty. Otherwise it asks the
+  pooled adapter, as 8.1.1 always did. `Database::getHostname()` and the document and query cache keys follow it, so a
+  pool given a hostname reads and writes cache entries under that hostname from 8.1.2 on.
+- `Pool::getPool(): Utopia\Pools\Pool` returns the pool of adapters the handle borrows from. A subclass that
+  exposed the protected `$pool` property, or overrode the hostname, for either purpose can be removed.
+
 # Upgrading from 8.0 to 8.1
 
 8.1 is a minor release. Every change in it is additive or opt-in, with one exception: it runs
@@ -10,7 +40,7 @@ exactly as in 8.0.3 apart from that join.
 - [Grant check on related documents](#grant-check-on-related-documents)
 - [Fractional operands on integer attributes](#fractional-operands-on-integer-attributes)
 - [Cursor from an ID](#cursor-from-an-id)
-- [One read for documents and aggregates](#one-read-for-documents-and-aggregates)
+- [Documents or aggregates](#documents-or-aggregates)
 - [Joins on a one-to-many relationship](#joins-on-a-one-to-many-relationship)
 - [Spatial support behind a pool](#spatial-support-behind-a-pool)
 - [`State\Snapshot`](#statesnapshot)
@@ -276,17 +306,12 @@ if ($cursor->isEmpty()) {
 $page = $database->find('posts', [...$queries, Query::cursorAfter($cursor)]);
 ```
 
-## One read for documents and aggregates
+## Documents or aggregates
 
-Additive. `find()` still refuses aggregate and `groupBy()` queries, as 8.0 decided. A caller that serves both through
-one list can use `Database::read(string $collection, array $queries = [], PermissionType $forPermission =
-PermissionType::Read): array`. It returns a list of `Document`:
-
-- aggregate or `groupBy()` queries return the rows of `aggregate()`, each wrapped in a `Document`. Aggregates are read
-  under the read permission only, so another `$forPermission` throws `Exception\Query`.
-- any other queries return what `find($collection, $queries, $forPermission)` returns.
-
-`ParsedQuery::isAggregation(): bool` (from `Query::groupByType($queries)`) tells which of the two a list is.
+No change. `find()` still refuses aggregate and `groupBy()` queries, as 8.0 decided; `aggregate()` runs them.
+`ParsedQuery::isAggregation(): bool` (from `Query::groupByType($queries)`) tells which of the two a list is. 8.1.0 and
+8.1.1 also had `Database::read()`, which 8.1.2 removes (see
+[Upgrading from 8.1.1 to 8.1.2](#databaseread-is-removed)).
 
 ## Joins on a one-to-many relationship
 
@@ -305,7 +330,7 @@ $rows = $database->find('customers', [
 
 - The condition keeps its operator, and its right column becomes the two-way key. Other conditions of the join are
   unchanged, and the caller's `Query` objects are not modified.
-- `getDocument()`, `find()`, `findOne()`, `read()`, `aggregate()`, `count()`, `sum()` and `resolveCursor()` run it, so
+- `getDocument()`, `find()`, `findOne()`, `aggregate()`, `count()`, `sum()` and `resolveCursor()` run it, so
   `cursorAfter()` and `cursorBefore()` page over the joined rows.
 - Only an unqualified left column that is the parent side of a one-to-many with a two-way key is resolved. Every
   other relationship attribute joins, or is refused, exactly as in 8.0.3; so is a left column under a join's alias.

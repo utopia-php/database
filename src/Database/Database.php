@@ -1059,14 +1059,6 @@ class Database
     }
 
     /**
-     * @internal
-     */
-    public function getRelationshipHook(): ?Relationships
-    {
-        return $this->relationshipHook;
-    }
-
-    /**
      * Set whether to preserve original date values instead of overwriting with current timestamps.
      *
      * @return $this
@@ -2385,35 +2377,9 @@ class Database
         return $limits->indexes - $limits->defaultIndexes;
     }
 
-    public function getMaxIndexLength(): int
-    {
-        return $this->adapter->limits()->indexLength;
-    }
-
-    public function getMaxVarcharLength(): int
-    {
-        return $this->adapter->limits()->varchar;
-    }
-
     public function getMaxUidLength(): int
     {
         return $this->adapter->limits()->uidLength;
-    }
-
-    /**
-     * A copy, so a caller that modifies it leaves the adapter's limit as it is.
-     */
-    public function getMinDateTime(): NativeDateTime
-    {
-        return clone $this->adapter->limits()->minDateTime;
-    }
-
-    /**
-     * A copy, so a caller that modifies it leaves the adapter's limit as it is.
-     */
-    public function getMaxDateTime(): NativeDateTime
-    {
-        return clone $this->adapter->limits()->maxDateTime;
     }
 
     /**

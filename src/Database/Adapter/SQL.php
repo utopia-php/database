@@ -14,6 +14,7 @@ use Utopia\Console;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\SQL\BoundedPage;
 use Utopia\Database\Adapter\SQL\Expression;
+use Utopia\Database\Adapter\SQL\Hook\Column\AllowNull;
 use Utopia\Database\Adapter\SQL\Hook\Join;
 use Utopia\Database\Adapter\SQL\Hook\Permission;
 use Utopia\Database\Adapter\SQL\Hook\Tenant;
@@ -4818,7 +4819,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 $permissionHook = $this->newPermissionHook($name, $roles, $forPermission->value, $docCol);
                 if ($preserving) {
                     $permissionConditions[$alias] = $permissionHook->filter($alias);
-                    $permissionHook = new Permission\AllowNullUid(
+                    $permissionHook = new AllowNull(
                         $permissionHook,
                         $docCol,
                         $this->getIdentifierQuote(),

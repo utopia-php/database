@@ -88,7 +88,7 @@ final class ParallelPopulationTest extends TestCase
             for ($round = 1; $round <= self::ROUNDS; $round++) {
                 $this->assertCount(self::DOCUMENTS, $this->findParents($database));
                 $this->assertTrue($database->getAuthorization()->getStatus(), "Authorization is left disabled after round {$round}");
-                $this->assertTrue($this->hook($database)->isEnabled(), "Relationships are left disabled after round {$round}");
+                $this->assertTrue($database->snapshot()->relationships, "Relationships are left disabled after round {$round}");
             }
         });
     }
@@ -143,7 +143,7 @@ final class ParallelPopulationTest extends TestCase
 
                 $this->assertSame([], $this->populatedSecrets($parents));
                 $this->assertTrue($database->getAuthorization()->getStatus());
-                $this->assertTrue($this->hook($database)->isEnabled());
+                $this->assertTrue($database->snapshot()->relationships);
             }
 
             $this->assertSame(1, $this->peak, 'Chunk reads shared one connection at the same time');
@@ -248,7 +248,7 @@ final class ParallelPopulationTest extends TestCase
         $this->assertCount(self::DOCUMENTS, $parents);
         $this->assertSame([], $this->populatedSecrets($parents));
         $this->assertTrue($database->getAuthorization()->getStatus());
-        $this->assertTrue($this->hook($database)->isEnabled());
+        $this->assertTrue($database->snapshot()->relationships);
         $this->assertSame([], $this->ids($database->find('secrets')));
 
         $this->finds = 0;
@@ -414,14 +414,6 @@ final class ParallelPopulationTest extends TestCase
         if ($event === Event::DocumentFind) {
             $this->finds++;
         }
-    }
-
-    private function hook(Database $database): Relationships
-    {
-        $hook = $database->getRelationshipHook();
-        $this->assertNotNull($hook);
-
-        return $hook;
     }
 
     /**

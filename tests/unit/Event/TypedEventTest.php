@@ -33,12 +33,14 @@ final class TypedEventTest extends TestCase
         $this->database->addHook($this->recorder);
     }
 
-    public function testEveryCaseButAllNamesAFinalEventClassThatCarriesIt(): void
+    public function testEveryCaseAHookReceivesNamesAFinalEventClassThatCarriesIt(): void
     {
+        $unhooked = [Event::All, Event::PermissionsCreate, Event::PermissionsRead, Event::PermissionsDelete];
+
         foreach (Event::cases() as $case) {
             $class = $case->domain();
-            if ($case === Event::All) {
-                $this->assertNull($class);
+            if (\in_array($case, $unhooked, true)) {
+                $this->assertNull($class, $case->value.' names an event class');
 
                 continue;
             }
@@ -205,19 +207,6 @@ final class TypedEventTest extends TestCase
         $batch = $this->only(Event::DocumentsUpsert, Event\Document\BatchUpserted::class);
         $this->assertSame([HookFixture::COLLECTION, 2, 1, 3], [$batch->collection, $batch->created, $batch->updated, $batch->count]);
         $this->assertSame([], $this->recorder->received(Event::DocumentUpsert));
-    }
-
-    public function testPermissionEventsCarryTheirCase(): void
-    {
-        $created = new Event\Permission\Created('posts', 'first', ['read("any")']);
-        $read = new Event\Permission\Read('posts', 'first', ['read("any")']);
-        $deleted = new Event\Permission\Deleted('posts', 'first', []);
-
-        $this->assertSame(
-            [Event::PermissionsCreate, Event::PermissionsRead, Event::PermissionsDelete],
-            [$created->event, $read->event, $deleted->event],
-        );
-        $this->assertSame(['posts', 'first', ['read("any")']], [$created->collection, $created->document, $created->permissions]);
     }
 
     public function testNoEventIsBuiltForAnEventNoHookHandles(): void

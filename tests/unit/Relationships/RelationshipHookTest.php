@@ -580,7 +580,7 @@ final class RelationshipHookTest extends TestCase
     /**
      * @param  Closure(): Adapter  $adapter
      */
-    private function database(Closure $adapter, bool $sharedTables = false): Database
+    private function database(Closure $adapter, bool $sharedTables = false, Relationships $hook = new Relationships()): Database
     {
         $authorization = new Authorization();
         $authorization->addRole(Role::any()->toString());
@@ -599,7 +599,7 @@ final class RelationshipHookTest extends TestCase
         }
 
         $database->create();
-        $database->addHook(new Relationships());
+        $database->addHook($hook);
         $database->addHook(new Permissions());
 
         return $database;
@@ -696,12 +696,13 @@ final class RelationshipHookTest extends TestCase
     #[DataProvider('adapters')]
     public function testAFailedNestedOneToOneWriteLeavesNoWriteStackEntry(Closure $adapter): void
     {
-        $database = $this->writeStackDatabase($adapter);
+        $hook = new Relationships();
+        $database = $this->writeStackDatabase($adapter, $hook);
 
         foreach ([1, 2] as $attempt) {
             $this->failNestedOneToOneWrite($database, $attempt);
 
-            $this->assertSame(0, $database->getRelationshipHook()?->getWriteStackCount(), "Attempt {$attempt} left an entry on the write stack");
+            $this->assertSame(0, $hook->getWriteStackCount(), "Attempt {$attempt} left an entry on the write stack");
         }
     }
 
@@ -729,9 +730,9 @@ final class RelationshipHookTest extends TestCase
     /**
      * @param  Closure(): Adapter  $adapter
      */
-    private function writeStackDatabase(Closure $adapter): Database
+    private function writeStackDatabase(Closure $adapter, Relationships $hook = new Relationships()): Database
     {
-        $database = $this->database($adapter);
+        $database = $this->database($adapter, hook: $hook);
         $database->createCollection(Collection::create(id: 'owner', permissions: $this->permissions(), documentSecurity: false));
         $database->createCollection(Collection::create(id: 'solo', attributes: [Attribute::string(key: 'name', size: 64)], permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: false));
         $database->createCollection(Collection::create(id: 'item', permissions: $this->permissions(), documentSecurity: false));

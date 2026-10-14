@@ -429,14 +429,24 @@ class PermissionTest extends TestCase
         $this->assertEquals('read("any", "name")', Permission::read(Role::any(), 'name'));
         $this->assertEquals('create("any", "name")', Permission::create(Role::any(), 'name'));
         $this->assertEquals('update("any", "name")', Permission::update(Role::any(), 'name'));
-        $this->assertEquals('delete("any", "name")', Permission::delete(Role::any(), 'name'));
-        $this->assertEquals('write("any", "name")', Permission::write(Role::any(), 'name'));
 
         $this->assertEquals('read("any")', Permission::read(Role::any()));
+
+        // delete() and write() take the argument too -- a builder renders what it is handed --
+        // but the validator refuses both, because a column cannot narrow a whole-row delete.
+        $this->assertEquals('delete("any", "name")', Permission::delete(Role::any(), 'name'));
+        $this->assertEquals('write("any", "name")', Permission::write(Role::any(), 'name'));
     }
 
     /**
      * Expanding write() keeps the column: the aggregate is the same grant, narrowed the same way.
+     *
+     * @throws \Exception
+     */
+    /**
+     * Expanding a grant keeps its column. Shown through write(), which is the only type that
+     * expands -- the validator refuses a scoped write, so this is about the transform, not
+     * about a set anyone can store.
      *
      * @throws \Exception
      */
@@ -449,6 +459,17 @@ class PermissionTest extends TestCase
             'update("any", "salary")',
             'delete("any", "salary")',
         ], $parsed);
+    }
+
+    /**
+     * @throws \Exception
+     */
+    public function test_a_wildcard_column_is_rejected(): void
+    {
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Wildcard column "*" is not supported');
+
+        Permission::parse('read("any", "*")');
     }
 
     /**

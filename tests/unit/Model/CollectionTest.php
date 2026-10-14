@@ -44,7 +44,7 @@ final class CollectionTest extends TestCase
         $this->assertSame([ColumnType::String, ColumnType::Integer], \array_map(static fn (Attribute $attribute): ColumnType => $attribute->type, $collection->attributes()));
         $this->assertSame(['by_title'], \array_map(static fn (Index $index): string => $index->key, $collection->indexes()));
         $this->assertSame([OrderDirection::Asc], $collection->indexes()[0]->orders);
-        $this->assertSame(['read("any")'], $collection->grants());
+        $this->assertSame(['read("any")'], $collection->declaredPermissions());
         $this->assertFalse($collection->documentSecurity());
         $this->assertFalse($collection->getAttribute('documentSecurity'));
     }
@@ -56,7 +56,7 @@ final class CollectionTest extends TestCase
         $this->assertSame('books', $collection->name());
         $this->assertSame([], $collection->attributes());
         $this->assertSame([], $collection->indexes());
-        $this->assertNull($collection->grants());
+        $this->assertNull($collection->declaredPermissions());
         $this->assertTrue($collection->documentSecurity());
         $this->assertTrue($collection->getAttribute('documentSecurity'));
     }
@@ -78,7 +78,7 @@ final class CollectionTest extends TestCase
 
     public function testCreateWithNoPermissionsDeclaresAnEmptyList(): void
     {
-        $this->assertSame([], Collection::create('books', permissions: [])->grants());
+        $this->assertSame([], Collection::create('books', permissions: [])->declaredPermissions());
     }
 
     public function testCreateKeepsMetadataInStorage(): void
@@ -106,7 +106,7 @@ final class CollectionTest extends TestCase
         $this->assertSame('books', $collection->name());
         $this->assertTrue($collection->documentSecurity());
         $this->assertTrue($collection->getAttribute('documentSecurity'));
-        $this->assertNull($collection->grants());
+        $this->assertNull($collection->declaredPermissions());
         $this->assertSame('fiction', $collection->getAttribute('category'));
         $this->assertSame('title', $collection->attributes()[0]->key);
         $this->assertSame(ColumnType::String, $collection->attributes()[0]->type);
@@ -136,7 +136,7 @@ final class CollectionTest extends TestCase
     {
         $collection = Collection::fromArray(['$id' => 'books', '$permissions' => 'read("any")']);
 
-        $this->assertNull($collection->grants());
+        $this->assertNull($collection->declaredPermissions());
     }
 
     public function testFromArrayRejectsInvalidPermissionEntries(): void
@@ -205,11 +205,11 @@ final class CollectionTest extends TestCase
         $collection = Collection::create('books');
         $collection->setAttribute('$permissions', [Permission::read(Role::any())]);
 
-        $this->assertSame(['read("any")'], $collection->grants());
+        $this->assertSame(['read("any")'], $collection->declaredPermissions());
 
         $collection->removeAttribute('$permissions');
 
-        $this->assertNull($collection->grants());
+        $this->assertNull($collection->declaredPermissions());
     }
 
     public function testDocumentSecurityFollowsStorage(): void

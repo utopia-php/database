@@ -44,7 +44,7 @@ trait ColumnPermissionTests
 
         $stored = $database->getCollection('columnGrants');
 
-        $permissions = $stored->grants();
+        $permissions = $stored->declaredPermissions();
 
         $this->assertNotNull($permissions);
         $this->assertContains('read("any", "name")', $permissions);
@@ -119,7 +119,7 @@ trait ColumnPermissionTests
             'read("any", "name")',
             'read("team:hr", "salary")',
             'create("any")',
-        ], $stored->grants());
+        ], $stored->declaredPermissions());
 
         // The gate keeps the roles and drops the columns, which is what every adapter matches.
         $this->assertSame(['any', 'team:hr'], $stored->getPermissionsByType(PermissionType::Read));
@@ -151,7 +151,7 @@ trait ColumnPermissionTests
 
         $stored = $database->getCollection('columnGrantsAbsent');
 
-        $this->assertSame(['read("any")', 'create("any")'], $stored->grants());
+        $this->assertSame(['read("any")', 'create("any")'], $stored->declaredPermissions());
         $this->assertSame([], $stored->getAttribute(Collection::COLUMN_PERMISSIONS));
     }
 
@@ -170,7 +170,7 @@ trait ColumnPermissionTests
             permissions: [Permission::read(Role::any(), 'name'), Permission::create(Role::any())],
         )));
 
-        $this->assertSame(['read("any", "name")', 'create("any")'], $collection->grants());
+        $this->assertSame(['read("any", "name")', 'create("any")'], $collection->declaredPermissions());
         $this->assertSame(['read("any")', 'create("any")'], $collection->getPermissions());
 
         $collection = $database->updateCollection('columnGrantsCleared', new CollectionUpdate(permissions: [
@@ -178,13 +178,13 @@ trait ColumnPermissionTests
             Permission::create(Role::any()),
         ]));
 
-        $this->assertSame(['read("any")', 'create("any")'], $collection->grants());
+        $this->assertSame(['read("any")', 'create("any")'], $collection->declaredPermissions());
         $this->assertSame(['read("any")', 'create("any")'], $collection->getPermissions());
 
         $stored = $database->getCollection('columnGrantsCleared');
 
         $this->assertSame([], $stored->getAttribute(Collection::COLUMN_PERMISSIONS));
-        $this->assertSame(['read("any")', 'create("any")'], $stored->grants());
+        $this->assertSame(['read("any")', 'create("any")'], $stored->declaredPermissions());
     }
 
     /**
@@ -231,7 +231,7 @@ trait ColumnPermissionTests
 
         $this->assertSame(
             ['read("any")'],
-            $database->getCollection('columnGrantsGatedUpdate')->grants(),
+            $database->getCollection('columnGrantsGatedUpdate')->declaredPermissions(),
         );
     }
 
@@ -267,7 +267,7 @@ trait ColumnPermissionTests
 
         $this->assertContains(
             'read("any", "name")',
-            $database->getCollection('columnGrantsSnapshot')->grants() ?? [],
+            $database->getCollection('columnGrantsSnapshot')->declaredPermissions() ?? [],
         );
         $this->assertFalse($database->hasColumnPermissions());
     }
@@ -308,7 +308,7 @@ trait ColumnPermissionTests
             Permission::create(Role::any()),
         ])));
 
-        $updated = $database->getCollection('columnGrantsUpdate')->grants();
+        $updated = $database->getCollection('columnGrantsUpdate')->declaredPermissions();
 
         $this->assertNotNull($updated);
         $this->assertContains('read("any", "name")', $updated);
@@ -323,7 +323,7 @@ trait ColumnPermissionTests
         }
 
         // The rejected update left the collection as it was.
-        $updated = $database->getCollection('columnGrantsUpdate')->grants();
+        $updated = $database->getCollection('columnGrantsUpdate')->declaredPermissions();
 
         $this->assertNotNull($updated);
         $this->assertContains('read("any", "name")', $updated);
@@ -434,7 +434,7 @@ trait ColumnPermissionTests
             ],
         )));
 
-        $grants = $database->getCollection('database_1_collection_1')->grants();
+        $grants = $database->getCollection('database_1_collection_1')->declaredPermissions();
         $this->assertNotNull($grants);
 
         // Appwrite's list of the database's tables, one row per table, shaped like the real

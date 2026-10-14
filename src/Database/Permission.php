@@ -167,7 +167,11 @@ class Permission
             }
 
             if ($rest === '"') {
-                throw new DatabaseException('Column must not be empty');
+                throw new DatabaseException('Column must not be empty. Omit the argument to grant every column.');
+            }
+
+            if ($rest === '"*') {
+                throw new DatabaseException('Wildcard column "*" is not supported. Omit the argument to grant every column.');
             }
 
             $column = \substr($rest, 1);

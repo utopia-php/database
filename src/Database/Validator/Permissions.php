@@ -27,6 +27,8 @@ class Permissions extends Roles
      */
     private ?array $columns;
 
+    private Key $key;
+
     /**
      * @param  int  $length  maximum amount of permissions. 0 means unlimited.
      * @param  array<PermissionType>  $allowed  allowed permissions. Defaults to all available.
@@ -42,6 +44,7 @@ class Permissions extends Roles
         $this->length = $length;
         $this->allowed = \array_map(fn (PermissionType $p) => $p->value, $allowed);
         $this->columns = $columns;
+        $this->key = new Key();
     }
 
     #[\Override]
@@ -129,8 +132,27 @@ class Permissions extends Roles
      */
     private function isValidColumn(Permission $permission): bool
     {
+        $type = $permission->getPermission();
+
+        // Before anything about where the permission lives: delete removes the whole row, so
+        // narrowing it to one column says nothing, and write aggregates to create, update and
+        // delete, so it inherits the same objection.
+        if (\in_array($type, [PermissionType::Delete->value, PermissionType::Write->value], true)) {
+            $this->message = 'Permission "'.$type.'" cannot be scoped to a column, it applies to the whole row.';
+
+            return false;
+        }
+
         if ($this->columns === null) {
             $this->message = 'Permission "'.$permission->toString().'" is scoped to a column. Column-scoped permissions are set on the collection, not here.';
+
+            return false;
+        }
+
+        // Judged before existence, so a column that could never be a key is told why rather
+        // than being reported as one the collection happens not to have.
+        if (! $this->key->isValid($permission->getColumn())) {
+            $this->message = 'Column "'.$permission->getColumn().'" is not a valid column key.';
 
             return false;
         }

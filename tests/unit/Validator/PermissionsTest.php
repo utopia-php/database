@@ -405,4 +405,44 @@ class PermissionsTest extends TestCase
 
         $this->assertTrue($object->isValid([Permission::read(Role::any())]));
     }
+
+    /**
+     * Delete removes the whole row, so narrowing it to one column says nothing. Write
+     * aggregates to create, update and delete, so it inherits the objection.
+     */
+    public function test_column_scope_rejected_for_delete_and_write(): void
+    {
+        $object = new Permissions(columns: ['name']);
+
+        $this->assertFalse($object->isValid([Permission::delete(Role::any(), 'name')]));
+        $this->assertSame(
+            'Permission "delete" cannot be scoped to a column, it applies to the whole row.',
+            $object->getDescription(),
+        );
+
+        $this->assertFalse($object->isValid([Permission::write(Role::any(), 'name')]));
+        $this->assertSame(
+            'Permission "write" cannot be scoped to a column, it applies to the whole row.',
+            $object->getDescription(),
+        );
+
+        // The three that can be narrowed still are.
+        $this->assertTrue($object->isValid([
+            Permission::read(Role::any(), 'name'),
+            Permission::create(Role::any(), 'name'),
+            Permission::update(Role::any(), 'name'),
+        ]), $object->getDescription());
+    }
+
+    /**
+     * A column that could never be a key is told why, rather than reported as one the
+     * collection happens not to have.
+     */
+    public function test_column_scope_rejects_an_invalid_key(): void
+    {
+        $object = new Permissions(columns: ['name']);
+
+        $this->assertFalse($object->isValid(['read("any", "_internal")']));
+        $this->assertSame('Column "_internal" is not a valid column key.', $object->getDescription());
+    }
 }

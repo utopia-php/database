@@ -14,7 +14,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Permission;
 use Utopia\Database\Relationship;
-use Utopia\Database\RelationshipUpdate;
+use Utopia\Database\Relationship\Update;
 use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
 
@@ -61,7 +61,7 @@ final class SQLiteChildSideRelationshipTest extends TestCase
             twoWayKey: 'author',
         ));
 
-        $this->database->updateRelationship('books', 'author', new RelationshipUpdate(key: 'writer'));
+        $this->database->updateRelationship('books', 'author', new Update(key: 'writer'));
 
         $this->assertContains('writer', $this->columns('books'));
         $this->assertNotContains('author', $this->columns('books'));
@@ -85,7 +85,7 @@ final class SQLiteChildSideRelationshipTest extends TestCase
             twoWayKey: 'books',
         ));
 
-        $this->database->updateRelationship('authors', 'books', new RelationshipUpdate(twoWayKey: 'writer'));
+        $this->database->updateRelationship('authors', 'books', new Update(twoWayKey: 'writer'));
 
         $this->assertContains('writer', $this->columns('books'));
         $this->assertNotContains('author', $this->columns('books'));

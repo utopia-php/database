@@ -16,7 +16,7 @@ use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
-use Utopia\Database\AttributeUpdate;
+use Utopia\Database\Attribute\Update;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
@@ -389,7 +389,7 @@ final class TypeTableTest extends TestCase
         $database->createAttribute('items', $this->attribute($factory));
         $this->write($database, ['value' => $sample->value]);
 
-        $updated = $database->updateAttribute('items', 'value', new AttributeUpdate(key: 'renamed'));
+        $updated = $database->updateAttribute('items', 'value', new Update(key: 'renamed'));
 
         $this->assertSame('renamed', $updated->key);
         $this->assertSame($this->attribute($factory)->type, $updated->type);
@@ -410,7 +410,7 @@ final class TypeTableTest extends TestCase
 
         $this->assertStored($sample->readType, $sample->default, $database->getDocument('items', 'one')->getAttribute('value'));
 
-        $updated = $database->updateAttribute('items', 'value', new AttributeUpdate(default: $sample->value));
+        $updated = $database->updateAttribute('items', 'value', new Update(default: $sample->value));
         $this->assertSame($sample->value, $updated->default);
     }
 
@@ -426,7 +426,7 @@ final class TypeTableTest extends TestCase
 
         $this->assertRejected(
             'Default value 5 does not match given type id',
-            fn () => $database->updateAttribute('items', 'value', new AttributeUpdate(default: '5')),
+            fn () => $database->updateAttribute('items', 'value', new Update(default: '5')),
         );
     }
 

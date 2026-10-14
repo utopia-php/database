@@ -12,6 +12,10 @@ class BigInt extends Validator
     public const string SIGNED_MAX = '9223372036854775807';
     public const string UNSIGNED_MAX = '18446744073709551615';
 
+    private const int CHUNK_DIGITS = 18;
+
+    private const int CHUNK_BASE = 10 ** self::CHUNK_DIGITS;
+
     public function __construct(
         private readonly bool $signed,
         private readonly bool $supportUnsigned64Bit = true
@@ -393,41 +397,49 @@ class BigInt extends Validator
 
     private static function addUnsignedStrings(string $a, string $b): string
     {
-        $aIndex = \strlen($a) - 1;
-        $bIndex = \strlen($b) - 1;
+        [$a, $b] = self::alignToChunks($a, $b);
+        $chunks = [];
         $carry = 0;
-        $result = '';
 
-        while ($aIndex >= 0 || $bIndex >= 0 || $carry > 0) {
-            $sum = ($aIndex >= 0 ? (int) $a[$aIndex--] : 0)
-                + ($bIndex >= 0 ? (int) $b[$bIndex--] : 0)
-                + $carry;
-            $result = (string) ($sum % 10).$result;
-            $carry = \intdiv($sum, 10);
+        for ($offset = \strlen($a) - self::CHUNK_DIGITS; $offset >= 0; $offset -= self::CHUNK_DIGITS) {
+            $sum = (int) \substr($a, $offset, self::CHUNK_DIGITS) + (int) \substr($b, $offset, self::CHUNK_DIGITS) + $carry;
+            $carry = $sum >= self::CHUNK_BASE ? 1 : 0;
+            $chunks[] = \str_pad((string) ($sum - $carry * self::CHUNK_BASE), self::CHUNK_DIGITS, '0', \STR_PAD_LEFT);
+        }
+        if ($carry === 1) {
+            $chunks[] = '1';
         }
 
-        return self::normalizeUnsignedString($result);
+        return self::normalizeUnsignedString(\implode('', \array_reverse($chunks)));
     }
 
     private static function subtractUnsignedStrings(string $a, string $b): string
     {
-        $aIndex = \strlen($a) - 1;
-        $bIndex = \strlen($b) - 1;
+        [$a, $b] = self::alignToChunks($a, $b);
+        $chunks = [];
         $borrow = 0;
-        $result = '';
 
-        while ($aIndex >= 0) {
-            $digit = (int) $a[$aIndex--] - $borrow - ($bIndex >= 0 ? (int) $b[$bIndex--] : 0);
-            if ($digit < 0) {
-                $digit += 10;
-                $borrow = 1;
-            } else {
-                $borrow = 0;
-            }
-            $result = (string) $digit.$result;
+        for ($offset = \strlen($a) - self::CHUNK_DIGITS; $offset >= 0; $offset -= self::CHUNK_DIGITS) {
+            $difference = (int) \substr($a, $offset, self::CHUNK_DIGITS) - (int) \substr($b, $offset, self::CHUNK_DIGITS) - $borrow;
+            $borrow = $difference < 0 ? 1 : 0;
+            $chunks[] = \str_pad((string) ($difference + $borrow * self::CHUNK_BASE), self::CHUNK_DIGITS, '0', \STR_PAD_LEFT);
         }
 
-        return self::normalizeUnsignedString($result);
+        return self::normalizeUnsignedString(\implode('', \array_reverse($chunks)));
+    }
+
+    /**
+     * @return array{string, string} Both numbers left-padded with zeros to the same whole number of chunks
+     */
+    private static function alignToChunks(string $a, string $b): array
+    {
+        $length = \max(\strlen($a), \strlen($b));
+        $length += (self::CHUNK_DIGITS - $length % self::CHUNK_DIGITS) % self::CHUNK_DIGITS;
+
+        return [
+            \str_pad($a, $length, '0', \STR_PAD_LEFT),
+            \str_pad($b, $length, '0', \STR_PAD_LEFT),
+        ];
     }
 
     private static function multiplyUnsignedStrings(string $a, string $b): string

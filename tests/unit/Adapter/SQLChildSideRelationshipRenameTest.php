@@ -10,9 +10,9 @@ use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Relationship;
+use Utopia\Database\Relationship\Update;
 use Utopia\Database\RelationshipSide;
 use Utopia\Database\RelationshipType;
-use Utopia\Database\RelationshipUpdate;
 
 final class SQLChildSideRelationshipRenameTest extends TestCase
 {
@@ -46,7 +46,7 @@ final class SQLChildSideRelationshipRenameTest extends TestCase
     {
         [$collection, $relationship] = $this->relationship($type, $side);
 
-        $this->assertTrue($this->adapter($class)->updateRelationship($collection, $relationship, $side, new RelationshipUpdate(key: $newKey, twoWayKey: $newTwoWayKey)));
+        $this->assertTrue($this->adapter($class)->updateRelationship($collection, $relationship, $side, new Update(key: $newKey, twoWayKey: $newTwoWayKey)));
 
         $this->assertSame([$expected], $this->statements);
     }
@@ -74,7 +74,7 @@ final class SQLChildSideRelationshipRenameTest extends TestCase
     {
         [$collection, $relationship] = $this->relationship($type, $side);
 
-        $this->assertTrue($this->adapter($class)->updateRelationship($collection, $relationship, $side, new RelationshipUpdate(key: $newKey, twoWayKey: $newTwoWayKey)));
+        $this->assertTrue($this->adapter($class)->updateRelationship($collection, $relationship, $side, new Update(key: $newKey, twoWayKey: $newTwoWayKey)));
 
         $this->assertSame([], $this->statements);
     }

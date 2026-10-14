@@ -13,7 +13,7 @@ use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
-use Utopia\Database\CollectionUpdate;
+use Utopia\Database\Collection\Update;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -413,7 +413,7 @@ class CollectionValidationTest extends TestCase
         $this->adapter->method('updateDocument')->willReturnArgument(2);
 
         $newPermissions = [Permission::read(Role::any()), Permission::create(Role::user('admin'))];
-        $result = $this->database->updateCollection('testCol', new CollectionUpdate(permissions: $newPermissions, documentSecurity: true));
+        $result = $this->database->updateCollection('testCol', new Update(permissions: $newPermissions, documentSecurity: true));
         $this->assertTrue($result->getAttribute('documentSecurity'));
     }
 
@@ -461,7 +461,7 @@ class CollectionValidationTest extends TestCase
         );
         $this->adapter->method('updateDocument')->willReturnArgument(2);
 
-        $result = $this->database->updateCollection('testCol', new CollectionUpdate(permissions: [Permission::read(Role::any())], documentSecurity: true));
+        $result = $this->database->updateCollection('testCol', new Update(permissions: [Permission::read(Role::any())], documentSecurity: true));
         $this->assertTrue($result->getAttribute('documentSecurity'));
     }
 
@@ -469,7 +469,7 @@ class CollectionValidationTest extends TestCase
     {
         $this->adapter->method('getDocument')->willReturn(new Document());
         $this->expectException(NotFoundException::class);
-        $this->database->updateCollection('nonexistent', new CollectionUpdate(permissions: [Permission::read(Role::any())], documentSecurity: true));
+        $this->database->updateCollection('nonexistent', new Update(permissions: [Permission::read(Role::any())], documentSecurity: true));
     }
 
     public function testListCollectionsReturnsCollectionDocuments(): void

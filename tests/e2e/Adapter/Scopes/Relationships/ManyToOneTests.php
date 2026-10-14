@@ -14,9 +14,9 @@ use Utopia\Database\Id;
 use Utopia\Database\Permission;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
+use Utopia\Database\Relationship\Update;
 use Utopia\Database\RelationshipDeleteAction;
 use Utopia\Database\RelationshipType;
-use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\Role;
 use Utopia\Query\Schema\ColumnType;
 
@@ -268,7 +268,7 @@ trait ManyToOneTests
         $database->updateRelationship(
             'review',
             'movie',
-            new RelationshipUpdate(key: 'newMovie'),
+            new Update(key: 'newMovie'),
         );
 
         // Get document with new relationship key
@@ -316,7 +316,7 @@ trait ManyToOneTests
         $database->updateRelationship(
             collection: 'review',
             key: 'newMovie',
-            update: new RelationshipUpdate(onDelete: RelationshipDeleteAction::SetNull)
+            update: new Update(onDelete: RelationshipDeleteAction::SetNull)
         );
 
         // Delete child, set parent relationship to null
@@ -330,7 +330,7 @@ trait ManyToOneTests
         $database->updateRelationship(
             collection: 'review',
             key: 'newMovie',
-            update: new RelationshipUpdate(onDelete: RelationshipDeleteAction::Cascade)
+            update: new Update(onDelete: RelationshipDeleteAction::Cascade)
         );
 
         // Delete child, will delete parent
@@ -711,7 +711,7 @@ trait ManyToOneTests
         $database->updateRelationship(
             'product',
             'store',
-            new RelationshipUpdate(
+            new Update(
                 key: 'newStore',
                 twoWayKey: 'newProducts',
             )
@@ -770,7 +770,7 @@ trait ManyToOneTests
         $database->updateRelationship(
             collection: 'product',
             key: 'newStore',
-            update: new RelationshipUpdate(onDelete: RelationshipDeleteAction::SetNull)
+            update: new Update(onDelete: RelationshipDeleteAction::SetNull)
         );
 
         // Delete child, set parent relationship to null
@@ -802,7 +802,7 @@ trait ManyToOneTests
         $database->updateRelationship(
             collection: 'product',
             key: 'newStore',
-            update: new RelationshipUpdate(onDelete: RelationshipDeleteAction::Cascade)
+            update: new Update(onDelete: RelationshipDeleteAction::Cascade)
         );
 
         // Delete child, will delete parent

@@ -13,7 +13,7 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Index;
 use Utopia\Database\Permission;
 use Utopia\Database\Relationship;
-use Utopia\Database\RelationshipUpdate;
+use Utopia\Database\Relationship\Update;
 use Utopia\Database\Role;
 use Utopia\Database\Schema\Index as SchemaIndex;
 use Utopia\Database\Storage;
@@ -126,7 +126,7 @@ trait SchemaReconciliationTests
             $database->createDocument($authors, new Document([Document::ID => 'herbert', 'name' => 'Herbert']));
             $database->createDocument($books, new Document([Document::ID => 'dune', 'name' => 'Dune', 'author' => 'herbert']));
             $adapter->createAttribute($authors, Attribute::string(key: 'novel', size: 64));
-            $update = new RelationshipUpdate(key: 'writer', twoWayKey: 'novel');
+            $update = new Update(key: 'writer', twoWayKey: 'novel');
 
             try {
                 $database->updateRelationship($books, 'author', $update);

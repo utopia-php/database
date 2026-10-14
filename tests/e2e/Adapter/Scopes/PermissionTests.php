@@ -10,7 +10,7 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Change;
 use Utopia\Database\Collection;
-use Utopia\Database\CollectionUpdate;
+use Utopia\Database\Collection\Update;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -668,7 +668,7 @@ trait PermissionTests
             Permission::delete(Role::users()),
         ], documentSecurity: false));
 
-        $database->updateCollection($this->getCollUpdateCollection(), new CollectionUpdate(permissions: [], documentSecurity: true));
+        $database->updateCollection($this->getCollUpdateCollection(), new Update(permissions: [], documentSecurity: true));
 
         self::$collUpdateFixtureInit = true;
         self::$collUpdateFixtureData = [
@@ -1756,7 +1756,7 @@ trait PermissionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $database->updateCollection($collectionId, new CollectionUpdate(permissions: [
+        $database->updateCollection($collectionId, new Update(permissions: [
             'i dont work'
         ], documentSecurity: false));
     }

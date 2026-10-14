@@ -36,7 +36,7 @@ final class RelationshipsHookTest extends TestCase
 
         $mirror->addHook($hook);
 
-        $this->assertSame($hook, $mirror->getRelationshipHook());
+        $this->assertTrue(self::relatesThrough($mirror, $hook));
     }
 
     public function testBothSidesRelateDocumentsWithACopyOfTheGivenHook(): void
@@ -49,10 +49,11 @@ final class RelationshipsHookTest extends TestCase
 
         $mirror->addHook($hook);
 
-        $this->assertInstanceOf($hook::class, $source->getRelationshipHook());
-        $this->assertInstanceOf($hook::class, $destination->getRelationshipHook());
-        $this->assertNotSame($hook, $source->getRelationshipHook());
-        $this->assertNotSame($source->getRelationshipHook(), $destination->getRelationshipHook());
+        foreach ([$source, $destination] as $database) {
+            $this->assertFalse($database->skipRelationships(static fn (): bool => $database->snapshot()->relationships));
+            $this->assertFalse(self::relatesThrough($database, $hook));
+        }
+        $this->assertTrue($source->skipRelationships(static fn (): bool => $destination->snapshot()->relationships));
     }
 
     #[DataProvider('preparing')]
@@ -127,5 +128,10 @@ final class RelationshipsHookTest extends TestCase
         $database->createRelationship('parents', Relationship::oneToMany(relatedCollection: 'children', twoWay: true, key: 'children', twoWayKey: 'parent'));
 
         return $database;
+    }
+
+    private static function relatesThrough(Database $database, Relationships $hook): bool
+    {
+        return $hook->withEnabled(false, static fn (): bool => ! $database->snapshot()->relationships);
     }
 }

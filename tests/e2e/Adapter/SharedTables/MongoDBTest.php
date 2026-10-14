@@ -6,7 +6,6 @@ use Exception;
 use Redis;
 use Tests\E2E\Adapter\Base;
 use Tests\E2E\Adapter\Scopes\MongoReadFilterTests;
-use Tests\Unit\Support\FractionalEngine;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Mongo;
@@ -205,11 +204,5 @@ class MongoDBTest extends Base
     protected function deleteIndex(string $collection, string $index): bool
     {
         return true;
-    }
-
-    #[\Override]
-    protected static function fractionalEngine(): FractionalEngine
-    {
-        return FractionalEngine::MongoDB;
     }
 }

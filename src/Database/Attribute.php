@@ -4,8 +4,10 @@ namespace Utopia\Database;
 
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\Profile;
+use Utopia\Database\Attribute\Update as AttributeUpdate;
 use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Structure;
+use Utopia\Database\Relationship\Update as RelationshipUpdate;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Query\Schema\ColumnType;
 

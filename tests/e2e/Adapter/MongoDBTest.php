@@ -5,7 +5,6 @@ namespace Tests\E2E\Adapter;
 use Exception;
 use Redis;
 use Tests\E2E\Adapter\Scopes\MongoReadFilterTests;
-use Tests\Unit\Support\FractionalEngine;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Mongo;
@@ -384,11 +383,5 @@ class MongoDBTest extends Base
         $updated = $database->updateDocument($collection, 'note', new Document(['title' => 'single']));
         $this->assertSame('single', $updated->getAttribute('title'));
         $this->assertSame($permissions, $updated->getPermissions());
-    }
-
-    #[\Override]
-    protected static function fractionalEngine(): FractionalEngine
-    {
-        return FractionalEngine::MongoDB;
     }
 }

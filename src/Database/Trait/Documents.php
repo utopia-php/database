@@ -12,7 +12,6 @@ use Utopia\Console;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\ReadWritePool;
-use Utopia\Database\Arithmetic\Fractional;
 use Utopia\Database\Attribute;
 use Utopia\Database\Cache\Epoch;
 use Utopia\Database\Cache\Owners;
@@ -40,13 +39,16 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Hook\Lifecycle;
 use Utopia\Database\Hook\Preparation;
+use Utopia\Database\Hook\Queries;
 use Utopia\Database\Id;
 use Utopia\Database\Operator;
+use Utopia\Database\OperatorType;
 use Utopia\Database\Permission;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\RelationshipSide;
 use Utopia\Database\RelationshipType;
+use Utopia\Database\Rounding;
 use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization\Input;
 use Utopia\Database\Validator\BigInt;
@@ -118,11 +120,6 @@ trait Documents
         $this->cacheWriterTimeout = \max(0, $seconds);
 
         return $this;
-    }
-
-    public function getCacheWriterTimeout(): int
-    {
-        return $this->cacheWriterTimeout;
     }
 
     private function getNumericResult(Attribute $attribute, mixed $current, int|float|string $value, bool $increase): int|float|string
@@ -286,6 +283,58 @@ trait Documents
     }
 
     /**
+     * @return list<string> The attributes whose fractional change rounds to nothing
+     */
+    private function roundOperators(Collection $collection, Document $document): array
+    {
+        $unchanged = [];
+        foreach ($collection->attributes() as $attribute) {
+            $operator = $document->getAttribute($attribute->key);
+            if (! $operator instanceof Operator || ! $this->isDeclaredInteger($attribute)) {
+                continue;
+            }
+
+            $limitRounding = match ($operator->getMethod()) {
+                OperatorType::Increment => Rounding::Floor,
+                OperatorType::Decrement => Rounding::Ceil,
+                default => null,
+            };
+            if ($limitRounding === null) {
+                continue;
+            }
+
+            $values = $operator->getValues();
+            if (\array_key_exists(0, $values)) {
+                $amount = Rounding::HalfAwayFromZero->round($values[0]);
+                if ($amount === 0 && $amount !== $values[0]) {
+                    $unchanged[] = $attribute->key;
+                }
+                $values[0] = $amount;
+            }
+            if (isset($values[1])) {
+                $values[1] = $limitRounding->round($values[1]);
+            }
+            $document->setAttribute($attribute->key, (clone $operator)->setValues($values));
+        }
+
+        return $unchanged;
+    }
+
+    /**
+     * @param  list<string>  $keys
+     */
+    private static function keepStored(Document $document, Document $stored, array $keys): void
+    {
+        foreach ($keys as $key) {
+            if ($stored->offsetExists($key)) {
+                $document->setAttribute($key, $stored->getAttribute($key));
+            } else {
+                $document->removeAttribute($key);
+            }
+        }
+    }
+
+    /**
      * Cached validator instances keyed by context and a
      * stable schema/authorization fingerprint.
      *
@@ -421,13 +470,13 @@ trait Documents
         $refetchedMap = [];
         foreach (\array_chunk($sequences, \max(1, $this->maxQueryValues)) as $chunk) {
             $refetched = $this->getAuthorization()->skip(fn () => $this->silent(
-                fn () => $this->find(
+                fn () => $this->skipQueryHooks(fn () => $this->find(
                     $collection->getId(),
                     \array_merge([
                         Query::equal(Document::SEQUENCE, $chunk),
                         Query::limit(\count($chunk)),
                     ], $selections)
-                )
+                ))
             ));
 
             foreach ($refetched as $document) {
@@ -472,7 +521,7 @@ trait Documents
             ? self::sharedDefinition()
             : $this->silent(fn () => $this->getCollection($collection));
 
-        return $this->readDocument($definition, $id, $queries, $forUpdate);
+        return $this->readDocument($definition, $id, $this->rewriteQueries(Event::DocumentRead, $definition, $queries), $forUpdate);
     }
 
     /**
@@ -1117,6 +1166,38 @@ trait Documents
     }
 
     /**
+     * Check, without writing anything, only the grants of the related documents nested in $document: the part of
+     * authorizeCreate() and authorizeUpdate() that refuses a related document adding a permission for a role the
+     * caller does not hold. It checks neither create nor update on $collection, on $document or on any related
+     * collection or document, so it can run before them, as for a staged upsert that is not known to create or update
+     * yet. Related documents are first prepared by the registered {@see \Utopia\Database\Hook\Nested} hooks, and
+     * $resolve gives their staged view, both as for authorizeCreate(). The grants judged are the same whether the
+     * later write creates or updates the document that relates them.
+     *
+     * It does nothing, and reads nothing, unless grants are checked ({@see Database::setCheckGrants()}), authorization
+     * is enabled, and the relationship hook is attached and enabled.
+     *
+     * @param  string  $collection  The collection identifier
+     * @param  Document  $document  The document, or the changes, a later write would be given; it is not changed
+     * @param  (callable(string, string): ?Document)|null  $resolve  The staged view of a related document; null judges every one as stored
+     *
+     * @throws AuthorizationException When a related document adds a permission for a role the caller does not hold
+     * @throws NotFoundException When the collection does not exist
+     * @throws RelationshipException When a related document given as an array is not a valid document
+     * @throws StructureException When a related document's permissions are malformed
+     */
+    public function authorizeGrants(string $collection, Document $document, ?callable $resolve = null): void
+    {
+        if (! $this->checksGrants() || ! $this->relationshipHook?->isEnabled()) {
+            return;
+        }
+
+        $definition = $this->silent(fn () => $this->getCollection($collection));
+
+        $this->prepareNestedCopy($definition, $document, $this->nestedPreparation($resolve));
+    }
+
+    /**
      * @param  string  $collection  The collection identifier
      * @param  Document  $document  The document to create
      * @return Document The created document with generated ID and timestamps
@@ -1168,7 +1249,7 @@ trait Documents
         $hook = $this->relationshipHook;
         if ($hook !== null && ! $hook->isInBatchPopulation() && $hook->isEnabled()) {
             $fetchDepth = $hook->getWriteStackCount();
-            $documents = $this->silent(fn () => $hook->populateDocuments([$document], $collection, $fetchDepth));
+            $documents = $this->silent(fn () => $this->skipQueryHooks(fn () => $hook->populateDocuments([$document], $collection, $fetchDepth)));
             $document = $documents[0];
         }
 
@@ -1720,7 +1801,7 @@ trait Documents
 
             $hook = $this->relationshipHook;
             if ($hook !== null && ! $hook->isInBatchPopulation() && $hook->isEnabled()) {
-                $batch = $this->silent(fn () => $hook->populateDocuments($batch, $collection, $hook->getFetchDepth()));
+                $batch = $this->silent(fn () => $this->skipQueryHooks(fn () => $hook->populateDocuments($batch, $collection, $hook->getFetchDepth())));
             }
 
             /** @var array<Document> $batch */
@@ -1772,13 +1853,12 @@ trait Documents
         $preparation = $this->nestedPreparation(lock: true);
         $newUpdatedAt = $document->getUpdatedAt();
         $hasOperators = false;
-        $round = $this->fractionRounding()->get();
         $cacheTarget = $collection->getId() === self::METADATA
             ? new Document([Document::ID => $id, Document::COLLECTION => self::METADATA])
             : $collection->getId();
-        $document = $this->withMutation(Event::DocumentUpdate, $cacheTarget, function () use ($collection, $id, $document, $preparation, $newUpdatedAt, $round, &$hasOperators) {
+        $document = $this->withMutation(Event::DocumentUpdate, $cacheTarget, function () use ($collection, $id, $document, $preparation, $newUpdatedAt, &$hasOperators) {
             $old = $this->authorization->skip(fn () => $this->silent(
-                fn () => $this->readDocument($collection, $id, forUpdate: true)
+                fn () => $this->skipQueryHooks(fn () => $this->readDocument($collection, $id, forUpdate: true))
             ));
             if ($old->isEmpty()) {
                 return new Document();
@@ -1817,9 +1897,7 @@ trait Documents
             // for a write that leaves the stored document identical.
             $document = $this->removeUnknownAttributes($collection, $document);
 
-            if ($round) {
-                $this->resolveFractions($collection, $document, $old);
-            }
+            self::keepStored($document, $old, $this->roundOperators($collection, $document));
 
             $shouldUpdate = false;
 
@@ -2038,7 +2116,7 @@ trait Documents
 
         $hook = $this->relationshipHook;
         if ($hook !== null && ! $hook->isInBatchPopulation() && $hook->isEnabled()) {
-            $documents = $this->silent(fn () => $hook->populateDocuments([$document], $collection, $hook->getFetchDepth()));
+            $documents = $this->silent(fn () => $this->skipQueryHooks(fn () => $hook->populateDocuments([$document], $collection, $hook->getFetchDepth())));
             $document = $documents[0];
         }
 
@@ -2103,6 +2181,13 @@ trait Documents
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
+        foreach ($this->roundOperators($collection, $updates) as $key) {
+            $updates->removeAttribute($key);
+        }
+        if ($updates->isEmpty()) {
+            return 0;
+        }
+
         if ($this->checksGrants() && $this->relationshipHook?->isEnabled() && self::holdsRelatedDocument($collection, $updates)) {
             throw new RelationshipException('Invalid relationship value. A bulk update takes related documents by ID while grants are checked.');
         }
@@ -2148,9 +2233,6 @@ trait Documents
         $updatedAt = $updates->getUpdatedAt();
         $updates[Document::UPDATED_AT] = ($updatedAt === null || ! $this->datePreservation()->get()) ? DateTime::now() : $updatedAt;
 
-        $fractionalKeys = $this->fractionRounding()->get() ? $this->prepareFractions($collection, $updates) : [];
-        $fractional = $fractionalKeys === [] ? null : new Fractional($this->adapter->arithmetic());
-
         $decodedUpdates = clone $updates;
         $updates = $this->encode(
             $collection,
@@ -2162,7 +2244,6 @@ trait Documents
             $validator = new PartialStructure(
                 collection: $collection,
                 profile: $this->profile(),
-                fractions: $fractional !== null,
             );
 
             if (! $validator->isValid($updates)) {
@@ -2204,12 +2285,12 @@ trait Documents
                 $new[] = Query::cursorAfter($last);
             }
 
-            $batch = $this->silent(fn () => $this->fetch(
+            $batch = $this->silent(fn () => $this->skipQueryHooks(fn () => $this->fetch(
                 $collection,
                 array_merge($new, $queries),
                 PermissionType::Update,
                 false,
-            ));
+            )));
 
             if (empty($batch)) {
                 break;
@@ -2221,9 +2302,8 @@ trait Documents
 
             $cacheTarget = $collection->getId() === self::METADATA ? $batch : $collection->getId();
             $found = $batch;
-            $this->withMutation(Event::DocumentsUpdate, $cacheTarget, function () use ($collection, $updates, $decodedUpdates, $adapterUpdates, $adapterData, $fractionalKeys, $fractional, &$batch, $found, $currentPermissions) {
+            $this->withMutation(Event::DocumentsUpdate, $cacheTarget, function () use ($collection, $updates, $decodedUpdates, $adapterUpdates, &$batch, $found, $currentPermissions) {
                 $keepsPermissions = [];
-                $groups = [];
                 foreach ($found as $index => $document) {
                     $skipPermissionsUpdate = true;
 
@@ -2243,17 +2323,9 @@ trait Documents
                     // keeps the permission rows of every document under that id rewritten.
                     $keepsPermissions[$document->getId()] = $skipPermissionsUpdate && ($keepsPermissions[$document->getId()] ?? true);
 
-                    $resolved = [];
-                    if ($fractional !== null) {
-                        $resolved = $this->lockedFractions($collection, $decodedUpdates, $fractionalKeys, $document, $fractional);
-                        $signature = \serialize(\array_map(static fn (Operator $operator): array => $operator->toArray(), $resolved));
-                        $groups[$signature]['operators'] = $resolved;
-                        $groups[$signature]['indexes'][] = $index;
-                    }
-
                     $updateData = [];
                     foreach ($decodedUpdates->getArrayCopy() as $key => $value) {
-                        $updateData[$key] = $resolved[$key] ?? ($value instanceof Operator ? clone $value : $value);
+                        $updateData[$key] = $value instanceof Operator ? clone $value : $value;
                     }
                     $new = new Document(\array_merge($document->getArrayCopy(), $updateData));
 
@@ -2279,23 +2351,12 @@ trait Documents
                     $batch[$index] = $this->castBefore($collection, $encoded);
                 }
 
-                if ($groups === []) {
-                    $this->adapter->updateDocuments(
-                        $collection,
-                        $adapterUpdates,
-                        $batch,
-                        \array_filter($keepsPermissions),
-                    );
-                }
-
-                foreach ($groups as ['operators' => $operators, 'indexes' => $indexes]) {
-                    $this->adapter->updateDocuments(
-                        $collection,
-                        $this->castBefore($collection, new Document([...$adapterData, ...$operators])),
-                        \array_values(\array_intersect_key($batch, \array_flip($indexes))),
-                        \array_filter($keepsPermissions),
-                    );
-                }
+                $this->adapter->updateDocuments(
+                    $collection,
+                    $adapterUpdates,
+                    $batch,
+                    \array_filter($keepsPermissions),
+                );
 
                 foreach ($batch as $document) {
                     $this->withDocumentTenant(
@@ -2378,7 +2439,7 @@ trait Documents
         );
 
         if ($result === null) {
-            return $this->getDocument($collection, $document->getId());
+            return $this->skipQueryHooks(fn (): Document => $this->getDocument($collection, $document->getId()));
         }
 
         $listeners = $this->listens(Event::DocumentUpsert);
@@ -2486,15 +2547,15 @@ trait Documents
             self::internalAttributesFor(true)
         ));
         $existing = $this->findDocumentsToUpsert($collection->getId(), $documents);
-        $round = $this->fractionRounding()->get();
-        $fractionalKeys = [];
 
         foreach ($documents as $key => $document) {
             $old = $existing[$this->upsertKey($document)] ?? new Document();
 
             $document = $this->removeUnknownAttributes($collection, $document);
-
-            $keys = $round ? $this->prepareFractions($collection, $document) : [];
+            $unchanged = $this->roundOperators($collection, $document);
+            if (! $old->isEmpty()) {
+                self::keepStored($document, $old, $unchanged);
+            }
 
             // Extract operators early to avoid comparison issues
             $documentArray = $document->getArrayCopy();
@@ -2623,8 +2684,7 @@ trait Documents
                 $validator = new Structure(
                     collection: $collection,
                     profile: $this->profile(),
-                    currentDocument: $old->isEmpty() ? null : $old,
-                    fractions: $keys !== [],
+                    currentDocument: $old->isEmpty() ? null : $old
                 );
 
                 if (! $validator->isValid($document)) {
@@ -2656,9 +2716,6 @@ trait Documents
             if (! empty($operators)) {
                 $operatorIds[$identity] = true;
             }
-            if ($keys !== []) {
-                $fractionalKeys[$identity] = $keys;
-            }
             $old = $this->castBefore($collection, $old);
             $document = $this->castBefore($collection, $document);
 
@@ -2688,17 +2745,12 @@ trait Documents
             $batch = $this->withMutation(
                 Event::DocumentsUpsert,
                 \array_map(static fn (Change $change): Document => $change->new, $chunk),
-                function () use ($collection, $increase, $chunk, $fractionalKeys): array {
+                function () use ($collection, $increase, $chunk): array {
                     if (! $this->adapterHasFeature(Feature\Upserts::class)) {
                         throw new DatabaseException('Adapter does not support upserts');
                     }
 
                     $adapter = $this->adapter;
-
-                    if ($fractionalKeys !== []) {
-                        $this->resolveUpsertFractions($collection, $chunk, $fractionalKeys);
-                    }
-
                     $batch = $this->authorization->skip(fn () => $adapter->upsertDocuments(
                         $collection,
                         $chunk,
@@ -2738,7 +2790,7 @@ trait Documents
 
             $hook = $this->relationshipHook;
             if ($hook !== null && ! $hook->isInBatchPopulation() && $hook->isEnabled()) {
-                $batch = $this->silent(fn () => $hook->populateDocuments($batch, $collection, $hook->getFetchDepth()));
+                $batch = $this->silent(fn () => $this->skipQueryHooks(fn () => $hook->populateDocuments($batch, $collection, $hook->getFetchDepth())));
             }
 
             if ($hasOperators && $onNext !== null) {
@@ -2806,10 +2858,10 @@ trait Documents
         $existing = [];
         foreach ($batches as $batch) {
             foreach (\array_chunk(\array_values(\array_unique($batch['ids'])), \max(1, $this->maxQueryValues)) as $chunk) {
-                $read = fn (): array => $this->authorization->skip(fn () => $this->silent(fn () => $this->find($collection, [
+                $read = fn (): array => $this->authorization->skip(fn () => $this->silent(fn () => $this->skipQueryHooks(fn () => $this->find($collection, [
                     Query::equal(Document::ID, $chunk),
                     Query::limit($this->maxQueryValues),
-                ], forPermission: PermissionType::Update)));
+                ], forPermission: PermissionType::Update))));
 
                 $found = $perTenant
                     ? $this->withTenant($batch['tenant'], $read)
@@ -2842,8 +2894,10 @@ trait Documents
      * @param  string  $collection  The collection ID
      * @param  string  $id  The document ID
      * @param  string  $attribute  The attribute to increase
-     * @param  int|float|string  $value  The value to increase the attribute by, a number greater than 0
-     * @param  int|float|string|null  $max  The maximum value the attribute can reach after the increase, null means no limit
+     * @param  int|float|string  $value  The value to increase the attribute by, a number greater than 0; on an integer
+     *                                   attribute it is rounded half away from zero, and below a half changes nothing
+     * @param  int|float|string|null  $max  The maximum value the attribute can reach after the increase, null means no
+     *                                      limit; floored on an integer attribute
      *
      * @throws AuthorizationException
      * @throws DatabaseException
@@ -2863,25 +2917,21 @@ trait Documents
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $numericAttribute = $this->numericAttribute($collection, $attribute);
-        $exact = false;
 
         if ($this->isDeclaredInteger($numericAttribute ?? $this->declaredAttribute($collection, $attribute))) {
-            if ($this->fractionRounding()->get()) {
-                [$exact, $max] = $this->prepareIntegerChange($value, $max, true);
-            } else {
-                $this->assertIntegerChange($value);
-                if ($max !== null) {
-                    $max = $this->integerBound($max, 'Max');
-                }
+            $value = Rounding::HalfAwayFromZero->round($value);
+            $this->assertIntegerChange($value);
+            if ($max !== null) {
+                $max = $this->integerBound(Rounding::Floor->round($max), 'Max');
             }
         }
 
         $cacheTarget = $collection->getId() === self::METADATA
             ? new Document([Document::ID => $id, Document::COLLECTION => self::METADATA])
             : $collection->getId();
-        $document = $this->withMutation(Event::DocumentIncrease, $cacheTarget, function () use ($collection, $id, $attribute, $value, $max, $numericAttribute, $exact) {
+        $document = $this->withMutation(Event::DocumentIncrease, $cacheTarget, function () use ($collection, $id, $attribute, $value, $max, $numericAttribute) {
             /** @var Document $document */
-            $document = $this->authorization->skip(fn () => $this->silent(fn () => $this->readDocument($collection, $id, forUpdate: true))); // Skip ensures user does not need read permission for this
+            $document = $this->authorization->skip(fn () => $this->silent(fn () => $this->skipQueryHooks(fn () => $this->readDocument($collection, $id, forUpdate: true)))); // Skip ensures user does not need read permission for this
 
             if ($document->isEmpty()) {
                 throw new NotFoundException('Document not found');
@@ -2898,13 +2948,12 @@ trait Documents
                 }
             }
 
+            if ($value === 0) {
+                return $document;
+            }
+
             $attributeExists = $document->offsetExists($attribute);
             $currentVal = $document->getAttribute($attribute);
-            $returned = null;
-            if ($exact) {
-                [$value, $returned] = $this->exactChange($currentVal, $value, $max, true);
-                $max = null;
-            }
             if ($numericAttribute instanceof Attribute) {
                 $result = $this->getNumericResult($numericAttribute, $currentVal, $value, true);
             } else {
@@ -2948,11 +2997,11 @@ trait Documents
             $this->purgeCachedDocumentInternal($collection->getId(), $id);
             $this->queueDocumentPurge($collection->getId(), $id);
 
-            return $document->setAttribute($attribute, $returned ?? $result);
+            return $document->setAttribute($attribute, $result);
         });
 
         $listeners = $this->listens(Event::DocumentIncrease);
-        if ($listeners !== []) {
+        if ($listeners !== [] && $value !== 0) {
             $this->dispatch(new Event\Document\Increased($collection->getId(), $document, $attribute), $listeners);
         }
 
@@ -2977,8 +3026,10 @@ trait Documents
      * @param  string  $collection  The collection identifier
      * @param  string  $id  The document identifier
      * @param  string  $attribute  The attribute to decrease
-     * @param  int|float|string  $value  The value to decrease the attribute by, a number greater than 0
-     * @param  int|float|string|null  $min  The minimum value the attribute can reach, null means no limit
+     * @param  int|float|string  $value  The value to decrease the attribute by, a number greater than 0; on an integer
+     *                                   attribute it is rounded half away from zero, and below a half changes nothing
+     * @param  int|float|string|null  $min  The minimum value the attribute can reach, null means no limit; ceiled on an
+     *                                      integer attribute
      * @return Document The updated document
      *
      * @throws AuthorizationException
@@ -2997,25 +3048,21 @@ trait Documents
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $numericAttribute = $this->numericAttribute($collection, $attribute);
-        $exact = false;
 
         if ($this->isDeclaredInteger($numericAttribute ?? $this->declaredAttribute($collection, $attribute))) {
-            if ($this->fractionRounding()->get()) {
-                [$exact, $min] = $this->prepareIntegerChange($value, $min, false);
-            } else {
-                $this->assertIntegerChange($value);
-                if ($min !== null) {
-                    $min = $this->integerBound($min, 'Min');
-                }
+            $value = Rounding::HalfAwayFromZero->round($value);
+            $this->assertIntegerChange($value);
+            if ($min !== null) {
+                $min = $this->integerBound(Rounding::Ceil->round($min), 'Min');
             }
         }
 
         $cacheTarget = $collection->getId() === self::METADATA
             ? new Document([Document::ID => $id, Document::COLLECTION => self::METADATA])
             : $collection->getId();
-        $document = $this->withMutation(Event::DocumentDecrease, $cacheTarget, function () use ($collection, $id, $attribute, $value, $min, $numericAttribute, $exact) {
+        $document = $this->withMutation(Event::DocumentDecrease, $cacheTarget, function () use ($collection, $id, $attribute, $value, $min, $numericAttribute) {
             /** @var Document $document */
-            $document = $this->authorization->skip(fn () => $this->silent(fn () => $this->readDocument($collection, $id, forUpdate: true))); // Skip ensures user does not need read permission for this
+            $document = $this->authorization->skip(fn () => $this->silent(fn () => $this->skipQueryHooks(fn () => $this->readDocument($collection, $id, forUpdate: true)))); // Skip ensures user does not need read permission for this
 
             if ($document->isEmpty()) {
                 throw new NotFoundException('Document not found');
@@ -3032,13 +3079,12 @@ trait Documents
                 }
             }
 
+            if ($value === 0) {
+                return $document;
+            }
+
             $attributeExists = $document->offsetExists($attribute);
             $currentDecVal = $document->getAttribute($attribute);
-            $returned = null;
-            if ($exact) {
-                [$value, $returned] = $this->exactChange($currentDecVal, $value, $min, false);
-                $min = null;
-            }
             if ($numericAttribute instanceof Attribute) {
                 $result = $this->getNumericResult($numericAttribute, $currentDecVal, $value, false);
             } else {
@@ -3082,11 +3128,11 @@ trait Documents
             $this->purgeCachedDocumentInternal($collection->getId(), $id);
             $this->queueDocumentPurge($collection->getId(), $id);
 
-            return $document->setAttribute($attribute, $returned ?? $result);
+            return $document->setAttribute($attribute, $result);
         });
 
         $listeners = $this->listens(Event::DocumentDecrease);
-        if ($listeners !== []) {
+        if ($listeners !== [] && $value !== 0) {
             $this->dispatch(new Event\Document\Decreased($collection->getId(), $document, $attribute), $listeners);
         }
 
@@ -3121,7 +3167,7 @@ trait Documents
         $deleted = $this->withMutation(Event::DocumentDelete, $cacheTarget, function () use ($collection, $id, $report, &$changed): ?Document {
             $changed = [];
             $document = $this->authorization->skip(fn () => $this->silent(
-                fn () => $this->readDocument($collection, $id, forUpdate: true)
+                fn () => $this->skipQueryHooks(fn () => $this->readDocument($collection, $id, forUpdate: true))
             ));
 
             if ($document->isEmpty()) {
@@ -3289,12 +3335,12 @@ trait Documents
             /**
              * @var array<Document> $batch
              */
-            $batch = $this->silent(fn () => $this->fetch(
+            $batch = $this->silent(fn () => $this->skipQueryHooks(fn () => $this->fetch(
                 $collection,
                 array_merge($new, $queries),
                 PermissionType::Delete,
                 false,
-            ));
+            )));
 
             if (empty($batch)) {
                 break;
@@ -4147,37 +4193,9 @@ trait Documents
      */
     public function find(string $collection, array $queries = [], PermissionType $forPermission = PermissionType::Read): array
     {
-        return $this->fetch($this->silent(fn () => $this->getCollection($collection)), $queries, $forPermission, false);
-    }
+        $definition = $this->silent(fn () => $this->getCollection($collection));
 
-    /**
-     * Read a list the way its queries ask: the documents find() reads, or, when the queries aggregate or group, the
-     * rows aggregate() reads, each as a document.
-     *
-     * @param  array<Query>  $queries
-     * @param  PermissionType  $forPermission  The permission documents are read under; aggregate rows read under the read permission only
-     * @return list<Document>
-     *
-     * @throws DatabaseException
-     * @throws QueryException When aggregate or groupBy queries are read under another permission than read
-     * @throws TimeoutException
-     */
-    public function read(string $collection, array $queries = [], PermissionType $forPermission = PermissionType::Read): array
-    {
-        $this->checkQueryTypes($queries);
-
-        if (! Query::groupByType($queries)->isAggregation()) {
-            return \array_values($this->find($collection, $queries, $forPermission));
-        }
-
-        if ($forPermission !== PermissionType::Read) {
-            throw new QueryException('Aggregate and groupBy queries read under the read permission only, not '.$forPermission->value);
-        }
-
-        return \array_map(
-            static fn (array $row): Document => new Document($row),
-            $this->aggregate($collection, $queries),
-        );
+        return $this->fetch($definition, $this->rewriteQueries(Event::DocumentFind, $definition, $queries), $forPermission, false);
     }
 
     /**
@@ -4233,7 +4251,7 @@ trait Documents
         $cursor = $parsed->cursor;
         $cursorDirection = $parsed->cursorDirection ?? CursorDirection::After;
 
-        $isAggregation = ! empty($aggregations) || ! empty($groupByAttrs);
+        $isAggregation = $parsed->isAggregation();
 
         if ($isAggregation !== $aggregate) {
             throw new QueryException($aggregate
@@ -4497,29 +4515,6 @@ trait Documents
     }
 
     /**
-     * Execute a raw query bypassing the query builder. The statement runs as written, with no
-     * permission or tenant scope, so like from(), query() and mutate() it runs only while authorization is
-     * disabled: inside getAuthorization()->skip().
-     *
-     * @param string $query The raw query string
-     * @param array<mixed> $bindings Parameter bindings
-     * @return array<Document>
-     *
-     * @throws AuthorizationException While authorization is enabled
-     * @throws DatabaseException
-     */
-    public function rawQuery(string $query, array $bindings = []): array
-    {
-        $this->requireSkippedAuthorization();
-
-        if (! $this->adapterHasFeature(Feature\RawQuery::class)) {
-            throw new DatabaseException('Raw queries are not supported by this adapter');
-        }
-
-        return $this->adapter->rawQuery($query, $bindings);
-    }
-
-    /**
      * Find a single document matching the given queries.
      *
      * @param  string  $collection  The collection identifier
@@ -4566,6 +4561,7 @@ trait Documents
         $this->assertMax($max);
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
+        $queries = $this->rewriteQueries(Event::DocumentCount, $collection, $queries);
 
         $this->assertQueryColumns($collection, $queries);
 
@@ -4625,6 +4621,7 @@ trait Documents
         $this->assertMax($max);
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
+        $queries = $this->rewriteQueries(Event::DocumentSum, $collection, $queries);
 
         // The aggregated column is read too, so it is named alongside the queries.
         $this->assertQueryColumns($collection, [...$queries, Query::sum($attribute)]);
@@ -4846,11 +4843,15 @@ trait Documents
      * Yield each document matching the queries, read in batches of $batchSize. A limit in the queries caps the
      * iteration, and an offset or a cursorAfter in them positions the first batch only.
      *
+     * With a {@see Queries} hook registered, the collection is resolved and the queries rewritten when this is
+     * called, so a missing collection or a refusal throws then; without one, they throw when the generator is iterated.
+     *
      * @param  array<Query>  $queries
      * @return Generator<int, Document>
      *
      * @throws DatabaseException When the queries hold a cursorBefore
      * @throws LimitException When $batchSize is above BATCH_SIZE
+     * @throws NotFoundException When a {@see Queries} hook is registered and the collection does not exist
      */
     public function cursor(
         string $collection,
@@ -4859,6 +4860,11 @@ trait Documents
         PermissionType $forPermission = PermissionType::Read,
     ): Generator {
         $batchSize = self::batchSize($batchSize);
+
+        if ($this->queryHooks !== []) {
+            $queries = $this->rewriteQueries(Event::DocumentFind, $this->silent(fn () => $this->getCollection($collection)), $queries);
+        }
+
         $parsed = Query::groupByType($queries);
 
         if ($parsed->cursor !== null && $parsed->cursorDirection === CursorDirection::Before) {
@@ -4937,8 +4943,11 @@ trait Documents
      */
     public function aggregate(string $collection, array $queries): array
     {
+        $definition = $this->silent(fn () => $this->getCollection($collection));
+        $queries = self::aliasAggregates($this->rewriteQueries(Event::DocumentAggregate, $definition, $queries));
+
         $rows = [];
-        foreach ($this->fetch($this->silent(fn () => $this->getCollection($collection)), self::aliasAggregates($queries), PermissionType::Read, true) as $row) {
+        foreach ($this->fetch($definition, $queries, PermissionType::Read, true) as $row) {
             $rows[] = $row->getArrayCopy();
         }
 
@@ -5068,7 +5077,7 @@ trait Documents
     private function nextPageCheck(string $collection, array $queries): Closure
     {
         $parsed = Query::groupByType($queries);
-        if (($parsed->joins === [] && ! $parsed->distinct) || $parsed->aggregations !== [] || $parsed->groupBy !== []) {
+        if (($parsed->joins === [] && ! $parsed->distinct) || $parsed->isAggregation()) {
             return static function (Document $cursor): void {
             };
         }
@@ -5752,6 +5761,31 @@ trait Documents
                 $this->checkQueryTypes($query->getValues());
             }
         }
+    }
+
+    /**
+     * The queries a read uses: the given ones as each {@see Queries} hook rewrote them, in registration order.
+     *
+     * @param  array<Query>  $queries
+     * @return array<Query>
+     *
+     * @throws QueryException When a query, given or rewritten, is not a {@see Query}
+     */
+    private function rewriteQueries(Event $event, Collection $collection, array $queries): array
+    {
+        if ($this->queryHooks === [] || $collection->getId() === self::METADATA || ! $this->rewriting()->get()) {
+            return $queries;
+        }
+
+        $this->checkQueryTypes($queries);
+
+        foreach ($this->queryHooks as $hook) {
+            $queries = \array_values($hook->rewrite($event, $collection, $queries));
+        }
+
+        $this->checkQueryTypes($queries);
+
+        return $queries;
     }
 
     private function castBefore(Document $collection, Document $document): Document

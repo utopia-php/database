@@ -6,7 +6,7 @@ use Exception;
 use Throwable;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
-use Utopia\Database\AttributeUpdate;
+use Utopia\Database\Attribute\Update;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Document;
@@ -176,7 +176,7 @@ trait Attributes
      * @throws StructureException
      * @throws Exception
      */
-    public function updateAttribute(string $collection, string $key, AttributeUpdate $update): Attribute
+    public function updateAttribute(string $collection, string $key, Update $update): Attribute
     {
         $definition = $this->silent(fn () => $this->getCollection($collection));
 
@@ -208,7 +208,7 @@ trait Attributes
 
         $updated = $stored->apply($update);
         if ($update->required === true && $updated->default !== null) {
-            $updated = $updated->apply(new AttributeUpdate(default: null));
+            $updated = $updated->apply(new Update(default: null));
         }
 
         $newKey = $updated->key;
@@ -431,7 +431,7 @@ trait Attributes
             }
         }
 
-        $renamed = $attributes[$position]->apply(new AttributeUpdate(key: $new));
+        $renamed = $attributes[$position]->apply(new Update(key: $new));
         $attributes = self::replacing($attributes, $old, $renamed);
 
         try {
@@ -851,7 +851,7 @@ trait Attributes
      */
     private static function normalise(Attribute $attribute): Attribute
     {
-        return $attribute->apply(new AttributeUpdate());
+        return $attribute->apply(new Update());
     }
 
     /**

@@ -3,7 +3,7 @@
 namespace Tests\E2E\Adapter\Scopes;
 
 use Utopia\Database\Attribute;
-use Utopia\Database\AttributeUpdate;
+use Utopia\Database\Attribute\Update;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
@@ -1597,7 +1597,7 @@ trait VectorTests
 
         // Try to update attribute dimensions - should fail (immutable)
         try {
-            $database->updateAttribute('vectorDimUpdate', 'embedding', new AttributeUpdate(type: ColumnType::Vector, size: 5, required: true));
+            $database->updateAttribute('vectorDimUpdate', 'embedding', new Update(type: ColumnType::Vector, size: 5, required: true));
             $this->fail('Should not allow changing vector dimensions');
         } catch (\Throwable $e) {
             $this->assertNotSame('', $e->getMessage());

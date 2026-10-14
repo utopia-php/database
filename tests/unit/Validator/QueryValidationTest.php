@@ -30,6 +30,7 @@ use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Queries\Document as DocumentQueries;
 use Utopia\Database\Validator\Query\Aggregate;
 use Utopia\Database\Validator\Query\Join;
+use Utopia\Query\Builder\Statement;
 use Utopia\Query\Exception\ValidationException;
 use Utopia\Query\Method;
 use Utopia\Query\Schema\ColumnType;
@@ -417,20 +418,18 @@ final class QueryValidationTest extends TestCase
         $this->assertSame('Ann', $database->getDocument('customers', 'c1', [Query::select(['name'])])->getAttribute('name'));
     }
 
-    /**
-     * rawQuery() runs SQL as written, with no permission or tenant scope, so like from() and
-     * execute() it runs only while authorization is skipped.
-     */
-    public function testRawQueryRunsOnlyWhileAuthorizationIsSkipped(): void
+    public function testQueryRunsOnlyWhileAuthorizationIsSkipped(): void
     {
+        $statement = new Statement('SELECT ? AS answer', [42]);
+
         try {
-            $this->database->rawQuery('SELECT ? AS answer', [42]);
-            $this->fail('rawQuery() ran with authorization enabled');
+            $this->database->query($statement);
+            $this->fail('query() ran with authorization enabled');
         } catch (AuthorizationException $error) {
             $this->assertStringContainsString('getAuthorization()->skip()', $error->getMessage());
         }
 
-        $rows = $this->database->getAuthorization()->skip(fn (): array => $this->database->rawQuery('SELECT ? AS answer', [42]));
+        $rows = $this->database->getAuthorization()->skip(fn (): array => $this->database->query($statement));
 
         $this->assertCount(1, $rows);
         $this->assertSame(42, $rows[0]['answer']);

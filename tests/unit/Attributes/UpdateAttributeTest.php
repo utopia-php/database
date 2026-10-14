@@ -8,7 +8,7 @@ use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Attribute;
-use Utopia\Database\AttributeUpdate;
+use Utopia\Database\Attribute\Update;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -27,7 +27,7 @@ final class UpdateAttributeTest extends TestCase
     {
         $database = $this->database();
 
-        $updated = $database->updateAttribute('items', 'name', new AttributeUpdate(size: 128));
+        $updated = $database->updateAttribute('items', 'name', new Update(size: 128));
 
         $this->assertSame(128, $updated->size);
         $this->assertSame('none', $updated->default);
@@ -40,7 +40,7 @@ final class UpdateAttributeTest extends TestCase
     {
         $database = $this->database();
 
-        $updated = $database->updateAttribute('items', 'name', new AttributeUpdate(default: null));
+        $updated = $database->updateAttribute('items', 'name', new Update(default: null));
 
         $this->assertNull($updated->default);
         $this->assertNull($this->stored($database, 'name')->default);
@@ -50,7 +50,7 @@ final class UpdateAttributeTest extends TestCase
     {
         $database = $this->database();
 
-        $database->updateAttribute('items', 'name', new AttributeUpdate(default: 'other'));
+        $database->updateAttribute('items', 'name', new Update(default: 'other'));
 
         $this->assertSame('other', $this->stored($database, 'name')->default);
     }
@@ -60,7 +60,7 @@ final class UpdateAttributeTest extends TestCase
         $database = $this->database();
 
         try {
-            $database->updateAttribute('items', 'code', new AttributeUpdate(default: 'x'));
+            $database->updateAttribute('items', 'code', new Update(default: 'x'));
             $this->fail('Expected a default on a required attribute to be refused');
         } catch (DatabaseException $error) {
             $this->assertSame('Cannot set a default value on a required attribute', $error->getMessage());
@@ -73,7 +73,7 @@ final class UpdateAttributeTest extends TestCase
     {
         $database = $this->database();
 
-        $updated = $database->updateAttribute('items', 'code', new AttributeUpdate(required: false, default: 'x'));
+        $updated = $database->updateAttribute('items', 'code', new Update(required: false, default: 'x'));
 
         $this->assertFalse($updated->required);
         $this->assertSame('x', $this->stored($database, 'code')->default);
@@ -83,7 +83,7 @@ final class UpdateAttributeTest extends TestCase
     {
         $database = $this->database();
 
-        $updated = $database->updateAttribute('items', 'name', new AttributeUpdate(required: true));
+        $updated = $database->updateAttribute('items', 'name', new Update(required: true));
 
         $this->assertTrue($updated->required);
         $this->assertNull($updated->default);
@@ -114,7 +114,7 @@ final class UpdateAttributeTest extends TestCase
             }
         });
 
-        $database->updateAttribute('items', 'code', new AttributeUpdate(required: false));
+        $database->updateAttribute('items', 'code', new Update(required: false));
 
         $created = $database->createDocument('items', new Document([
             '$permissions' => [Permission::read(Role::any())],
@@ -130,7 +130,7 @@ final class UpdateAttributeTest extends TestCase
         $database = $this->database();
 
         try {
-            $database->updateAttribute('items', 'name', new AttributeUpdate(required: true, default: 'kept'));
+            $database->updateAttribute('items', 'name', new Update(required: true, default: 'kept'));
             $this->fail('Expected a default together with required: true to be refused');
         } catch (DatabaseException $error) {
             $this->assertSame('Cannot set a default value on a required attribute', $error->getMessage());
@@ -145,7 +145,7 @@ final class UpdateAttributeTest extends TestCase
     {
         $database = $this->database();
 
-        $updated = $database->updateAttribute('items', 'name', new AttributeUpdate(required: true, default: null));
+        $updated = $database->updateAttribute('items', 'name', new Update(required: true, default: null));
 
         $this->assertTrue($updated->required);
         $this->assertNull($this->stored($database, 'name')->default);
@@ -155,7 +155,7 @@ final class UpdateAttributeTest extends TestCase
     {
         $database = $this->database();
 
-        $database->updateAttribute('items', 'name', new AttributeUpdate(format: null, filters: ['json']));
+        $database->updateAttribute('items', 'name', new Update(format: null, filters: ['json']));
 
         $stored = $this->stored($database, 'name');
         $this->assertNull($stored->format);
@@ -166,21 +166,21 @@ final class UpdateAttributeTest extends TestCase
     {
         $this->expectException(DatabaseException::class);
 
-        $this->database()->updateAttribute('items', 'name', new AttributeUpdate(format: new Format('not-registered')));
+        $this->database()->updateAttribute('items', 'name', new Update(format: new Format('not-registered')));
     }
 
     public function testAMissingAttributeIsNotFound(): void
     {
         $this->expectException(NotFoundException::class);
 
-        $this->database()->updateAttribute('items', 'missing', new AttributeUpdate(required: true));
+        $this->database()->updateAttribute('items', 'missing', new Update(required: true));
     }
 
     public function testAMissingCollectionIsNotFound(): void
     {
         $this->expectException(NotFoundException::class);
 
-        $this->database()->updateAttribute('missing', 'name', new AttributeUpdate(required: true));
+        $this->database()->updateAttribute('missing', 'name', new Update(required: true));
     }
 
     public function testAnEmptyUpdateChangesNothing(): void
@@ -188,7 +188,7 @@ final class UpdateAttributeTest extends TestCase
         $database = $this->database();
         $before = $this->stored($database, 'name')->toDocument()->getArrayCopy();
 
-        $updated = $database->updateAttribute('items', 'name', new AttributeUpdate());
+        $updated = $database->updateAttribute('items', 'name', new Update());
 
         $this->assertSame($before, $updated->toDocument()->getArrayCopy());
         $this->assertSame($before, $this->stored($database, 'name')->toDocument()->getArrayCopy());
@@ -206,8 +206,8 @@ final class UpdateAttributeTest extends TestCase
         $mirror->create();
         $mirror->createCollection($this->items());
 
-        $mirror->updateAttribute('items', 'code', new AttributeUpdate(required: false, default: 'x'));
-        $mirror->updateAttribute('items', 'name', new AttributeUpdate(default: null));
+        $mirror->updateAttribute('items', 'code', new Update(required: false, default: 'x'));
+        $mirror->updateAttribute('items', 'name', new Update(default: null));
 
         $this->assertSame('x', $this->stored($destination, 'code')->default);
         $this->assertFalse($this->stored($destination, 'code')->required);

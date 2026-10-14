@@ -5,7 +5,7 @@ namespace Tests\E2E\Adapter\Scopes;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
-use Utopia\Database\CollectionUpdate;
+use Utopia\Database\Collection\Update;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Query as QueryException;
@@ -450,8 +450,8 @@ trait JoinComboTests
 
         $any = [Permission::create(Role::any()), Permission::read(Role::any())];
         $documentLevel = [Permission::create(Role::any())];
-        $database->updateCollection($selfCol, new CollectionUpdate(permissions: $any, documentSecurity: false));
-        $database->updateCollection($cCol, new CollectionUpdate(permissions: $any, documentSecurity: false));
+        $database->updateCollection($selfCol, new Update(permissions: $any, documentSecurity: false));
+        $database->updateCollection($cCol, new Update(permissions: $any, documentSecurity: false));
 
         $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $selfCol, $cCol, $documentLevel): void {
             $visible = $database->find($mCol, [
@@ -468,7 +468,7 @@ trait JoinComboTests
             $this->assertNotFalse($visibleEncoded);
             $this->assertSame(true, \str_contains($visibleEncoded, 'c-combo-secret'));
 
-            $database->updateCollection($cCol, new CollectionUpdate(permissions: $documentLevel, documentSecurity: true));
+            $database->updateCollection($cCol, new Update(permissions: $documentLevel, documentSecurity: true));
 
             $hidden = $database->find($mCol, [
                 Query::join($selfCol, 'mid', [Query::on('$id', 'mainId')]),

@@ -3,7 +3,7 @@
 namespace Tests\Unit\Model;
 
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\CollectionUpdate;
+use Utopia\Database\Collection\Update;
 use Utopia\Database\Permission;
 use Utopia\Database\Role;
 
@@ -11,7 +11,7 @@ final class CollectionUpdateTest extends TestCase
 {
     public function testDefaultsChangeNothing(): void
     {
-        $update = new CollectionUpdate();
+        $update = new Update();
 
         $this->assertNull($update->permissions);
         $this->assertNull($update->documentSecurity);
@@ -19,8 +19,8 @@ final class CollectionUpdateTest extends TestCase
 
     public function testCarriesOnlyTheGivenChanges(): void
     {
-        $permissions = new CollectionUpdate(permissions: [Permission::read(Role::any())]);
-        $security = new CollectionUpdate(documentSecurity: false);
+        $permissions = new Update(permissions: [Permission::read(Role::any())]);
+        $security = new Update(documentSecurity: false);
 
         $this->assertSame(['read("any")'], $permissions->permissions);
         $this->assertNull($permissions->documentSecurity);
@@ -30,14 +30,14 @@ final class CollectionUpdateTest extends TestCase
 
     public function testAnEmptyPermissionListIsAChange(): void
     {
-        $update = new CollectionUpdate(permissions: []);
+        $update = new Update(permissions: []);
 
         $this->assertSame([], $update->permissions);
     }
 
     public function testPropertiesAreReadonly(): void
     {
-        $update = new CollectionUpdate(documentSecurity: true);
+        $update = new Update(documentSecurity: true);
 
         $this->expectException(\Error::class);
 

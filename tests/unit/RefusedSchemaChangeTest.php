@@ -12,7 +12,7 @@ use Throwable;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Attribute;
-use Utopia\Database\AttributeUpdate;
+use Utopia\Database\Attribute\Update as AttributeUpdate;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Exception as DatabaseException;
@@ -22,7 +22,7 @@ use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Index;
 use Utopia\Database\Permission;
 use Utopia\Database\Relationship;
-use Utopia\Database\RelationshipUpdate;
+use Utopia\Database\Relationship\Update as RelationshipUpdate;
 use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
 

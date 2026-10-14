@@ -6,7 +6,7 @@ use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
-use Utopia\Database\CollectionUpdate;
+use Utopia\Database\Collection\Update;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
@@ -148,8 +148,8 @@ trait JoinRelationshipTests
             $this->assertSame(
                 [4],
                 \array_map(
-                    static fn (Document $row): ?int => self::joinRelationshipInteger($row->getAttribute('rows')),
-                    $database->read(self::JOIN_RELATIONSHIP_CUSTOMERS, [$join, Query::count('*', 'rows')]),
+                    static fn (array $row): ?int => self::joinRelationshipInteger($row['rows']),
+                    $database->aggregate(self::JOIN_RELATIONSHIP_CUSTOMERS, [$join, Query::count('*', 'rows')]),
                 ),
             );
             $this->assertSame(
@@ -178,7 +178,7 @@ trait JoinRelationshipTests
 
         try {
             $authorization = $database->getAuthorization();
-            $database->updateCollection(self::JOIN_RELATIONSHIP_ORDERS, new CollectionUpdate(permissions: [Permission::create(Role::any())], documentSecurity: true));
+            $database->updateCollection(self::JOIN_RELATIONSHIP_ORDERS, new Update(permissions: [Permission::create(Role::any())], documentSecurity: true));
             $authorization->skip(fn (): Document => $database->updateDocument(self::JOIN_RELATIONSHIP_ORDERS, 'o2', new Document(['$permissions' => [Permission::read(Role::user('bob'))]])));
             $queries = [Query::leftJoin(self::JOIN_RELATIONSHIP_ORDERS, 'purchase', [Query::on('orders', '$id')])];
 
@@ -190,7 +190,7 @@ trait JoinRelationshipTests
                 $this->assertSame(['c1/o1', 'c1/o2', 'c2/o3', 'c2/o4', 'c3/-'], $this->joinRelationshipPairs($database, self::JOIN_RELATIONSHIP_CUSTOMERS, $queries, 'purchase'));
             });
 
-            $database->updateCollection(self::JOIN_RELATIONSHIP_ORDERS, new CollectionUpdate(permissions: [Permission::create(Role::any())], documentSecurity: false));
+            $database->updateCollection(self::JOIN_RELATIONSHIP_ORDERS, new Update(permissions: [Permission::create(Role::any())], documentSecurity: false));
             $this->withJoinRelationshipRoles($database, [Role::any()->toString()], function () use ($database, $queries): void {
                 try {
                     $database->find(self::JOIN_RELATIONSHIP_CUSTOMERS, $queries);

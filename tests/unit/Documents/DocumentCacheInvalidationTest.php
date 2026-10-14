@@ -19,7 +19,7 @@ use Utopia\Database\Adapter\Memory as DatabaseMemory;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
-use Utopia\Database\CollectionUpdate;
+use Utopia\Database\Collection\Update;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Permission;
@@ -157,7 +157,7 @@ final class DocumentCacheInvalidationTest extends TestCase
         $database->getCollection('webhooks');
         $database->getCollection('logs');
 
-        $database->updateCollection('logs', new CollectionUpdate(permissions: [Permission::read(Role::any()), Permission::create(Role::any())], documentSecurity: true));
+        $database->updateCollection('logs', new Update(permissions: [Permission::read(Role::any()), Permission::create(Role::any())], documentSecurity: true));
         $adapter->reset();
 
         $this->assertNotNull($database->findCollection('webhooks'));

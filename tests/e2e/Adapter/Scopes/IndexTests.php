@@ -18,7 +18,7 @@ use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
-use Utopia\Database\AttributeUpdate;
+use Utopia\Database\Attribute\Update;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
@@ -265,7 +265,7 @@ trait IndexTests
         $database->createIndex(__FUNCTION__, Index::key(key: 'index_title2', attributes: ['title2'], lengths: [0]));
 
         try {
-            $database->updateAttribute(__FUNCTION__, 'title2', new AttributeUpdate(type: ColumnType::String, size: $database->getAdapter()->limits()->indexLength + 300, required: true));
+            $database->updateAttribute(__FUNCTION__, 'title2', new Update(type: ColumnType::String, size: $database->getAdapter()->limits()->indexLength + 300, required: true));
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
             $this->assertEquals('Index length is longer than the maximum: '.$database->getAdapter()->limits()->indexLength, $e->getMessage());
@@ -1369,7 +1369,7 @@ trait IndexTests
         ));
 
         try {
-            $updated = $database->updateAttribute($collection, 'name', new AttributeUpdate(size: 128));
+            $updated = $database->updateAttribute($collection, 'name', new Update(size: 128));
 
             $this->assertSame(128, $updated->size);
             $this->assertSame(128, $database->getCollection($collection)->attributes()[0]->size);

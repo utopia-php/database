@@ -6,7 +6,7 @@ use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Attribute;
-use Utopia\Database\AttributeUpdate;
+use Utopia\Database\Attribute\Update;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
@@ -170,7 +170,7 @@ trait MongoReadFilterTests
         ));
         $database->createDocument($collection, new Document(['$id' => 'first', 'a.b' => 'renamed', 'x.y' => 'deleted']));
 
-        $database->updateAttribute($collection, 'a.b', new AttributeUpdate(key: 'c'));
+        $database->updateAttribute($collection, 'a.b', new Update(key: 'c'));
         $this->assertSame('renamed', $database->getDocument($collection, 'first')->getAttribute('c'));
 
         $database->deleteAttribute($collection, 'x.y');

@@ -38,6 +38,7 @@ use Utopia\Database\Permission;
 use Utopia\Database\Profiler;
 use Utopia\Database\Query;
 use Utopia\Database\Role;
+use Utopia\Query\Builder\Statement;
 
 trait GeneralTests
 {
@@ -1643,7 +1644,7 @@ trait GeneralTests
                         ? 'SELECT pg_terminate_backend(pg_backend_pid())'
                         : 'KILL '.$database->getConnectionId();
                     try {
-                        $database->getAuthorization()->skip(fn (): array => $database->rawQuery($end));
+                        $database->getAuthorization()->skip(fn (): array => $database->query(new Statement($end, [])));
                     } catch (Throwable) {
                         // The server ends the session that runs the statement, so the statement itself may fail.
                     }

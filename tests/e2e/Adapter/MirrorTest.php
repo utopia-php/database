@@ -8,7 +8,7 @@ use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
-use Utopia\Database\CollectionUpdate;
+use Utopia\Database\Collection\Update;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception;
@@ -181,7 +181,7 @@ class MirrorTest extends Base
 
         $database->updateCollection(
             'testUpdateMirroredCollection',
-            new CollectionUpdate(
+            new Update(
                 permissions: [
                     Permission::read(Role::users()),
                 ],

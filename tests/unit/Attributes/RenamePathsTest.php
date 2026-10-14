@@ -7,7 +7,7 @@ use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Attribute;
-use Utopia\Database\AttributeUpdate;
+use Utopia\Database\Attribute\Update;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -32,7 +32,7 @@ final class RenamePathsTest extends TestCase
     {
         $database = $this->database();
 
-        $updated = $database->updateAttribute('items', 'name', new AttributeUpdate(key: 'title'));
+        $updated = $database->updateAttribute('items', 'name', new Update(key: 'title'));
 
         $this->assertSame('title', $updated->key);
         $this->assertRenamed($database);
@@ -53,7 +53,7 @@ final class RenamePathsTest extends TestCase
 
         $this->expectException(DuplicateException::class);
 
-        $database->updateAttribute('items', 'name', new AttributeUpdate(key: 'code'));
+        $database->updateAttribute('items', 'name', new Update(key: 'code'));
     }
 
     public function testThereIsNoOtherPublicRenamePath(): void

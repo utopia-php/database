@@ -20,7 +20,7 @@ use Utopia\Database\Adapter\ReadWritePool;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
-use Utopia\Database\CollectionUpdate;
+use Utopia\Database\Collection\Update;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
@@ -80,7 +80,7 @@ final class TransactionDefinitionReadTest extends TestCase
         $database->withTransaction(fn (): Collection => $database->getCollection(self::COLLECTION));
         $this->assertSame(0, $this->transactionReads($database, $adapter, fn (): Collection => $database->getCollection(self::COLLECTION)), 'the transaction did not cache its definition');
 
-        $database->updateCollection(self::COLLECTION, new CollectionUpdate(permissions: [Permission::read(Role::any()), Permission::update(Role::any())], documentSecurity: true));
+        $database->updateCollection(self::COLLECTION, new Update(permissions: [Permission::read(Role::any()), Permission::update(Role::any())], documentSecurity: true));
 
         $collection = $database->withTransaction(fn (): Collection => $database->getCollection(self::COLLECTION));
 
@@ -319,7 +319,7 @@ final class TransactionDefinitionReadTest extends TestCase
         $database->withTransaction(function () use ($database, $writer, $adapter): void {
             $database->getCollection(self::COLLECTION);
             $adapter->afterNextDefinitionRead(static function () use ($writer): void {
-                $writer->updateCollection(self::COLLECTION, new CollectionUpdate(permissions: [Permission::read(Role::any()), Permission::update(Role::any())], documentSecurity: true));
+                $writer->updateCollection(self::COLLECTION, new Update(permissions: [Permission::read(Role::any()), Permission::update(Role::any())], documentSecurity: true));
             });
         });
 
@@ -360,7 +360,7 @@ final class TransactionDefinitionReadTest extends TestCase
         [$before, $after] = $database->withTransaction(function () use ($database): array {
             $database->updateDocument(self::COLLECTION, 'ada', new Document(['balance' => 2]));
             $before = $database->getCollection(self::COLLECTION);
-            $database->updateCollection(self::COLLECTION, new CollectionUpdate(permissions: [Permission::read(Role::users())], documentSecurity: true));
+            $database->updateCollection(self::COLLECTION, new Update(permissions: [Permission::read(Role::users())], documentSecurity: true));
 
             return [$before, $database->getCollection(self::COLLECTION)];
         });
@@ -380,7 +380,7 @@ final class TransactionDefinitionReadTest extends TestCase
             $database->getCollection(self::COLLECTION);
         });
 
-        $database->updateCollection(self::COLLECTION, new CollectionUpdate(permissions: [Permission::read(Role::any()), Permission::update(Role::any())], documentSecurity: true));
+        $database->updateCollection(self::COLLECTION, new Update(permissions: [Permission::read(Role::any()), Permission::update(Role::any())], documentSecurity: true));
         $database->purgeCachedDocument(Database::METADATA, self::COLLECTION);
 
         $collection = $database->withTransaction(function () use ($database): Collection {

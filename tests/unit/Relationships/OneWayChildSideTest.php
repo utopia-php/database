@@ -18,8 +18,8 @@ use Utopia\Database\Document;
 use Utopia\Database\Index;
 use Utopia\Database\Permission;
 use Utopia\Database\Relationship;
+use Utopia\Database\Relationship\Update;
 use Utopia\Database\RelationshipSide;
-use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
 
@@ -44,7 +44,7 @@ final class OneWayChildSideTest extends TestCase
     {
         $database = $factory();
 
-        $updated = $database->updateRelationship('passports', 'holder', new RelationshipUpdate(key: 'owner', twoWayKey: 'document'));
+        $updated = $database->updateRelationship('passports', 'holder', new Update(key: 'owner', twoWayKey: 'document'));
 
         $this->assertSame('owner', $updated->key);
         $this->assertSame('document', $updated->twoWayKey);

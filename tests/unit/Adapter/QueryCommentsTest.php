@@ -30,6 +30,7 @@ use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Pools\Adapter\Stack;
 use Utopia\Pools\Pool as UtopiaPool;
+use Utopia\Query\Builder\Statement;
 
 final class QueryCommentsTest extends TestCase
 {
@@ -123,7 +124,7 @@ final class QueryCommentsTest extends TestCase
         $this->assertPingCarries('/* user: user-1 */');
 
         $this->statements = [];
-        $rows = $this->database->getAuthorization()->skip(fn (): array => $this->database->rawQuery('SELECT ? AS answer', [42]));
+        $rows = $this->database->getAuthorization()->skip(fn (): array => $this->database->query(new Statement('SELECT ? AS answer', [42])));
 
         $this->assertSame(42, $rows[0]->getAttribute('answer'));
         $this->assertEveryStatementStartsWith("/* user: user-1 */\n");

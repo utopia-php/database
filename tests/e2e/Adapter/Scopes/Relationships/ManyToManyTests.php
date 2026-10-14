@@ -17,9 +17,9 @@ use Utopia\Database\Operator;
 use Utopia\Database\Permission;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
+use Utopia\Database\Relationship\Update;
 use Utopia\Database\RelationshipDeleteAction;
 use Utopia\Database\RelationshipType;
-use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\Role;
 use Utopia\Query\Schema\ColumnType;
 
@@ -55,7 +55,7 @@ trait ManyToManyTests
         }));
         $database->purgeCachedCollection($junction);
 
-        $database->updateRelationship('legacy_books', 'tags', new RelationshipUpdate(key: 'labels'));
+        $database->updateRelationship('legacy_books', 'tags', new Update(key: 'labels'));
 
         $keys = \array_map(static fn ($index): string => $index->key, $database->getCollection($junction)->indexes());
         $this->assertContains('_index_labels', $keys);
@@ -303,7 +303,7 @@ trait ManyToManyTests
         $database->updateRelationship(
             'playlist',
             'songs',
-            new RelationshipUpdate(key: 'newSongs')
+            new Update(key: 'newSongs')
         );
 
         // Get document with new relationship key
@@ -342,7 +342,7 @@ trait ManyToManyTests
         $database->updateRelationship(
             collection: 'playlist',
             key: 'newSongs',
-            update: new RelationshipUpdate(onDelete: RelationshipDeleteAction::SetNull)
+            update: new Update(onDelete: RelationshipDeleteAction::SetNull)
         );
 
         $playlist1 = $database->getDocument('playlist', 'playlist1');
@@ -365,7 +365,7 @@ trait ManyToManyTests
         $database->updateRelationship(
             collection: 'playlist',
             key: 'newSongs',
-            update: new RelationshipUpdate(onDelete: RelationshipDeleteAction::Cascade)
+            update: new Update(onDelete: RelationshipDeleteAction::Cascade)
         );
 
         // Delete parent, will delete child
@@ -755,7 +755,7 @@ trait ManyToManyTests
         $database->updateRelationship(
             'students',
             'classes',
-            new RelationshipUpdate(
+            new Update(
                 key: 'newClasses',
                 twoWayKey: 'newStudents',
             )
@@ -803,7 +803,7 @@ trait ManyToManyTests
         $database->updateRelationship(
             collection: 'students',
             key: 'newClasses',
-            update: new RelationshipUpdate(onDelete: RelationshipDeleteAction::SetNull)
+            update: new Update(onDelete: RelationshipDeleteAction::SetNull)
         );
 
         $student1 = $database->getDocument('students', 'student1');
@@ -826,7 +826,7 @@ trait ManyToManyTests
         $database->updateRelationship(
             collection: 'students',
             key: 'newClasses',
-            update: new RelationshipUpdate(onDelete: RelationshipDeleteAction::Cascade)
+            update: new Update(onDelete: RelationshipDeleteAction::Cascade)
         );
 
         // Delete parent, will delete child
@@ -2531,7 +2531,7 @@ trait ManyToManyTests
         try {
             $database->createDocument($books, new Document(['$id' => 'dune', 'authors' => [new Document(['$id' => 'herbert'])]]));
 
-            $this->assertSame('works', $database->updateRelationship($books, 'authors', new RelationshipUpdate(twoWayKey: 'works'))->twoWayKey);
+            $this->assertSame('works', $database->updateRelationship($books, 'authors', new Update(twoWayKey: 'works'))->twoWayKey);
 
             $this->assertSame(['herbert'], $this->relatedDocumentIds($database, $books, 'dune', 'authors'));
 
@@ -2540,7 +2540,7 @@ trait ManyToManyTests
             $this->assertSame(['austen', 'herbert'], $this->relatedDocumentIds($database, $books, 'emma', 'authors'));
             $this->assertSame(['herbert'], $this->relatedDocumentIds($database, $books, 'dune', 'authors'));
 
-            $this->assertSame('writers', $database->updateRelationship($books, 'authors', new RelationshipUpdate(key: 'writers'))->key);
+            $this->assertSame('writers', $database->updateRelationship($books, 'authors', new Update(key: 'writers'))->key);
 
             $this->assertSame(['austen', 'herbert'], $this->relatedDocumentIds($database, $books, 'emma', 'writers'));
         } finally {
@@ -2568,7 +2568,7 @@ trait ManyToManyTests
         try {
             $database->createDocument($books, new Document(['$id' => 'dune', 'authors' => [new Document(['$id' => 'herbert'])]]));
 
-            $this->assertSame('works', $database->updateRelationship($authors, 'books', new RelationshipUpdate(key: 'works'))->key);
+            $this->assertSame('works', $database->updateRelationship($authors, 'books', new Update(key: 'works'))->key);
 
             $this->assertSame(['dune'], $this->relatedDocumentIds($database, $authors, 'herbert', 'works'));
             $this->assertSame(['herbert'], $this->relatedDocumentIds($database, $books, 'dune', 'authors'));

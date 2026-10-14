@@ -8,7 +8,7 @@ use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
-use Utopia\Database\AttributeUpdate;
+use Utopia\Database\Attribute\Update;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -42,7 +42,7 @@ final class SharedRenameTest extends TestCase
 
         foreach (self::TENANTS as $tenant) {
             $database->setTenant($tenant);
-            $this->assertSame('years', $database->updateAttribute(self::COLLECTION, 'age', new AttributeUpdate(required: true, key: 'years'))->key);
+            $this->assertSame('years', $database->updateAttribute(self::COLLECTION, 'age', new Update(required: true, key: 'years'))->key);
         }
 
         $this->assertEachTenantReadsItsValuesUnder($database, 'years', 'age');
@@ -63,7 +63,7 @@ final class SharedRenameTest extends TestCase
         }
 
         try {
-            $database->updateAttribute(self::COLLECTION, 'nick', new AttributeUpdate(key: 'title'));
+            $database->updateAttribute(self::COLLECTION, 'nick', new Update(key: 'title'));
             $this->fail('A key update onto another attribute\'s column must be refused while the old column holds values');
         } catch (DuplicateException $e) {
             $this->assertSame('Attribute already exists', $e->getMessage());

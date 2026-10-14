@@ -41,6 +41,23 @@ final class ColumnNameTest extends TestCase
         yield 'an empty name' => [''];
     }
 
+    #[DataProvider('invalidColumns')]
+    public function testAllowNullRejectsAColumnOutsideTheIdentifierPattern(string $column): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Invalid column name: '.$column);
+
+        new AllowNull(new Filter(['any'], static fn (string $table): string => $table.'_perms'), $column);
+    }
+
+    public function testAllowNullRejectsAnInjectedStatement(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Invalid column name: table_main._uid; DROP TABLE');
+
+        new AllowNull(new Filter(['any'], static fn (string $table): string => $table.'_perms'), 'table_main._uid; DROP TABLE');
+    }
+
     /**
      * @param  Closure(string): Filter  $construct
      */

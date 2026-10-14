@@ -9,10 +9,10 @@ use Utopia\Query\Hook;
  * Hook for preparing each nested related document of a write before the write relates it.
  *
  * It is given each related document that createDocument(), createDocuments(), updateDocument(), upsertDocument(),
- * upsertDocuments(), authorizeCreate() or authorizeUpdate() is given as a document (a {@see Document} or an
- * associative array), at every depth the write relates. It runs before the write checks the document's grants and
- * relates it, a parent before its children. Hooks run in the order they were registered, each given the document
- * the previous one returned.
+ * upsertDocuments(), authorizeCreate(), authorizeUpdate() or, while it checks grants, authorizeGrants() is given as a
+ * document (a {@see Document} or an associative array), at every depth the write relates. It runs before the write
+ * checks the document's grants and relates it, a parent before its children. Hooks run in the order they were
+ * registered, each given the document the previous one returned.
  *
  * It is given a copy, never the caller's document, and the document it returns is the one the write uses. In
  * createDocuments(), upsertDocument() and upsertDocuments() the prepared related documents replace the relationship

@@ -14,6 +14,7 @@ use Utopia\Console;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\SQL\BoundedPage;
 use Utopia\Database\Adapter\SQL\Expression;
+use Utopia\Database\Adapter\SQL\Hook\Column\AllowNull;
 use Utopia\Database\Adapter\SQL\Hook\Join;
 use Utopia\Database\Adapter\SQL\Hook\Permission;
 use Utopia\Database\Adapter\SQL\Hook\Tenant;
@@ -46,9 +47,9 @@ use Utopia\Database\PDOStatement as DatabasePDOStatement;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
+use Utopia\Database\Relationship\Update;
 use Utopia\Database\RelationshipSide;
 use Utopia\Database\RelationshipType;
-use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Database\Validator\Query\Join as JoinValidator;
@@ -2938,7 +2939,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * @throws DatabaseException
      */
     #[\Override]
-    public function updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, RelationshipUpdate $update): bool
+    public function updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, Update $update): bool
     {
         $name = $this->filter($collection);
         $relatedName = $this->filter($relationship->relatedCollection);
@@ -4818,7 +4819,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 $permissionHook = $this->newPermissionHook($name, $roles, $forPermission->value, $docCol);
                 if ($preserving) {
                     $permissionConditions[$alias] = $permissionHook->filter($alias);
-                    $permissionHook = new Permission\AllowNullUid(
+                    $permissionHook = new AllowNull(
                         $permissionHook,
                         $docCol,
                         $this->getIdentifierQuote(),

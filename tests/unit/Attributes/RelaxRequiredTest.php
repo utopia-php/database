@@ -12,7 +12,7 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
-use Utopia\Database\AttributeUpdate;
+use Utopia\Database\Attribute\Update;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -35,7 +35,7 @@ final class RelaxRequiredTest extends TestCase
         });
 
         try {
-            $database->updateAttribute('items', 'name', new AttributeUpdate(required: false));
+            $database->updateAttribute('items', 'name', new Update(required: false));
             $this->fail('Expected the failed relax to surface');
         } catch (DatabaseException $error) {
             $this->assertSame('Relaxing the column failed', $error->getMessage());
@@ -55,7 +55,7 @@ final class RelaxRequiredTest extends TestCase
         });
 
         try {
-            $database->updateAttribute('items', 'name', new AttributeUpdate(required: false));
+            $database->updateAttribute('items', 'name', new Update(required: false));
             $this->fail('Expected the unconfirmed relax to surface');
         } catch (RefusedException $error) {
             $this->assertSame('Failed to update attribute', $error->getMessage());
@@ -83,7 +83,7 @@ final class RelaxRequiredTest extends TestCase
     {
         $database = $this->database($adapter());
 
-        $updated = $database->updateAttribute('items', 'name', new AttributeUpdate(required: false));
+        $updated = $database->updateAttribute('items', 'name', new Update(required: false));
 
         $this->assertFalse($updated->required);
         $this->assertFalse($this->storedAttribute($database, 'name')->required);

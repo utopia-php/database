@@ -31,7 +31,6 @@ class ReadWritePool extends Pool
      * the sticky window, so a call that writes, or must see the latest write, never belongs here.
      */
     final protected const array METADATA_METHODS = [
-        'arithmetic',
         'supports',
         'capabilities',
         'hasFeature',
@@ -121,6 +120,14 @@ class ReadWritePool extends Pool
     public function hostname(): string
     {
         return $this->writePoolHostname ??= parent::hostname();
+    }
+
+    #[\Override]
+    public function setHostname(string $hostname): static
+    {
+        $this->writePoolHostname = null;
+
+        return parent::setHostname($hostname);
     }
 
     /**

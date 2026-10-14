@@ -7,7 +7,7 @@ use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Attribute;
-use Utopia\Database\AttributeUpdate;
+use Utopia\Database\Attribute\Update;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -40,7 +40,7 @@ final class StoredValueRevalidationTest extends TestCase
     public function testAnUpdateKeepsAStoredValueANarrowedRangeNoLongerAdmits(): void
     {
         $database = $this->database();
-        $database->updateAttribute(self::COLLECTION, 'level', new AttributeUpdate(format: new Format('storedRange', ['min' => 0, 'max' => 10])));
+        $database->updateAttribute(self::COLLECTION, 'level', new Update(format: new Format('storedRange', ['min' => 0, 'max' => 10])));
 
         $updated = $database->updateDocument(self::COLLECTION, 'row', new Document(['note' => 'after narrow']));
 
@@ -53,7 +53,7 @@ final class StoredValueRevalidationTest extends TestCase
     public function testAnUpdateKeepsAStoredValueAShrunkEnumNoLongerAdmits(): void
     {
         $database = $this->database();
-        $database->updateAttribute(self::COLLECTION, 'kind', new AttributeUpdate(format: new Format('storedEnum', ['elements' => ['a']])));
+        $database->updateAttribute(self::COLLECTION, 'kind', new Update(format: new Format('storedEnum', ['elements' => ['a']])));
 
         $database->updateDocument(self::COLLECTION, 'row', new Document(['note' => 'after shrink']));
 
@@ -65,7 +65,7 @@ final class StoredValueRevalidationTest extends TestCase
     public function testAnUpdateThatWritesAValueTheNarrowedRangeRefusesFails(): void
     {
         $database = $this->database();
-        $database->updateAttribute(self::COLLECTION, 'level', new AttributeUpdate(format: new Format('storedRange', ['min' => 0, 'max' => 10])));
+        $database->updateAttribute(self::COLLECTION, 'level', new Update(format: new Format('storedRange', ['min' => 0, 'max' => 10])));
 
         try {
             $database->updateDocument(self::COLLECTION, 'row', new Document(['level' => 60, 'note' => 'written']));

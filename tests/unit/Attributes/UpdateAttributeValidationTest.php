@@ -14,7 +14,7 @@ use Utopia\Database\Adapter\Limits;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
-use Utopia\Database\AttributeUpdate;
+use Utopia\Database\Attribute\Update;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
@@ -56,12 +56,12 @@ final class UpdateAttributeValidationTest extends TestCase
     private static function updaters(): array
     {
         return [
-            'required' => static fn (Database $database, string $collection, string $id): mixed => $database->updateAttribute($collection, $id, new AttributeUpdate(required: false)),
-            'format' => static fn (Database $database, string $collection, string $id): mixed => $database->updateAttribute($collection, $id, new AttributeUpdate(format: new Format('text'))),
-            'format options' => static fn (Database $database, string $collection, string $id): mixed => $database->updateAttribute($collection, $id, new AttributeUpdate(format: new Format('text', ['maximum' => 1]))),
-            'filters' => static fn (Database $database, string $collection, string $id): mixed => $database->updateAttribute($collection, $id, new AttributeUpdate(filters: [])),
-            'default' => static fn (Database $database, string $collection, string $id): mixed => $database->updateAttribute($collection, $id, new AttributeUpdate(default: 'x')),
-            'structure' => static fn (Database $database, string $collection, string $id): mixed => $database->updateAttribute($collection, $id, new AttributeUpdate(size: 128)),
+            'required' => static fn (Database $database, string $collection, string $id): mixed => $database->updateAttribute($collection, $id, new Update(required: false)),
+            'format' => static fn (Database $database, string $collection, string $id): mixed => $database->updateAttribute($collection, $id, new Update(format: new Format('text'))),
+            'format options' => static fn (Database $database, string $collection, string $id): mixed => $database->updateAttribute($collection, $id, new Update(format: new Format('text', ['maximum' => 1]))),
+            'filters' => static fn (Database $database, string $collection, string $id): mixed => $database->updateAttribute($collection, $id, new Update(filters: [])),
+            'default' => static fn (Database $database, string $collection, string $id): mixed => $database->updateAttribute($collection, $id, new Update(default: 'x')),
+            'structure' => static fn (Database $database, string $collection, string $id): mixed => $database->updateAttribute($collection, $id, new Update(size: 128)),
         ];
     }
 
@@ -133,11 +133,11 @@ final class UpdateAttributeValidationTest extends TestCase
             $before = $this->definitions($database);
             $this->assertRefused(
                 'Format ("'.self::FORMAT.'") not available for this attribute type ("string")',
-                fn (): mixed => $database->updateAttribute(self::COLLECTION, 'label', new AttributeUpdate(format: new Format(self::FORMAT))),
+                fn (): mixed => $database->updateAttribute(self::COLLECTION, 'label', new Update(format: new Format(self::FORMAT))),
             );
             $this->assertSame($before, $this->definitions($database));
 
-            $this->assertSame(self::FORMAT, $database->updateAttribute(self::COLLECTION, 'count', new AttributeUpdate(format: new Format(self::FORMAT)))->format?->name);
+            $this->assertSame(self::FORMAT, $database->updateAttribute(self::COLLECTION, 'count', new Update(format: new Format(self::FORMAT)))->format?->name);
         } finally {
             Structure::removeFormat(self::FORMAT);
         }
@@ -154,11 +154,11 @@ final class UpdateAttributeValidationTest extends TestCase
 
         $this->assertRefused(
             'Cannot set a default value on a required attribute',
-            fn (): mixed => $database->updateAttribute(self::COLLECTION, 'name', new AttributeUpdate(default: 'x')),
+            fn (): mixed => $database->updateAttribute(self::COLLECTION, 'name', new Update(default: 'x')),
         );
         $this->assertSame($before, $this->definitions($database));
 
-        $cleared = $database->updateAttribute(self::COLLECTION, 'name', new AttributeUpdate(default: null));
+        $cleared = $database->updateAttribute(self::COLLECTION, 'name', new Update(default: null));
         $this->assertTrue($cleared->required);
         $this->assertNull($cleared->default);
     }
@@ -171,8 +171,8 @@ final class UpdateAttributeValidationTest extends TestCase
     {
         $database = $this->database($adapter());
 
-        $database->updateAttribute(self::COLLECTION, 'label', new AttributeUpdate(default: 'x'));
-        $database->updateAttribute(self::COLLECTION, 'label', new AttributeUpdate(required: true));
+        $database->updateAttribute(self::COLLECTION, 'label', new Update(default: 'x'));
+        $database->updateAttribute(self::COLLECTION, 'label', new Update(required: true));
 
         $definitions = $this->definitions($database);
         foreach (['name', 'label'] as $key) {
@@ -214,7 +214,7 @@ final class UpdateAttributeValidationTest extends TestCase
         $database = $this->database($adapter());
         $before = $this->definitions($database);
 
-        $this->assertRefused($message, fn (): mixed => $database->updateAttribute(self::COLLECTION, $attribute, new AttributeUpdate(default: $default)));
+        $this->assertRefused($message, fn (): mixed => $database->updateAttribute(self::COLLECTION, $attribute, new Update(default: $default)));
 
         $this->assertSame($before, $this->definitions($database));
     }
@@ -227,7 +227,7 @@ final class UpdateAttributeValidationTest extends TestCase
     {
         $database = $this->database($adapter());
 
-        $this->assertSame(['a', 'b'], $database->updateAttribute(self::COLLECTION, 'tags', new AttributeUpdate(default: ['a', 'b']))->default);
+        $this->assertSame(['a', 'b'], $database->updateAttribute(self::COLLECTION, 'tags', new Update(default: ['a', 'b']))->default);
         $this->assertSame(['a', 'b'], $this->definitions($database)['tags']['default']);
     }
 
@@ -239,11 +239,11 @@ final class UpdateAttributeValidationTest extends TestCase
 
         $this->assertRefused(
             'Vector default value must contain only numeric elements',
-            fn (): mixed => $database->updateAttribute(self::COLLECTION, 'embedding', new AttributeUpdate(default: ['a', 'b', 'c'])),
+            fn (): mixed => $database->updateAttribute(self::COLLECTION, 'embedding', new Update(default: ['a', 'b', 'c'])),
         );
 
         $this->assertSame($before, $this->definitions($database));
-        $this->assertSame([1, 2.5, 3], $database->updateAttribute(self::COLLECTION, 'embedding', new AttributeUpdate(default: [1, 2.5, 3]))->default);
+        $this->assertSame([1, 2.5, 3], $database->updateAttribute(self::COLLECTION, 'embedding', new Update(default: [1, 2.5, 3]))->default);
     }
 
     /**
@@ -271,7 +271,7 @@ final class UpdateAttributeValidationTest extends TestCase
         $before = $this->definitions($database);
 
         try {
-            $database->updateAttribute(self::COLLECTION, 'label', new AttributeUpdate(type: $type));
+            $database->updateAttribute(self::COLLECTION, 'label', new Update(type: $type));
             $this->fail('A type the adapter cannot store must be refused');
         } catch (StructureException $error) {
             $this->assertSame("Unknown attribute type: {$type->value}", $error->getMessage());
@@ -290,7 +290,7 @@ final class UpdateAttributeValidationTest extends TestCase
 
         $this->assertRefused(
             'A relationship attribute cannot change type; use updateRelationship()',
-            fn (): mixed => $database->updateAttribute(self::COLLECTION, 'label', new AttributeUpdate(type: ColumnType::Relationship)),
+            fn (): mixed => $database->updateAttribute(self::COLLECTION, 'label', new Update(type: ColumnType::Relationship)),
         );
     }
 
@@ -304,23 +304,23 @@ final class UpdateAttributeValidationTest extends TestCase
         $limits = $database->getAdapter()->limits();
         $before = $this->definitions($database);
 
-        $this->assertRefused('Size length is required', fn (): mixed => $database->updateAttribute(self::COLLECTION, 'label', new AttributeUpdate(size: 0)));
+        $this->assertRefused('Size length is required', fn (): mixed => $database->updateAttribute(self::COLLECTION, 'label', new Update(size: 0)));
         $this->assertRefused(
             'Max size allowed for string is: '.\number_format($limits->string),
-            fn (): mixed => $database->updateAttribute(self::COLLECTION, 'label', new AttributeUpdate(size: $limits->string + 1)),
+            fn (): mixed => $database->updateAttribute(self::COLLECTION, 'label', new Update(size: $limits->string + 1)),
         );
-        $this->assertRefused('Size length is required', fn (): mixed => $database->updateAttribute(self::COLLECTION, 'label', new AttributeUpdate(type: ColumnType::Varchar, size: 0)));
+        $this->assertRefused('Size length is required', fn (): mixed => $database->updateAttribute(self::COLLECTION, 'label', new Update(type: ColumnType::Varchar, size: 0)));
         $this->assertRefused(
             'Max size allowed for varchar is: '.\number_format($limits->varchar),
-            fn (): mixed => $database->updateAttribute(self::COLLECTION, 'label', new AttributeUpdate(type: ColumnType::Varchar, size: $limits->varchar + 1)),
+            fn (): mixed => $database->updateAttribute(self::COLLECTION, 'label', new Update(type: ColumnType::Varchar, size: $limits->varchar + 1)),
         );
         $signedLimit = $limits->integer / 2;
         $this->assertRefused(
             'Max size allowed for int is: '.\number_format($signedLimit),
-            fn (): mixed => $database->updateAttribute(self::COLLECTION, 'count', new AttributeUpdate(size: (int) $signedLimit + 1)),
+            fn (): mixed => $database->updateAttribute(self::COLLECTION, 'count', new Update(size: (int) $signedLimit + 1)),
         );
-        $this->assertRefused('Size must be empty', fn (): mixed => $database->updateAttribute(self::COLLECTION, 'ratio', new AttributeUpdate(size: 8)));
-        $this->assertRefused('Size must be empty', fn (): mixed => $database->updateAttribute(self::COLLECTION, 'flag', new AttributeUpdate(size: 1)));
+        $this->assertRefused('Size must be empty', fn (): mixed => $database->updateAttribute(self::COLLECTION, 'ratio', new Update(size: 8)));
+        $this->assertRefused('Size must be empty', fn (): mixed => $database->updateAttribute(self::COLLECTION, 'flag', new Update(size: 1)));
 
         $this->assertSame($before, $this->definitions($database));
     }
@@ -335,14 +335,14 @@ final class UpdateAttributeValidationTest extends TestCase
         $before = $this->definitions($database);
 
         if (! $database->getAdapter()->supports(Capability::Objects)) {
-            $this->assertRefused('Object attributes are not supported', fn (): mixed => $database->updateAttribute(self::COLLECTION, 'label', new AttributeUpdate(type: ColumnType::Object, size: 0)));
+            $this->assertRefused('Object attributes are not supported', fn (): mixed => $database->updateAttribute(self::COLLECTION, 'label', new Update(type: ColumnType::Object, size: 0)));
             $this->assertSame($before, $this->definitions($database));
 
             return;
         }
 
-        $this->assertRefused('Size must be empty for object attributes', fn (): mixed => $database->updateAttribute(self::COLLECTION, 'label', new AttributeUpdate(type: ColumnType::Object)));
-        $this->assertRefused('Object attributes cannot be arrays', fn (): mixed => $database->updateAttribute(self::COLLECTION, 'label', new AttributeUpdate(type: ColumnType::Object, size: 0, array: true)));
+        $this->assertRefused('Size must be empty for object attributes', fn (): mixed => $database->updateAttribute(self::COLLECTION, 'label', new Update(type: ColumnType::Object)));
+        $this->assertRefused('Object attributes cannot be arrays', fn (): mixed => $database->updateAttribute(self::COLLECTION, 'label', new Update(type: ColumnType::Object, size: 0, array: true)));
         $this->assertSame($before, $this->definitions($database));
     }
 
@@ -355,11 +355,11 @@ final class UpdateAttributeValidationTest extends TestCase
         $database = $this->database($adapter());
 
         foreach ([ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon] as $spatial) {
-            $this->assertRefused('Spatial attributes are not supported', fn (): mixed => $database->updateAttribute(self::COLLECTION, 'label', new AttributeUpdate(type: $spatial, size: 0)));
+            $this->assertRefused('Spatial attributes are not supported', fn (): mixed => $database->updateAttribute(self::COLLECTION, 'label', new Update(type: $spatial, size: 0)));
         }
         $this->assertRefused(
             'Vector types are not supported by the current database',
-            fn (): mixed => $database->updateAttribute(self::COLLECTION, 'label', new AttributeUpdate(type: ColumnType::Vector, size: 3)),
+            fn (): mixed => $database->updateAttribute(self::COLLECTION, 'label', new Update(type: ColumnType::Vector, size: 3)),
         );
     }
 
@@ -395,7 +395,7 @@ final class UpdateAttributeValidationTest extends TestCase
         $this->assertRefused($message, fn (): mixed => $database->updateAttribute(
             self::COLLECTION,
             'embedding',
-            new AttributeUpdate(
+            new Update(
                 size: $size,
                 default: \array_key_exists('default', $change) ? $change['default'] : Unchanged::Value,
                 array: $array,
@@ -413,7 +413,7 @@ final class UpdateAttributeValidationTest extends TestCase
     {
         $database = $this->database($adapter());
 
-        $updated = $database->updateAttribute(self::COLLECTION, 'occurredAt', new AttributeUpdate(filters: []));
+        $updated = $database->updateAttribute(self::COLLECTION, 'occurredAt', new Update(filters: []));
 
         $this->assertSame(['datetime'], $updated->filters);
         $this->assertSame(['datetime'], $this->definitions($database)['occurredAt']['filters']);
@@ -456,7 +456,7 @@ final class UpdateAttributeValidationTest extends TestCase
         $before = $this->definitions($database);
 
         try {
-            $database->updateAttribute(self::COLLECTION, 'label', new AttributeUpdate(size: 128));
+            $database->updateAttribute(self::COLLECTION, 'label', new Update(size: 128));
             $this->fail('an update past the row width limit must be refused');
         } catch (LimitException $error) {
             $this->assertSame('Row width limit reached. Cannot update attribute.', $error->getMessage());
@@ -477,7 +477,7 @@ final class UpdateAttributeValidationTest extends TestCase
         $before = $this->definitions($database);
 
         try {
-            $database->updateAttribute(self::COLLECTION, 'label', new AttributeUpdate(size: 128));
+            $database->updateAttribute(self::COLLECTION, 'label', new Update(size: 128));
             $this->fail('an update the adapter does not apply must be refused');
         } catch (RefusedException $error) {
             $this->assertSame('Failed to update attribute', $error->getMessage());
@@ -596,7 +596,7 @@ final class UpdateAttributeValidationTest extends TestCase
         $database = $this->database($this->vectorMemory());
         $database->createAttribute(self::COLLECTION, Attribute::vector(key: 'embedding', dimensions: 3));
 
-        $updated = $database->updateAttribute(self::COLLECTION, 'embedding', new AttributeUpdate(default: [0.5, 1.5, 2.5]));
+        $updated = $database->updateAttribute(self::COLLECTION, 'embedding', new Update(default: [0.5, 1.5, 2.5]));
 
         $this->assertSame(ColumnType::Vector, $updated->type);
         $this->assertSame([0.5, 1.5, 2.5], $updated->default);

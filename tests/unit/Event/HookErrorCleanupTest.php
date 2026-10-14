@@ -18,8 +18,8 @@ use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Permission;
 use Utopia\Database\Relationship;
+use Utopia\Database\Relationship\Update;
 use Utopia\Database\RelationshipDeleteAction;
-use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
 
@@ -81,7 +81,7 @@ final class HookErrorCleanupTest extends TestCase
 
         $this->assertInstanceOf(
             TypeError::class,
-            $this->failureOf(fn () => $database->updateRelationship('parent', 'children', new RelationshipUpdate(twoWayKey: 'owner'))),
+            $this->failureOf(fn () => $database->updateRelationship('parent', 'children', new Update(twoWayKey: 'owner'))),
         );
 
         $owner = $database->getDocument('child', 'member')->getAttribute('owner');

@@ -1,8 +1,10 @@
 <?php
 
-namespace Utopia\Database;
+namespace Utopia\Database\Relationship;
 
-final readonly class RelationshipUpdate
+use Utopia\Database\RelationshipDeleteAction;
+
+final readonly class Update
 {
     public function __construct(
         public ?string $key = null,

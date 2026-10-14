@@ -3,6 +3,7 @@
 namespace Utopia\Database;
 
 use Utopia\Database\Exception\Relationship as RelationshipException;
+use Utopia\Database\Relationship\Update;
 use Utopia\Query\Schema\ForeignKeyAction;
 
 final readonly class Relationship
@@ -71,7 +72,7 @@ final readonly class Relationship
         return new self($relatedCollection, RelationshipType::ManyToMany, $twoWay, $key, $twoWayKey, $onDelete);
     }
 
-    public function apply(RelationshipUpdate $update): self
+    public function apply(Update $update): self
     {
         return new self(
             $this->relatedCollection,

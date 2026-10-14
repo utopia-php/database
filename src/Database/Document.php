@@ -526,6 +526,8 @@ class Document extends ArrayObject
      * Remove Attribute.
      *
      * Method for removing a specific field attribute
+     *
+     * @phpstan-impure
      */
     public function removeAttribute(string $key): static
     {

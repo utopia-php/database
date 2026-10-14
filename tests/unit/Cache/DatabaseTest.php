@@ -12,11 +12,11 @@ use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
 use Utopia\Database\Adapter\Pool;
 use Utopia\Database\Attribute;
-use Utopia\Database\AttributeUpdate;
+use Utopia\Database\Attribute\Update as AttributeUpdate;
 use Utopia\Database\Cache\Query as ResultCache;
 use Utopia\Database\Cache\Scope;
 use Utopia\Database\Collection;
-use Utopia\Database\CollectionUpdate;
+use Utopia\Database\Collection\Update as CollectionUpdate;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
@@ -852,7 +852,6 @@ final class DatabaseTest extends TestCase
             namespace: $adapter->getNamespace(),
             tenant: $adapter->getTenant(),
             name: $database->getCacheName(),
-            writerTimeout: $database->getCacheWriterTimeout(),
         );
     }
 

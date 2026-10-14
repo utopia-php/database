@@ -13,7 +13,7 @@ use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
-use Utopia\Database\CollectionUpdate;
+use Utopia\Database\Collection\Update;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -106,7 +106,7 @@ final class CollectionGuardsTest extends TestCase
 
         $database->setTenant(self::TENANT);
         try {
-            $database->updateCollection(self::COLLECTION, new CollectionUpdate(permissions: [Permission::read(Role::user('intruder'))], documentSecurity: true));
+            $database->updateCollection(self::COLLECTION, new Update(permissions: [Permission::read(Role::user('intruder'))], documentSecurity: true));
             $this->fail('a tenant must not change a collection it does not own');
         } catch (NotFoundException $error) {
             $this->assertSame('Collection not found', $error->getMessage());

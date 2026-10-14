@@ -3,8 +3,8 @@
 namespace Utopia\Database\Adapter\Feature;
 
 use Utopia\Database\Relationship;
+use Utopia\Database\Relationship\Update;
 use Utopia\Database\RelationshipSide;
-use Utopia\Database\RelationshipUpdate;
 
 /**
  * Every relationship is given from the side of $collection, with both keys resolved.
@@ -19,7 +19,7 @@ interface Relationships
     /**
      * Rename the stored keys of a relationship as $update says, from the side of $collection that $side names.
      */
-    public function updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, RelationshipUpdate $update): bool;
+    public function updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, Update $update): bool;
 
     /**
      * Drop the storage of a relationship, from the side of $collection that $side names.

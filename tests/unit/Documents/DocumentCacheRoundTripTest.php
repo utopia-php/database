@@ -12,7 +12,7 @@ use Tests\Unit\Support\UncachedTwin;
 use Utopia\Cache\Cache;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
-use Utopia\Database\CollectionUpdate;
+use Utopia\Database\Collection\Update;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Permission;
@@ -262,8 +262,8 @@ final class DocumentCacheRoundTripTest extends TestCase
         $this->assertTrue($database->getCollection('logs')->getAttribute('documentSecurity'));
 
         $uncached = UncachedTwin::of($database);
-        $uncached->updateCollection('webhooks', new CollectionUpdate(permissions: [Permission::read(Role::any())], documentSecurity: false));
-        $uncached->updateCollection('logs', new CollectionUpdate(permissions: [Permission::read(Role::any())], documentSecurity: false));
+        $uncached->updateCollection('webhooks', new Update(permissions: [Permission::read(Role::any())], documentSecurity: false));
+        $uncached->updateCollection('logs', new Update(permissions: [Permission::read(Role::any())], documentSecurity: false));
         $this->assertTrue($database->getCollection('webhooks')->getAttribute('documentSecurity'), 'A definition written without this cache leaves the cached definition in place');
 
         $database->purgeCachedCollection(Database::METADATA);

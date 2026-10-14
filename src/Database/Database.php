@@ -56,7 +56,6 @@ class Database
     use Trait\Cursors;
     use Trait\Databases;
     use Trait\Documents;
-    use Trait\Fractions;
     use Trait\Indexes;
     use Trait\Relationships;
     use Trait\Transactions;
@@ -243,6 +242,11 @@ class Database
      */
     protected array $nestedHooks = [];
 
+    /**
+     * @var list<Hook\Queries>
+     */
+    protected array $queryHooks = [];
+
     /** @var Value<bool>|null Whether every lifecycle hook is silenced. */
     private ?Value $silenced = null;
 
@@ -282,8 +286,8 @@ class Database
     /** @var Value<bool>|null */
     private ?Value $grantChecking = null;
 
-    /** @var Value<bool>|null */
-    private ?Value $fractionRounding = null;
+    /** @var Value<bool>|null Whether {@see Hook\Queries} hooks rewrite the queries of reads. */
+    private ?Value $rewriting = null;
 
     protected ?Relationships $relationshipHook = null;
 
@@ -1069,14 +1073,6 @@ class Database
     }
 
     /**
-     * @internal
-     */
-    public function getRelationshipHook(): ?Relationships
-    {
-        return $this->relationshipHook;
-    }
-
-    /**
      * Set whether to preserve original date values instead of overwriting with current timestamps.
      *
      * @return $this
@@ -1171,8 +1167,8 @@ class Database
 
     /**
      * Set whether, while authorization is enabled, a related document given as a document to createDocument(),
-     * createDocuments(), updateDocument(), upsertDocument(), upsertDocuments(), authorizeCreate() or authorizeUpdate()
-     * may only add permissions for roles the caller holds, as deep as the write relates it. Permissions it already
+     * createDocuments(), updateDocument(), upsertDocument(), upsertDocuments(), authorizeCreate(), authorizeUpdate()
+     * or authorizeGrants() may only add permissions for roles the caller holds, as deep as the write relates it. Permissions it already
      * has may be sent back, and permissions it inherits from its parent are never checked. Malformed permissions
      * throw a structure exception and an unheld role an authorization exception, before anything is written.
      * While it is on, updateDocuments() refuses a related document given as a document with a relationship
@@ -1209,42 +1205,6 @@ class Database
     public function withCheckGrants(bool $check, callable $callback): mixed
     {
         return $this->grantChecking()->with($check, $callback);
-    }
-
-    /**
-     * Set whether a fractional amount or limit on a single-valued integer attribute is stored as the adapter's
-     * engine stored it on database 7.4.1 (see Adapter::arithmetic()), instead of being refused. This covers
-     * increaseDocumentAttribute() and decreaseDocumentAttribute(), whose float change returns its exact result, and
-     * the numeric operators given to updateDocument(), updateDocuments(), upsertDocument() and upsertDocuments(),
-     * each answered from the stored value it changes, read locked in the write's transaction. Fractional items
-     * added to an integer array are cut toward zero. What the engine refused stays refused.
-     *
-     * @return $this
-     */
-    public function setRoundFractions(bool $round): static
-    {
-        $this->fractionRounding()->set($round);
-
-        return $this;
-    }
-
-    public function isRoundingFractions(): bool
-    {
-        return $this->fractionRounding()->get();
-    }
-
-    /**
-     * Run the callback with fractions on integer attributes rounded or refused for the calling coroutine and the
-     * coroutines it starts.
-     *
-     * @template T
-     *
-     * @param  callable(): T  $callback
-     * @return T
-     */
-    public function withRoundFractions(bool $round, callable $callback): mixed
-    {
-        return $this->fractionRounding()->with($round, $callback);
     }
 
     /**
@@ -1433,6 +1393,22 @@ class Database
     }
 
     /**
+     * Run the callback with no {@see Hook\Queries} hook rewriting the reads it makes, for the calling coroutine and
+     * the coroutines it starts. A write makes its own reads under it, so it sees the documents as they are stored.
+     *
+     * @internal
+     *
+     * @template T
+     *
+     * @param  callable(): T  $callback
+     * @return T
+     */
+    public function skipQueryHooks(callable $callback): mixed
+    {
+        return $this->rewriting()->with(false, $callback);
+    }
+
+    /**
      * Register a hook into the database pipeline.
      *
      * Dispatches by type:
@@ -1441,6 +1417,7 @@ class Database
      * - {@see Hook\Decorator} — document transformation on read/write results
      * - {@see Hook\Relationships} — relationship resolution and mutation
      * - {@see Hook\Nested} — preparation of each nested related document before a write relates it, run in registration order
+     * - {@see Hook\Queries} — rewriting of a read's queries before it validates, resolves or authorizes them, run in registration order
      * - {@see Hook\Write} — row-level write interception (permissions, tenant)
      * - {@see Hook\Transform} — raw SQL transformation before execution
      * - {@see Invalidator} — the query cache invalidation, replacing the one setQueryCache() made
@@ -1457,6 +1434,7 @@ class Database
             && ! $hook instanceof Hook\Decorator
             && ! $hook instanceof Relationships
             && ! $hook instanceof Hook\Nested
+            && ! $hook instanceof Hook\Queries
             && ! $hook instanceof Hook\Write
             && ! $hook instanceof Transform
         ) {
@@ -1485,6 +1463,10 @@ class Database
 
         if ($hook instanceof Hook\Nested) {
             $this->nestedHooks[] = $hook;
+        }
+
+        if ($hook instanceof Hook\Queries) {
+            $this->queryHooks[] = $hook;
         }
 
         if ($hook instanceof Hook\Write) {
@@ -1516,6 +1498,7 @@ class Database
         $this->lifecycleHooks = \array_values(\array_filter($this->lifecycleHooks, $kept));
         $this->decorators = \array_values(\array_filter($this->decorators, $kept));
         $this->nestedHooks = \array_values(\array_filter($this->nestedHooks, $kept));
+        $this->queryHooks = \array_values(\array_filter($this->queryHooks, $kept));
 
         if ($this->invalidator !== null && ! $kept($this->invalidator)) {
             $this->invalidator = null;
@@ -1684,7 +1667,7 @@ class Database
             columnPermissions: $this->columnPermissions()->get(),
             requestTimestamp: $this->requestTimestamp()->get(),
             checkGrants: $this->grantChecking()->get(),
-            roundFractions: $this->fractionRounding()->get(),
+            rewriting: $this->rewriting()->get(),
         );
     }
 
@@ -1725,8 +1708,8 @@ class Database
      */
     private function withToggles(Snapshot $snapshot, callable $callback): mixed
     {
-        $rounded = fn (): mixed => $this->fractionRounding()->with($snapshot->roundFractions, $callback);
-        $checked = fn (): mixed => $this->grantChecking()->with($snapshot->checkGrants, $rounded);
+        $rewritten = fn (): mixed => $this->rewriting()->with($snapshot->rewriting, $callback);
+        $checked = fn (): mixed => $this->grantChecking()->with($snapshot->checkGrants, $rewritten);
         $timestamped = fn (): mixed => $this->requestTimestamp()->with($snapshot->requestTimestamp, $checked);
         $scoped = fn (): mixed => $this->columnPermissions()->with($snapshot->columnPermissions, $timestamped);
         $deduplicated = fn (): mixed => $this->ignoringDuplicates()->with($snapshot->ignoreDuplicates, $scoped);
@@ -1834,9 +1817,9 @@ class Database
     /**
      * @return Value<bool>
      */
-    private function fractionRounding(): Value
+    private function rewriting(): Value
     {
-        return $this->fractionRounding ??= new Value(false);
+        return $this->rewriting ??= new Value(true);
     }
 
     protected function isIgnoringDuplicates(): bool
@@ -2482,35 +2465,9 @@ class Database
         return $limits->indexes - $limits->defaultIndexes;
     }
 
-    public function getMaxIndexLength(): int
-    {
-        return $this->adapter->limits()->indexLength;
-    }
-
-    public function getMaxVarcharLength(): int
-    {
-        return $this->adapter->limits()->varchar;
-    }
-
     public function getMaxUidLength(): int
     {
         return $this->adapter->limits()->uidLength;
-    }
-
-    /**
-     * A copy, so a caller that modifies it leaves the adapter's limit as it is.
-     */
-    public function getMinDateTime(): NativeDateTime
-    {
-        return clone $this->adapter->limits()->minDateTime;
-    }
-
-    /**
-     * A copy, so a caller that modifies it leaves the adapter's limit as it is.
-     */
-    public function getMaxDateTime(): NativeDateTime
-    {
-        return clone $this->adapter->limits()->maxDateTime;
     }
 
     /**

@@ -8,7 +8,7 @@ use Utopia\Console;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
-use Utopia\Database\CollectionUpdate;
+use Utopia\Database\Collection\Update;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
@@ -165,7 +165,7 @@ trait Collections
      * @throws DatabaseException
      * @throws NotFoundException
      */
-    public function updateCollection(string $collection, CollectionUpdate $update): Collection
+    public function updateCollection(string $collection, Update $update): Collection
     {
         $definition = $this->silent(fn () => $this->getOwnCollection($collection));
 

@@ -649,6 +649,7 @@ class QueryTest extends TestCase
 
         $node->shape();
     }
+
     public function testGroupByTypeKeepsTheOrdersInTheOrderGiven(): void
     {
         $cursor = new Document([Document::ID => 'first']);
@@ -675,4 +676,11 @@ class QueryTest extends TestCase
         Query::groupByType([Query::cursorAfter([Document::ID => 'first'])]);
     }
 
+    public function testGroupByTypeTellsAnAggregationFromADocumentList(): void
+    {
+        $this->assertFalse(Query::groupByType([Query::equal('category', ['news']), Query::orderAsc('views'), Query::limit(2)])->isAggregation());
+        $this->assertFalse(Query::groupByType([])->isAggregation());
+        $this->assertTrue(Query::groupByType([Query::count()])->isAggregation());
+        $this->assertTrue(Query::groupByType([Query::groupBy(['category'])])->isAggregation(), 'a groupBy reads one row per group without an aggregate');
+    }
 }

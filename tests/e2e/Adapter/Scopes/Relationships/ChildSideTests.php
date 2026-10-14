@@ -11,10 +11,10 @@ use Utopia\Database\Document;
 use Utopia\Database\Id;
 use Utopia\Database\Permission;
 use Utopia\Database\Relationship;
+use Utopia\Database\Relationship\Update;
 use Utopia\Database\RelationshipDeleteAction;
 use Utopia\Database\RelationshipSide;
 use Utopia\Database\RelationshipType;
-use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\Role;
 
 trait ChildSideTests
@@ -43,7 +43,7 @@ trait ChildSideTests
 
         [$parents, $children] = $this->createChildSideRelationship($database, $type);
 
-        $updated = $database->updateRelationship($children, 'back', new RelationshipUpdate(key: 'owner', twoWayKey: 'items'));
+        $updated = $database->updateRelationship($children, 'back', new Update(key: 'owner', twoWayKey: 'items'));
 
         $this->assertSame($parents, $updated->relatedCollection);
         $this->assertSame($type, $updated->type);
@@ -77,7 +77,7 @@ trait ChildSideTests
 
         [$parents, $children] = $this->createChildSideRelationship($database, $type);
 
-        $updated = $database->updateRelationship($children, 'back', new RelationshipUpdate(onDelete: RelationshipDeleteAction::Cascade));
+        $updated = $database->updateRelationship($children, 'back', new Update(onDelete: RelationshipDeleteAction::Cascade));
 
         $this->assertSame(RelationshipDeleteAction::Cascade, $updated->onDelete);
         $this->assertSame('back', $updated->key);
@@ -140,7 +140,7 @@ trait ChildSideTests
 
         [$parents, $children] = $this->createOneWayOneToOne($database);
 
-        $updated = $database->updateRelationship($children, 'back', new RelationshipUpdate(key: 'owner', twoWayKey: 'item'));
+        $updated = $database->updateRelationship($children, 'back', new Update(key: 'owner', twoWayKey: 'item'));
 
         $this->assertSame('owner', $updated->key);
         $this->assertSame('item', $updated->twoWayKey);

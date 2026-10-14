@@ -8,8 +8,10 @@ use PDO;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Tests\Unit\Event\HookFixture;
+use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
+use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
@@ -297,6 +299,54 @@ final class QueriesTest extends TestCase
         } catch (QueryException $error) {
             $this->assertSame('Invalid query type: "string". Expected instances of "'.Query::class.'"', $error->getMessage());
         }
+    }
+
+    public function testAQueryThatIsNotAQueryIsRefusedBeforeTheHookIsGivenIt(): void
+    {
+        $database = $this->posts();
+        $recorder = new QueriesRecorder();
+        $database->addHook($recorder);
+
+        try {
+            /** @phpstan-ignore argument.type */
+            $database->find(HookFixture::COLLECTION, ['title']);
+            $this->fail('A query that is not a Query was read');
+        } catch (QueryException $error) {
+            $this->assertSame('Invalid query type: "string". Expected instances of "'.Query::class.'"', $error->getMessage());
+        }
+
+        $this->assertSame([], $recorder->calls);
+    }
+
+    public function testResolveCursorRunsTheHookOnThePairedRowItReadsOverAJoin(): void
+    {
+        $database = $this->joined();
+        $recorder = new QueriesRecorder(self::mapping(self::PUBLIC_THEMES, 'themes'));
+        $database->addHook($recorder);
+
+        $cursor = $database->resolveCursor('tickets', 'k2', CursorDirection::After, [$this->publicThemesJoin(), Query::orderAsc('th.name')]);
+
+        $this->assertSame('second theme', $cursor->getAttribute('th.name'));
+        $this->assertSame([[Event::DocumentFind, 'tickets'], [Event::DocumentFind, 'themes']], $recorder->calls);
+    }
+
+    public function testASelectTheHookAddsToGetDocumentNeitherReadsNorFillsTheCachedDocument(): void
+    {
+        $cache = new MemoryCache();
+        $database = HookFixture::database(new Memory(), new Cache($cache));
+        HookFixture::seed($database, ['first']);
+        $selecting = new QueriesRecorder(QueriesRecorder::adding(Query::select(['title'])));
+
+        $this->assertSame(1, $database->getDocument(HookFixture::COLLECTION, 'first')->getAttribute('views'));
+        $this->assertNotSame([], $cache->store);
+
+        $database->addHook($selecting);
+        $selected = $database->getDocument(HookFixture::COLLECTION, 'first');
+        $database->removeHook($selecting);
+
+        $this->assertSame('first', $selected->getAttribute('title'));
+        $this->assertFalse($selected->offsetExists('views'));
+        $this->assertSame(1, $database->getDocument(HookFixture::COLLECTION, 'first')->getAttribute('views'));
     }
 
     public function testTheHookRunsWhileEventsAreSilenced(): void

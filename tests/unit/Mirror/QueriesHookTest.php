@@ -54,6 +54,25 @@ final class QueriesHookTest extends TestCase
         $this->assertSame([], $hook->calls);
     }
 
+    public function testTheSourceRewritesItsReadsWithALifecycleQueriesHookUntilTheMirrorRemovesIt(): void
+    {
+        $hook = self::hook(true);
+        $source = HookFixture::memory();
+        HookFixture::seed($source, ['first', 'second']);
+        $mirror = new Mirror($source, HookFixture::memory());
+
+        $mirror->addHook($hook);
+
+        $this->assertSame(['first'], self::ids($mirror->getSource()->find(HookFixture::COLLECTION)));
+        $this->assertSame([[Event::DocumentFind, HookFixture::COLLECTION]], $hook->calls);
+
+        $mirror->removeHook($hook);
+
+        $this->assertSame(['first', 'second'], self::ids($mirror->getSource()->find(HookFixture::COLLECTION)));
+        $this->assertSame(['first', 'second'], self::ids($mirror->find(HookFixture::COLLECTION)));
+        $this->assertSame([[Event::DocumentFind, HookFixture::COLLECTION]], $hook->calls);
+    }
+
     public function testTheMirrorReplicatesAWriteWhileALifecycleQueriesHookRewritesTheSourcesReads(): void
     {
         $hook = self::hook(true);

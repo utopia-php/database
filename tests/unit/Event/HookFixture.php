@@ -44,9 +44,9 @@ final class HookFixture
         }
     }
 
-    public static function database(Adapter $adapter): Database
+    public static function database(Adapter $adapter, Cache $cache = new Cache(new None())): Database
     {
-        $database = new Database($adapter, new Cache(new None()));
+        $database = new Database($adapter, $cache);
         $database
             ->setAuthorization(new Authorization())
             ->setDatabase('hooks')

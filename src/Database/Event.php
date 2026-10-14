@@ -47,14 +47,15 @@ enum Event: string
     case IndexDelete = 'index_delete';
 
     /**
-     * The typed event a lifecycle hook receives for this case; All only selects timeouts.
+     * The typed event a lifecycle hook receives for this case. All only selects timeouts, and the
+     * permission cases only label the statements a permissions write runs: neither reaches a hook.
      *
      * @return class-string<Event\Domain>|null
      */
     public function domain(): ?string
     {
         return match ($this) {
-            self::All => null,
+            self::All, self::PermissionsCreate, self::PermissionsRead, self::PermissionsDelete => null,
             self::DatabaseList => Event\Database\Listed::class,
             self::DatabaseCreate => Event\Database\Created::class,
             self::DatabaseUpdate => Event\Database\Updated::class,
@@ -89,9 +90,6 @@ enum Event: string
             self::DocumentCount => Event\Document\Counted::class,
             self::DocumentSum => Event\Document\Summed::class,
             self::DocumentPurge => Event\Document\Purged::class,
-            self::PermissionsCreate => Event\Permission\Created::class,
-            self::PermissionsRead => Event\Permission\Read::class,
-            self::PermissionsDelete => Event\Permission\Deleted::class,
         };
     }
 }

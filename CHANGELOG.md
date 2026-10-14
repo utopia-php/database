@@ -1,5 +1,19 @@
 # Changelog
 
+## 8.1.2
+
+### Removed
+
+- `Database::rawQuery()`. Use `Database::query(new Utopia\Query\Builder\Statement($query, $bindings))`, which runs
+  the same statement under the same authorization guard. `Feature\RawQuery` and the adapters' `rawQuery()` stay.
+- `Database::getRelationshipHook()`. Keep the `Hook\Relationships` given to `addHook()`.
+- `Database::getMaxIndexLength()`, `getMaxVarcharLength()`, `getMinDateTime()` and `getMaxDateTime()`. Read
+  `indexLength`, `varchar`, `minDateTime` and `maxDateTime` from `$database->getAdapter()->limits()`.
+- `Database::getCacheWriterTimeout()`.
+- `Event\Permission\Created`, `Read` and `Deleted`, which `Database` never dispatched. `Event::PermissionsCreate`,
+  `PermissionsRead` and `PermissionsDelete` stay as statement labels; their `domain()` is `null`.
+- `Adapter\SQL\Hook\Permission\AllowNullUid`. Use `Adapter\SQL\Hook\Column\AllowNull`, which it wrapped.
+
 ## 8.1.1
 
 ### Added

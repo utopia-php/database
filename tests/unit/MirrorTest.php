@@ -12,6 +12,7 @@ use RuntimeException;
 use Swoole\Runtime;
 use Tests\Unit\Event\RecordingLifecycle;
 use Tests\Unit\Support\CountingMemory;
+use Tests\Unit\Support\ScopedDatabase;
 use Throwable;
 use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Cache\Adapter\None;
@@ -494,14 +495,14 @@ class MirrorTest extends TestCase
         ];
         yield 'skipRelationships' => [
             static fn (Mirror $mirror, Closure $callback): mixed => $mirror->skipRelationships($callback),
-            static fn (Database $database): mixed => $database->getRelationshipHook()?->isEnabled(),
+            static fn (Database $database): mixed => $database->snapshot()->relationships,
             false,
             true,
             true,
         ];
         yield 'skipRelationshipsExistCheck' => [
             static fn (Mirror $mirror, Closure $callback): mixed => $mirror->skipRelationshipsExistCheck($callback),
-            static fn (Database $database): mixed => $database->getRelationshipHook()?->shouldCheckExist(),
+            static fn (Database $database): mixed => $database->snapshot()->existCheck,
             false,
             true,
             true,
@@ -982,14 +983,12 @@ class MirrorTest extends TestCase
 
     public function testCacheWriterTimeoutReachesSourceAndDestination(): void
     {
-        [$mirror, $source, $destination] = $this->pair();
+        $source = new ScopedDatabase(new Memory(), new Cache(new None()));
+        $destination = new ScopedDatabase(new Memory(), new Cache(new None()));
 
-        $mirror->setCacheWriterTimeout(30);
+        (new Mirror($source, $destination))->setCacheWriterTimeout(30);
 
-        $this->assertSame(
-            [30, 30, 30],
-            [$mirror->getCacheWriterTimeout(), $source->getCacheWriterTimeout(), $destination->getCacheWriterTimeout()],
-        );
+        $this->assertSame([30, 30], [$source->getScope()->writerTimeout, $destination->getScope()->writerTimeout]);
     }
 
     /**

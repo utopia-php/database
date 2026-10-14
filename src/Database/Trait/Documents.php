@@ -118,11 +118,6 @@ trait Documents
         return $this;
     }
 
-    public function getCacheWriterTimeout(): int
-    {
-        return $this->cacheWriterTimeout;
-    }
-
     private function getNumericResult(Attribute $attribute, mixed $current, int|float|string $value, bool $increase): int|float|string
     {
         $current ??= 0;
@@ -4324,29 +4319,6 @@ trait Documents
         }
 
         return $results;
-    }
-
-    /**
-     * Execute a raw query bypassing the query builder. The statement runs as written, with no
-     * permission or tenant scope, so like from(), query() and mutate() it runs only while authorization is
-     * disabled: inside getAuthorization()->skip().
-     *
-     * @param string $query The raw query string
-     * @param array<mixed> $bindings Parameter bindings
-     * @return array<Document>
-     *
-     * @throws AuthorizationException While authorization is enabled
-     * @throws DatabaseException
-     */
-    public function rawQuery(string $query, array $bindings = []): array
-    {
-        $this->requireSkippedAuthorization();
-
-        if (! $this->adapterHasFeature(Feature\RawQuery::class)) {
-            throw new DatabaseException('Raw queries are not supported by this adapter');
-        }
-
-        return $this->adapter->rawQuery($query, $bindings);
     }
 
     /**

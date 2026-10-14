@@ -1,3 +1,17 @@
+# Upgrading from 8.1.1 to 8.1.2
+
+8.1.2 removes public API that nothing outside the library called. Each removal has a replacement:
+
+| Removed | Use instead |
+|---|---|
+| `Database::rawQuery(string $query, array $bindings = []): array` | `Database::query(new \Utopia\Query\Builder\Statement($query, $bindings))`, inside `getAuthorization()->skip()` as before. It returns a list of `Document`. The adapter's `Feature\RawQuery::rawQuery()` stays. |
+| `Database::getRelationshipHook()` (internal) | Keep the `Hook\Relationships` you pass to `addHook()` |
+| `Database::getMaxIndexLength()`, `Database::getMaxVarcharLength()` | `$database->getAdapter()->limits()->indexLength`, `->varchar` |
+| `Database::getMinDateTime()`, `Database::getMaxDateTime()` | `$database->getAdapter()->limits()->minDateTime`, `->maxDateTime`; clone the `DateTime` before modifying it |
+| `Database::getCacheWriterTimeout()` | The value given to `setCacheWriterTimeout()`; without one, `Cache\Scope::WRITER_TIMEOUT` (3600 seconds) |
+| `Event\Permission\Created`, `Event\Permission\Read`, `Event\Permission\Deleted` | None: `Database` never dispatched them. `Event::PermissionsCreate`, `PermissionsRead` and `PermissionsDelete` stay as the labels of the statements a permissions write runs, for transforms and timeouts, and their `domain()` is `null`. |
+| `Adapter\SQL\Hook\Permission\AllowNullUid` | `Adapter\SQL\Hook\Column\AllowNull`, which takes the same `(Filter $filter, string $column, string $quoteCharacter)` arguments |
+
 # Upgrading from 8.0 to 8.1
 
 8.1 is a minor release. Every change in it is additive or opt-in, with one exception: it runs
@@ -978,7 +992,7 @@ Each event's payload is a typed property; 7.x passed arrays, strings, `false` an
 | `document_aggregate` | `Event\Document\Aggregated` | `collection`, `rows` |
 | `document_count`, `document_sum` | `Event\Document\Counted`, `Summed` | `collection`, `count`; `attribute`, `sum` |
 | `document_purge` | `Event\Document\Purged` | `collection`, `id` |
-| `permissions_create`, `permissions_read`, `permissions_delete` | `Event\Permission\Created`, `Read`, `Deleted` | `collection`, `document`, `permissions` |
+| `permissions_create`, `permissions_read`, `permissions_delete` | None: they only label the statements a permissions write runs, for transforms and timeouts, and reach no hook | |
 
 `Event::domain()` names the class of a case. New events: `upsertDocument()` fires `document_upsert` (not
 `documents_upsert`), `renameAttribute()` fires `attribute_rename` (it fired `attribute_update`), `createIndexes()`
@@ -1134,8 +1148,8 @@ method as a no-op, so a hook overrides only what it needs:
 - The protected `trigger(string $event, mixed $args = null)` is removed. Event dispatch (`listens()`, `dispatch()`)
   is internal: register a `Hook\Lifecycle` to act on events.
 - The protected `createDocumentInstance()` is `newDocument()`.
-- `casting()` and `applySelectFiltersToDocuments()` are internal, and so are `getRelationshipHook()` and the public
-  helpers of `Hook\Relationships` that `Database` calls.
+- `casting()` and `applySelectFiltersToDocuments()` are internal, and so are the public helpers of
+  `Hook\Relationships` that `Database` calls.
 - `increaseDocumentAttribute()` and `decreaseDocumentAttribute()` accept numeric strings as well
   (`string|int|float`), for unsigned 64-bit values, so an override has to widen its parameter types.
 - `Database` is now composed of the traits in `Utopia\Database\Trait`. Its public methods are unchanged by that.
@@ -1817,9 +1831,8 @@ The 16 per-limit getters of `Adapter` are one `Adapter\Limits` value, `$adapter-
 | `getIdAttributeType()` | `idType` (a `ColumnType`) |
 | `getKeywords()`, `getInternalIndexesKeys()` | `keywords`, `internalIndexKeys` |
 
-`Database` keeps `getLimitForAttributes()`, `getLimitForIndexes()`, `getMaxIndexLength()`, `getMaxVarcharLength()`,
-`getMinDateTime()`, `getMaxDateTime()`, `getIdAttributeType()` and `getMaxUidLength()` (7.x adapters spelled it
-`getMaxUIDLength()`), all read from `limits()`.
+`Database` keeps `getLimitForAttributes()`, `getLimitForIndexes()`, `getIdAttributeType()` and `getMaxUidLength()`
+(7.x adapters spelled it `getMaxUIDLength()`), all read from `limits()`.
 
 `$database->profile(): Adapter\Profile` snapshots the adapter's `limits`, `capabilities`, `features`, `sharedTables`
 and `migrating` once per `Database`, and is rebuilt by `setSharedTables()`, `setMigrating()` and `setSchemaless()`.
@@ -2432,9 +2445,9 @@ from those builds changed before 8.0.0; none of them exists in 7.x.
 | `Hook\Write` extending `Utopia\Query\Hook\Write`, its row-level `after*(string $table, ...)` methods, the closure-bag write context, `Document::SKIP_PERMISSIONS_UPDATE` | `decorateRow(array $row, Hook\RowMetadata $metadata)`, the document-level `afterDocument*()` methods and `Hook\WriteContext::skipPermissions()` |
 | `new Relationships($database)` | `new Relationships()`, attached by `addHook()` |
 | `Adapter::hasTenantHook()`, `hasPermissionHook()` | Removed |
-| `Hook\PermissionFilter`, `PermissionJoinFilter`, `PermissionAllowNullUid`, `OuterJoinPermissionFilter` | `Adapter\SQL\Hook\Permission\Filter`, `Join`, `AllowNullUid`, `OuterJoin` |
+| `Hook\PermissionFilter`, `PermissionJoinFilter`, `OuterJoinPermissionFilter` | `Adapter\SQL\Hook\Permission\Filter`, `Join`, `OuterJoin` |
 | `Hook\TenantFilter`, `RawTenantFilter`, `OuterJoinTenantFilter`, `RawOuterJoinTenantFilter` | `Adapter\SQL\Hook\Tenant\Filter`, `Raw`, `OuterJoin`, `RawOuterJoin` |
-| `Hook\JoinChain`, `OuterJoinChainFilter`, `AllowNullColumn` | `Adapter\SQL\Hook\Join\Chain`, `Join\OuterChain`, `Column\AllowNull` |
+| `Hook\JoinChain`, `OuterJoinChainFilter`, `AllowNullColumn`, `PermissionAllowNullUid` | `Adapter\SQL\Hook\Join\Chain`, `Join\OuterChain`, `Column\AllowNull`, `Column\AllowNull` |
 | `Hook\Read`, `Hook\Mongo\PermissionFilter`, `Hook\Mongo\TenantFilter` | `Hook\Mongo\Read`, `Hook\Mongo\Permission`, `Hook\Mongo\Tenant` |
 | `Traits\`, `Builder\PostgreSQL`, `State\Scope` | `Trait\`, `Builder\Postgres`, `State\Frame` |
 | `Validator\Query\JoinedCollection`, `JoinedAttributes` | `Validator\Query\Joined\Collection`, `Joined\Attributes` |
@@ -2676,7 +2689,7 @@ A fulltext `search()` only filters, as in 7.x. A search read is ordered by its e
 `$sequence`, and a cursor pages along them. Results are not ranked by relevance and carry no `_relevance`
 attribute.
 
-### Query builder: `from()`, `query()`, `mutate()` and `rawQuery()`
+### Query builder: `from()`, `query()` and `mutate()`
 
 `Database::from($collection)` returns a utopia-php/query builder over the collection's table.
 `Database::query($statement)` runs a read as written and returns a list of `Document`, and
@@ -2689,8 +2702,8 @@ write no permission rows, skip validation and run no hooks or events (a `Mirror`
 `Utopia\Database\Exception\Authorization` unless authorization is disabled: build and run them inside
 `$database->getAuthorization()->skip(fn () => ...)`.
 
-`Database::rawQuery($sql, $bindings)` is the same escape hatch for SQL you write yourself: it runs the statement as
-written, checks no permissions, applies no tenant scope (under shared tables it reads every tenant's rows unless the
+For SQL you write yourself, pass `query()` a `Utopia\Query\Builder\Statement`, `new Statement($sql, $bindings)`: it
+runs the statement as written, checks no permissions, applies no tenant scope (under shared tables it reads every tenant's rows unless the
 SQL limits them) and runs no hooks or events. It throws `Utopia\Database\Exception\Authorization` unless
 authorization is disabled: run it inside `$database->getAuthorization()->skip(fn () => ...)`.
 
@@ -2759,7 +2772,7 @@ back.
   Each `Utopia\Database\Profiler\Log` carries the statement's bound values (`bindings`), the collection it
   reads (`collection`, for the statements `getDocument()`, `find()`, `count()` and `sum()` run) and the operation
   that ran it (`operation`, the `Utopia\Database\Event` value, such as `document_find`). Statements that bind by
-  hand (`rawQuery()`, schema changes) log no bindings, and writes log no collection. `Profiler\Log` has no
+  hand (`query()`, `mutate()`, schema changes) log no bindings, and writes log no collection. `Profiler\Log` has no
   `explainPlan`.
 - **Capability questions behind a `Pool`.** `supports()`, `capabilities()` and `hasFeature()` ask a connection the
   first time and are then answered without one, for every handle built over the same `Utopia\Pools\Pool`.
@@ -2775,7 +2788,7 @@ back.
 - **Read/write splitting (`Adapter\ReadWritePool`).** Reads go to the read pool and writes to the write pool. After
   a write returns, or a `withTransaction()` block finishes, reads stay on the write pool for the sticky window
   (`setStickyDuration()`, default 5000 ms; `setSticky(false)` turns it off), so a caller reads its own writes.
-  `getDocument(..., forUpdate: true)` and `rawQuery()` always use the write pool, since a locking read must run on
+  `getDocument(..., forUpdate: true)` and `query()` always use the write pool, since a locking read must run on
   the primary and raw SQL may write; both also open the sticky window. So do the reads that decide a write: the
   batch `updateDocuments()` and `deleteDocuments()` select, and the document `upsertDocuments()` compares against. Calls that touch no data (capability checks
   such as `supports()`, `capabilities()` and `hasFeature()`, `limits()`, value casting, and configuration such as

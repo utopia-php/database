@@ -126,8 +126,8 @@ final class AttachTest extends TestCase
             $this->assertSame('This relationships hook is already attached to another database; attach a clone of it instead', $error->getMessage());
         }
 
-        $this->assertSame($hook, $first->getRelationshipHook());
-        $this->assertNull($second->getRelationshipHook());
+        $this->assertTrue(self::relatesThrough($first, $hook));
+        $this->assertFalse(self::relatesThrough($second, $hook));
     }
 
     public function testTheRelationshipsHookCanBeAddedAgainToItsOwnDatabase(): void
@@ -137,7 +137,7 @@ final class AttachTest extends TestCase
 
         $database->addHook($hook)->addHook($hook);
 
-        $this->assertSame($hook, $database->getRelationshipHook());
+        $this->assertTrue(self::relatesThrough($database, $hook));
     }
 
     public function testACloneOfAnAttachedRelationshipsHookAttachesToAnotherDatabase(): void
@@ -150,8 +150,13 @@ final class AttachTest extends TestCase
         $clone = clone $hook;
         $second->addHook($clone);
 
-        $this->assertSame($hook, $first->getRelationshipHook());
-        $this->assertSame($clone, $second->getRelationshipHook());
+        $this->assertTrue(self::relatesThrough($first, $hook));
+        $this->assertTrue(self::relatesThrough($second, $clone));
+        $this->assertFalse(self::relatesThrough($second, $hook));
     }
 
+    private static function relatesThrough(Database $database, Relationships $hook): bool
+    {
+        return $hook->withEnabled(false, static fn (): bool => ! $database->snapshot()->relationships);
+    }
 }

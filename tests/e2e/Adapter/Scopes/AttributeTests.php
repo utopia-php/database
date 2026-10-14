@@ -1835,7 +1835,6 @@ trait AttributeTests
 
         if ($database->getAdapter()->supports(Capability::IndexArray)) {
             if ($database->getAdapter()->supports(Capability::DefinedAttributes) && $database->getAdapter()->limits()->indexLength > 0) {
-                // If getMaxIndexLength() > 0 We clear length for array attributes
                 $database->createIndex($collection, Index::key(key: 'indx1', attributes: ['long_size']));
                 $database->deleteIndex($collection, 'indx1');
                 $database->createIndex($collection, Index::key(key: 'indx2', attributes: ['long_size'], lengths: [1000]));

@@ -852,7 +852,6 @@ final class DatabaseTest extends TestCase
             namespace: $adapter->getNamespace(),
             tenant: $adapter->getTenant(),
             name: $database->getCacheName(),
-            writerTimeout: $database->getCacheWriterTimeout(),
         );
     }
 

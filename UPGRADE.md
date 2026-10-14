@@ -1,3 +1,23 @@
+# Upgrading from 8.1.1 to 8.1.2
+
+## Update models
+
+The update models moved into the namespace of the model they update. Their constructors and fields are unchanged, so
+only the imports change:
+
+| 8.1.1 | 8.1.2 |
+|---|---|
+| `Utopia\Database\AttributeUpdate` | `Utopia\Database\Attribute\Update` |
+| `Utopia\Database\CollectionUpdate` | `Utopia\Database\Collection\Update` |
+| `Utopia\Database\RelationshipUpdate` | `Utopia\Database\Relationship\Update` |
+
+A file that uses more than one of them imports each under an alias, which keeps the call sites unchanged:
+
+```php
+use Utopia\Database\Attribute\Update as AttributeUpdate;
+use Utopia\Database\Relationship\Update as RelationshipUpdate;
+```
+
 # Upgrading from 8.0 to 8.1
 
 8.1 is a minor release. Every change in it is additive or opt-in, with one exception: it runs

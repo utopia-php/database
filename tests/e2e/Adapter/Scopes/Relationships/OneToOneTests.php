@@ -17,9 +17,9 @@ use Utopia\Database\Id;
 use Utopia\Database\Permission;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
+use Utopia\Database\Relationship\Update;
 use Utopia\Database\RelationshipDeleteAction;
 use Utopia\Database\RelationshipType;
-use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\Role;
 use Utopia\Query\Schema\ColumnType;
 
@@ -329,7 +329,7 @@ trait OneToOneTests
         $database->updateRelationship(
             collection: 'person',
             key: 'library',
-            update: new RelationshipUpdate(key: 'newLibrary')
+            update: new Update(key: 'newLibrary')
         );
 
         // Get document with again
@@ -391,7 +391,7 @@ trait OneToOneTests
         $database->updateRelationship(
             collection: 'person',
             key: 'newLibrary',
-            update: new RelationshipUpdate(onDelete: RelationshipDeleteAction::SetNull)
+            update: new Update(onDelete: RelationshipDeleteAction::SetNull)
         );
 
         // Delete parent, no effect on children for one-way
@@ -415,7 +415,7 @@ trait OneToOneTests
         $database->updateRelationship(
             collection: 'person',
             key: 'newLibrary',
-            update: new RelationshipUpdate(onDelete: RelationshipDeleteAction::Cascade)
+            update: new Update(onDelete: RelationshipDeleteAction::Cascade)
         );
 
         // Delete parent, will delete child
@@ -867,7 +867,7 @@ trait OneToOneTests
         $database->updateRelationship(
             'country',
             'city',
-            new RelationshipUpdate(
+            new Update(
                 key: 'newCity',
                 twoWayKey: 'newCountry',
             )
@@ -913,7 +913,7 @@ trait OneToOneTests
         $database->updateRelationship(
             collection: 'country',
             key: 'newCity',
-            update: new RelationshipUpdate(onDelete: RelationshipDeleteAction::SetNull)
+            update: new Update(onDelete: RelationshipDeleteAction::SetNull)
         );
 
         $database->updateDocument('city', 'city1', new Document(['newCountry' => null, '$id' => 'city1']));
@@ -950,7 +950,7 @@ trait OneToOneTests
         $database->updateRelationship(
             collection: 'country',
             key: 'newCity',
-            update: new RelationshipUpdate(onDelete: RelationshipDeleteAction::Cascade)
+            update: new Update(onDelete: RelationshipDeleteAction::Cascade)
         );
 
         // Delete parent, will delete child
@@ -1074,7 +1074,7 @@ trait OneToOneTests
             $database->updateRelationship(
                 collection: 'parent',
                 key: 'children',
-                update: new RelationshipUpdate(key: 'child1')
+                update: new Update(key: 'child1')
             );
             $this->fail('Failed to throw Exception');
         } catch (Exception $e) {
@@ -1085,7 +1085,7 @@ trait OneToOneTests
             $database->updateRelationship(
                 collection: 'parent',
                 key: 'children',
-                update: new RelationshipUpdate(twoWayKey: 'parent')
+                update: new Update(twoWayKey: 'parent')
             );
             $this->fail('Failed to throw Exception');
         } catch (Exception $e) {
@@ -1898,7 +1898,7 @@ trait OneToOneTests
         $this->getDatabase()->updateRelationship(
             collection: 'bulk_delete_person_o2o',
             key: 'bulk_delete_library_o2o',
-            update: new RelationshipUpdate(onDelete: RelationshipDeleteAction::SetNull)
+            update: new Update(onDelete: RelationshipDeleteAction::SetNull)
         );
 
         $person1 = $this->getDatabase()->createDocument('bulk_delete_person_o2o', new Document([
@@ -1946,7 +1946,7 @@ trait OneToOneTests
         $this->getDatabase()->updateRelationship(
             collection: 'bulk_delete_person_o2o',
             key: 'bulk_delete_library_o2o',
-            update: new RelationshipUpdate(onDelete: RelationshipDeleteAction::Cascade)
+            update: new Update(onDelete: RelationshipDeleteAction::Cascade)
         );
 
         $person1 = $this->getDatabase()->createDocument('bulk_delete_person_o2o', new Document([

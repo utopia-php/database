@@ -24,9 +24,9 @@ use Utopia\Database\Operator;
 use Utopia\Database\Permission;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
+use Utopia\Database\Relationship\Update;
 use Utopia\Database\RelationshipSide;
 use Utopia\Database\RelationshipType;
-use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\CursorDirection;
@@ -79,7 +79,7 @@ final class RedisAdapterPathsTest extends TestCase
             new Document(['$id' => 'rex', 'name' => 'Rex']),
         ]]));
 
-        $database->updateRelationship('pets', 'owner', new RelationshipUpdate(key: 'keeper'));
+        $database->updateRelationship('pets', 'owner', new Update(key: 'keeper'));
 
         $pet = $database->getDocument('pets', 'rex');
         $this->assertNull($pet->getAttribute('owner'));
@@ -93,7 +93,7 @@ final class RedisAdapterPathsTest extends TestCase
         $database->createDocument('owners', new Document(['$id' => 'alice', 'name' => 'Alice']));
         $database->createDocument('pets', new Document(['$id' => 'rex', 'name' => 'Rex', 'owner' => 'alice']));
 
-        $database->updateRelationship('owners', 'pets', new RelationshipUpdate(twoWayKey: 'master'));
+        $database->updateRelationship('owners', 'pets', new Update(twoWayKey: 'master'));
 
         $pet = $database->getDocument('pets', 'rex');
         $this->assertNull($pet->getAttribute('owner'));
@@ -236,7 +236,7 @@ final class RedisAdapterPathsTest extends TestCase
             'books',
             Relationship::manyToMany(relatedCollection: 'authors', twoWay: true, key: 'authors', twoWayKey: 'books'),
             RelationshipSide::Parent,
-            new RelationshipUpdate(key: 'writers'),
+            new Update(key: 'writers'),
         ));
 
         $link = $adapter->getDocument(new Document(['$id' => $junction]), 'link');
@@ -441,7 +441,7 @@ final class RedisAdapterPathsTest extends TestCase
             self::NOTES,
             Relationship::manyToMany(relatedCollection: 'tags', twoWay: true, key: 'tags', twoWayKey: 'notes'),
             RelationshipSide::Parent,
-            new RelationshipUpdate(key: 'labels', twoWayKey: 'entries'),
+            new Update(key: 'labels', twoWayKey: 'entries'),
         ));
 
         $this->assertSame($before, [$this->strings, $this->sets, $this->hashes], 'without stored definitions there is no junction to rename');

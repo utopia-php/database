@@ -13,7 +13,7 @@ use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
-use Utopia\Database\CollectionUpdate;
+use Utopia\Database\Collection\Update;
 use Utopia\Database\Database;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Structure as StructureException;
@@ -55,7 +55,7 @@ final class UpdateCollectionValidationTest extends TestCase
 
         $this->expectException(StructureException::class);
 
-        $database->updateCollection('unvalidated', new CollectionUpdate(permissions: [Permission::read(Role::any())], documentSecurity: true));
+        $database->updateCollection('unvalidated', new Update(permissions: [Permission::read(Role::any())], documentSecurity: true));
     }
 
     /**
@@ -84,7 +84,7 @@ final class UpdateCollectionValidationTest extends TestCase
         ));
 
         $permissions = [Permission::read(Role::any()), Permission::update(Role::any())];
-        $database->updateCollection('books', new CollectionUpdate(permissions: $permissions, documentSecurity: false));
+        $database->updateCollection('books', new Update(permissions: $permissions, documentSecurity: false));
 
         $books = $database->getCollection('books');
         $this->assertSame($permissions, $books->getPermissions());

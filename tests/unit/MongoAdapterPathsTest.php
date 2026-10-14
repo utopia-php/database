@@ -18,8 +18,8 @@ use Utopia\Database\Index;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
 use Utopia\Database\Relationship;
+use Utopia\Database\Relationship\Update;
 use Utopia\Database\RelationshipSide;
-use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Mongo\Client;
@@ -49,8 +49,8 @@ final class MongoAdapterPathsTest extends TestCase
         });
         $adapter = $this->adapter();
 
-        $adapter->updateRelationship('books', Relationship::manyToMany(relatedCollection: 'authors', twoWay: true, key: 'authors', twoWayKey: 'books'), RelationshipSide::Parent, new RelationshipUpdate(key: 'writers'));
-        $adapter->updateRelationship('authors', Relationship::manyToMany(relatedCollection: 'books', twoWay: true, key: 'books', twoWayKey: 'authors'), RelationshipSide::Child, new RelationshipUpdate(key: 'titles'));
+        $adapter->updateRelationship('books', Relationship::manyToMany(relatedCollection: 'authors', twoWay: true, key: 'authors', twoWayKey: 'books'), RelationshipSide::Parent, new Update(key: 'writers'));
+        $adapter->updateRelationship('authors', Relationship::manyToMany(relatedCollection: 'books', twoWay: true, key: 'books', twoWayKey: 'authors'), RelationshipSide::Child, new Update(key: 'titles'));
 
         $this->assertSame([
             [self::NAMESPACE.'__11_22', ['$rename' => ['authors' => 'writers']]],

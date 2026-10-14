@@ -16,9 +16,9 @@ use Utopia\Database\Operator;
 use Utopia\Database\Permission;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
+use Utopia\Database\Relationship\Update;
 use Utopia\Database\RelationshipDeleteAction;
 use Utopia\Database\RelationshipType;
-use Utopia\Database\RelationshipUpdate;
 use Utopia\Database\Role;
 use Utopia\Query\Schema\ColumnType;
 
@@ -297,7 +297,7 @@ trait OneToManyTests
         $database->updateRelationship(
             'artist',
             'albums',
-            new RelationshipUpdate(key: 'newAlbums')
+            new Update(key: 'newAlbums')
         );
 
         // Get document with new relationship key
@@ -335,7 +335,7 @@ trait OneToManyTests
         $database->updateRelationship(
             collection: 'artist',
             key: 'newAlbums',
-            update: new RelationshipUpdate(onDelete: RelationshipDeleteAction::SetNull)
+            update: new Update(onDelete: RelationshipDeleteAction::SetNull)
         );
 
         // Delete parent, set child relationship to null
@@ -356,7 +356,7 @@ trait OneToManyTests
         $database->updateRelationship(
             collection: 'artist',
             key: 'newAlbums',
-            update: new RelationshipUpdate(onDelete: RelationshipDeleteAction::Cascade)
+            update: new Update(onDelete: RelationshipDeleteAction::Cascade)
         );
 
         // Delete parent, will delete child
@@ -784,7 +784,7 @@ trait OneToManyTests
         $database->updateRelationship(
             'customer',
             'accounts',
-            new RelationshipUpdate(
+            new Update(
                 key: 'newAccounts',
                 twoWayKey: 'newCustomer',
             )
@@ -830,7 +830,7 @@ trait OneToManyTests
         $database->updateRelationship(
             collection: 'customer',
             key: 'newAccounts',
-            update: new RelationshipUpdate(onDelete: RelationshipDeleteAction::SetNull)
+            update: new Update(onDelete: RelationshipDeleteAction::SetNull)
         );
 
         // Delete parent, set child relationship to null
@@ -851,7 +851,7 @@ trait OneToManyTests
         $database->updateRelationship(
             collection: 'customer',
             key: 'newAccounts',
-            update: new RelationshipUpdate(onDelete: RelationshipDeleteAction::Cascade)
+            update: new Update(onDelete: RelationshipDeleteAction::Cascade)
         );
 
         // Delete parent, will delete child
@@ -1787,7 +1787,7 @@ trait OneToManyTests
         $this->getDatabase()->updateRelationship(
             collection: 'bulk_delete_person_o2m',
             key: 'bulk_delete_library_o2m',
-            update: new RelationshipUpdate(onDelete: RelationshipDeleteAction::SetNull)
+            update: new Update(onDelete: RelationshipDeleteAction::SetNull)
         );
 
         $person1 = $this->getDatabase()->createDocument('bulk_delete_person_o2m', new Document([
@@ -1841,7 +1841,7 @@ trait OneToManyTests
         $this->getDatabase()->updateRelationship(
             collection: 'bulk_delete_person_o2m',
             key: 'bulk_delete_library_o2m',
-            update: new RelationshipUpdate(onDelete: RelationshipDeleteAction::Cascade)
+            update: new Update(onDelete: RelationshipDeleteAction::Cascade)
         );
 
         $person1 = $this->getDatabase()->createDocument('bulk_delete_person_o2m', new Document([

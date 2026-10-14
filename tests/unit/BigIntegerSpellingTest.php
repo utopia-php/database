@@ -14,7 +14,7 @@ use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\Redis as RedisAdapter;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
-use Utopia\Database\AttributeUpdate;
+use Utopia\Database\Attribute\Update;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -70,11 +70,11 @@ final class BigIntegerSpellingTest extends TestCase
             'type' => self::PERSISTED,
         ]))->type);
 
-        $changed = Attribute::integer(key: 'count')->apply(new AttributeUpdate(type: ColumnType::BigInteger));
+        $changed = Attribute::integer(key: 'count')->apply(new Update(type: ColumnType::BigInteger));
         $this->assertSame(ColumnType::BigInteger, $changed->type);
         $this->assertSame(self::PERSISTED, $changed->toDocument()->getAttribute('type'));
 
-        $changed = $changed->apply(new AttributeUpdate(type: ColumnType::Integer));
+        $changed = $changed->apply(new Update(type: ColumnType::Integer));
         $this->assertSame(ColumnType::Integer, $changed->type);
         $this->assertSame(ColumnType::Integer->value, $changed->toDocument()->getAttribute('type'));
 
@@ -106,8 +106,8 @@ final class BigIntegerSpellingTest extends TestCase
         $database->createAttribute('ledger', Attribute::bigInteger(key: 'single'));
         $database->createAttributes('ledger', [Attribute::bigInteger(key: 'batch')]);
         $database->createAttribute('ledger', Attribute::integer(key: 'widened'));
-        $database->updateAttribute('ledger', 'widened', new AttributeUpdate(type: ColumnType::BigInteger));
-        $database->updateAttribute('ledger', 'single', new AttributeUpdate(required: true));
+        $database->updateAttribute('ledger', 'widened', new Update(type: ColumnType::BigInteger));
+        $database->updateAttribute('ledger', 'single', new Update(required: true));
 
         $this->assertSame([
             'inline' => self::PERSISTED,
@@ -143,7 +143,7 @@ final class BigIntegerSpellingTest extends TestCase
             $this->assertSame(ColumnType::BigInteger, $attribute->type, $attribute->key);
         }
 
-        $database->updateAttribute('ledger', 'total', new AttributeUpdate(required: true));
+        $database->updateAttribute('ledger', 'total', new Update(required: true));
 
         $this->assertSame([
             'total' => self::PERSISTED,

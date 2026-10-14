@@ -1,5 +1,19 @@
 # Changelog
 
+## 8.1.2
+
+### Changed (breaking)
+
+- The update models moved into the namespace of the model they update. Replace the imports:
+
+  | 8.1.1 | 8.1.2 |
+  |---|---|
+  | `Utopia\Database\AttributeUpdate` | `Utopia\Database\Attribute\Update` |
+  | `Utopia\Database\CollectionUpdate` | `Utopia\Database\Collection\Update` |
+  | `Utopia\Database\RelationshipUpdate` | `Utopia\Database\Relationship\Update` |
+
+  Their constructors and fields are unchanged. See [Upgrading from 8.1.1 to 8.1.2](UPGRADE.md#upgrading-from-811-to-812).
+
 ## 8.1.1
 
 ### Added

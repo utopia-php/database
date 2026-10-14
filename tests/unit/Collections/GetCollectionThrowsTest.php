@@ -7,7 +7,7 @@ use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Collection;
-use Utopia\Database\CollectionUpdate;
+use Utopia\Database\Collection\Update;
 use Utopia\Database\Database;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Permission;
@@ -36,7 +36,7 @@ final class GetCollectionThrowsTest extends TestCase
     {
         $this->expectException(NotFoundException::class);
 
-        $this->database()->updateCollection('missing', new CollectionUpdate(documentSecurity: false));
+        $this->database()->updateCollection('missing', new Update(documentSecurity: false));
     }
 
     public function testDeleteCollectionThrowsForAMissingCollection(): void
@@ -59,7 +59,7 @@ final class GetCollectionThrowsTest extends TestCase
         $permissions = [Permission::read(Role::any())];
         $database->createCollection(Collection::create('books', permissions: $permissions, documentSecurity: true));
 
-        $updated = $database->updateCollection('books', new CollectionUpdate(documentSecurity: false));
+        $updated = $database->updateCollection('books', new Update(documentSecurity: false));
 
         $this->assertFalse($updated->documentSecurity());
         $this->assertSame($permissions, $updated->getPermissions());
@@ -73,7 +73,7 @@ final class GetCollectionThrowsTest extends TestCase
         $database->createCollection(Collection::create('books', documentSecurity: false));
         $permissions = [Permission::read(Role::users())];
 
-        $database->updateCollection('books', new CollectionUpdate(permissions: $permissions));
+        $database->updateCollection('books', new Update(permissions: $permissions));
 
         $stored = $database->getCollection('books');
         $this->assertSame($permissions, $stored->getPermissions());

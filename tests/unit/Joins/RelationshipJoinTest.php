@@ -244,10 +244,10 @@ final class RelationshipJoinTest extends TestCase
             ),
             [['Ada', 30], ['Bob', 70]],
         ];
-        yield 'read' => [
+        yield 'ungrouped aggregate' => [
             static fn (Database $database): array => \array_map(
-                static fn (Document $row): ?int => self::integer($row->getAttribute('rows')),
-                $database->read('customers', [$join, Query::count('*', 'rows')]),
+                static fn (array $row): ?int => self::integer($row['rows']),
+                $database->aggregate('customers', [$join, Query::count('*', 'rows')]),
             ),
             [4],
         ];

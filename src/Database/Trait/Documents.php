@@ -4036,36 +4036,6 @@ trait Documents
     }
 
     /**
-     * Read a list the way its queries ask: the documents find() reads, or, when the queries aggregate or group, the
-     * rows aggregate() reads, each as a document.
-     *
-     * @param  array<Query>  $queries
-     * @param  PermissionType  $forPermission  The permission documents are read under; aggregate rows read under the read permission only
-     * @return list<Document>
-     *
-     * @throws DatabaseException
-     * @throws QueryException When aggregate or groupBy queries are read under another permission than read
-     * @throws TimeoutException
-     */
-    public function read(string $collection, array $queries = [], PermissionType $forPermission = PermissionType::Read): array
-    {
-        $this->checkQueryTypes($queries);
-
-        if (! Query::groupByType($queries)->isAggregation()) {
-            return \array_values($this->find($collection, $queries, $forPermission));
-        }
-
-        if ($forPermission !== PermissionType::Read) {
-            throw new QueryException('Aggregate and groupBy queries read under the read permission only, not '.$forPermission->value);
-        }
-
-        return \array_map(
-            static fn (array $row): Document => new Document($row),
-            $this->aggregate($collection, $queries),
-        );
-    }
-
-    /**
      * @param  array<Query>  $queries
      * @param  bool  $aggregate  Whether the queries must aggregate (aggregate()) or must not (find())
      * @return array<Document>
@@ -4116,7 +4086,7 @@ trait Documents
         $cursor = $parsed->cursor;
         $cursorDirection = $parsed->cursorDirection ?? CursorDirection::After;
 
-        $isAggregation = ! empty($aggregations) || ! empty($groupByAttrs);
+        $isAggregation = $parsed->isAggregation();
 
         if ($isAggregation !== $aggregate) {
             throw new QueryException($aggregate
@@ -4923,7 +4893,7 @@ trait Documents
     private function nextPageCheck(string $collection, array $queries): Closure
     {
         $parsed = Query::groupByType($queries);
-        if (($parsed->joins === [] && ! $parsed->distinct) || $parsed->aggregations !== [] || $parsed->groupBy !== []) {
+        if (($parsed->joins === [] && ! $parsed->distinct) || $parsed->isAggregation()) {
             return static function (Document $cursor): void {
             };
         }

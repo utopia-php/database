@@ -148,8 +148,8 @@ trait JoinRelationshipTests
             $this->assertSame(
                 [4],
                 \array_map(
-                    static fn (Document $row): ?int => self::joinRelationshipInteger($row->getAttribute('rows')),
-                    $database->read(self::JOIN_RELATIONSHIP_CUSTOMERS, [$join, Query::count('*', 'rows')]),
+                    static fn (array $row): ?int => self::joinRelationshipInteger($row['rows']),
+                    $database->aggregate(self::JOIN_RELATIONSHIP_CUSTOMERS, [$join, Query::count('*', 'rows')]),
                 ),
             );
             $this->assertSame(

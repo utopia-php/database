@@ -42,10 +42,12 @@ use Utopia\Database\Hook\Lifecycle;
 use Utopia\Database\Hook\Preparation;
 use Utopia\Database\Id;
 use Utopia\Database\Operator;
+use Utopia\Database\Permission;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\RelationshipSide;
 use Utopia\Database\RelationshipType;
+use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization\Input;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Database\Validator\PartialStructure;
@@ -1348,6 +1350,138 @@ trait Documents
      * @throws DatabaseException
      * @throws StructureException
      */
+    /**
+     * The columns the caller may reach on this collection, or null when nothing narrows them.
+     *
+     * Grants only ever add: a grant naming no column reaches every column, one naming a column
+     * reaches that column alone, and a caller's reach is the union over the grants whose role
+     * they hold. Nothing is restricted by default and nothing a grant says takes access away --
+     * a column is simply unreachable until something grants it.
+     *
+     * Null means "do not narrow", which covers the ordinary collection where no grant names a
+     * column at all, and the caller who holds a whole-row grant. A document's own permissions
+     * never name a column, so a row-level grant is whole-row and reaches everything.
+     *
+     * @return list<string>|null
+     *
+     * @throws DatabaseException
+     * @throws StructureException
+     */
+    private function grantedColumns(Document $collection, PermissionType $type): ?array
+    {
+        $definition = Collection::fromDocument($collection);
+
+        // The overwhelming majority of collections name no column anywhere, and pay one
+        // array check rather than a parse of every permission on every read.
+        if ($definition->getAttribute(Collection::COLUMN_PERMISSIONS, []) === []) {
+            return null;
+        }
+
+        $columns = [];
+        $narrowed = false;
+
+        foreach ($definition->declaredPermissions() ?? [] as $permission) {
+            $parsed = Permission::parse($permission);
+
+            if ($parsed->getPermission() !== $type->value) {
+                continue;
+            }
+
+            $role = (new Role($parsed->getRole(), $parsed->getIdentifier(), $parsed->getDimension()))->toString();
+
+            if (! $this->authorization->isValid(new Input($type, [$role]))) {
+                continue;
+            }
+
+            if ($parsed->isForAllColumns()) {
+                return null;
+            }
+
+            $narrowed = true;
+            $columns[] = $parsed->getColumn();
+        }
+
+        return $narrowed ? \array_values(\array_unique($columns)) : null;
+    }
+
+    /**
+     * Refuse a query that names a column the caller may not read.
+     *
+     * Masking the result is not enough on its own: a filter on a column answers questions about
+     * it whether or not the value comes back, and Query::greaterThan() turns that into a binary
+     * search. Ordering leaks the order, and an aggregate leaks the aggregate. So anything that
+     * names a column is settled here, before the adapter sees it.
+     *
+     * @param  array<Query>  $queries
+     *
+     * @throws AuthorizationException
+     * @throws DatabaseException
+     * @throws StructureException
+     */
+    private function assertQueryColumns(Document $collection, array $queries): void
+    {
+        if (! $this->authorization->getStatus()) {
+            return;
+        }
+
+        $granted = $this->grantedColumns($collection, PermissionType::Read);
+
+        if ($granted === null) {
+            return;
+        }
+
+        foreach (self::columnsNamedBy($queries) as $column) {
+            if (! \in_array($column, $granted, true)) {
+                throw new AuthorizationException('Missing "read" permission for column "'.$column.'".');
+            }
+        }
+    }
+
+    /**
+     * Every column a set of queries names, nested ones included.
+     *
+     * @param  array<Query>  $queries
+     * @return list<string>
+     */
+    private static function columnsNamedBy(array $queries): array
+    {
+        $columns = [];
+
+        foreach ($queries as $query) {
+            if (! $query instanceof Query) {
+                continue;
+            }
+
+            if ($query->getMethod() === Method::Select) {
+                foreach ($query->getValues() as $value) {
+                    // '*' names nothing in particular -- it asks for whatever the caller is
+                    // entitled to, which is what a read with no select asks for too. Naming a
+                    // column is what gets refused; asking for the lot is not.
+                    if (\is_string($value) && $value !== '' && $value !== '*' && ! \str_starts_with($value, '$')) {
+                        $columns[] = $value;
+                    }
+                }
+
+                continue;
+            }
+
+            $attribute = $query->getAttribute();
+
+            if ($attribute !== '' && ! \str_starts_with($attribute, '$')) {
+                $columns[] = $attribute;
+            }
+
+            // and/or carry their operands as values
+            $nested = \array_filter($query->getValues(), static fn (mixed $value): bool => $value instanceof Query);
+
+            foreach (self::columnsNamedBy(\array_values($nested)) as $column) {
+                $columns[] = $column;
+            }
+        }
+
+        return \array_values(\array_unique($columns));
+    }
+
     private function assertRowPermissions(Document $document): void
     {
         if (! $this->validation()->get()) {
@@ -4079,6 +4213,8 @@ trait Documents
 
         $relationships = self::relationshipAttributes($collection);
 
+        $this->assertQueryColumns($collection, $queries);
+
         $parsed = Query::groupByType($queries);
         $filters = $parsed->filters;
         $selects = $parsed->selections;
@@ -4431,6 +4567,8 @@ trait Documents
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
+        $this->assertQueryColumns($collection, $queries);
+
         $this->checkQueryTypes($queries);
         $queries = self::resolveOneToManyJoins($collection, $queries);
 
@@ -4487,6 +4625,9 @@ trait Documents
         $this->assertMax($max);
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        // The aggregated column is read too, so it is named alongside the queries.
+        $this->assertQueryColumns($collection, [...$queries, Query::sum($attribute)]);
 
         $this->checkQueryTypes($queries);
         $queries = self::resolveOneToManyJoins($collection, $queries);

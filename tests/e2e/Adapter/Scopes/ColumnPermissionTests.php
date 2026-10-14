@@ -9,10 +9,12 @@ use Utopia\Database\CollectionUpdate;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Filter;
 use Utopia\Database\Mirror;
 use Utopia\Database\Permission;
 use Utopia\Database\PermissionType;
+use Utopia\Database\Query;
 use Utopia\Database\Role;
 
 /**
@@ -577,6 +579,69 @@ trait ColumnPermissionTests
 
         if ($database->getAdapter()->hasFeature(Feature\Upserts::class)) {
             $this->assertTrue($database->getDocument('columnGrantsWrites', 'upserted')->isEmpty());
+        }
+    }
+
+    /**
+     * Asking for everything is not the same as naming a column you may not read.
+     *
+     * select(['*']) and a read with no select are the same request -- "whatever I am entitled
+     * to" -- and neither names a column, so neither is refused; the caller is given what their
+     * grants reach. Naming the column is what gets refused, even alongside one they may read,
+     * because a query that names a column answers questions about it whether or not the value
+     * comes back.
+     */
+    public function testSelectingEverythingIsNotRefusedButNamingAnUngrantedColumnIs(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $authorization = $database->getAuthorization();
+
+        $database->withColumnPermissions(fn () => $database->createCollection(Collection::create(
+            id: 'columnGrantsSelect',
+            attributes: [
+                Attribute::string(key: 'name', size: 64),
+                Attribute::integer(key: 'salary'),
+            ],
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any(), 'name'),
+                Permission::read(Role::team('hr'), 'salary'),
+            ],
+        )));
+
+        $authorization->skip(fn () => $database->createDocument('columnGrantsSelect', new Document([
+            '$id' => 'e1',
+            'name' => 'Ada',
+            'salary' => 120000,
+        ])));
+
+        $previous = $authorization->getRoles();
+        $authorization->cleanRoles();
+        $authorization->addRole(Role::any()->toString());
+
+        try {
+            // Asking for the lot, however it is spelled.
+            $this->assertCount(1, $database->find('columnGrantsSelect', [Query::select(['*'])]));
+            $this->assertCount(1, $database->find('columnGrantsSelect'));
+
+            // Naming only what the grant reaches.
+            $this->assertCount(1, $database->find('columnGrantsSelect', [Query::select(['name'])]));
+
+            // Naming one it does not, even beside one it does.
+            foreach ([['salary'], ['name', 'salary']] as $selection) {
+                try {
+                    $database->find('columnGrantsSelect', [Query::select($selection)]);
+                    $this->fail('Expected select('.\implode(', ', $selection).') to be refused');
+                } catch (AuthorizationException $e) {
+                    $this->assertStringContainsString('Missing "read" permission for column "salary"', $e->getMessage());
+                }
+            }
+        } finally {
+            $authorization->cleanRoles();
+            foreach ($previous as $role) {
+                $authorization->addRole($role);
+            }
         }
     }
 

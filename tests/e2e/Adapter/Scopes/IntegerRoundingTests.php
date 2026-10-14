@@ -128,7 +128,7 @@ trait IntegerRoundingTests
         }
     }
 
-    public function testIntegerRoundingLeavesAFractionalMultiplyOrDivideRefused(): void
+    public function testIntegerRoundingLeavesMultiplyOrDivideByAFractionRefused(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();

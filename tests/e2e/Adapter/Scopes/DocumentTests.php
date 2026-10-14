@@ -10917,7 +10917,7 @@ trait DocumentTests
         return [$result, $statements];
     }
 
-    public function testIncreaseAndDecreaseFloorAndCeilAFractionalBoundOnAnInteger(): void
+    public function testIncreaseAndDecreaseFloorAMaximumAndCeilAMinimumOnAnInteger(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
@@ -10958,7 +10958,7 @@ trait DocumentTests
         }
     }
 
-    public function testIncreaseAndDecreaseRoundAFractionalChangeValueOnAnInteger(): void
+    public function testIncreaseAndDecreaseRoundTheChangeValueOnAnInteger(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();

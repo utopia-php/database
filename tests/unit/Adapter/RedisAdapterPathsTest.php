@@ -393,7 +393,7 @@ final class RedisAdapterPathsTest extends TestCase
         $adapter->createDocument($this->notes(), new Document(['$id' => 'second', '$permissions' => [], 'tags' => ['a', 'b']]));
     }
 
-    public function testAFractionalOperatorLimitIsFlooredBeforeTheWrite(): void
+    public function testAnOperatorLimitWithAFractionIsFlooredBeforeTheWrite(): void
     {
         $database = $this->database();
         $database->create();

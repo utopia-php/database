@@ -5238,7 +5238,7 @@ trait OperatorTests
         $database->deleteCollection($collectionId);
     }
 
-    public function testOperatorWholeFloatLimitHoldsAndAFractionalLimitIsFloored(): void
+    public function testOperatorWholeFloatLimitHoldsAndALimitWithAFractionIsFloored(): void
     {
         $database = static::getDatabase();
 

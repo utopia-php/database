@@ -46,7 +46,7 @@ final class IntegerRoundingTest extends TestCase
     }
 
     #[DataProvider('adapters')]
-    public function testAFractionalAmountIsRoundedHalfAwayFromZero(string $adapter): void
+    public function testAnAmountIsRoundedHalfAwayFromZero(string $adapter): void
     {
         $database = $this->database($adapter);
 
@@ -93,7 +93,7 @@ final class IntegerRoundingTest extends TestCase
     }
 
     #[DataProvider('adapters')]
-    public function testAFractionalMaximumIsFlooredAndAFractionalMinimumCeiled(string $adapter): void
+    public function testAMaximumIsFlooredAndAMinimumCeiled(string $adapter): void
     {
         $database = $this->database($adapter);
 
@@ -204,7 +204,7 @@ final class IntegerRoundingTest extends TestCase
     }
 
     #[DataProvider('refusedOperators')]
-    public function testAFractionalMultiplyDivideModuloOrPowerOnAnIntegerIsRefused(string $adapter, Operator $operator, string $method): void
+    public function testMultiplyDivideModuloOrPowerByAFractionOnAnIntegerIsRefused(string $adapter, Operator $operator, string $method): void
     {
         $database = $this->database($adapter);
 

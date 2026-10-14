@@ -40,6 +40,7 @@ use Utopia\Database\Index;
 use Utopia\Database\Mirror;
 use Utopia\Database\Mirror\Failure;
 use Utopia\Database\Mirror\Filter;
+use Utopia\Database\Operator;
 use Utopia\Database\Permission;
 use Utopia\Database\Query;
 use Utopia\Database\Role;
@@ -246,6 +247,23 @@ class MirrorTest extends TestCase
         $mirror->updateDocument(self::COLLECTION, 'first', new Document(['title' => 'updated']));
 
         $this->assertSame('updated', $this->title($mirror));
+    }
+
+    public function testUpdatesWithAnOperatorThatRoundsToNothingAreNotReplicated(): void
+    {
+        [$mirror, $source, $destination] = $this->pair();
+        $this->seed($mirror);
+        $recorder = new RecordingLifecycle();
+        $destination->addHook($recorder);
+        \usleep(2000);
+
+        $this->assertSame(0, $mirror->updateDocuments(self::COLLECTION, new Document(['views' => Operator::increment(0.4)])));
+
+        $this->assertSame([], $recorder->received(Event::DocumentsUpdate));
+        $this->assertSame(
+            $source->getDocument(self::COLLECTION, 'first')->getUpdatedAt(),
+            $destination->getDocument(self::COLLECTION, 'first')->getUpdatedAt(),
+        );
     }
 
     public function testAnEventThroughTheMirrorInvalidatesTheMirrorQueryCacheAndIsDispatchedOnce(): void

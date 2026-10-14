@@ -1984,12 +1984,11 @@ trait Documents
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        $unchanged = $this->roundOperators($collection, $updates);
-        if (\count($unchanged) === \count($updates)) {
-            return 0;
-        }
-        foreach ($unchanged as $key) {
+        foreach ($this->roundOperators($collection, $updates) as $key) {
             $updates->removeAttribute($key);
+        }
+        if ($updates->isEmpty()) {
+            return 0;
         }
 
         if ($this->checksGrants() && $this->relationshipHook?->isEnabled() && self::holdsRelatedDocument($collection, $updates)) {

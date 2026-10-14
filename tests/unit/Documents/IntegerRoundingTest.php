@@ -221,6 +221,20 @@ final class IntegerRoundingTest extends TestCase
         $this->assertSame(7, $this->stored($database, 'big'));
     }
 
+    #[DataProvider('engines')]
+    public function testUpdatesWithAnOperatorThatRoundsToNothingUpdateNothingWhenGivenAgain(Engine $engine): void
+    {
+        $database = $this->database($engine);
+        $updatedAt = $database->getDocument(self::COLLECTION, self::DOCUMENT)->getUpdatedAt();
+        $updates = new Document(['count' => Operator::increment(0.4)]);
+        \usleep(2000);
+
+        $this->assertSame(0, $database->updateDocuments(self::COLLECTION, $updates));
+        $this->assertSame(0, $database->updateDocuments(self::COLLECTION, $updates));
+
+        $this->assertSame($updatedAt, $database->getDocument(self::COLLECTION, self::DOCUMENT)->getUpdatedAt());
+    }
+
     public function testAnUpsertWithAnOperatorThatRoundsToNothingIsNoChange(): void
     {
         $database = $this->database(Engine::SQLite);

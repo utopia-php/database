@@ -12,9 +12,9 @@ use Tests\E2E\Adapter\Scopes\CustomDocumentTypeTests;
 use Tests\E2E\Adapter\Scopes\DatabaseTests;
 use Tests\E2E\Adapter\Scopes\DocumentTests;
 use Tests\E2E\Adapter\Scopes\FeatureTests;
-use Tests\E2E\Adapter\Scopes\FractionalIntegerTests;
 use Tests\E2E\Adapter\Scopes\GeneralTests;
 use Tests\E2E\Adapter\Scopes\IndexTests;
+use Tests\E2E\Adapter\Scopes\IntegerRoundingTests;
 use Tests\E2E\Adapter\Scopes\JoinComboTests;
 use Tests\E2E\Adapter\Scopes\JoinReadRuleTests;
 use Tests\E2E\Adapter\Scopes\JoinRelationshipTests;
@@ -29,7 +29,6 @@ use Tests\E2E\Adapter\Scopes\SchemalessTests;
 use Tests\E2E\Adapter\Scopes\SchemaReconciliationTests;
 use Tests\E2E\Adapter\Scopes\SpatialTests;
 use Tests\E2E\Adapter\Scopes\VectorTests;
-use Tests\Unit\Support\FractionalEngine;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\Memory;
@@ -57,9 +56,9 @@ abstract class Base extends TestCase
     use DatabaseTests;
     use DocumentTests;
     use FeatureTests;
-    use FractionalIntegerTests;
     use GeneralTests;
     use IndexTests;
+    use IntegerRoundingTests;
     use JoinComboTests;
     use JoinReadRuleTests;
     use JoinRelationshipTests;
@@ -125,14 +124,6 @@ abstract class Base extends TestCase
     protected static function getTestToken(): string
     {
         return getenv('TEST_TOKEN') ?: getenv('UNIQUE_TEST_TOKEN') ?: (string) getmypid();
-    }
-
-    /**
-     * The engine family whose database 7.4.1 arithmetic the adapter under test reproduces.
-     */
-    protected static function fractionalEngine(): FractionalEngine
-    {
-        return FractionalEngine::MariaDB;
     }
 
     /**

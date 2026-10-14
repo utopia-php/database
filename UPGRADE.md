@@ -1,28 +1,67 @@
+# Upgrading from 8.1.1 to 8.1.2
+
+8.1.2 replaces the opt-in emulation of 7.4.1's fractional arithmetic on integer attributes with one rounding rule that
+always applies. [CHANGELOG.md](CHANGELOG.md#812) lists every removed signature.
+
+## Integer rounding
+
+On a single-valued integer or big integer attribute:
+
+| Value | Rule | Example |
+|---|---|---|
+| The change of `increaseDocumentAttribute()` or `decreaseDocumentAttribute()` | Rounded half away from zero | 1.5 adds 2; 2.5 subtracts 3 |
+| The amount of `Operator::increment()` or `Operator::decrement()` | Rounded half away from zero | `increment(-2.5)` subtracts 3 |
+| A `max`, or the limit of `increment()` | Floored | 101.9 is 101 |
+| A `min`, or the limit of `decrement()` | Ceiled | 99.1 is 100 |
+
+The operators are rounded in `updateDocument()`, `updateDocuments()`, `upsertDocument()` and `upsertDocuments()`.
+Rounding happens once, in PHP, before validation, so every adapter stores the same result. Decimal text is rounded
+exactly at any size: `'9007199254740993.5'` adds 9007199254740994. Text with an exponent, such as `'1.5e2'`, and
+values that are not finite are still refused as in 8.1.1.
+
+A counter change that rounds to 0, such as 0.4, leaves the document unchanged: it writes nothing, keeps `$updatedAt`
+and fires no event. An operator amount that rounds to 0 changes nothing either.
+
+Still refused with `Exception\Structure`, as by default in 8.1.1: a fractional amount or limit of `multiply()`,
+`divide()`, `modulo()` or `power()` on an integer attribute, and a fractional item added to an integer array. Float and
+double attributes are unchanged.
+
+If you relied on fractions being refused, check the value before you call. If you used `setRoundFractions(true)`:
+
+- Delete the `setRoundFractions()` and `withRoundFractions()` calls and any `isRoundingFractions()` checks. The rule
+  above applies on every adapter instead of each engine's 7.4.1 rounding.
+- A counter returns the stored whole number, not the exact fractional result as a float.
+- A fractional `max` or `min` is floored or ceiled before the comparison, instead of being compared as given.
+- The stored value is no longer read locked to resolve an operator, and `updateDocuments()` sends one update for all
+  rows again.
+
+Code that called `Adapter::arithmetic()`, built an `Arithmetic` or `Arithmetic\Rounding`, passed `$fractions` to
+`Validator\Operator`, `Validator\Structure` or `Validator\PartialStructure`, or passed `$roundFractions` to the
+`State\Snapshot` constructor must drop it.
+
 # Upgrading from 8.0 to 8.1
 
 8.1 is a minor release. Every change in it is additive or opt-in, with one exception: it runs
 [joins on a one-to-many relationship](#joins-on-a-one-to-many-relationship) that 8.0.3 refused. With no `Hook\Nested`
-hook registered and with `setCheckGrants()` and `setRoundFractions()` off, which is the default, a `Database` behaves
-exactly as in 8.0.3 apart from that join.
+hook registered and with `setCheckGrants()` off, which is the default, a `Database` behaves exactly as in 8.0.3 apart
+from that join and the [integer rounding](#integer-rounding) of 8.1.2.
 [CHANGELOG.md](CHANGELOG.md) lists every new signature.
 
 - [Preparing nested related documents](#preparing-nested-related-documents)
 - [Grant check on related documents](#grant-check-on-related-documents)
-- [Fractional operands on integer attributes](#fractional-operands-on-integer-attributes)
 - [Cursor from an ID](#cursor-from-an-id)
 - [One read for documents and aggregates](#one-read-for-documents-and-aggregates)
 - [Joins on a one-to-many relationship](#joins-on-a-one-to-many-relationship)
 - [Spatial support behind a pool](#spatial-support-behind-a-pool)
 - [`State\Snapshot`](#statesnapshot)
 
-The two new toggles follow the 8.0 toggle idiom (see [Configuration toggles](#configuration-toggles)). Each one is
-scoped to the calling coroutine and the coroutines it starts. `withSnapshot()` carries it into relationship writes and
+The new toggle follows the 8.0 toggle idiom (see [Configuration toggles](#configuration-toggles)). It is scoped to
+the calling coroutine and the coroutines it starts. `withSnapshot()` carries it into relationship writes and
 other work that runs in another coroutine.
 
 | Toggle | Set | Read | Scope |
 |---|---|---|---|
 | Grant check | `setCheckGrants(bool $check): static` | `isCheckingGrants(): bool` | `withCheckGrants(bool $check, callable $callback): mixed` |
-| Fractions | `setRoundFractions(bool $round): static` | `isRoundingFractions(): bool` | `withRoundFractions(bool $round, callable $callback): mixed` |
 
 ## Preparing nested related documents
 
@@ -164,93 +203,6 @@ check passes and the relationship write refuses the document for its read or upd
 `Exception\Authorization`. If that difference matters to you, answer every `Exception\Authorization` with the same
 response.
 
-## Fractional operands on integer attributes
-
-Opt-in. By default 8.1 refuses fractions on integer attributes exactly as 8.0.2 and 8.0.3 do:
-`increaseDocumentAttribute()` and `decreaseDocumentAttribute()` throw `Exception\Type`, and fractional operator limits
-throw `Exception\Structure`.
-
-With `setRoundFractions(true)`, fractions on single-valued integer and big integer attributes are stored as the
-adapter's engine stored them on 7.4.1, which handed them to the engine. This covers:
-
-- the change value and the `max` or `min` of `increaseDocumentAttribute()` and `decreaseDocumentAttribute()`;
-- the amount and limit of `Operator::increment()`, `decrement()`, `multiply()`, `divide()`, `modulo()` and `power()`
-  given to `updateDocument()`, `updateDocuments()`, `upsertDocument()` and `upsertDocuments()`;
-- fractional items added to an integer array by `arrayAppend()`, `arrayPrepend()` or `arrayInsert()`, which are cut
-  toward zero, as every engine read them back.
-
-Float and double attributes are unchanged.
-
-Each fractional operator is resolved from the stored value into the whole-number increment or decrement that stores
-the engine's result. The stored value is read locked, inside the write's transaction. `updateDocuments()` and the
-upserts read each row locked inside its batch's transaction, then send one update per group of rows with the same
-resolved change. A row an upsert creates is resolved from 0. A write without a fractional operator on an integer
-attribute takes the 8.0 path. Big integers stay exact beyond 2^53: the stored value never passes through a float.
-
-`Adapter::arithmetic()` declares each engine's rules:
-
-| Adapter | Counter change | Divide by a whole number | Power | Other operators | Refused |
-|---|---|---|---|---|---|
-| MariaDB, MySQL | Half to even | Exact, half away from zero | Half to even | Computed in `DOUBLE`, half to even | — |
-| PostgreSQL | Refused | Exact, half away from zero | Double precision, half to even | `NUMERIC`, half away from zero; multiply, divide and modulo exact | A fractional counter change; a fractional amount of increment, decrement, multiply or divide without a limit |
-| MongoDB | Toward zero | Toward zero | Toward zero | Toward zero | — |
-| SQLite, Memory, Redis | Toward zero | Toward zero | Toward zero | Toward zero; a fractional modulus is cut toward zero first | A modulus that cuts to zero (`modulo(0.5)`) |
-
-An adapter that did not exist in 7.4.1 answers with the MariaDB and MySQL rules unless it overrides `arithmetic()`.
-`Pool` asks the pooled adapter once per pool, and `ReadWritePool` answers wherever reads go.
-
-**Operator limits.** A limit is compared with the exact result, as given, and is never rounded. A result past the limit
-leaves the stored value unchanged, as on 7.4.1. So does a power that has no value under a limit: 0 to a negative power,
-or a negative base to a fractional power. Because the engine rounded after comparing, a stored whole number can pass a
-fractional limit: on MariaDB, `increment(1.5, 13.5)` on 12 stores 14.
-
-**Counters.**
-
-- A whole change is an integer, integer text, numeric text with a whole value such as `'1e3'`, or a float without a
-  fraction. With a whole change, a fractional `max` is rounded down and a fractional `min` rounded up, reading text
-  exactly. Then the change runs as in 8.0. On PostgreSQL, a whole change with a fractional bound is refused as 7.4.1
-  refused it: `Exception\Limit` if the exact result passes the bound, otherwise `Exception\Type` (`Max must be an
-  integer.` or `Min must be an integer.`).
-- With a fractional change, the bound is used as given. The stored value is read locked. If the exact result passes
-  the bound, the call throws `Exception\Limit` before writing. Otherwise it writes the whole-number change the engine
-  would have stored, and the returned document carries the exact result as a float. On MariaDB, 5 + 1.5 with
-  `max` 6.5 returns 6.5 and stores 6, and 5 − 1.5 with `min` 3.5 returns 3.5 and stores 4.
-- A whole-number change of 0 still writes. On MariaDB, 4 + 0.5 stores 4, moves `$updatedAt`, purges the caches and
-  fires the events.
-- On PostgreSQL a fractional change throws `Exception\Type` (`Change value must be an integer.`), with or without a
-  bound. A bound the exact result passes throws `Exception\Limit` first.
-- A change of 0 or less still throws `Exception\Type` (`Value must be numeric and greater than 0`).
-
-**Refusals.** An operator an engine refused, or one whose amount or limit is infinite or not a number, comes back
-unresolved. Validation then refuses it with `Exception\Structure`, as by default. So does an amount or limit on
-PostgreSQL's exact operators that is too long to compute exactly (more than 128 significant digits). A counter change
-that is infinite or not a number throws `Exception\Type`.
-
-**MongoDB.** 7.4.1 stored the fractional double, every read cut it toward zero, and later operations continued from the
-double. 8.1 stores the whole number after each operation, which is what every 7.4.1 read returned. This approximates
-7.4.1 rather than reproducing it: two increments of 0.5 from 1 stored 2.0 on 7.4.1 and store 1 on 8.1. **SQLite.**
-7.4.1 compared a fractional operator limit as text, so a fractional maximum never held and a fractional minimum always
-held. 8.1 does not reproduce this: limits hold as on Memory and Redis.
-
-**Mirror.** `Mirror` forwards the toggle to its source and destination.
-
-- `increaseDocumentAttribute()`, `decreaseDocumentAttribute()`, `updateDocuments()` and the upserts are replayed on
-  the destination with the caller's arguments. The destination resolves them with its own adapter's rules and its own
-  stored values. If it refuses one, for example a fractional counter on a PostgreSQL destination, the failure only
-  reaches `onError()`.
-- `updateDocument()` replicates the values the source stored.
-
-`Validator\Operator` and `Validator\Structure` (and `Validator\PartialStructure`) take a trailing
-`bool $fractions = false` for code that validates operators itself. When it is set, a finite fractional amount or limit
-within the attribute's range passes, and the caller resolves it into a whole one before writing.
-
-```php
-$database->setRoundFractions(true);
-
-// MariaDB: stores 6 and returns 6.5. PostgreSQL: throws Exception\Type, as 7.4.1 did.
-$document = $database->increaseDocumentAttribute('posts', 'p1', 'likes', 1.5, max: 6.5);
-```
-
 ## Cursor from an ID
 
 Additive. `Database::resolveCursor(string $collection, string $id, CursorDirection $direction, array $queries = []):
@@ -321,9 +273,9 @@ source. Creating a `point` attribute fails exactly when `hasFeature(Feature\Spat
 
 ## `State\Snapshot`
 
-Additive. The `State\Snapshot` constructor takes two more trailing arguments, `bool $checkGrants = false` and
-`bool $roundFractions = false`, which `Database::snapshot()` fills in. Code that builds a `Snapshot` itself still
-works; a snapshot built without them runs its callback with both toggles off.
+Additive. The `State\Snapshot` constructor takes one more trailing argument, `bool $checkGrants = false`, which
+`Database::snapshot()` fills in. Code that builds a `Snapshot` itself still works; a snapshot built without it runs its
+callback with the grant check off.
 
 # Upgrading from 7.x to 8.0
 
@@ -1221,7 +1173,8 @@ method as a no-op, so a hook overrides only what it needs:
   counted and emitted it). Of a batch that repeats an id, only the first copy is written. Permissions are written
   only for inserted documents: in 7.x the skipped copy's permissions were added to the stored document on MariaDB,
   MySQL and SQLite, so `find()`, `count()` and `sum()` could return it to roles its own permissions do not grant.
-- **Fractional numbers on integer attributes.** `increaseDocumentAttribute()` and `decreaseDocumentAttribute()`
+- **Fractional numbers on integer attributes.** Since 8.1.2 these are rounded instead (see
+  [Integer rounding](#integer-rounding)). In 8.0, `increaseDocumentAttribute()` and `decreaseDocumentAttribute()`
   throw `Utopia\Database\Exception\Type` before anything is written, on every adapter and also on schemaless
   collections that declare the attribute as an integer:
   - for a fractional change value (`Change value must be an integer.`). 7.x passed it to the engine, which rounded

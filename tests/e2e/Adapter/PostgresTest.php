@@ -3,7 +3,6 @@
 namespace Tests\E2E\Adapter;
 
 use Redis;
-use Tests\Unit\Support\FractionalEngine;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Postgres;
@@ -242,11 +241,5 @@ class PostgresTest extends Base
         );
 
         $database->deleteCollection('vectorPlan');
-    }
-
-    #[\Override]
-    protected static function fractionalEngine(): FractionalEngine
-    {
-        return FractionalEngine::PostgreSQL;
     }
 }

@@ -3,8 +3,6 @@
 namespace Utopia\Database\Adapter;
 
 use Utopia\Database\Adapter;
-use Utopia\Database\Arithmetic;
-use Utopia\Database\Arithmetic\Rounding;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
@@ -1956,22 +1954,6 @@ class Memory extends Adapter implements Feature\Relationships
     public function getSizeOfCollectionOnDisk(string $collection): int
     {
         return $this->getSizeOfCollection($collection);
-    }
-
-    /**
-     * Memory stored a fractional result as a float and every read cast it to an integer, cutting it toward zero;
-     * a fractional modulus was cut toward zero before the remainder was taken.
-     */
-    #[\Override]
-    public function arithmetic(): Arithmetic
-    {
-        return new Arithmetic(
-            counter: Rounding::TowardZero,
-            operators: Rounding::TowardZero,
-            division: Rounding::TowardZero,
-            power: Rounding::TowardZero,
-            truncatesModulus: true,
-        );
     }
 
     /**

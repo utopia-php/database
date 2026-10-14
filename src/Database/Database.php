@@ -56,7 +56,6 @@ class Database
     use Trait\Cursors;
     use Trait\Databases;
     use Trait\Documents;
-    use Trait\Fractions;
     use Trait\Indexes;
     use Trait\Relationships;
     use Trait\Transactions;
@@ -275,9 +274,6 @@ class Database
 
     /** @var Value<bool>|null */
     private ?Value $grantChecking = null;
-
-    /** @var Value<bool>|null */
-    private ?Value $fractionRounding = null;
 
     protected ?Relationships $relationshipHook = null;
 
@@ -1206,42 +1202,6 @@ class Database
     }
 
     /**
-     * Set whether a fractional amount or limit on a single-valued integer attribute is stored as the adapter's
-     * engine stored it on database 7.4.1 (see Adapter::arithmetic()), instead of being refused. This covers
-     * increaseDocumentAttribute() and decreaseDocumentAttribute(), whose float change returns its exact result, and
-     * the numeric operators given to updateDocument(), updateDocuments(), upsertDocument() and upsertDocuments(),
-     * each answered from the stored value it changes, read locked in the write's transaction. Fractional items
-     * added to an integer array are cut toward zero. What the engine refused stays refused.
-     *
-     * @return $this
-     */
-    public function setRoundFractions(bool $round): static
-    {
-        $this->fractionRounding()->set($round);
-
-        return $this;
-    }
-
-    public function isRoundingFractions(): bool
-    {
-        return $this->fractionRounding()->get();
-    }
-
-    /**
-     * Run the callback with fractions on integer attributes rounded or refused for the calling coroutine and the
-     * coroutines it starts.
-     *
-     * @template T
-     *
-     * @param  callable(): T  $callback
-     * @return T
-     */
-    public function withRoundFractions(bool $round, callable $callback): mixed
-    {
-        return $this->fractionRounding()->with($round, $callback);
-    }
-
-    /**
      * Set the migration mode flag, which relaxes certain constraints during data migrations.
      *
      * @return $this
@@ -1654,7 +1614,6 @@ class Database
             ignoreDuplicates: $this->ignoringDuplicates()->get(),
             requestTimestamp: $this->requestTimestamp()->get(),
             checkGrants: $this->grantChecking()->get(),
-            roundFractions: $this->fractionRounding()->get(),
         );
     }
 
@@ -1695,8 +1654,7 @@ class Database
      */
     private function withToggles(Snapshot $snapshot, callable $callback): mixed
     {
-        $rounded = fn (): mixed => $this->fractionRounding()->with($snapshot->roundFractions, $callback);
-        $checked = fn (): mixed => $this->grantChecking()->with($snapshot->checkGrants, $rounded);
+        $checked = fn (): mixed => $this->grantChecking()->with($snapshot->checkGrants, $callback);
         $timestamped = fn (): mixed => $this->requestTimestamp()->with($snapshot->requestTimestamp, $checked);
         $deduplicated = fn (): mixed => $this->ignoringDuplicates()->with($snapshot->ignoreDuplicates, $timestamped);
         $sequenced = fn (): mixed => $this->sequencePreservation()->with($snapshot->preserveSequence, $deduplicated);
@@ -1782,14 +1740,6 @@ class Database
     private function grantChecking(): Value
     {
         return $this->grantChecking ??= new Value(false);
-    }
-
-    /**
-     * @return Value<bool>
-     */
-    private function fractionRounding(): Value
-    {
-        return $this->fractionRounding ??= new Value(false);
     }
 
     protected function isIgnoringDuplicates(): bool

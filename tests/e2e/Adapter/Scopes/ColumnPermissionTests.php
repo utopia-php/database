@@ -5,7 +5,7 @@ namespace Tests\E2E\Adapter\Scopes;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
-use Utopia\Database\CollectionUpdate;
+use Utopia\Database\Collection\Update as CollectionUpdate;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -16,6 +16,7 @@ use Utopia\Database\Permission;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\Role;
+use Utopia\Database\Validator\Authorization;
 
 /**
  * Column permissions are set on a collection, never on a document.
@@ -641,6 +642,148 @@ trait ColumnPermissionTests
             $authorization->cleanRoles();
             foreach ($previous as $role) {
                 $authorization->addRole($role);
+            }
+        }
+    }
+
+    /**
+     * A query naming a column the caller cannot read is refused, wherever it names it.
+     *
+     * Returning the rows would answer the question the filter asks whether or not the value
+     * comes back -- Query::greaterThan() turns that into a binary search -- and returning none
+     * is no better, since an empty result is a signal too and a wrong answer besides. Ordering
+     * leaks the order, and an aggregate leaks the aggregate.
+     */
+    public function testAQueryNamingAnUngrantedColumnIsRefused(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $authorization = $database->getAuthorization();
+
+        $database->withColumnPermissions(fn () => $database->createCollection(Collection::create(
+            id: 'columnGrantsQueries',
+            attributes: [
+                Attribute::string(key: 'name', size: 64),
+                Attribute::integer(key: 'salary'),
+            ],
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any(), 'name'),
+                Permission::read(Role::team('hr'), 'salary'),
+            ],
+        )));
+
+        $authorization->skip(fn () => $database->createDocument('columnGrantsQueries', new Document([
+            '$id' => 'e1',
+            'name' => 'Ada',
+            'salary' => 120000,
+        ])));
+
+        $refused = [
+            'filter' => fn () => $database->find('columnGrantsQueries', [Query::equal('salary', [120000])]),
+            'range filter' => fn () => $database->find('columnGrantsQueries', [Query::greaterThan('salary', 1)]),
+            'order' => fn () => $database->find('columnGrantsQueries', [Query::orderDesc('salary')]),
+            'select' => fn () => $database->find('columnGrantsQueries', [Query::select(['salary'])]),
+            'count' => fn () => $database->count('columnGrantsQueries', [Query::equal('salary', [120000])]),
+            'sum' => fn () => $database->sum('columnGrantsQueries', 'salary'),
+            'aggregate' => fn () => $database->aggregate('columnGrantsQueries', [Query::max('salary')]),
+        ];
+
+        $this->asRole($authorization, Role::any()->toString(), function () use ($refused, $database): void {
+            foreach ($refused as $what => $run) {
+                try {
+                    $run();
+                    $this->fail($what.' on an ungranted column was allowed');
+                } catch (AuthorizationException $e) {
+                    $this->assertStringContainsString('Missing "read" permission for column "salary"', $e->getMessage(), $what);
+                }
+            }
+
+            // The column the grant does reach is queryable as usual.
+            $this->assertCount(1, $database->find('columnGrantsQueries', [Query::equal('name', ['Ada'])]));
+        });
+
+        // And it is per role, not per column: hr reaches salary and not name.
+        $this->asRole($authorization, Role::team('hr')->toString(), function () use ($database): void {
+            $this->assertSame(120000, $database->sum('columnGrantsQueries', 'salary'));
+
+            try {
+                $database->find('columnGrantsQueries', [Query::equal('name', ['Ada'])]);
+                $this->fail('hr filtered on a column it was not granted');
+            } catch (AuthorizationException $e) {
+                $this->assertStringContainsString('Missing "read" permission for column "name"', $e->getMessage());
+            }
+        });
+    }
+
+    /**
+     * A write touching a column the caller may not change is refused, and refused whole.
+     *
+     * Applying the part they are allowed and dropping the rest would leave a document neither
+     * the caller nor the collection asked for.
+     */
+    public function testAWriteTouchingAnUngrantedColumnIsRefused(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $authorization = $database->getAuthorization();
+
+        $database->withColumnPermissions(fn () => $database->createCollection(Collection::create(
+            id: 'columnGrantsWritesScoped',
+            attributes: [
+                Attribute::string(key: 'name', size: 64),
+                Attribute::integer(key: 'salary'),
+            ],
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+                Permission::update(Role::any(), 'name'),
+                Permission::update(Role::team('hr'), 'salary'),
+            ],
+        )));
+
+        $authorization->skip(fn () => $database->createDocument('columnGrantsWritesScoped', new Document([
+            '$id' => 'e1',
+            'name' => 'Ada',
+            'salary' => 120000,
+        ])));
+
+        $this->asRole($authorization, Role::any()->toString(), function () use ($database): void {
+            $this->assertSame('Grace', $database->updateDocument('columnGrantsWritesScoped', 'e1', new Document([
+                'name' => 'Grace',
+            ]))->getAttribute('name'));
+
+            foreach (['salary alone' => ['salary' => 1], 'both at once' => ['name' => 'X', 'salary' => 2]] as $what => $data) {
+                try {
+                    $database->updateDocument('columnGrantsWritesScoped', 'e1', new Document($data));
+                    $this->fail($what.' was allowed');
+                } catch (AuthorizationException $e) {
+                    $this->assertStringContainsString('Missing "update" permission for column "salary"', $e->getMessage(), $what);
+                }
+            }
+        });
+
+        // Refused whole: the granted half of "both at once" was not applied either.
+        $stored = $authorization->skip(fn () => $database->getDocument('columnGrantsWritesScoped', 'e1'));
+        $this->assertSame('Grace', $stored->getAttribute('name'));
+        $this->assertSame(120000, $stored->getAttribute('salary'));
+    }
+
+    /**
+     * Run the callback holding one role and nothing else.
+     */
+    private function asRole(Authorization $authorization, string $role, callable $callback): void
+    {
+        $previous = $authorization->getRoles();
+        $authorization->cleanRoles();
+        $authorization->addRole($role);
+
+        try {
+            $callback();
+        } finally {
+            $authorization->cleanRoles();
+            foreach ($previous as $held) {
+                $authorization->addRole($held);
             }
         }
     }

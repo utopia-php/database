@@ -48,8 +48,8 @@ use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\RelationshipSide;
 use Utopia\Database\RelationshipType;
-use Utopia\Database\Rounding;
 use Utopia\Database\Role;
+use Utopia\Database\Rounding;
 use Utopia\Database\Validator\Authorization\Input;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Database\Validator\PartialStructure;
@@ -1486,6 +1486,41 @@ trait Documents
     }
 
     /**
+     * Refuse a write that touches a column the caller may not change.
+     *
+     * The mirror of the read gate, and the simpler half: there is no query surface, only the
+     * columns the document carries. A caller granted one column may change that column and no
+     * other, and the write is refused whole rather than applied in part -- a half-applied update
+     * is harder to reason about than one that did not happen.
+     *
+     * @throws AuthorizationException
+     * @throws DatabaseException
+     * @throws StructureException
+     */
+    private function assertWritableColumns(Document $collection, Document $document): void
+    {
+        if (! $this->authorization->getStatus()) {
+            return;
+        }
+
+        $granted = $this->grantedColumns($collection, PermissionType::Update);
+
+        if ($granted === null) {
+            return;
+        }
+
+        foreach (\array_keys($document->getArrayCopy()) as $key) {
+            if (\str_starts_with($key, '$')) {
+                continue;
+            }
+
+            if (! \in_array($key, $granted, true)) {
+                throw new AuthorizationException('Missing "update" permission for column "'.$key.'".');
+            }
+        }
+    }
+
+    /**
      * Refuse a query that names a column the caller may not read.
      *
      * Masking the result is not enough on its own: a filter on a column answers questions about
@@ -1529,10 +1564,6 @@ trait Documents
         $columns = [];
 
         foreach ($queries as $query) {
-            if (! $query instanceof Query) {
-                continue;
-            }
-
             if ($query->getMethod() === Method::Select) {
                 foreach ($query->getValues() as $value) {
                     // '*' names nothing in particular -- it asks for whatever the caller is
@@ -1850,6 +1881,9 @@ trait Documents
         $this->assertRowPermissions($document);
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        $this->assertWritableColumns($collection, $document);
+
         $preparation = $this->nestedPreparation(lock: true);
         $newUpdatedAt = $document->getUpdatedAt();
         $hasOperators = false;
@@ -2174,6 +2208,7 @@ trait Documents
         $this->rejectJoins($queries, 'Join queries are not supported for bulk updates');
 
         $this->assertRowPermissions($updates);
+        $this->assertWritableColumns($this->silent(fn () => $this->getCollection($collection)), $updates);
 
         if ($updates->isEmpty()) {
             return 0;
@@ -4944,6 +4979,12 @@ trait Documents
     public function aggregate(string $collection, array $queries): array
     {
         $definition = $this->silent(fn () => $this->getCollection($collection));
+
+        // min, max, avg and the rest arrive as queries naming the column they aggregate, so the
+        // same check covers them: an aggregate over a column you cannot read discloses it as
+        // surely as reading it.
+        $this->assertQueryColumns($definition, $queries);
+
         $queries = self::aliasAggregates($this->rewriteQueries(Event::DocumentAggregate, $definition, $queries));
 
         $rows = [];

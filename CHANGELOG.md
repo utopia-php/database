@@ -20,7 +20,9 @@
   `Database::METADATA`, for writes (`updateDocuments()` and `deleteDocuments()` included) or for the `query()`,
   `mutate()` and `from()` builders. With such a hook registered, `cursor()` resolves the collection and rewrites its
   queries when it is called, so a missing collection or a refusal throws then instead of when the generator is
-  iterated. A `Mirror` runs it on its own reads, also for a hook that is a `Hook\Lifecycle` too.
+  iterated. A `Mirror` runs it once on each of its own reads and never on its destination's. One that is also a
+  `Hook\Lifecycle` is registered on the source too, as every lifecycle hook is, so it also rewrites the reads made on
+  the source directly.
 
 ## 8.1.2
 

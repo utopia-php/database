@@ -1837,8 +1837,9 @@ class Mirror extends Database
      * both sides relate documents exactly as it is configured to. A write hook also intercepts the destination's
      * writes. A nested hook runs on the mirror, for its pre-checks, and on the source, but never on the destination:
      * the destination replicates the related documents the source already prepared, so preparing them again would
-     * give it IDs the source does not have. A queries hook runs on the mirror, which serves its reads, and is not
-     * forwarded to the destination.
+     * give it IDs the source does not have. A queries hook runs once on each read of the mirror, which serves its
+     * reads, and never on the destination. One that is also a lifecycle hook is registered on the source too, as every
+     * lifecycle hook is, so it also rewrites the reads made on the source directly.
      */
     #[\Override]
     public function addHook(\Utopia\Query\Hook $hook): static

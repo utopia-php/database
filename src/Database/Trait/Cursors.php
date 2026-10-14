@@ -5,6 +5,7 @@ namespace Utopia\Database\Trait;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Document;
+use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
@@ -47,6 +48,7 @@ trait Cursors
     public function resolveCursor(string $collection, string $id, CursorDirection $direction, array $queries = []): Document
     {
         $definition = $this->silent(fn (): Collection => $this->getCollection($collection));
+        $queries = $this->rewriteQueries(Event::DocumentFind, $definition, $queries);
 
         $this->checkQueryTypes($queries);
         $queries = self::resolveOneToManyJoins($definition, \array_values(\array_filter(

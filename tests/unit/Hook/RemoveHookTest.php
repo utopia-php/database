@@ -20,6 +20,7 @@ use Utopia\Database\Hook\Transform;
 use Utopia\Database\Hook\Write;
 use Utopia\Database\Mirror;
 use Utopia\Database\Permission;
+use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\Role;
 
@@ -119,6 +120,24 @@ final class RemoveHookTest extends TestCase
         HookFixture::seed($database, ['second']);
 
         $this->assertSame($transformed, $transform->transformed);
+    }
+
+    public function testRemovingAQueriesHookStopsItRewritingReads(): void
+    {
+        $database = HookFixture::memory();
+        HookFixture::seed($database, ['first', 'second']);
+        $removed = new QueriesRecorder(QueriesRecorder::adding(Query::equal('title', ['first'])));
+        $kept = new QueriesRecorder();
+        $database->addHook($removed)->addHook($kept);
+
+        $this->assertSame($database, $database->removeHook($removed));
+        $this->assertSame(2, $database->count(HookFixture::COLLECTION));
+        $this->assertSame([], $removed->calls);
+        $this->assertSame([[Event::DocumentCount, HookFixture::COLLECTION]], $kept->calls);
+
+        $database->removeHook(QueriesRecorder::class);
+        $this->assertSame(2, $database->count(HookFixture::COLLECTION));
+        $this->assertSame([[Event::DocumentCount, HookFixture::COLLECTION]], $kept->calls);
     }
 
     public function testRemovingTheRelationshipsHookStopsRelatingDocuments(): void

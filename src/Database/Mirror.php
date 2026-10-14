@@ -19,6 +19,7 @@ use Utopia\Database\Exception\Limit;
 use Utopia\Database\Filter\Registry;
 use Utopia\Database\Hook\Lifecycle;
 use Utopia\Database\Hook\Nested;
+use Utopia\Database\Hook\Queries;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Hook\Write;
 use Utopia\Database\Mirror\Failure;
@@ -1635,7 +1636,7 @@ class Mirror extends Database
 
         return $this->getSource()->getAuthorization()->skip(function () use ($collection) {
             try {
-                return $this->source->getDocument('upgrades', $collection);
+                return $this->source->skipQueryHooks(fn (): Document => $this->source->getDocument('upgrades', $collection));
             } catch (Throwable) {
                 return;
             }
@@ -1836,7 +1837,9 @@ class Mirror extends Database
      * both sides relate documents exactly as it is configured to. A write hook also intercepts the destination's
      * writes. A nested hook runs on the mirror, for its pre-checks, and on the source, but never on the destination:
      * the destination replicates the related documents the source already prepared, so preparing them again would
-     * give it IDs the source does not have.
+     * give it IDs the source does not have. A queries hook runs once on each read of the mirror, which serves its
+     * reads, and never on the destination. One that is also a lifecycle hook is registered on the source too, as every
+     * lifecycle hook is, so it also rewrites the reads made on the source directly, though never those a write makes.
      */
     #[\Override]
     public function addHook(\Utopia\Query\Hook $hook): static
@@ -1849,6 +1852,10 @@ class Mirror extends Database
 
             if ($hook instanceof Nested) {
                 $this->nestedHooks[] = $hook;
+            }
+
+            if ($hook instanceof Queries) {
+                $this->queryHooks[] = $hook;
             }
         } else {
             parent::addHook($hook);

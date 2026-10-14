@@ -1082,7 +1082,7 @@ class Relationships implements Attachable, Hook
                             }
 
                             if (\is_string($value)) {
-                                $related = $this->database->skipRelationships(fn () => $this->database->getDocument($relatedCollection->getId(), $value, [Query::select([Document::ID])]));
+                                $related = $this->database->skipRelationships(fn () => $this->database->skipQueryHooks(fn () => $this->database->getDocument($relatedCollection->getId(), $value, [Query::select([Document::ID])])));
                                 if ($related->isEmpty()) {
                                     $this->refuseUnreadable($relatedCollection, $value, PermissionType::Read);
                                     $document->setAttribute($key, null);
@@ -1118,7 +1118,7 @@ class Relationships implements Attachable, Hook
                             }
 
                             $related = $this->database->skipRelationships(
-                                fn () => $this->database->getDocument($relatedCollection->getId(), $value, [Query::select([Document::ID])])
+                                fn () => $this->database->skipQueryHooks(fn () => $this->database->getDocument($relatedCollection->getId(), $value, [Query::select([Document::ID])]))
                             );
 
                             if ($related->isEmpty()) {
@@ -1141,7 +1141,7 @@ class Relationships implements Attachable, Hook
                                 ));
                             }
                         } elseif ($value instanceof Document) {
-                            $related = $this->database->skipRelationships(fn () => $this->database->getDocument($relatedCollection->getId(), $value->getId()));
+                            $related = $this->database->skipRelationships(fn () => $this->database->skipQueryHooks(fn () => $this->database->getDocument($relatedCollection->getId(), $value->getId())));
 
                             /** @var Document|null $oldValueDoc2 */
                             $oldValueDoc2 = $oldValue instanceof Document ? $oldValue : null;
@@ -1175,7 +1175,7 @@ class Relationships implements Attachable, Hook
                             $oldValueDocNull = $oldValue instanceof Document ? $oldValue : null;
                             if ($oldValueDocNull?->getId() !== null) {
                                 $oldRelated = $this->database->skipRelationships(
-                                    fn () => $this->database->getDocument($relatedCollection->getId(), $oldValueDocNull->getId())
+                                    fn () => $this->database->skipQueryHooks(fn () => $this->database->getDocument($relatedCollection->getId(), $oldValueDocNull->getId()))
                                 );
                                 $this->database->skipRelationships(fn () => $this->database->updateDocument(
                                     $relatedCollection->getId(),
@@ -1242,12 +1242,12 @@ class Relationships implements Attachable, Hook
                                 $unlinkedIds = [];
                                 foreach (\array_chunk($stringRelations, $this->relationQueryChunkSize()) as $chunk) {
                                     $unlinked = $this->database->skipRelationships(
-                                        fn () => $this->database->find($relatedCollection->getId(), [
+                                        fn () => $this->database->skipQueryHooks(fn () => $this->database->find($relatedCollection->getId(), [
                                             Query::select([Document::ID]),
                                             Query::equal(Document::ID, $chunk),
                                             $this->notReferencing($twoWayKey, $document->getId()),
                                             Query::limit(\count($chunk)),
-                                        ])
+                                        ]))
                                     );
                                     foreach ($unlinked as $related) {
                                         $unlinkedIds[] = $related->getId();
@@ -1273,7 +1273,7 @@ class Relationships implements Attachable, Hook
                                     }
 
                                     $related = $this->database->skipRelationships(
-                                        fn () => $this->database->getDocument($relatedCollection->getId(), $relation->getId(), [Query::select([Document::ID])])
+                                        fn () => $this->database->skipQueryHooks(fn () => $this->database->getDocument($relatedCollection->getId(), $relation->getId(), [Query::select([Document::ID])]))
                                     );
 
                                     if ($related->isEmpty()) {
@@ -1305,7 +1305,7 @@ class Relationships implements Attachable, Hook
                             }
 
                             $related = $this->database->skipRelationships(
-                                fn () => $this->database->getDocument($relatedCollection->getId(), $value, [Query::select([Document::ID])])
+                                fn () => $this->database->skipQueryHooks(fn () => $this->database->getDocument($relatedCollection->getId(), $value, [Query::select([Document::ID])]))
                             );
 
                             if ($related->isEmpty()) {
@@ -1321,7 +1321,7 @@ class Relationships implements Attachable, Hook
                             }
 
                             $related = $this->database->skipRelationships(
-                                fn () => $this->database->getDocument($relatedCollection->getId(), $value->getId(), [Query::select([Document::ID])])
+                                fn () => $this->database->skipQueryHooks(fn () => $this->database->getDocument($relatedCollection->getId(), $value->getId(), [Query::select([Document::ID])]))
                             );
 
                             if ($related->isEmpty()) {
@@ -1390,12 +1390,12 @@ class Relationships implements Attachable, Hook
                             // validator's maxQueryValues ceiling.
                             $junctionIds = [];
                             foreach (\array_chunk($removedDocuments, $this->relationQueryChunkSize()) as $chunk) {
-                                $junctions = $this->database->find($junction, [
+                                $junctions = $this->database->skipQueryHooks(fn () => $this->database->find($junction, [
                                     Query::select([Document::ID]),
                                     Query::equal($key, $chunk),
                                     Query::equal($twoWayKey, [$document->getId()]),
                                     Query::limit(PHP_INT_MAX),
-                                ]);
+                                ]));
                                 foreach ($junctions as $junctionDoc) {
                                     $junctionIds[] = $junctionDoc->getId();
                                 }
@@ -1438,7 +1438,7 @@ class Relationships implements Attachable, Hook
                                         continue;
                                     }
 
-                                    $related = $this->database->getDocument($relatedCollection->getId(), $relation, [Query::select([Document::ID])]);
+                                    $related = $this->database->skipQueryHooks(fn () => $this->database->getDocument($relatedCollection->getId(), $relation, [Query::select([Document::ID])]));
 
                                     if ($related->isEmpty()) {
                                         $this->refuseUnreadable($relatedCollection, $relation, PermissionType::Read);
@@ -1448,7 +1448,7 @@ class Relationships implements Attachable, Hook
 
                                     $this->authorizeLink($relatedCollection, $related);
                                 } elseif ($relation instanceof Document) {
-                                    $related = $this->database->getDocument($relatedCollection->getId(), $relation->getId(), [Query::select([Document::ID])]);
+                                    $related = $this->database->skipQueryHooks(fn () => $this->database->getDocument($relatedCollection->getId(), $relation->getId(), [Query::select([Document::ID])]));
 
                                     if (! $related->isEmpty() && ! \in_array($relation->getId(), $oldIds)) {
                                         $this->authorizeLink($relatedCollection, $related);
@@ -1650,11 +1650,11 @@ class Relationships implements Attachable, Hook
             $ids = \array_values(\array_map(fn (Document $document): string => $document->getId(), $byId));
 
             foreach (\array_chunk($ids, $this->relationQueryChunkSize()) as $chunk) {
-                $found = $this->database->getAuthorization()->skip(fn () => $this->database->find($collectionId, [
+                $found = $this->database->getAuthorization()->skip(fn () => $this->database->skipQueryHooks(fn () => $this->database->find($collectionId, [
                     Query::equal(Document::ID, $chunk),
                     Query::select([Document::ID]),
                     Query::limit(\count($chunk)),
-                ]));
+                ])));
 
                 foreach ($found as $existing) {
                     $remaining[$collectionId][$existing->getId()] = $byId[$existing->getId()];
@@ -2097,7 +2097,7 @@ class Relationships implements Attachable, Hook
             return $this->prepareRelated($prepared, $collection, $relatedCollection, $key, $document, $relation, $relationType, $twoWayKey, $side, $coroutine);
         }
 
-        $related = $this->database->getDocument($relatedCollection->getId(), $relation->getId());
+        $related = $this->database->skipQueryHooks(fn () => $this->database->getDocument($relatedCollection->getId(), $relation->getId()));
 
         if ($related->isEmpty()) {
             $this->refuseUnreadable($relatedCollection, $relation->getId(), PermissionType::Update);
@@ -2201,7 +2201,7 @@ class Relationships implements Attachable, Hook
             $this->writePrepared($prepared);
         }
 
-        $related = $this->database->skipRelationships(fn () => $this->database->getDocument($relatedCollection->getId(), $relationId));
+        $related = $this->database->skipRelationships(fn () => $this->database->skipQueryHooks(fn () => $this->database->getDocument($relatedCollection->getId(), $relationId)));
 
         if ($related->isEmpty()) {
             $this->refuseUnreadable($relatedCollection, $relationId, PermissionType::Read);
@@ -2267,11 +2267,11 @@ class Relationships implements Attachable, Hook
 
     private function isLinkedElsewhere(Document $collection, string $key, string $relatedId, Document $document): bool
     {
-        return ! $this->database->getAuthorization()->skip(fn () => $this->database->skipRelationships(fn () => $this->database->findOne($collection->getId(), [
+        return ! $this->database->getAuthorization()->skip(fn () => $this->database->skipRelationships(fn () => $this->database->skipQueryHooks(fn () => $this->database->findOne($collection->getId(), [
             Query::select([Document::ID]),
             Query::equal($key, [$relatedId]),
             Query::notEqual(Document::ID, $document->getId()),
-        ])))->isEmpty();
+        ]))))->isEmpty();
     }
 
     /**
@@ -2722,10 +2722,10 @@ class Relationships implements Attachable, Hook
             && ! $twoWay
         ) {
             $this->database->getAuthorization()->skip(function () use ($document, $relatedCollection, $twoWayKey) {
-                $related = $this->database->findOne($relatedCollection->getId(), [
+                $related = $this->database->skipQueryHooks(fn () => $this->database->findOne($relatedCollection->getId(), [
                     Query::select([Document::ID]),
                     Query::equal($twoWayKey, [$document->getId()]),
-                ]);
+                ]));
 
                 if ($related->isEmpty()) {
                     return;
@@ -2745,10 +2745,10 @@ class Relationships implements Attachable, Hook
             $relationType === RelationshipType::ManyToOne
             && $side === RelationshipSide::Child
         ) {
-            $related = $this->database->getAuthorization()->skip(fn () => $this->database->findOne($relatedCollection->getId(), [
+            $related = $this->database->getAuthorization()->skip(fn () => $this->database->skipQueryHooks(fn () => $this->database->findOne($relatedCollection->getId(), [
                 Query::select([Document::ID]),
                 Query::equal($twoWayKey, [$document->getId()]),
-            ]));
+            ])));
 
             if (! $related->isEmpty()) {
                 throw new RestrictedException('Cannot delete document because it has at least one related document.');
@@ -2761,19 +2761,19 @@ class Relationships implements Attachable, Hook
         $authorization = $this->database->getAuthorization();
 
         if ($relationType === RelationshipType::OneToMany) {
-            return ! $authorization->skip(fn () => $this->database->findOne($relatedCollection->getId(), [
+            return ! $authorization->skip(fn () => $this->database->skipQueryHooks(fn () => $this->database->findOne($relatedCollection->getId(), [
                 Query::select([Document::ID]),
                 Query::equal($twoWayKey, [$document->getId()]),
-            ]))->isEmpty();
+            ])))->isEmpty();
         }
 
         $relatedIds = $this->findRelatedIds($collection, $relatedCollection, $document, $key, $relationType, $twoWay, $twoWayKey, $side);
 
         foreach (\array_chunk($relatedIds, $this->relationQueryChunkSize()) as $chunk) {
-            $related = $authorization->skip(fn () => $this->database->findOne($relatedCollection->getId(), [
+            $related = $authorization->skip(fn () => $this->database->skipQueryHooks(fn () => $this->database->findOne($relatedCollection->getId(), [
                 Query::select([Document::ID]),
                 Query::equal(Document::ID, $chunk),
-            ]));
+            ])));
 
             if (! $related->isEmpty()) {
                 return true;
@@ -2816,7 +2816,7 @@ class Relationships implements Attachable, Hook
     private function findStoredRelatedIds(Document $collection, Document $document, string $key): array
     {
         $stored = $this->database->getAuthorization()->skip(fn () => $this->database->skipRelationships(
-            fn () => $this->database->getDocument($collection->getId(), $document->getId(), forUpdate: true)
+            fn () => $this->database->skipQueryHooks(fn () => $this->database->getDocument($collection->getId(), $document->getId(), forUpdate: true))
         ));
         $relatedId = $stored->getAttribute($key);
 
@@ -2839,14 +2839,14 @@ class Relationships implements Attachable, Hook
      */
     private function findJunctionRelatedIds(Document $collection, Document $relatedCollection, Document $document, string $key, string $twoWayKey, RelationshipSide $side): array
     {
-        $junctions = $this->database->getAuthorization()->skip(fn () => $this->database->skipRelationships(fn () => $this->database->find(
+        $junctions = $this->database->getAuthorization()->skip(fn () => $this->database->skipRelationships(fn () => $this->database->skipQueryHooks(fn () => $this->database->find(
             $this->getJunctionCollection($collection, $relatedCollection, $side),
             [
                 Query::select([$key]),
                 Query::equal($twoWayKey, [$document->getId()]),
                 Query::limit(PHP_INT_MAX),
             ],
-        )));
+        ))));
 
         $relatedIds = [];
         foreach ($junctions as $junction) {
@@ -2875,11 +2875,11 @@ class Relationships implements Attachable, Hook
      */
     private function findReferencingDocuments(Document $relatedCollection, Document $document, string $twoWayKey): array
     {
-        return $this->database->getAuthorization()->skip(fn () => $this->database->find($relatedCollection->getId(), [
+        return $this->database->getAuthorization()->skip(fn () => $this->database->skipQueryHooks(fn () => $this->database->find($relatedCollection->getId(), [
             Query::select([Document::ID]),
             Query::equal($twoWayKey, [$document->getId()]),
             Query::limit(PHP_INT_MAX),
-        ]));
+        ])));
     }
 
     /**
@@ -2926,10 +2926,10 @@ class Relationships implements Attachable, Hook
                 }
 
                 $written = $this->database->getAuthorization()->skip(function () use ($document, $relatedCollection, $twoWayKey): ?Document {
-                    $related = $this->database->findOne($relatedCollection->getId(), [
+                    $related = $this->database->skipQueryHooks(fn () => $this->database->findOne($relatedCollection->getId(), [
                         Query::select([Document::ID]),
                         Query::equal($twoWayKey, [$document->getId()]),
-                    ]);
+                    ]));
 
                     if ($related->isEmpty()) {
                         return null;
@@ -2963,11 +2963,11 @@ class Relationships implements Attachable, Hook
             case RelationshipType::ManyToMany:
                 $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
-                $junctions = $this->database->find($junction, [
+                $junctions = $this->database->skipQueryHooks(fn () => $this->database->find($junction, [
                     Query::select([Document::ID]),
                     Query::equal($twoWayKey, [$document->getId()]),
                     Query::limit(PHP_INT_MAX),
-                ]);
+                ]));
 
                 $junctionIds = \array_map(fn (Document $junctionDocument) => $junctionDocument->getId(), $junctions);
                 $this->database->skipRelationships(fn () => $this->deleteRelatedDocuments($junction, $junctionIds));
@@ -2993,11 +2993,11 @@ class Relationships implements Attachable, Hook
             case RelationshipType::ManyToMany:
                 $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
-                $junctions = $this->database->skipRelationships(fn () => $this->database->find($junction, [
+                $junctions = $this->database->skipRelationships(fn () => $this->database->skipQueryHooks(fn () => $this->database->find($junction, [
                     Query::select([Document::ID, $key]),
                     Query::equal($twoWayKey, [$document->getId()]),
                     Query::limit(PHP_INT_MAX),
-                ]));
+                ])));
 
                 $junctionIds = [];
                 $relatedIds = [];
@@ -3106,12 +3106,12 @@ class Relationships implements Attachable, Hook
                 continue;
             }
 
-            $unlinked = $this->database->getAuthorization()->skip(fn () => $this->database->skipRelationships(fn () => $this->database->find($collection->getId(), [
+            $unlinked = $this->database->getAuthorization()->skip(fn () => $this->database->skipRelationships(fn () => $this->database->skipQueryHooks(fn () => $this->database->find($collection->getId(), [
                 Query::select([Document::ID]),
                 Query::equal(Document::ID, $chunk),
                 $this->notReferencing($twoWayKey, $documentId),
                 Query::limit(\count($chunk)),
-            ])));
+            ]))));
 
             foreach ($unlinked as $related) {
                 $this->linkRelatedDocument($collection, $related->getId(), $twoWayKey, $documentId);
@@ -3130,7 +3130,7 @@ class Relationships implements Attachable, Hook
         $authorization = $this->database->getAuthorization();
 
         $related = $authorization->skip(fn () => $this->database->skipRelationships(
-            fn () => $this->database->getDocument($collection->getId(), $id, forUpdate: true)
+            fn () => $this->database->skipQueryHooks(fn () => $this->database->getDocument($collection->getId(), $id, forUpdate: true))
         ));
 
         if ($related->isEmpty() || $related->getAttribute($twoWayKey) === $documentId) {
@@ -3304,7 +3304,7 @@ class Relationships implements Attachable, Hook
         $staged = $preparation->resolve === null ? null : ($preparation->resolve)($collection->getId(), $id);
 
         return $staged ?? $this->database->getAuthorization()->skip(fn (): Document => $this->database->skipRelationships(
-            fn (): Document => $this->database->getDocument($collection->getId(), $id, [Query::select([Document::PERMISSIONS])], $preparation->lock)
+            fn (): Document => $this->database->skipQueryHooks(fn () => $this->database->getDocument($collection->getId(), $id, [Query::select([Document::PERMISSIONS])], $preparation->lock))
         ));
     }
 
@@ -3461,7 +3461,7 @@ class Relationships implements Attachable, Hook
     {
         $staged = $resolve === null ? null : $resolve($collection->getId(), $id);
         if ($staged === null) {
-            $stored = $this->database->skipRelationships(fn () => $this->database->getDocument($collection->getId(), $id, $queries));
+            $stored = $this->database->skipRelationships(fn () => $this->database->skipQueryHooks(fn () => $this->database->getDocument($collection->getId(), $id, $queries)));
             if ($stored->isEmpty()) {
                 $this->refuseUnreadable($collection, $id, $check);
             }
@@ -3543,7 +3543,7 @@ class Relationships implements Attachable, Hook
         }
 
         $stored = $authorization->skip(fn () => $this->database->skipRelationships(
-            fn () => $this->database->getDocument($collection->getId(), $id, [Query::select([Document::ID])])
+            fn () => $this->database->skipQueryHooks(fn () => $this->database->getDocument($collection->getId(), $id, [Query::select([Document::ID])]))
         ));
         if ($stored->isEmpty()) {
             return;

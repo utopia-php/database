@@ -239,6 +239,11 @@ class Database
      */
     protected array $nestedHooks = [];
 
+    /**
+     * @var list<Hook\Queries>
+     */
+    protected array $queryHooks = [];
+
     /** @var Value<bool>|null Whether every lifecycle hook is silenced. */
     private ?Value $silenced = null;
 
@@ -1364,6 +1369,7 @@ class Database
      * - {@see Hook\Decorator} — document transformation on read/write results
      * - {@see Hook\Relationships} — relationship resolution and mutation
      * - {@see Hook\Nested} — preparation of each nested related document before a write relates it, run in registration order
+     * - {@see Hook\Queries} — rewriting of a read's queries before it validates, resolves or authorizes them, run in registration order
      * - {@see Hook\Write} — row-level write interception (permissions, tenant)
      * - {@see Hook\Transform} — raw SQL transformation before execution
      * - {@see Invalidator} — the query cache invalidation, replacing the one setQueryCache() made
@@ -1380,6 +1386,7 @@ class Database
             && ! $hook instanceof Hook\Decorator
             && ! $hook instanceof Relationships
             && ! $hook instanceof Hook\Nested
+            && ! $hook instanceof Hook\Queries
             && ! $hook instanceof Hook\Write
             && ! $hook instanceof Transform
         ) {
@@ -1408,6 +1415,10 @@ class Database
 
         if ($hook instanceof Hook\Nested) {
             $this->nestedHooks[] = $hook;
+        }
+
+        if ($hook instanceof Hook\Queries) {
+            $this->queryHooks[] = $hook;
         }
 
         if ($hook instanceof Hook\Write) {
@@ -1439,6 +1450,7 @@ class Database
         $this->lifecycleHooks = \array_values(\array_filter($this->lifecycleHooks, $kept));
         $this->decorators = \array_values(\array_filter($this->decorators, $kept));
         $this->nestedHooks = \array_values(\array_filter($this->nestedHooks, $kept));
+        $this->queryHooks = \array_values(\array_filter($this->queryHooks, $kept));
 
         if ($this->invalidator !== null && ! $kept($this->invalidator)) {
             $this->invalidator = null;

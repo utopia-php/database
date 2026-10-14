@@ -39,6 +39,7 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Hook\Lifecycle;
 use Utopia\Database\Hook\Preparation;
+use Utopia\Database\Hook\Queries;
 use Utopia\Database\Id;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
@@ -518,7 +519,7 @@ trait Documents
             ? self::sharedDefinition()
             : $this->silent(fn () => $this->getCollection($collection));
 
-        return $this->readDocument($definition, $id, $queries, $forUpdate);
+        return $this->readDocument($definition, $id, $this->rewriteQueries(Event::DocumentRead, $definition, $queries), $forUpdate);
     }
 
     /**
@@ -3992,7 +3993,9 @@ trait Documents
      */
     public function find(string $collection, array $queries = [], PermissionType $forPermission = PermissionType::Read): array
     {
-        return $this->fetch($this->silent(fn () => $this->getCollection($collection)), $queries, $forPermission, false);
+        $definition = $this->silent(fn () => $this->getCollection($collection));
+
+        return $this->fetch($definition, $this->rewriteQueries(Event::DocumentFind, $definition, $queries), $forPermission, false);
     }
 
     /**
@@ -4356,6 +4359,7 @@ trait Documents
         $this->assertMax($max);
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
+        $queries = $this->rewriteQueries(Event::DocumentCount, $collection, $queries);
 
         $this->checkQueryTypes($queries);
         $queries = self::resolveOneToManyJoins($collection, $queries);
@@ -4413,6 +4417,7 @@ trait Documents
         $this->assertMax($max);
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
+        $queries = $this->rewriteQueries(Event::DocumentSum, $collection, $queries);
 
         $this->checkQueryTypes($queries);
         $queries = self::resolveOneToManyJoins($collection, $queries);
@@ -4631,11 +4636,15 @@ trait Documents
      * Yield each document matching the queries, read in batches of $batchSize. A limit in the queries caps the
      * iteration, and an offset or a cursorAfter in them positions the first batch only.
      *
+     * With a {@see Queries} hook registered, the collection is resolved and the queries rewritten when this is
+     * called, so a missing collection or a refusal throws then; without one, they throw when the generator is iterated.
+     *
      * @param  array<Query>  $queries
      * @return Generator<int, Document>
      *
      * @throws DatabaseException When the queries hold a cursorBefore
      * @throws LimitException When $batchSize is above BATCH_SIZE
+     * @throws NotFoundException When a {@see Queries} hook is registered and the collection does not exist
      */
     public function cursor(
         string $collection,
@@ -4644,6 +4653,11 @@ trait Documents
         PermissionType $forPermission = PermissionType::Read,
     ): Generator {
         $batchSize = self::batchSize($batchSize);
+
+        if ($this->queryHooks !== []) {
+            $queries = $this->rewriteQueries(Event::DocumentFind, $this->silent(fn () => $this->getCollection($collection)), $queries);
+        }
+
         $parsed = Query::groupByType($queries);
 
         if ($parsed->cursor !== null && $parsed->cursorDirection === CursorDirection::Before) {
@@ -4722,8 +4736,11 @@ trait Documents
      */
     public function aggregate(string $collection, array $queries): array
     {
+        $definition = $this->silent(fn () => $this->getCollection($collection));
+        $queries = self::aliasAggregates($this->rewriteQueries(Event::DocumentAggregate, $definition, $queries));
+
         $rows = [];
-        foreach ($this->fetch($this->silent(fn () => $this->getCollection($collection)), self::aliasAggregates($queries), PermissionType::Read, true) as $row) {
+        foreach ($this->fetch($definition, $queries, PermissionType::Read, true) as $row) {
             $rows[] = $row->getArrayCopy();
         }
 
@@ -5537,6 +5554,31 @@ trait Documents
                 $this->checkQueryTypes($query->getValues());
             }
         }
+    }
+
+    /**
+     * The queries a read uses: the given ones as each {@see Queries} hook rewrote them, in registration order.
+     *
+     * @param  array<Query>  $queries
+     * @return array<Query>
+     *
+     * @throws QueryException When a query, given or rewritten, is not a {@see Query}
+     */
+    private function rewriteQueries(Event $event, Collection $collection, array $queries): array
+    {
+        if ($this->queryHooks === [] || $collection->getId() === self::METADATA) {
+            return $queries;
+        }
+
+        $this->checkQueryTypes($queries);
+
+        foreach ($this->queryHooks as $hook) {
+            $queries = \array_values($hook->rewrite($event, $collection, $queries));
+        }
+
+        $this->checkQueryTypes($queries);
+
+        return $queries;
     }
 
     private function castBefore(Document $collection, Document $document): Document

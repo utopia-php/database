@@ -9,20 +9,29 @@
 
 - `Hook\Queries::rewrite(Event $event, Collection $collection, array $queries): array` rewrites the queries of a
   read, registered with `addHook()` and removed with `removeHook()`. It is given the queries one read was given and
-  the definition of the collection being read, before the read checks, validates, parses, resolves joins or
-  authorizes anything, and the queries it returns replace the read's queries for the rest of the read, the query-cache
-  key included. It runs for `getDocument()` (`Event::DocumentRead`), `find()` and so `findOne()`, `cursor()` and
-  `resolveCursor()` (`Event::DocumentFind`), `count()` (`Event::DocumentCount`), `sum()` (`Event::DocumentSum`) and
-  `aggregate()` (`Event::DocumentAggregate`). Hooks run in registration order, each given the previous one's output.
-  Throwing refuses the read, with the exception reaching the caller unchanged before anything is read. It runs on the
-  reads the library makes itself, such as relationship population and each `cursor()` page, so it must return the same
-  queries when given its own output; it runs whether or not events are silenced. It never runs for reads of
-  `Database::METADATA`, for writes (`updateDocuments()` and `deleteDocuments()` included) or for the `query()`,
-  `mutate()` and `from()` builders. With such a hook registered, `cursor()` resolves the collection and rewrites its
-  queries when it is called, so a missing collection or a refusal throws then instead of when the generator is
-  iterated. A `Mirror` runs it once on each of its own reads and never on its destination's. One that is also a
-  `Hook\Lifecycle` is registered on the source too, as every lifecycle hook is, so it also rewrites the reads made on
-  the source directly.
+  the definition of the collection being read, once each query is checked to be a `Query` and before the read checks
+  its queries any further: before it validates, parses or authorizes them or resolves their joins. The queries it
+  returns replace the read's queries for the rest of the read, the query-cache key included. It runs for
+  `getDocument()` (`Event::DocumentRead`), `find()` and so `findOne()`, `cursor()` and `resolveCursor()`
+  (`Event::DocumentFind`), `count()` (`Event::DocumentCount`), `sum()` (`Event::DocumentSum`) and `aggregate()`
+  (`Event::DocumentAggregate`). Hooks run in registration order, each given the previous one's output. Throwing
+  refuses the read, with the exception reaching the caller unchanged before anything is read. It also runs on the
+  reads such a read makes itself: relationship population, the reads that resolve queries on relationship attributes,
+  `findOne()` through `find()`, each `cursor()` page and `resolveCursor()`'s read of the joined row it pairs with the
+  document. So it must return the same queries when given its own output; it runs whether or not events are silenced.
+  It never runs for reads of `Database::METADATA`, for the `query()`, `mutate()` and `from()` builders, or for writes
+  and the reads they make themselves. The writes are `createDocument()`, `createDocuments()`, `updateDocument()`,
+  `updateDocuments()`, `upsertDocument()`, `upsertDocuments()`, `increaseDocumentAttribute()`,
+  `decreaseDocumentAttribute()`, `deleteDocument()` and `deleteDocuments()`, and the `authorizeCreate()`,
+  `authorizeUpdate()` and `authorizeGrants()` checks of a later write; their own reads load the documents they change,
+  read back the ones they wrote, populate the relationships of the documents they return, and check, link and cascade
+  related documents, so a hook that hides rows never hides them from a write's permission and relationship checks. A
+  read the caller's own code makes while a write runs, such as in an `onNext` callback, runs it. With such a hook
+  registered, `cursor()` resolves the collection and rewrites its queries when it is called, so a missing collection
+  or a refusal throws then instead of when the generator is iterated. A `Mirror` runs it once on each of its own reads
+  and never on its destination's. One that is also a `Hook\Lifecycle` is registered on the source too, as every
+  lifecycle hook is, so it also rewrites the reads made on the source directly, except the reads the mirror's writes
+  make there.
 
 ## 8.1.2
 

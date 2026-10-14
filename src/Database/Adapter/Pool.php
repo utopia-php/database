@@ -88,6 +88,14 @@ class Pool extends Adapter implements Feature\Timeouts
     }
 
     /**
+     * @return UtopiaPool<covariant Adapter>
+     */
+    public function getPool(): UtopiaPool
+    {
+        return $this->pool;
+    }
+
+    /**
      * Required because __call() can't be used to implement abstract methods.
      *
      * @param  array<mixed>  $arguments
@@ -487,6 +495,10 @@ class Pool extends Adapter implements Feature\Timeouts
 
     public function hostname(): string
     {
+        if ($this->hostname !== '') {
+            return $this->hostname;
+        }
+
         /** @var string $result */
         $result = $this->delegateFeature(Feature\Connection::class, __FUNCTION__, \func_get_args());
 

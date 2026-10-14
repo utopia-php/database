@@ -13,13 +13,13 @@ enum Rounding
     case Floor;
     case Ceil;
 
-    private const string DECIMAL = '/^(-?)(\d+)\.(\d+)$/';
+    private const string DECIMAL = '/^\s*([+-]?)(?=\.?\d)(\d*)\.(\d*)\s*$/D';
 
     /**
      * @template T
      *
      * @param  T  $value
-     * @return T|int|string $value as a whole number, exact at any size; anything but a finite float or decimal
+     * @return T|int|string $value as a whole number, exact at any size; anything but a finite float or plain decimal
      *                      text is returned as given, for the caller to accept or refuse
      */
     public function round(mixed $value): mixed
@@ -33,8 +33,8 @@ enum Rounding
             $fractional = $fraction > 0;
         } elseif (\is_string($value) && \preg_match(self::DECIMAL, $value, $parts) === 1) {
             $negative = $parts[1] === '-';
-            $whole = BigInt::toNative($parts[1].$parts[2]);
-            $half = $parts[3][0] >= '5';
+            $whole = BigInt::toNative(($negative ? '-' : '').($parts[2] ?: '0'));
+            $half = $parts[3] !== '' && $parts[3][0] >= '5';
             $fractional = \trim($parts[3], '0') !== '';
         } else {
             return $value;

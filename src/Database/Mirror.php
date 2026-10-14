@@ -1636,7 +1636,7 @@ class Mirror extends Database
 
         return $this->getSource()->getAuthorization()->skip(function () use ($collection) {
             try {
-                return $this->source->getDocument('upgrades', $collection);
+                return $this->source->skipQueryHooks(fn (): Document => $this->source->getDocument('upgrades', $collection));
             } catch (Throwable) {
                 return;
             }
@@ -1839,7 +1839,7 @@ class Mirror extends Database
      * the destination replicates the related documents the source already prepared, so preparing them again would
      * give it IDs the source does not have. A queries hook runs once on each read of the mirror, which serves its
      * reads, and never on the destination. One that is also a lifecycle hook is registered on the source too, as every
-     * lifecycle hook is, so it also rewrites the reads made on the source directly.
+     * lifecycle hook is, so it also rewrites the reads made on the source directly, though never those a write makes.
      */
     #[\Override]
     public function addHook(\Utopia\Query\Hook $hook): static

@@ -468,13 +468,13 @@ trait Documents
         $refetchedMap = [];
         foreach (\array_chunk($sequences, \max(1, $this->maxQueryValues)) as $chunk) {
             $refetched = $this->getAuthorization()->skip(fn () => $this->silent(
-                fn () => $this->find(
+                fn () => $this->skipQueryHooks(fn () => $this->find(
                     $collection->getId(),
                     \array_merge([
                         Query::equal(Document::SEQUENCE, $chunk),
                         Query::limit(\count($chunk)),
                     ], $selections)
-                )
+                ))
             ));
 
             foreach ($refetched as $document) {
@@ -1247,7 +1247,7 @@ trait Documents
         $hook = $this->relationshipHook;
         if ($hook !== null && ! $hook->isInBatchPopulation() && $hook->isEnabled()) {
             $fetchDepth = $hook->getWriteStackCount();
-            $documents = $this->silent(fn () => $hook->populateDocuments([$document], $collection, $fetchDepth));
+            $documents = $this->silent(fn () => $this->skipQueryHooks(fn () => $hook->populateDocuments([$document], $collection, $fetchDepth)));
             $document = $documents[0];
         }
 
@@ -1609,7 +1609,7 @@ trait Documents
 
             $hook = $this->relationshipHook;
             if ($hook !== null && ! $hook->isInBatchPopulation() && $hook->isEnabled()) {
-                $batch = $this->silent(fn () => $hook->populateDocuments($batch, $collection, $hook->getFetchDepth()));
+                $batch = $this->silent(fn () => $this->skipQueryHooks(fn () => $hook->populateDocuments($batch, $collection, $hook->getFetchDepth())));
             }
 
             /** @var array<Document> $batch */
@@ -1664,7 +1664,7 @@ trait Documents
             : $collection->getId();
         $document = $this->withMutation(Event::DocumentUpdate, $cacheTarget, function () use ($collection, $id, $document, $preparation, $newUpdatedAt, &$hasOperators) {
             $old = $this->authorization->skip(fn () => $this->silent(
-                fn () => $this->readDocument($collection, $id, forUpdate: true)
+                fn () => $this->skipQueryHooks(fn () => $this->readDocument($collection, $id, forUpdate: true))
             ));
             if ($old->isEmpty()) {
                 return new Document();
@@ -1922,7 +1922,7 @@ trait Documents
 
         $hook = $this->relationshipHook;
         if ($hook !== null && ! $hook->isInBatchPopulation() && $hook->isEnabled()) {
-            $documents = $this->silent(fn () => $hook->populateDocuments([$document], $collection, $hook->getFetchDepth()));
+            $documents = $this->silent(fn () => $this->skipQueryHooks(fn () => $hook->populateDocuments([$document], $collection, $hook->getFetchDepth())));
             $document = $documents[0];
         }
 
@@ -2089,12 +2089,12 @@ trait Documents
                 $new[] = Query::cursorAfter($last);
             }
 
-            $batch = $this->silent(fn () => $this->fetch(
+            $batch = $this->silent(fn () => $this->skipQueryHooks(fn () => $this->fetch(
                 $collection,
                 array_merge($new, $queries),
                 PermissionType::Update,
                 false,
-            ));
+            )));
 
             if (empty($batch)) {
                 break;
@@ -2243,7 +2243,7 @@ trait Documents
         );
 
         if ($result === null) {
-            return $this->getDocument($collection, $document->getId());
+            return $this->skipQueryHooks(fn (): Document => $this->getDocument($collection, $document->getId()));
         }
 
         $listeners = $this->listens(Event::DocumentUpsert);
@@ -2590,7 +2590,7 @@ trait Documents
 
             $hook = $this->relationshipHook;
             if ($hook !== null && ! $hook->isInBatchPopulation() && $hook->isEnabled()) {
-                $batch = $this->silent(fn () => $hook->populateDocuments($batch, $collection, $hook->getFetchDepth()));
+                $batch = $this->silent(fn () => $this->skipQueryHooks(fn () => $hook->populateDocuments($batch, $collection, $hook->getFetchDepth())));
             }
 
             if ($hasOperators && $onNext !== null) {
@@ -2658,10 +2658,10 @@ trait Documents
         $existing = [];
         foreach ($batches as $batch) {
             foreach (\array_chunk(\array_values(\array_unique($batch['ids'])), \max(1, $this->maxQueryValues)) as $chunk) {
-                $read = fn (): array => $this->authorization->skip(fn () => $this->silent(fn () => $this->find($collection, [
+                $read = fn (): array => $this->authorization->skip(fn () => $this->silent(fn () => $this->skipQueryHooks(fn () => $this->find($collection, [
                     Query::equal(Document::ID, $chunk),
                     Query::limit($this->maxQueryValues),
-                ], forPermission: PermissionType::Update)));
+                ], forPermission: PermissionType::Update))));
 
                 $found = $perTenant
                     ? $this->withTenant($batch['tenant'], $read)
@@ -2731,7 +2731,7 @@ trait Documents
             : $collection->getId();
         $document = $this->withMutation(Event::DocumentIncrease, $cacheTarget, function () use ($collection, $id, $attribute, $value, $max, $numericAttribute) {
             /** @var Document $document */
-            $document = $this->authorization->skip(fn () => $this->silent(fn () => $this->readDocument($collection, $id, forUpdate: true))); // Skip ensures user does not need read permission for this
+            $document = $this->authorization->skip(fn () => $this->silent(fn () => $this->skipQueryHooks(fn () => $this->readDocument($collection, $id, forUpdate: true)))); // Skip ensures user does not need read permission for this
 
             if ($document->isEmpty()) {
                 throw new NotFoundException('Document not found');
@@ -2862,7 +2862,7 @@ trait Documents
             : $collection->getId();
         $document = $this->withMutation(Event::DocumentDecrease, $cacheTarget, function () use ($collection, $id, $attribute, $value, $min, $numericAttribute) {
             /** @var Document $document */
-            $document = $this->authorization->skip(fn () => $this->silent(fn () => $this->readDocument($collection, $id, forUpdate: true))); // Skip ensures user does not need read permission for this
+            $document = $this->authorization->skip(fn () => $this->silent(fn () => $this->skipQueryHooks(fn () => $this->readDocument($collection, $id, forUpdate: true)))); // Skip ensures user does not need read permission for this
 
             if ($document->isEmpty()) {
                 throw new NotFoundException('Document not found');
@@ -2967,7 +2967,7 @@ trait Documents
         $deleted = $this->withMutation(Event::DocumentDelete, $cacheTarget, function () use ($collection, $id, $report, &$changed): ?Document {
             $changed = [];
             $document = $this->authorization->skip(fn () => $this->silent(
-                fn () => $this->readDocument($collection, $id, forUpdate: true)
+                fn () => $this->skipQueryHooks(fn () => $this->readDocument($collection, $id, forUpdate: true))
             ));
 
             if ($document->isEmpty()) {
@@ -3135,12 +3135,12 @@ trait Documents
             /**
              * @var array<Document> $batch
              */
-            $batch = $this->silent(fn () => $this->fetch(
+            $batch = $this->silent(fn () => $this->skipQueryHooks(fn () => $this->fetch(
                 $collection,
                 array_merge($new, $queries),
                 PermissionType::Delete,
                 false,
-            ));
+            )));
 
             if (empty($batch)) {
                 break;
@@ -5566,7 +5566,7 @@ trait Documents
      */
     private function rewriteQueries(Event $event, Collection $collection, array $queries): array
     {
-        if ($this->queryHooks === [] || $collection->getId() === self::METADATA) {
+        if ($this->queryHooks === [] || $collection->getId() === self::METADATA || ! $this->rewriting()->get()) {
             return $queries;
         }
 

@@ -54,6 +54,26 @@ final class QueriesHookTest extends TestCase
         $this->assertSame([], $hook->calls);
     }
 
+    public function testTheMirrorReplicatesAWriteWhileALifecycleQueriesHookRewritesTheSourcesReads(): void
+    {
+        $hook = self::hook(true);
+        $source = HookFixture::memory();
+        $destination = HookFixture::memory();
+        $mirror = new Mirror($source, $destination);
+        $mirror->createUpgrades();
+        $source->getAuthorization()->skip(static fn (): Document => $source->createDocument('upgrades', new Document([
+            '$id' => HookFixture::COLLECTION,
+            'collectionId' => HookFixture::COLLECTION,
+            'status' => 'upgraded',
+        ])));
+
+        $mirror->addHook($hook);
+        $mirror->createDocument(HookFixture::COLLECTION, new Document(['$id' => 'third', 'title' => 'third', 'views' => 3]));
+
+        $this->assertSame([], $hook->calls);
+        $this->assertSame('third', $destination->getDocument(HookFixture::COLLECTION, 'third')->getAttribute('title'));
+    }
+
     private static function hook(bool $lifecycle): QueriesRecorder
     {
         $adding = QueriesRecorder::adding(Query::equal('title', ['first']));

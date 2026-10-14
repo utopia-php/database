@@ -280,6 +280,9 @@ class Database
     /** @var Value<bool>|null */
     private ?Value $grantChecking = null;
 
+    /** @var Value<bool>|null Whether {@see Hook\Queries} hooks rewrite the queries of reads. */
+    private ?Value $rewriting = null;
+
     protected ?Relationships $relationshipHook = null;
 
     protected bool $dropUnknownAttributes = false;
@@ -1361,6 +1364,22 @@ class Database
     }
 
     /**
+     * Run the callback with no {@see Hook\Queries} hook rewriting the reads it makes, for the calling coroutine and
+     * the coroutines it starts. A write makes its own reads under it, so it sees the documents as they are stored.
+     *
+     * @internal
+     *
+     * @template T
+     *
+     * @param  callable(): T  $callback
+     * @return T
+     */
+    public function skipQueryHooks(callable $callback): mixed
+    {
+        return $this->rewriting()->with(false, $callback);
+    }
+
+    /**
      * Register a hook into the database pipeline.
      *
      * Dispatches by type:
@@ -1618,6 +1637,7 @@ class Database
             ignoreDuplicates: $this->ignoringDuplicates()->get(),
             requestTimestamp: $this->requestTimestamp()->get(),
             checkGrants: $this->grantChecking()->get(),
+            rewriting: $this->rewriting()->get(),
         );
     }
 
@@ -1658,7 +1678,8 @@ class Database
      */
     private function withToggles(Snapshot $snapshot, callable $callback): mixed
     {
-        $checked = fn (): mixed => $this->grantChecking()->with($snapshot->checkGrants, $callback);
+        $rewritten = fn (): mixed => $this->rewriting()->with($snapshot->rewriting, $callback);
+        $checked = fn (): mixed => $this->grantChecking()->with($snapshot->checkGrants, $rewritten);
         $timestamped = fn (): mixed => $this->requestTimestamp()->with($snapshot->requestTimestamp, $checked);
         $deduplicated = fn (): mixed => $this->ignoringDuplicates()->with($snapshot->ignoreDuplicates, $timestamped);
         $sequenced = fn (): mixed => $this->sequencePreservation()->with($snapshot->preserveSequence, $deduplicated);
@@ -1744,6 +1765,14 @@ class Database
     private function grantChecking(): Value
     {
         return $this->grantChecking ??= new Value(false);
+    }
+
+    /**
+     * @return Value<bool>
+     */
+    private function rewriting(): Value
+    {
+        return $this->rewriting ??= new Value(true);
     }
 
     protected function isIgnoringDuplicates(): bool

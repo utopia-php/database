@@ -6,6 +6,7 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Query\Joined\Attributes;
+use Utopia\Database\Validator\Query\Joined\Collection;
 use Utopia\Query\Method;
 use Utopia\Query\Query as BaseQuery;
 
@@ -29,6 +30,14 @@ class Order extends Base
      */
     protected array $aggregationAliases = [];
 
+    /**
+     * The relationships whose related ids live on the other collection or in a junction table, so this collection
+     * holds no column to order by.
+     *
+     * @var array<string, true>
+     */
+    private array $columnless = [];
+
     private bool $aggregates = false;
 
     /**
@@ -47,6 +56,12 @@ class Order extends Base
         foreach ($attributes as $attribute) {
             $attribute = $attribute instanceof Attribute ? $attribute : Attribute::fromDocument($attribute);
             $this->schema[$attribute->key] = true;
+        }
+
+        foreach (Collection::columns($attributes) as $key => $holdsColumn) {
+            if (! $holdsColumn) {
+                $this->columnless[$key] = true;
+            }
         }
     }
 
@@ -109,6 +124,12 @@ class Order extends Base
         $attribute = $value->getAttribute();
 
         if ($method === Method::OrderAsc || $method === Method::OrderDesc) {
+            if (isset($this->columnless[$attribute])) {
+                $this->message = 'Cannot order by relationship attribute: '.$attribute;
+
+                return false;
+            }
+
             return $this->isValidAttribute($attribute) && $this->isGroupedOrder($attribute);
         }
 

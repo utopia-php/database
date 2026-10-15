@@ -2868,6 +2868,34 @@ trait DocumentTests
         $database->deleteCollection($collection);
     }
 
+    public function testNegativeSumOverflowIsRefused(): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'sum_underflow_'.\substr(\uniqid(), -6);
+        $database->createCollection(Collection::create(
+            id: $collection,
+            attributes: [Attribute::double(key: 'reading', required: true)],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+        foreach ([-1e308, -1e308] as $reading) {
+            $database->createDocument($collection, new Document([
+                'reading' => $reading,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
+
+        foreach ([[[], null], [[], 5], [[Query::lessThan('reading', 0)], null]] as [$queries, $max]) {
+            try {
+                $database->sum($collection, 'reading', $queries, $max);
+                $this->fail('A sum that overflows below the range of a double is refused');
+            } catch (LimitException) {
+                $this->addToAssertionCount(1);
+            }
+        }
+
+        $database->deleteCollection($collection);
+    }
+
     public function testUpdateDocument(): void
     {
         $document = $this->initDocumentsFixture();

@@ -521,7 +521,11 @@ trait Documents
             ? self::sharedDefinition()
             : $this->silent(fn () => $this->getCollection($collection));
 
-        return $this->readDocument($definition, $id, $this->rewriteQueries(Event::DocumentRead, $definition, $queries), $forUpdate);
+        $document = $this->readDocument($definition, $id, $this->rewriteQueries(Event::DocumentRead, $definition, $queries), $forUpdate);
+
+        $this->maskColumns($definition, $document);
+
+        return $document;
     }
 
     /**
@@ -1268,6 +1272,8 @@ trait Documents
             $this->dispatch(new Event\Document\Created($collection->getId(), $document), $listeners);
         }
 
+        $this->maskColumns($collection, $document);
+
         return $document;
     }
 
@@ -1486,6 +1492,41 @@ trait Documents
     }
 
     /**
+     * Remove the columns the caller was not granted from a document on its way back.
+     *
+     * The other half of the gate: a query naming an ungranted column is refused, and a read
+     * naming nothing is answered with what the caller may see. Asking for everything -- a bare
+     * read, or select('*') -- is not refusing, so it is shaped rather than thrown.
+     *
+     * The key is removed rather than nulled: null would be indistinguishable from a column that
+     * genuinely holds null, which tells the caller something untrue. System attributes are left
+     * alone; they are not columns and the row gate already decided them.
+     *
+     * @throws DatabaseException
+     * @throws StructureException
+     */
+    private function maskColumns(Document $collection, Document $document): void
+    {
+        if (! $this->authorization->getStatus() || $document->isEmpty()) {
+            return;
+        }
+
+        $granted = $this->grantedColumns($collection, PermissionType::Read);
+
+        if ($granted === null) {
+            return;
+        }
+
+        foreach (\array_keys($document->getArrayCopy()) as $key) {
+            if (\str_starts_with($key, '$') || \in_array($key, $granted, true)) {
+                continue;
+            }
+
+            $document->removeAttribute($key);
+        }
+    }
+
+    /**
      * Refuse a write that touches a column the caller may not change.
      *
      * The mirror of the read gate, and the simpler half: there is no query surface, only the
@@ -1556,7 +1597,7 @@ trait Documents
     /**
      * Every column a set of queries names, nested ones included.
      *
-     * @param  array<Query>  $queries
+     * @param  array<mixed>  $queries
      * @return list<string>
      */
     private static function columnsNamedBy(array $queries): array
@@ -1564,6 +1605,10 @@ trait Documents
         $columns = [];
 
         foreach ($queries as $query) {
+            if (! $query instanceof Query) {
+                continue;
+            }
+
             if ($query->getMethod() === Method::Select) {
                 foreach ($query->getValues() as $value) {
                     // '*' names nothing in particular -- it asks for whatever the caller is
@@ -1584,9 +1629,7 @@ trait Documents
             }
 
             // and/or carry their operands as values
-            $nested = \array_filter($query->getValues(), static fn (mixed $value): bool => $value instanceof Query);
-
-            foreach (self::columnsNamedBy(\array_values($nested)) as $column) {
+            foreach (self::columnsNamedBy($query->getValues()) as $column) {
                 $columns[] = $column;
             }
         }
@@ -1845,6 +1888,7 @@ trait Documents
 
             foreach ($batch as $document) {
                 if ($onNext !== null) {
+                    $this->maskColumns($collection, $document);
                     $onNext($document, null);
                 }
 
@@ -2170,6 +2214,8 @@ trait Documents
             $this->dispatch(new Event\Document\Updated($collection->getId(), $document), $listeners);
         }
 
+        $this->maskColumns($collection, $document);
+
         return $document;
     }
 
@@ -2422,6 +2468,8 @@ trait Documents
 
             foreach ($batch as $index => $doc) {
                 if ($onNext !== null) {
+                    $this->maskColumns($collection, $doc);
+                    $this->maskColumns($collection, $old[$index]);
                     $onNext($doc, $old[$index]);
                 }
                 $modified++;
@@ -2848,9 +2896,11 @@ trait Documents
 
                 if (! $old->isEmpty()) {
                     $old = $this->castAfterDocument($collection, $old);
+                    $this->maskColumns($collection, $old);
                 }
 
                 if ($onNext !== null) {
+                    $this->maskColumns($collection, $doc);
                     $onNext($doc, $old->isEmpty() ? null : $old);
                 }
             }
@@ -3040,6 +3090,8 @@ trait Documents
             $this->dispatch(new Event\Document\Increased($collection->getId(), $document, $attribute), $listeners);
         }
 
+        $this->maskColumns($collection, $document);
+
         return $document;
     }
 
@@ -3170,6 +3222,8 @@ trait Documents
         if ($listeners !== [] && $value !== 0) {
             $this->dispatch(new Event\Document\Decreased($collection->getId(), $document, $attribute), $listeners);
         }
+
+        $this->maskColumns($collection, $document);
 
         return $document;
     }
@@ -3433,6 +3487,7 @@ trait Documents
 
             foreach ($batch as $document) {
                 if ($onNext !== null) {
+                    $this->maskColumns($collection, $document);
                     $onNext($document, clone $document);
                 }
                 $modified++;
@@ -4230,7 +4285,13 @@ trait Documents
     {
         $definition = $this->silent(fn () => $this->getCollection($collection));
 
-        return $this->fetch($definition, $this->rewriteQueries(Event::DocumentFind, $definition, $queries), $forPermission, false);
+        $documents = $this->fetch($definition, $this->rewriteQueries(Event::DocumentFind, $definition, $queries), $forPermission, false);
+
+        foreach ($documents as $document) {
+            $this->maskColumns($definition, $document);
+        }
+
+        return $documents;
     }
 
     /**
@@ -4266,6 +4327,10 @@ trait Documents
 
         $relationships = self::relationshipAttributes($collection);
 
+        // Covers aggregate() too, which reads through here: min, max and the rest arrive as
+        // queries naming the column they aggregate, and an aggregate over a column you cannot
+        // read discloses it as surely as reading it. After checkQueryTypes() above, so a
+        // malformed query is still reported as malformed rather than reaching this.
         $this->assertQueryColumns($collection, $queries);
 
         $parsed = Query::groupByType($queries);
@@ -4598,9 +4663,9 @@ trait Documents
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $queries = $this->rewriteQueries(Event::DocumentCount, $collection, $queries);
 
+        $this->checkQueryTypes($queries);
         $this->assertQueryColumns($collection, $queries);
 
-        $this->checkQueryTypes($queries);
         $queries = self::resolveOneToManyJoins($collection, $queries);
 
         $joinedCollections = null;
@@ -4658,10 +4723,11 @@ trait Documents
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $queries = $this->rewriteQueries(Event::DocumentSum, $collection, $queries);
 
+        $this->checkQueryTypes($queries);
+
         // The aggregated column is read too, so it is named alongside the queries.
         $this->assertQueryColumns($collection, [...$queries, Query::sum($attribute)]);
 
-        $this->checkQueryTypes($queries);
         $queries = self::resolveOneToManyJoins($collection, $queries);
 
         $joinedCollections = null;
@@ -4979,11 +5045,6 @@ trait Documents
     public function aggregate(string $collection, array $queries): array
     {
         $definition = $this->silent(fn () => $this->getCollection($collection));
-
-        // min, max, avg and the rest arrive as queries naming the column they aggregate, so the
-        // same check covers them: an aggregate over a column you cannot read discloses it as
-        // surely as reading it.
-        $this->assertQueryColumns($definition, $queries);
 
         $queries = self::aliasAggregates($this->rewriteQueries(Event::DocumentAggregate, $definition, $queries));
 

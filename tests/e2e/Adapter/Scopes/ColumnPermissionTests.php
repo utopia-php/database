@@ -4,6 +4,7 @@ namespace Tests\E2E\Adapter\Scopes;
 
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Collection\Update as CollectionUpdate;
 use Utopia\Database\Database;
@@ -686,8 +687,13 @@ trait ColumnPermissionTests
             'select' => fn () => $database->find('columnGrantsQueries', [Query::select(['salary'])]),
             'count' => fn () => $database->count('columnGrantsQueries', [Query::equal('salary', [120000])]),
             'sum' => fn () => $database->sum('columnGrantsQueries', 'salary'),
-            'aggregate' => fn () => $database->aggregate('columnGrantsQueries', [Query::max('salary')]),
         ];
+
+        // An adapter without aggregates rejects max() as a method before the column is reached,
+        // which is the right order: an unsupported query is not a permission question.
+        if ($database->getAdapter()->supports(Capability::Aggregations)) {
+            $refused['aggregate'] = fn () => $database->aggregate('columnGrantsQueries', [Query::max('salary')]);
+        }
 
         $this->asRole($authorization, Role::any()->toString(), function () use ($refused, $database): void {
             foreach ($refused as $what => $run) {
@@ -786,6 +792,217 @@ trait ColumnPermissionTests
                 $authorization->addRole($held);
             }
         }
+    }
+
+    /**
+     * A read that names nothing comes back holding what the caller was granted.
+     *
+     * The mirror of the refusal: naming an ungranted column throws, asking for everything does
+     * not, so the answer is shaped instead. The key is removed rather than nulled, since null
+     * would be indistinguishable from a column that genuinely holds null.
+     */
+    public function testAReadComesBackHoldingOnlyTheGrantedColumns(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $authorization = $database->getAuthorization();
+
+        $database->withColumnPermissions(fn () => $database->createCollection(Collection::create(
+            id: 'columnGrantsMasked',
+            attributes: [
+                Attribute::string(key: 'name', size: 64),
+                Attribute::integer(key: 'salary'),
+            ],
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any(), 'name'),
+                Permission::read(Role::team('hr'), 'salary'),
+                Permission::read(Role::team('exec')),
+            ],
+        )));
+
+        $authorization->skip(fn () => $database->createDocument('columnGrantsMasked', new Document([
+            '$id' => 'e1',
+            'name' => 'Ada',
+            'salary' => 120000,
+        ])));
+
+        $columns = static fn (Document $document): array => \array_keys(\array_intersect_key(
+            $document->getArrayCopy(),
+            ['name' => true, 'salary' => true],
+        ));
+
+        // Granted one column: the other is gone, not nulled.
+        $this->asRole($authorization, Role::any()->toString(), function () use ($database, $columns): void {
+            $stored = $database->getDocument('columnGrantsMasked', 'e1');
+
+            $this->assertSame(['name'], $columns($stored));
+            $this->assertSame('Ada', $stored->getAttribute('name'));
+            $this->assertFalse($stored->offsetExists('salary'), 'salary came back for a role granted only name');
+
+            // find() and select('*') shape the same way, and the system attributes survive.
+            $this->assertSame(['name'], $columns($database->find('columnGrantsMasked')[0]));
+            $this->assertSame(['name'], $columns($database->find('columnGrantsMasked', [Query::select(['*'])])[0]));
+            $this->assertSame('e1', $database->find('columnGrantsMasked')[0]->getId());
+        });
+
+        // A different role, a different column.
+        $this->asRole($authorization, Role::team('hr')->toString(), function () use ($database, $columns): void {
+            $this->assertSame(['salary'], $columns($database->getDocument('columnGrantsMasked', 'e1')));
+        });
+
+        // A whole-row grant names no column, so nothing is withheld from it.
+        $this->asRole($authorization, Role::team('exec')->toString(), function () use ($database, $columns): void {
+            $this->assertSame(['name', 'salary'], $columns($database->getDocument('columnGrantsMasked', 'e1')));
+        });
+
+        // Internal reads are not shaped, or the library would lose columns it needs to write.
+        $this->assertSame(
+            ['name', 'salary'],
+            $columns($authorization->skip(fn () => $database->getDocument('columnGrantsMasked', 'e1'))),
+        );
+    }
+
+    /**
+     * A write hands its result back the same way a read does.
+     *
+     * An update reads the row to merge the patch onto it, so its response carries every column
+     * the row holds -- including the ones the caller may not read. The write itself is judged
+     * separately: a role may be allowed to change a column it cannot see, and then the change
+     * lands while the answer still withholds it.
+     */
+    public function testAWriteComesBackHoldingOnlyTheGrantedColumns(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $authorization = $database->getAuthorization();
+
+        $database->withColumnPermissions(fn () => $database->createCollection(Collection::create(
+            id: 'columnGrantsWritten',
+            attributes: [
+                Attribute::string(key: 'name', size: 64),
+                Attribute::integer(key: 'salary'),
+            ],
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::read(Role::any(), 'name'),
+                Permission::update(Role::team('exec')),
+                Permission::read(Role::team('exec')),
+            ],
+        )));
+
+        $columns = static fn (Document $document): array => \array_keys(\array_intersect_key(
+            $document->getArrayCopy(),
+            ['name' => true, 'salary' => true],
+        ));
+
+        $this->asRole($authorization, Role::any()->toString(), function () use ($database, $columns): void {
+            $created = $database->createDocument('columnGrantsWritten', new Document([
+                '$id' => 'w1',
+                'name' => 'Ada',
+                'salary' => 120000,
+            ]));
+            $this->assertSame(['name'], $columns($created), 'createDocument() handed back an ungranted column');
+
+            $updated = $database->updateDocument('columnGrantsWritten', 'w1', new Document([
+                'name' => 'Ada Lovelace',
+            ]));
+            $this->assertSame(['name'], $columns($updated), 'updateDocument() handed back an ungranted column');
+            $this->assertSame('Ada Lovelace', $updated->getAttribute('name'));
+
+            if ($database->getAdapter()->hasFeature(Feature\Upserts::class)) {
+                $upserted = $database->upsertDocument('columnGrantsWritten', new Document([
+                    '$id' => 'w1',
+                    'name' => 'Ada King',
+                ]));
+                $this->assertSame(['name'], $columns($upserted), 'upsertDocument() handed back an ungranted column');
+            }
+
+            // A counter may be bumped by a role that cannot read it, and the answer still withholds it.
+            $increased = $database->increaseDocumentAttribute('columnGrantsWritten', 'w1', 'salary', 1000);
+            $this->assertSame(['name'], $columns($increased), 'increaseDocumentAttribute() handed back an ungranted column');
+
+            $decreased = $database->decreaseDocumentAttribute('columnGrantsWritten', 'w1', 'salary', 500);
+            $this->assertSame(['name'], $columns($decreased), 'decreaseDocumentAttribute() handed back an ungranted column');
+        });
+
+        // Shaping the answer is not editing the row: every write above landed in full.
+        $stored = $authorization->skip(fn () => $database->getDocument('columnGrantsWritten', 'w1'));
+        $this->assertSame(['name', 'salary'], $columns($stored));
+        $this->assertSame(120500, $stored->getAttribute('salary'));
+
+        // A whole-row grant names no column, so nothing is withheld from it.
+        $this->asRole($authorization, Role::team('exec')->toString(), function () use ($database, $columns): void {
+            $this->assertSame(
+                ['name', 'salary'],
+                $columns($database->updateDocument('columnGrantsWritten', 'w1', new Document(['name' => 'Ada']))),
+            );
+        });
+    }
+
+    /**
+     * A batch write reports each row through onNext, which is the same way out.
+     *
+     * Both documents it is handed are shaped: the one just written and the one it replaced,
+     * since the previous row is read from storage in full.
+     */
+    public function testABatchWriteHandsBackOnlyTheGrantedColumns(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $authorization = $database->getAuthorization();
+
+        $database->withColumnPermissions(fn () => $database->createCollection(Collection::create(
+            id: 'columnGrantsBatched',
+            attributes: [
+                Attribute::string(key: 'name', size: 64),
+                Attribute::integer(key: 'salary'),
+            ],
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+                Permission::read(Role::any(), 'name'),
+            ],
+        )));
+
+        $columns = static fn (Document $document): array => \array_keys(\array_intersect_key(
+            $document->getArrayCopy(),
+            ['name' => true, 'salary' => true],
+        ));
+
+        $this->asRole($authorization, Role::any()->toString(), function () use ($database, $columns): void {
+            $seen = [];
+            $collect = function (Document $document, ?Document $previous) use (&$seen, $columns): void {
+                $seen[] = $columns($document);
+                if ($previous !== null) {
+                    $seen[] = $columns($previous);
+                }
+            };
+
+            $database->createDocuments('columnGrantsBatched', [
+                new Document(['$id' => 'b1', 'name' => 'Ada', 'salary' => 120000]),
+                new Document(['$id' => 'b2', 'name' => 'Grace', 'salary' => 130000]),
+            ], onNext: $collect);
+            $this->assertSame([['name'], ['name']], $seen, 'createDocuments() reported an ungranted column');
+
+            $seen = [];
+            $database->updateDocuments('columnGrantsBatched', new Document(['name' => 'Redacted']), onNext: $collect);
+            $this->assertSame([['name'], ['name'], ['name'], ['name']], $seen, 'updateDocuments() reported an ungranted column');
+
+            if ($database->getAdapter()->hasFeature(Feature\Upserts::class)) {
+                $seen = [];
+                $database->upsertDocuments('columnGrantsBatched', [
+                    new Document(['$id' => 'b1', 'name' => 'Ada', 'salary' => 1]),
+                ], onNext: $collect);
+                $this->assertSame([['name'], ['name']], $seen, 'upsertDocuments() reported an ungranted column');
+            }
+
+            $seen = [];
+            $database->deleteDocuments('columnGrantsBatched', onNext: $collect);
+            $this->assertSame([['name'], ['name'], ['name'], ['name']], $seen, 'deleteDocuments() reported an ungranted column');
+        });
     }
 
     public function testADocumentPermissionNamingNoColumnIsUnaffected(): void

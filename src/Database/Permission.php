@@ -10,6 +10,15 @@ use Utopia\Database\Exception as DatabaseException;
  */
 class Permission
 {
+    /**
+     * A permission naming no column covers every column.
+     *
+     * The empty string rather than null: a permission is parsed from and rendered back to
+     * a string, and an absent column has to round-trip through that without becoming the
+     * word "null" or a column of that name.
+     */
+    public const string ALL_COLUMNS = '';
+
     private Role $role;
 
     /**
@@ -28,12 +37,14 @@ class Permission
      * @param string $role The role name
      * @param string $identifier The role identifier
      * @param string $dimension The role dimension
+     * @param string $column The column this permission is scoped to, or ALL_COLUMNS for the whole row
      */
     public function __construct(
         private string $permission,
         string $role,
         string $identifier = '',
         string $dimension = '',
+        private string $column = self::ALL_COLUMNS,
     ) {
         $this->role = new Role($role, $identifier, $dimension);
     }
@@ -45,7 +56,27 @@ class Permission
      */
     public function toString(): string
     {
-        return $this->permission.'("'.$this->role->toString().'")';
+        if ($this->column === self::ALL_COLUMNS) {
+            return $this->permission.'("'.$this->role->toString().'")';
+        }
+
+        return $this->permission.'("'.$this->role->toString().'", "'.$this->column.'")';
+    }
+
+    /**
+     * The column this permission is scoped to, or ALL_COLUMNS when it covers the whole row.
+     */
+    public function getColumn(): string
+    {
+        return $this->column;
+    }
+
+    /**
+     * Does this permission cover every column rather than naming one?
+     */
+    public function isForAllColumns(): bool
+    {
+        return $this->column === self::ALL_COLUMNS;
     }
 
     /**
@@ -109,6 +140,44 @@ class Permission
             throw new DatabaseException('Invalid permission type: "'.$permission.'".');
         }
         $fullRole = \str_replace('")', '', $permissionParts[1]);
+
+        // A column-scoped permission is read("role", "column"). Split the column off here so
+        // every branch below parses a bare role exactly as it did before -- the role grammar
+        // (identifier, dimension) is unchanged by the column, and keeping them separate stops
+        // the two from having to know about each other.
+        //
+        // The role ends at its closing quote, whatever spacing follows the comma. Matching the
+        // canonical '", "' alone would read read("any","name") as the role any","name, which is
+        // a role that matches nobody -- and these strings come from callers, not only from
+        // toString().
+        $column = self::ALL_COLUMNS;
+        $quote = \strpos($fullRole, '"');
+
+        if ($quote !== false) {
+            $rest = \ltrim(\substr($fullRole, $quote + 1));
+
+            if (! \str_starts_with($rest, ',')) {
+                throw new DatabaseException('Invalid permission: "'.$permission.'".');
+            }
+
+            $rest = \ltrim(\substr($rest, 1));
+
+            if (! \str_starts_with($rest, '"')) {
+                throw new DatabaseException('Invalid permission: "'.$permission.'".');
+            }
+
+            if ($rest === '"') {
+                throw new DatabaseException('Column must not be empty. Omit the argument to grant every column.');
+            }
+
+            if ($rest === '"*') {
+                throw new DatabaseException('Wildcard column "*" is not supported. Omit the argument to grant every column.');
+            }
+
+            $column = \substr($rest, 1);
+            $fullRole = \substr($fullRole, 0, $quote);
+        }
+
         $roleParts = \explode(':', $fullRole);
         $role = $roleParts[0];
 
@@ -116,13 +185,13 @@ class Permission
         $hasDimension = \str_contains($fullRole, '/');
 
         if (! $hasIdentifier && ! $hasDimension) {
-            return new self($permission, $role);
+            return new self($permission, $role, column: $column);
         }
 
         if ($hasIdentifier && ! $hasDimension) {
             $identifier = $roleParts[1];
 
-            return new self($permission, $role, $identifier);
+            return new self($permission, $role, $identifier, column: $column);
         }
 
         if (! $hasIdentifier) {
@@ -138,7 +207,7 @@ class Permission
                 throw new DatabaseException('Dimension must not be empty');
             }
 
-            return new self($permission, $role, '', $dimension);
+            return new self($permission, $role, '', $dimension, $column);
         }
 
         // Has both identifier and dimension
@@ -154,7 +223,7 @@ class Permission
             throw new DatabaseException('Dimension must not be empty');
         }
 
-        return new self($permission, $role, $identifier, $dimension);
+        return new self($permission, $role, $identifier, $dimension, $column);
     }
 
     /**
@@ -196,7 +265,8 @@ class Permission
                         $subType,
                         $permission->getRole(),
                         $permission->getIdentifier(),
-                        $permission->getDimension()
+                        $permission->getDimension(),
+                        $permission->getColumn()
                     ))->toString();
                 }
             }
@@ -206,18 +276,72 @@ class Permission
     }
 
     /**
+     * Does any of these permissions name a column?
+     *
+     * @param  list<string>  $permissions
+     *
+     * @throws DatabaseException
+     */
+    public static function hasColumns(array $permissions): bool
+    {
+        foreach ($permissions as $permission) {
+            if (! self::parse($permission)->isForAllColumns()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * The same permissions with every column dropped, deduplicated.
+     *
+     * Whether a caller may reach a row is a question about the role alone: a column narrows what
+     * a permission reaches, not who holds it. This is the form a read gate matches against --
+     * a side table of roles, a JSONB containment, a Mongo `$in` -- so the column is kept only
+     * where the scope is enforced and never where access is decided. A gate handed the column
+     * would be comparing `read("any", "name")` against `read("any")` and finding nothing.
+     *
+     * @param  list<string>  $permissions
+     * @return list<string>
+     *
+     * @throws DatabaseException
+     */
+    public static function withoutColumns(array $permissions): array
+    {
+        $stripped = [];
+
+        foreach ($permissions as $permission) {
+            $parsed = self::parse($permission);
+
+            $stripped[] = $parsed->isForAllColumns()
+                ? $permission
+                : (new self(
+                    $parsed->getPermission(),
+                    $parsed->getRole(),
+                    $parsed->getIdentifier(),
+                    $parsed->getDimension()
+                ))->toString();
+        }
+
+        return \array_values(\array_unique($stripped));
+    }
+
+    /**
      * Create a read permission string from the given Role.
      *
      * @param Role $role The role to grant read permission to
+     * @param string $column Scope the permission to one column, or ALL_COLUMNS for the whole row
      * @return string The formatted permission string
      */
-    public static function read(Role $role): string
+    public static function read(Role $role, string $column = self::ALL_COLUMNS): string
     {
         $permission = new self(
             PermissionType::Read->value,
             $role->getRole(),
             $role->getIdentifier(),
-            $role->getDimension()
+            $role->getDimension(),
+            $column
         );
 
         return $permission->toString();
@@ -227,15 +351,17 @@ class Permission
      * Create a create permission string from the given Role.
      *
      * @param Role $role The role to grant create permission to
+     * @param string $column Scope the permission to one column, or ALL_COLUMNS for the whole row
      * @return string The formatted permission string
      */
-    public static function create(Role $role): string
+    public static function create(Role $role, string $column = self::ALL_COLUMNS): string
     {
         $permission = new self(
             PermissionType::Create->value,
             $role->getRole(),
             $role->getIdentifier(),
-            $role->getDimension()
+            $role->getDimension(),
+            $column
         );
 
         return $permission->toString();
@@ -245,15 +371,17 @@ class Permission
      * Create an update permission string from the given Role.
      *
      * @param Role $role The role to grant update permission to
+     * @param string $column Scope the permission to one column, or ALL_COLUMNS for the whole row
      * @return string The formatted permission string
      */
-    public static function update(Role $role): string
+    public static function update(Role $role, string $column = self::ALL_COLUMNS): string
     {
         $permission = new self(
             PermissionType::Update->value,
             $role->getRole(),
             $role->getIdentifier(),
-            $role->getDimension()
+            $role->getDimension(),
+            $column
         );
 
         return $permission->toString();
@@ -263,15 +391,17 @@ class Permission
      * Create a delete permission string from the given Role.
      *
      * @param Role $role The role to grant delete permission to
+     * @param string $column Scope the permission to one column, or ALL_COLUMNS for the whole row
      * @return string The formatted permission string
      */
-    public static function delete(Role $role): string
+    public static function delete(Role $role, string $column = self::ALL_COLUMNS): string
     {
         $permission = new self(
             PermissionType::Delete->value,
             $role->getRole(),
             $role->getIdentifier(),
-            $role->getDimension()
+            $role->getDimension(),
+            $column
         );
 
         return $permission->toString();
@@ -281,15 +411,17 @@ class Permission
      * Create a write permission string from the given Role.
      *
      * @param Role $role The role to grant write permission to
+     * @param string $column Scope the permission to one column, or ALL_COLUMNS for the whole row
      * @return string The formatted permission string
      */
-    public static function write(Role $role): string
+    public static function write(Role $role, string $column = self::ALL_COLUMNS): string
     {
         $permission = new self(
             PermissionType::Write->value,
             $role->getRole(),
             $role->getIdentifier(),
-            $role->getDimension()
+            $role->getDimension(),
+            $column
         );
 
         return $permission->toString();

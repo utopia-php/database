@@ -2952,6 +2952,48 @@ trait AggregationTests
         }
     }
 
+    public function testSumOfGroupedOrDistinctRowsThatOverflowsIsRefused(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'agg_rows_overflow'.$this->getAggSuffix();
+        $database->createCollection(Collection::create(
+            id: $collection,
+            attributes: [
+                Attribute::string(key: 'series', size: 20, required: true),
+                Attribute::double(key: 'reading', required: true),
+            ],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+        foreach ([['huge', 1e308], ['huge', 1e308], ['huge', 9e307], ['sunk', -1e308], ['sunk', -9e307], ['single', 1e308]] as [$series, $reading]) {
+            $database->createDocument($collection, new Document([
+                'series' => $series,
+                'reading' => $reading,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
+
+        foreach (['huge', 'sunk'] as $series) {
+            foreach ([[Query::count('*', 'n'), Query::groupBy(['reading'])], [Query::distinct(), Query::select(['reading'])]] as $shape) {
+                try {
+                    $database->sum($collection, 'reading', [Query::equal('series', [$series]), ...$shape]);
+                    $this->fail("A sum of {$series} grouped or distinct rows that overflows a double is refused");
+                } catch (LimitException) {
+                    $this->addToAssertionCount(1);
+                }
+            }
+        }
+
+        $this->assertEqualsWithDelta(1e308, $database->sum($collection, 'reading', [Query::equal('series', ['single']), Query::distinct(), Query::select(['reading'])]), 1e293);
+
+        $database->deleteCollection($collection);
+    }
+
     private function assertCountRefused(callable $count, string $label): void
     {
         $error = null;

@@ -1952,7 +1952,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
             $outerBuilder = $this->dialectBuilder();
             $outerBuilder->fromSub($this->rowsBuilder($collectionDoc, $plan, $name, $alias, $roles, $max), 'table_count');
-            $outerBuilder->selectRaw('SUM('.$this->quote($column).') AS '.$this->quote('sum'));
+            $outerBuilder->selectRaw($this->rangeChecked('SUM('.$this->quote($column).')').' AS '.$this->quote('sum'));
 
             return $this->sumOf($this->fetchAggregateRow($outerBuilder, Event::DocumentSum, $name));
         }
@@ -3456,6 +3456,15 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * statements scope it with the tenants they read, or use it as it is where they name no collection.
      */
     abstract protected function dialectBuilder(): SQLBuilder&Scoping;
+
+    /**
+     * A floating expression the engine raises an error for when it overflows a double, rather than answer a wrong
+     * number. The dialect builder checks the aggregates it compiles the same way.
+     */
+    protected function rangeChecked(string $expression): string
+    {
+        return $expression;
+    }
 
     #[\Override]
     public function schema(): MySQLSchema|PostgresSchema

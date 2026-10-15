@@ -95,6 +95,43 @@ final class SumOverflowTest extends TestCase
     }
 
     /**
+     * @return iterable<string, array{Closure(): Adapter, list<Query>}>
+     */
+    public static function rows(): iterable
+    {
+        foreach (['sqlite' => false, 'sqlite stringified' => true] as $label => $stringify) {
+            $adapter = static fn (): Adapter => new SQLite(new PDO('sqlite::memory:', null, null, [PDO::ATTR_STRINGIFY_FETCHES => $stringify]));
+            yield "groupBy on {$label}" => [$adapter, [Query::count('*', 'n'), Query::groupBy(['reading'])]];
+            yield "distinct on {$label}" => [$adapter, [Query::distinct(), Query::select(['reading'])]];
+        }
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     * @param  list<Query>  $queries
+     */
+    #[DataProvider('rows')]
+    public function testASumOfGroupedOrDistinctRowsThatOverflowsIsRefused(Closure $adapter, array $queries): void
+    {
+        $database = $this->database($adapter, [1e308, 1e308, 9e307]);
+
+        $this->expectException(LimitException::class);
+        $database->sum(self::COLLECTION, 'reading', $queries);
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     * @param  list<Query>  $queries
+     */
+    #[DataProvider('rows')]
+    public function testTheLargestFiniteSumOfGroupedOrDistinctRowsIsStillAnswered(Closure $adapter, array $queries): void
+    {
+        $database = $this->database($adapter, [1e308, 1e308]);
+
+        $this->assertSame(1e308, $database->sum(self::COLLECTION, 'reading', $queries));
+    }
+
+    /**
      * @param  Closure(): Adapter  $adapter
      */
     #[DataProvider('adapters')]

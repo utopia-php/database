@@ -2259,7 +2259,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         $sum = $row['sum'] ?? 0;
 
         if (\is_numeric($sum)) {
-            return \str_contains((string) $sum, '.') ? (float) $sum : (int) $sum;
+            return $sum + 0;
         }
 
         return 0;

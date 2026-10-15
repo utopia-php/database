@@ -11154,4 +11154,43 @@ trait DocumentTests
             $database->deleteCollection($collection);
         }
     }
+
+    public function testNestedPathOnAPlainAttributeIsAnInvalidQuery(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::DefinedAttributes)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = __FUNCTION__;
+        $database->createCollection(Collection::create(id: $collection, permissions: [Permission::read(Role::any()), Permission::create(Role::any())]));
+
+        try {
+            $database->createAttribute($collection, Attribute::string(key: 'name', size: 64, required: true));
+            $database->createDocument($collection, new Document(['name' => 'a', '$permissions' => [Permission::read(Role::any())]]));
+
+            $reads = [
+                'filter' => fn (): array => $database->find($collection, [Query::equal('name.x', ['a'])]),
+                'count' => fn (): int => $database->count($collection, [Query::equal('name.x', ['a'])]),
+                'select' => fn (): array => $database->find($collection, [Query::select(['name.x'])]),
+            ];
+
+            foreach ($reads as $shape => $read) {
+                try {
+                    $read();
+                    $this->fail("A {$shape} on a nested path under a plain attribute must be refused");
+                } catch (QueryException $e) {
+                    $this->assertStringContainsString('nested attribute on: name', $e->getMessage(), $shape);
+                }
+            }
+
+            $this->assertCount(1, $database->find($collection, [Query::equal('name', ['a'])]));
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
 }

@@ -3,9 +3,12 @@
 namespace Tests\Unit\Validator\Query;
 
 use PHPUnit\Framework\TestCase;
+use Utopia\Database\Attribute;
 use Utopia\Database\Document;
 use Utopia\Database\Exception;
 use Utopia\Database\Query;
+use Utopia\Database\Relationship;
+use Utopia\Database\RelationshipSide;
 use Utopia\Database\Validator\Query\Filter;
 use Utopia\Query\Method;
 use Utopia\Query\Schema\ColumnType;
@@ -215,6 +218,45 @@ class FilterTest extends TestCase
 
         $this->assertFalse($this->validator->isValid(new Query(Method::NotBetween, 'integer', [10, 20, 30])));
         $this->assertEquals('NotBetween queries require exactly two values.', $this->validator->getDescription());
+    }
+
+    public function test_nested_path_on_a_plain_attribute_is_rejected(): void
+    {
+        $this->assertFalse($this->validator->isValid(Query::equal('string.x', ['a'])));
+        $this->assertSame('Cannot query nested attribute on: string', $this->validator->getDescription());
+
+        $this->assertFalse($this->validator->isValid(Query::greaterThan('integer.x', 1)));
+        $this->assertSame('Cannot query nested attribute on: integer', $this->validator->getDescription());
+    }
+
+    public function test_nested_path_on_a_relationship_or_object_is_accepted(): void
+    {
+        $validator = new Filter(
+            attributes: [
+                Attribute::relationship('artist', Relationship::manyToOne('artists'), RelationshipSide::Parent)->toDocument(),
+                new Document([
+                    '$id' => 'meta',
+                    'key' => 'meta',
+                    'type' => ColumnType::Object->value,
+                    'array' => false,
+                ]),
+            ],
+            idAttributeType: ColumnType::Integer->value,
+        );
+
+        $this->assertTrue($validator->isValid(Query::equal('artist.name', ['a'])), $validator->getDescription());
+        $this->assertTrue($validator->isValid(Query::equal('meta.key', ['a'])), $validator->getDescription());
+    }
+
+    public function test_nested_path_on_a_plain_attribute_is_left_to_a_schemaless_adapter(): void
+    {
+        $validator = new Filter(
+            attributes: [new Document(['$id' => 'string', 'key' => 'string', 'type' => ColumnType::String->value, 'array' => false])],
+            idAttributeType: ColumnType::Integer->value,
+            supportForAttributes: false,
+        );
+
+        $this->assertTrue($validator->isValid(Query::equal('string.x', ['a'])), $validator->getDescription());
     }
 
     public function test_dotted_join_alias_is_accepted_after_allow_join_aliases(): void

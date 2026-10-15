@@ -50,6 +50,26 @@ class SelectTest extends TestCase
         $this->assertFalse($this->validator->isValid(Query::select(['name.artist'])));
     }
 
+    public function testANestedPathOnAPlainAttributeIsRefused(): void
+    {
+        $this->assertFalse($this->validator->isValid(Query::select(['attr.x'])));
+        $this->assertSame('Cannot select nested attribute on: attr', $this->validator->getDescription());
+    }
+
+    public function testANestedPathOnAnObjectAttributeIsAccepted(): void
+    {
+        $validator = new Select([
+            new Document([
+                '$id' => 'meta',
+                'key' => 'meta',
+                'type' => ColumnType::Object->value,
+                'array' => false,
+            ]),
+        ]);
+
+        $this->assertTrue($validator->isValid(Query::select(['meta.key'])), $validator->getDescription());
+    }
+
     /**
      * A non-string selection used to reach str_contains() and raise a TypeError,
      * which is an Error rather than an Exception, so it escaped every catch on the

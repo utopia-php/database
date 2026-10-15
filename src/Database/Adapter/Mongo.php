@@ -2290,14 +2290,15 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
+     * Deletes only the rows that match every one of the deletionFilters().
+     *
      * @param  array<string>  $sequences
      * @param  array<string>  $permissionIds
-     * @param  array<Query>  $queries
      *
      * @throws DatabaseException
      */
     #[\Override]
-    public function deleteDocuments(Document $collection, array $sequences, array $permissionIds, array $queries = []): int
+    public function deleteDocuments(Document $collection, array $sequences, array $permissionIds): int
     {
         $collectionId = $collection->getId();
         $name = $this->getNamespace().'_'.$this->filter($collectionId);
@@ -2308,7 +2309,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
 
         $filters = $this->replaceInternalIdsKeys($filters, '$', '_', $this->operators);
 
-        $queries = \array_map(static fn (Query $query): Query => clone $query, $queries);
+        $queries = \array_map(static fn (Query $query): Query => clone $query, $this->deletionFilters());
         $this->escapeQueryAttributes($collection, $queries);
         $matching = $this->buildFilters($queries);
         if ($matching !== []) {

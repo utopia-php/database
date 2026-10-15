@@ -1393,12 +1393,13 @@ class Redis extends Adapter implements
     }
 
     /**
+     * Deletes only the rows that match every one of the deletionFilters().
+     *
      * @param  array<string>  $sequences
      * @param  array<string>  $permissionIds
-     * @param  array<Query>  $queries
      */
     #[\Override]
-    public function deleteDocuments(Document $collection, array $sequences, array $permissionIds, array $queries = []): int
+    public function deleteDocuments(Document $collection, array $sequences, array $permissionIds): int
     {
         if (empty($sequences) && empty($permissionIds)) {
             return 0;
@@ -1406,6 +1407,7 @@ class Redis extends Adapter implements
 
         $collectionId = $this->filter($collection->getId());
         $idxKey = $this->idxKey($collectionId);
+        $queries = $this->deletionFilters();
 
         return $this->transaction(function (RedisClient $redis) use ($collectionId, $sequences, $permissionIds, $queries, $idxKey): int {
             $sequenceSet = [];

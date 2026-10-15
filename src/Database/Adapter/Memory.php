@@ -1727,24 +1727,25 @@ class Memory extends Adapter implements Feature\Relationships
     }
 
     /**
+     * Deletes only the rows that match every one of the deletionFilters().
+     *
      * @param  array<string>  $sequences
      * @param  array<string>  $permissionIds
-     * @param  array<Query>  $queries
      */
     #[\Override]
-    public function deleteDocuments(Document $collection, array $sequences, array $permissionIds, array $queries = []): int
+    public function deleteDocuments(Document $collection, array $sequences, array $permissionIds): int
     {
         $key = $this->key($collection->getId());
         if (! isset($this->data[$key])) {
             throw new NotFoundException('Collection not found');
         }
 
-        $seqSet = [];
-        foreach ($sequences as $seq) {
-            $seqSet[(string) $seq] = true;
+        $sequenceSet = [];
+        foreach ($sequences as $sequence) {
+            $sequenceSet[(string) $sequence] = true;
         }
 
-        $filters = Query::groupByType($queries)->filters;
+        $filters = Query::groupByType($this->deletionFilters())->filters;
         $count = 0;
         $deletedIds = [];
         $keptIds = [];
@@ -1757,7 +1758,7 @@ class Memory extends Adapter implements Feature\Relationships
             }
             $rowId = $row[Storage::SEQUENCE] ?? '';
             $rowUid = $row[Storage::UID] ?? $docKey;
-            if (isset($seqSet[\is_scalar($rowId) ? (string) $rowId : ''])) {
+            if (isset($sequenceSet[\is_scalar($rowId) ? (string) $rowId : ''])) {
                 if (! $this->matchesAll($row, $filters)) {
                     $keptIds[\is_scalar($rowUid) ? (string) $rowUid : $docKey] = true;
 

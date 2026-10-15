@@ -9,7 +9,7 @@ use Utopia\Query\CursorDirection;
 
 /**
  * Runs a write of the test's choosing right after a find() returns, or right before a bulk delete reaches the
- * engine, as another connection whose write lands in between would.
+ * engine, as another connection whose write lands in between would, and counts the finds and bulk deletes.
  */
 trait Interleaves
 {
@@ -23,11 +23,15 @@ trait Interleaves
      */
     public ?Closure $beforeDelete = null;
 
+    public int $finds = 0;
+
     public int $deletes = 0;
 
     #[\Override]
     public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read): array
     {
+        $this->finds++;
+
         $documents = parent::find($collection, $queries, $limit, $offset, $orderAttributes, $orderTypes, $cursor, $cursorDirection, $forPermission);
 
         if ($this->afterFind !== null) {
@@ -38,7 +42,7 @@ trait Interleaves
     }
 
     #[\Override]
-    public function deleteDocuments(Document $collection, array $sequences, array $permissionIds, array $queries = []): int
+    public function deleteDocuments(Document $collection, array $sequences, array $permissionIds): int
     {
         $this->deletes++;
 
@@ -46,6 +50,6 @@ trait Interleaves
             ($this->beforeDelete)($collection);
         }
 
-        return parent::deleteDocuments($collection, $sequences, $permissionIds, $queries);
+        return parent::deleteDocuments($collection, $sequences, $permissionIds);
     }
 }

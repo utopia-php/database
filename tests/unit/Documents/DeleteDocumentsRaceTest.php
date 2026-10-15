@@ -170,7 +170,7 @@ final class DeleteDocumentsRaceTest extends TestCase
         $sequences = \array_values(\array_filter(\array_map(static fn (Document $document): ?string => $document->getSequence(), $found)));
         $permissionIds = \array_map(static fn (Document $document): string => $document->getId(), $found);
 
-        $count = $engine->deleteDocuments($collection, $sequences, $permissionIds, $database->convertQueries($collection, [$this->expired()]));
+        $count = $engine->deleteDocumentsMatching($collection, $sequences, $permissionIds, $database->convertQueries($collection, [$this->expired()]));
 
         $this->assertSame(2, $count);
         $this->assertSame(['b', 'd'], $this->stored($database));

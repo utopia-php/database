@@ -3060,7 +3060,15 @@ trait Documents
      *
      * Each batch deletes only the documents that still match the filters when it is deleted: a document another write
      * changed after it was found, so that it no longer matches, is kept, and is neither counted, handed to $onNext nor
-     * cascaded. A limit counts the documents found, kept ones included.
+     * cascaded. A limit counts the documents found, kept ones included. Without a transaction, as on a standalone
+     * MongoDB server, a document changed between the check and the delete is kept the same way, but its cascade may
+     * already have run.
+     *
+     * Each batch commits on its own, so a batch that fails leaves the batches before it deleted; they were handed to
+     * $onNext and Event::DocumentsDelete reports them when the failure is a contention. In a transaction begun with
+     * startTransaction(), a batch that fails with a contention is retried in its savepoint, which on MySQL and MariaDB
+     * reads the transaction's snapshot again and fails the same way, so roll the whole transaction back and run it
+     * again.
      *
      * @param  string  $collection  The collection identifier
      * @param  array<Query>  $queries  Queries to filter documents for deletion
@@ -3076,7 +3084,8 @@ trait Documents
      * @throws LimitException When $batchSize is above BATCH_SIZE
      * @throws QueryException
      * @throws RestrictedException
-     * @throws ContentionException When documents keep changing between the check and the delete of a batch
+     * @throws ContentionException When documents keep changing between the check and the delete of a batch, in a
+     *                               transaction
      * @throws Throwable
      */
     public function deleteDocuments(
@@ -3155,68 +3164,15 @@ trait Documents
             }
 
             $cacheTarget = $collection->getId() === self::METADATA ? $batch : $collection->getId();
-            $deleted = $this->withMutation(Event::DocumentsDelete, $cacheTarget, function () use ($collection, $batch, $parsed): array {
-                $filters = [];
-                $documents = $parsed->filters === [] ? $batch : $this->stillMatching($collection, $batch, $parsed, $filters);
-
-                $sequences = [];
-                $permissionIds = [];
-
-                foreach ($documents as $document) {
-                    $seq = $document->getSequence();
-                    if ($seq !== null) {
-                        $sequences[] = $seq;
-                    }
-                    if (! empty($document->getPermissions())) {
-                        $permissionIds[] = $document->getId();
-                    }
-
-                    if ($this->relationshipHook?->isEnabled()) {
-                        $this->silent(fn () => $this->relationshipHook->beforeDocumentDelete(
-                            $collection,
-                            $document
-                        ));
-                    }
-
-                    // Check if document was updated after the request timestamp
-                    try {
-                        $oldUpdatedAt = new PhpDateTime($document->getUpdatedAt() ?? 'now');
-                    } catch (Exception $e) {
-                        throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
-                    }
-
-                    $requestTimestamp = $this->requestTimestamp()->get();
-                    if ($requestTimestamp !== null && $oldUpdatedAt > $requestTimestamp) {
-                        throw new ConflictException('Document was updated after the request timestamp');
-                    }
+            try {
+                $deleted = $this->withMutation(Event::DocumentsDelete, $cacheTarget, fn (): array => $this->deleteBatch($collection, $batch, $parsed));
+            } catch (ContentionException $error) {
+                if ($modified > 0 && ! $this->adapter->inTransaction()) {
+                    $this->announceBatchDeleted($collection, $modified);
                 }
 
-                if ($documents === []) {
-                    return [];
-                }
-
-                $count = $this->adapter->deleteDocuments(
-                    $collection,
-                    $sequences,
-                    $permissionIds,
-                    $filters,
-                );
-
-                if ($filters !== [] && $count !== \count($sequences)) {
-                    throw new ContentionException('Documents were changed while they were being deleted');
-                }
-
-                foreach ($documents as $document) {
-                    $this->withDocumentTenant(
-                        $document,
-                        fn () => $this->advanceCollectionCacheEpoch($collection->getId(), $document->getId())
-                    );
-                }
-
-                $this->queueDocumentPurges($collection->getId(), $documents);
-
-                return $documents;
-            });
+                throw $error;
+            }
 
             foreach ($deleted as $document) {
                 if ($onNext !== null) {
@@ -3236,12 +3192,157 @@ trait Documents
             $last = \end($batch);
         }
 
+        $this->announceBatchDeleted($collection, $modified);
+
+        return $modified;
+    }
+
+    private function announceBatchDeleted(Collection $collection, int $modified): void
+    {
         $listeners = $this->listens(Event::DocumentsDelete);
         if ($listeners !== []) {
             $this->dispatch(new Event\Document\BatchDeleted($collection->getId(), $modified), $listeners);
         }
+    }
 
-        return $modified;
+    /**
+     * Delete the documents of a batch deleteDocuments() found that still match its filters, in the transaction the
+     * caller runs it in, and return them.
+     *
+     * A document whose filters are all on its immutable sequence still matches, so such a batch is not read again.
+     * When the adapter deletes fewer rows than it was handed, a document changed between the read and the delete: in a
+     * transaction the batch fails with a contention the transaction retries, and without one, as on a standalone
+     * MongoDB server, the documents still stored are left out. A cascade then has already run for them, so without a
+     * transaction cascades are best-effort.
+     *
+     * @param  array<Document>  $batch
+     * @return array<Document>
+     *
+     * @throws ConflictException
+     * @throws ContentionException
+     * @throws DatabaseException
+     * @throws QueryException
+     * @throws TimeoutException
+     * @throws Exception
+     */
+    private function deleteBatch(Collection $collection, array $batch, ParsedQuery $parsed): array
+    {
+        $filters = [];
+        $documents = self::onSequenceOnly($parsed->filters) ? $batch : $this->stillMatching($collection, $batch, $parsed, $filters);
+
+        $sequences = [];
+        $permissionIds = [];
+
+        foreach ($documents as $document) {
+            $sequence = $document->getSequence();
+            if ($sequence !== null) {
+                $sequences[] = $sequence;
+            }
+            if (! empty($document->getPermissions())) {
+                $permissionIds[] = $document->getId();
+            }
+
+            if ($this->relationshipHook?->isEnabled()) {
+                $this->silent(fn () => $this->relationshipHook->beforeDocumentDelete(
+                    $collection,
+                    $document
+                ));
+            }
+
+            try {
+                $oldUpdatedAt = new PhpDateTime($document->getUpdatedAt() ?? 'now');
+            } catch (Exception $e) {
+                throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
+            }
+
+            $requestTimestamp = $this->requestTimestamp()->get();
+            if ($requestTimestamp !== null && $oldUpdatedAt > $requestTimestamp) {
+                throw new ConflictException('Document was updated after the request timestamp');
+            }
+        }
+
+        if ($documents === []) {
+            return [];
+        }
+
+        if ($filters === []) {
+            $this->adapter->deleteDocuments($collection, $sequences, $permissionIds);
+        } elseif ($this->adapter->deleteDocumentsMatching($collection, $sequences, $permissionIds, $filters) !== \count($sequences)) {
+            if ($this->adapter->inTransaction()) {
+                throw new ContentionException('Documents were changed while they were being deleted');
+            }
+
+            $documents = $this->withoutStored($collection, $documents);
+        }
+
+        foreach ($documents as $document) {
+            $this->withDocumentTenant(
+                $document,
+                fn () => $this->advanceCollectionCacheEpoch($collection->getId(), $document->getId())
+            );
+        }
+
+        $this->queueDocumentPurges($collection->getId(), $documents);
+
+        return $documents;
+    }
+
+    /**
+     * Whether every filter, and every filter nested in one, is on the sequence, which no write changes.
+     *
+     * @param  array<Query>  $filters
+     */
+    private static function onSequenceOnly(array $filters): bool
+    {
+        foreach ($filters as $filter) {
+            if ($filter->isNested()) {
+                /** @var array<Query> $nested */
+                $nested = $filter->getValues();
+                if (! self::onSequenceOnly($nested)) {
+                    return false;
+                }
+            } elseif ($filter->getAttribute() !== Document::SEQUENCE) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * The documents given that are no longer stored, whatever their permissions.
+     *
+     * @param  array<Document>  $documents
+     * @return list<Document>
+     *
+     * @throws DatabaseException
+     * @throws QueryException
+     * @throws TimeoutException
+     * @throws Exception
+     */
+    private function withoutStored(Collection $collection, array $documents): array
+    {
+        $sequences = [];
+        foreach ($documents as $document) {
+            $sequences[] = (string) $document->getSequence();
+        }
+
+        $queries = [Query::equal(Document::SEQUENCE, $sequences), Query::limit(\count($sequences))];
+
+        /** @var array<Document> $stored */
+        $stored = $this->silent(fn () => $this->skipQueryHooks(fn () => $this->skipValidation(fn () => $this->skipRelationships(
+            fn () => $this->authorization->skip(fn () => $this->fetch($collection, $queries, PermissionType::Read, false))
+        ))));
+
+        $storedSequences = [];
+        foreach ($stored as $document) {
+            $storedSequences[(string) $document->getSequence()] = true;
+        }
+
+        return \array_values(\array_filter(
+            $documents,
+            static fn (Document $document): bool => ! isset($storedSequences[(string) $document->getSequence()]),
+        ));
     }
 
     /**

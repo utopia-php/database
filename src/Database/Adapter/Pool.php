@@ -865,7 +865,15 @@ class Pool extends Adapter implements Feature\Timeouts
     }
 
     #[\Override]
-    public function deleteDocuments(Document $collection, array $sequences, array $permissionIds, array $queries = []): int
+    public function deleteDocuments(Document $collection, array $sequences, array $permissionIds): int
+    {
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
+    }
+
+    #[\Override]
+    public function deleteDocumentsMatching(Document $collection, array $sequences, array $permissionIds, array $queries): int
     {
         /** @var int $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());

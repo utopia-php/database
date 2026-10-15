@@ -1807,11 +1807,11 @@ class MirrorTest extends TestCase
             }
 
             #[\Override]
-            public function deleteDocuments(Document $collection, array $sequences, array $permissionIds, array $queries = []): int
+            public function deleteDocuments(Document $collection, array $sequences, array $permissionIds): int
             {
                 $this->reach();
 
-                return parent::deleteDocuments($collection, $sequences, $permissionIds, $queries);
+                return parent::deleteDocuments($collection, $sequences, $permissionIds);
             }
 
             private function reach(): void

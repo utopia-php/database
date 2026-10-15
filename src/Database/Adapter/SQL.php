@@ -1257,14 +1257,15 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
+     * Deletes only the rows that match every one of the deletionFilters().
+     *
      * @param  array<string>  $sequences
      * @param  array<string>  $permissionIds
-     * @param  array<Query>  $queries
      *
      * @throws DatabaseException
      */
     #[\Override]
-    public function deleteDocuments(Document $collection, array $sequences, array $permissionIds, array $queries = []): int
+    public function deleteDocuments(Document $collection, array $sequences, array $permissionIds): int
     {
         if (empty($sequences)) {
             return 0;
@@ -1275,13 +1276,15 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         try {
             $name = $this->filter($collection->getId());
             $filters = \array_values(\array_filter(
-                $this->mainRowQueries($queries, $collection),
+                $this->mainRowQueries($this->deletionFilters(), $collection),
                 static fn (Query $query): bool => ! $query->getMethod()->isVector(),
             ));
 
             $builder = $this->newBuilder($name);
             $builder->filter([BaseQuery::equal(Storage::SEQUENCE, \array_values($sequences))]);
-            $this->applyFilters($builder, $filters, $name, $this->unqualifiedTable($name));
+            if ($filters !== []) {
+                $this->applyFilters($builder, $filters, $name, $this->unqualifiedTable($name));
+            }
             $result = $builder->delete();
             $statement = $this->executeResult($result, Event::DocumentsDelete);
 
@@ -3553,7 +3556,8 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * Does NOT call execute() - the caller is responsible for that.
      *
      * Floats are bound as 7.x bound them: a find() binds them in fixed-point notation, every other statement as
-     * PHP writes them, so a write keeps a magnitude fixed point would round to zero.
+     * PHP writes them, so a write keeps a magnitude fixed point would round to zero. A bulk delete binds them as a
+     * find() does, so its filters match the rows the find() of the documents it deletes matched.
      *
      * @param  string  $collection  The collection the statement reads or writes, for the profiler
      * @return PDOStatement|DatabasePDOStatement|PDOStatementProxy
@@ -3566,7 +3570,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             if (\is_bool($value) && $this->supports(Capability::IntegerBooleans)) {
                 $value = (int) $value;
             }
-            if (\is_float($value) && $event === Event::DocumentFind) {
+            if (\is_float($value) && ($event === Event::DocumentFind || $event === Event::DocumentsDelete)) {
                 $prepared->bindValue($i + 1, $this->getFloatPrecision($value), PDO::PARAM_STR);
             } elseif (\is_float($value)) {
                 $prepared->bindValue($i + 1, $value, PDO::PARAM_STR);

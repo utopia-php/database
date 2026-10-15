@@ -8316,7 +8316,7 @@ trait DocumentTests
             $ids[] = $document->getId();
         }
 
-        $deleted = $database->getAdapter()->deleteDocuments($collection, $sequences, $ids, $database->convertQueries($collection, [$filter]));
+        $deleted = $database->getAdapter()->deleteDocumentsMatching($collection, $sequences, $ids, $database->convertQueries($collection, [$filter]));
 
         $this->assertSame(2, $deleted);
         $remaining = \array_map(static fn (Document $document): string => $document->getId(), $database->find($collectionId, [Query::orderAsc('$id')]));

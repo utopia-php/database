@@ -42,6 +42,9 @@ abstract class Adapter
     /** @var Value<bool>|null */
     private ?Value $ignoringDuplicates = null;
 
+    /** @var Value<array<Query>>|null */
+    private ?Value $deletionFilters = null;
+
     protected bool $tenantPerDocument = false;
 
     protected int $inTransaction = 0;
@@ -771,15 +774,55 @@ abstract class Adapter
     abstract public function deleteDocument(Document $collection, string $id): bool;
 
     /**
+     * @param  array<string>  $sequences
+     * @param  array<string>  $permissionIds
+     */
+    abstract public function deleteDocuments(Document $collection, array $sequences, array $permissionIds): int;
+
+    /**
      * Delete the rows of the sequences given that match every filter query, and the permission rows of the
-     * permission ids given, but those of a row kept because it no longer matches.
+     * permission ids given but those of a row kept because it no longer matches. Database::deleteDocuments() calls
+     * it for a batch it deletes with filters, so that a document another write changed after it was found is kept.
+     *
+     * This implementation calls deleteDocuments() with the queries as its deletionFilters(), so that an override of
+     * deleteDocuments() still runs. The bundled adapters delete only the rows that match them; an adapter that
+     * ignores them deletes every row of the sequences given, as before. An adapter that extends Adapter directly
+     * honours them by reading deletionFilters() in deleteDocuments(), or by overriding this method.
      *
      * @param  array<string>  $sequences
      * @param  array<string>  $permissionIds
      * @param  array<Query>  $queries  Filter queries as find() is handed them, which every deleted row must match
      * @return int The number of rows deleted
      */
-    abstract public function deleteDocuments(Document $collection, array $sequences, array $permissionIds, array $queries = []): int;
+    public function deleteDocumentsMatching(Document $collection, array $sequences, array $permissionIds, array $queries): int
+    {
+        return $this->deletionFiltersValue()->with(
+            $queries,
+            fn (): int => $this->deleteDocuments($collection, $sequences, $permissionIds),
+        );
+    }
+
+    /**
+     * The filter queries every row deleteDocuments() deletes must match: those deleteDocumentsMatching() was handed
+     * while it runs, else none.
+     *
+     * @return array<Query>
+     */
+    protected function deletionFilters(): array
+    {
+        return $this->deletionFiltersValue()->get();
+    }
+
+    /**
+     * @return Value<array<Query>>
+     */
+    private function deletionFiltersValue(): Value
+    {
+        /** @var array<Query> $none */
+        $none = [];
+
+        return $this->deletionFilters ??= new Value($none);
+    }
 
     /**
      * Find Documents

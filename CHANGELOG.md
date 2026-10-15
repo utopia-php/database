@@ -1,5 +1,28 @@
 # Changelog
 
+## 8.1.4
+
+8.1.4 fixes `deleteDocuments()` deleting documents that stopped matching its queries after they were found. Custom
+adapters that implement `Adapter::deleteDocuments()` add a parameter; see
+[Upgrading from 8.1.3 to 8.1.4](UPGRADE.md#upgrading-from-813-to-814).
+
+### Fixed
+
+- `deleteDocuments()` deletes only the documents that still match its filters when each batch is deleted. It found a
+  batch and then deleted it by internal id alone, so a document another write changed in between, so that it no
+  longer matched (such as a presence refreshed before an expired-presence cleanup deleted it), was deleted anyway,
+  cascaded to its related documents, lost its permission rows, and was counted and handed to `onNext`. Each batch
+  with filters now reads its documents again, with the same queries, in the transaction that deletes them, and the
+  adapter deletes only the rows that match the filters there. A document that no longer matches is kept with its
+  related documents and permission rows, and is neither counted, handed to `onNext` nor in `Event::DocumentsDelete`'s
+  count. A limit counts the documents found, kept ones included, so a kept document is not replaced by a later one.
+  When a document changes between that read and the delete, the batch is rolled back and tried again, and fails with
+  `Exception\Contention` once the transaction's retries are spent. A delete without filters runs as before.
+- `Adapter::deleteDocuments(Document $collection, array $sequences, array $permissionIds, array $queries = []): int`
+  takes the filter queries every deleted row must match, as `find()` is handed them, and returns the number of rows
+  deleted. Memory, SQLite, MariaDB, MySQL, PostgreSQL, MongoDB and Redis apply them in the delete itself; `Pool` and
+  `ReadWritePool` pass them on. A row kept because it no longer matches keeps its permission rows.
+
 ## 8.1.3
 
 8.1.3 adds a hook that rewrites the queries of a read. It changes nothing for a database without one; see

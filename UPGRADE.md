@@ -1,3 +1,19 @@
+# Upgrading from 8.1.3 to 8.1.4
+
+8.1.4 is a patch release. `deleteDocuments()` keeps its signature and now deletes only the documents that still match
+its filters when they are deleted; see [CHANGELOG.md](CHANGELOG.md#814).
+
+A custom adapter that extends `Adapter` and implements `deleteDocuments()`, or a subclass of a bundled adapter or
+`Pool` that overrides it, adds the new last parameter, as PHP refuses an override that drops it:
+
+```php
+public function deleteDocuments(Document $collection, array $sequences, array $permissionIds, array $queries = []): int
+```
+
+Delete only the rows of `$sequences` that match every query in `$queries` (filter queries, as `find()` is handed them),
+remove the permission rows of `$permissionIds` but those of a row kept because it no longer matches, and return the
+number of rows deleted. An override that delegates passes `$queries` on to its parent.
+
 # Upgrading from 8.1.2 to 8.1.3
 
 8.1.3 is a patch release and needs no code change. It adds `Hook\Queries`, which rewrites the queries of a read

@@ -84,7 +84,7 @@ final class MongoQueryFilterTest extends TestCase
 
         $this->assertNotNull($found);
         $this->assertIsArray($deleted);
-        $this->assertSame(['$and' => $found], $deleted[1] ?? null, 'The delete must match the rows the find matched');
+        $this->assertSame(self::values(['$and' => $found]), self::values($deleted[1] ?? null), 'The delete must match the rows the find matched');
     }
 
     public function testCountRethrowsDriverErrors(): void
@@ -324,6 +324,27 @@ final class MongoQueryFilterTest extends TestCase
     private function find(array $queries): array
     {
         return $this->createAdapter()->find(new Document(['$id' => self::COLLECTION]), $queries);
+    }
+
+    /**
+     * The filter with every object, such as a MongoDB\BSON\UTCDateTime, replaced by its class and value, so that two
+     * filters built separately compare by value.
+     */
+    private static function values(mixed $filter): mixed
+    {
+        if (\is_array($filter)) {
+            return \array_map(self::values(...), $filter);
+        }
+
+        if ($filter instanceof \Stringable) {
+            return [$filter::class => (string) $filter];
+        }
+
+        if (\is_object($filter)) {
+            return [$filter::class => self::values(\get_object_vars($filter))];
+        }
+
+        return $filter;
     }
 
     /**

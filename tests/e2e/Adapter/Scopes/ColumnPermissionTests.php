@@ -11,6 +11,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Filter;
 use Utopia\Database\Mirror;
 use Utopia\Database\Permission;
@@ -623,9 +624,16 @@ trait ColumnPermissionTests
         $authorization->addRole(Role::any()->toString());
 
         try {
-            // Asking for the lot, however it is spelled.
-            $this->assertCount(1, $database->find('columnGrantsSelect', [Query::select(['*'])]));
-            $this->assertCount(1, $database->find('columnGrantsSelect'));
+            // Asking for the lot, however it is spelled: not refused, but answered with only
+            // what the grant reaches. Refusing '*' would make a plain read unusable, so the
+            // answer is shaped instead -- the other half of the gate.
+            foreach ([[Query::select(['*'])], []] as $queries) {
+                $rows = $database->find('columnGrantsSelect', $queries);
+
+                $this->assertCount(1, $rows);
+                $this->assertSame('Ada', $rows[0]->getAttribute('name'));
+                $this->assertFalse($rows[0]->offsetExists('salary'), 'select(*) returned an ungranted column');
+            }
 
             // Naming only what the grant reaches.
             $this->assertCount(1, $database->find('columnGrantsSelect', [Query::select(['name'])]));
@@ -972,36 +980,183 @@ trait ColumnPermissionTests
             ['name' => true, 'salary' => true],
         ));
 
-        $this->asRole($authorization, Role::any()->toString(), function () use ($database, $columns): void {
+        // Each write gets its own collector, so what one reported cannot carry into the next.
+        $shapesFrom = static function (callable $write) use ($columns): array {
+            /** @var list<list<string>> $seen */
             $seen = [];
-            $collect = function (Document $document, ?Document $previous) use (&$seen, $columns): void {
+
+            $write(static function (Document $document, ?Document $previous) use (&$seen, $columns): void {
                 $seen[] = $columns($document);
+
                 if ($previous !== null) {
                     $seen[] = $columns($previous);
                 }
-            };
+            });
 
-            $database->createDocuments('columnGrantsBatched', [
-                new Document(['$id' => 'b1', 'name' => 'Ada', 'salary' => 120000]),
-                new Document(['$id' => 'b2', 'name' => 'Grace', 'salary' => 130000]),
-            ], onNext: $collect);
-            $this->assertSame([['name'], ['name']], $seen, 'createDocuments() reported an ungranted column');
+            return $seen;
+        };
 
-            $seen = [];
-            $database->updateDocuments('columnGrantsBatched', new Document(['name' => 'Redacted']), onNext: $collect);
-            $this->assertSame([['name'], ['name'], ['name'], ['name']], $seen, 'updateDocuments() reported an ungranted column');
+        $this->asRole($authorization, Role::any()->toString(), function () use ($database, $shapesFrom): void {
+            $this->assertSame(
+                [['name'], ['name']],
+                $shapesFrom(static fn (callable $onNext) => $database->createDocuments('columnGrantsBatched', [
+                    new Document(['$id' => 'b1', 'name' => 'Ada', 'salary' => 120000]),
+                    new Document(['$id' => 'b2', 'name' => 'Grace', 'salary' => 130000]),
+                ], onNext: $onNext)),
+                'createDocuments() reported an ungranted column',
+            );
+
+            $this->assertSame(
+                [['name'], ['name'], ['name'], ['name']],
+                $shapesFrom(static fn (callable $onNext) => $database->updateDocuments(
+                    'columnGrantsBatched',
+                    new Document(['name' => 'Redacted']),
+                    onNext: $onNext,
+                )),
+                'updateDocuments() reported an ungranted column',
+            );
 
             if ($database->getAdapter()->hasFeature(Feature\Upserts::class)) {
-                $seen = [];
-                $database->upsertDocuments('columnGrantsBatched', [
-                    new Document(['$id' => 'b1', 'name' => 'Ada', 'salary' => 1]),
-                ], onNext: $collect);
-                $this->assertSame([['name'], ['name']], $seen, 'upsertDocuments() reported an ungranted column');
+                $this->assertSame(
+                    [['name'], ['name']],
+                    $shapesFrom(static fn (callable $onNext) => $database->upsertDocuments('columnGrantsBatched', [
+                        new Document(['$id' => 'b1', 'name' => 'Ada', 'salary' => 1]),
+                    ], onNext: $onNext)),
+                    'upsertDocuments() reported an ungranted column',
+                );
             }
 
-            $seen = [];
-            $database->deleteDocuments('columnGrantsBatched', onNext: $collect);
-            $this->assertSame([['name'], ['name'], ['name'], ['name']], $seen, 'deleteDocuments() reported an ungranted column');
+            $this->assertSame(
+                [['name'], ['name'], ['name'], ['name']],
+                $shapesFrom(static fn (callable $onNext) => $database->deleteDocuments('columnGrantsBatched', onNext: $onNext)),
+                'deleteDocuments() reported an ungranted column',
+            );
+        });
+    }
+
+    /**
+     * A role under a column restriction may not join.
+     *
+     * A join names columns in a second collection under an alias, and returns them beside the
+     * base row. The gate reads those names against the base collection and the mask only knows
+     * the base collection, so a join would be judged against the wrong schema and its columns
+     * would come back unshaped. Refusing is the honest answer until both halves follow aliases.
+     *
+     * A whole-row grant is unrestricted and joins exactly as it always did.
+     */
+    public function testARestrictedRoleMayNotJoin(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->markTestSkipped('Adapter does not support joins');
+        }
+
+        $authorization = $database->getAuthorization();
+
+        $database->createCollection(Collection::create(
+            id: 'columnGrantsJoined',
+            attributes: [
+                Attribute::string(key: 'mainId', size: 64),
+                Attribute::string(key: 'note', size: 64)
+            ],
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+                // asRole() replaces the role list, so exec holds nothing that "any" would cover.
+                Permission::read(Role::team('exec')),
+            ],
+        ));
+
+        $database->withColumnPermissions(fn () => $database->createCollection(Collection::create(
+            id: 'columnGrantsJoinBase',
+            attributes: [
+                Attribute::string(key: 'name', size: 64),
+                Attribute::integer(key: 'salary'),
+            ],
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any(), 'name'),
+                Permission::read(Role::team('exec')),
+            ],
+        )));
+
+        $authorization->skip(function () use ($database): void {
+            $database->createDocument('columnGrantsJoinBase', new Document(['$id' => 'm1', 'name' => 'Ada', 'salary' => 120000]));
+            $database->createDocument('columnGrantsJoined', new Document(['$id' => 's1', 'mainId' => 'm1', 'note' => 'hi']));
+        });
+
+        $this->asRole($authorization, Role::any()->toString(), function () use ($database): void {
+            try {
+                $database->find('columnGrantsJoinBase', [
+                    Query::join('columnGrantsJoined', 'entry', [Query::on('$id', 'mainId')]),
+                ]);
+                $this->fail('a column-restricted role was allowed to join');
+            } catch (QueryException $e) {
+                $this->assertStringContainsString('Join queries are not supported', $e->getMessage());
+            }
+
+            // The refusal does not mention a column, because the join names none of the base ones.
+            try {
+                $database->find('columnGrantsJoinBase', [
+                    Query::join('columnGrantsJoined', 'entry', [Query::on('$id', 'mainId')]),
+                    Query::equal('entry.note', ['hi']),
+                ]);
+                $this->fail('a column-restricted role was allowed to join and filter the joined collection');
+            } catch (QueryException $e) {
+                $this->assertStringNotContainsString('columnGrantsJoined', $e->getMessage());
+            }
+        });
+
+        // A whole-row grant is not restricted, so joins keep working for it.
+        $this->asRole($authorization, Role::team('exec')->toString(), function () use ($database): void {
+            $rows = $database->find('columnGrantsJoinBase', [
+                Query::join('columnGrantsJoined', 'entry', [Query::on('$id', 'mainId')]),
+            ]);
+
+            $this->assertCount(1, $rows);
+            $this->assertSame('Ada', $rows[0]->getAttribute('name'));
+            $this->assertSame(120000, $rows[0]->getAttribute('salary'));
+        });
+
+        // The other direction: an open collection must not be used as a way into a restricted
+        // one. The base names no column, so nothing about it is refused -- the join is.
+        $database->createCollection(Collection::create(
+            id: 'columnGrantsJoinOpen',
+            attributes: [Attribute::string(key: 'baseId', size: 64), Attribute::string(key: 'label', size: 64)],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+
+        $authorization->skip(fn () => $database->createDocument('columnGrantsJoinOpen', new Document([
+            '$id' => 'o1',
+            'baseId' => 'm1',
+            'label' => 'row',
+        ])));
+
+        $this->asRole($authorization, Role::any()->toString(), function () use ($database): void {
+            try {
+                $database->find('columnGrantsJoinOpen', [
+                    Query::join('columnGrantsJoinBase', 'secret', [Query::on('baseId', '$id')]),
+                ]);
+                $this->fail('an open collection was joined into a column-restricted one');
+            } catch (QueryException $e) {
+                $this->assertStringContainsString('Join queries are not supported', $e->getMessage());
+            }
+
+            // And filtering on the restricted column through the alias is refused with it.
+            try {
+                $database->find('columnGrantsJoinOpen', [
+                    Query::join('columnGrantsJoinBase', 'secret', [Query::on('baseId', '$id')]),
+                    Query::equal('secret.salary', [120000]),
+                ]);
+                $this->fail('a restricted column was filtered through a join alias');
+            } catch (QueryException $e) {
+                $this->assertStringContainsString('Join queries are not supported', $e->getMessage());
+            }
+
+            // Without the join the open collection reads as it always did.
+            $this->assertCount(1, $database->find('columnGrantsJoinOpen'));
         });
     }
 

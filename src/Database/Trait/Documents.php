@@ -1495,6 +1495,76 @@ trait Documents
     }
 
     /**
+     * Refuse a join while a column restriction applies to either side of it.
+     *
+     * A join names columns in a second collection under an alias, and returns them beside the
+     * base row as "alias.column". Neither this gate nor maskColumns() resolves that alias: the
+     * gate would read the joined names against the base collection's grants, and the mask only
+     * knows the base collection, so the joined columns would come back unshaped. That cuts both
+     * ways -- a restricted base must not reach into an open collection, and an open base must
+     * not be used to read a restricted one -- so the join is refused if either side narrows for
+     * this role. A role holding a whole-row grant on both sides is unrestricted and joins as it
+     * always did.
+     *
+     * @param  array<mixed>  $queries
+     *
+     * @throws QueryException
+     * @throws DatabaseException
+     * @throws StructureException
+     */
+    private function rejectRestrictedJoins(Document $collection, array $queries): void
+    {
+        $joined = self::joinedBy($queries);
+
+        if ($joined === []) {
+            return;
+        }
+
+        $message = 'Join queries are not supported while a column-scoped permission applies';
+
+        if ($this->grantedColumns($collection, PermissionType::Read) !== null) {
+            throw new QueryException($message);
+        }
+
+        foreach ($joined as $id) {
+            // A join naming no such collection is validation's to report, not this gate's.
+            $definition = $this->silent(fn (): ?Collection => $this->findCollection($id));
+
+            if ($definition !== null && $this->grantedColumns($definition, PermissionType::Read) !== null) {
+                throw new QueryException($message);
+            }
+        }
+    }
+
+    /**
+     * Every collection a set of queries joins, nested joins included.
+     *
+     * @param  array<mixed>  $queries
+     * @return list<string>
+     */
+    private static function joinedBy(array $queries): array
+    {
+        $ids = [];
+
+        foreach ($queries as $query) {
+            if (! $query instanceof Query) {
+                continue;
+            }
+
+            if ($query->getMethod()->isJoin() && $query->getAttribute() !== '') {
+                $ids[] = $query->getAttribute();
+            }
+
+            // A nested join is a join among its parent's values.
+            foreach (self::joinedBy($query->getValues()) as $id) {
+                $ids[] = $id;
+            }
+        }
+
+        return \array_values(\array_unique($ids));
+    }
+
+    /**
      * Remove the columns the caller was not granted from a document on its way back.
      *
      * The other half of the gate: a query naming an ungranted column is refused, and a read
@@ -1583,6 +1653,11 @@ trait Documents
         if (! $this->authorization->getStatus()) {
             return;
         }
+
+        // Before the base collection's own grant is consulted: a join is refused for a
+        // restriction on either side, and an unrestricted base is exactly the case where one
+        // can be used to read a restricted collection.
+        $this->rejectRestrictedJoins($collection, $queries);
 
         $granted = $this->grantedColumns($collection, PermissionType::Read);
 

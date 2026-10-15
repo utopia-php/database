@@ -607,7 +607,7 @@ class Filter extends Base
                     $nestedQueries[] = $nested;
                 }
 
-                $filters = BaseQuery::groupByType($nestedQueries)->filters;
+                $filters = self::filters($nestedQueries);
 
                 if (count($nestedQueries) !== count($filters)) {
                     $this->message = \ucfirst($method->value).' queries can only contain filter queries';
@@ -652,7 +652,7 @@ class Filter extends Base
                     $nestedQueries[] = $nested;
                 }
 
-                $filters = BaseQuery::groupByType($nestedQueries)->filters;
+                $filters = self::filters($nestedQueries);
                 if (count($nestedQueries) !== count($filters)) {
                     $this->message = 'elemMatch queries can only contain filter queries';
 
@@ -754,6 +754,21 @@ class Filter extends Base
     public function getMaxValuesCount(): int
     {
         return $this->maxValuesCount;
+    }
+
+    /**
+     * The filters among the queries a logical query holds. A relationship query is not one: it shapes related
+     * documents rather than matching a row.
+     *
+     * @param  list<Query>  $queries
+     * @return list<BaseQuery>
+     */
+    private static function filters(array $queries): array
+    {
+        return \array_values(\array_filter(
+            BaseQuery::groupByType($queries)->filters,
+            static fn (BaseQuery $query): bool => $query->getMethod() !== Method::Relationship,
+        ));
     }
 
     #[\Override]

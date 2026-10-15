@@ -1940,7 +1940,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         }
 
         if ($otherQueries === []) {
-            return $this->countOf($this->fetchAggregate($collectionDoc, $name, $roles, 'COUNT(1)', '1', $max, Event::DocumentCount));
+            return $this->countOf($this->fetchAggregate($collectionDoc, $name, $roles, Query::count('1', 'sum'), '1', $max, Event::DocumentCount));
         }
 
         $otherQueries = $this->mainRowQueries($otherQueries, $collectionDoc);
@@ -1948,7 +1948,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
         $filters = $this->compileRowFilters($builder, $otherQueries);
         if ($filters !== null) {
-            return $this->countOf($this->fetchAggregate($collectionDoc, $name, $roles, 'COUNT(1)', '1', $max, Event::DocumentCount, $filters));
+            return $this->countOf($this->fetchAggregate($collectionDoc, $name, $roles, Query::count('1', 'sum'), '1', $max, Event::DocumentCount, $filters));
         }
 
         $this->applyFilters($builder, $otherQueries, $name, $alias);
@@ -2017,7 +2017,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         $column = $this->quote($attribute);
 
         if ($otherQueries === []) {
-            return $this->sumOf($this->fetchAggregate($collectionDoc, $name, $roles, "SUM({$column})", $column, $max, Event::DocumentSum));
+            return $this->sumOf($this->fetchAggregate($collectionDoc, $name, $roles, Query::sum($attribute, 'sum'), $column, $max, Event::DocumentSum));
         }
 
         $otherQueries = $this->mainRowQueries($otherQueries, $collectionDoc);
@@ -2025,7 +2025,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
         $filters = $this->compileRowFilters($builder, $otherQueries);
         if ($filters !== null) {
-            return $this->sumOf($this->fetchAggregate($collectionDoc, $name, $roles, "SUM({$column})", $column, $max, Event::DocumentSum, $filters));
+            return $this->sumOf($this->fetchAggregate($collectionDoc, $name, $roles, Query::sum($attribute, 'sum'), $column, $max, Event::DocumentSum, $filters));
         }
 
         $this->applyFilters($builder, $otherQueries, $name, $alias);
@@ -2184,7 +2184,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * @param  array<string>  $roles
      * @return array<string, mixed>
      */
-    private function fetchAggregate(Document $collection, string $name, array $roles, string $aggregate, string $column, ?int $max, Event $event, ?Condition $filters = null): array
+    private function fetchAggregate(Document $collection, string $name, array $roles, BaseQuery $aggregate, string $column, ?int $max, Event $event, ?Condition $filters = null): array
     {
         $alias = Query::DEFAULT_ALIAS;
         $conditions = [];
@@ -2212,11 +2212,11 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             $rows .= ' WHERE '.\implode(' AND ', $conditions);
         }
 
-        $sum = $this->quote('sum');
+        $selection = $this->dialectBuilder()->compileAggregate($aggregate);
         if ($max === null) {
-            $sql = "SELECT {$aggregate} AS {$sum} FROM {$rows}";
+            $sql = "SELECT {$selection} FROM {$rows}";
         } else {
-            $sql = "SELECT {$aggregate} AS {$sum} FROM (SELECT {$column} FROM {$rows} LIMIT ?) AS {$this->quote('table_count')}";
+            $sql = "SELECT {$selection} FROM (SELECT {$column} FROM {$rows} LIMIT ?) AS {$this->quote('table_count')}";
             $bindings[] = $max;
         }
 
@@ -2252,6 +2252,9 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
+     * The sum in a row, with SQLite's `INF`, `-INF` and `NAN` read as the doubles they name for Database::sum() to
+     * refuse.
+     *
      * @param  array<string, mixed>  $row
      */
     private function sumOf(array $row): int|float
@@ -2259,10 +2262,15 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         $sum = $row['sum'] ?? 0;
 
         if (\is_numeric($sum)) {
-            return \str_contains((string) $sum, '.') ? (float) $sum : (int) $sum;
+            return $sum + 0;
         }
 
-        return 0;
+        return match (\is_string($sum) ? \strtoupper($sum) : null) {
+            'INF' => \INF,
+            '-INF' => -\INF,
+            'NAN' => \NAN,
+            default => 0,
+        };
     }
 
     /**

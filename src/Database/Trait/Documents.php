@@ -73,6 +73,17 @@ use WeakMap;
 
 trait Documents
 {
+    private const array FLOATING_AGGREGATES = [
+        Method::Sum,
+        Method::Avg,
+        Method::Stddev,
+        Method::StddevPop,
+        Method::StddevSamp,
+        Method::Variance,
+        Method::VarPop,
+        Method::VarSamp,
+    ];
+
     private const string DOCUMENT_CACHE_ACTIVE_PREFIX = 'active:';
 
     private const string DOCUMENT_CACHE_BLOCKED_PREFIX = 'blocked:';
@@ -4611,6 +4622,7 @@ trait Documents
      * @return float|int The sum of the attribute values
      *
      * @throws DatabaseException
+     * @throws LimitException When the sum overflows the range of a double
      * @throws QueryException When $max is not greater than 0
      */
     public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): float|int
@@ -4656,6 +4668,7 @@ trait Documents
 
         $getSum = fn () => $this->adapter->sum($collection, $attribute, $queries, $max);
         $sum = $skipAuth ? $this->authorization->skip($getSum) : $getSum();
+        self::assertFinite($sum);
 
         $listeners = $this->listens(Event::DocumentSum);
         if ($listeners !== []) {
@@ -4933,6 +4946,7 @@ trait Documents
      * @return list<array<string, mixed>>
      *
      * @throws DatabaseException
+     * @throws LimitException When a sum, average, deviation or variance overflows the range of a double
      * @throws QueryException When the queries hold no aggregate or groupBy
      */
     public function aggregate(string $collection, array $queries): array
@@ -4940,9 +4954,14 @@ trait Documents
         $definition = $this->silent(fn () => $this->getCollection($collection));
         $queries = self::aliasAggregates($this->rewriteQueries(Event::DocumentAggregate, $definition, $queries));
 
+        $floating = self::floatingAggregates($queries);
         $rows = [];
         foreach ($this->fetch($definition, $queries, PermissionType::Read, true) as $row) {
-            $rows[] = $row->getArrayCopy();
+            $row = $row->getArrayCopy();
+            foreach ($floating as $alias) {
+                self::assertFinite($row[$alias] ?? null);
+            }
+            $rows[] = $row;
         }
 
         $listeners = $this->listens(Event::DocumentAggregate);
@@ -4951,6 +4970,41 @@ trait Documents
         }
 
         return $rows;
+    }
+
+    /**
+     * @param  array<Query>  $queries  Each aggregate aliased by aliasAggregates()
+     * @return list<string>
+     */
+    private static function floatingAggregates(array $queries): array
+    {
+        $aliases = [];
+        foreach ($queries as $query) {
+            if (\in_array($query->getMethod(), self::FLOATING_AGGREGATES, true)) {
+                $aliases[] = $query->getAlias();
+            }
+        }
+
+        return $aliases;
+    }
+
+    /**
+     * SQLite, MongoDB and the adapters that sum in PHP answer a double that overflowed with infinity, which no caller
+     * can tell from a value, so it is refused as MariaDB, MySQL and PostgreSQL refuse it.
+     *
+     * @throws LimitException
+     */
+    private static function assertFinite(mixed $value): void
+    {
+        $finite = match (true) {
+            \is_float($value) => \is_finite($value),
+            \is_string($value) => \preg_match('/^[+-]?(inf|infinity|nan)$/i', $value) !== 1,
+            default => true,
+        };
+
+        if (! $finite) {
+            throw new LimitException('Value out of range');
+        }
     }
 
     /**

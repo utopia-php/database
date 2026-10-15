@@ -2830,6 +2830,44 @@ trait DocumentTests
         $this->getDatabase()->getAuthorization()->addRole('user:x');
     }
 
+    /**
+     * MariaDB and MySQL sent a double sum that overflowed as `0`, and SQLite, MongoDB and the adapters that sum in
+     * PHP answered infinity. A sum past the range of a double is refused on every adapter instead.
+     */
+    public function testSumOverflowIsRefused(): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'sum_overflow_'.\substr(\uniqid(), -6);
+        $database->createCollection(Collection::create(
+            id: $collection,
+            attributes: [
+                Attribute::string(key: 'series', size: 20, required: true),
+                Attribute::double(key: 'reading', required: true),
+            ],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+        foreach ([['huge', 1e308], ['huge', 1e308], ['single', 1e308]] as [$series, $reading]) {
+            $database->createDocument($collection, new Document([
+                'series' => $series,
+                'reading' => $reading,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
+
+        foreach ([[[], null], [[Query::equal('series', ['huge'])], null], [[Query::equal('series', ['huge'])], 5], [[Query::greaterThan('reading', 0)], null]] as [$queries, $max]) {
+            try {
+                $database->sum($collection, 'reading', $queries, $max);
+                $this->fail('A sum that overflows a double is refused');
+            } catch (LimitException) {
+                $this->addToAssertionCount(1);
+            }
+        }
+
+        $this->assertEqualsWithDelta(1e308, $database->sum($collection, 'reading', [Query::equal('series', ['single'])]), 1e293);
+
+        $database->deleteCollection($collection);
+    }
+
     public function testUpdateDocument(): void
     {
         $document = $this->initDocumentsFixture();

@@ -2290,6 +2290,8 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
+     * Deletes only the rows that match every one of the deletionFilters().
+     *
      * @param  array<string>  $sequences
      * @param  array<string>  $permissionIds
      *
@@ -2301,13 +2303,16 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         $collectionId = $collection->getId();
         $name = $this->getNamespace().'_'.$this->filter($collectionId);
 
-        foreach ($sequences as $index => $sequence) {
-            $sequences[$index] = $sequence;
-        }
-
         /** @var array<string, mixed> $filters */
         $filters = $this->buildFilters([new Query(Method::Equal, Storage::SEQUENCE, $sequences)]);
         $filters = $this->applyTenantFilter($filters, $collectionId);
+
+        $queries = \array_map(static fn (Query $query): Query => clone $query, $this->deletionFilters());
+        $this->escapeQueryAttributes($collection, $queries);
+        $matching = $this->buildFilters($queries);
+        if ($matching !== []) {
+            $filters = ['$and' => [$filters, $matching]];
+        }
 
         $filters = $this->replaceInternalIdsKeys($filters, '$', '_', $this->operators);
 

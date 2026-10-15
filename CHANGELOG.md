@@ -1,5 +1,46 @@
 # Changelog
 
+## 8.1.4
+
+8.1.4 fixes `deleteDocuments()` deleting documents that stopped matching its queries after they were found. It needs
+no code change; a custom adapter can opt in to the fix, see
+[Upgrading from 8.1.3 to 8.1.4](UPGRADE.md#upgrading-from-813-to-814).
+
+### Added
+
+- `Adapter::deleteDocumentsMatching(Document $collection, array $sequences, array $permissionIds, array $queries): int`
+  deletes the rows of `$sequences` that match every filter query in `$queries`, as `find()` is handed them, removes
+  the permission rows of `$permissionIds` but those of a row kept because it no longer matches, and returns the
+  number of rows deleted. It calls `deleteDocuments()` with the queries readable through the new protected
+  `Adapter::deletionFilters()`, so an override of `deleteDocuments()` still runs, on a `Pool` too. Memory, SQLite,
+  MariaDB, MySQL, PostgreSQL, MongoDB and Redis delete only the rows that match them; `Pool` and `ReadWritePool` hand
+  them to the pooled adapter. A custom adapter that ignores them deletes every row of `$sequences`, as before.
+
+### Fixed
+
+- `deleteDocuments()` deletes only the documents that still match its filters when each batch is deleted. It found a
+  batch and then deleted it by internal id alone, so a document another write changed in between, so that it no
+  longer matched (such as a presence refreshed before an expired-presence cleanup deleted it), was deleted anyway,
+  cascaded to its related documents, lost its permission rows, and was counted and handed to `onNext`. Each batch
+  with filters on anything but `$sequence` now reads its documents again, with the same queries, in the transaction
+  that deletes them, and deletes them with `Adapter::deleteDocumentsMatching()`. A document that no longer matches is
+  kept with its related documents and permission rows, and is neither counted, handed to `onNext` nor in
+  `Event::DocumentsDelete`'s count. A limit counts the documents found, kept ones included, so a kept document is not
+  replaced by a later one. When a document changes between that read and the delete, the batch is rolled back and
+  tried again, and fails with `Exception\Contention` once the transaction's retries are spent; the batches before it
+  stay deleted and `Event::DocumentsDelete` reports them. In a transaction begun with `startTransaction()` the retry
+  runs in a savepoint, which on MySQL and MariaDB reads the transaction's snapshot again and fails the same way; a
+  MongoDB replica set has no savepoints, so the batch is not retried and its partial delete stays in the transaction.
+  Either way the caller rolls the whole transaction back and runs it again. Without transactions, as on a standalone
+  MongoDB server, nothing is rolled back: the documents still stored are kept and left out of the count, `onNext`,
+  the cache purges and the event, the remaining batches are deleted, a document another deleter removed meanwhile is
+  counted by this call, and a cascade that already ran for a kept document stays, so cascades are best-effort there.
+  The adapter's count is a hint: only a document of the batch still stored after the delete counts as changed, so a
+  custom adapter that reports a wrong count does not fail the delete. A delete without filters, or with filters only
+  on `$sequence`, runs as before.
+- A bulk delete on SQLite, MariaDB, MySQL and PostgreSQL binds the floats of its filters in fixed-point notation, as
+  `find()` binds them, so it matches the rows the find matched.
+
 ## 8.1.3
 
 8.1.3 adds a hook that rewrites the queries of a read. It changes nothing for a database without one; see

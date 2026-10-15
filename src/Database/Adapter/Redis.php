@@ -1392,6 +1392,12 @@ class Redis extends Adapter implements
         });
     }
 
+    /**
+     * Deletes only the rows that match every one of the deletionFilters().
+     *
+     * @param  array<string>  $sequences
+     * @param  array<string>  $permissionIds
+     */
     #[\Override]
     public function deleteDocuments(Document $collection, array $sequences, array $permissionIds): int
     {
@@ -1400,25 +1406,26 @@ class Redis extends Adapter implements
         }
 
         $collectionId = $this->filter($collection->getId());
-        $idxKey = $this->idxKey($collectionId);
+        $indexKey = $this->idxKey($collectionId);
+        $queries = $this->deletionFilters();
 
-        return $this->transaction(function (RedisClient $redis) use ($collectionId, $sequences, $permissionIds, $idxKey): int {
+        return $this->transaction(function (RedisClient $redis) use ($collectionId, $sequences, $permissionIds, $queries, $indexKey): int {
             $sequenceSet = [];
             foreach ($sequences as $sequence) {
                 $sequenceSet[(string) $sequence] = true;
             }
 
-            $allIds = $redis->sMembers($idxKey);
+            $allIds = $redis->sMembers($indexKey);
             if (! \is_array($allIds)) {
                 $allIds = [];
             }
 
-            $docKeys = [];
+            $documentKeys = [];
             $redis->multi(\Redis::PIPELINE);
             foreach ($allIds as $id) {
-                $docKey = $this->docKey($collectionId, (string) $id);
-                $docKeys[(string) $id] = $docKey;
-                $redis->get($docKey);
+                $documentKey = $this->docKey($collectionId, (string) $id);
+                $documentKeys[(string) $id] = $documentKey;
+                $redis->get($documentKey);
             }
             $payloads = $redis->exec();
             if (! \is_array($payloads)) {
@@ -1426,6 +1433,7 @@ class Redis extends Adapter implements
             }
 
             $deleted = [];
+            $kept = [];
             foreach ($allIds as $position => $id) {
                 $payload = $payloads[$position] ?? false;
                 if (! \is_string($payload) || $payload === '') {
@@ -1433,28 +1441,34 @@ class Redis extends Adapter implements
                 }
                 $document = $this->decode($payload);
                 $matchesSequence = isset($sequenceSet[(string) $document->getSequence()]);
-                if ($matchesSequence) {
-                    $deleted[$document->getId()] = ['payload' => $payload, 'docKey' => $docKeys[(string) $id]];
+                if (! $matchesSequence) {
+                    continue;
                 }
+                if ($this->filterDocumentsByQueries($collectionId, [$document], $queries) === []) {
+                    $kept[$document->getId()] = true;
+
+                    continue;
+                }
+                $deleted[$document->getId()] = ['payload' => $payload, 'documentKey' => $documentKeys[(string) $id]];
             }
 
             foreach ($deleted as $documentId => $deleteEntry) {
-                $deletedDocKey = $deleteEntry['docKey'];
+                $deletedKey = $deleteEntry['documentKey'];
                 $this->journal('deleteDoc', [
                     'collection' => $collectionId,
                     'id' => (string) $documentId,
                     'payload' => $deleteEntry['payload'],
-                    'docKey' => $deletedDocKey,
-                    'idxKey' => $idxKey,
+                    'docKey' => $deletedKey,
+                    'idxKey' => $indexKey,
                 ]);
                 $this->clearPermissions($collectionId, (string) $documentId);
-                $redis->del($deletedDocKey);
-                $redis->sRem($idxKey, \strtolower((string) $documentId));
+                $redis->del($deletedKey);
+                $redis->sRem($indexKey, \strtolower((string) $documentId));
             }
 
             foreach ($permissionIds as $permissionId) {
                 $documentId = (string) $permissionId;
-                if (isset($deleted[$documentId])) {
+                if (isset($deleted[$documentId]) || isset($kept[$documentId])) {
                     continue;
                 }
                 $this->clearPermissions($collectionId, $documentId);

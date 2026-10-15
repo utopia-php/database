@@ -1,3 +1,25 @@
+# Upgrading from 8.1.3 to 8.1.4
+
+8.1.4 is a patch release and needs no code change. `Database::deleteDocuments()` keeps its signature and now deletes
+only the documents that still match its filters when they are deleted; see [CHANGELOG.md](CHANGELOG.md#814).
+
+`Adapter::deleteDocuments()` keeps its signature. A batch with filters reaches the adapter through the new
+`Adapter::deleteDocumentsMatching()`, which calls `deleteDocuments()` with the filters readable through
+`$this->deletionFilters()`, so an override of `deleteDocuments()` in a subclass of a bundled adapter still runs and,
+when it calls its parent, deletes only the rows that match. A custom adapter that extends `Adapter` directly deletes
+every row it is handed, as in 8.1.3; to keep a document another write changed after it was found, delete only the
+rows that match every query of `deletionFilters()` (filter queries, as `find()` is handed them), keep the permission
+rows of a row kept, and return the number of rows deleted.
+
+The count `deleteDocuments()` returns is a hint: a lower count than the rows handed makes `Database::deleteDocuments()`
+check which documents are still stored, and a higher one is ignored, so a custom adapter that counts differently still
+works.
+
+`deleteDocuments()` can now throw `Exception\Contention` when documents keep changing between the check and the delete
+of a batch. Inside a transaction begun with `startTransaction()`, roll it back and run it again: on MySQL and MariaDB
+the retry in the savepoint rereads the same snapshot, and a MongoDB replica set has no savepoint, so the partial
+delete of the batch stays in the transaction until it is rolled back.
+
 # Upgrading from 8.1.2 to 8.1.3
 
 8.1.3 is a patch release and needs no code change. It adds `Hook\Queries`, which rewrites the queries of a read

@@ -11226,7 +11226,7 @@ trait DocumentTests
             return;
         }
 
-        $collection = __FUNCTION__;
+        $collection = 'nestedPathPlain';
         $database->createCollection(Collection::create(id: $collection, permissions: [Permission::read(Role::any()), Permission::create(Role::any())]));
 
         try {

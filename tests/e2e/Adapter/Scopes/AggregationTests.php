@@ -15,6 +15,7 @@ use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Index;
@@ -1557,6 +1558,67 @@ trait AggregationTests
         $this->assertNotEqualsWithDelta(186240.27777778, $this->numericAttribute($variance[0], 'result'), 1.0);
 
         $database->deleteCollection('stat_contract');
+    }
+
+    /**
+     * MariaDB and MySQL sent a double aggregate that overflowed as `0`, and MariaDB's STDDEV answered an overflowing
+     * variance with NULL. An aggregate past the range of a double is refused on every engine instead of answered with
+     * a wrong number.
+     */
+    public function testFloatAggregateOverflowIsRefused(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'agg_overflow'.$this->getAggSuffix();
+        $database->createCollection(Collection::create(
+            id: $collection,
+            attributes: [
+                Attribute::string(key: 'series', size: 20, required: true),
+                Attribute::double(key: 'reading', required: true),
+            ],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+        foreach ([['huge', 1e308], ['huge', 1e308], ['spread', 1e308], ['spread', -1e308], ['spread', 0.0], ['single', 1e308]] as [$series, $reading]) {
+            $database->createDocument($collection, new Document([
+                'series' => $series,
+                'reading' => $reading,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
+
+        $overflows = [
+            [Query::equal('series', ['huge']), Query::sum('reading', 'result')],
+            [Query::equal('series', ['huge']), Query::avg('reading', 'result')],
+            [Query::sum('reading', 'result'), Query::groupBy(['series'])],
+        ];
+        if (! $database->getAdapter() instanceof SQLite) {
+            $overflows[] = [Query::equal('series', ['spread']), Query::stddevPop('reading', 'result')];
+            $overflows[] = [Query::equal('series', ['spread']), Query::varSamp('reading', 'result')];
+        }
+
+        foreach ($overflows as $queries) {
+            try {
+                $database->aggregate($collection, $queries);
+                $this->fail('An aggregate that overflows a double is refused');
+            } catch (LimitException) {
+                $this->addToAssertionCount(1);
+            }
+        }
+
+        $single = $database->aggregate($collection, [
+            Query::equal('series', ['single']),
+            Query::sum('reading', 'total'),
+            Query::avg('reading', 'mean'),
+        ]);
+        $this->assertEqualsWithDelta(1e308, $this->numericAttribute($single[0], 'total'), 1e293);
+        $this->assertEqualsWithDelta(1e308, $this->numericAttribute($single[0], 'mean'), 1e293);
+
+        $database->deleteCollection($collection);
     }
 
     public function testStddevPopOfPrice(): void

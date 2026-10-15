@@ -1102,8 +1102,9 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
             $statement = $this->executeResult($result, Event::DocumentCreate);
 
             $this->execute($statement);
-            $lastInsertedId = $this->getDriver()->lastInsertId();
-            $document[Document::SEQUENCE] ??= $lastInsertedId;
+            if (empty($document->getSequence())) {
+                $document[Document::SEQUENCE] = $this->getDriver()->lastInsertId();
+            }
 
             $context = $this->writeContext();
             $this->runWriteHooks(fn ($hook) => $hook->afterDocumentCreate($name, [$document], $context));

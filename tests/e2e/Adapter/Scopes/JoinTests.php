@@ -18,7 +18,6 @@ use Utopia\Database\Index;
 use Utopia\Database\Permission;
 use Utopia\Database\Query;
 use Utopia\Database\Role;
-use Utopia\Database\Storage;
 use Utopia\Query\Method;
 
 trait JoinTests
@@ -6293,7 +6292,7 @@ trait JoinTests
     {
         return \array_map(
             fn (array $row): array => [
-                $row['category'] ?? null,
+                $row['b.category'] ?? null,
                 $this->intAttribute($row, 'rows'),
                 $this->intAttribute($row, 'total'),
                 $this->intAttribute($row, 'mainTotal'),
@@ -6483,7 +6482,7 @@ trait JoinTests
         ]);
         $totals = [];
         foreach ($results as $result) {
-            $status = $result['status'];
+            $status = $result['j1.status'];
             $this->assertIsString($status);
             $totals[$status] = $this->intAttribute($result, 'total');
         }
@@ -7849,7 +7848,7 @@ trait JoinTests
             foreach ([Document::ID, Document::SEQUENCE, Document::CREATED_AT, Document::UPDATED_AT, Document::PERMISSIONS] as $attribute) {
                 $total = 0;
                 foreach ($database->aggregate($customers, [$join, Query::count('*', 'rows'), Query::groupBy(['purchase.'.$attribute])]) as $group) {
-                    $this->assertArrayHasKey(Storage::column($attribute), $group, $type.' grouped by purchase.'.$attribute);
+                    $this->assertArrayHasKey('purchase.'.$attribute, $group, $type.' grouped by purchase.'.$attribute);
                     $total += $this->intAttribute($group, 'rows');
                 }
                 $this->assertSame(3, $total, $type.' grouped by purchase.'.$attribute);
@@ -7862,7 +7861,7 @@ trait JoinTests
             Query::groupBy(['purchase.$id']),
             Query::orderAsc('purchase.$id'),
         ]);
-        $this->assertSame(['open', 'other', 'paid'], \array_map(static fn (array $group): mixed => $group[Storage::UID], $groups));
+        $this->assertSame(['open', 'other', 'paid'], \array_map(static fn (array $group): mixed => $group['purchase.$id'], $groups));
         $this->assertSame([50, 7, 100], \array_map(fn (array $group): int => $this->intAttribute($group, 'total'), $groups));
 
         $this->cleanupAggCollections($database, $collections);
@@ -8024,7 +8023,7 @@ trait JoinTests
             $grouped = $reads[$attribute]['groupBy']();
             $this->assertCount(1, $grouped, $attribute);
             $this->assertSame($rows, $this->intAttribute($grouped[0], 'total'), $attribute);
-            $value = $grouped[0][Storage::TENANT];
+            $value = $grouped[0][$attribute];
             $this->assertIsScalar($value, $attribute);
             $this->assertSame($tenant, (string) $value, $attribute);
         }

@@ -151,7 +151,7 @@ final class EmptySetAggregateContractTest extends TestCase
      */
     private function answer(string $sql, int $inputs): array
     {
-        \preg_match_all('/([A-Z_]+)\((?:DISTINCT )?[^()]*\) AS [`"]([^`"]+)[`"]/', $sql, $matches, PREG_SET_ORDER);
+        \preg_match_all('/([A-Z_]+)\((?:DISTINCT )?[^()]*\)(?: \+ 0)? AS [`"]([^`"]+)[`"]/', $sql, $matches, PREG_SET_ORDER);
         $this->assertNotSame([], $matches, 'no aggregate in: '.$sql);
 
         $row = [];

@@ -15,6 +15,7 @@ use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Index;
@@ -22,6 +23,7 @@ use Utopia\Database\Permission;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\Role;
+use Utopia\Query\Method;
 
 trait AggregationTests
 {
@@ -1559,6 +1561,69 @@ trait AggregationTests
         $database->deleteCollection('stat_contract');
     }
 
+    /**
+     * MariaDB and MySQL sent a double aggregate that overflowed as `0`, and MariaDB's STDDEV answered an overflowing
+     * variance with NULL. An aggregate past the range of a double is refused on every engine instead of answered with
+     * a wrong number.
+     */
+    public function testFloatAggregateOverflowIsRefused(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'agg_overflow'.$this->getAggSuffix();
+        $database->createCollection(Collection::create(
+            id: $collection,
+            attributes: [
+                Attribute::string(key: 'series', size: 20, required: true),
+                Attribute::double(key: 'reading', required: true),
+            ],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+        foreach ([['huge', 1e308], ['huge', 1e308], ['sunk', -1e308], ['sunk', -1e308], ['spread', 1e308], ['spread', -1e308], ['spread', 0.0], ['single', 1e308]] as [$series, $reading]) {
+            $database->createDocument($collection, new Document([
+                'series' => $series,
+                'reading' => $reading,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
+
+        $overflows = [
+            [Query::equal('series', ['huge']), Query::sum('reading', 'result')],
+            [Query::equal('series', ['huge']), Query::avg('reading', 'result')],
+            [Query::equal('series', ['sunk']), Query::sum('reading', 'result')],
+            [Query::equal('series', ['sunk']), Query::avg('reading', 'result')],
+            [Query::sum('reading', 'result'), Query::groupBy(['series'])],
+        ];
+        if (! $database->getAdapter() instanceof SQLite) {
+            $overflows[] = [Query::equal('series', ['spread']), Query::stddevPop('reading', 'result')];
+            $overflows[] = [Query::equal('series', ['spread']), Query::varSamp('reading', 'result')];
+        }
+
+        foreach ($overflows as $queries) {
+            try {
+                $database->aggregate($collection, $queries);
+                $this->fail('An aggregate that overflows a double is refused');
+            } catch (LimitException) {
+                $this->addToAssertionCount(1);
+            }
+        }
+
+        $single = $database->aggregate($collection, [
+            Query::equal('series', ['single']),
+            Query::sum('reading', 'total'),
+            Query::avg('reading', 'mean'),
+        ]);
+        $this->assertEqualsWithDelta(1e308, $this->numericAttribute($single[0], 'total'), 1e293);
+        $this->assertEqualsWithDelta(1e308, $this->numericAttribute($single[0], 'mean'), 1e293);
+
+        $database->deleteCollection($collection);
+    }
+
     public function testStddevPopOfPrice(): void
     {
         $database = static::getDatabase();
@@ -2346,9 +2411,9 @@ trait AggregationTests
                 'full outer join' => [Query::fullOuterJoin($collection, 'product', [Query::on('product_uid', '$id')]), [3, 3, 5]],
             ] as $type => [$product, $totals]) {
                 $groups = $database->aggregate($orders, [$product, Query::count('*', 'total'), Query::groupBy(['product.category']), Query::select(['product.category']), Query::orderAsc('product.category')]);
-                $this->assertSame(['books', 'clothing', 'electronics'], \array_map(fn (array $group): mixed => $group['category'], $groups), $type);
+                $this->assertSame(['books', 'clothing', 'electronics'], \array_map(fn (array $group): mixed => $group['product.category'], $groups), $type);
                 $this->assertSame($totals, \array_map(fn (array $group): int => $this->intAttribute($group, 'total'), $groups), $type);
-                $this->assertSame(['category', 'total'], $this->sortedAttributeNames($groups[0]), $type);
+                $this->assertSame(['product.category', 'total'], $this->sortedAttributeNames($groups[0]), $type);
             }
 
             $database->deleteCollection($orders);
@@ -2760,5 +2825,330 @@ trait AggregationTests
         }
 
         return $documents;
+    }
+
+    public function testAggregateRowsAreTypedNamedAndDecodedAsAReadReturnsThem(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'agg_typed_rows'.$this->getAggSuffix();
+        $database->createCollection(Collection::create(
+            id: $collection,
+            attributes: [
+                Attribute::string(key: 'label', size: 16, required: true),
+                Attribute::integer(key: 'quantity', required: true),
+                Attribute::double(key: 'price', required: true),
+                Attribute::boolean(key: 'active', required: true),
+                Attribute::datetime(key: 'shippedAt', required: true),
+            ],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+        foreach ([
+            ['first', 'a', 1, 1.5, true, '2023-06-01T00:00:00.000+00:00'],
+            ['second', 'a', 2, 2.5, false, '2023-06-02T00:00:00.000+00:00'],
+            ['third', 'b', 4, 3.5, true, '2023-06-01T00:00:00.000+00:00'],
+        ] as [$id, $label, $quantity, $price, $active, $shippedAt]) {
+            $database->createDocument($collection, new Document([
+                '$id' => $id,
+                'label' => $label,
+                'quantity' => $quantity,
+                'price' => $price,
+                'active' => $active,
+                'shippedAt' => $shippedAt,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
+
+        $totals = $database->aggregate($collection, [
+            Query::count('*', 'rows'),
+            Query::countDistinct('label', 'labels'),
+            Query::sum('quantity', 'units'),
+            Query::sum('price', 'revenue'),
+            Query::avg('quantity', 'mean'),
+            Query::min('quantity', 'fewest'),
+            Query::max('price', 'dearest'),
+            Query::min('shippedAt', 'firstShipped'),
+        ]);
+        $this->assertCount(1, $totals);
+        $this->assertIsFloat($totals[0]['mean']);
+        $this->assertEqualsWithDelta(7 / 3, $totals[0]['mean'], 0.0001);
+        $this->assertSame([
+            'rows' => 3,
+            'labels' => 2,
+            'units' => 7,
+            'revenue' => 7.5,
+            'mean' => $totals[0]['mean'],
+            'fewest' => 1,
+            'dearest' => 3.5,
+            'firstShipped' => '2023-06-01T00:00:00.000+00:00',
+        ], $totals[0]);
+
+        $this->assertSame(
+            [
+                ['rows' => 1, 'active' => false, 'quantity' => 2, '$id' => 'second'],
+                ['rows' => 1, 'active' => true, 'quantity' => 1, '$id' => 'first'],
+                ['rows' => 1, 'active' => true, 'quantity' => 4, '$id' => 'third'],
+            ],
+            $database->aggregate($collection, [
+                Query::count('*', 'rows'),
+                Query::groupBy(['active', 'quantity', '$id']),
+                Query::orderAsc('active'),
+                Query::orderAsc('quantity'),
+            ]),
+        );
+
+        $this->assertSame(
+            [['count' => 2, 'sum_quantity' => 3, 'label' => 'a'], ['count' => 1, 'sum_quantity' => 4, 'label' => 'b']],
+            $database->aggregate($collection, [Query::count('*'), Query::sum('quantity'), Query::groupBy(['label']), Query::orderAsc('label')]),
+        );
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testCountMatchesTheRowsOfGroupedDistinctAndAggregateReads(): void
+    {
+        $database = static::getDatabase();
+        [$products, $reviews] = $this->createCountedRowsCollections($database);
+
+        $join = Query::join($reviews, 'r', [Query::on('$id', 'product')]);
+        $leftJoin = Query::leftJoin($reviews, 'r', [Query::on('$id', 'product')]);
+        $fullOuterJoin = Query::fullOuterJoin($reviews, 'r', [Query::on('$id', 'product')]);
+
+        $shapes = [
+            'groupBy' => [[Query::count('*', 'n'), Query::groupBy(['category'])], 4, 3],
+            'groupBy with having' => [[Query::count('*', 'n'), Query::groupBy(['category']), Query::having([Query::greaterThan('n', 1)])], 3, 2],
+            'groupBy with a filter' => [[Query::lessThan('price', 100), Query::count('*', 'n'), Query::groupBy(['category'])], 3, 2],
+            'distinct' => [[Query::distinct(), Query::select(['category'])], 4, 3],
+            'plain aggregate' => [[Query::sum('price', 'total')], 1, 1],
+            'unaliased aggregate' => [[Query::count('*')], 1, 1],
+            'left join with groupBy' => [[$leftJoin, Query::count('*', 'n'), Query::groupBy(['category'])], 4, 3],
+            'join with groupBy' => [[$join, Query::count('*', 'n'), Query::groupBy(['category'])], 4, 2],
+            'distinct over a join' => [[$join, Query::distinct(), Query::select(['category'])], 4, 2],
+            'distinct joined attribute' => [[$join, Query::distinct(), Query::select(['r.score'])], 5, 2],
+            'distinct over a join without a select' => [[$join, Query::distinct()], 6, 3],
+            'full outer join with groupBy' => [[$fullOuterJoin, Query::count('*', 'n'), Query::groupBy(['r.score'])], null, null],
+            'full outer join with distinct' => [[$fullOuterJoin, Query::distinct(), Query::select(['category'])], null, null],
+        ];
+
+        $documents = [
+            'plain' => [[], 10, 5],
+            'filtered' => [[Query::lessThan('price', 100)], 6, 3],
+            'join' => [[$join], 6, 3],
+        ];
+
+        $authorization = $database->getAuthorization();
+
+        try {
+            foreach (['admin' => 1, 'viewer' => 2] as $role => $column) {
+                $authorization->cleanRoles();
+                $authorization->addRole(Role::user($role)->toString());
+
+                foreach ($documents as $label => [$queries, $expectedAdmin, $expectedViewer]) {
+                    if ($queries !== [] && $queries[0]->getMethod()->isJoin() && ! $database->getAdapter()->supports(Capability::Joins)) {
+                        continue;
+                    }
+
+                    $expected = $column === 1 ? $expectedAdmin : $expectedViewer;
+                    $this->assertSame($expected, $database->count($products, $queries), "{$label} as {$role}");
+                    $this->assertCount($expected, $database->find($products, [...$queries, Query::limit(100)]), "{$label} as {$role}");
+                }
+
+                foreach ($shapes as $label => [$queries, $expectedAdmin, $expectedViewer]) {
+                    $needsJoins = \array_filter($queries, static fn (Query $query): bool => $query->getMethod()->isJoin()) !== [];
+                    if (! $database->getAdapter()->supports(Capability::Aggregations) || ($needsJoins && ! $database->getAdapter()->supports(Capability::Joins))) {
+                        $this->assertCountRefused(fn (): int => $database->count($products, $queries), "{$label} as {$role}");
+
+                        continue;
+                    }
+
+                    $isAggregation = \array_filter($queries, static fn (Query $query): bool => $query->getMethod()->isAggregate() || $query->getMethod() === Method::GroupBy) !== [];
+                    $rows = $isAggregation
+                        ? \count($database->aggregate($products, [...$queries, Query::limit(100)]))
+                        : \count($database->find($products, [...$queries, Query::limit(100)]));
+
+                    $count = $database->count($products, $queries);
+                    $this->assertSame($rows, $count, "{$label} as {$role}: count() and the rows the read returns");
+                    $this->assertSame($rows, $database->count($products, [...$queries, Query::limit(1), Query::offset(1)]), "{$label} as {$role}: the page is not counted");
+
+                    $expected = $column === 1 ? $expectedAdmin : $expectedViewer;
+                    if ($expected !== null) {
+                        $this->assertSame($expected, $count, "{$label} as {$role}");
+                    } else {
+                        $this->assertGreaterThan(0, $count, "{$label} as {$role}");
+                    }
+
+                    $this->assertSame(\min(2, $rows), $database->count($products, $queries, 2), "{$label} as {$role}: capped at max");
+                }
+            }
+        } finally {
+            $authorization->cleanRoles();
+            $authorization->addRole('any');
+            $this->cleanupAggCollections($database, [$products, $reviews]);
+        }
+    }
+
+    public function testSumAddsUpTheRowsOfGroupedAndDistinctReads(): void
+    {
+        $database = static::getDatabase();
+        [$products, $reviews] = $this->createCountedRowsCollections($database);
+
+        $join = Query::join($reviews, 'r', [Query::on('$id', 'product')]);
+
+        $shapes = [
+            'groupBy' => [$reviews, 'score', [Query::count('*', 'n'), Query::groupBy(['score'])], 15, 12],
+            'distinct' => [$reviews, 'score', [Query::distinct(), Query::select(['score'])], 15, 12],
+            'distinct joined attribute' => [$products, 'r.score', [$join, Query::distinct(), Query::select(['r.score'])], 15, 9],
+        ];
+
+        $authorization = $database->getAuthorization();
+
+        try {
+            foreach (['admin' => 3, 'viewer' => 4] as $role => $column) {
+                $authorization->cleanRoles();
+                $authorization->addRole(Role::user($role)->toString());
+
+                $this->assertSame($column === 3 ? 20 : 17, $database->sum($reviews, 'score'), "every review as {$role}");
+
+                foreach ($shapes as $label => $shape) {
+                    [$collection, $attribute, $queries] = $shape;
+                    $needsJoins = $collection === $products;
+                    if (! $database->getAdapter()->supports(Capability::Aggregations) || ($needsJoins && ! $database->getAdapter()->supports(Capability::Joins))) {
+                        $this->assertCountRefused(fn (): int|float => $database->sum($collection, $attribute, $queries), "{$label} as {$role}");
+
+                        continue;
+                    }
+
+                    $this->assertEquals($shape[$column], $database->sum($collection, $attribute, $queries), "{$label} as {$role}");
+                    $this->assertEquals($shape[$column], $database->sum($collection, $attribute, [...$queries, Query::limit(1), Query::offset(1)]), "{$label} as {$role}: the page is not summed");
+                }
+
+                if ($database->getAdapter()->supports(Capability::Aggregations)) {
+                    $this->assertCountRefused(fn (): int|float => $database->sum($reviews, 'score', [Query::count('*', 'n'), Query::groupBy(['product'])]), "an attribute the groups do not hold as {$role}");
+                }
+            }
+        } finally {
+            $authorization->cleanRoles();
+            $authorization->addRole('any');
+            $this->cleanupAggCollections($database, [$products, $reviews]);
+        }
+    }
+
+    public function testSumOfGroupedOrDistinctRowsThatOverflowsIsRefused(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'agg_rows_overflow'.$this->getAggSuffix();
+        $database->createCollection(Collection::create(
+            id: $collection,
+            attributes: [
+                Attribute::string(key: 'series', size: 20, required: true),
+                Attribute::double(key: 'reading', required: true),
+            ],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+        foreach ([['huge', 1e308], ['huge', 1e308], ['huge', 9e307], ['sunk', -1e308], ['sunk', -9e307], ['single', 1e308]] as [$series, $reading]) {
+            $database->createDocument($collection, new Document([
+                'series' => $series,
+                'reading' => $reading,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
+
+        foreach (['huge', 'sunk'] as $series) {
+            foreach ([[Query::count('*', 'n'), Query::groupBy(['reading'])], [Query::distinct(), Query::select(['reading'])]] as $shape) {
+                try {
+                    $database->sum($collection, 'reading', [Query::equal('series', [$series]), ...$shape]);
+                    $this->fail("A sum of {$series} grouped or distinct rows that overflows a double is refused");
+                } catch (LimitException) {
+                    $this->addToAssertionCount(1);
+                }
+            }
+        }
+
+        $this->assertEqualsWithDelta(1e308, $database->sum($collection, 'reading', [Query::equal('series', ['single']), Query::distinct(), Query::select(['reading'])]), 1e293);
+
+        $database->deleteCollection($collection);
+    }
+
+    private function assertCountRefused(callable $count, string $label): void
+    {
+        $error = null;
+        try {
+            $count();
+        } catch (Throwable $caught) {
+            $error = $caught;
+        }
+
+        $this->assertInstanceOf(QueryException::class, $error, $label.': '.($error === null ? 'counted' : $error::class.': '.$error->getMessage()));
+    }
+
+    /**
+     * Products and their reviews, each readable by `user:admin` through the collection and by `user:viewer` only
+     * where the document grants it.
+     *
+     * @return array{string, string}
+     */
+    private function createCountedRowsCollections(Database $database): array
+    {
+        $products = 'counted_rows_products';
+        $reviews = 'counted_rows_reviews';
+        $this->cleanupAggCollections($database, [$products, $reviews]);
+
+        $permissions = [Permission::create(Role::any()), Permission::read(Role::user('admin'))];
+        $viewer = [Permission::read(Role::user('viewer'))];
+
+        $database->createCollection(Collection::create(id: $products, attributes: [
+            Attribute::string(key: 'category', size: 50, required: true),
+            Attribute::integer(key: 'price', required: true),
+        ], permissions: $permissions, documentSecurity: true));
+        $database->createCollection(Collection::create(id: $reviews, attributes: [
+            Attribute::string(key: 'product', size: 36, required: true),
+            Attribute::integer(key: 'score', required: true),
+        ], permissions: $permissions, documentSecurity: true));
+
+        $rows = [
+            $products => [
+                'p1' => [['category' => 'electronics', 'price' => 1200], true],
+                'p2' => [['category' => 'electronics', 'price' => 800], true],
+                'p3' => [['category' => 'electronics', 'price' => 500], false],
+                'p4' => [['category' => 'clothing', 'price' => 30], true],
+                'p5' => [['category' => 'clothing', 'price' => 50], false],
+                'p6' => [['category' => 'clothing', 'price' => 120], false],
+                'p7' => [['category' => 'books', 'price' => 15], true],
+                'p8' => [['category' => 'books', 'price' => 60], true],
+                'p9' => [['category' => 'books', 'price' => 10], false],
+                'p10' => [['category' => 'toys', 'price' => 25], false],
+            ],
+            $reviews => [
+                'r1' => [['product' => 'p1', 'score' => 5], true],
+                'r2' => [['product' => 'p1', 'score' => 4], true],
+                'r3' => [['product' => 'p4', 'score' => 3], false],
+                'r4' => [['product' => 'p7', 'score' => 5], true],
+                'r5' => [['product' => 'p3', 'score' => 2], true],
+                'r6' => [['product' => 'p10', 'score' => 1], true],
+            ],
+        ];
+
+        foreach ($rows as $collection => $documents) {
+            foreach ($documents as $id => [$attributes, $visible]) {
+                $database->createDocument($collection, new Document([
+                    '$id' => $id,
+                    ...$attributes,
+                    '$permissions' => $visible ? $viewer : [],
+                ]));
+            }
+        }
+
+        return [$products, $reviews];
     }
 }

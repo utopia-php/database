@@ -1175,6 +1175,12 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     #[\Override]
+    protected function rangeChecked(string $expression): string
+    {
+        return $expression.' + 0';
+    }
+
+    #[\Override]
     protected function boundsJoinedSort(): bool
     {
         return true;

@@ -87,10 +87,10 @@ final class AggregateOrderTest extends TestCase
             'total',
             [20, 40],
         ];
-        yield 'a joined group' => [[$note, Query::count('*', 'rows'), Query::groupBy(['note.name']), Query::orderDesc('note.name')], 'name', ['second', 'first']];
+        yield 'a joined group' => [[$note, Query::count('*', 'rows'), Query::groupBy(['note.name']), Query::orderDesc('note.name')], 'note.name', ['second', 'first']];
         yield 'a joined group named without its alias' => [
             [$note, Query::count('*', 'rows'), Query::groupBy(['score']), Query::orderDesc('note.score')],
-            'score',
+            'note.score',
             [5, 4, 3],
         ];
     }

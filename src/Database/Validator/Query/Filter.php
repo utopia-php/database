@@ -84,6 +84,12 @@ class Filter extends Base
                 return false;
             }
 
+            if (! $this->isNestable($alias)) {
+                $this->message = 'Cannot query nested attribute on: '.$alias;
+
+                return false;
+            }
+
             // For relationships, just validate the top level.
             // will validate each nested level during the recursive calls.
             $attribute = $alias;
@@ -96,6 +102,16 @@ class Filter extends Base
         }
 
         return true;
+    }
+
+    private function isNestable(string $base): bool
+    {
+        $definition = $this->schema[$base] ?? null;
+        if (! $this->supportForAttributes || ! \is_array($definition)) {
+            return true;
+        }
+
+        return \in_array($definition['type'] ?? null, [ColumnType::Relationship, ColumnType::Object], true);
     }
 
     private function isValidObjectPath(string $base, string $path): bool

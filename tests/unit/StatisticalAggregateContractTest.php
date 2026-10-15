@@ -19,7 +19,9 @@ use Utopia\Database\Validator\Authorization;
  *
  * Bare SQL `STDDEV` / `VARIANCE` are population on MySQL and MariaDB and sample
  * on PostgreSQL, so the same query used to answer different numbers per engine.
- * Every adapter now emits the explicit population form.
+ * Every adapter now emits the explicit population form. MySQL and MariaDB take the
+ * deviation as the root of the population variance, so an overflowing variance
+ * raises an error instead of reading as DBL_MAX or NULL.
  */
 final class StatisticalAggregateContractTest extends TestCase
 {
@@ -41,9 +43,9 @@ final class StatisticalAggregateContractTest extends TestCase
     {
         $sql = $this->captureFindSql($adapter, [Query::stddev('price', 'result')]);
 
-        $this->assertMatchesRegularExpression('/\bSTDDEV_POP\s*\(/i', $sql, $sql);
-        $this->assertDoesNotMatchRegularExpression('/\bSTDDEV\s*\(/i', $sql, $sql);
-        $this->assertDoesNotMatchRegularExpression('/\bSTDDEV_SAMP\s*\(/i', $sql, $sql);
+        $this->assertMatchesRegularExpression('/\b(STDDEV_POP|SQRT\(VAR_POP)\s*\(/i', $sql, $sql);
+        $this->assertDoesNotMatchRegularExpression('/\b(STDDEV|VARIANCE)\s*\(/i', $sql, $sql);
+        $this->assertDoesNotMatchRegularExpression('/\b(STDDEV_SAMP|VAR_SAMP)\s*\(/i', $sql, $sql);
     }
 
     /**
@@ -66,7 +68,7 @@ final class StatisticalAggregateContractTest extends TestCase
     public function testTheExplicitSampleFormsAreLeftAlone(string $adapter): void
     {
         $this->assertMatchesRegularExpression(
-            '/\bSTDDEV_SAMP\s*\(/i',
+            '/\b(STDDEV_SAMP|SQRT\(VAR_SAMP)\s*\(/i',
             $this->captureFindSql($adapter, [Query::stddevSamp('price', 'result')]),
         );
         $this->assertMatchesRegularExpression(

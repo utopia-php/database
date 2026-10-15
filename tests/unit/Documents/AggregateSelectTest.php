@@ -25,7 +25,6 @@ use Utopia\Database\Relationship;
 use Utopia\Database\RelationshipSide;
 use Utopia\Database\RelationshipType;
 use Utopia\Database\Role;
-use Utopia\Database\Storage;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Queries\Document as DocumentValidator;
 use Utopia\Database\Validator\Queries\Documents as DocumentsValidator;
@@ -138,7 +137,7 @@ final class AggregateSelectTest extends TestCase
             $this->database->aggregate('customers', [Query::count('*', 'rows'), Query::groupBy(['status']), Query::select($selects), Query::orderAsc('status')]),
         );
         $this->assertSame(
-            [['rows' => 2, 'name' => 'first'], ['rows' => 1, 'name' => 'second']],
+            [['rows' => 2, 'note.name' => 'first'], ['rows' => 1, 'note.name' => 'second']],
             $this->database->aggregate('customers', [Query::join('notes', 'note', [Query::on('$id', 'customerId')]), Query::count('*', 'rows'), Query::groupBy(['note.name']), Query::select($selects), Query::orderAsc('note.name')]),
         );
     }
@@ -163,7 +162,7 @@ final class AggregateSelectTest extends TestCase
         $this->assertSame([['rows' => 5]], $this->database->aggregate('customers', [$note, Query::count('*', 'rows'), Query::select(['*'])]));
         $this->assertSame([['rows' => 5]], $this->database->aggregate('customers', [$note, Query::count('*', 'rows'), Query::select(['*', 'account.*', 'account.region.*'])]));
         $this->assertSame(
-            [['rows' => 1, 'name' => null], ['rows' => 2, 'name' => 'first'], ['rows' => 1, 'name' => 'second'], ['rows' => 1, 'name' => 'third']],
+            [['rows' => 1, 'note.name' => null], ['rows' => 2, 'note.name' => 'first'], ['rows' => 1, 'note.name' => 'second'], ['rows' => 1, 'note.name' => 'third']],
             $this->database->aggregate('customers', [$note, Query::count('*', 'rows'), Query::groupBy(['note.name']), Query::select(['note.name', '*', 'account.*', 'account.region.*']), Query::orderAsc('note.name')]),
         );
         $this->assertInvalidQuery(self::ungrouped('name'), fn (): mixed => $this->database->aggregate('customers', [$note, Query::count('*', 'rows'), Query::select(['name'])]));
@@ -202,19 +201,19 @@ final class AggregateSelectTest extends TestCase
         ];
         yield 'a grouped internal attribute' => [
             [Query::count('*', 'rows'), Query::groupBy(['$id']), Query::select(['$id']), Query::orderAsc('$id')],
-            [['rows' => 1, Storage::UID => 'c1'], ['rows' => 1, Storage::UID => 'c2'], ['rows' => 1, Storage::UID => 'c3']],
+            [['rows' => 1, '$id' => 'c1'], ['rows' => 1, '$id' => 'c2'], ['rows' => 1, '$id' => 'c3']],
         ];
         yield 'a grouped joined attribute' => [
             [$note, Query::count('*', 'rows'), Query::groupBy(['note.name']), Query::select(['note.name']), Query::orderAsc('note.name')],
-            [['rows' => 2, 'name' => 'first'], ['rows' => 1, 'name' => 'second']],
+            [['rows' => 2, 'note.name' => 'first'], ['rows' => 1, 'note.name' => 'second']],
         ];
         yield 'a joined attribute grouped by the bare name only its join declares' => [
             [$note, Query::count('*', 'rows'), Query::groupBy(['score']), Query::select(['note.score']), Query::orderAsc('note.score')],
-            [['rows' => 1, 'score' => 3], ['rows' => 1, 'score' => 4], ['rows' => 1, 'score' => 5]],
+            [['rows' => 1, 'note.score' => 3], ['rows' => 1, 'note.score' => 4], ['rows' => 1, 'note.score' => 5]],
         ];
         yield 'a grouped joined internal attribute' => [
             [$note, Query::count('*', 'rows'), Query::groupBy(['note.$id']), Query::select(['note.$id']), Query::orderAsc('note.$id')],
-            [['rows' => 1, Storage::UID => 'n1'], ['rows' => 1, Storage::UID => 'n2'], ['rows' => 1, Storage::UID => 'n3']],
+            [['rows' => 1, 'note.$id' => 'n1'], ['rows' => 1, 'note.$id' => 'n2'], ['rows' => 1, 'note.$id' => 'n3']],
         ];
     }
 
@@ -236,7 +235,7 @@ final class AggregateSelectTest extends TestCase
         }
 
         $this->assertSame(
-            [['rows' => 1, 'name' => null], ['rows' => 2, 'name' => 'first'], ['rows' => 1, 'name' => 'second'], ['rows' => 1, 'name' => 'third']],
+            [['rows' => 1, 'note.name' => null], ['rows' => 2, 'note.name' => 'first'], ['rows' => 1, 'note.name' => 'second'], ['rows' => 1, 'note.name' => 'third']],
             $this->database->aggregate('customers', [
                 Query::fullOuterJoin('notes', 'note', [Query::on('$id', 'customerId')]),
                 Query::count('*', 'rows'),
@@ -253,7 +252,7 @@ final class AggregateSelectTest extends TestCase
 
         $this->assertInvalidQuery(self::ungrouped('$tenant'), fn (): mixed => $this->database->aggregate('customers', [Query::count('*', 'rows'), Query::select(['$tenant'])]));
         $this->assertSame(
-            [['rows' => 3, Storage::TENANT => 1]],
+            [['rows' => 3, '$tenant' => 1]],
             $this->database->aggregate('customers', [Query::count('*', 'rows'), Query::groupBy(['$tenant']), Query::select(['$tenant'])]),
         );
     }

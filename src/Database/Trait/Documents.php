@@ -12,6 +12,7 @@ use Utopia\Console;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\ReadWritePool;
+use Utopia\Database\Aggregation;
 use Utopia\Database\Attribute;
 use Utopia\Database\Cache\Epoch;
 use Utopia\Database\Cache\Owners;
@@ -75,6 +76,17 @@ use WeakMap;
 
 trait Documents
 {
+    private const array FLOATING_AGGREGATES = [
+        Method::Sum,
+        Method::Avg,
+        Method::Stddev,
+        Method::StddevPop,
+        Method::StddevSamp,
+        Method::Variance,
+        Method::VarPop,
+        Method::VarSamp,
+    ];
+
     private const string DOCUMENT_CACHE_ACTIVE_PREFIX = 'active:';
 
     private const string DOCUMENT_CACHE_BLOCKED_PREFIX = 'blocked:';
@@ -4594,6 +4606,8 @@ trait Documents
      * @param  array<Query>|null  $adapterQueries  Receives the queries as the adapter's find() was handed them, or
      *                                             null when they can match no document and the adapter is not read
      * @param-out array<Query>|null  $adapterQueries
+     * @param  array<string, Document>  $joinedByAlias  Receives the collection each join reads, keyed by join alias
+     * @param-out array<string, Document>  $joinedByAlias
      * @return array<Document>
      *
      * @throws DatabaseException
@@ -4601,9 +4615,10 @@ trait Documents
      * @throws TimeoutException
      * @throws Exception
      */
-    private function fetch(Collection $collection, array $queries, PermissionType $forPermission, bool $aggregate, ?array &$adapterQueries = null): array
+    private function fetch(Collection $collection, array $queries, PermissionType $forPermission, bool $aggregate, ?array &$adapterQueries = null, array &$joinedByAlias = []): array
     {
         $adapterQueries = null;
+        $joinedByAlias = [];
 
         $queryCacheQueries = $queries;
 
@@ -4636,9 +4651,6 @@ trait Documents
         $parsed = Query::groupByType($queries);
         $filters = $parsed->filters;
         $selects = $parsed->selections;
-        $aggregations = $parsed->aggregations;
-        $groupByAttrs = $parsed->groupBy;
-        $having = $parsed->having;
         $joins = $parsed->joins;
         // Skipping authorization would also skip the joined collections' permission filters,
         // so with joins the main collection's grant travels to the adapter instead.
@@ -4659,19 +4671,7 @@ trait Documents
                 : 'find() does not run aggregate or groupBy queries: use aggregate()');
         }
 
-        if ($isAggregation && ! $this->adapter->supports(Capability::Aggregations)) {
-            throw new QueryException('Aggregation queries are not supported by this adapter');
-        }
-
-        if ($distinct && ! $this->adapter->supports(Capability::Aggregations)) {
-            throw new QueryException('Distinct queries are not supported by this adapter');
-        }
-
-        if (! empty($joins) && ! $this->adapter->supports(Capability::Joins)) {
-            throw new QueryException('Join queries are not supported by this adapter');
-        }
-
-        $this->assertJoinCount($joins);
+        $this->assertReadable($parsed);
 
         $joinedCollectionsById ??= $this->resolveJoinedCollections($joins);
         $joinDocumentSecurity = [];
@@ -4739,20 +4739,7 @@ trait Documents
 
         $outerJoinIds = $distinct ? [] : $this->outerJoinIdSelections($selects, $joins, $joinedCollections);
 
-        /** @var array<Query> $queries */
-        $queries = \array_merge(
-            $selects,
-            $outerJoinIds === [] ? [] : [Query::select($outerJoinIds)],
-            $this->convertQueries($collection, \array_merge($filters, $aggregations, $having, $joins), $joinedByAlias),
-        );
-
-        if (! empty($groupByAttrs)) {
-            $queries[] = Query::groupBy($groupByAttrs);
-        }
-
-        if ($distinct) {
-            $queries[] = Query::distinct();
-        }
+        $queries = $this->readQueries($collection, $parsed, $joinedByAlias, $outerJoinIds);
 
         $selections = $this->validateSelections($collection, $selects);
 
@@ -4837,7 +4824,7 @@ trait Documents
             }
 
             if (! isset($results)) {
-                $adapterCollection = $this->withJoinIndexed($this->withJoinAttributes($this->withJoinAuthorization($collection, $joinDocumentSecurity, $collectionGranted), $joins, $joinedCollectionsById), $joins, $joinedCollectionsById);
+                $adapterCollection = $this->readCollection($collection, $joins, $joinedCollectionsById, $joinDocumentSecurity, $collectionGranted);
 
                 $find = fn (): array => $this->adapter->find(
                     $adapterCollection,
@@ -4947,15 +4934,17 @@ trait Documents
     /**
      * Count Documents
      *
-     * Count the number of documents matching the given queries.
+     * Count the number of documents matching the given queries, or with aggregates, groupBy, having or distinct, the
+     * number of rows aggregate() or find() returns for them before ordering and paging.
      *
      * @param  string  $collection  The collection identifier
-     * @param  array<Query>  $queries  Queries for filtering
-     * @param  int|null  $max  The most documents to count, greater than 0, or null for every match
-     * @return int The document count
+     * @param  array<Query>  $queries  Queries for filtering, joining, aggregating, grouping and distinct; order, limit,
+     *                                 offset and cursor queries are ignored
+     * @param  int|null  $max  The most documents or rows to count, greater than 0, or null for every match
+     * @return int The document or row count
      *
      * @throws DatabaseException
-     * @throws QueryException When $max is not greater than 0
+     * @throws QueryException When $max is not greater than 0, or the adapter cannot read the queries
      */
     public function count(string $collection, array $queries = [], ?int $max = null): int
     {
@@ -4984,17 +4973,23 @@ trait Documents
             throw new AuthorizationException($this->authorization->getDescription());
         }
 
-        $relationships = self::relationshipAttributes($collection);
+        $parsed = Query::groupByType($queries);
+        if (self::shapesRows($parsed)) {
+            if ($this->validation()->get()) {
+                $this->validateRelationshipSelects($collection, $queries);
+            }
 
-        $prepared = $this->prepareFilterJoinQueries($collection, $queries, $relationships, $collectionGranted, $joinedCollections);
-        if ($prepared === null) {
-            return 0;
+            $count = $this->readRows(
+                $collection,
+                Query::groupByType(self::aliasAggregates($queries)),
+                $collectionGranted,
+                $joinedCollections,
+                fn (Document $adapterCollection, array $adapterQueries): int => $this->adapter->count($adapterCollection, $adapterQueries, $max),
+                0,
+            );
+        } else {
+            $count = $this->countDocuments($collection, $queries, $collectionGranted, $joinedCollections, $max);
         }
-
-        [$collection, $queries, $skipAuth] = $prepared;
-
-        $getCount = fn () => $this->adapter->count($collection, $queries, $max);
-        $count = $skipAuth ? $this->authorization->skip($getCount) : $getCount();
 
         $listeners = $this->listens(Event::DocumentCount);
         if ($listeners !== []) {
@@ -5005,18 +5000,174 @@ trait Documents
     }
 
     /**
+     * @param  array<Query>  $queries
+     * @param  array<string, Document>|null  $joinedCollections  The collection each join names, by its id
+     *
+     * @throws DatabaseException
+     * @throws QueryException
+     */
+    private function countDocuments(Collection $collection, array $queries, bool $collectionGranted, ?array $joinedCollections, ?int $max): int
+    {
+        $prepared = $this->prepareFilterJoinQueries($collection, $queries, self::relationshipAttributes($collection), $collectionGranted, $joinedCollections);
+        if ($prepared === null) {
+            return 0;
+        }
+
+        [$adapterCollection, $adapterQueries, $skipAuth] = $prepared;
+
+        $count = fn (): int => $this->adapter->count($adapterCollection, $adapterQueries, $max);
+
+        return $skipAuth ? $this->authorization->skip($count) : $count();
+    }
+
+    /**
+     * @param  array<Query>  $queries
+     * @param  array<string, Document>|null  $joinedCollections  The collection each join names, by its id
+     *
+     * @throws DatabaseException
+     * @throws QueryException
+     */
+    private function sumDocuments(Collection $collection, string $attribute, array $queries, bool $collectionGranted, ?array $joinedCollections, ?int $max): int|float
+    {
+        $prepared = $this->prepareFilterJoinQueries($collection, $queries, self::relationshipAttributes($collection), $collectionGranted, $joinedCollections);
+        if ($prepared === null) {
+            return 0;
+        }
+
+        [$adapterCollection, $adapterQueries, $skipAuth] = $prepared;
+
+        $sum = fn (): int|float => $this->adapter->sum($adapterCollection, $attribute, $adapterQueries, $max);
+
+        return $skipAuth ? $this->authorization->skip($sum) : $sum();
+    }
+
+    /**
+     * Reads the rows of the statement aggregate() or find() reads for the queries, built and authorized as they
+     * build and authorize it, without its order and page.
+     *
+     * @template T of int|float
+     *
+     * @param  array<string, Document>|null  $joinedCollections  The collection each join names, by its id
+     * @param  Closure(Document, array<Query>): T  $read  Reads the rows of the adapter's collection and queries
+     * @param  T  $none  What the read gives when no row can match
+     * @return T
+     *
+     * @throws DatabaseException
+     * @throws QueryException
+     */
+    private function readRows(Collection $collection, ParsedQuery $parsed, bool $collectionGranted, ?array $joinedCollections, Closure $read, int|float $none): int|float
+    {
+        $this->assertReadable($parsed);
+
+        $joins = $parsed->joins;
+        $joinedCollections ??= $this->resolveJoinedCollections($joins);
+        $joinDocumentSecurity = $joins === [] ? [] : $this->authorizeJoins($joins, PermissionType::Read, $joinedCollections);
+
+        $queries = $this->readQueries($collection, $parsed, $this->joinedCollectionsByAlias($joins, $joinedCollections), []);
+
+        if (! $parsed->isAggregation() && $this->relationshipHook !== null) {
+            $queries = $this->relationshipHook->convertQueries(self::relationshipAttributes($collection), $queries, $collection);
+            if ($queries === null) {
+                return $none;
+            }
+        }
+
+        $adapterCollection = $this->readCollection($collection, $joins, $joinedCollections, $joinDocumentSecurity, $collectionGranted);
+
+        $rows = fn (): int|float => $read($adapterCollection, $queries);
+
+        return $collectionGranted && $joins === [] ? $this->authorization->skip($rows) : $rows();
+    }
+
+    /**
+     * Whether the queries read rows other than one per matching document: groups, aggregates or distinct values.
+     */
+    private static function shapesRows(ParsedQuery $parsed): bool
+    {
+        return $parsed->isAggregation() || $parsed->distinct;
+    }
+
+    /**
+     * @throws QueryException When the adapter cannot read the aggregates, distinct or joins the queries hold
+     */
+    private function assertReadable(ParsedQuery $parsed): void
+    {
+        if ($parsed->isAggregation() && ! $this->adapter->supports(Capability::Aggregations)) {
+            throw new QueryException('Aggregation queries are not supported by this adapter');
+        }
+
+        if ($parsed->distinct && ! $this->adapter->supports(Capability::Aggregations)) {
+            throw new QueryException('Distinct queries are not supported by this adapter');
+        }
+
+        if ($parsed->joins !== [] && ! $this->adapter->supports(Capability::Joins)) {
+            throw new QueryException('Join queries are not supported by this adapter');
+        }
+
+        $this->assertJoinCount($parsed->joins);
+    }
+
+    /**
+     * The queries the adapter reads for aggregate() and find(), and for count() over the same rows.
+     *
+     * @param  array<string, Document>  $joinedByAlias  The collection each join alias reads
+     * @param  list<string>  $outerJoinIds  The joined ids selected to tell an unmatched outer row (see outerJoinIdSelections())
+     * @return array<Query>
+     *
+     * @throws QueryException
+     */
+    private function readQueries(Collection $collection, ParsedQuery $parsed, array $joinedByAlias, array $outerJoinIds): array
+    {
+        $queries = \array_merge(
+            $parsed->selections,
+            $outerJoinIds === [] ? [] : [Query::select($outerJoinIds)],
+            $this->convertQueries($collection, \array_merge($parsed->filters, $parsed->aggregations, $parsed->having, $parsed->joins), $joinedByAlias),
+        );
+
+        if ($parsed->groupBy !== []) {
+            $queries[] = Query::groupBy($parsed->groupBy);
+        }
+
+        if ($parsed->distinct) {
+            $queries[] = Query::distinct();
+        }
+
+        return $queries;
+    }
+
+    /**
+     * The collection handed to the adapter for a read, carrying what it needs to authorize and qualify each join.
+     *
+     * @param  array<Query>  $joins
+     * @param  array<string, Document>  $joinedCollections  The collection each join names, by its id
+     * @param  array<string, bool>  $joinDocumentSecurity
+     */
+    private function readCollection(Collection $collection, array $joins, array $joinedCollections, array $joinDocumentSecurity, bool $collectionGranted): Document
+    {
+        return $this->withJoinIndexed(
+            $this->withJoinAttributes($this->withJoinAuthorization($collection, $joinDocumentSecurity, $collectionGranted), $joins, $joinedCollections),
+            $joins,
+            $joinedCollections,
+        );
+    }
+
+    /**
      * Sum an attribute
      *
-     * Sum an attribute for all matching documents.
+     * Sum an attribute for all matching documents, or with groupBy or distinct, over the rows aggregate() or find()
+     * returns for them before ordering and paging, where the attribute is one of their groups or selections.
      *
      * @param  string  $collection  The collection identifier
      * @param  string  $attribute  The attribute to sum
-     * @param  array<Query>  $queries  Queries for filtering
-     * @param  int|null  $max  The most documents to include in the sum, greater than 0, or null for every match
+     * @param  array<Query>  $queries  Queries for filtering, joining, grouping and distinct; order, limit, offset and
+     *                                 cursor queries are ignored
+     * @param  int|null  $max  The most documents or rows to include in the sum, greater than 0, or null for every match
      * @return float|int The sum of the attribute values
      *
      * @throws DatabaseException
-     * @throws QueryException When $max is not greater than 0
+     * @throws LimitException When the sum overflows the range of a double
+     * @throws QueryException When $max is not greater than 0, the adapter cannot read the queries, or the attribute is
+     *                        not a column of the grouped or distinct rows
      */
     public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): float|int
     {
@@ -5054,17 +5205,25 @@ trait Documents
             throw new AuthorizationException($this->authorization->getDescription());
         }
 
-        $relationships = self::relationshipAttributes($collection);
+        $parsed = Query::groupByType($queries);
+        if (self::shapesRows($parsed)) {
+            if ($this->validation()->get()) {
+                $this->validateRelationshipSelects($collection, $queries);
+            }
 
-        $prepared = $this->prepareFilterJoinQueries($collection, $queries, $relationships, $collectionGranted, $joinedCollections);
-        if ($prepared === null) {
-            return 0;
+            $sum = $this->readRows(
+                $collection,
+                Query::groupByType(self::aliasAggregates($queries)),
+                $collectionGranted,
+                $joinedCollections,
+                fn (Document $adapterCollection, array $adapterQueries): int|float => $this->adapter->sum($adapterCollection, $attribute, $adapterQueries, $max),
+                0,
+            );
+        } else {
+            $sum = $this->sumDocuments($collection, $attribute, $queries, $collectionGranted, $joinedCollections, $max);
         }
 
-        [$collection, $queries, $skipAuth] = $prepared;
-
-        $getSum = fn () => $this->adapter->sum($collection, $attribute, $queries, $max);
-        $sum = $skipAuth ? $this->authorization->skip($getSum) : $getSum();
+        self::assertFinite($sum);
 
         $listeners = $this->listens(Event::DocumentSum);
         if ($listeners !== []) {
@@ -5338,10 +5497,15 @@ trait Documents
      * Run aggregation queries (count, sum, avg, min, max, groupBy) and return one row per group. An aggregate without
      * an alias comes back under `<method>_<attribute>`, or `<method>` for count('*').
      *
+     * Counts and bitwise aggregates are integers, averages, deviations and variances floats, and a sum an integer over
+     * an integer attribute and a float otherwise; min() and max() are typed as their attribute. Each group is named as
+     * a read names its attribute, a joined one qualified by its join alias, and typed and decoded as a read returns it.
+     *
      * @param  array<Query>  $queries  At least one aggregate or groupBy query
      * @return list<array<string, mixed>>
      *
      * @throws DatabaseException
+     * @throws LimitException When a sum, average, deviation or variance overflows the range of a double
      * @throws QueryException When the queries hold no aggregate or groupBy
      */
     public function aggregate(string $collection, array $queries): array
@@ -5350,9 +5514,19 @@ trait Documents
 
         $queries = self::aliasAggregates($this->rewriteQueries(Event::DocumentAggregate, $definition, $queries));
 
+        $floating = self::floatingAggregates($queries);
+        $adapterQueries = null;
+        $joinedByAlias = [];
+        $results = $this->fetch($definition, $queries, PermissionType::Read, true, $adapterQueries, $joinedByAlias);
+        $aggregation = Aggregation::from($this, $definition, $joinedByAlias, $queries);
+
         $rows = [];
-        foreach ($this->fetch($definition, $queries, PermissionType::Read, true) as $row) {
-            $rows[] = $row->getArrayCopy();
+        foreach ($results as $row) {
+            $row = $row->getArrayCopy();
+            foreach ($floating as $alias) {
+                self::assertFinite($row[$alias] ?? null);
+            }
+            $rows[] = $aggregation->decode($row);
         }
 
         $listeners = $this->listens(Event::DocumentAggregate);
@@ -5361,6 +5535,41 @@ trait Documents
         }
 
         return $rows;
+    }
+
+    /**
+     * @param  array<Query>  $queries  Each aggregate aliased by aliasAggregates()
+     * @return list<string>
+     */
+    private static function floatingAggregates(array $queries): array
+    {
+        $aliases = [];
+        foreach ($queries as $query) {
+            if (\in_array($query->getMethod(), self::FLOATING_AGGREGATES, true)) {
+                $aliases[] = $query->getAlias();
+            }
+        }
+
+        return $aliases;
+    }
+
+    /**
+     * SQLite, MongoDB and the adapters that sum in PHP answer a double that overflowed with infinity, which no caller
+     * can tell from a value, so it is refused as MariaDB, MySQL and PostgreSQL refuse it.
+     *
+     * @throws LimitException
+     */
+    private static function assertFinite(mixed $value): void
+    {
+        $finite = match (true) {
+            \is_float($value) => \is_finite($value),
+            \is_string($value) => \preg_match('/^[+-]?(inf|infinity|nan)$/i', $value) !== 1,
+            default => true,
+        };
+
+        if (! $finite) {
+            throw new LimitException('Value out of range');
+        }
     }
 
     /**
@@ -5392,8 +5601,7 @@ trait Documents
             }
 
             $attribute = $query->getAttribute();
-            $alias = $attribute === '*' || $attribute === '' ? $method->value : $method->value.'_'.$attribute;
-            $alias = \substr((string) \preg_replace('/[^A-Za-z0-9_]/', '_', $alias), 0, Aggregate::MAX_ALIAS_LENGTH);
+            $alias = Aggregation::alias($query);
 
             if (isset($taken[$alias])) {
                 throw new QueryException("The default aggregate alias '{$alias}' is used by more than one aggregate; give each of them an explicit alias");

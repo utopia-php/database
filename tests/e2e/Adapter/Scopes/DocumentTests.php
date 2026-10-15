@@ -2830,6 +2830,72 @@ trait DocumentTests
         $this->getDatabase()->getAuthorization()->addRole('user:x');
     }
 
+    /**
+     * MariaDB and MySQL sent a double sum that overflowed as `0`, and SQLite, MongoDB and the adapters that sum in
+     * PHP answered infinity. A sum past the range of a double is refused on every adapter instead.
+     */
+    public function testSumOverflowIsRefused(): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'sum_overflow_'.\substr(\uniqid(), -6);
+        $database->createCollection(Collection::create(
+            id: $collection,
+            attributes: [
+                Attribute::string(key: 'series', size: 20, required: true),
+                Attribute::double(key: 'reading', required: true),
+            ],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+        foreach ([['huge', 1e308], ['huge', 1e308], ['single', 1e308]] as [$series, $reading]) {
+            $database->createDocument($collection, new Document([
+                'series' => $series,
+                'reading' => $reading,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
+
+        foreach ([[[], null], [[Query::equal('series', ['huge'])], null], [[Query::equal('series', ['huge'])], 5], [[Query::greaterThan('reading', 0)], null]] as [$queries, $max]) {
+            try {
+                $database->sum($collection, 'reading', $queries, $max);
+                $this->fail('A sum that overflows a double is refused');
+            } catch (LimitException) {
+                $this->addToAssertionCount(1);
+            }
+        }
+
+        $this->assertEqualsWithDelta(1e308, $database->sum($collection, 'reading', [Query::equal('series', ['single'])]), 1e293);
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testNegativeSumOverflowIsRefused(): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'sum_underflow_'.\substr(\uniqid(), -6);
+        $database->createCollection(Collection::create(
+            id: $collection,
+            attributes: [Attribute::double(key: 'reading', required: true)],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+        foreach ([-1e308, -1e308] as $reading) {
+            $database->createDocument($collection, new Document([
+                'reading' => $reading,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
+
+        foreach ([[[], null], [[], 5], [[Query::lessThan('reading', 0)], null]] as [$queries, $max]) {
+            try {
+                $database->sum($collection, 'reading', $queries, $max);
+                $this->fail('A sum that overflows below the range of a double is refused');
+            } catch (LimitException) {
+                $this->addToAssertionCount(1);
+            }
+        }
+
+        $database->deleteCollection($collection);
+    }
+
     public function testUpdateDocument(): void
     {
         $document = $this->initDocumentsFixture();
@@ -2908,6 +2974,38 @@ trait DocumentTests
         $new->setAttribute('$id', $id);
         $new = $this->getDatabase()->updateDocument($new->getCollection(), $newId, $new);
         $this->assertEquals($id, $new->getId());
+    }
+
+    public function testDocumentRecreatedWithItsSequenceInAFreshSessionKeepsIt(): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'own_sequence_'.\substr(\uniqid(), -6);
+        $database->createCollection(Collection::create(
+            id: $collection,
+            attributes: [Attribute::string(key: 'name', size: 20, required: true)],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::delete(Role::any())],
+        ));
+
+        $document = $database->createDocument($collection, new Document([
+            '$id' => 'own',
+            'name' => 'first',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->deleteDocument($collection, 'own');
+
+        $adapter = $database->getAdapter();
+        if ($adapter instanceof Postgres) {
+            $driver = $adapter->getDriver();
+            $this->assertInstanceOf(DatabasePDO::class, $driver);
+            $driver->exec('DISCARD SEQUENCES');
+        }
+
+        $recreated = $database->createDocument($collection, $document);
+
+        $this->assertSame($document->getSequence(), $recreated->getSequence());
+        $this->assertSame($document->getSequence(), $database->getDocument($collection, 'own')->getSequence());
+
+        $database->deleteCollection($collection);
     }
 
     public function testDeleteDocument(): void
@@ -10883,9 +10981,9 @@ trait DocumentTests
                     $case.': a having on the qualified group',
                 );
                 $this->assertEquals(
-                    [['orders' => 2, 'name' => 'apple'], ['orders' => 1, 'name' => 'banana']],
+                    [['orders' => 2, 'it.name' => 'apple'], ['orders' => 1, 'it.name' => 'banana']],
                     $database->aggregate($orders, [$join, Query::count('*', 'orders'), Query::groupBy(['it.name']), Query::orderAsc('it.name')]),
-                    $case.': a joined group alone keeps its bare name',
+                    $case.': a joined group alone keeps its qualified name',
                 );
             }
         } finally {
@@ -10954,7 +11052,7 @@ trait DocumentTests
             $this->assertSame(['o2', 'o1', 'o3'], $ids($database->find($orders, [Query::fullOuterJoin($items, 'it', [Query::on('item', 'code')]), Query::orderDesc('price'), Query::orderAsc('$id')])));
             $this->assertSame(['o2', 'o1', 'o3'], $ids($database->find($orders, [$item, Query::orderDesc('name'), Query::orderAsc('$id')])), 'a name the main collection declares reads the main table');
             $this->assertEquals(
-                [['orders' => 1, 'code' => 'b'], ['orders' => 2, 'code' => 'a']],
+                [['orders' => 1, 'it.code' => 'b'], ['orders' => 2, 'it.code' => 'a']],
                 $database->aggregate($orders, [$item, Query::count('*', 'orders'), Query::groupBy(['code']), Query::orderDesc('code')]),
             );
 
@@ -11112,6 +11210,45 @@ trait DocumentTests
             } catch (QueryException $exception) {
                 $this->assertSame('Distinct queries are not supported by this adapter', $exception->getMessage());
             }
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
+    public function testNestedPathOnAPlainAttributeIsAnInvalidQuery(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::DefinedAttributes)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'nestedPathPlain';
+        $database->createCollection(Collection::create(id: $collection, permissions: [Permission::read(Role::any()), Permission::create(Role::any())]));
+
+        try {
+            $database->createAttribute($collection, Attribute::string(key: 'name', size: 64, required: true));
+            $database->createDocument($collection, new Document(['name' => 'a', '$permissions' => [Permission::read(Role::any())]]));
+
+            $reads = [
+                'filter' => fn (): array => $database->find($collection, [Query::equal('name.x', ['a'])]),
+                'count' => fn (): int => $database->count($collection, [Query::equal('name.x', ['a'])]),
+                'select' => fn (): array => $database->find($collection, [Query::select(['name.x'])]),
+            ];
+
+            foreach ($reads as $shape => $read) {
+                try {
+                    $read();
+                    $this->fail("A {$shape} on a nested path under a plain attribute must be refused");
+                } catch (QueryException $e) {
+                    $this->assertStringContainsString('nested attribute on: name', $e->getMessage(), $shape);
+                }
+            }
+
+            $this->assertCount(1, $database->find($collection, [Query::equal('name', ['a'])]));
         } finally {
             $database->deleteCollection($collection);
         }

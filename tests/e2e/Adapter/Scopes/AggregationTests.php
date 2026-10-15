@@ -2845,6 +2845,7 @@ trait AggregationTests
             'join with groupBy' => [[$join, Query::count('*', 'n'), Query::groupBy(['category'])], 4, 2],
             'distinct over a join' => [[$join, Query::distinct(), Query::select(['category'])], 4, 2],
             'distinct joined attribute' => [[$join, Query::distinct(), Query::select(['r.score'])], 5, 2],
+            'distinct over a join without a select' => [[$join, Query::distinct()], 6, 3],
             'full outer join with groupBy' => [[$fullOuterJoin, Query::count('*', 'n'), Query::groupBy(['r.score'])], null, null],
             'full outer join with distinct' => [[$fullOuterJoin, Query::distinct(), Query::select(['category'])], null, null],
         ];

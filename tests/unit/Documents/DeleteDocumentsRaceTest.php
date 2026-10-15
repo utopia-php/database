@@ -6,6 +6,7 @@ use Closure;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Tests\Unit\Documents\Interleaving\Memory;
+use Tests\Unit\Documents\Interleaving\Refresh;
 use Tests\Unit\Documents\Interleaving\SQLite;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
@@ -285,22 +286,7 @@ final class DeleteDocumentsRaceTest extends TestCase
      */
     private function refreshOnce(Database $database, string $id): Closure
     {
-        $refreshed = false;
-
-        /** @param array<Document> $documents */
-        return function (Document $collection, array $documents) use ($database, $id, &$refreshed): void {
-            if ($refreshed || $collection->getId() !== self::COLLECTION) {
-                return;
-            }
-            foreach ($documents as $document) {
-                if ($document->getId() === $id) {
-                    $refreshed = true;
-                    $database->updateDocument(self::COLLECTION, $id, new Document(['expiresAt' => self::REFRESHED]));
-
-                    return;
-                }
-            }
-        };
+        return (new Refresh($database, self::COLLECTION, $id, ['expiresAt' => self::REFRESHED]))(...);
     }
 
     private function expired(): Query

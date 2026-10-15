@@ -4622,6 +4622,7 @@ trait Documents
      * @return float|int The sum of the attribute values
      *
      * @throws DatabaseException
+     * @throws LimitException When the sum overflows the range of a double
      * @throws QueryException When $max is not greater than 0
      */
     public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): float|int
@@ -4667,6 +4668,7 @@ trait Documents
 
         $getSum = fn () => $this->adapter->sum($collection, $attribute, $queries, $max);
         $sum = $skipAuth ? $this->authorization->skip($getSum) : $getSum();
+        self::assertFinite($sum);
 
         $listeners = $this->listens(Event::DocumentSum);
         if ($listeners !== []) {
@@ -4987,8 +4989,8 @@ trait Documents
     }
 
     /**
-     * SQLite answers a double that overflowed with infinity, which no caller can tell from a value, so it is refused
-     * as MariaDB, MySQL and PostgreSQL refuse it.
+     * SQLite, MongoDB and the adapters that sum in PHP answer a double that overflowed with infinity, which no caller
+     * can tell from a value, so it is refused as MariaDB, MySQL and PostgreSQL refuse it.
      *
      * @throws LimitException
      */

@@ -2252,6 +2252,9 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
+     * The sum in a row, with SQLite's `INF`, `-INF` and `NAN` read as the doubles they name for Database::sum() to
+     * refuse.
+     *
      * @param  array<string, mixed>  $row
      */
     private function sumOf(array $row): int|float
@@ -2262,7 +2265,12 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             return $sum + 0;
         }
 
-        return 0;
+        return match (\is_string($sum) ? \strtoupper($sum) : null) {
+            'INF' => \INF,
+            '-INF' => -\INF,
+            'NAN' => \NAN,
+            default => 0,
+        };
     }
 
     /**

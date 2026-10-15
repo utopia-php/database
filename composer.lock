@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "8b292909c606fd89476efa5048c2711f",
+    "content-hash": "c1b0fe62abab5df150159dba20b7ebfc",
     "packages": [
         {
             "name": "brick/math",
@@ -2278,16 +2278,16 @@
         },
         {
             "name": "utopia-php/query",
-            "version": "dev-feat-query-relationship-method",
+            "version": "0.7.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/query.git",
-                "reference": "cfc5c7e95df33a964752a39cc9a58b74f4dd95d2"
+                "reference": "291ec903812f6b752991c02ee4ea50e835c23b9b"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/query/zipball/cfc5c7e95df33a964752a39cc9a58b74f4dd95d2",
-                "reference": "cfc5c7e95df33a964752a39cc9a58b74f4dd95d2",
+                "url": "https://api.github.com/repos/utopia-php/query/zipball/291ec903812f6b752991c02ee4ea50e835c23b9b",
+                "reference": "291ec903812f6b752991c02ee4ea50e835c23b9b",
                 "shasum": ""
             },
             "require": {
@@ -2316,9 +2316,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/query/issues",
-                "source": "https://github.com/utopia-php/query/tree/feat-query-relationship-method"
+                "source": "https://github.com/utopia-php/query/tree/0.7.1"
             },
-            "time": "2026-10-15T03:40:07+00:00"
+            "time": "2026-10-15T06:11:20+00:00"
         },
         {
             "name": "utopia-php/telemetry",
@@ -5209,18 +5209,9 @@
             "time": "2026-09-02T15:57:19+00:00"
         }
     ],
-    "aliases": [
-        {
-            "package": "utopia-php/query",
-            "version": "dev-feat-query-relationship-method",
-            "alias": "0.7.1",
-            "alias_normalized": "0.7.1.0"
-        }
-    ],
+    "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": {
-        "utopia-php/query": 20
-    },
+    "stability-flags": {},
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {

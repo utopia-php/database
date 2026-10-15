@@ -1,0 +1,57 @@
+<?php
+
+namespace Utopia\Database\Adapter\SQL\Hook\Permission;
+
+use Utopia\Database\Adapter\SQL\Hook\Column\AllowNull;
+use Utopia\Database\Storage;
+use Utopia\Query\Builder\JoinType;
+use Utopia\Query\Hook\Join\Condition as JoinCondition;
+use Utopia\Query\Hook\Join\Filter as JoinFilter;
+use Utopia\Query\Hook\Join\Placement;
+
+/**
+ * Permission check bound to one join alias, placed the way Tenant\Filter places tenant conditions.
+ *
+ * Inner and left joins check it in ON, so only readable rows are matched. Right, full outer and
+ * cross joins check it in WHERE, since ON cannot drop the rows they keep. A condition in WHERE
+ * runs after every join, so when the read has a right or full outer join it also lets through the
+ * rows an outer join left without this table, recognised by the NOT NULL `_uid`; a full outer join
+ * leaves its own table missing from the rows it keeps unmatched.
+ */
+final readonly class Join implements JoinFilter
+{
+    /**
+     * @param bool $preservingOuterJoin Whether the read has a right or full outer join
+     */
+    public function __construct(
+        private Filter $filter,
+        private string $alias,
+        private string $quoteCharacter = '`',
+        private bool $preservingOuterJoin = false,
+    ) {
+    }
+
+    #[\Override]
+    public function filterJoin(string $table, JoinType $joinType): ?JoinCondition
+    {
+        if ($table !== $this->alias) {
+            return null;
+        }
+
+        $placement = match ($joinType) {
+            JoinType::Left, JoinType::Inner => Placement::On,
+            default => Placement::Where,
+        };
+
+        $condition = $this->filter->filter($table);
+        if ($placement === Placement::Where && ($joinType === JoinType::FullOuter || $this->preservingOuterJoin)) {
+            $condition = AllowNull::wrap(
+                $condition,
+                $this->alias.'.'.Storage::UID,
+                $this->quoteCharacter,
+            );
+        }
+
+        return new JoinCondition($condition, $placement);
+    }
+}

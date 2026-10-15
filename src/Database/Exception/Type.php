@@ -2,8 +2,9 @@
 
 namespace Utopia\Database\Exception;
 
-use Utopia\Database\Exception;
-
-class Type extends Exception
+/**
+ * Thrown when a value has an incompatible or unsupported type for the target attribute.
+ */
+class Type extends Schema
 {
 }

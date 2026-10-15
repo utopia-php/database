@@ -2,20 +2,32 @@
 
 namespace Utopia\Database;
 
+use Exception as PhpException;
 use Throwable;
 
-class Exception extends \Exception
+/**
+ * Base exception class for all database-related errors.
+ */
+class Exception extends PhpException
 {
-    public function __construct(string $message, int|string $code = 0, ?Throwable $previous = null)
+    /**
+     * The SQLSTATE a driver reported as the code, which PHP's integer code cannot hold.
+     */
+    public readonly ?string $state;
+
+    public function __construct(string $message = '', int|string $code = 0, ?Throwable $previous = null)
     {
-        if (\is_string($code)) {
-            if (\is_numeric($code)) {
-                $code = (int) $code;
-            } else {
-                $code = 0;
-            }
+        $this->state = \is_string($code) ? $code : null;
+
+        parent::__construct($message, self::integerCode($code), $previous);
+    }
+
+    private static function integerCode(int|string $code): int
+    {
+        if (\is_int($code)) {
+            return $code;
         }
 
-        parent::__construct($message, $code, $previous);
+        return \is_numeric($code) ? (int) $code : 0;
     }
 }

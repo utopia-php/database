@@ -4,55 +4,56 @@ namespace Tests\Unit\Validator;
 
 use Exception;
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Database;
+use Tests\Unit\Support\Profiles;
+use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Document;
-use Utopia\Database\Helpers\ID;
-use Utopia\Database\Validator\Index;
+use Utopia\Database\Exception\Index as IndexException;
+use Utopia\Database\Index;
+use Utopia\Database\Validator\IndexDefinition;
+use Utopia\Database\Validator\Queries\Indexed;
+use Utopia\Query\OrderDirection;
+use Utopia\Query\Schema\IndexType;
 
 class IndexTest extends TestCase
 {
-    public function setUp(): void
+    /**
+     * What an index validator supported by default before it took a profile.
+     */
+    private const array CAPABILITIES = [
+        Capability::DefinedAttributes,
+        Capability::IndexFulltextMultiple,
+        Capability::IndexIdentical,
+        Capability::IndexKey,
+        Capability::IndexUnique,
+        Capability::IndexFulltext,
+    ];
+
+    #[\Override]
+    protected function setUp(): void
     {
     }
 
-    public function tearDown(): void
+    #[\Override]
+    protected function tearDown(): void
     {
     }
 
     /**
      * @throws Exception
      */
-    public function testAttributeNotFound(): void
+    public function test_attribute_not_found(): void
     {
-        $collection = new Document([
-            '$id' => ID::custom('test'),
-            'name' => 'test',
-            'attributes' => [
-                new Document([
-                    '$id' => ID::custom('title'),
-                    'type' => Database::VAR_STRING,
-                    'format' => '',
-                    'size' => 255,
-                    'signed' => true,
-                    'required' => false,
-                    'default' => null,
-                    'array' => false,
-                    'filters' => [],
-                ])
-            ],
-            'indexes' => [
-                new Document([
-                    '$id' => ID::custom('index1'),
-                    'type' => Database::INDEX_KEY,
-                    'attributes' => ['not_exist'],
-                    'lengths' => [],
-                    'orders' => [],
-                ]),
-            ],
-        ]);
+        $attributes = [
+            Attribute::string(key: 'title'),
+        ];
 
-        $validator = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes'), 768);
-        $index = $collection->getAttribute('indexes')[0];
+        $indexes = [
+            Index::key(key: 'index1', attributes: ['not_exist']),
+        ];
+
+        $validator = new IndexDefinition($attributes, $indexes, Profiles::of(capabilities: self::CAPABILITIES, indexLength: 768));
+        $index = $indexes[0];
         $this->assertFalse($validator->isValid($index));
         $this->assertEquals('Invalid index attribute "not_exist" not found', $validator->getDescription());
     }
@@ -60,48 +61,19 @@ class IndexTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testFulltextWithNonString(): void
+    public function test_fulltext_with_non_string(): void
     {
-        $collection = new Document([
-            '$id' => ID::custom('test'),
-            'name' => 'test',
-            'attributes' => [
-                new Document([
-                    '$id' => ID::custom('title'),
-                    'type' => Database::VAR_STRING,
-                    'format' => '',
-                    'size' => 255,
-                    'signed' => true,
-                    'required' => false,
-                    'default' => null,
-                    'array' => false,
-                    'filters' => [],
-                ]),
-                new Document([
-                    '$id' => ID::custom('date'),
-                    'type' => Database::VAR_DATETIME,
-                    'format' => '',
-                    'size' => 0,
-                    'signed' => false,
-                    'required' => false,
-                    'default' => null,
-                    'array' => false,
-                    'filters' => ['datetime'],
-                ]),
-            ],
-            'indexes' => [
-                new Document([
-                    '$id' => ID::custom('index1'),
-                    'type' => Database::INDEX_FULLTEXT,
-                    'attributes' => ['title', 'date'],
-                    'lengths' => [],
-                    'orders' => [],
-                ]),
-            ],
-        ]);
+        $attributes = [
+            Attribute::string(key: 'title'),
+            Attribute::datetime(key: 'date'),
+        ];
 
-        $validator = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes'), 768);
-        $index = $collection->getAttribute('indexes')[0];
+        $indexes = [
+            Index::fulltext(key: 'index1', attributes: ['title', 'date']),
+        ];
+
+        $validator = new IndexDefinition($attributes, $indexes, Profiles::of(capabilities: self::CAPABILITIES, indexLength: 768));
+        $index = $indexes[0];
         $this->assertFalse($validator->isValid($index));
         $this->assertEquals('Attribute "date" cannot be part of a fulltext index, must be of type string', $validator->getDescription());
     }
@@ -109,37 +81,18 @@ class IndexTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testIndexLength(): void
+    public function test_index_length(): void
     {
-        $collection = new Document([
-            '$id' => ID::custom('test'),
-            'name' => 'test',
-            'attributes' => [
-                new Document([
-                    '$id' => ID::custom('title'),
-                    'type' => Database::VAR_STRING,
-                    'format' => '',
-                    'size' => 769,
-                    'signed' => true,
-                    'required' => false,
-                    'default' => null,
-                    'array' => false,
-                    'filters' => [],
-                ]),
-            ],
-            'indexes' => [
-                new Document([
-                    '$id' => ID::custom('index1'),
-                    'type' => Database::INDEX_KEY,
-                    'attributes' => ['title'],
-                    'lengths' => [],
-                    'orders' => [],
-                ]),
-            ],
-        ]);
+        $attributes = [
+            Attribute::string(key: 'title', size: 769),
+        ];
 
-        $validator = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes'), 768);
-        $index = $collection->getAttribute('indexes')[0];
+        $indexes = [
+            Index::key(key: 'index1', attributes: ['title']),
+        ];
+
+        $validator = new IndexDefinition($attributes, $indexes, Profiles::of(capabilities: self::CAPABILITIES, indexLength: 768));
+        $index = $indexes[0];
         $this->assertFalse($validator->isValid($index));
         $this->assertEquals('Index length is longer than the maximum: 768', $validator->getDescription());
     }
@@ -147,93 +100,43 @@ class IndexTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testMultipleIndexLength(): void
+    public function test_multiple_index_length(): void
     {
-        $collection = new Document([
-            '$id' => ID::custom('test'),
-            'name' => 'test',
-            'attributes' => [
-                new Document([
-                    '$id' => ID::custom('title'),
-                    'type' => Database::VAR_STRING,
-                    'format' => '',
-                    'size' => 256,
-                    'signed' => true,
-                    'required' => false,
-                    'default' => null,
-                    'array' => false,
-                    'filters' => [],
-                ]),
-                new Document([
-                    '$id' => ID::custom('description'),
-                    'type' => Database::VAR_STRING,
-                    'format' => '',
-                    'size' => 1024,
-                    'signed' => true,
-                    'required' => false,
-                    'default' => null,
-                    'array' => false,
-                    'filters' => [],
-                ]),
-            ],
-            'indexes' => [
-                new Document([
-                    '$id' => ID::custom('index1'),
-                    'type' => Database::INDEX_FULLTEXT,
-                    'attributes' => ['title'],
-                ]),
-            ],
-        ]);
+        $attributes = [
+            Attribute::string(key: 'title', size: 256),
+            Attribute::string(key: 'description', size: 1024),
+        ];
 
-        $validator = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes'), 768);
-        $index = $collection->getAttribute('indexes')[0];
+        $indexes = [
+            Index::fulltext(key: 'index1', attributes: ['title']),
+        ];
+
+        $validator = new IndexDefinition($attributes, $indexes, Profiles::of(capabilities: self::CAPABILITIES, indexLength: 768));
+        $index = $indexes[0];
         $this->assertTrue($validator->isValid($index));
 
-        $index = new Document([
-            '$id' => ID::custom('index2'),
-            'type' => Database::INDEX_KEY,
-            'attributes' => ['title', 'description'],
-        ]);
+        $index2 = Index::key(key: 'index2', attributes: ['title', 'description']);
 
-        $collection->setAttribute('indexes', $index, Document::SET_TYPE_APPEND);
-        $this->assertFalse($validator->isValid($index));
+        // Validator does not track new indexes added; just validate the new one
+        $this->assertFalse($validator->isValid($index2));
         $this->assertEquals('Index length is longer than the maximum: 768', $validator->getDescription());
     }
 
     /**
      * @throws Exception
      */
-    public function testEmptyAttributes(): void
+    public function test_empty_attributes(): void
     {
-        $collection = new Document([
-            '$id' => ID::custom('test'),
-            'name' => 'test',
-            'attributes' => [
-                new Document([
-                    '$id' => ID::custom('title'),
-                    'type' => Database::VAR_STRING,
-                    'format' => '',
-                    'size' => 769,
-                    'signed' => true,
-                    'required' => false,
-                    'default' => null,
-                    'array' => false,
-                    'filters' => [],
-                ]),
-            ],
-            'indexes' => [
-                new Document([
-                    '$id' => ID::custom('index1'),
-                    'type' => Database::INDEX_KEY,
-                    'attributes' => [],
-                    'lengths' => [],
-                    'orders' => [],
-                ]),
-            ],
-        ]);
+        $attributes = [
+            Attribute::string(key: 'title', size: 769),
+        ];
 
-        $validator = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes'), 768);
-        $index = $collection->getAttribute('indexes')[0];
+        $indexes = [
+            Index::fromArray(['key' => 'index1', 'type' => IndexType::Key]),
+        ];
+
+        $validator = new IndexDefinition($attributes, $indexes, Profiles::of(capabilities: self::CAPABILITIES, indexLength: 768));
+        $index = $indexes[0];
         $this->assertFalse($validator->isValid($index));
         $this->assertEquals('No attributes provided for index', $validator->getDescription());
     }
@@ -241,86 +144,40 @@ class IndexTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testObjectIndexValidation(): void
+    public function test_object_index_validation(): void
     {
-        $collection = new Document([
-            '$id' => ID::custom('test'),
-            'name' => 'test',
-            'attributes' => [
-                new Document([
-                    '$id' => ID::custom('data'),
-                    'type' => Database::VAR_OBJECT,
-                    'format' => '',
-                    'size' => 0,
-                    'signed' => false,
-                    'required' => true,
-                    'default' => null,
-                    'array' => false,
-                    'filters' => [],
-                ]),
-                new Document([
-                    '$id' => ID::custom('name'),
-                    'type' => Database::VAR_STRING,
-                    'format' => '',
-                    'size' => 255,
-                    'signed' => true,
-                    'required' => false,
-                    'default' => null,
-                    'array' => false,
-                    'filters' => [],
-                ])
-            ],
-            'indexes' => []
-        ]);
+        $attributes = [
+            Attribute::object(key: 'data', required: true),
+            Attribute::string(key: 'name'),
+        ];
+
+        /** @var array<Index> $emptyIndexes */
+        $emptyIndexes = [];
 
         // Validator with supportForObjectIndexes enabled
-        $validator = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes', []), 768, [], false, false, false, false, supportForObjectIndexes:true);
+        $validator = new IndexDefinition($attributes, $emptyIndexes, Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::IndexFulltextMultiple, Capability::IndexIdentical, Capability::IndexObject, Capability::IndexKey, Capability::IndexUnique, Capability::IndexFulltext], indexLength: 768));
 
         // Valid: Object index on single VAR_OBJECT attribute
-        $validIndex = new Document([
-            '$id' => ID::custom('idx_gin_valid'),
-            'type' => Database::INDEX_OBJECT,
-            'attributes' => ['data'],
-            'lengths' => [],
-            'orders' => [],
-        ]);
+        $validIndex = Index::object(key: 'idx_gin_valid', attribute: 'data');
         $this->assertTrue($validator->isValid($validIndex));
 
         // Invalid: Object index on non-object attribute
-        $invalidIndexType = new Document([
-            '$id' => ID::custom('idx_gin_invalid_type'),
-            'type' => Database::INDEX_OBJECT,
-            'attributes' => ['name'],
-            'lengths' => [],
-            'orders' => [],
-        ]);
+        $invalidIndexType = Index::object(key: 'idx_gin_invalid_type', attribute: 'name');
         $this->assertFalse($validator->isValid($invalidIndexType));
         $this->assertStringContainsString('Object index can only be created on object attributes', $validator->getDescription());
 
         // Invalid: Object index on multiple attributes
-        $invalidIndexMulti = new Document([
-            '$id' => ID::custom('idx_gin_multi'),
-            'type' => Database::INDEX_OBJECT,
-            'attributes' => ['data', 'name'],
-            'lengths' => [],
-            'orders' => [],
-        ]);
+        $invalidIndexMulti = Index::fromArray(['key' => 'idx_gin_multi', 'type' => IndexType::Object, 'attributes' => ['data', 'name']]);
         $this->assertFalse($validator->isValid($invalidIndexMulti));
         $this->assertStringContainsString('Object index can be created on a single object attribute', $validator->getDescription());
 
         // Invalid: Object index with orders
-        $invalidIndexOrder = new Document([
-            '$id' => ID::custom('idx_gin_order'),
-            'type' => Database::INDEX_OBJECT,
-            'attributes' => ['data'],
-            'lengths' => [],
-            'orders' => ['asc'],
-        ]);
+        $invalidIndexOrder = Index::fromArray(['key' => 'idx_gin_order', 'type' => IndexType::Object, 'attributes' => ['data'], 'orders' => [OrderDirection::Asc]]);
         $this->assertFalse($validator->isValid($invalidIndexOrder));
         $this->assertStringContainsString('Object index do not support explicit orders', $validator->getDescription());
 
         // Validator with supportForObjectIndexes disabled should reject GIN
-        $validatorNoSupport = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes', []), 768, [], false, false, false, false, false);
+        $validatorNoSupport = new IndexDefinition($attributes, $emptyIndexes, Profiles::of(capabilities: [Capability::IndexFulltextMultiple, Capability::IndexIdentical, Capability::IndexKey, Capability::IndexUnique, Capability::IndexFulltext], indexLength: 768));
         $this->assertFalse($validatorNoSupport->isValid($validIndex));
         $this->assertEquals('Object indexes are not supported', $validatorNoSupport->getDescription());
     }
@@ -328,150 +185,63 @@ class IndexTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testNestedObjectPathIndexValidation(): void
+    public function test_nested_object_path_index_validation(): void
     {
-        $collection = new Document([
-            '$id' => ID::custom('test'),
-            'name' => 'test',
-            'attributes' => [
-                new Document([
-                    '$id' => ID::custom('data'),
-                    'type' => Database::VAR_OBJECT,
-                    'format' => '',
-                    'size' => 0,
-                    'signed' => false,
-                    'required' => true,
-                    'default' => null,
-                    'array' => false,
-                    'filters' => [],
-                ]),
-                new Document([
-                    '$id' => ID::custom('metadata'),
-                    'type' => Database::VAR_OBJECT,
-                    'format' => '',
-                    'size' => 0,
-                    'signed' => false,
-                    'required' => false,
-                    'default' => null,
-                    'array' => false,
-                    'filters' => [],
-                ]),
-                new Document([
-                    '$id' => ID::custom('name'),
-                    'type' => Database::VAR_STRING,
-                    'format' => '',
-                    'size' => 255,
-                    'signed' => true,
-                    'required' => false,
-                    'default' => null,
-                    'array' => false,
-                    'filters' => [],
-                ])
-            ],
-            'indexes' => []
-        ]);
+        $attributes = [
+            Attribute::object(key: 'data', required: true),
+            Attribute::object(key: 'metadata'),
+            Attribute::string(key: 'name'),
+        ];
+
+        /** @var array<Index> $emptyIndexes */
+        $emptyIndexes = [];
 
         // Validator with supportForObjectIndexes enabled
-        $validator = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes', []), 768, [], false, false, false, false, true, true, true, true, supportForObjects:true);
+        $validator = new IndexDefinition($attributes, $emptyIndexes, Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::IndexFulltextMultiple, Capability::IndexIdentical, Capability::IndexObject, Capability::IndexKey, Capability::IndexUnique, Capability::IndexFulltext, Capability::Objects], indexLength: 768));
 
         // InValid: INDEX_OBJECT on nested path (dot notation)
-        $validNestedObjectIndex = new Document([
-            '$id' => ID::custom('idx_nested_object'),
-            'type' => Database::INDEX_OBJECT,
-            'attributes' => ['data.key.nestedKey'],
-            'lengths' => [],
-            'orders' => [],
-        ]);
+        $validNestedObjectIndex = Index::object(key: 'idx_nested_object', attribute: 'data.key.nestedKey');
 
         $this->assertFalse($validator->isValid($validNestedObjectIndex));
 
         // Valid: INDEX_UNIQUE on nested path (for Postgres/Mongo)
-        $validNestedUniqueIndex = new Document([
-            '$id' => ID::custom('idx_nested_unique'),
-            'type' => Database::INDEX_UNIQUE,
-            'attributes' => ['data.key.nestedKey'],
-            'lengths' => [],
-            'orders' => [],
-        ]);
+        $validNestedUniqueIndex = Index::unique(key: 'idx_nested_unique', attributes: ['data.key.nestedKey']);
         $this->assertTrue($validator->isValid($validNestedUniqueIndex));
 
         // Valid: INDEX_KEY on nested path
-        $validNestedKeyIndex = new Document([
-            '$id' => ID::custom('idx_nested_key'),
-            'type' => Database::INDEX_KEY,
-            'attributes' => ['metadata.user.id'],
-            'lengths' => [],
-            'orders' => [],
-        ]);
+        $validNestedKeyIndex = Index::key(key: 'idx_nested_key', attributes: ['metadata.user.id']);
         $this->assertTrue($validator->isValid($validNestedKeyIndex));
 
         // Invalid: Nested path on non-object attribute
-        $invalidNestedPath = new Document([
-            '$id' => ID::custom('idx_invalid_nested'),
-            'type' => Database::INDEX_OBJECT,
-            'attributes' => ['name.key'],
-            'lengths' => [],
-            'orders' => [],
-        ]);
+        $invalidNestedPath = Index::object(key: 'idx_invalid_nested', attribute: 'name.key');
         $this->assertFalse($validator->isValid($invalidNestedPath));
         $this->assertStringContainsString('Index attribute "name.key" is only supported on object attributes', $validator->getDescription());
 
         // Invalid: Nested path with non-existent base attribute
-        $invalidBaseAttribute = new Document([
-            '$id' => ID::custom('idx_invalid_base'),
-            'type' => Database::INDEX_OBJECT,
-            'attributes' => ['nonexistent.key'],
-            'lengths' => [],
-            'orders' => [],
-        ]);
+        $invalidBaseAttribute = Index::object(key: 'idx_invalid_base', attribute: 'nonexistent.key');
         $this->assertFalse($validator->isValid($invalidBaseAttribute));
         $this->assertStringContainsString('Invalid index attribute', $validator->getDescription());
 
         // Valid: Multiple nested paths in same index
-        $validMultiNested = new Document([
-            '$id' => ID::custom('idx_multi_nested'),
-            'type' => Database::INDEX_KEY,
-            'attributes' => ['data.key1', 'data.key2'],
-            'lengths' => [],
-            'orders' => [],
-        ]);
+        $validMultiNested = Index::key(key: 'idx_multi_nested', attributes: ['data.key1', 'data.key2']);
         $this->assertTrue($validator->isValid($validMultiNested));
     }
 
     /**
      * @throws Exception
      */
-    public function testDuplicatedAttributes(): void
+    public function test_duplicated_attributes(): void
     {
-        $collection = new Document([
-            '$id' => ID::custom('test'),
-            'name' => 'test',
-            'attributes' => [
-                new Document([
-                    '$id' => ID::custom('title'),
-                    'type' => Database::VAR_STRING,
-                    'format' => '',
-                    'size' => 255,
-                    'signed' => true,
-                    'required' => false,
-                    'default' => null,
-                    'array' => false,
-                    'filters' => [],
-                ])
-            ],
-            'indexes' => [
-                new Document([
-                    '$id' => ID::custom('index1'),
-                    'type' => Database::INDEX_FULLTEXT,
-                    'attributes' => ['title', 'title'],
-                    'lengths' => [],
-                    'orders' => [],
-                ]),
-            ],
-        ]);
+        $attributes = [
+            Attribute::string(key: 'title'),
+        ];
 
-        $validator = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes'), 768);
-        $index = $collection->getAttribute('indexes')[0];
+        $indexes = [
+            Index::fulltext(key: 'index1', attributes: ['title', 'title']),
+        ];
+
+        $validator = new IndexDefinition($attributes, $indexes, Profiles::of(capabilities: self::CAPABILITIES, indexLength: 768));
+        $index = $indexes[0];
         $this->assertFalse($validator->isValid($index));
         $this->assertEquals('Duplicate attributes provided', $validator->getDescription());
     }
@@ -479,233 +249,108 @@ class IndexTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testDuplicatedAttributesDifferentOrder(): void
+    public function test_duplicated_attributes_different_order(): void
     {
-        $collection = new Document([
-            '$id' => ID::custom('test'),
-            'name' => 'test',
-            'attributes' => [
-                new Document([
-                    '$id' => ID::custom('title'),
-                    'type' => Database::VAR_STRING,
-                    'format' => '',
-                    'size' => 255,
-                    'signed' => true,
-                    'required' => false,
-                    'default' => null,
-                    'array' => false,
-                    'filters' => [],
-                ])
-            ],
-            'indexes' => [
-                new Document([
-                    '$id' => ID::custom('index1'),
-                    'type' => Database::INDEX_FULLTEXT,
-                    'attributes' => ['title', 'title'],
-                    'lengths' => [],
-                    'orders' => ['asc', 'desc'],
-                ]),
-            ],
-        ]);
+        $attributes = [
+            Attribute::string(key: 'title'),
+        ];
 
-        $validator = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes'), 768);
-        $index = $collection->getAttribute('indexes')[0];
+        $indexes = [
+            Index::fulltext(key: 'index1', attributes: ['title', 'title']),
+        ];
+
+        $validator = new IndexDefinition($attributes, $indexes, Profiles::of(capabilities: self::CAPABILITIES, indexLength: 768));
+        $index = $indexes[0];
         $this->assertFalse($validator->isValid($index));
     }
 
     /**
      * @throws Exception
      */
-    public function testReservedIndexKey(): void
+    public function test_reserved_index_key(): void
     {
-        $collection = new Document([
-            '$id' => ID::custom('test'),
-            'name' => 'test',
-            'attributes' => [
-                new Document([
-                    '$id' => ID::custom('title'),
-                    'type' => Database::VAR_STRING,
-                    'format' => '',
-                    'size' => 255,
-                    'signed' => true,
-                    'required' => false,
-                    'default' => null,
-                    'array' => false,
-                    'filters' => [],
-                ])
-            ],
-            'indexes' => [
-                new Document([
-                    '$id' => ID::custom('primary'),
-                    'type' => Database::INDEX_FULLTEXT,
-                    'attributes' => ['title'],
-                    'lengths' => [],
-                    'orders' => [],
-                ]),
-            ],
-        ]);
+        $attributes = [
+            Attribute::string(key: 'title'),
+        ];
 
-        $validator = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes'), 768, ['PRIMARY']);
-        $index = $collection->getAttribute('indexes')[0];
+        $indexes = [
+            Index::fulltext(key: 'primary', attributes: ['title']),
+        ];
+
+        $validator = new IndexDefinition($attributes, $indexes, Profiles::of(capabilities: self::CAPABILITIES, indexLength: 768, internalIndexKeys: ['PRIMARY']));
+        $index = $indexes[0];
         $this->assertFalse($validator->isValid($index));
     }
 
     /**
      * @throws Exception
-    */
-    public function testIndexWithNoAttributeSupport(): void
+     */
+    public function test_index_with_no_attribute_support(): void
     {
-        $collection = new Document([
-            '$id' => ID::custom('test'),
-            'name' => 'test',
-            'attributes' => [
-                new Document([
-                    '$id' => ID::custom('title'),
-                    'type' => Database::VAR_STRING,
-                    'format' => '',
-                    'size' => 769,
-                    'signed' => true,
-                    'required' => false,
-                    'default' => null,
-                    'array' => false,
-                    'filters' => [],
-                ]),
-            ],
-            'indexes' => [
-                new Document([
-                    '$id' => ID::custom('index1'),
-                    'type' => Database::INDEX_KEY,
-                    'attributes' => ['new'],
-                    'lengths' => [],
-                    'orders' => [],
-                ]),
-            ],
-        ]);
+        $attributes = [
+            Attribute::string(key: 'title', size: 769),
+        ];
 
-        $validator = new Index(attributes: $collection->getAttribute('attributes'), indexes: $collection->getAttribute('indexes'), maxLength: 768);
-        $index = $collection->getAttribute('indexes')[0];
+        $indexes = [
+            Index::key(key: 'index1', attributes: ['new']),
+        ];
+
+        $validator = new IndexDefinition($attributes, $indexes, Profiles::of(capabilities: self::CAPABILITIES, indexLength: 768));
+        $index = $indexes[0];
         $this->assertFalse($validator->isValid($index));
 
-        $validator = new Index(attributes: $collection->getAttribute('attributes'), indexes: $collection->getAttribute('indexes'), maxLength: 768, supportForAttributes: false);
-        $index = $collection->getAttribute('indexes')[0];
+        $validator = new IndexDefinition($attributes, $indexes, Profiles::of(capabilities: [Capability::IndexFulltextMultiple, Capability::IndexIdentical, Capability::IndexKey, Capability::IndexUnique, Capability::IndexFulltext], indexLength: 768));
+        $index = $indexes[0];
         $this->assertTrue($validator->isValid($index));
     }
 
     /**
      * @throws Exception
      */
-    public function testTrigramIndexValidation(): void
+    public function test_trigram_index_validation(): void
     {
-        $collection = new Document([
-            '$id' => ID::custom('test'),
-            'name' => 'test',
-            'attributes' => [
-                new Document([
-                    '$id' => ID::custom('name'),
-                    'type' => Database::VAR_STRING,
-                    'format' => '',
-                    'size' => 255,
-                    'signed' => true,
-                    'required' => false,
-                    'default' => null,
-                    'array' => false,
-                    'filters' => [],
-                ]),
-                new Document([
-                    '$id' => ID::custom('description'),
-                    'type' => Database::VAR_STRING,
-                    'format' => '',
-                    'size' => 512,
-                    'signed' => true,
-                    'required' => false,
-                    'default' => null,
-                    'array' => false,
-                    'filters' => [],
-                ]),
-                new Document([
-                    '$id' => ID::custom('age'),
-                    'type' => Database::VAR_INTEGER,
-                    'format' => '',
-                    'size' => 0,
-                    'signed' => true,
-                    'required' => false,
-                    'default' => null,
-                    'array' => false,
-                    'filters' => [],
-                ]),
-            ],
-            'indexes' => []
-        ]);
+        $attributes = [
+            Attribute::string(key: 'name'),
+            Attribute::string(key: 'description', size: 512),
+            Attribute::integer(key: 'age'),
+        ];
+
+        /** @var array<Index> $emptyIndexes */
+        $emptyIndexes = [];
 
         // Validator with supportForTrigramIndexes enabled
-        $validator = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes', []), 768, [], false, false, false, false, false, false, false, false, supportForTrigramIndexes: true);
+        $validator = new IndexDefinition($attributes, $emptyIndexes, Profiles::of(capabilities: [Capability::IndexTrigram, Capability::IndexKey, Capability::IndexUnique, Capability::IndexFulltext], indexLength: 768));
 
         // Valid: Trigram index on single VAR_STRING attribute
-        $validIndex = new Document([
-            '$id' => ID::custom('idx_trigram_valid'),
-            'type' => Database::INDEX_TRIGRAM,
-            'attributes' => ['name'],
-            'lengths' => [],
-            'orders' => [],
-        ]);
+        $validIndex = Index::trigram(key: 'idx_trigram_valid', attributes: ['name']);
         $this->assertTrue($validator->isValid($validIndex));
 
         // Valid: Trigram index on multiple string attributes
-        $validIndexMulti = new Document([
-            '$id' => ID::custom('idx_trigram_multi_valid'),
-            'type' => Database::INDEX_TRIGRAM,
-            'attributes' => ['name', 'description'],
-            'lengths' => [],
-            'orders' => [],
-        ]);
+        $validIndexMulti = Index::trigram(key: 'idx_trigram_multi_valid', attributes: ['name', 'description']);
         $this->assertTrue($validator->isValid($validIndexMulti));
 
         // Invalid: Trigram index on non-string attribute
-        $invalidIndexType = new Document([
-            '$id' => ID::custom('idx_trigram_invalid_type'),
-            'type' => Database::INDEX_TRIGRAM,
-            'attributes' => ['age'],
-            'lengths' => [],
-            'orders' => [],
-        ]);
+        $invalidIndexType = Index::trigram(key: 'idx_trigram_invalid_type', attributes: ['age']);
         $this->assertFalse($validator->isValid($invalidIndexType));
         $this->assertStringContainsString('Trigram index can only be created on string type attributes', $validator->getDescription());
 
         // Invalid: Trigram index with mixed string and non-string attributes
-        $invalidIndexMixed = new Document([
-            '$id' => ID::custom('idx_trigram_mixed'),
-            'type' => Database::INDEX_TRIGRAM,
-            'attributes' => ['name', 'age'],
-            'lengths' => [],
-            'orders' => [],
-        ]);
+        $invalidIndexMixed = Index::trigram(key: 'idx_trigram_mixed', attributes: ['name', 'age']);
         $this->assertFalse($validator->isValid($invalidIndexMixed));
         $this->assertStringContainsString('Trigram index can only be created on string type attributes', $validator->getDescription());
 
         // Invalid: Trigram index with orders
-        $invalidIndexOrder = new Document([
-            '$id' => ID::custom('idx_trigram_order'),
-            'type' => Database::INDEX_TRIGRAM,
-            'attributes' => ['name'],
-            'lengths' => [],
-            'orders' => ['asc'],
-        ]);
+        $invalidIndexOrder = Index::fromArray(['key' => 'idx_trigram_order', 'type' => IndexType::Trigram, 'attributes' => ['name'], 'orders' => [OrderDirection::Asc]]);
         $this->assertFalse($validator->isValid($invalidIndexOrder));
         $this->assertStringContainsString('Trigram indexes do not support orders or lengths', $validator->getDescription());
 
         // Invalid: Trigram index with lengths
-        $invalidIndexLength = new Document([
-            '$id' => ID::custom('idx_trigram_length'),
-            'type' => Database::INDEX_TRIGRAM,
-            'attributes' => ['name'],
-            'lengths' => [128],
-            'orders' => [],
-        ]);
+        $invalidIndexLength = Index::fromArray(['key' => 'idx_trigram_length', 'type' => IndexType::Trigram, 'attributes' => ['name'], 'lengths' => [128]]);
         $this->assertFalse($validator->isValid($invalidIndexLength));
         $this->assertStringContainsString('Trigram indexes do not support orders or lengths', $validator->getDescription());
 
         // Validator with supportForTrigramIndexes disabled should reject trigram
-        $validatorNoSupport = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes', []), 768, [], false, false, false, false, false, false, false, false, false);
+        $validatorNoSupport = new IndexDefinition($attributes, $emptyIndexes, Profiles::of(capabilities: [Capability::IndexKey, Capability::IndexUnique, Capability::IndexFulltext], indexLength: 768));
         $this->assertFalse($validatorNoSupport->isValid($validIndex));
         $this->assertEquals('Trigram indexes are not supported', $validatorNoSupport->getDescription());
     }
@@ -713,167 +358,184 @@ class IndexTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testTTLIndexValidation(): void
+    public function test_ttl_index_validation(): void
     {
-        $collection = new Document([
-            '$id' => ID::custom('test'),
-            'name' => 'test',
-            'attributes' => [
-                new Document([
-                    '$id' => ID::custom('expiresAt'),
-                    'type' => Database::VAR_DATETIME,
-                    'format' => '',
-                    'size' => 0,
-                    'signed' => false,
-                    'required' => false,
-                    'default' => null,
-                    'array' => false,
-                    'filters' => ['datetime'],
-                ]),
-                new Document([
-                    '$id' => ID::custom('name'),
-                    'type' => Database::VAR_STRING,
-                    'format' => '',
-                    'size' => 255,
-                    'signed' => true,
-                    'required' => false,
-                    'default' => null,
-                    'array' => false,
-                    'filters' => [],
-                ]),
-            ],
-            'indexes' => []
-        ]);
+        $attributes = [
+            Attribute::datetime(key: 'expiresAt'),
+            Attribute::string(key: 'name'),
+        ];
+
+        /** @var array<Index> $emptyIndexes */
+        $emptyIndexes = [];
 
         // Validator with supportForTTLIndexes enabled
-        $validator = new Index(
-            $collection->getAttribute('attributes'),
-            $collection->getAttribute('indexes', []),
-            768,
-            [],
-            false, // supportForArrayIndexes
-            false, // supportForSpatialIndexNull
-            false, // supportForSpatialIndexOrder
-            false, // supportForVectorIndexes
-            true,  // supportForAttributes
-            true,  // supportForMultipleFulltextIndexes
-            true,  // supportForIdenticalIndexes
-            false, // supportForObjectIndexes
-            false, // supportForTrigramIndexes
-            false, // supportForSpatialIndexes
-            true,  // supportForKeyIndexes
-            true,  // supportForUniqueIndexes
-            true,  // supportForFulltextIndexes
-            true   // supportForTTLIndexes
+        $validator = new IndexDefinition(
+            $attributes,
+            $emptyIndexes,
+            Profiles::of(capabilities: [...self::CAPABILITIES, Capability::IndexTtl], indexLength: 768),
         );
 
         // Valid: TTL index on single datetime attribute with valid TTL
-        $validIndex = new Document([
-            '$id' => ID::custom('idx_ttl_valid'),
-            'type' => Database::INDEX_TTL,
-            'attributes' => ['expiresAt'],
-            'lengths' => [],
-            'orders' => [Database::ORDER_ASC],
-            'ttl' => 3600,
-        ]);
+        $validIndex = Index::ttl(key: 'idx_ttl_valid', attribute: 'expiresAt', ttl: 3600);
         $this->assertTrue($validator->isValid($validIndex));
 
-        // Invalid: TTL index with ttl = 1
-        $invalidIndexZero = new Document([
-            '$id' => ID::custom('idx_ttl_zero'),
-            'type' => Database::INDEX_TTL,
-            'attributes' => ['expiresAt'],
-            'lengths' => [],
-            'orders' => [Database::ORDER_ASC],
-            'ttl' => 0,
-        ]);
-        $this->assertFalse($validator->isValid($invalidIndexZero));
-        $this->assertEquals('TTL must be at least 1 second', $validator->getDescription());
+        // Invalid: TTL index with ttl = 0
+        $this->assertTtlRefused(0);
 
         // Invalid: TTL index with TTL < 0
-        $invalidIndexNegative = new Document([
-            '$id' => ID::custom('idx_ttl_negative'),
-            'type' => Database::INDEX_TTL,
-            'attributes' => ['expiresAt'],
-            'lengths' => [],
-            'orders' => [Database::ORDER_ASC],
-            'ttl' => -100,
-        ]);
-        $this->assertFalse($validator->isValid($invalidIndexNegative));
-        $this->assertEquals('TTL must be at least 1 second', $validator->getDescription());
+        $this->assertTtlRefused(-100);
+
+        // Invalid: stored TTL index without a TTL
+        $this->assertFalse($validator->isValid(new Document(['$id' => 'idx_ttl_missing', 'type' => IndexType::Ttl->value, 'attributes' => ['expiresAt']])));
+        $this->assertSame('TTL must be at least 1 second', $validator->getDescription());
 
         // Invalid: TTL index on non-datetime attribute
-        $invalidIndexType = new Document([
-            '$id' => ID::custom('idx_ttl_invalid_type'),
-            'type' => Database::INDEX_TTL,
-            'attributes' => ['name'],
-            'lengths' => [],
-            'orders' => [Database::ORDER_ASC],
-            'ttl' => 3600,
-        ]);
+        $invalidIndexType = Index::ttl(key: 'idx_ttl_invalid_type', attribute: 'name', ttl: 3600);
         $this->assertFalse($validator->isValid($invalidIndexType));
         $this->assertStringContainsString('TTL index can only be created on datetime attributes', $validator->getDescription());
 
         // Invalid: TTL index on multiple attributes
-        $invalidIndexMulti = new Document([
-            '$id' => ID::custom('idx_ttl_multi'),
-            'type' => Database::INDEX_TTL,
-            'attributes' => ['expiresAt', 'name'],
-            'lengths' => [],
-            'orders' => [Database::ORDER_ASC, Database::ORDER_ASC],
-            'ttl' => 3600,
-        ]);
+        $invalidIndexMulti = Index::fromArray(['key' => 'idx_ttl_multi', 'type' => IndexType::Ttl, 'attributes' => ['expiresAt', 'name'], 'orders' => [OrderDirection::Asc, OrderDirection::Asc], 'ttl' => 3600]);
         $this->assertFalse($validator->isValid($invalidIndexMulti));
         $this->assertStringContainsString('TTL indexes must be created on a single datetime attribute', $validator->getDescription());
 
         // Valid: TTL index with minimum valid TTL (1 second)
-        $validIndexMin = new Document([
-            '$id' => ID::custom('idx_ttl_min'),
-            'type' => Database::INDEX_TTL,
-            'attributes' => ['expiresAt'],
-            'lengths' => [],
-            'orders' => [Database::ORDER_ASC],
-            'ttl' => 1,
-        ]);
+        $validIndexMin = Index::ttl(key: 'idx_ttl_min', attribute: 'expiresAt', ttl: 1);
         $this->assertTrue($validator->isValid($validIndexMin));
 
         // Invalid: any additional TTL index when another TTL index already exists
-        $collection->setAttribute('indexes', $validIndex, Document::SET_TYPE_APPEND);
-        $validatorWithExisting = new Index(
-            $collection->getAttribute('attributes'),
-            $collection->getAttribute('indexes', []),
-            768,
-            [],
-            false, // supportForArrayIndexes
-            false, // supportForSpatialIndexNull
-            false, // supportForSpatialIndexOrder
-            false, // supportForVectorIndexes
-            true,  // supportForAttributes
-            true,  // supportForMultipleFulltextIndexes
-            true,  // supportForIdenticalIndexes
-            false, // supportForObjectIndexes
-            false, // supportForTrigramIndexes
-            false, // supportForSpatialIndexes
-            true,  // supportForKeyIndexes
-            true,  // supportForUniqueIndexes
-            true,  // supportForFulltextIndexes
-            true   // supportForTTLIndexes
+        $indexesWithTTL = [$validIndex];
+        $validatorWithExisting = new IndexDefinition(
+            $attributes,
+            $indexesWithTTL,
+            Profiles::of(capabilities: [...self::CAPABILITIES, Capability::IndexTtl], indexLength: 768),
         );
 
-        $duplicateTTLIndex = new Document([
-            '$id' => ID::custom('idx_ttl_duplicate'),
-            'type' => Database::INDEX_TTL,
-            'attributes' => ['expiresAt'],
-            'lengths' => [],
-            'orders' => [Database::ORDER_ASC],
-            'ttl' => 7200,
-        ]);
+        $duplicateTTLIndex = Index::ttl(key: 'idx_ttl_duplicate', attribute: 'expiresAt', ttl: 7200);
         $this->assertFalse($validatorWithExisting->isValid($duplicateTTLIndex));
         $this->assertEquals('There can be only one TTL index in a collection', $validatorWithExisting->getDescription());
 
-        // Validator with supportForTrigramIndexes disabled should reject TTL
-        $validatorNoSupport = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes', []), 768, [], false, false, false, false, false, false, false, false, false);
+        // Validator with supportForTTLIndexes disabled should reject TTL
+        $validatorNoSupport = new IndexDefinition($attributes, $indexesWithTTL, Profiles::of(capabilities: [Capability::IndexKey, Capability::IndexUnique, Capability::IndexFulltext], indexLength: 768));
         $this->assertFalse($validatorNoSupport->isValid($validIndex));
         $this->assertEquals('TTL indexes are not supported', $validatorNoSupport->getDescription());
+    }
+
+    public function testIndexWithoutATypeIsRejected(): void
+    {
+        $validator = new IndexDefinition([Attribute::string(key: 'title', size: 64)], [], Profiles::of(capabilities: self::CAPABILITIES, indexLength: 768));
+
+        $this->assertFalse($validator->isValid(new Document([
+            Document::ID => 'by_title',
+            'attributes' => ['title'],
+        ])));
+        $this->assertStringStartsWith('Unknown index type: . Must be one of ', $validator->getDescription());
+    }
+
+    public function testTtlIndexWithoutATtlIsRejected(): void
+    {
+        $validator = new IndexDefinition(
+            [Attribute::datetime(key: 'expiresAt')],
+            [],
+            Profiles::of(capabilities: [...self::CAPABILITIES, Capability::IndexTtl], indexLength: 768),
+        );
+
+        $this->assertFalse($validator->isValid(new Document([
+            Document::ID => 'expiry',
+            'type' => IndexType::Ttl->value,
+            'attributes' => ['expiresAt'],
+        ])));
+        $this->assertSame('TTL must be at least 1 second', $validator->getDescription());
+    }
+
+    public function testUnknownIndexTypeIsAValidationFailure(): void
+    {
+        $validator = new IndexDefinition([Attribute::string(key: 'title', size: 64)], [], Profiles::of(capabilities: self::CAPABILITIES, indexLength: 768));
+
+        $this->assertFalse($validator->isValid(new Document([
+            Document::ID => 'by_title',
+            'type' => 'bogus',
+            'attributes' => ['title'],
+        ])));
+        $this->assertStringStartsWith('Unknown index type: bogus. Must be one of ', $validator->getDescription());
+    }
+
+    public function testStoredIndexOfAnUnknownTypeIsReadLeniently(): void
+    {
+        $stored = new Document([
+            Document::ID => 'by_title',
+            'type' => 'bogus',
+            'attributes' => ['title'],
+        ]);
+
+        $index = Index::fromDocument($stored);
+
+        $this->assertSame(IndexType::Key, $index->type);
+        $this->assertSame(['title'], $index->attributes);
+        $this->assertTrue((new Indexed([Attribute::string(key: 'title', size: 64)], [$stored]))->isValid([]));
+    }
+
+    public function testTextAttributeWithoutASizeIsJudgedAgainstTheTextMaximum(): void
+    {
+        $validator = new IndexDefinition([Attribute::text(key: 'body')], [], Profiles::of(capabilities: self::CAPABILITIES, indexLength: 768));
+
+        $this->assertTrue($validator->isValid(Index::key(key: 'by_body', attributes: ['body'], lengths: [100])), $validator->getDescription());
+
+        $this->assertFalse($validator->isValid(Index::key(key: 'by_body', attributes: ['body'])));
+        $this->assertSame('Index length is longer than the maximum: 768', $validator->getDescription());
+    }
+
+    public function testKeyAndUniqueIndexesAreRejectedWithoutAdapterSupport(): void
+    {
+        $validator = new IndexDefinition(
+            [Attribute::string(key: 'title', size: 64)],
+            [],
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::IndexFulltextMultiple, Capability::IndexIdentical, Capability::IndexFulltext], indexLength: 768),
+        );
+        $key = Index::key(key: 'by_title', attributes: ['title']);
+        $unique = Index::unique(key: 'by_title', attributes: ['title']);
+
+        $this->assertFalse($validator->isValid($key));
+        $this->assertSame('Key index is not supported', $validator->getDescription());
+        $this->assertFalse($validator->checkKeyUniqueFulltextSupport($key));
+        $this->assertSame('Key index is not supported', $validator->getDescription());
+
+        $this->assertFalse($validator->isValid($unique));
+        $this->assertSame('Unique index is not supported', $validator->getDescription());
+        $this->assertFalse($validator->checkKeyUniqueFulltextSupport($unique));
+        $this->assertSame('Unique index is not supported', $validator->getDescription());
+    }
+
+    public function testStoredLegacyIndexTypeIsValidatedAsAKeyIndex(): void
+    {
+        $validator = new IndexDefinition([Attribute::string(key: 'title', size: 64)], [], Profiles::of(capabilities: self::CAPABILITIES, indexLength: 768));
+        $stored = new Document([Document::ID => 'by_title', 'type' => IndexType::Index->value, 'attributes' => ['title']]);
+
+        $this->assertSame(IndexType::Key, Index::fromDocument($stored)->type);
+        $this->assertTrue($validator->isValid($stored), $validator->getDescription());
+    }
+
+    public function testOrderOnAnArrayAttributeIsRejected(): void
+    {
+        $validator = new IndexDefinition(
+            [Attribute::string(key: 'tags', size: 64, array: true)],
+            [],
+            Profiles::of(capabilities: [Capability::IndexArray, Capability::DefinedAttributes, Capability::IndexFulltextMultiple, Capability::IndexIdentical, Capability::IndexKey, Capability::IndexUnique, Capability::IndexFulltext], indexLength: 768),
+        );
+
+        $this->assertFalse($validator->isValid(Index::key(key: 'by_tags', attributes: ['tags'], lengths: [64], orders: [OrderDirection::Asc])));
+        $this->assertSame('Invalid index order "'.OrderDirection::Asc->value.'" on array attribute "tags"', $validator->getDescription());
+
+        $this->assertTrue($validator->isValid(Index::key(key: 'by_tags', attributes: ['tags'], lengths: [64])), $validator->getDescription());
+    }
+
+    private function assertTtlRefused(int $ttl): void
+    {
+        try {
+            Index::fromArray(['key' => 'idx_ttl', 'type' => IndexType::Ttl, 'attributes' => ['expiresAt'], 'ttl' => $ttl]);
+            $this->fail('A TTL index with a TTL of '.$ttl.' must be refused');
+        } catch (IndexException $error) {
+            $this->assertSame('TTL must be at least 1 second', $error->getMessage());
+        }
     }
 }

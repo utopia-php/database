@@ -4,43 +4,55 @@ namespace Tests\E2E\Adapter;
 
 use Exception;
 use Redis;
+use Tests\E2E\Adapter\Scopes\MongoReadFilterTests;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Mongo;
+use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
+use Utopia\Database\Document;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Index;
+use Utopia\Database\Permission;
+use Utopia\Database\Query;
+use Utopia\Database\Role;
+use Utopia\Database\Storage;
 use Utopia\Mongo\Client;
 
 class MongoDBTest extends Base
 {
+    use MongoReadFilterTests;
+
     public static ?Database $database = null;
+
+    #[\Override]
     protected static string $namespace;
 
     /**
      * Return name of adapter
-     *
-     * @return string
      */
     public static function getAdapterName(): string
     {
-        return "mongodb";
+        return 'mongodb';
     }
 
     /**
-     * @return Database
      * @throws Exception
      */
+    #[\Override]
     public function getDatabase(): Database
     {
-        if (!is_null(self::$database)) {
+        if (! is_null(self::$database)) {
             return self::$database;
         }
 
         $redis = new Redis();
         $redis->connect('redis', 6379);
-        $redis->flushAll();
-        $cache = new Cache(new RedisAdapter($redis));
+        $redis->select(4);
+        $cache = new Cache((new RedisAdapter($redis))->setMaxRetries(3));
 
-        $schema = 'utopiaTests'; // same as $this->testDatabase
+        $schema = $this->testDatabase;
         $client = new Client(
             $schema,
             'mongo',
@@ -51,11 +63,12 @@ class MongoDBTest extends Base
         );
 
         $database = new Database(new Mongo($client), $cache);
-        $database->getAdapter()->setSupportForAttributes(true);
+        $database->setSchemaless(false);
+        assert(self::$authorization !== null);
         $database
             ->setAuthorization(self::$authorization)
             ->setDatabase($schema)
-            ->setNamespace(static::$namespace = 'myapp_' . uniqid());
+            ->setNamespace(static::$namespace = 'myapp_'.uniqid());
 
         if ($database->exists()) {
             $database->delete();
@@ -69,42 +82,306 @@ class MongoDBTest extends Base
     /**
      * @throws Exception
      */
+    #[\Override]
     public function testCreateExistsDelete(): void
     {
-        // Mongo creates databases on the fly, so exists would always pass. So we override this test to remove the exists check.
-        $this->assertNotNull($this->getDatabase()->create());
-        $this->assertEquals(true, $this->getDatabase()->delete($this->testDatabase));
-        $this->assertEquals(true, $this->getDatabase()->create());
-        $this->assertEquals($this->getDatabase(), $this->getDatabase()->setDatabase($this->testDatabase));
+        $database = $this->getDatabase();
+
+        $this->assertTrue($database->create());
+        $this->assertTrue($database->exists($this->testDatabase));
+        $this->assertFalse($database->exists($this->testDatabase.'Absent'));
+        $this->assertTrue($database->delete($this->testDatabase));
+        $this->assertFalse($database->exists($this->testDatabase));
+        $this->assertTrue($database->create());
+        $this->assertTrue($database->exists($this->testDatabase));
+        $this->assertSame($database, $database->setDatabase($this->testDatabase));
     }
 
-    public function testRenameAttribute(): void
+    public function testCollectionGrantsAuthorizeWritesWithoutReadPermission(): void
     {
-        $this->assertTrue(true);
+        $database = $this->getDatabase();
+        $collection = 'collectionGrantedWrites';
+
+        $database->createCollection(Collection::create(
+            id: $collection,
+            attributes: [Attribute::integer(key: 'count', required: true)],
+            permissions: [
+                Permission::read(Role::any()),
+                Permission::update(Role::users()),
+                Permission::delete(Role::users()),
+            ],
+            documentSecurity: false,
+        ));
+
+        $database->getAuthorization()->skip(function () use ($database, $collection): void {
+            foreach (['first', 'second', 'third'] as $id) {
+                $database->createDocument($collection, new Document([
+                    '$id' => $id,
+                    '$permissions' => [],
+                    'count' => 0,
+                ]));
+            }
+        });
+
+        $this->actAs('bob', function () use ($database, $collection): void {
+            $database->increaseDocumentAttribute($collection, 'first', 'count', 5);
+            $this->assertSame(5, $database->getDocument($collection, 'first')->getAttribute('count'));
+
+            $database->decreaseDocumentAttribute($collection, 'first', 'count', 2);
+            $this->assertSame(3, $database->getDocument($collection, 'first')->getAttribute('count'));
+
+            $this->assertSame(3, $database->updateDocuments($collection, new Document(['count' => 42])));
+            $this->assertSame(
+                [42, 42, 42],
+                \array_map(fn (Document $document) => $document->getAttribute('count'), $database->find($collection)),
+            );
+
+            $this->assertSame(3, $database->deleteDocuments($collection));
+            $this->assertSame(0, $database->count($collection));
+        });
     }
 
-    public function testRenameAttributeExisting(): void
+    public function testDocumentGrantsAuthorizeWritesWithoutReadPermission(): void
     {
-        $this->assertTrue(true);
+        $database = $this->getDatabase();
+        $collection = 'documentGrantedWrites';
+
+        $database->createCollection(Collection::create(
+            id: $collection,
+            attributes: [Attribute::integer(key: 'count', required: true)],
+            permissions: [],
+            documentSecurity: true,
+        ));
+
+        $database->getAuthorization()->skip(function () use ($database, $collection): void {
+            foreach (['first', 'second'] as $id) {
+                $database->createDocument($collection, new Document([
+                    '$id' => $id,
+                    '$permissions' => [
+                        Permission::update(Role::user('bob')),
+                        Permission::delete(Role::user('bob')),
+                    ],
+                    'count' => 0,
+                ]));
+            }
+        });
+
+        $stored = fn (): array => $database->getAuthorization()->skip(fn () => \array_map(
+            fn (Document $document) => $document->getAttribute('count'),
+            $database->find($collection),
+        ));
+
+        $this->actAs('bob', fn () => $database->increaseDocumentAttribute($collection, 'first', 'count', 5));
+        $this->assertSame([5, 0], $stored());
+
+        $this->actAs('bob', fn () => $this->assertSame(2, $database->updateDocuments($collection, new Document(['count' => 42]))));
+        $this->assertSame([42, 42], $stored());
+
+        $this->actAs('bob', fn () => $this->assertSame(2, $database->deleteDocuments($collection)));
+        $this->assertSame([], $stored());
     }
 
-    public function testUpdateAttributeStructure(): void
+    public function testDeniedReaderDoesNotHideADocumentFromItsReader(): void
     {
-        $this->assertTrue(true);
+        $database = $this->getDatabase();
+        $collection = 'deniedReaderProfiles';
+
+        $database->createCollection(Collection::create(
+            id: $collection,
+            attributes: [Attribute::string(key: 'name', size: 64)],
+            permissions: [Permission::read(Role::user('alice'))],
+            documentSecurity: false,
+        ));
+
+        $database->getAuthorization()->skip(fn () => $database->createDocument($collection, new Document([
+            '$id' => 'alice',
+            '$permissions' => [Permission::read(Role::user('alice'))],
+            'name' => 'Alice',
+        ])));
+
+        $this->actAs('bob', fn () => $this->assertTrue($database->getDocument($collection, 'alice')->isEmpty()));
+
+        $this->actAs('alice', fn () => $this->assertSame(
+            'Alice',
+            $database->getDocument($collection, 'alice')->getAttribute('name'),
+            'A reader denied the document must not leave a negative cache entry for a reader who may see it',
+        ));
     }
 
-    public function testKeywords(): void
+    public function testListCollectionsReturnsOnlyReadableDefinitions(): void
     {
-        $this->assertTrue(true);
+        $database = $this->getDatabase();
+        $definitions = ['adminDefinition', 'listedDefinition', 'unlistedDefinition'];
+
+        $database->createCollection(Collection::create(id: 'listedDefinition', permissions: [Permission::read(Role::any())]));
+        $database->createCollection(Collection::create(id: 'adminDefinition', permissions: [Permission::read(Role::user('admin'))]));
+        $database->createCollection(Collection::create(id: 'unlistedDefinition', permissions: [Permission::create(Role::any())]));
+
+        $listed = fn (): array => \array_values(\array_intersect(
+            $definitions,
+            \array_map(fn (Collection $collection) => $collection->getId(), $database->listCollections(100)),
+        ));
+        $queries = [Query::equal('$id', $definitions)];
+
+        $this->actAs('bob', function () use ($database, $listed, $queries): void {
+            $this->assertSame(['listedDefinition'], $listed());
+            $this->assertCount(1, $database->find(Database::METADATA, $queries));
+            $this->assertSame(1, $database->count(Database::METADATA, $queries), 'count() and find() must agree on the metadata collection');
+        });
+
+        $this->actAs('admin', function () use ($database, $listed, $queries): void {
+            $this->assertSame(['adminDefinition', 'listedDefinition'], $listed());
+            $this->assertSame(2, $database->count(Database::METADATA, $queries));
+        });
+
+        $this->assertSame($definitions, $database->getAuthorization()->skip($listed));
     }
 
+    public function testUpdateMovesEveryCollectionIntoTheNewDatabase(): void
+    {
+        $suffix = \substr(\uniqid(), -6);
+        $source = $this->testDatabase.'_from'.$suffix;
+        $target = $this->testDatabase.'_to'.$suffix;
+        $occupied = $this->testDatabase.'_taken'.$suffix;
+        $collection = 'renamedBooks';
+
+        $sourceDatabase = $this->databaseBoundTo($source);
+        $targetDatabase = $this->databaseBoundTo($target);
+        $occupiedDatabase = $this->databaseBoundTo($occupied);
+        $authorization = $sourceDatabase->getAuthorization();
+
+        try {
+            $sourceDatabase->create();
+            $authorization->skip(function () use ($sourceDatabase, $collection): void {
+                $sourceDatabase->createCollection(Collection::create(
+                    id: $collection,
+                    attributes: [Attribute::string(key: 'title', size: 64)],
+                    indexes: [Index::unique(key: 'byTitle', attributes: ['title'])],
+                    permissions: [],
+                    documentSecurity: true,
+                ));
+                $sourceDatabase->createDocument($collection, new Document([
+                    '$id' => 'hobbit',
+                    'title' => 'The Hobbit',
+                    '$permissions' => [Permission::read(Role::user('reader'))],
+                ]));
+            });
+            $this->assertNotNull($sourceDatabase->findCollection($collection));
+
+            $this->assertTrue($sourceDatabase->update($source, $target));
+
+            $sourceDatabase->setDatabase($source);
+            $this->assertNull($sourceDatabase->findCollection($collection), 'The definition cached under the old name must not outlive the rename');
+
+            $moved = $targetDatabase->findCollection($collection);
+            $this->assertNotNull($moved);
+            $this->assertContains('byTitle', \array_map(static fn (Index $index): string => $index->key, $moved->indexes()));
+            $this->assertSame('The Hobbit', $authorization->skip(fn (): Document => $targetDatabase->getDocument($collection, 'hobbit'))->getAttribute('title'));
+            $this->actAs('stranger', function () use ($targetDatabase, $collection): void {
+                $this->assertSame([], $targetDatabase->find($collection));
+            });
+            $this->actAs('reader', function () use ($targetDatabase, $collection): void {
+                $this->assertSame(['hobbit'], \array_map(static fn (Document $book): string => $book->getId(), $targetDatabase->find($collection)));
+            });
+
+            $occupiedDatabase->create();
+            $this->expectException(DuplicateException::class);
+            $occupiedDatabase->update($occupied, $target);
+        } finally {
+            $sourceDatabase->delete($source);
+            $targetDatabase->delete($target);
+            $occupiedDatabase->delete($occupied);
+        }
+    }
+
+    private function databaseBoundTo(string $name): Database
+    {
+        $adapter = new Mongo(new Client($name, 'mongo', 27017, 'root', 'password', false));
+        $adapter->setSchemaless(false);
+        $database = new Database($adapter, $this->getDatabase()->getCache());
+        assert(self::$authorization !== null);
+        $database
+            ->setAuthorization(self::$authorization)
+            ->setDatabase($name)
+            ->setNamespace(static::$namespace);
+
+        return $database;
+    }
+
+    #[\Override]
     protected function deleteColumn(string $collection, string $column): bool
     {
         return true;
     }
 
+    #[\Override]
     protected function deleteIndex(string $collection, string $index): bool
     {
         return true;
+    }
+
+    private function actAs(string $user, callable $callback): void
+    {
+        $authorization = $this->getDatabase()->getAuthorization();
+        $roles = $authorization->getRoles();
+
+        $authorization->cleanRoles();
+        $authorization->addRole(Role::any()->toString());
+        $authorization->addRole(Role::users()->toString());
+        $authorization->addRole(Role::user($user)->toString());
+
+        try {
+            $callback();
+        } finally {
+            $authorization->cleanRoles();
+            foreach ($roles as $role) {
+                $authorization->addRole($role);
+            }
+        }
+    }
+
+    public function testReadsDropAStoredNonStringPermission(): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'lenientReads';
+        $permissions = [Permission::read(Role::any())];
+
+        $database->createCollection(Collection::create(
+            id: $collection,
+            attributes: [Attribute::string(key: 'title', size: 64)],
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            documentSecurity: true,
+        ));
+        $database->createDocument($collection, new Document([
+            '$id' => 'note',
+            '$permissions' => $permissions,
+            'title' => 'stored',
+        ]));
+
+        $client = $database->getAdapter()->getDriver();
+        $this->assertInstanceOf(Client::class, $client);
+        $client->update(
+            $database->getNamespace().'_'.$collection,
+            [Storage::UID => 'note'],
+            ['$set' => [Storage::PERMISSIONS => [Permission::read(Role::any()), 42, null]]],
+        );
+        $database->purgeCachedDocument($collection, 'note');
+
+        $this->assertSame($permissions, $database->getDocument($collection, 'note')->getPermissions());
+        $this->assertSame(
+            [$permissions],
+            \array_map(fn (Document $document): array => $document->getPermissions(), $database->find($collection)),
+        );
+
+        $this->assertSame(1, $database->updateDocuments($collection, new Document(['title' => 'bulk'])));
+        $this->assertSame('bulk', $database->getDocument($collection, 'note')->getAttribute('title'));
+
+        $updated = $database->updateDocument($collection, 'note', new Document(['title' => 'single']));
+        $this->assertSame('single', $updated->getAttribute('title'));
+        $this->assertSame($permissions, $updated->getPermissions());
     }
 }

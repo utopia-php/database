@@ -3,39 +3,48 @@
 namespace Utopia\Database\Validator;
 
 use Utopia\Database\Database;
+use Utopia\Query\Schema\ColumnType;
 use Utopia\Validator;
 use Utopia\Validator\Range;
 
 class Sequence extends Validator
 {
     private string $idAttributeType;
+
     private bool $primary;
 
+    #[\Override]
     public function getDescription(): string
     {
         return 'Invalid sequence value';
     }
 
-    /**
-     * Expression constructor
-     */
     public function __construct(string $idAttributeType, bool $primary)
     {
         $this->primary = $primary;
         $this->idAttributeType = $idAttributeType;
     }
 
+    #[\Override]
     public function isArray(): bool
     {
         return false;
     }
 
+    #[\Override]
     public function getType(): string
     {
         return self::TYPE_STRING;
     }
 
-    public function isValid($value): bool
+    /**
+     * Validate a sequence value against the configured ID attribute type.
+     *
+     * @param mixed $value The value to validate
+     * @return bool
+     */
+    #[\Override]
+    public function isValid(mixed $value): bool
     {
         if ($this->primary && empty($value)) {
             return false;
@@ -45,23 +54,20 @@ class Sequence extends Validator
             return true;
         }
 
-        if (!\is_string($value) && !\is_int($value)) {
+        if (! \is_string($value) && ! \is_int($value)) {
             return false;
         }
 
-        if (!$this->primary) {
+        if (! $this->primary) {
             return true;
         }
 
-        switch ($this->idAttributeType) {
-            case Database::VAR_UUID7:
-                return \is_string($value) && preg_match('/^[a-f0-9]{8}-[a-f0-9]{4}-7[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i', $value) === 1;
-            case Database::VAR_INTEGER:
-                $validator = new Range(1, Database::MAX_BIG_INT, Database::VAR_INTEGER);
-                return $validator->isValid($value);
+        $idType = ColumnType::tryFrom($this->idAttributeType);
 
-            default:
-                return false;
-        }
+        return match ($idType) {
+            ColumnType::Uuid7 => \is_string($value) && preg_match('/^[a-f0-9]{8}-[a-f0-9]{4}-7[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i', $value) === 1,
+            ColumnType::Integer => (new Range(1, Database::MAX_BIG_INT, ColumnType::Integer->value))->isValid($value),
+            default => false,
+        };
     }
 }

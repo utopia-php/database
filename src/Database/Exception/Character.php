@@ -2,8 +2,9 @@
 
 namespace Utopia\Database\Exception;
 
-use Utopia\Database\Exception;
-
-class Character extends Exception
+/**
+ * Thrown when a value contains invalid or unsupported characters.
+ */
+class Character extends Schema
 {
 }

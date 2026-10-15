@@ -2,13 +2,26 @@
 
 namespace Tests\Unit;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Tests\Unit\Filter\Reversed;
+use Tests\Unit\Filter\Rot13;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
+use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Filter;
+use Utopia\Database\Filter\Callback;
+use Utopia\Database\Filter\Codec;
+use Utopia\Database\Filter\Registry;
+use Utopia\Database\Permission;
+use Utopia\Database\Role;
+use Utopia\Query\Schema\ColumnType;
 
 class FilterRegistryTest extends TestCase
 {
@@ -23,24 +36,25 @@ class FilterRegistryTest extends TestCase
     /**
      * @var array<string, array{encode: callable, decode: callable, signature: string}>
      */
-    private array $registry;
+    private array $registry = [];
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->adapter = new DatabaseMemory();
         $this->cache = new Cache(new HashAwareMemoryCache());
-        $this->namespace = 'filter_registry_' . \uniqid();
+        $this->namespace = 'filter_registry_'.\uniqid();
 
         $this->database = $this->createDatabase();
 
         // Snapshot once the constructor has registered the built-ins, so the
         // restore in tearDown puts back a populated registry rather than an
         // empty one.
-        $this->registry = (new \ReflectionProperty(Database::class, 'filters'))->getValue();
+        $this->registry = FilterRegistry::filters();
 
         $this->database->create();
-        $this->database->createCollection('projects');
-        $this->database->createAttribute('projects', 'name', Database::VAR_STRING, 255, false);
+        $this->database->createCollection(Collection::create(id: 'projects'));
+        $this->database->createAttribute('projects', Attribute::string(key: 'name', size: 255));
         $this->database->createDocument('projects', new Document([
             '$id' => 'project',
             '$permissions' => [Permission::read(Role::any())],
@@ -48,42 +62,102 @@ class FilterRegistryTest extends TestCase
         ]));
     }
 
+    #[\Override]
     protected function tearDown(): void
     {
         // addFilter() writes to a static registry with no removal API, so a test
         // registering one would otherwise leak into every later test.
-        (new \ReflectionProperty(Database::class, 'filters'))->setValue(null, $this->registry);
-        (new \ReflectionProperty(Database::class, 'defaultFiltersRegistered'))->setValue(null, true);
+        FilterRegistry::restore($this->registry, true);
     }
 
-    private function createDatabase(): Database
+    public function testRegisteredCodecsAreFoundByName(): void
     {
-        $database = new Database($this->adapter, $this->cache);
+        $registry = new Registry();
+        $reversed = new Reversed();
+        $rot13 = new Rot13();
 
-        return $database
-            ->setDatabase('utopiaTests')
-            ->setNamespace($this->namespace);
+        $this->assertSame($registry, $registry->register($reversed)->register($rot13));
+        $this->assertSame($reversed, $registry->get('reversed'));
+        $this->assertSame($rot13, $registry->get('rot13'));
+        $this->assertTrue($registry->has('reversed'));
+    }
+
+    public function testAnUnknownNameIsNeitherFoundNorHeld(): void
+    {
+        $registry = (new Registry())->register(new Reversed());
+
+        $this->assertNull($registry->get('rot13'));
+        $this->assertFalse($registry->has('rot13'));
+    }
+
+    public function testRegisteringANameAgainReplacesTheCodec(): void
+    {
+        $replacement = new Rot13('reversed');
+        $registry = (new Registry())->register(new Reversed())->register($replacement);
+
+        $this->assertSame($replacement, $registry->get('reversed'));
     }
 
     /**
-     * Write through the adapter, bypassing Database and therefore the cache
-     * purge, so the cache holds a copy the source no longer agrees with. A read
-     * returning 'cached' was served from the cache; one returning 'fresh' missed
-     * and went to the adapter.
+     * @return iterable<string, array{string}>
      */
-    private function writeBehindTheCache(string $value): void
+    public static function builtInFilters(): iterable
     {
-        $collection = $this->database->getCollection('projects');
-        $document = $this->adapter->getDocument($collection, 'project');
-        $document->setAttribute('name', $value);
-        $this->adapter->updateDocument($collection, 'project', $document, true);
+        foreach (Filter::cases() as $filter) {
+            yield $filter->value => [$filter->value];
+        }
     }
 
-    private function read(?Database $database = null): string
+    #[DataProvider('builtInFilters')]
+    public function testBuiltInFilterNamesAreRejected(string $name): void
     {
-        return ($database ?? $this->database)
-            ->getDocument('projects', 'project')
-            ->getAttribute('name');
+        $registry = new Registry();
+
+        try {
+            $registry->register(new Reversed($name));
+            $this->fail("registering a codec named \"{$name}\" must be rejected");
+        } catch (DuplicateException $exception) {
+            $this->assertStringContainsString("\"{$name}\"", $exception->getMessage());
+        }
+
+        $this->assertFalse($registry->has($name));
+    }
+
+    public function testDefaultFiltersNameEveryBuiltInFilter(): void
+    {
+        FilterRegistry::clear();
+        new Database(new DatabaseMemory(), new Cache(new HashAwareMemoryCache()));
+
+        $names = \array_keys(FilterRegistry::filters());
+        $expected = Database::DEFAULT_FILTERS;
+        $cases = \array_map(static fn (Filter $filter): string => $filter->value, Filter::cases());
+        \sort($names);
+        \sort($expected);
+        \sort($cases);
+
+        $this->assertSame($expected, $names);
+        $this->assertSame($expected, $cases);
+    }
+
+    public function testCallbackRunsItsClosures(): void
+    {
+        $callback = new Callback(
+            'wrapped',
+            static fn (mixed $value): mixed => \is_string($value) ? '['.$value.']' : $value,
+            static fn (mixed $value): mixed => \is_string($value) ? \trim($value, '[]') : $value,
+        );
+
+        $this->assertSame('wrapped', $callback->name());
+        $this->assertSame('[value]', $callback->encode('value'));
+        $this->assertSame('value', $callback->decode('[value]'));
+    }
+
+    public function testRegisteringOnARegistryLeavesTheGlobalFiltersUntouched(): void
+    {
+        (new Registry())->register(new Reversed());
+
+        $this->expectException(NotFoundException::class);
+        $this->createDatabase()->decode($this->notes('reversed'), new Document(['body' => 'olleh']));
     }
 
     public function testRegisteringAGlobalFilterStopsStaleEntriesBeingServed(): void
@@ -103,31 +177,22 @@ class FilterRegistryTest extends TestCase
         );
     }
 
-    public function testChangingInstanceFiltersStopsStaleEntriesBeingServed(): void
+    public function testRegisteringOnASharedRegistryStopsStaleEntriesBeingServed(): void
     {
-        $database = new class ($this->adapter, $this->cache) extends Database {
-            public function swapInstanceFilter(string $signature): void
-            {
-                $noop = fn (mixed $value) => $value;
-
-                $this->instanceFilters = [
-                    'probe' => ['encode' => $noop, 'decode' => $noop, 'signature' => $signature],
-                ];
-            }
-        };
-        $database->setDatabase('utopiaTests')->setNamespace($this->namespace);
+        $registry = new Registry();
+        $database = $this->createDatabase()->setFilters($registry);
 
         $this->assertSame('cached', $this->read($database));
 
         $this->writeBehindTheCache('fresh');
         $this->assertSame('cached', $this->read($database), 'read should still be served from cache');
 
-        $database->swapInstanceFilter('v2');
+        $registry->register(new Reversed('probe'));
 
         $this->assertSame(
             'fresh',
             $this->read($database),
-            'a subclass replacing its instance filters must not keep serving the previous entry',
+            'a codec registered after the handle cached a document must not keep the previous entry served',
         );
     }
 
@@ -135,8 +200,7 @@ class FilterRegistryTest extends TestCase
     {
         // A fresh process: nothing has constructed a Database yet, so the
         // built-ins are not in the registry.
-        (new \ReflectionProperty(Database::class, 'filters'))->setValue(null, []);
-        (new \ReflectionProperty(Database::class, 'defaultFiltersRegistered'))->setValue(null, false);
+        FilterRegistry::clear();
 
         $identity = fn (mixed $value) => $value;
         Database::addFilter('datetime', $identity, $identity);
@@ -147,7 +211,7 @@ class FilterRegistryTest extends TestCase
                 'attributes' => [
                     new Document([
                         '$id' => 'occurredAt',
-                        'type' => Database::VAR_DATETIME,
+                        'type' => ColumnType::Datetime->value,
                         'array' => false,
                         'filters' => ['datetime'],
                     ]),
@@ -175,5 +239,170 @@ class FilterRegistryTest extends TestCase
             $this->read($this->createDatabase()),
             'a later instance with the same config must hit the entry the first one cached',
         );
+    }
+
+    public function testFilterEncodeFailureIsADatabaseExceptionWithTheOriginalAsPrevious(): void
+    {
+        $failure = new \InvalidArgumentException('cannot encode the probe', 7);
+        Database::addFilter(
+            'failingEncode',
+            static fn (mixed $value) => throw $failure,
+            static fn (mixed $value) => $value,
+        );
+
+        $this->assertEncodeFailureWrapped($this->database, 'failingEncode', $failure);
+    }
+
+    public function testCodecEncodeFailureIsADatabaseExceptionWithTheOriginalAsPrevious(): void
+    {
+        $failure = new \DomainException('cannot encode the custom probe', 11);
+        $codec = new class ($failure) implements Codec {
+            public function __construct(private readonly \DomainException $failure)
+            {
+            }
+
+            #[\Override]
+            public function name(): string
+            {
+                return 'failingCodec';
+            }
+
+            #[\Override]
+            public function encode(mixed $value): mixed
+            {
+                throw $this->failure;
+            }
+
+            #[\Override]
+            public function decode(mixed $value): mixed
+            {
+                return $value;
+            }
+        };
+
+        $database = new Database($this->adapter, $this->cache, [$codec]);
+
+        $this->assertEncodeFailureWrapped($database, 'failingCodec', $failure);
+    }
+
+    /**
+     * @return array<string, array{callable, callable}>
+     */
+    public static function nonClosureCallables(): array
+    {
+        $first = new class () {
+            public function transform(mixed $value): mixed
+            {
+                return $value;
+            }
+        };
+        $second = new class () {
+            public function transform(mixed $value): mixed
+            {
+                return $value;
+            }
+        };
+
+        return [
+            'string callables' => ['trim', 'strtolower'],
+            'static array callables' => [[self::class, 'identity'], [self::class, 'passthrough']],
+            'instance array callables' => [[$first, 'transform'], [$second, 'transform']],
+        ];
+    }
+
+    #[DataProvider('nonClosureCallables')]
+    public function testReplacingANonClosureFilterStopsStaleEntriesBeingServed(callable $original, callable $replacement): void
+    {
+        Database::addFilter('replaceable', $original, $original);
+        $this->assertSame('cached', $this->read());
+
+        $this->writeBehindTheCache('fresh');
+        $this->assertSame('cached', $this->read(), 'read should still be served from cache');
+
+        Database::addFilter('replaceable', $replacement, $replacement);
+
+        $this->assertSame(
+            'fresh',
+            $this->read(),
+            'a filter replaced by another callable under the same name must not keep serving the previous entry',
+        );
+    }
+
+    public static function identity(mixed $value): mixed
+    {
+        return $value;
+    }
+
+    public static function passthrough(mixed $value): mixed
+    {
+        return $value;
+    }
+
+    private function createDatabase(): Database
+    {
+        $database = new Database($this->adapter, $this->cache);
+
+        return $database
+            ->setDatabase('utopiaTests')
+            ->setNamespace($this->namespace);
+    }
+
+    /**
+     * Write through the adapter, bypassing Database and therefore the cache
+     * purge, so the cache holds a copy the source no longer agrees with. A read
+     * returning 'cached' was served from the cache; one returning 'fresh' missed
+     * and went to the adapter.
+     */
+    private function writeBehindTheCache(string $value): void
+    {
+        $collection = $this->database->getCollection('projects');
+        $document = $this->adapter->getDocument($collection, 'project');
+        $document->setAttribute('name', $value);
+        $this->adapter->updateDocument($collection, 'project', $document, true);
+    }
+
+    private function read(?Database $database = null): mixed
+    {
+        return ($database ?? $this->database)
+            ->getDocument('projects', 'project')
+            ->getAttribute('name');
+    }
+
+    private function notes(string $filter): Document
+    {
+        return new Document([
+            '$id' => 'notes',
+            'attributes' => [
+                new Document([
+                    '$id' => 'body',
+                    'type' => ColumnType::String->value,
+                    'array' => false,
+                    'filters' => [$filter],
+                ]),
+            ],
+        ]);
+    }
+
+    private function assertEncodeFailureWrapped(Database $database, string $filter, \Throwable $failure): void
+    {
+        $collection = new Document([
+            '$id' => 'probes',
+            'attributes' => [new Document([
+                '$id' => 'probe',
+                'type' => ColumnType::String->value,
+                'array' => false,
+                'filters' => [$filter],
+            ])],
+        ]);
+
+        try {
+            $database->encode($collection, new Document(['$id' => 'probe', 'probe' => 'value']));
+            $this->fail('encode() must rethrow the failure of '.$filter);
+        } catch (DatabaseException $error) {
+            $this->assertSame(DatabaseException::class, $error::class);
+            $this->assertSame($failure->getMessage(), $error->getMessage());
+            $this->assertSame($failure->getCode(), $error->getCode());
+            $this->assertSame($failure, $error->getPrevious());
+        }
     }
 }

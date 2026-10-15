@@ -6,26 +6,26 @@ use Utopia\Database\Database;
 
 class Label extends Key
 {
+    /**
+     * @param bool $allowInternal Whether to allow internal attribute names starting with $
+     * @param int $maxLength Maximum allowed string length
+     */
     public function __construct(
         bool $allowInternal = false,
         int $maxLength = Database::MAX_UID_DEFAULT_LENGTH
     ) {
         parent::__construct($allowInternal, $maxLength);
-        $this->message = 'Value must be a valid string between 1 and ' . $this->maxLength . ' chars containing only alphanumeric chars';
+        $this->message = 'Value must be a valid string between 1 and '.$this->maxLength.' chars containing only alphanumeric chars';
     }
 
-    /**
-     * Is valid.
-     *
-     * Returns true if valid or false if not.
-     *
-     * @param $value
-     *
-     * @return bool
-     */
-    public function isValid($value): bool
+    #[\Override]
+    public function isValid(mixed $value): bool
     {
-        if (!parent::isValid($value)) {
+        if (! parent::isValid($value)) {
+            return false;
+        }
+
+        if (! \is_string($value)) {
             return false;
         }
 

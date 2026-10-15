@@ -6,35 +6,41 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\UID;
+use Utopia\Query\Method;
 
 class Cursor extends Base
 {
+    /**
+     * @param int $maxLength Maximum allowed UID length for cursor values
+     */
     public function __construct(private readonly int $maxLength = Database::MAX_UID_DEFAULT_LENGTH)
     {
     }
 
     /**
-     * Is valid.
+     * A cursorAfter or cursorBefore query whose value is a document ID, or a document holding one. A document
+     * without an ID is a row a join or a distinct read returned; the read decides whether its values name a row.
+     * Any other value, an array included, is refused.
      *
-     * Returns true if method is cursorBefore or cursorAfter and value is not null
-     *
-     * Otherwise, returns false
-     *
-     * @param Query $value
-     * @return bool
+     * @param  mixed  $value
      */
-    public function isValid($value): bool
+    #[\Override]
+    public function isValid(mixed $value): bool
     {
-        if (!$value instanceof Query) {
+        if (! $value instanceof Query) {
             return false;
         }
 
         $method = $value->getMethod();
 
-        if ($method === Query::TYPE_CURSOR_AFTER || $method === Query::TYPE_CURSOR_BEFORE) {
+        if ($method === Method::CursorAfter || $method === Method::CursorBefore) {
             $cursor = $value->getValue();
 
             if ($cursor instanceof Document) {
+                if ($cursor->getId() === '') {
+                    return true;
+                }
+
                 $cursor = $cursor->getId();
             }
 
@@ -42,13 +48,15 @@ class Cursor extends Base
             if ($validator->isValid($cursor)) {
                 return true;
             }
-            $this->message = 'Invalid cursor: ' . $validator->getDescription();
+            $this->message = 'Invalid cursor: '.$validator->getDescription();
+
             return false;
         }
 
         return false;
     }
 
+    #[\Override]
     public function getMethodType(): string
     {
         return self::METHOD_TYPE_CURSOR;

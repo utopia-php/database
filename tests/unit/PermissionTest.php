@@ -3,14 +3,14 @@
 namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Database;
-use Utopia\Database\Helpers\ID;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
+use Utopia\Database\Id;
+use Utopia\Database\Permission;
+use Utopia\Database\PermissionType;
+use Utopia\Database\Role;
 
 class PermissionTest extends TestCase
 {
-    public function testOutputFromString(): void
+    public function test_output_from_string(): void
     {
         $permission = Permission::parse('read("any")');
         $this->assertEquals('read', $permission->getPermission());
@@ -141,7 +141,7 @@ class PermissionTest extends TestCase
         $this->assertEquals('unverified', $permission->getDimension());
     }
 
-    public function testInputFromParameters(): void
+    public function test_input_from_parameters(): void
     {
         $permission = new Permission('read', 'any');
         $this->assertEquals('read("any")', $permission->toString());
@@ -192,7 +192,7 @@ class PermissionTest extends TestCase
         $this->assertEquals('delete("team:123/admin")', $permission->toString());
     }
 
-    public function testInputFromRoles(): void
+    public function test_input_from_roles(): void
     {
         $permission = Permission::read(Role::any());
         $this->assertEquals('read("any")', $permission);
@@ -200,10 +200,10 @@ class PermissionTest extends TestCase
         $permission = Permission::read(Role::users());
         $this->assertEquals('read("users")', $permission);
 
-        $permission = Permission::read(Role::user(ID::custom('123')));
+        $permission = Permission::read(Role::user(Id::custom('123')));
         $this->assertEquals('read("user:123")', $permission);
 
-        $permission = Permission::read(Role::team(ID::custom('123'), 'admin'));
+        $permission = Permission::read(Role::team(Id::custom('123'), 'admin'));
         $this->assertEquals('read("team:123/admin")', $permission);
 
         $permission = Permission::read(Role::guests());
@@ -215,10 +215,10 @@ class PermissionTest extends TestCase
         $permission = Permission::create(Role::users());
         $this->assertEquals('create("users")', $permission);
 
-        $permission = Permission::create(Role::user(ID::custom('123')));
+        $permission = Permission::create(Role::user(Id::custom('123')));
         $this->assertEquals('create("user:123")', $permission);
 
-        $permission = Permission::create(Role::team(ID::custom('123'), 'admin'));
+        $permission = Permission::create(Role::team(Id::custom('123'), 'admin'));
         $this->assertEquals('create("team:123/admin")', $permission);
 
         $permission = Permission::create(Role::guests());
@@ -230,10 +230,10 @@ class PermissionTest extends TestCase
         $permission = Permission::update(Role::users());
         $this->assertEquals('update("users")', $permission);
 
-        $permission = Permission::update(Role::user(ID::custom('123')));
+        $permission = Permission::update(Role::user(Id::custom('123')));
         $this->assertEquals('update("user:123")', $permission);
 
-        $permission = Permission::update(Role::team(ID::custom('123'), 'admin'));
+        $permission = Permission::update(Role::team(Id::custom('123'), 'admin'));
         $this->assertEquals('update("team:123/admin")', $permission);
 
         $permission = Permission::update(Role::guests());
@@ -245,10 +245,10 @@ class PermissionTest extends TestCase
         $permission = Permission::delete(Role::users());
         $this->assertEquals('delete("users")', $permission);
 
-        $permission = Permission::delete(Role::user(ID::custom('123')));
+        $permission = Permission::delete(Role::user(Id::custom('123')));
         $this->assertEquals('delete("user:123")', $permission);
 
-        $permission = Permission::delete(Role::team(ID::custom('123'), 'admin'));
+        $permission = Permission::delete(Role::team(Id::custom('123'), 'admin'));
         $this->assertEquals('delete("team:123/admin")', $permission);
 
         $permission = Permission::delete(Role::guests());
@@ -258,7 +258,7 @@ class PermissionTest extends TestCase
         $this->assertEquals('write("any")', $permission);
     }
 
-    public function testInvalidFormats(): void
+    public function test_invalid_formats(): void
     {
         try {
             Permission::parse('read');
@@ -289,16 +289,26 @@ class PermissionTest extends TestCase
         }
     }
 
+    public function test_custom_type_rejected_as_in_7_4(): void
+    {
+        try {
+            Permission::parse('execute("any")');
+            $this->fail('Failed to throw Exception');
+        } catch (\Exception $e) {
+            $this->assertSame('Invalid permission type: "execute".', $e->getMessage());
+        }
+    }
+
     /**
      * @throws \Exception
      */
-    public function testAggregation(): void
+    public function test_aggregation(): void
     {
         $permissions = ['write("any")'];
         $parsed = Permission::aggregate($permissions);
         $this->assertEquals(['create("any")', 'update("any")', 'delete("any")'], $parsed);
 
-        $parsed = Permission::aggregate($permissions, [Database::PERMISSION_UPDATE, Database::PERMISSION_DELETE]);
+        $parsed = Permission::aggregate($permissions, [PermissionType::Update, PermissionType::Delete]);
         $this->assertEquals(['update("any")', 'delete("any")'], $parsed);
 
         $permissions = [
@@ -307,10 +317,10 @@ class PermissionTest extends TestCase
             'read("user:123")',
             'write("user:123")',
             'update("user:123")',
-            'delete("user:123")'
+            'delete("user:123")',
         ];
 
-        $parsed = Permission::aggregate($permissions, Database::PERMISSIONS);
+        $parsed = Permission::aggregate($permissions, [PermissionType::Create, PermissionType::Read, PermissionType::Update, PermissionType::Delete]);
         $this->assertEquals([
             'read("any")',
             'read("user:123")',

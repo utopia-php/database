@@ -2,7 +2,9 @@
 
 namespace Utopia\Database\Validator;
 
+use Utopia\Database\Attribute;
 use Utopia\Database\Document;
+use Utopia\Database\Index;
 use Utopia\Validator;
 
 class IndexDependency extends Validator
@@ -12,49 +14,49 @@ class IndexDependency extends Validator
     protected bool $castIndexSupport;
 
     /**
-     * @var array<Document>
+     * @var list<Index>
      */
     protected array $indexes;
 
     /**
-     * @param array<Document> $indexes
-     * @param bool $castIndexSupport
+     * @param  array<Index|Document>  $indexes
      */
     public function __construct(array $indexes, bool $castIndexSupport)
     {
         $this->castIndexSupport = $castIndexSupport;
-        $this->indexes = $indexes;
+        $this->indexes = [];
+        foreach ($indexes as $index) {
+            $this->indexes[] = $index instanceof Index ? $index : Index::fromDocument($index);
+        }
     }
 
-    /**
-     * Returns validator description
-     */
+    #[\Override]
     public function getDescription(): string
     {
         return $this->message;
     }
 
     /**
-     * Is valid.
-     *
-     * @param  Document  $value
+     * @param  Attribute|Document  $value
      */
-    public function isValid($value): bool
+    #[\Override]
+    public function isValid(mixed $value): bool
     {
         if (! $this->castIndexSupport) {
             return true;
         }
 
-        if (! $value->getAttribute('array', false)) {
+        $attribute = $value instanceof Attribute ? $value : Attribute::fromDocument($value);
+
+        if (! $attribute->array) {
             return true;
         }
 
-        $key = \strtolower($value->getAttribute('key', $value->getAttribute('$id')));
+        $key = \strtolower($attribute->key);
 
         foreach ($this->indexes as $index) {
-            $attributes = $index->getAttribute('attributes', []);
-            foreach ($attributes as $attribute) {
-                if ($key === \strtolower($attribute)) {
+            foreach ($index->attributes as $indexedAttribute) {
+                if ($key === \strtolower($indexedAttribute)) {
                     return false;
                 }
             }
@@ -63,21 +65,13 @@ class IndexDependency extends Validator
         return true;
     }
 
-    /**
-     * Is array
-     *
-     * Function will return true if object is array.
-     */
+    #[\Override]
     public function isArray(): bool
     {
         return false;
     }
 
-    /**
-     * Get Type
-     *
-     * Returns validator type.
-     */
+    #[\Override]
     public function getType(): string
     {
         return self::TYPE_OBJECT;

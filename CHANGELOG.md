@@ -12,9 +12,9 @@ no code change; a custom adapter can opt in to the fix, see
   deletes the rows of `$sequences` that match every filter query in `$queries`, as `find()` is handed them, removes
   the permission rows of `$permissionIds` but those of a row kept because it no longer matches, and returns the
   number of rows deleted. It calls `deleteDocuments()` with the queries readable through the new protected
-  `Adapter::deletionFilters()`, so an override of `deleteDocuments()` still runs. Memory, SQLite, MariaDB, MySQL,
-  PostgreSQL, MongoDB and Redis delete only the rows that match them; `Pool` and `ReadWritePool` pass the call on. A
-  custom adapter that ignores them deletes every row of `$sequences`, as before.
+  `Adapter::deletionFilters()`, so an override of `deleteDocuments()` still runs, on a `Pool` too. Memory, SQLite,
+  MariaDB, MySQL, PostgreSQL, MongoDB and Redis delete only the rows that match them; `Pool` and `ReadWritePool` hand
+  them to the pooled adapter. A custom adapter that ignores them deletes every row of `$sequences`, as before.
 
 ### Fixed
 
@@ -29,11 +29,15 @@ no code change; a custom adapter can opt in to the fix, see
   replaced by a later one. When a document changes between that read and the delete, the batch is rolled back and
   tried again, and fails with `Exception\Contention` once the transaction's retries are spent; the batches before it
   stay deleted and `Event::DocumentsDelete` reports them. In a transaction begun with `startTransaction()` the retry
-  runs in a savepoint, which on MySQL and MariaDB reads the transaction's snapshot again and fails the same way, so the
-  caller rolls the whole transaction back and runs it again. Without transactions, as on a standalone MongoDB server,
-  nothing is rolled back: the documents still stored are kept and left out of the count, `onNext`, the cache purges
-  and the event, the remaining batches are deleted, and a cascade that already ran for a kept document stays, so
-  cascades are best-effort there. A delete without filters, or with filters only on `$sequence`, runs as before.
+  runs in a savepoint, which on MySQL and MariaDB reads the transaction's snapshot again and fails the same way; a
+  MongoDB replica set has no savepoints, so the batch is not retried and its partial delete stays in the transaction.
+  Either way the caller rolls the whole transaction back and runs it again. Without transactions, as on a standalone
+  MongoDB server, nothing is rolled back: the documents still stored are kept and left out of the count, `onNext`,
+  the cache purges and the event, the remaining batches are deleted, a document another deleter removed meanwhile is
+  counted by this call, and a cascade that already ran for a kept document stays, so cascades are best-effort there.
+  The adapter's count is a hint: only a document of the batch still stored after the delete counts as changed, so a
+  custom adapter that reports a wrong count does not fail the delete. A delete without filters, or with filters only
+  on `$sequence`, runs as before.
 - A bulk delete on SQLite, MariaDB, MySQL and PostgreSQL binds the floats of its filters in fixed-point notation, as
   `find()` binds them, so it matches the rows the find matched.
 

@@ -11,8 +11,14 @@ every row it is handed, as in 8.1.3; to keep a document another write changed af
 rows that match every query of `deletionFilters()` (filter queries, as `find()` is handed them), keep the permission
 rows of a row kept, and return the number of rows deleted.
 
+The count `deleteDocuments()` returns is a hint: a lower count than the rows handed makes `Database::deleteDocuments()`
+check which documents are still stored, and a higher one is ignored, so a custom adapter that counts differently still
+works.
+
 `deleteDocuments()` can now throw `Exception\Contention` when documents keep changing between the check and the delete
-of a batch. Inside a transaction begun with `startTransaction()`, roll it back and run it again.
+of a batch. Inside a transaction begun with `startTransaction()`, roll it back and run it again: on MySQL and MariaDB
+the retry in the savepoint rereads the same snapshot, and a MongoDB replica set has no savepoint, so the partial
+delete of the batch stays in the transaction until it is rolled back.
 
 # Upgrading from 8.1.2 to 8.1.3
 

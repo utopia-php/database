@@ -71,7 +71,7 @@ final class JoinedAttributeResolutionTest extends TestCase
 
             $byStatus = [];
             foreach ($this->aggregateCustomers($validate, [$purchases, Query::sum('amount', 'total'), Query::groupBy(['status'])]) as $group) {
-                $status = $group['status'];
+                $status = $group['purchase.status'];
                 $this->assertIsString($status, $mode);
                 $byStatus[$status] = $group['total'];
             }
@@ -229,7 +229,7 @@ final class JoinedAttributeResolutionTest extends TestCase
 
         $totals = [];
         foreach ($results as $result) {
-            $status = $result['status'];
+            $status = $result['purchase.status'];
             $this->assertIsString($status);
             $totals[$status] = $result['total'];
         }

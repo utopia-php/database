@@ -115,7 +115,7 @@ final class AggregateResultNamesTest extends TestCase
             $database->aggregate('main', [Query::count('*', 'links'), Query::sum('score', 'total'), Query::groupBy(['link']), Query::orderAsc('link')]),
         );
         $this->assertSame(
-            [['score' => 10, 'label' => 'first']],
+            [['score' => 10, 'a.label' => 'first']],
             $database->aggregate('main', [Query::join('a', 'a', [Query::on('link', 'link')]), Query::sum('score', 'score'), Query::groupBy(['a.label'])]),
         );
     }

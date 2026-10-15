@@ -10981,9 +10981,9 @@ trait DocumentTests
                     $case.': a having on the qualified group',
                 );
                 $this->assertEquals(
-                    [['orders' => 2, 'name' => 'apple'], ['orders' => 1, 'name' => 'banana']],
+                    [['orders' => 2, 'it.name' => 'apple'], ['orders' => 1, 'it.name' => 'banana']],
                     $database->aggregate($orders, [$join, Query::count('*', 'orders'), Query::groupBy(['it.name']), Query::orderAsc('it.name')]),
-                    $case.': a joined group alone keeps its bare name',
+                    $case.': a joined group alone keeps its qualified name',
                 );
             }
         } finally {
@@ -11052,7 +11052,7 @@ trait DocumentTests
             $this->assertSame(['o2', 'o1', 'o3'], $ids($database->find($orders, [Query::fullOuterJoin($items, 'it', [Query::on('item', 'code')]), Query::orderDesc('price'), Query::orderAsc('$id')])));
             $this->assertSame(['o2', 'o1', 'o3'], $ids($database->find($orders, [$item, Query::orderDesc('name'), Query::orderAsc('$id')])), 'a name the main collection declares reads the main table');
             $this->assertEquals(
-                [['orders' => 1, 'code' => 'b'], ['orders' => 2, 'code' => 'a']],
+                [['orders' => 1, 'it.code' => 'b'], ['orders' => 2, 'it.code' => 'a']],
                 $database->aggregate($orders, [$item, Query::count('*', 'orders'), Query::groupBy(['code']), Query::orderDesc('code')]),
             );
 

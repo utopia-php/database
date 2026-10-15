@@ -21,7 +21,6 @@ use Utopia\Database\Permission;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\Role;
-use Utopia\Database\Storage;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\Method;
 
@@ -86,7 +85,7 @@ final class JoinInternalColumnsTest extends TestCase
 
         $total = 0;
         foreach ($groups as $group) {
-            $this->assertArrayHasKey(Storage::column($attribute), $group, 'a group comes back under its column, as on the main collection');
+            $this->assertArrayHasKey('note.'.$attribute, $group, 'a joined group comes back under its qualified name');
             $count = $group['rows'];
             $this->assertIsInt($count);
             $total += $count;
@@ -123,7 +122,7 @@ final class JoinInternalColumnsTest extends TestCase
             Query::orderAsc('note.$id'),
         ]);
 
-        $this->assertSame($expected, \array_map(static fn (array $group): mixed => $group[Storage::UID], $groups));
+        $this->assertSame($expected, \array_map(static fn (array $group): mixed => $group['note.$id'], $groups));
     }
 
     public function testCollectionIsNeitherAggregatedNorGrouped(): void
@@ -176,9 +175,9 @@ final class JoinInternalColumnsTest extends TestCase
         $note = $this->join(Method::Join);
 
         $this->assertSame([['total' => 3]], $this->database->aggregate('customers', [Query::count('$tenant', 'total')]));
-        $this->assertSame([['rows' => 3, Storage::TENANT => 1]], $this->database->aggregate('customers', [Query::count('*', 'rows'), Query::groupBy(['$tenant'])]));
+        $this->assertSame([['rows' => 3, '$tenant' => 1]], $this->database->aggregate('customers', [Query::count('*', 'rows'), Query::groupBy(['$tenant'])]));
         $this->assertSame([['total' => 3]], $this->database->aggregate('customers', [$note, Query::count('note.$tenant', 'total')]));
-        $this->assertSame([['rows' => 3, Storage::TENANT => 1]], $this->database->aggregate('customers', [$note, Query::count('*', 'rows'), Query::groupBy(['note.$tenant'])]));
+        $this->assertSame([['rows' => 3, 'note.$tenant' => 1]], $this->database->aggregate('customers', [$note, Query::count('*', 'rows'), Query::groupBy(['note.$tenant'])]));
 
         $customers = $this->database->find('customers', [$note, Query::select(['name', 'note.$tenant']), Query::orderAsc('note.$id')]);
         $this->assertSame([self::TENANT, self::TENANT, self::TENANT], \array_map(static fn (Document $customer): mixed => $customer->getAttribute('note.$tenant'), $customers));

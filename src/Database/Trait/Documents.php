@@ -61,6 +61,7 @@ use Utopia\Database\Validator\Queries\Narrow;
 use Utopia\Database\Validator\Query\Aggregate;
 use Utopia\Database\Validator\Query\Join as JoinValidator;
 use Utopia\Database\Validator\Query\Joined\Collection as JoinedCollection;
+use Utopia\Database\Validator\Query\Select as SelectValidator;
 use Utopia\Database\Validator\Structure;
 use Utopia\Database\Validator\UID;
 use Utopia\Query\CursorDirection;
@@ -2006,6 +2007,7 @@ trait Documents
         }
 
         $this->checkQueryTypes($queries);
+        $queries = $this->withoutRelationshipQueries($queries);
 
         if ($this->validation()->get()) {
             $validator = $this->getQueriesValidator($collection, $queries);
@@ -3113,6 +3115,7 @@ trait Documents
         }
 
         $this->checkQueryTypes($queries);
+        $queries = $this->withoutRelationshipQueries($queries);
 
         if ($this->validation()->get()) {
             $validator = $this->getQueriesValidator($collection, $queries);
@@ -4216,6 +4219,7 @@ trait Documents
         if ($this->validation()->get()) {
             $joinedCollectionsById = $this->resolveJoinedCollections($queries);
             $this->validateDocumentsQueries($collection, $queries, $joinedCollectionsById);
+            $this->validateRelationshipSelects($collection, $queries);
         }
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
@@ -4353,7 +4357,7 @@ trait Documents
         if ($isAggregation) {
             $nestedSelections = [];
         } else {
-            $nestedSelections = $this->relationshipHook?->processQueries($relationships, $queries) ?? [];
+            $nestedSelections = $this->relationshipHook?->processQueries($relationships, [...$queries, ...$parsed->relationships]) ?? [];
         }
 
         // Convert relationship filter queries to SQL-level subqueries
@@ -4465,7 +4469,7 @@ trait Documents
         $hook = $this->relationshipHook;
         if ($hook !== null && ! $hook->isInBatchPopulation() && $hook->isEnabled() && ! empty($relationships) && (empty($selects) || ! empty($nestedSelections))) {
             if (count($results) > 0) {
-                $results = $this->silent(fn () => $hook->populateDocuments($results, $collection, $hook->getFetchDepth(), $nestedSelections));
+                $results = $this->silent(fn () => $hook->populateDocuments($results, $collection, $hook->getFetchDepth(), $nestedSelections, ! empty($selects)));
             }
         }
 
@@ -5236,6 +5240,77 @@ trait Documents
                 );
             }
         }
+    }
+
+    /**
+     * A relationship query's selects name attributes of the collection it relates to, which the documents validator
+     * does not know, so they are checked against that collection.
+     *
+     * @param  array<Query>  $queries
+     *
+     * @throws QueryException
+     */
+    private function validateRelationshipSelects(Collection $collection, array $queries): void
+    {
+        $relationshipQueries = \array_filter($queries, static fn (Query $query): bool => $query->getMethod() === Method::Relationship);
+        if ($relationshipQueries === []) {
+            return;
+        }
+
+        $relatedCollections = [];
+        foreach (self::relationshipAttributes($collection) as $attribute) {
+            $relatedCollections[$attribute->key] = $attribute->relationship?->relatedCollection;
+        }
+
+        foreach ($relationshipQueries as $query) {
+            $relatedCollectionId = $relatedCollections[$query->getAttribute()] ?? null;
+            $selects = \array_filter($query->getValues(), static fn (mixed $inner): bool => $inner instanceof Query && $inner->getMethod() === Method::Select);
+
+            if ($relatedCollectionId === null || $selects === []) {
+                continue;
+            }
+
+            $related = $this->silent(fn () => $this->getCollection($relatedCollectionId));
+            $validator = new SelectValidator(
+                [...$related->attributes(), ...DocumentsValidator::internalAttributes()],
+                $this->adapter->supports(Capability::DefinedAttributes),
+                $this->profile()->sharedTables,
+            );
+
+            foreach ($selects as $select) {
+                if (! $validator->isValid($select)) {
+                    throw new QueryException('Invalid query: '.$validator->getDescription());
+                }
+            }
+        }
+    }
+
+    /**
+     * A bulk write changes the documents its filters match, which a relationship query does not narrow, so it is
+     * refused there when queries are validated, and ignored when not.
+     *
+     * @param  array<Query>  $queries
+     * @return array<Query>
+     *
+     * @throws QueryException
+     */
+    private function withoutRelationshipQueries(array $queries): array
+    {
+        $kept = [];
+
+        foreach ($queries as $query) {
+            if ($query->getMethod() !== Method::Relationship) {
+                $kept[] = $query;
+
+                continue;
+            }
+
+            if ($this->validation()->get()) {
+                throw new QueryException('Invalid query: Invalid query method: '.Method::Relationship->value);
+            }
+        }
+
+        return $kept;
     }
 
     /**

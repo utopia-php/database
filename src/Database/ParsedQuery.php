@@ -24,6 +24,7 @@ final readonly class ParsedQuery extends BaseParsedQuery
      * @param  list<array{attribute: string, interval: string}>  $timeBuckets
      * @param  list<string>  $orderAttributes
      * @param  list<OrderDirection>  $orderTypes
+     * @param  list<Query>  $relationships
      */
     public function __construct(
         #[\Override] public array $filters = [],
@@ -41,6 +42,7 @@ final readonly class ParsedQuery extends BaseParsedQuery
         #[\Override] public array $timeBuckets = [],
         public array $orderAttributes = [],
         public array $orderTypes = [],
+        public array $relationships = [],
     ) {
     }
 

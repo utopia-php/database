@@ -210,7 +210,7 @@ class Query extends BaseQuery
      * different parameter values produce the same fingerprint, which is
      * useful for pattern-based counting and slow-query grouping.
      *
-     * Logical queries (`and`, `or`, `elemMatch`) contribute their inner
+     * Logical queries (`and`, `or`, `elemMatch`) and relationship queries contribute their inner
      * structure to the hash via `Query::shape()` — two `and(...)` queries
      * with different child shapes produce different fingerprints.
      *
@@ -245,8 +245,8 @@ class Query extends BaseQuery
     /**
      * Canonical shape string for this Query — values excluded.
      *
-     * Non-logical queries produce `method:attribute`. Logical queries
-     * (`and`, `or`, `elemMatch`) produce `method:attribute(child1|child2|…)`
+     * Non-logical queries produce `method:attribute`. Logical and relationship queries
+     * (`and`, `or`, `elemMatch`, `relationship`) produce `method:attribute(child1|child2|…)`
      * with children sorted so child order does not affect the shape.
      *
      * Implemented iteratively: walks the tree into a preorder list via a
@@ -272,7 +272,7 @@ class Query extends BaseQuery
                 throw new QueryException('Query is too deeply nested to fingerprint: exceeded '.self::SHAPE_MAX_NODES.' nodes, which means a cycle or a child shared across too many parents');
             }
 
-            if (!\in_array($node->method, self::LOGICAL_TYPES, true)) {
+            if (! self::shapesChildren($node->method)) {
                 continue;
             }
             foreach ($node->values as $child) {
@@ -287,7 +287,7 @@ class Query extends BaseQuery
         foreach (\array_reverse($nodes) as $node) {
             $id = \spl_object_id($node);
 
-            if (!\in_array($node->method, self::LOGICAL_TYPES, true)) {
+            if (! self::shapesChildren($node->method)) {
                 $shapes[$id] = $node->method->value . ':' . $node->attribute;
                 continue;
             }
@@ -299,11 +299,16 @@ class Query extends BaseQuery
                 }
             }
             \sort($childShapes);
-            // Attribute is empty for and/or; meaningful for elemMatch (the field being matched).
+            // Attribute is empty for and/or; meaningful for elemMatch and relationship (the field being matched).
             $shapes[$id] = $node->method->value . ':' . $node->attribute . '(' . \implode('|', $childShapes) . ')';
         }
 
         return $shapes[\spl_object_id($this)];
+    }
+
+    private static function shapesChildren(Method $method): bool
+    {
+        return $method === Method::Relationship || \in_array($method, self::LOGICAL_TYPES, true);
     }
 
     /**
@@ -346,7 +351,8 @@ class Query extends BaseQuery
     }
 
     /**
-     * Group the queries by kind, with their orders in the order the queries give them.
+     * Group the queries by kind, with their orders in the order the queries give them and the relationship queries
+     * kept apart from the filters.
      *
      * @param  array<mixed>  $queries  Database queries
      *
@@ -364,8 +370,15 @@ class Query extends BaseQuery
 
         $orderAttributes = [];
         $orderTypes = [];
+        $relationships = [];
         foreach ($queries as $query) {
             if (! $query instanceof BaseQuery) {
+                continue;
+            }
+
+            if ($query instanceof self && $query->getMethod() === Method::Relationship) {
+                $relationships[] = clone $query;
+
                 continue;
             }
 
@@ -385,7 +398,10 @@ class Query extends BaseQuery
         }
 
         /** @var list<Query> $filters */
-        $filters = $grouped->filters;
+        $filters = \array_values(\array_filter(
+            $grouped->filters,
+            static fn (BaseQuery $filter): bool => $filter->getMethod() !== Method::Relationship,
+        ));
         /** @var list<Query> $selections */
         $selections = $grouped->selections;
         /** @var list<Query> $aggregations */
@@ -413,6 +429,7 @@ class Query extends BaseQuery
             timeBuckets: $grouped->timeBuckets,
             orderAttributes: $orderAttributes,
             orderTypes: $orderTypes,
+            relationships: $relationships,
         );
     }
 

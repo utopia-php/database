@@ -2447,7 +2447,7 @@ class Database
         foreach ($queries as $index => $query) {
             $method = $query->getMethod();
 
-            if ($method->isAggregate() || $method === Method::Select) {
+            if ($method->isAggregate() || $method === Method::Select || $method === Method::Relationship) {
                 continue;
             }
 
@@ -2468,10 +2468,15 @@ class Database
                 continue;
             }
 
-            $queries[$index] = $this->convertQueriesWithMap([$query], $attributesById, $isNestedQueryAttributeSupported)[0];
+            $converted = $this->convertQueriesWithMap([$query], $attributesById, $isNestedQueryAttributeSupported);
+            if ($converted === []) {
+                unset($queries[$index]);
+            } else {
+                $queries[$index] = $converted[0];
+            }
         }
 
-        return $queries;
+        return \array_values($queries);
     }
 
     /**
@@ -2539,20 +2544,29 @@ class Database
      */
     private function convertQueriesWithMap(array $queries, array $attributesById, bool $isNestedQueryAttributeSupported): array
     {
-        foreach ($queries as $index => $query) {
+        $converted = [];
+
+        foreach ($queries as $query) {
+            // A relationship query shapes related documents and matches no row, so it is dropped from the
+            // conditions, along with a logical query it leaves empty. Only an unvalidated read gets here with one.
+            if ($query->getMethod() === Method::Relationship) {
+                continue;
+            }
+
             if ($query->isNested()) {
                 /** @var array<Query> $nestedQueries */
                 $nestedQueries = $query->getValues();
                 $values = $this->convertQueriesWithMap($nestedQueries, $attributesById, $isNestedQueryAttributeSupported);
+                if ($values === [] && $nestedQueries !== []) {
+                    continue;
+                }
                 $query->setValues($values);
             }
 
-            $query = $this->convertQueryWithMap($query, $attributesById, $isNestedQueryAttributeSupported);
-
-            $queries[$index] = $query;
+            $converted[] = $this->convertQueryWithMap($query, $attributesById, $isNestedQueryAttributeSupported);
         }
 
-        return $queries;
+        return $converted;
     }
 
     /**

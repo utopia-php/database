@@ -5438,4 +5438,1383 @@ trait RelationshipTests
             Permission::delete(Role::any()),
         ];
     }
+
+    private static int $nestedSliceAuthorReads = 0;
+
+    /**
+     * @param  list<string>  $collections
+     */
+    private function dropNestedQueryCollections(Database $database, array $collections): void
+    {
+        foreach ($collections as $collection) {
+            if ($database->collectionExists($collection)) {
+                $database->deleteCollection($collection);
+            }
+        }
+    }
+
+    /**
+     * @param  array<Document>  $documents
+     * @return list<string>
+     */
+    private function nestedQueryIds(array $documents): array
+    {
+        return \array_values(\array_map(fn (Document $document): string => $document->getId(), $documents));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function nestedQueryRelatedIds(Document $document, string $key): array
+    {
+        $this->assertIsArray($document->getAttribute($key), "{$key} must be populated as a list");
+
+        return $this->nestedQueryIds($document->getDocuments($key));
+    }
+
+    private function createNestedSkeletonFixture(Database $database): void
+    {
+        $this->deleteNestedSkeletonFixture($database);
+
+        $permissions = $this->relationshipCoveragePermissions();
+
+        $database->createCollection(Collection::create(id: 'nsk_authors', attributes: [Attribute::string(key: 'name', required: true)], permissions: $permissions, documentSecurity: false));
+        $database->createCollection(Collection::create(id: 'nsk_tags', attributes: [Attribute::string(key: 'name', required: true)], permissions: $permissions, documentSecurity: false));
+        $database->createCollection(Collection::create(id: 'nsk_comments', attributes: [Attribute::string(key: 'text', required: true), Attribute::boolean(key: 'approved')], permissions: $permissions, documentSecurity: false));
+        $database->createCollection(Collection::create(id: 'nsk_posts', attributes: [Attribute::string(key: 'title', required: true), Attribute::integer(key: 'views', required: true)], permissions: $permissions, documentSecurity: false));
+
+        $database->createRelationship('nsk_comments', Relationship::manyToOne(relatedCollection: 'nsk_authors', key: 'author', twoWay: true, twoWayKey: 'comments'));
+        $database->createRelationship('nsk_posts', Relationship::oneToMany(relatedCollection: 'nsk_comments', key: 'comments', twoWay: true, twoWayKey: 'post'));
+        $database->createRelationship('nsk_posts', Relationship::manyToMany(relatedCollection: 'nsk_tags', key: 'tags', twoWay: true, twoWayKey: 'posts'));
+
+        foreach (['nsk_author1' => 'Alice', 'nsk_author2' => 'Bob'] as $id => $name) {
+            $database->createDocument('nsk_authors', new Document(['$id' => $id, '$permissions' => $permissions, 'name' => $name]));
+        }
+
+        foreach (['nsk_tag1' => 'php', 'nsk_tag2' => 'database'] as $id => $name) {
+            $database->createDocument('nsk_tags', new Document(['$id' => $id, '$permissions' => $permissions, 'name' => $name]));
+        }
+
+        $comments = [
+            ['nsk_comment1', 'First', true, 'nsk_author1'],
+            ['nsk_comment2', 'Second', false, 'nsk_author2'],
+            ['nsk_comment3', 'Third', true, 'nsk_author1'],
+        ];
+
+        foreach ($comments as [$id, $text, $approved, $author]) {
+            $database->createDocument('nsk_comments', new Document([
+                '$id' => $id,
+                '$permissions' => $permissions,
+                'text' => $text,
+                'approved' => $approved,
+                'author' => $author,
+            ]));
+        }
+
+        $database->createDocument('nsk_posts', new Document([
+            '$id' => 'nsk_post1',
+            '$permissions' => $permissions,
+            'title' => 'Post One',
+            'views' => 10,
+            'comments' => ['nsk_comment1', 'nsk_comment2'],
+            'tags' => ['nsk_tag1', 'nsk_tag2'],
+        ]));
+
+        $database->createDocument('nsk_posts', new Document([
+            '$id' => 'nsk_post2',
+            '$permissions' => $permissions,
+            'title' => 'Post Two',
+            'views' => 20,
+            'comments' => ['nsk_comment3'],
+            'tags' => ['nsk_tag2'],
+        ]));
+    }
+
+    private function deleteNestedSkeletonFixture(Database $database): void
+    {
+        $this->dropNestedQueryCollections($database, ['nsk_posts', 'nsk_comments', 'nsk_tags', 'nsk_authors']);
+    }
+
+    public function testNestedSkeletonSiblingRelationshipStillPopulated(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->createNestedSkeletonFixture($database);
+
+        try {
+            $posts = $database->find('nsk_posts', [
+                Query::relationship('comments', [Query::orderAsc('$id')]),
+                Query::orderAsc('$id'),
+            ]);
+
+            $this->assertCount(2, $posts);
+            $this->assertSame(['nsk_comment1', 'nsk_comment2'], $this->nestedQueryRelatedIds($posts[0], 'comments'));
+            $this->assertSame(['nsk_tag1', 'nsk_tag2'], $this->nestedQueryRelatedIds($posts[0], 'tags'));
+            $this->assertSame(['nsk_comment3'], $this->nestedQueryRelatedIds($posts[1], 'comments'));
+            $this->assertSame(['nsk_tag2'], $this->nestedQueryRelatedIds($posts[1], 'tags'));
+        } finally {
+            $this->deleteNestedSkeletonFixture($database);
+        }
+    }
+
+    public function testNestedSkeletonSumIgnoresNested(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->createNestedSkeletonFixture($database);
+
+        try {
+            $this->assertSame(30, $database->sum('nsk_posts', 'views'));
+            $this->assertSame(30, $database->sum('nsk_posts', 'views', [
+                Query::relationship('comments', [Query::limit(1)]),
+            ]));
+        } finally {
+            $this->deleteNestedSkeletonFixture($database);
+        }
+    }
+
+    public function testNestedSkeletonCountIgnoresNested(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->createNestedSkeletonFixture($database);
+
+        try {
+            $this->assertSame(2, $database->count('nsk_posts'));
+            $this->assertSame(2, $database->count('nsk_posts', [
+                Query::relationship('comments', [Query::limit(1)]),
+            ]));
+        } finally {
+            $this->deleteNestedSkeletonFixture($database);
+        }
+    }
+
+    public function testNestedSkeletonInnerQueriesNotMutatedAcrossFinds(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->createNestedSkeletonFixture($database);
+
+        try {
+            $nested = Query::relationship('comments', [Query::select(['author.name'])]);
+
+            $first = $database->find('nsk_posts', [$nested, Query::orderAsc('$id')]);
+            $second = $database->find('nsk_posts', [$nested, Query::orderAsc('$id')]);
+            $database->skipValidation(fn () => $database->getDocument('nsk_posts', 'nsk_post1', [$nested]));
+
+            $firstAuthor = $first[0]->getDocuments('comments')[0]->getDocument('author');
+            $secondAuthor = $second[0]->getDocuments('comments')[0]->getDocument('author');
+
+            $this->assertFalse($firstAuthor->isEmpty());
+            $this->assertSame($firstAuthor->getArrayCopy(), $secondAuthor->getArrayCopy());
+        } finally {
+            $this->deleteNestedSkeletonFixture($database);
+        }
+    }
+
+    public function testNestedSkeletonContract(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->createNestedSkeletonFixture($database);
+
+        try {
+            $found = $database->findOne('nsk_posts', [
+                Query::relationship('comments', [Query::limit(1)]),
+                Query::orderAsc('$id'),
+            ]);
+            $this->assertSame('nsk_post1', $found->getId());
+
+            $withoutNested = [];
+            foreach ($database->cursor('nsk_posts', [Query::orderAsc('$id')]) as $post) {
+                $withoutNested[] = $post->getId();
+            }
+
+            $withNested = [];
+            foreach ($database->cursor('nsk_posts', [Query::relationship('comments', [Query::orderAsc('$id')]), Query::orderAsc('$id')]) as $post) {
+                $withNested[] = $post->getId();
+            }
+
+            $this->assertSame(['nsk_post1', 'nsk_post2'], $withoutNested);
+            $this->assertSame($withoutNested, $withNested);
+
+            try {
+                $database->updateDocuments('nsk_posts', new Document(['views' => 1]), [
+                    Query::relationship('comments', [Query::limit(1)]),
+                ]);
+                $this->fail('updateDocuments accepted a relationship query');
+            } catch (QueryException $exception) {
+                $this->assertStringContainsString('Invalid query method: relationship', $exception->getMessage());
+            }
+
+            try {
+                $database->deleteDocuments('nsk_posts', [
+                    Query::relationship('comments', [Query::limit(1)]),
+                ]);
+                $this->fail('deleteDocuments accepted a relationship query');
+            } catch (QueryException $exception) {
+                $this->assertStringContainsString('Invalid query method: relationship', $exception->getMessage());
+            }
+
+            try {
+                $database->getDocument('nsk_posts', 'nsk_post1', [
+                    Query::relationship('comments', [Query::limit(1)]),
+                ]);
+                $this->fail('getDocument accepted a relationship query');
+            } catch (QueryException $exception) {
+                $this->assertStringContainsString('Invalid query method: relationship', $exception->getMessage());
+            }
+        } finally {
+            $this->deleteNestedSkeletonFixture($database);
+        }
+    }
+
+    public function testNestedSkeletonInvalidInnerFilterRejectedWhenParentsMatch(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) || ! $database->getAdapter()->supports(Capability::DefinedAttributes)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->createNestedSkeletonFixture($database);
+
+        try {
+            $database->find('nsk_posts', [
+                Query::relationship('comments', [Query::equal('doesNotExist', ['x'])]),
+            ]);
+            $this->fail('An invalid inner filter was accepted');
+        } catch (QueryException $exception) {
+            $this->assertStringContainsString('doesNotExist', $exception->getMessage());
+        } finally {
+            $this->deleteNestedSkeletonFixture($database);
+        }
+    }
+
+    public function testNestedSkeletonInvalidInnerSelectRejectedWhenParentsMatch(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) || ! $database->getAdapter()->supports(Capability::DefinedAttributes)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->createNestedSkeletonFixture($database);
+
+        try {
+            $database->find('nsk_posts', [
+                Query::relationship('comments', [Query::select(['doesNotExist'])]),
+            ]);
+            $this->fail('An invalid inner select was accepted');
+        } catch (QueryException $exception) {
+            $this->assertStringContainsString('doesNotExist', $exception->getMessage());
+        } finally {
+            $this->deleteNestedSkeletonFixture($database);
+        }
+    }
+
+    public function testNestedSkeletonInvalidInnerSelectRejectedWhenNoParentsMatch(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) || ! $database->getAdapter()->supports(Capability::DefinedAttributes)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->createNestedSkeletonFixture($database);
+
+        try {
+            $database->find('nsk_posts', [
+                Query::equal('title', ['No Such Post']),
+                Query::relationship('comments', [Query::select(['doesNotExist'])]),
+            ]);
+            $this->fail('An invalid inner select was accepted because no parents matched');
+        } catch (QueryException $exception) {
+            $this->assertStringContainsString('doesNotExist', $exception->getMessage());
+        } finally {
+            $this->deleteNestedSkeletonFixture($database);
+        }
+    }
+
+    public function testNestedSkeletonInvalidInnerFilterWhenNoParentsMatch(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->createNestedSkeletonFixture($database);
+
+        try {
+            $posts = $database->find('nsk_posts', [
+                Query::equal('title', ['No Such Post']),
+                Query::relationship('comments', [Query::equal('doesNotExist', ['x'])]),
+            ]);
+
+            $this->assertSame([], $posts);
+        } finally {
+            $this->deleteNestedSkeletonFixture($database);
+        }
+    }
+
+    public function testNestedFilterOneToManyConstrainsChildren(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $permissions = $this->relationshipCoveragePermissions();
+        $this->dropNestedQueryCollections($database, ['nf_posts', 'nf_comments']);
+
+        $database->createCollection(Collection::create(id: 'nf_posts', attributes: [Attribute::string(key: 'title', required: true)], permissions: $permissions, documentSecurity: false));
+        $database->createCollection(Collection::create(id: 'nf_comments', attributes: [Attribute::string(key: 'text', required: true), Attribute::boolean(key: 'approved', required: true)], permissions: $permissions, documentSecurity: false));
+        $database->createRelationship('nf_posts', Relationship::oneToMany(relatedCollection: 'nf_comments', key: 'comments', twoWay: true, twoWayKey: 'post'));
+
+        try {
+            foreach (['nf_post_a' => 'A', 'nf_post_b' => 'B', 'nf_post_c' => 'C'] as $id => $title) {
+                $database->createDocument('nf_posts', new Document(['$id' => $id, '$permissions' => $permissions, 'title' => $title]));
+            }
+
+            $comments = [
+                ['nf_ca1', true, 'nf_post_a'],
+                ['nf_ca2', true, 'nf_post_a'],
+                ['nf_ca3', false, 'nf_post_a'],
+                ['nf_ca4', false, 'nf_post_a'],
+                ['nf_cb1', true, 'nf_post_b'],
+                ['nf_cb2', false, 'nf_post_b'],
+                ['nf_cb3', false, 'nf_post_b'],
+                ['nf_cb4', false, 'nf_post_b'],
+                ['nf_cc1', false, 'nf_post_c'],
+                ['nf_cc2', false, 'nf_post_c'],
+            ];
+
+            foreach ($comments as [$id, $approved, $post]) {
+                $database->createDocument('nf_comments', new Document([
+                    '$id' => $id,
+                    '$permissions' => $permissions,
+                    'text' => $id,
+                    'approved' => $approved,
+                    'post' => $post,
+                ]));
+            }
+
+            $posts = $database->find('nf_posts', [
+                Query::equal('comments.approved', [true]),
+                Query::orderAsc('$id'),
+            ]);
+
+            $this->assertSame(['nf_post_a', 'nf_post_b'], $this->nestedQueryIds($posts));
+            $this->assertSame(['nf_ca1', 'nf_ca2'], $this->nestedQueryRelatedIds($posts[0], 'comments'));
+            $this->assertSame(['nf_cb1'], $this->nestedQueryRelatedIds($posts[1], 'comments'));
+        } finally {
+            $this->dropNestedQueryCollections($database, ['nf_posts', 'nf_comments']);
+        }
+    }
+
+    public function testNestedFilterManyToOneConstrainsChild(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $permissions = $this->relationshipCoveragePermissions();
+        $this->dropNestedQueryCollections($database, ['nf_notes', 'nf_authors']);
+
+        $database->createCollection(Collection::create(id: 'nf_authors', attributes: [Attribute::string(key: 'name', required: true)], permissions: $permissions, documentSecurity: false));
+        $database->createCollection(Collection::create(id: 'nf_notes', attributes: [Attribute::string(key: 'body', required: true)], permissions: $permissions, documentSecurity: false));
+        $database->createRelationship('nf_notes', Relationship::manyToOne(relatedCollection: 'nf_authors', key: 'author', twoWay: true, twoWayKey: 'notes'));
+
+        try {
+            foreach (['nf_alice' => 'Alice', 'nf_bob' => 'Bob'] as $id => $name) {
+                $database->createDocument('nf_authors', new Document(['$id' => $id, '$permissions' => $permissions, 'name' => $name]));
+            }
+
+            foreach (['nf_note1' => 'nf_alice', 'nf_note2' => 'nf_bob', 'nf_note3' => 'nf_alice'] as $id => $author) {
+                $database->createDocument('nf_notes', new Document(['$id' => $id, '$permissions' => $permissions, 'body' => $id, 'author' => $author]));
+            }
+
+            $notes = $database->find('nf_notes', [
+                Query::equal('author.name', ['Alice']),
+                Query::orderAsc('$id'),
+            ]);
+
+            $this->assertSame(['nf_note1', 'nf_note3'], $this->nestedQueryIds($notes));
+
+            foreach ($notes as $note) {
+                $author = $note->getAttribute('author');
+                $this->assertInstanceOf(Document::class, $author);
+                $this->assertSame('nf_alice', $author->getId());
+                $this->assertSame('Alice', $author->getAttribute('name'));
+            }
+
+            $authors = $database->find('nf_authors', [
+                Query::equal('notes.body', ['nf_note1']),
+            ]);
+
+            $this->assertSame(['nf_alice'], $this->nestedQueryIds($authors));
+            $this->assertSame(['nf_note1'], $this->nestedQueryRelatedIds($authors[0], 'notes'));
+        } finally {
+            $this->dropNestedQueryCollections($database, ['nf_notes', 'nf_authors']);
+        }
+    }
+
+    public function testNestedFilterManyToManyConstrainsChildren(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $permissions = $this->relationshipCoveragePermissions();
+        $this->dropNestedQueryCollections($database, ['nf_articles', 'nf_tags']);
+
+        $database->createCollection(Collection::create(id: 'nf_tags', attributes: [Attribute::string(key: 'color', required: true)], permissions: $permissions, documentSecurity: false));
+        $database->createCollection(Collection::create(id: 'nf_articles', attributes: [Attribute::string(key: 'title', required: true)], permissions: $permissions, documentSecurity: false));
+        $database->createRelationship('nf_articles', Relationship::manyToMany(relatedCollection: 'nf_tags', key: 'tags', twoWay: true, twoWayKey: 'articles'));
+
+        try {
+            foreach (['nf_tag_red1' => 'red', 'nf_tag_red2' => 'red', 'nf_tag_blue1' => 'blue'] as $id => $color) {
+                $database->createDocument('nf_tags', new Document(['$id' => $id, '$permissions' => $permissions, 'color' => $color]));
+            }
+
+            $articles = [
+                ['nf_art1', ['nf_tag_red1', 'nf_tag_blue1']],
+                ['nf_art2', ['nf_tag_blue1']],
+                ['nf_art3', ['nf_tag_red1', 'nf_tag_red2']],
+            ];
+
+            foreach ($articles as [$id, $tags]) {
+                $database->createDocument('nf_articles', new Document(['$id' => $id, '$permissions' => $permissions, 'title' => $id, 'tags' => $tags]));
+            }
+
+            $found = $database->find('nf_articles', [
+                Query::equal('tags.color', ['red']),
+                Query::orderAsc('$id'),
+            ]);
+
+            $this->assertSame(['nf_art1', 'nf_art3'], $this->nestedQueryIds($found));
+            $this->assertSame(['nf_tag_red1'], $this->nestedQueryRelatedIds($found[0], 'tags'));
+            $this->assertSame(['nf_tag_red1', 'nf_tag_red2'], $this->nestedQueryRelatedIds($found[1], 'tags'));
+        } finally {
+            $this->dropNestedQueryCollections($database, ['nf_articles', 'nf_tags']);
+        }
+    }
+
+    public function testNestedFilterOneToOneConstrainsChild(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $permissions = $this->relationshipCoveragePermissions();
+        $this->dropNestedQueryCollections($database, ['nf_users', 'nf_profiles']);
+
+        $database->createCollection(Collection::create(id: 'nf_profiles', attributes: [Attribute::boolean(key: 'verified', required: true)], permissions: $permissions, documentSecurity: false));
+        $database->createCollection(Collection::create(id: 'nf_users', attributes: [Attribute::string(key: 'name', required: true)], permissions: $permissions, documentSecurity: false));
+        $database->createRelationship('nf_users', Relationship::oneToOne(relatedCollection: 'nf_profiles', key: 'profile', twoWay: true, twoWayKey: 'user'));
+
+        try {
+            foreach (['nf_profile1' => true, 'nf_profile2' => false] as $id => $verified) {
+                $database->createDocument('nf_profiles', new Document(['$id' => $id, '$permissions' => $permissions, 'verified' => $verified]));
+            }
+
+            foreach (['nf_user1' => 'nf_profile1', 'nf_user2' => 'nf_profile2'] as $id => $profile) {
+                $database->createDocument('nf_users', new Document(['$id' => $id, '$permissions' => $permissions, 'name' => $id, 'profile' => $profile]));
+            }
+
+            $users = $database->find('nf_users', [
+                Query::equal('profile.verified', [true]),
+                Query::orderAsc('$id'),
+            ]);
+
+            $this->assertSame(['nf_user1'], $this->nestedQueryIds($users));
+
+            $profile = $users[0]->getAttribute('profile');
+            $this->assertInstanceOf(Document::class, $profile);
+            $this->assertSame('nf_profile1', $profile->getId());
+            $this->assertTrue($profile->getAttribute('verified'));
+        } finally {
+            $this->dropNestedQueryCollections($database, ['nf_users', 'nf_profiles']);
+        }
+    }
+
+    public function testNestedFilterDepthTwo(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $permissions = $this->relationshipCoveragePermissions();
+        $collections = ['nf_dt_posts', 'nf_dt_comments', 'nf_dt_authors'];
+        $this->dropNestedQueryCollections($database, $collections);
+
+        $database->createCollection(Collection::create(id: 'nf_dt_authors', attributes: [Attribute::string(key: 'name', required: true)], permissions: $permissions, documentSecurity: false));
+        $database->createCollection(Collection::create(id: 'nf_dt_comments', attributes: [Attribute::string(key: 'text', required: true)], permissions: $permissions, documentSecurity: false));
+        $database->createCollection(Collection::create(id: 'nf_dt_posts', attributes: [Attribute::string(key: 'title', required: true)], permissions: $permissions, documentSecurity: false));
+        $database->createRelationship('nf_dt_comments', Relationship::manyToOne(relatedCollection: 'nf_dt_authors', key: 'author', twoWay: true, twoWayKey: 'comments'));
+        $database->createRelationship('nf_dt_posts', Relationship::oneToMany(relatedCollection: 'nf_dt_comments', key: 'comments', twoWay: true, twoWayKey: 'post'));
+
+        try {
+            foreach (['nf_dt_alice' => 'Alice', 'nf_dt_bob' => 'Bob'] as $id => $name) {
+                $database->createDocument('nf_dt_authors', new Document(['$id' => $id, '$permissions' => $permissions, 'name' => $name]));
+            }
+
+            foreach (['nf_dt_post1', 'nf_dt_post2', 'nf_dt_post3'] as $id) {
+                $database->createDocument('nf_dt_posts', new Document(['$id' => $id, '$permissions' => $permissions, 'title' => $id]));
+            }
+
+            $comments = [
+                ['nf_dt_c1', 'nf_dt_post1', 'nf_dt_alice'],
+                ['nf_dt_c2', 'nf_dt_post1', 'nf_dt_bob'],
+                ['nf_dt_c3', 'nf_dt_post2', 'nf_dt_bob'],
+                ['nf_dt_c4', 'nf_dt_post3', 'nf_dt_alice'],
+            ];
+
+            foreach ($comments as [$id, $post, $author]) {
+                $database->createDocument('nf_dt_comments', new Document([
+                    '$id' => $id,
+                    '$permissions' => $permissions,
+                    'text' => $id,
+                    'post' => $post,
+                    'author' => $author,
+                ]));
+            }
+
+            $posts = $database->find('nf_dt_posts', [
+                Query::equal('comments.author.name', ['Alice']),
+                Query::orderAsc('$id'),
+            ]);
+
+            $this->assertSame(['nf_dt_post1', 'nf_dt_post3'], $this->nestedQueryIds($posts));
+            $this->assertSame(['nf_dt_c1'], $this->nestedQueryRelatedIds($posts[0], 'comments'));
+            $this->assertSame(['nf_dt_c4'], $this->nestedQueryRelatedIds($posts[1], 'comments'));
+
+            foreach ($posts as $post) {
+                foreach ($post->getDocuments('comments') as $comment) {
+                    $author = $comment->getAttribute('author');
+                    $this->assertInstanceOf(Document::class, $author);
+                    $this->assertSame('nf_dt_alice', $author->getId());
+                    $this->assertSame('Alice', $author->getAttribute('name'));
+                }
+            }
+        } finally {
+            $this->dropNestedQueryCollections($database, $collections);
+        }
+    }
+
+    public function testNestedFilterSiblingRelationshipStillPopulated(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $permissions = $this->relationshipCoveragePermissions();
+        $collections = ['nf_blogs', 'nf_blog_tags', 'nf_blog_comments'];
+        $this->dropNestedQueryCollections($database, $collections);
+
+        $database->createCollection(Collection::create(id: 'nf_blog_comments', attributes: [Attribute::boolean(key: 'approved', required: true)], permissions: $permissions, documentSecurity: false));
+        $database->createCollection(Collection::create(id: 'nf_blog_tags', attributes: [Attribute::string(key: 'name', required: true)], permissions: $permissions, documentSecurity: false));
+        $database->createCollection(Collection::create(id: 'nf_blogs', attributes: [Attribute::string(key: 'title', required: true)], permissions: $permissions, documentSecurity: false));
+        $database->createRelationship('nf_blogs', Relationship::oneToMany(relatedCollection: 'nf_blog_comments', key: 'comments', twoWay: true, twoWayKey: 'blog'));
+        $database->createRelationship('nf_blogs', Relationship::manyToMany(relatedCollection: 'nf_blog_tags', key: 'tags', twoWay: true, twoWayKey: 'blogs'));
+
+        try {
+            foreach (['nf_btag1' => 'php', 'nf_btag2' => 'database'] as $id => $name) {
+                $database->createDocument('nf_blog_tags', new Document(['$id' => $id, '$permissions' => $permissions, 'name' => $name]));
+            }
+
+            $database->createDocument('nf_blogs', new Document([
+                '$id' => 'nf_blog1',
+                '$permissions' => $permissions,
+                'title' => 'Blog One',
+                'tags' => ['nf_btag1', 'nf_btag2'],
+            ]));
+
+            foreach (['nf_bc1' => true, 'nf_bc2' => false] as $id => $approved) {
+                $database->createDocument('nf_blog_comments', new Document(['$id' => $id, '$permissions' => $permissions, 'approved' => $approved, 'blog' => 'nf_blog1']));
+            }
+
+            $blogs = $database->find('nf_blogs', [
+                Query::equal('comments.approved', [true]),
+            ]);
+
+            $this->assertSame(['nf_blog1'], $this->nestedQueryIds($blogs));
+            $this->assertSame(['nf_bc1'], $this->nestedQueryRelatedIds($blogs[0], 'comments'));
+            $this->assertSame(['nf_btag1', 'nf_btag2'], $this->nestedQueryRelatedIds($blogs[0], 'tags'));
+        } finally {
+            $this->dropNestedQueryCollections($database, $collections);
+        }
+    }
+
+    public function testNestedFilterGetDocumentRejectsDottedFilter(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $permissions = $this->relationshipCoveragePermissions();
+        $this->dropNestedQueryCollections($database, ['nf_docs', 'nf_doc_comments']);
+
+        $database->createCollection(Collection::create(id: 'nf_doc_comments', attributes: [Attribute::boolean(key: 'approved', required: true)], permissions: $permissions, documentSecurity: false));
+        $database->createCollection(Collection::create(id: 'nf_docs', attributes: [Attribute::string(key: 'title', required: true)], permissions: $permissions, documentSecurity: false));
+        $database->createRelationship('nf_docs', Relationship::oneToMany(relatedCollection: 'nf_doc_comments', key: 'comments', twoWay: true, twoWayKey: 'doc'));
+
+        try {
+            $database->createDocument('nf_docs', new Document(['$id' => 'nf_doc1', '$permissions' => $permissions, 'title' => 'Doc One']));
+
+            try {
+                $database->getDocument('nf_docs', 'nf_doc1', [
+                    Query::equal('comments.approved', [true]),
+                ]);
+                $this->fail('getDocument accepted a dotted filter');
+            } catch (QueryException $exception) {
+                $this->assertStringContainsString('Invalid query method', $exception->getMessage());
+            }
+        } finally {
+            $this->dropNestedQueryCollections($database, ['nf_docs', 'nf_doc_comments']);
+        }
+    }
+
+    private function createNestedSliceFixture(Database $database): void
+    {
+        $this->deleteNestedSliceFixture($database);
+
+        $permissions = $this->relationshipCoveragePermissions();
+
+        $database->addFilter(
+            'nsSliceAuthorSpy',
+            static fn (mixed $value): mixed => $value,
+            static function (mixed $value): mixed {
+                self::$nestedSliceAuthorReads++;
+
+                return $value;
+            },
+        );
+
+        $database->createCollection(Collection::create(id: 'ns_authors', attributes: [Attribute::string(key: 'name', required: true, filters: ['nsSliceAuthorSpy'])], permissions: $permissions, documentSecurity: false));
+        $database->createCollection(Collection::create(id: 'ns_comments', attributes: [Attribute::string(key: 'text', required: true)], permissions: $permissions, documentSecurity: false));
+        $database->createCollection(Collection::create(id: 'ns_posts', attributes: [Attribute::string(key: 'title', required: true)], permissions: $permissions, documentSecurity: false));
+        $database->createRelationship('ns_comments', Relationship::manyToOne(relatedCollection: 'ns_authors', key: 'author', twoWay: true, twoWayKey: 'comments'));
+        $database->createRelationship('ns_posts', Relationship::oneToMany(relatedCollection: 'ns_comments', key: 'comments', twoWay: true, twoWayKey: 'post'));
+
+        for ($post = 1; $post <= 3; $post++) {
+            $commentIds = [];
+
+            for ($comment = 1; $comment <= 5; $comment++) {
+                $commentId = 'p'.$post.'c'.$comment;
+
+                $database->createDocument('ns_authors', new Document([
+                    '$id' => 'a_'.$commentId,
+                    '$permissions' => $permissions,
+                    'name' => 'Author '.$commentId,
+                ]));
+
+                $database->createDocument('ns_comments', new Document([
+                    '$id' => $commentId,
+                    '$permissions' => $permissions,
+                    'text' => 'Comment '.$commentId,
+                    'author' => 'a_'.$commentId,
+                ]));
+
+                $commentIds[] = $commentId;
+            }
+
+            $database->createDocument('ns_posts', new Document([
+                '$id' => 'ns_post'.$post,
+                '$permissions' => $permissions,
+                'title' => 'Post '.$post,
+                'comments' => $commentIds,
+            ]));
+        }
+    }
+
+    private function deleteNestedSliceFixture(Database $database): void
+    {
+        $this->dropNestedQueryCollections($database, ['ns_posts', 'ns_comments', 'ns_authors']);
+    }
+
+    public function testNestedSliceLimitOffsetPerParent(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->createNestedSliceFixture($database);
+
+        try {
+            $slices = [
+                'limit+offset must be applied per parent, not across the batch' => [[Query::limit(2), Query::offset(1)], ['c2', 'c3']],
+                'limit must be applied per parent' => [[Query::limit(2)], ['c1', 'c2']],
+                'offset must be applied per parent' => [[Query::offset(4)], ['c5']],
+            ];
+
+            foreach ($slices as $message => [$slice, $expected]) {
+                $posts = $database->find('ns_posts', [
+                    Query::relationship('comments', [Query::orderAsc('$id'), ...$slice]),
+                    Query::orderAsc('$id'),
+                ]);
+
+                $this->assertCount(3, $posts);
+
+                foreach ($posts as $index => $post) {
+                    $prefix = 'p'.($index + 1);
+                    $this->assertSame(
+                        \array_map(fn (string $suffix): string => $prefix.$suffix, $expected),
+                        $this->nestedQueryRelatedIds($post, 'comments'),
+                        $message,
+                    );
+                }
+            }
+        } finally {
+            $this->deleteNestedSliceFixture($database);
+        }
+    }
+
+    public function testNestedSliceCursorAfterDocument(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->createNestedSliceFixture($database);
+
+        try {
+            $posts = $database->find('ns_posts', [
+                Query::relationship('comments', [
+                    Query::orderAsc('$id'),
+                    Query::cursorAfter(new Document(['$id' => 'p1c2'])),
+                    Query::limit(2),
+                ]),
+                Query::orderAsc('$id'),
+            ]);
+
+            $this->assertCount(3, $posts);
+            $this->assertSame(['p1c3', 'p1c4'], $this->nestedQueryRelatedIds($posts[0], 'comments'));
+            $this->assertSame([], $this->nestedQueryRelatedIds($posts[1], 'comments'));
+            $this->assertSame([], $this->nestedQueryRelatedIds($posts[2], 'comments'));
+        } finally {
+            $this->deleteNestedSliceFixture($database);
+        }
+    }
+
+    public function testNestedSliceCursorAfterWithOffset(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->createNestedSliceFixture($database);
+
+        try {
+            $posts = $database->find('ns_posts', [
+                Query::relationship('comments', [
+                    Query::orderAsc('$id'),
+                    Query::cursorAfter(new Document(['$id' => 'p1c2'])),
+                    Query::offset(1),
+                    Query::limit(2),
+                ]),
+                Query::orderAsc('$id'),
+            ]);
+
+            $this->assertCount(3, $posts);
+            $this->assertSame(['p1c4', 'p1c5'], $this->nestedQueryRelatedIds($posts[0], 'comments'), 'offset must apply after the cursor, matching top-level find()');
+            $this->assertSame([], $this->nestedQueryRelatedIds($posts[1], 'comments'));
+            $this->assertSame([], $this->nestedQueryRelatedIds($posts[2], 'comments'));
+        } finally {
+            $this->deleteNestedSliceFixture($database);
+        }
+    }
+
+    public function testNestedSliceCursorBeforeOffsetPastWindowIsEmpty(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->createNestedSliceFixture($database);
+
+        try {
+            $posts = $database->find('ns_posts', [
+                Query::relationship('comments', [
+                    Query::orderAsc('$id'),
+                    Query::cursorBefore(new Document(['$id' => 'p1c4'])),
+                    Query::offset(10),
+                    Query::limit(2),
+                ]),
+                Query::orderAsc('$id'),
+            ]);
+
+            $this->assertCount(3, $posts);
+
+            foreach ($posts as $post) {
+                $this->assertSame([], $this->nestedQueryRelatedIds($post, 'comments'));
+            }
+        } finally {
+            $this->deleteNestedSliceFixture($database);
+        }
+    }
+
+    public function testNestedSliceCursorAfterParsed(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->createNestedSliceFixture($database);
+
+        try {
+            $nested = Query::relationship('comments', [
+                Query::orderAsc('$id'),
+                Query::cursorAfter(new Document(['$id' => 'p1c2'])),
+                Query::limit(2),
+            ]);
+
+            $posts = $database->find('ns_posts', [Query::parse($nested->toString()), Query::orderAsc('$id')]);
+
+            $this->assertCount(3, $posts);
+            $this->assertSame(['p1c3', 'p1c4'], $this->nestedQueryRelatedIds($posts[0], 'comments'));
+            $this->assertSame([], $this->nestedQueryRelatedIds($posts[1], 'comments'));
+            $this->assertSame([], $this->nestedQueryRelatedIds($posts[2], 'comments'));
+        } finally {
+            $this->deleteNestedSliceFixture($database);
+        }
+    }
+
+    public function testNestedSliceCursorBefore(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->createNestedSliceFixture($database);
+
+        try {
+            $posts = $database->find('ns_posts', [
+                Query::relationship('comments', [
+                    Query::orderAsc('$id'),
+                    Query::cursorBefore(new Document(['$id' => 'p1c4'])),
+                    Query::limit(2),
+                ]),
+                Query::orderAsc('$id'),
+            ]);
+
+            $this->assertCount(3, $posts);
+            $this->assertSame(['p1c2', 'p1c3'], $this->nestedQueryRelatedIds($posts[0], 'comments'));
+            $this->assertSame([], $this->nestedQueryRelatedIds($posts[1], 'comments'));
+            $this->assertSame([], $this->nestedQueryRelatedIds($posts[2], 'comments'));
+        } finally {
+            $this->deleteNestedSliceFixture($database);
+        }
+    }
+
+    public function testNestedSliceCursorNotFoundYieldsEmpty(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->createNestedSliceFixture($database);
+
+        try {
+            $posts = $database->find('ns_posts', [
+                Query::relationship('comments', [
+                    Query::orderAsc('$id'),
+                    Query::cursorAfter(new Document(['$id' => 'nsMissingComment'])),
+                ]),
+                Query::orderAsc('$id'),
+            ]);
+
+            $this->assertCount(3, $posts);
+
+            foreach ($posts as $post) {
+                $this->assertSame([], $this->nestedQueryRelatedIds($post, 'comments'));
+            }
+        } finally {
+            $this->deleteNestedSliceFixture($database);
+        }
+    }
+
+    public function testNestedSliceManyToOne(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $permissions = $this->relationshipCoveragePermissions();
+        $this->dropNestedQueryCollections($database, ['ns_m1_comments', 'ns_m1_posts']);
+
+        $database->createCollection(Collection::create(id: 'ns_m1_posts', attributes: [Attribute::string(key: 'title', required: true)], permissions: $permissions, documentSecurity: false));
+        $database->createCollection(Collection::create(id: 'ns_m1_comments', attributes: [Attribute::string(key: 'text', required: true)], permissions: $permissions, documentSecurity: false));
+        $database->createRelationship('ns_m1_comments', Relationship::manyToOne(relatedCollection: 'ns_m1_posts', key: 'post', twoWay: true, twoWayKey: 'comments'));
+
+        try {
+            for ($post = 1; $post <= 2; $post++) {
+                $database->createDocument('ns_m1_posts', new Document(['$id' => 'ns_m1_post'.$post, '$permissions' => $permissions, 'title' => 'Post '.$post]));
+
+                for ($comment = 1; $comment <= 3; $comment++) {
+                    $database->createDocument('ns_m1_comments', new Document([
+                        '$id' => 'm1p'.$post.'c'.$comment,
+                        '$permissions' => $permissions,
+                        'text' => 'Comment '.$comment,
+                        'post' => 'ns_m1_post'.$post,
+                    ]));
+                }
+            }
+
+            $posts = $database->find('ns_m1_posts', [
+                Query::relationship('comments', [Query::orderAsc('$id'), Query::limit(2)]),
+                Query::orderAsc('$id'),
+            ]);
+
+            $this->assertCount(2, $posts);
+            $this->assertSame(['m1p1c1', 'm1p1c2'], $this->nestedQueryRelatedIds($posts[0], 'comments'));
+            $this->assertSame(['m1p2c1', 'm1p2c2'], $this->nestedQueryRelatedIds($posts[1], 'comments'));
+        } finally {
+            $this->dropNestedQueryCollections($database, ['ns_m1_comments', 'ns_m1_posts']);
+        }
+    }
+
+    public function testNestedSliceManyToMany(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $permissions = $this->relationshipCoveragePermissions();
+        $this->dropNestedQueryCollections($database, ['ns_articles', 'ns_tags']);
+
+        $database->createCollection(Collection::create(id: 'ns_tags', attributes: [Attribute::string(key: 'name', required: true)], permissions: $permissions, documentSecurity: false));
+        $database->createCollection(Collection::create(id: 'ns_articles', attributes: [Attribute::string(key: 'title', required: true)], permissions: $permissions, documentSecurity: false));
+        $database->createRelationship('ns_articles', Relationship::manyToMany(relatedCollection: 'ns_tags', key: 'tags', twoWay: true, twoWayKey: 'articles'));
+
+        try {
+            foreach (['ns_tag_a', 'ns_tag_b', 'ns_tag_c'] as $tag) {
+                $database->createDocument('ns_tags', new Document(['$id' => $tag, '$permissions' => $permissions, 'name' => $tag]));
+            }
+
+            $database->createDocument('ns_articles', new Document(['$id' => 'ns_article1', '$permissions' => $permissions, 'title' => 'Article One', 'tags' => ['ns_tag_a', 'ns_tag_b']]));
+            $database->createDocument('ns_articles', new Document(['$id' => 'ns_article2', '$permissions' => $permissions, 'title' => 'Article Two', 'tags' => ['ns_tag_b', 'ns_tag_c']]));
+
+            $articles = $database->find('ns_articles', [
+                Query::relationship('tags', [Query::orderAsc('$id'), Query::limit(1)]),
+                Query::orderAsc('$id'),
+            ]);
+
+            $this->assertCount(2, $articles);
+            $this->assertSame(['ns_tag_a'], $this->nestedQueryRelatedIds($articles[0], 'tags'));
+            $this->assertSame(['ns_tag_b'], $this->nestedQueryRelatedIds($articles[1], 'tags'));
+        } finally {
+            $this->dropNestedQueryCollections($database, ['ns_articles', 'ns_tags']);
+        }
+    }
+
+    public function testNestedSliceDepthTwoFansOutFromSurvivorsOnly(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->createNestedSliceFixture($database);
+
+        try {
+            self::$nestedSliceAuthorReads = 0;
+
+            $posts = $database->find('ns_posts', [
+                Query::relationship('comments', [Query::orderAsc('$id'), Query::limit(2)]),
+                Query::orderAsc('$id'),
+            ]);
+
+            $this->assertCount(3, $posts);
+
+            $authorIds = [];
+
+            foreach ($posts as $index => $post) {
+                $prefix = 'p'.($index + 1);
+                $comments = $post->getDocuments('comments');
+                $this->assertSame([$prefix.'c1', $prefix.'c2'], $this->nestedQueryIds($comments));
+
+                foreach ($comments as $comment) {
+                    $author = $comment->getAttribute('author');
+                    $this->assertInstanceOf(Document::class, $author);
+                    $this->assertSame('a_'.$comment->getId(), $author->getId());
+                    $authorIds[] = $author->getId();
+                }
+            }
+
+            $this->assertCount(6, $authorIds);
+            $this->assertSame(6, self::$nestedSliceAuthorReads, 'depth 2 must fan out from surviving children only');
+        } finally {
+            $this->deleteNestedSliceFixture($database);
+        }
+    }
+
+    public function testNestedSliceCombinedWithSelect(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->createNestedSliceFixture($database);
+
+        try {
+            $posts = $database->find('ns_posts', [
+                Query::select(['comments.*']),
+                Query::relationship('comments', [Query::orderAsc('$id'), Query::limit(2)]),
+                Query::orderAsc('$id'),
+            ]);
+
+            $this->assertCount(3, $posts);
+
+            foreach ($posts as $index => $post) {
+                $prefix = 'p'.($index + 1);
+                $comments = $post->getDocuments('comments');
+                $this->assertSame([$prefix.'c1', $prefix.'c2'], $this->nestedQueryIds($comments));
+                $this->assertSame('Comment '.$prefix.'c1', $comments[0]->getAttribute('text'));
+            }
+        } finally {
+            $this->deleteNestedSliceFixture($database);
+        }
+    }
+
+    public function testNestedSliceSingularFilterExcludedChildIsEmptyDocument(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $permissions = $this->relationshipCoveragePermissions();
+        $this->dropNestedQueryCollections($database, ['ns_profiles', 'ns_users']);
+
+        $database->createCollection(Collection::create(id: 'ns_users', attributes: [Attribute::string(key: 'name', required: true)], permissions: $permissions, documentSecurity: false));
+        $database->createCollection(Collection::create(id: 'ns_profiles', attributes: [Attribute::string(key: 'label', required: true)], permissions: $permissions, documentSecurity: false));
+        $database->createRelationship('ns_profiles', Relationship::oneToOne(relatedCollection: 'ns_users', key: 'user', twoWay: true, twoWayKey: 'profile'));
+
+        try {
+            $database->createDocument('ns_users', new Document(['$id' => 'ns_user1', '$permissions' => $permissions, 'name' => 'somebody']));
+            $database->createDocument('ns_profiles', new Document(['$id' => 'ns_profile1', '$permissions' => $permissions, 'label' => 'Profile One', 'user' => 'ns_user1']));
+
+            $profiles = $database->find('ns_profiles', [
+                Query::relationship('user', [Query::equal('name', ['nobody'])]),
+            ]);
+
+            $this->assertSame(['ns_profile1'], $this->nestedQueryIds($profiles));
+
+            $user = $profiles[0]->getAttribute('user');
+            $this->assertInstanceOf(Document::class, $user);
+            $this->assertTrue($user->isEmpty());
+        } finally {
+            $this->dropNestedQueryCollections($database, ['ns_profiles', 'ns_users']);
+        }
+    }
+
+    public function testNestedFilterInsideNestedQuery(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $permissions = $this->relationshipCoveragePermissions();
+        $collections = ['nfi_posts', 'nfi_comments', 'nfi_authors'];
+        $this->dropNestedQueryCollections($database, $collections);
+
+        $database->createCollection(Collection::create(id: 'nfi_authors', attributes: [Attribute::string(key: 'name', required: true)], permissions: $permissions, documentSecurity: false));
+        $database->createCollection(Collection::create(id: 'nfi_comments', attributes: [Attribute::string(key: 'text', required: true)], permissions: $permissions, documentSecurity: false));
+        $database->createCollection(Collection::create(id: 'nfi_posts', attributes: [Attribute::string(key: 'title', required: true)], permissions: $permissions, documentSecurity: false));
+        $database->createRelationship('nfi_comments', Relationship::manyToOne(relatedCollection: 'nfi_authors', key: 'author', twoWay: true, twoWayKey: 'comments'));
+        $database->createRelationship('nfi_posts', Relationship::oneToMany(relatedCollection: 'nfi_comments', key: 'comments', twoWay: true, twoWayKey: 'post'));
+
+        try {
+            foreach (['nfi_alice' => 'Alice', 'nfi_bob' => 'Bob'] as $id => $name) {
+                $database->createDocument('nfi_authors', new Document(['$id' => $id, '$permissions' => $permissions, 'name' => $name]));
+            }
+
+            foreach (['nfi_post1', 'nfi_post2', 'nfi_post3'] as $id) {
+                $database->createDocument('nfi_posts', new Document(['$id' => $id, '$permissions' => $permissions, 'title' => $id]));
+            }
+
+            $comments = [
+                ['nfi_c1', 'nfi_post1', 'nfi_alice'],
+                ['nfi_c2', 'nfi_post1', 'nfi_bob'],
+                ['nfi_c3', 'nfi_post2', 'nfi_bob'],
+                ['nfi_c4', 'nfi_post3', 'nfi_alice'],
+            ];
+
+            foreach ($comments as [$id, $post, $author]) {
+                $database->createDocument('nfi_comments', new Document([
+                    '$id' => $id,
+                    '$permissions' => $permissions,
+                    'text' => $id,
+                    'post' => $post,
+                    'author' => $author,
+                ]));
+            }
+
+            $posts = $database->find('nfi_posts', [
+                Query::relationship('comments', [Query::equal('author.name', ['Alice'])]),
+                Query::orderAsc('$id'),
+            ]);
+
+            $this->assertSame(
+                ['nfi_post1', 'nfi_post2', 'nfi_post3'],
+                $this->nestedQueryIds($posts),
+                'A relationship query constrains the populated children, never the parent result set'
+            );
+            $this->assertSame(['nfi_c1'], $this->nestedQueryRelatedIds($posts[0], 'comments'));
+            $this->assertSame([], $this->nestedQueryRelatedIds($posts[1], 'comments'));
+            $this->assertSame(['nfi_c4'], $this->nestedQueryRelatedIds($posts[2], 'comments'));
+
+            foreach ($posts as $post) {
+                foreach ($post->getDocuments('comments') as $comment) {
+                    $author = $comment->getAttribute('author');
+                    $this->assertInstanceOf(Document::class, $author);
+                    $this->assertSame('nfi_alice', $author->getId());
+                }
+            }
+        } finally {
+            $this->dropNestedQueryCollections($database, $collections);
+        }
+    }
+
+    public function testNestedFilterContainsAllDoesNotEmptyChildren(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->createNestedSkeletonFixture($database);
+
+        try {
+            $posts = $database->find('nsk_posts', [
+                Query::containsAll('tags.name', ['php', 'database']),
+                Query::orderAsc('$id'),
+            ]);
+
+            $this->assertSame(['nsk_post1'], $this->nestedQueryIds($posts));
+            $this->assertSame(
+                ['nsk_tag1', 'nsk_tag2'],
+                $this->nestedQueryRelatedIds($posts[0], 'tags'),
+                'containsAll is a parent-set operator and must not require one child to match every value'
+            );
+        } finally {
+            $this->deleteNestedSkeletonFixture($database);
+        }
+    }
+
+    public function testNestedInnerSelectDoesNotPopulateUnselectedRelationships(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->createNestedSkeletonFixture($database);
+
+        try {
+            $posts = $database->find('nsk_posts', [
+                Query::relationship('comments', [Query::select(['text'])]),
+                Query::orderAsc('$id'),
+            ]);
+
+            $this->assertCount(2, $posts);
+            $this->assertSame(
+                ['nsk_tag1', 'nsk_tag2'],
+                $this->nestedQueryRelatedIds($posts[0], 'tags'),
+                'A relationship select must not put the parent into explicit-select mode'
+            );
+
+            $comments = $posts[0]->getDocuments('comments');
+            $this->assertNotEmpty($comments);
+            $this->assertSame('First', $comments[0]->getAttribute('text'));
+            $this->assertNull(
+                $comments[0]->getAttribute('author'),
+                'An inner select([text]) must not populate unselected child relationships at depth 2'
+            );
+        } finally {
+            $this->deleteNestedSkeletonFixture($database);
+        }
+    }
+
+    public function testNestedInsideOrIsIgnoredWhenValidationIsSkipped(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->createNestedSkeletonFixture($database);
+
+        try {
+            $posts = $database->skipValidation(fn (): array => $database->find('nsk_posts', [
+                Query::or([
+                    Query::relationship('comments', [Query::limit(1)]),
+                    Query::equal('title', ['Post One']),
+                ]),
+                Query::orderAsc('$id'),
+            ]));
+
+            $this->assertSame(['nsk_post1'], $this->nestedQueryIds($posts));
+        } finally {
+            $this->deleteNestedSkeletonFixture($database);
+        }
+    }
 }

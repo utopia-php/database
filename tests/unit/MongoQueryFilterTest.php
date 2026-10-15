@@ -72,6 +72,21 @@ final class MongoQueryFilterTest extends TestCase
         );
     }
 
+    public function testABulkDeleteNamesTheInternalAttributesOfItsFiltersAsFindDoes(): void
+    {
+        $filter = Query::or([Query::equal('$id', ['first']), Query::lessThan('$updatedAt', '2000-01-01T00:00:00.000+00:00')]);
+        $this->find([$filter]);
+        $this->createAdapter()->deleteDocumentsMatching(new Document(['$id' => self::COLLECTION]), ['1'], [], [$filter]);
+
+        $found = $this->calls['find'][0]['$and'] ?? null;
+
+        $deleted = $this->calls['delete'][0]['$and'] ?? null;
+
+        $this->assertNotNull($found);
+        $this->assertIsArray($deleted);
+        $this->assertSame(self::values(['$and' => $found]), self::values($deleted[1] ?? null), 'The delete must match the rows the find matched');
+    }
+
     public function testCountRethrowsDriverErrors(): void
     {
         $this->aggregateError = new MongoException('invalid pipeline', 2);
@@ -312,6 +327,27 @@ final class MongoQueryFilterTest extends TestCase
     }
 
     /**
+     * The filter with every object, such as a MongoDB\BSON\UTCDateTime, replaced by its class and value, so that two
+     * filters built separately compare by value.
+     */
+    private static function values(mixed $filter): mixed
+    {
+        if (\is_array($filter)) {
+            return \array_map(self::values(...), $filter);
+        }
+
+        if ($filter instanceof \Stringable) {
+            return [$filter::class => (string) $filter];
+        }
+
+        if (\is_object($filter)) {
+            return [$filter::class => self::values(\get_object_vars($filter))];
+        }
+
+        return $filter;
+    }
+
+    /**
      * @param  array<mixed>  $filter
      * @return list<string>
      */
@@ -428,6 +464,19 @@ final class MongoQueryFilterTest extends TestCase
             public function update(string $collection, array $where = [], array $updates = [], array $options = [], bool $multi = false): int
             {
                 ($this->record)('update', $updates);
+
+                return 0;
+            }
+
+            /**
+             * @param  array<mixed>  $filters
+             * @param  array<mixed>  $deleteOptions
+             * @param  array<mixed>  $options
+             */
+            #[\Override]
+            public function delete(string $collection, array $filters = [], int $limit = 1, array $deleteOptions = [], array $options = []): int
+            {
+                ($this->record)('delete', $filters);
 
                 return 0;
             }

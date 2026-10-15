@@ -26,6 +26,7 @@ use Utopia\Database\Permission;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
+use Utopia\Database\Relationship\Page;
 use Utopia\Database\RelationshipDeleteAction;
 use Utopia\Database\RelationshipSide;
 use Utopia\Database\RelationshipType;
@@ -36,6 +37,7 @@ use Utopia\Database\Validator\Authorization\Input;
 use Utopia\Database\Validator\Permissions as PermissionsValidator;
 use Utopia\Query\Hook;
 use Utopia\Query\Method;
+use Utopia\Query\OrderDirection;
 
 /**
  * Handles relationship side effects for document CRUD, populates nested relationships
@@ -1667,14 +1669,16 @@ class Relationships implements Attachable, Hook
 
     /**
      * @param  array<Document>  $documents
-     * @param  array<string, array<Query>>  $selects
+     * @param  array<string, array<Query>>  $selects  The queries for each relationship's related documents
+     * @param  bool|null  $hasExplicitSelects  Whether the read selects attributes, so a relationship it does not
+     *                                         select is left unpopulated; null when $selects holds only selects
      * @return array<Document>
      *
      * @internal
      */
-    public function populateDocuments(array $documents, Document $collection, int $fetchDepth, array $selects = []): array
+    public function populateDocuments(array $documents, Document $collection, int $fetchDepth, array $selects = [], ?bool $hasExplicitSelects = null): array
     {
-        return $this->inBatchPopulation->with(true, function () use ($documents, $collection, $fetchDepth, $selects): array {
+        return $this->inBatchPopulation->with(true, function () use ($documents, $collection, $fetchDepth, $selects, $hasExplicitSelects): array {
             $queue = [
                 [
                     'documents' => $documents,
@@ -1682,7 +1686,7 @@ class Relationships implements Attachable, Hook
                     'depth' => $fetchDepth,
                     'selects' => $selects,
                     'skipKey' => null,
-                    'hasExplicitSelects' => ! empty($selects),
+                    'hasExplicitSelects' => $hasExplicitSelects ?? ! empty($selects),
                 ],
             ];
 
@@ -1751,7 +1755,7 @@ class Relationships implements Attachable, Hook
 
                                 $nextSelects = $this->processQueries(self::relationships($relatedCollection), $relationshipQueries);
 
-                                $childHasExplicitSelects = $parentHasExplicitSelects;
+                                $childHasExplicitSelects = $parentHasExplicitSelects || self::selects($relationshipQueries);
 
                                 $nextQueue[] = [
                                     'documents' => $relatedDocuments,
@@ -1797,6 +1801,10 @@ class Relationships implements Attachable, Hook
     }
 
     /**
+     * The queries for each relationship's related documents: the selects that reach into it, the queries of a
+     * relationship query on it, and the filters on its attributes when the queries populate it without them, so a
+     * filter never populates a relationship the queries do not select.
+     *
      * @param  array<Attribute>  $relationships  The relationship attributes of the collection the queries read
      * @param  array<Query>  $queries
      * @return array<string, array<Query>>
@@ -1821,10 +1829,32 @@ class Relationships implements Attachable, Hook
             $relationshipsByKey[$relationship->key] = $relationship;
         }
 
+        $selects = false;
+        $constraints = [];
+
         foreach ($queries as $query) {
-            if ($query->getMethod() !== Method::Select) {
+            $method = $query->getMethod();
+
+            if ($method === Method::Relationship) {
+                $key = $query->getAttribute();
+                if (isset($relationshipsByKey[$key])) {
+                    foreach ($query->getValues() as $inner) {
+                        if ($inner instanceof Query) {
+                            $nestedSelections[$key][] = clone $inner;
+                        }
+                    }
+                }
+
                 continue;
             }
+
+            if ($method !== Method::Select) {
+                $this->constrainRelated($relationshipsByKey, $query, $constraints);
+
+                continue;
+            }
+
+            $selects = true;
 
             $values = $query->getValues();
             foreach ($values as $valueIndex => $value) {
@@ -1885,7 +1915,53 @@ class Relationships implements Attachable, Hook
             $query->setValues($finalValues);
         }
 
+        foreach ($constraints as $key => $filters) {
+            if (! $selects || isset($nestedSelections[$key])) {
+                $nestedSelections[$key] = [...$nestedSelections[$key] ?? [], ...$filters];
+            }
+        }
+
         return $nestedSelections;
+    }
+
+    /**
+     * Pass a filter on a related attribute down to the related documents, so they are filtered as the documents that
+     * hold them are. `comments.approved` keeps only the approved comments of each document it returns.
+     *
+     * containsAll matches across different related documents, so no single related document has to match it.
+     *
+     * @param  array<string, Attribute>  $relationshipsByKey
+     * @param  array<string, array<Query>>  $constraints
+     */
+    private function constrainRelated(array $relationshipsByKey, Query $query, array &$constraints): void
+    {
+        $method = $query->getMethod();
+        $attribute = $query->getAttribute();
+
+        if (
+            ! \str_contains($attribute, '.')
+            || \in_array($method, [
+                Method::Limit,
+                Method::Offset,
+                Method::CursorAfter,
+                Method::CursorBefore,
+                Method::OrderAsc,
+                Method::OrderDesc,
+                Method::OrderRandom,
+                Method::ContainsAll,
+            ], true)
+        ) {
+            return;
+        }
+
+        $nesting = \explode('.', $attribute);
+        $key = \array_shift($nesting);
+
+        if (! isset($relationshipsByKey[$key])) {
+            return;
+        }
+
+        $constraints[$key][] = new Query($method, \implode('.', $nesting), $query->getValues());
     }
 
     /**
@@ -2468,6 +2544,8 @@ class Relationships implements Attachable, Hook
             }
         }
 
+        [$page, $otherQueries] = Page::from($otherQueries);
+
         $collectionId = $relatedCollection->getId();
         $relatedDocuments = $this->readChunks(\array_map(
             fn (array $chunk): Closure => fn (): array => $this->database->find($collectionId, [
@@ -2497,13 +2575,7 @@ class Relationships implements Attachable, Hook
 
         $this->database->applySelectFiltersToDocuments($relatedDocuments, $this->selectsOfRelated($relatedCollection, $selectQueries));
 
-        foreach ($documents as $document) {
-            $parentId = $document->getId();
-            $relatedDocs = $relatedByParentId[$parentId] ?? [];
-            $document->setAttribute($key, $relatedDocs);
-        }
-
-        return $relatedDocuments;
+        return self::assignPages($documents, $key, $relatedByParentId, $page);
     }
 
     /**
@@ -2550,6 +2622,8 @@ class Relationships implements Attachable, Hook
             }
         }
 
+        [$page, $otherQueries] = Page::from($otherQueries);
+
         $collectionId = $relatedCollection->getId();
         $relatedDocuments = $this->readChunks(\array_map(
             fn (array $chunk): Closure => fn (): array => $this->database->find($collectionId, [
@@ -2579,12 +2653,7 @@ class Relationships implements Attachable, Hook
 
         $this->database->applySelectFiltersToDocuments($relatedDocuments, $this->selectsOfRelated($relatedCollection, $selectQueries));
 
-        foreach ($documents as $document) {
-            $childId = $document->getId();
-            $document->setAttribute($key, $relatedByChildId[$childId] ?? []);
-        }
-
-        return $relatedDocuments;
+        return self::assignPages($documents, $key, $relatedByChildId, $page);
     }
 
     /**
@@ -2656,8 +2725,9 @@ class Relationships implements Attachable, Hook
             }
         }
 
+        [$page, $otherQueries] = Page::from($otherQueries);
+
         $related = [];
-        $allRelatedDocs = [];
         if (! empty($relatedIds)) {
             $uniqueRelatedIds = array_unique($relatedIds);
             $relatedCollectionId = $relatedCollection->getId();
@@ -2670,32 +2740,129 @@ class Relationships implements Attachable, Hook
                 \array_chunk($uniqueRelatedIds, $this->relationQueryChunkSize()),
             ));
 
-            $allRelatedDocs = $foundRelated;
-
             $relatedById = [];
             foreach ($foundRelated as $doc) {
                 $relatedById[$doc->getId()] = $doc;
             }
 
-            $this->database->applySelectFiltersToDocuments($allRelatedDocs, $this->selectsOfRelated($relatedCollection, $selectQueries));
+            $this->database->applySelectFiltersToDocuments($foundRelated, $this->selectsOfRelated($relatedCollection, $selectQueries));
+
+            $orders = Query::groupByType($otherQueries);
+            $ordered = $orders->orderTypes !== [];
+
+            if ($ordered && ! \in_array(OrderDirection::Random, $orders->orderTypes, true)) {
+                $foundRelated = self::sortDocuments($foundRelated, ...self::withTieBreak($orders->orderAttributes, $orders->orderTypes));
+            }
 
             foreach ($junctionsByDocumentId as $documentId => $relatedDocIds) {
                 $documentRelated = [];
-                foreach ($relatedDocIds as $relatedId) {
-                    if (isset($relatedById[$relatedId])) {
-                        $documentRelated[] = $relatedById[$relatedId];
+
+                if ($ordered) {
+                    $wanted = \array_flip($relatedDocIds);
+                    foreach ($foundRelated as $doc) {
+                        if (isset($wanted[$doc->getId()])) {
+                            $documentRelated[] = $doc;
+                        }
+                    }
+                } else {
+                    foreach ($relatedDocIds as $relatedId) {
+                        if (isset($relatedById[$relatedId])) {
+                            $documentRelated[] = $relatedById[$relatedId];
+                        }
                     }
                 }
+
                 $related[$documentId] = $documentRelated;
             }
         }
 
+        return self::assignPages($documents, $key, $related, $page);
+    }
+
+    /**
+     * Set each document's relationship to its page of the related documents grouped under its ID, and return the
+     * related documents some page holds, which are the ones the next depth populates.
+     *
+     * @param  array<Document>  $documents
+     * @param  array<string, array<Document>>  $relatedByDocumentId
+     * @return array<Document>
+     */
+    private static function assignPages(array $documents, string $key, array $relatedByDocumentId, ?Page $page): array
+    {
+        $assigned = [];
+
         foreach ($documents as $document) {
-            $documentId = $document->getId();
-            $document->setAttribute($key, $related[$documentId] ?? []);
+            $related = $relatedByDocumentId[$document->getId()] ?? [];
+            if ($page !== null) {
+                $related = $page->slice($related);
+            }
+
+            $document->setAttribute($key, $related);
+
+            foreach ($related as $relatedDocument) {
+                $assigned[$relatedDocument->getId()] = $relatedDocument;
+            }
         }
 
-        return $allRelatedDocs;
+        return \array_values($assigned);
+    }
+
+    /**
+     * The orders with the tie break find() adds, so documents read in chunks sort as one read would return them.
+     *
+     * @param  list<string>  $attributes
+     * @param  list<OrderDirection>  $directions
+     * @return array{0: list<string>, 1: list<OrderDirection>}
+     */
+    private static function withTieBreak(array $attributes, array $directions): array
+    {
+        if (\in_array(Document::ID, $attributes, true) || \in_array(Document::SEQUENCE, $attributes, true)) {
+            return [$attributes, $directions];
+        }
+
+        $leading = $attributes[0] ?? null;
+        $attributes[] = Document::SEQUENCE;
+        $directions[] = \in_array($leading, [Document::CREATED_AT, Document::UPDATED_AT], true)
+            ? $directions[0]
+            : OrderDirection::Asc;
+
+        return [$attributes, $directions];
+    }
+
+    /**
+     * @param  array<Document>  $documents
+     * @param  list<string>  $attributes
+     * @param  list<OrderDirection>  $directions
+     * @return list<Document>
+     */
+    private static function sortDocuments(array $documents, array $attributes, array $directions): array
+    {
+        \usort($documents, static function (Document $left, Document $right) use ($attributes, $directions): int {
+            foreach ($attributes as $index => $attribute) {
+                $comparison = $left->getAttribute($attribute) <=> $right->getAttribute($attribute);
+                if ($comparison !== 0) {
+                    return $directions[$index] === OrderDirection::Desc ? -$comparison : $comparison;
+                }
+            }
+
+            return 0;
+        });
+
+        return $documents;
+    }
+
+    /**
+     * @param  array<Query>  $queries
+     */
+    private static function selects(array $queries): bool
+    {
+        foreach ($queries as $query) {
+            if ($query->getMethod() === Method::Select) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function deleteRestrict(

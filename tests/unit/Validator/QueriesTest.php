@@ -4,8 +4,11 @@ namespace Tests\Unit\Validator;
 
 use Exception;
 use PHPUnit\Framework\TestCase;
+use Utopia\Database\Attribute;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
+use Utopia\Database\Relationship;
+use Utopia\Database\RelationshipSide;
 use Utopia\Database\Validator\Queries\Base;
 use Utopia\Database\Validator\Query\Aggregate;
 use Utopia\Database\Validator\Query\Cursor;
@@ -17,6 +20,7 @@ use Utopia\Database\Validator\Query\Join;
 use Utopia\Database\Validator\Query\Limit;
 use Utopia\Database\Validator\Query\Offset;
 use Utopia\Database\Validator\Query\Order;
+use Utopia\Database\Validator\Query\Relationship as RelationshipValidator;
 use Utopia\Database\Validator\Query\Select;
 use Utopia\Query\Method;
 use Utopia\Query\Schema\ColumnType;
@@ -661,6 +665,49 @@ class QueriesTest extends TestCase
             new Query(Method::And, '', [123, Query::equal('name', ['Main'])]),
         ]));
         $this->assertSame('Invalid query: nested query must be a string', $validator->getDescription());
+    }
+
+    public function test_relationship_query_is_validated_by_its_validator(): void
+    {
+        $attributes = [
+            Attribute::string('name'),
+            Attribute::relationship('comments', Relationship::oneToMany('comments', twoWay: true, twoWayKey: 'post'), RelationshipSide::Parent),
+        ];
+
+        $validator = new Base([
+            new Filter($attributes, ColumnType::Integer->value),
+            new RelationshipValidator($attributes),
+        ]);
+
+        $this->assertTrue($validator->isValid([Query::relationship('comments', [Query::limit(1)])]), $validator->getDescription());
+
+        $this->assertFalse($validator->isValid([Query::relationship('name', [Query::limit(1)])]));
+        $this->assertSame('Invalid query: Relationship queries can only be used on relationship attributes: name', $validator->getDescription());
+
+        $this->assertFalse((new Base([new Limit()]))->isValid([Query::relationship('comments', [Query::limit(1)])]));
+    }
+
+    public function test_logical_query_rejects_relationship_query(): void
+    {
+        $attributes = [
+            Attribute::string('name'),
+            Attribute::relationship('comments', Relationship::oneToMany('comments', twoWay: true, twoWayKey: 'post'), RelationshipSide::Parent),
+        ];
+
+        $validator = new Base([
+            new Filter($attributes, ColumnType::Integer->value),
+            new RelationshipValidator($attributes),
+        ]);
+
+        foreach ([Query::or(...), Query::and(...)] as $logical) {
+            $this->assertFalse($validator->isValid([
+                $logical([
+                    Query::relationship('comments', [Query::limit(1)]),
+                    Query::equal('name', ['value']),
+                ]),
+            ]));
+            $this->assertStringContainsString('queries can only contain filter queries', $validator->getDescription());
+        }
     }
 
     public function test_is_array(): void

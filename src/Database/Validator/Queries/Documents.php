@@ -17,10 +17,11 @@ use Utopia\Database\Validator\Query\Join;
 use Utopia\Database\Validator\Query\Limit;
 use Utopia\Database\Validator\Query\Offset;
 use Utopia\Database\Validator\Query\Order;
+use Utopia\Database\Validator\Query\Relationship;
 use Utopia\Database\Validator\Query\Select;
 
 /**
- * Validates queries for document listing: filters, ordering, selection and pagination, plus joins
+ * Validates queries for document listing: filters, ordering, selection, pagination and relationship queries, plus joins
  * and aggregations (aggregate functions, group by, having and distinct) when enabled.
  */
 class Documents extends Indexed
@@ -68,6 +69,7 @@ class Documents extends Indexed
             ),
             new Order($attributes, $supportForAttributes, $profile->supports(Capability::OrderRandom)),
             new Select($attributes, $supportForAttributes, $profile->sharedTables),
+            new Relationship($attributes, $limits->uidLength, $supportForAttributes),
         ];
 
         if ($profile->supports(Capability::Joins)) {

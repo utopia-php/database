@@ -622,6 +622,81 @@ class QueryTest extends TestCase
         );
     }
 
+    public function testRelationshipShapeIncludesItsQueries(): void
+    {
+        $relationship = Query::relationship('comments', [Query::equal('approved', [true]), Query::limit(2)]);
+
+        $this->assertSame('relationship:comments(equal:approved|limit:)', $relationship->shape());
+        $this->assertNotSame(
+            Query::fingerprint([$relationship]),
+            Query::fingerprint([Query::relationship('comments', [Query::limit(2)])]),
+        );
+    }
+
+    public function testRelationshipRoundTrip(): void
+    {
+        $query = Query::relationship('comments', [
+            Query::equal('approved', [true]),
+            Query::orderDesc('$createdAt'),
+            Query::limit(2),
+            Query::offset(1),
+            Query::cursorAfter(new Document(['$id' => 'c1'])),
+        ]);
+
+        $this->assertSame(Method::Relationship, $query->getMethod());
+        $this->assertSame('comments', $query->getAttribute());
+        $this->assertTrue($query->isNested());
+
+        $parsed = Query::parse($query->toString());
+
+        $this->assertSame(Method::Relationship, $parsed->getMethod());
+        $this->assertSame('comments', $parsed->getAttribute());
+
+        /** @var list<Query> $inner */
+        $inner = $parsed->getValues();
+        $this->assertCount(5, $inner);
+        $this->assertContainsOnlyInstancesOf(Query::class, $inner);
+
+        $this->assertSame(Method::Equal, $inner[0]->getMethod());
+        $this->assertSame('approved', $inner[0]->getAttribute());
+        $this->assertSame([true], $inner[0]->getValues());
+        $this->assertSame(Method::OrderDesc, $inner[1]->getMethod());
+        $this->assertSame('$createdAt', $inner[1]->getAttribute());
+        $this->assertSame([2], $inner[2]->getValues());
+        $this->assertSame([1], $inner[3]->getValues());
+        $this->assertSame(Method::CursorAfter, $inner[4]->getMethod());
+        $this->assertSame(['c1'], $inner[4]->getValues());
+    }
+
+    public function testRelationshipParsesStringChildren(): void
+    {
+        $parsed = Query::parse(\json_encode([
+            'method' => 'relationship',
+            'attribute' => 'comments',
+            'values' => [Query::limit(3)->toString()],
+        ], JSON_THROW_ON_ERROR));
+
+        $inner = $parsed->getValues();
+        $this->assertCount(1, $inner);
+        $this->assertInstanceOf(Query::class, $inner[0]);
+        $this->assertSame(Method::Limit, $inner[0]->getMethod());
+    }
+
+    public function testGroupByTypeKeepsRelationshipQueriesApartFromFilters(): void
+    {
+        $relationship = Query::relationship('comments', [Query::limit(2)]);
+
+        $grouped = Query::groupByType([Query::equal('title', ['a']), $relationship, Query::limit(5)]);
+
+        $this->assertCount(1, $grouped->filters);
+        $this->assertSame(Method::Equal, $grouped->filters[0]->getMethod());
+        $this->assertCount(1, $grouped->relationships);
+        $this->assertSame(Method::Relationship, $grouped->relationships[0]->getMethod());
+        $this->assertSame('comments', $grouped->relationships[0]->getAttribute());
+        $this->assertNotSame($relationship, $grouped->relationships[0]);
+        $this->assertSame(5, $grouped->limit);
+    }
+
     public function testShapeKeepsASharedChildUnderEveryParent(): void
     {
         // The same Query object under two parents is a DAG, not a cycle, and it

@@ -8276,6 +8276,97 @@ trait DocumentTests
         $database->deleteCollection('bulk_delete_queries');
     }
 
+    public function testDeleteBulkDocumentsKeepsDocumentsThatStoppedMatching(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $collectionId = 'bulk_delete_stopped_matching';
+        $expired = '2000-01-01T00:00:00.000+00:00';
+        $refreshed = '2100-01-01T00:00:00.000+00:00';
+        $filter = Query::lessThan('expiresAt', '2050-01-01T00:00:00.000+00:00');
+
+        $database->createCollection(Collection::create(id: $collectionId, attributes: [
+            Attribute::datetime(key: 'expiresAt', required: true),
+        ], permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ], documentSecurity: false));
+
+        foreach (['first' => $expired, 'second' => $expired, 'third' => $expired, 'fourth' => $refreshed] as $id => $expiresAt) {
+            $database->createDocument($collectionId, new Document([
+                '$id' => $id,
+                '$permissions' => [Permission::read(Role::any())],
+                'expiresAt' => $expiresAt,
+            ]));
+        }
+
+        $found = $database->find($collectionId, [$filter]);
+        $this->assertCount(3, $found);
+        $database->updateDocument($collectionId, 'second', new Document(['expiresAt' => $refreshed]));
+
+        $collection = $database->getCollection($collectionId);
+        $sequences = [];
+        $ids = [];
+        foreach ($found as $document) {
+            $sequence = $document->getSequence();
+            $this->assertNotNull($sequence);
+            $sequences[] = $sequence;
+            $ids[] = $document->getId();
+        }
+
+        $deleted = $database->getAdapter()->deleteDocumentsMatching($collection, $sequences, $ids, $database->convertQueries($collection, [$filter]));
+
+        $this->assertSame(2, $deleted);
+        $remaining = \array_map(static fn (Document $document): string => $document->getId(), $database->find($collectionId, [Query::orderAsc('$id')]));
+        $this->assertSame(['fourth', 'second'], $remaining);
+        $this->assertSame($refreshed, $database->getDocument($collectionId, 'second')->getAttribute('expiresAt'));
+
+        $database->deleteCollection($collectionId);
+    }
+
+    public function testDeleteBulkDocumentsWithAFloatFilterDeletesWhatTheFindMatched(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $collectionId = 'bulk_delete_float_filter';
+        $filter = Query::greaterThan('score', 1.0E-20);
+
+        $database->createCollection(Collection::create(id: $collectionId, attributes: [
+            Attribute::float(key: 'score', required: true),
+        ], permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::delete(Role::any()),
+        ], documentSecurity: false));
+
+        foreach (['tiny' => 1.0E-21, 'large' => 1.5, 'negative' => -1.0] as $id => $score) {
+            $database->createDocument($collectionId, new Document([
+                '$id' => $id,
+                '$permissions' => [Permission::read(Role::any())],
+                'score' => $score,
+            ]));
+        }
+
+        $found = \array_map(static fn (Document $document): string => $document->getId(), $database->find($collectionId, [$filter]));
+        $deleted = [];
+        $count = $database->deleteDocuments($collectionId, [$filter], onNext: function (Document $document) use (&$deleted): void {
+            $deleted[] = $document->getId();
+        });
+
+        \sort($found);
+        \sort($deleted);
+        $this->assertContains('large', $found);
+        $this->assertSame(\count($found), $count);
+        $this->assertSame($found, $deleted);
+        $remaining = \array_map(static fn (Document $document): string => $document->getId(), $database->find($collectionId));
+        $this->assertSame([], \array_values(\array_intersect($found, $remaining)));
+        $this->assertContains('negative', $remaining);
+
+        $database->deleteCollection($collectionId);
+    }
+
     public function testDeleteBulkDocumentsWithCallbackSupport(): void
     {
         /** @var Database $database */

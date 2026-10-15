@@ -1257,6 +1257,8 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
+     * Deletes only the rows that match every one of the deletionFilters().
+     *
      * @param  array<string>  $sequences
      * @param  array<string>  $permissionIds
      *
@@ -1273,14 +1275,26 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
         try {
             $name = $this->filter($collection->getId());
+            $filters = \array_values(\array_filter(
+                $this->mainRowQueries($this->deletionFilters(), $collection),
+                static fn (Query $query): bool => ! $query->getMethod()->isVector(),
+            ));
 
             $builder = $this->newBuilder($name);
             $builder->filter([BaseQuery::equal(Storage::SEQUENCE, \array_values($sequences))]);
+            if ($filters !== []) {
+                $this->applyFilters($builder, $filters, $name, $this->unqualifiedTable($name));
+            }
             $result = $builder->delete();
             $statement = $this->executeResult($result, Event::DocumentsDelete);
 
             if (! $this->execute($statement)) {
                 throw new DatabaseException('Failed to delete documents');
+            }
+
+            $deleted = $statement->rowCount();
+            if ($filters !== [] && $deleted < \count($sequences)) {
+                $permissionIds = $this->withoutStoredDocuments($name, $permissionIds);
             }
 
             $context = $this->writeContext();
@@ -1289,7 +1303,47 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
         }
 
-        return $statement->rowCount();
+        return $deleted;
+    }
+
+    /**
+     * The name a statement on the collection's table refers to its columns by when it gives the table no alias.
+     *
+     * @throws DatabaseException
+     */
+    private function unqualifiedTable(string $name): string
+    {
+        $table = $this->getTableRaw($name);
+        $dot = \strrpos($table, '.');
+
+        return $dot === false ? $table : \substr($table, $dot + 1);
+    }
+
+    /**
+     * @param  array<string>  $documentIds
+     * @return array<string>
+     *
+     * @throws DatabaseException
+     */
+    private function withoutStoredDocuments(string $name, array $documentIds): array
+    {
+        if ($documentIds === []) {
+            return [];
+        }
+
+        $builder = $this->newBuilder($name);
+        $builder->select([Storage::UID]);
+        $builder->filter([BaseQuery::equal(Storage::UID, \array_values($documentIds))]);
+
+        $stored = [];
+        foreach ($this->executeSelect($builder, Event::DocumentFind, $name) as $row) {
+            $id = $row[Storage::UID] ?? null;
+            if (\is_string($id)) {
+                $stored[$id] = true;
+            }
+        }
+
+        return \array_values(\array_filter($documentIds, static fn (string $id): bool => ! isset($stored[$id])));
     }
 
     /**
@@ -3500,7 +3554,8 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * Does NOT call execute() - the caller is responsible for that.
      *
      * Floats are bound as 7.x bound them: a find() binds them in fixed-point notation, every other statement as
-     * PHP writes them, so a write keeps a magnitude fixed point would round to zero.
+     * PHP writes them, so a write keeps a magnitude fixed point would round to zero. A bulk delete binds them as a
+     * find() does, so its filters match the rows the find() of the documents it deletes matched.
      *
      * @param  string  $collection  The collection the statement reads or writes, for the profiler
      * @return PDOStatement|DatabasePDOStatement|PDOStatementProxy
@@ -3513,7 +3568,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             if (\is_bool($value) && $this->supports(Capability::IntegerBooleans)) {
                 $value = (int) $value;
             }
-            if (\is_float($value) && $event === Event::DocumentFind) {
+            if (\is_float($value) && ($event === Event::DocumentFind || $event === Event::DocumentsDelete)) {
                 $prepared->bindValue($i + 1, $this->getFloatPrecision($value), PDO::PARAM_STR);
             } elseif (\is_float($value)) {
                 $prepared->bindValue($i + 1, $value, PDO::PARAM_STR);

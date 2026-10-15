@@ -363,6 +363,7 @@ class Base extends Validator
                 Method::CrossJoin,
                 Method::FullOuterJoin,
                 Method::NaturalJoin => QueryBase::METHOD_TYPE_JOIN,
+                Method::Relationship => QueryBase::METHOD_TYPE_RELATIONSHIP,
                 default => '',
             };
         }

@@ -32,6 +32,8 @@ abstract class Base extends Validator
 
     public const string METHOD_TYPE_DISTINCT = 'distinct';
 
+    public const string METHOD_TYPE_RELATIONSHIP = 'relationship';
+
     protected string $message = 'Invalid query';
 
     #[\Override]

@@ -287,6 +287,7 @@ final class DeleteDocumentsRaceTest extends TestCase
     {
         $refreshed = false;
 
+        /** @param array<Document> $documents */
         return function (Document $collection, array $documents) use ($database, $id, &$refreshed): void {
             if ($refreshed || $collection->getId() !== self::COLLECTION) {
                 return;

@@ -2292,24 +2292,28 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     /**
      * @param  array<string>  $sequences
      * @param  array<string>  $permissionIds
+     * @param  array<Query>  $queries
      *
      * @throws DatabaseException
      */
     #[\Override]
-    public function deleteDocuments(Document $collection, array $sequences, array $permissionIds): int
+    public function deleteDocuments(Document $collection, array $sequences, array $permissionIds, array $queries = []): int
     {
         $collectionId = $collection->getId();
         $name = $this->getNamespace().'_'.$this->filter($collectionId);
-
-        foreach ($sequences as $index => $sequence) {
-            $sequences[$index] = $sequence;
-        }
 
         /** @var array<string, mixed> $filters */
         $filters = $this->buildFilters([new Query(Method::Equal, Storage::SEQUENCE, $sequences)]);
         $filters = $this->applyTenantFilter($filters, $collectionId);
 
         $filters = $this->replaceInternalIdsKeys($filters, '$', '_', $this->operators);
+
+        $queries = \array_map(static fn (Query $query): Query => clone $query, $queries);
+        $this->escapeQueryAttributes($collection, $queries);
+        $matching = $this->buildFilters($queries);
+        if ($matching !== []) {
+            $filters = ['$and' => [$filters, $matching]];
+        }
 
         $options = $this->getTransactionOptions();
 

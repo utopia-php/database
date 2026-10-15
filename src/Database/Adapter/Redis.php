@@ -1392,8 +1392,13 @@ class Redis extends Adapter implements
         });
     }
 
+    /**
+     * @param  array<string>  $sequences
+     * @param  array<string>  $permissionIds
+     * @param  array<Query>  $queries
+     */
     #[\Override]
-    public function deleteDocuments(Document $collection, array $sequences, array $permissionIds): int
+    public function deleteDocuments(Document $collection, array $sequences, array $permissionIds, array $queries = []): int
     {
         if (empty($sequences) && empty($permissionIds)) {
             return 0;
@@ -1402,7 +1407,7 @@ class Redis extends Adapter implements
         $collectionId = $this->filter($collection->getId());
         $idxKey = $this->idxKey($collectionId);
 
-        return $this->transaction(function (RedisClient $redis) use ($collectionId, $sequences, $permissionIds, $idxKey): int {
+        return $this->transaction(function (RedisClient $redis) use ($collectionId, $sequences, $permissionIds, $queries, $idxKey): int {
             $sequenceSet = [];
             foreach ($sequences as $sequence) {
                 $sequenceSet[(string) $sequence] = true;
@@ -1426,6 +1431,7 @@ class Redis extends Adapter implements
             }
 
             $deleted = [];
+            $kept = [];
             foreach ($allIds as $position => $id) {
                 $payload = $payloads[$position] ?? false;
                 if (! \is_string($payload) || $payload === '') {
@@ -1433,9 +1439,15 @@ class Redis extends Adapter implements
                 }
                 $document = $this->decode($payload);
                 $matchesSequence = isset($sequenceSet[(string) $document->getSequence()]);
-                if ($matchesSequence) {
-                    $deleted[$document->getId()] = ['payload' => $payload, 'docKey' => $docKeys[(string) $id]];
+                if (! $matchesSequence) {
+                    continue;
                 }
+                if ($this->filterDocumentsByQueries($collectionId, [$document], $queries) === []) {
+                    $kept[$document->getId()] = true;
+
+                    continue;
+                }
+                $deleted[$document->getId()] = ['payload' => $payload, 'docKey' => $docKeys[(string) $id]];
             }
 
             foreach ($deleted as $documentId => $deleteEntry) {
@@ -1454,7 +1466,7 @@ class Redis extends Adapter implements
 
             foreach ($permissionIds as $permissionId) {
                 $documentId = (string) $permissionId;
-                if (isset($deleted[$documentId])) {
+                if (isset($deleted[$documentId]) || isset($kept[$documentId])) {
                     continue;
                 }
                 $this->clearPermissions($collectionId, $documentId);

@@ -1726,8 +1726,13 @@ class Memory extends Adapter implements Feature\Relationships
         return true;
     }
 
+    /**
+     * @param  array<string>  $sequences
+     * @param  array<string>  $permissionIds
+     * @param  array<Query>  $queries
+     */
     #[\Override]
-    public function deleteDocuments(Document $collection, array $sequences, array $permissionIds): int
+    public function deleteDocuments(Document $collection, array $sequences, array $permissionIds, array $queries = []): int
     {
         $key = $this->key($collection->getId());
         if (! isset($this->data[$key])) {
@@ -1739,8 +1744,10 @@ class Memory extends Adapter implements Feature\Relationships
             $seqSet[(string) $seq] = true;
         }
 
+        $filters = Query::groupByType($queries)->filters;
         $count = 0;
         $deletedIds = [];
+        $keptIds = [];
         foreach ($this->data[$key]['documents'] as $docKey => $row) {
             // With sharedTables the row map is keyed by "tenant|uid" so sequence
             // collisions across tenants are possible. Skip rows that don't belong
@@ -1751,6 +1758,11 @@ class Memory extends Adapter implements Feature\Relationships
             $rowId = $row[Storage::SEQUENCE] ?? '';
             $rowUid = $row[Storage::UID] ?? $docKey;
             if (isset($seqSet[\is_scalar($rowId) ? (string) $rowId : ''])) {
+                if (! $this->matchesAll($row, $filters)) {
+                    $keptIds[\is_scalar($rowUid) ? (string) $rowUid : $docKey] = true;
+
+                    continue;
+                }
                 $deletedIds[\is_scalar($rowUid) ? (string) $rowUid : $docKey] = true;
                 $oldSignatures = $this->rowUniqueSignatures($key, $row);
                 unset($this->data[$key]['documents'][$docKey]);
@@ -1779,7 +1791,7 @@ class Memory extends Adapter implements Feature\Relationships
                 $this->removePermissionsForDocument($key, (string) $documentId, $tenant, $this->sharedTables);
             }
             foreach (\array_keys($permSet) as $documentId) {
-                if (isset($deletedIds[$documentId])) {
+                if (isset($deletedIds[$documentId]) || isset($keptIds[$documentId])) {
                     continue;
                 }
                 $this->removePermissionsForDocument($key, (string) $documentId, $tenant, $this->sharedTables);
@@ -2430,6 +2442,21 @@ class Memory extends Adapter implements Feature\Relationships
         }
 
         return $output;
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @param  array<Query>  $queries
+     */
+    private function matchesAll(array $row, array $queries): bool
+    {
+        foreach ($queries as $query) {
+            if (! $this->matches($row, $query)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

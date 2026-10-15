@@ -771,10 +771,15 @@ abstract class Adapter
     abstract public function deleteDocument(Document $collection, string $id): bool;
 
     /**
+     * Delete the rows of the sequences given that match every filter query, and the permission rows of the
+     * permission ids given, but those of a row kept because it no longer matches.
+     *
      * @param  array<string>  $sequences
      * @param  array<string>  $permissionIds
+     * @param  array<Query>  $queries  Filter queries as find() is handed them, which every deleted row must match
+     * @return int The number of rows deleted
      */
-    abstract public function deleteDocuments(Document $collection, array $sequences, array $permissionIds): int;
+    abstract public function deleteDocuments(Document $collection, array $sequences, array $permissionIds, array $queries = []): int;
 
     /**
      * Find Documents

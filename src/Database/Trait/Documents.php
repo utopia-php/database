@@ -26,6 +26,7 @@ use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
+use Utopia\Database\Exception\Contention as ContentionException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
@@ -43,6 +44,7 @@ use Utopia\Database\Hook\Queries;
 use Utopia\Database\Id;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
+use Utopia\Database\ParsedQuery;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\RelationshipSide;
@@ -3056,6 +3058,10 @@ trait Documents
     /**
      * Deletes all documents which match the given queries, respecting relationship onDelete options.
      *
+     * Each batch deletes only the documents that still match the filters when it is deleted: a document another write
+     * changed after it was found, so that it no longer matches, is kept, and is neither counted, handed to $onNext nor
+     * cascaded. A limit counts the documents found, kept ones included.
+     *
      * @param  string  $collection  The collection identifier
      * @param  array<Query>  $queries  Queries to filter documents for deletion
      * @param  int  $batchSize  Number of documents per batch deletion, at most BATCH_SIZE
@@ -3070,6 +3076,7 @@ trait Documents
      * @throws LimitException When $batchSize is above BATCH_SIZE
      * @throws QueryException
      * @throws RestrictedException
+     * @throws ContentionException When documents keep changing between the check and the delete of a batch
      * @throws Throwable
      */
     public function deleteDocuments(
@@ -3115,6 +3122,7 @@ trait Documents
 
         $originalLimit = $limit;
         $last = $cursor;
+        $found = 0;
         $modified = 0;
 
         while (true) {
@@ -3146,12 +3154,15 @@ trait Documents
                 break;
             }
 
-            $sequences = [];
-            $permissionIds = [];
-
             $cacheTarget = $collection->getId() === self::METADATA ? $batch : $collection->getId();
-            $this->withMutation(Event::DocumentsDelete, $cacheTarget, function () use ($collection, $sequences, $permissionIds, $batch) {
-                foreach ($batch as $document) {
+            $deleted = $this->withMutation(Event::DocumentsDelete, $cacheTarget, function () use ($collection, $batch, $parsed): array {
+                $filters = [];
+                $documents = $parsed->filters === [] ? $batch : $this->stillMatching($collection, $batch, $parsed, $filters);
+
+                $sequences = [];
+                $permissionIds = [];
+
+                foreach ($documents as $document) {
                     $seq = $document->getSequence();
                     if ($seq !== null) {
                         $sequences[] = $seq;
@@ -3180,32 +3191,45 @@ trait Documents
                     }
                 }
 
-                $this->adapter->deleteDocuments(
+                if ($documents === []) {
+                    return [];
+                }
+
+                $count = $this->adapter->deleteDocuments(
                     $collection,
                     $sequences,
-                    $permissionIds
+                    $permissionIds,
+                    $filters,
                 );
 
-                foreach ($batch as $document) {
+                if ($filters !== [] && $count !== \count($sequences)) {
+                    throw new ContentionException('Documents were changed while they were being deleted');
+                }
+
+                foreach ($documents as $document) {
                     $this->withDocumentTenant(
                         $document,
                         fn () => $this->advanceCollectionCacheEpoch($collection->getId(), $document->getId())
                     );
                 }
 
-                $this->queueDocumentPurges($collection->getId(), $batch);
+                $this->queueDocumentPurges($collection->getId(), $documents);
+
+                return $documents;
             });
 
-            foreach ($batch as $document) {
+            foreach ($deleted as $document) {
                 if ($onNext !== null) {
                     $onNext($document, clone $document);
                 }
                 $modified++;
             }
 
+            $found += \count($batch);
+
             if (count($batch) < $batchSize) {
                 break;
-            } elseif ($originalLimit && $modified >= $originalLimit) {
+            } elseif ($originalLimit && $found >= $originalLimit) {
                 break;
             }
 
@@ -3218,6 +3242,69 @@ trait Documents
         }
 
         return $modified;
+    }
+
+    /**
+     * The documents of a batch deleteDocuments() found that still match its queries, read again in the transaction
+     * that deletes them, in the order they were found, with the filters as the adapter applies them.
+     *
+     * @param  array<Document>  $batch
+     * @param  array<Query>  $filters
+     * @param-out array<Query>  $filters
+     * @return list<Document>
+     *
+     * @throws DatabaseException
+     * @throws QueryException
+     * @throws TimeoutException
+     * @throws Exception
+     */
+    private function stillMatching(Collection $collection, array $batch, ParsedQuery $parsed, array &$filters): array
+    {
+        $filters = [];
+        $sequences = [];
+        foreach ($batch as $document) {
+            $sequence = $document->getSequence();
+            if ($sequence !== null) {
+                $sequences[] = $sequence;
+            }
+        }
+
+        if ($sequences === []) {
+            return [];
+        }
+
+        $queries = [
+            Query::equal(Document::SEQUENCE, $sequences),
+            Query::limit(\count($sequences)),
+            ...$parsed->selections,
+            ...$parsed->filters,
+        ];
+
+        /** @var array{array<Document>, array<Query>|null} $read */
+        $read = $this->silent(fn () => $this->skipQueryHooks(fn () => $this->skipValidation(function () use ($collection, $queries): array {
+            $documents = $this->fetch($collection, $queries, PermissionType::Delete, false, $adapterQueries);
+
+            return [$documents, $adapterQueries];
+        })));
+        [$current, $adapterQueries] = $read;
+
+        if ($adapterQueries !== null) {
+            $filters = Query::groupByType($adapterQueries)->filters;
+        }
+
+        $matching = [];
+        foreach ($current as $document) {
+            $matching[(string) $document->getSequence()] = $document;
+        }
+
+        $documents = [];
+        foreach ($sequences as $sequence) {
+            if (isset($matching[$sequence])) {
+                $documents[] = $matching[$sequence];
+            }
+        }
+
+        return $documents;
     }
 
     /**
@@ -4001,6 +4088,9 @@ trait Documents
     /**
      * @param  array<Query>  $queries
      * @param  bool  $aggregate  Whether the queries must aggregate (aggregate()) or must not (find())
+     * @param  array<Query>|null  $adapterQueries  Receives the queries as the adapter's find() was handed them, or
+     *                                             null when they can match no document and the adapter is not read
+     * @param-out array<Query>|null  $adapterQueries
      * @return array<Document>
      *
      * @throws DatabaseException
@@ -4008,8 +4098,10 @@ trait Documents
      * @throws TimeoutException
      * @throws Exception
      */
-    private function fetch(Collection $collection, array $queries, PermissionType $forPermission, bool $aggregate): array
+    private function fetch(Collection $collection, array $queries, PermissionType $forPermission, bool $aggregate, ?array &$adapterQueries = null): array
     {
+        $adapterQueries = null;
+
         $queryCacheQueries = $queries;
 
         $this->checkQueryTypes($queries);
@@ -4174,6 +4266,7 @@ trait Documents
             $results = [];
         } else {
             $queries = $convertedQueries;
+            $adapterQueries = $queries;
 
             $cacheEntry = null;
             $cacheGeneration = '';

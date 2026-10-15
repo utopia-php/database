@@ -134,10 +134,14 @@ class Permissions extends Roles
     {
         $type = $permission->getPermission();
 
-        // Before anything about where the permission lives: delete removes the whole row, so
-        // narrowing it to one column says nothing, and write aggregates to create, update and
-        // delete, so it inherits the same objection.
-        if (\in_array($type, [PermissionType::Delete->value, PermissionType::Write->value], true)) {
+        // Before anything about where the permission lives. Only read and update answer a
+        // question about one column. A create brings a whole row into being, so narrowing it to
+        // one column would have to mean something about the columns it leaves unset, which is
+        // not a thing a grant can say; a delete removes the whole row, so narrowing it says
+        // nothing at all; and write aggregates to create, update and delete, so it inherits
+        // both objections. Refused rather than accepted and ignored: a grant that reads as a
+        // restriction and enforces none is worse than no grant.
+        if (\in_array($type, [PermissionType::Create->value, PermissionType::Delete->value, PermissionType::Write->value], true)) {
             $this->message = 'Permission "'.$type.'" cannot be scoped to a column, it applies to the whole row.';
 
             return false;

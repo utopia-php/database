@@ -407,30 +407,33 @@ class PermissionsTest extends TestCase
     }
 
     /**
-     * Delete removes the whole row, so narrowing it to one column says nothing. Write
-     * aggregates to create, update and delete, so it inherits the objection.
+     * Only read and update answer a question about one column.
+     *
+     * A create brings a whole row into being and a delete removes one, so neither is narrowed
+     * by naming a column, and write aggregates to all three. Refused rather than accepted and
+     * ignored, so a grant never reads as a restriction it does not enforce.
      */
-    public function test_column_scope_rejected_for_delete_and_write(): void
+    public function test_column_scope_rejected_for_create_delete_and_write(): void
     {
         $object = new Permissions(columns: ['name']);
 
-        $this->assertFalse($object->isValid([Permission::delete(Role::any(), 'name')]));
-        $this->assertSame(
-            'Permission "delete" cannot be scoped to a column, it applies to the whole row.',
-            $object->getDescription(),
-        );
+        foreach (['create', 'delete', 'write'] as $type) {
+            $this->assertFalse($object->isValid([Permission::$type(Role::any(), 'name')]), $type);
+            $this->assertSame(
+                'Permission "'.$type.'" cannot be scoped to a column, it applies to the whole row.',
+                $object->getDescription(),
+            );
+        }
 
-        $this->assertFalse($object->isValid([Permission::write(Role::any(), 'name')]));
-        $this->assertSame(
-            'Permission "write" cannot be scoped to a column, it applies to the whole row.',
-            $object->getDescription(),
-        );
-
-        // The three that can be narrowed still are.
+        // The two that can be narrowed still are, and all three still grant the whole row.
         $this->assertTrue($object->isValid([
             Permission::read(Role::any(), 'name'),
-            Permission::create(Role::any(), 'name'),
             Permission::update(Role::any(), 'name'),
+        ]), $object->getDescription());
+
+        $this->assertTrue($object->isValid([
+            Permission::create(Role::any()),
+            Permission::delete(Role::any()),
         ]), $object->getDescription());
     }
 

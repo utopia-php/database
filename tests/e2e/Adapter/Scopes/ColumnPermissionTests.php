@@ -278,6 +278,35 @@ trait ColumnPermissionTests
         $this->assertFalse($database->hasColumnPermissions());
     }
 
+    /**
+     * Only read and update may name a column, and createCollection() enforces it.
+     *
+     * A create brings a whole row into being and a delete removes one, so neither is narrowed
+     * by naming a column, and write aggregates to all three. The rule is the validator's; this
+     * pins that the collection write actually runs it.
+     */
+    public function testACollectionPermissionMayNotScopeCreateDeleteOrWrite(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        foreach (['create', 'delete', 'write'] as $type) {
+            try {
+                $database->withColumnPermissions(fn () => $database->createCollection(Collection::create(
+                    id: 'columnGrantsWholeRow'.$type,
+                    attributes: [Attribute::string(key: 'name', size: 64)],
+                    permissions: [Permission::$type(Role::any(), 'name')],
+                )));
+                $this->fail('Expected createCollection() to reject a column-scoped "'.$type.'"');
+            } catch (DatabaseException $e) {
+                $this->assertStringContainsString(
+                    'Permission "'.$type.'" cannot be scoped to a column, it applies to the whole row.',
+                    $e->getMessage(),
+                );
+            }
+        }
+    }
+
     public function testACollectionPermissionMayNotNameAColumnThatDoesNotExist(): void
     {
         /** @var Database $database */
@@ -1248,6 +1277,75 @@ trait ColumnPermissionTests
             $this->assertInstanceOf(Document::class, $related);
             $this->assertSame(120000, $related->getAttribute('salary'));
         });
+    }
+
+    /**
+     * Every write path refuses a column the caller may not change, not just updateDocument().
+     *
+     * An upsert onto a stored row is an update, and a counter changes one column like any other
+     * write of it, so each is judged the same way. Pinned per path because the gate is a call at
+     * each of them rather than one choke point: a new write path added without it would be a
+     * hole nothing else notices.
+     */
+    public function testEveryWritePathRefusesAnUngrantedColumn(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $authorization = $database->getAuthorization();
+
+        $database->withColumnPermissions(fn () => $database->createCollection(Collection::create(
+            id: 'columnGrantsWriteGate',
+            attributes: [
+                Attribute::string(key: 'name', size: 64),
+                Attribute::integer(key: 'salary'),
+            ],
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+                Permission::update(Role::any(), 'name'),
+            ],
+        )));
+
+        $authorization->skip(fn () => $database->createDocument('columnGrantsWriteGate', new Document([
+            '$id' => 'g1',
+            'name' => 'Ada',
+            'salary' => 100,
+        ])));
+
+        $refused = [
+            'updateDocument' => fn () => $database->updateDocument('columnGrantsWriteGate', 'g1', new Document(['salary' => 1])),
+            'updateDocuments' => fn () => $database->updateDocuments('columnGrantsWriteGate', new Document(['salary' => 2])),
+            'increaseDocumentAttribute' => fn () => $database->increaseDocumentAttribute('columnGrantsWriteGate', 'g1', 'salary', 7),
+            'decreaseDocumentAttribute' => fn () => $database->decreaseDocumentAttribute('columnGrantsWriteGate', 'g1', 'salary', 7),
+        ];
+
+        if ($database->getAdapter()->hasFeature(Feature\Upserts::class)) {
+            $refused['upsertDocument'] = fn () => $database->upsertDocument('columnGrantsWriteGate', new Document(['$id' => 'g1', 'salary' => 5]));
+            $refused['upsertDocuments'] = fn () => $database->upsertDocuments('columnGrantsWriteGate', [new Document(['$id' => 'g1', 'salary' => 6])]);
+        }
+
+        $this->asRole($authorization, Role::any()->toString(), function () use ($refused, $database): void {
+            foreach ($refused as $what => $run) {
+                try {
+                    $run();
+                    $this->fail($what.' changed a column the caller was not granted');
+                } catch (AuthorizationException $e) {
+                    $this->assertStringContainsString('Missing "update" permission for column "salary"', $e->getMessage(), $what);
+                }
+            }
+
+            // The granted column is writable through the same paths.
+            $this->assertSame(
+                'Ada Lovelace',
+                $database->updateDocument('columnGrantsWriteGate', 'g1', new Document(['name' => 'Ada Lovelace']))->getAttribute('name'),
+            );
+        });
+
+        // Nothing the refusals touched was stored.
+        $stored = $authorization->skip(fn () => $database->getDocument('columnGrantsWriteGate', 'g1'));
+
+        $this->assertSame(100, $stored->getAttribute('salary'));
+        $this->assertSame('Ada Lovelace', $stored->getAttribute('name'));
     }
 
     public function testADocumentPermissionNamingNoColumnIsUnaffected(): void

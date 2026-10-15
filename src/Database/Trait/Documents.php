@@ -1491,7 +1491,7 @@ trait Documents
      * @throws DatabaseException
      * @throws StructureException
      */
-    private function rejectRestrictedJoins(Document $collection, array $queries): void
+    private function rejectRestrictedJoins(Document $collection, array $queries, ?array &$joinedCollections): void
     {
         $joined = self::joinedBy($queries);
 
@@ -1501,13 +1501,19 @@ trait Documents
 
         $message = 'Join queries are not supported while a column-scoped permission applies';
 
+        // Before resolving anything: a restricted base refuses the join whatever it joins.
         if ($this->grantedColumns($collection, PermissionType::Read) !== null) {
             throw new QueryException($message);
         }
 
+        // The read's own map, filled in here when this gate is the first to need it and reused
+        // by the rest of the read, so a joined collection is still resolved once per read.
+        $joinedCollections ??= $this->resolveJoinedCollections($queries);
+
         foreach ($joined as $id) {
-            // A join naming no such collection is validation's to report, not this gate's.
-            $definition = $this->silent(fn (): ?Collection => $this->findCollection($id));
+            // Absent from the map only for a nested join, which it does not walk. A join naming
+            // no such collection is validation's to report, not this gate's.
+            $definition = $joinedCollections[$id] ?? $this->silent(fn (): ?Collection => $this->findCollection($id));
 
             if ($definition !== null && $this->grantedColumns($definition, PermissionType::Read) !== null) {
                 throw new QueryException($message);
@@ -1627,7 +1633,7 @@ trait Documents
      * @throws DatabaseException
      * @throws StructureException
      */
-    private function assertQueryColumns(Document $collection, array $queries): void
+    private function assertQueryColumns(Document $collection, array $queries, ?array &$joinedCollections = null): void
     {
         if (! $this->authorization->getStatus()) {
             return;
@@ -1636,7 +1642,7 @@ trait Documents
         // Before the base collection's own grant is consulted: a join is refused for a
         // restriction on either side, and an unrestricted base is exactly the case where one
         // can be used to read a restricted collection.
-        $this->rejectRestrictedJoins($collection, $queries);
+        $this->rejectRestrictedJoins($collection, $queries, $joinedCollections);
 
         $granted = $this->grantedColumns($collection, PermissionType::Read);
 
@@ -2709,6 +2715,15 @@ trait Documents
             $old = $existing[$this->upsertKey($document)] ?? new Document();
 
             $document = $this->removeUnknownAttributes($collection, $document);
+
+            // An upsert onto a stored row is an update, and is gated as updateDocument() is.
+            // Before keepStored() merges the row in, so the columns judged are the ones the
+            // caller wrote rather than every column the row happens to hold. An upsert that
+            // creates carries no stored row and is covered by the create grant instead.
+            if (! $old->isEmpty()) {
+                $this->assertWritableColumns($collection, $document);
+            }
+
             $unchanged = $this->roundOperators($collection, $document);
             if (! $old->isEmpty()) {
                 self::keepStored($document, $old, $unchanged);
@@ -3075,6 +3090,9 @@ trait Documents
         $this->assertPositiveChange($value);
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        // The one column the counter changes, judged as any other write of it would be.
+        $this->assertWritableColumns($collection, new Document([$attribute => null]));
         $numericAttribute = $this->numericAttribute($collection, $attribute);
 
         if ($this->isDeclaredInteger($numericAttribute ?? $this->declaredAttribute($collection, $attribute))) {
@@ -3207,6 +3225,9 @@ trait Documents
         $this->assertPositiveChange($value);
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        // The one column the counter changes, judged as any other write of it would be.
+        $this->assertWritableColumns($collection, new Document([$attribute => null]));
 
         $numericAttribute = $this->numericAttribute($collection, $attribute);
 
@@ -4601,7 +4622,7 @@ trait Documents
         // queries naming the column they aggregate, and an aggregate over a column you cannot
         // read discloses it as surely as reading it. After checkQueryTypes() above, so a
         // malformed query is still reported as malformed rather than reaching this.
-        $this->assertQueryColumns($collection, $queries);
+        $this->assertQueryColumns($collection, $queries, $joinedCollectionsById);
 
         $parsed = Query::groupByType($queries);
         $filters = $parsed->filters;
@@ -4935,7 +4956,6 @@ trait Documents
         $queries = $this->rewriteQueries(Event::DocumentCount, $collection, $queries);
 
         $this->checkQueryTypes($queries);
-        $this->assertQueryColumns($collection, $queries);
 
         $queries = self::resolveOneToManyJoins($collection, $queries);
 
@@ -4945,6 +4965,8 @@ trait Documents
             $joinedCollections = $this->resolveJoinedCollections($queries);
             $this->validateDocumentsQueries($collection, $queries, $joinedCollections);
         }
+
+        $this->assertQueryColumns($collection, $queries, $joinedCollections);
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
         $collectionGranted = $this->authorization->isValid(new Input(PermissionType::Read, $collection->getPermissionsByType(PermissionType::Read)));
@@ -4996,9 +5018,6 @@ trait Documents
 
         $this->checkQueryTypes($queries);
 
-        // The aggregated column is read too, so it is named alongside the queries.
-        $this->assertQueryColumns($collection, [...$queries, Query::sum($attribute)]);
-
         $queries = self::resolveOneToManyJoins($collection, $queries);
 
         $joinedCollections = null;
@@ -5010,6 +5029,9 @@ trait Documents
             }
             $this->validateSumAttribute($collection, $attribute, $queries, $joinedCollections);
         }
+
+        // The aggregated column is read too, so it is named alongside the queries.
+        $this->assertQueryColumns($collection, [...$queries, Query::sum($attribute)], $joinedCollections);
 
         if (! \str_contains($attribute, '.') && ! $this->declaresSumAttribute($collection, $attribute)) {
             $joinedCollections ??= $this->resolveJoinedCollections($queries);

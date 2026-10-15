@@ -427,13 +427,14 @@ class PermissionTest extends TestCase
     public function test_column_builders(): void
     {
         $this->assertEquals('read("any", "name")', Permission::read(Role::any(), 'name'));
-        $this->assertEquals('create("any", "name")', Permission::create(Role::any(), 'name'));
         $this->assertEquals('update("any", "name")', Permission::update(Role::any(), 'name'));
 
         $this->assertEquals('read("any")', Permission::read(Role::any()));
 
-        // delete() and write() take the argument too -- a builder renders what it is handed --
-        // but the validator refuses both, because a column cannot narrow a whole-row delete.
+        // create(), delete() and write() take the argument too -- a builder renders what it is
+        // handed -- but the validator refuses all three, because a column narrows neither a row
+        // brought into being nor one removed.
+        $this->assertEquals('create("any", "name")', Permission::create(Role::any(), 'name'));
         $this->assertEquals('delete("any", "name")', Permission::delete(Role::any(), 'name'));
         $this->assertEquals('write("any", "name")', Permission::write(Role::any(), 'name'));
     }

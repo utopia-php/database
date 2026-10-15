@@ -9,6 +9,7 @@ use Utopia\Database\Query;
 use Utopia\Database\Validator\Query\Joined\Attributes;
 use Utopia\Query\Method;
 use Utopia\Query\Query as BaseQuery;
+use Utopia\Query\Schema\ColumnType;
 
 /**
  * Validates select query methods ensuring referenced attributes exist in the schema, are not duplicated and, in an
@@ -29,6 +30,13 @@ class Select extends Base
      * @var array<int|string, true>
      */
     private array $relationships = [];
+
+    /**
+     * The object attributes of the collection.
+     *
+     * @var array<int|string, true>
+     */
+    private array $objects = [];
 
     /**
      * Whether the query set holds an aggregate.
@@ -54,6 +62,10 @@ class Select extends Base
 
             if ($attribute->relationship !== null) {
                 $this->relationships[$attribute->key] = true;
+            }
+
+            if ($attribute->type === ColumnType::Object) {
+                $this->objects[$attribute->key] = true;
             }
         }
     }
@@ -154,6 +166,12 @@ class Select extends Base
 
                 if ($this->isAggregation() && isset($this->joinAliases[$alias])) {
                     return $this->rejectUngrouped($attribute);
+                }
+
+                if (! $this->isAggregation() && $this->supportForAttributes && isset($this->schema[$alias]) && ! isset($this->relationships[$alias]) && ! isset($this->objects[$alias])) {
+                    $this->message = 'Cannot select nested attribute on: '.$alias;
+
+                    return false;
                 }
 
                 // For relationships, just validate the top level.

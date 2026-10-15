@@ -67,7 +67,7 @@ class DocumentQueriesTest extends TestCase
         $this->assertEquals(true, $validator->isValid($queries));
 
         $queries[] = Query::select(['price.relation']);
-        $this->assertEquals(true, $validator->isValid($queries));
+        $this->assertFalse($validator->isValid($queries), 'price is a plain attribute, so a path under it names a column that does not exist');
     }
 
     /**

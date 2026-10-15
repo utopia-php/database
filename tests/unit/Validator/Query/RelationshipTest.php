@@ -106,6 +106,23 @@ class RelationshipTest extends TestCase
         $this->assertSame('Relationship queries cannot contain relationship queries', $validator->getDescription());
     }
 
+    public function testRejectsQueriesThatReadSomethingOtherThanTheRelatedDocuments(): void
+    {
+        $validator = new RelationshipValidator($this->attributes());
+
+        $queries = [
+            'count' => Query::count(),
+            'groupBy' => Query::groupBy(['approved']),
+            'distinct' => Query::distinct(),
+            'join' => Query::join('authors', 'a', [Query::on('author', '$id')]),
+        ];
+
+        foreach ($queries as $method => $inner) {
+            $this->assertFalse($validator->isValid(Query::relationship('comments', [$inner])), $method);
+            $this->assertSame('Relationship queries cannot contain '.$method.' queries', $validator->getDescription());
+        }
+    }
+
     public function testRejectsMalformedInnerSelect(): void
     {
         $validator = new RelationshipValidator($this->attributes());

@@ -93,6 +93,12 @@ class Relationship extends Base
                 return false;
             }
 
+            if (! self::shapesDocuments($inner->getMethod())) {
+                $this->message = 'Relationship queries cannot contain '.$inner->getMethod()->value.' queries';
+
+                return false;
+            }
+
             $validator = match ($inner->getMethod()) {
                 Method::Select => new Select(supportForAttributes: false),
                 Method::Limit => new Limit(),
@@ -136,6 +142,26 @@ class Relationship extends Base
         }
 
         return false;
+    }
+
+    /**
+     * Whether the method filters, orders, selects or pages the related documents, rather than reading something
+     * other than those documents: an aggregate, a grouping, a join or a raw query.
+     */
+    private static function shapesDocuments(Method $method): bool
+    {
+        return ! $method->isAggregate()
+            && ! $method->isJoin()
+            && ! \in_array($method, [
+                Method::GroupBy,
+                Method::GroupByTimeBucket,
+                Method::Having,
+                Method::Distinct,
+                Method::Union,
+                Method::UnionAll,
+                Method::On,
+                Method::Raw,
+            ], true);
     }
 
     private static function holdsOneDocument(Attribute $attribute): bool

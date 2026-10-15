@@ -8357,6 +8357,7 @@ trait DocumentTests
 
         \sort($found);
         \sort($deleted);
+        $this->assertContains('large', $found);
         $this->assertSame(\count($found), $count);
         $this->assertSame($found, $deleted);
         $remaining = \array_map(static fn (Document $document): string => $document->getId(), $database->find($collectionId));

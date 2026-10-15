@@ -5,12 +5,15 @@ namespace Tests\Unit\Documents;
 use Closure;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Tests\Unit\Documents\Interleaving\AuditingPool;
 use Tests\Unit\Documents\Interleaving\Memory;
+use Tests\Unit\Documents\Interleaving\Miscounting;
 use Tests\Unit\Documents\Interleaving\Refresh;
 use Tests\Unit\Documents\Interleaving\SQLite;
 use Tests\Unit\Documents\Interleaving\Standalone;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
+use Utopia\Database\Adapter;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
@@ -27,6 +30,8 @@ use Utopia\Database\Relationship;
 use Utopia\Database\RelationshipDeleteAction;
 use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Pools\Adapter\Stack;
+use Utopia\Pools\Pool as UtopiaPool;
 
 /**
  * deleteDocuments() deletes only the documents that still match its queries when they are deleted: a document
@@ -230,10 +235,20 @@ final class DeleteDocumentsRaceTest extends TestCase
     }
 
     /**
-     * @param  Closure(): (Memory|SQLite)  $adapter
+     * @return iterable<string, array{Closure(): (Memory|SQLite), list<string>}>
      */
-    #[DataProvider('adapters')]
-    public function testAFloatFilterDeletesTheDocumentsTheFindMatched(Closure $adapter): void
+    public static function floatFinds(): iterable
+    {
+        yield 'memory compares exactly' => [static fn (): Memory => new Memory(), ['large']];
+        yield 'sqlite binds fixed point' => [static fn (): SQLite => SQLite::inMemory(), ['large', 'tiny']];
+    }
+
+    /**
+     * @param  Closure(): (Memory|SQLite)  $adapter
+     * @param  list<string>  $expected
+     */
+    #[DataProvider('floatFinds')]
+    public function testAFloatFilterDeletesTheDocumentsTheFindMatched(Closure $adapter, array $expected): void
     {
         [$database] = $this->database($adapter());
         $database->createCollection(Collection::create(
@@ -242,17 +257,69 @@ final class DeleteDocumentsRaceTest extends TestCase
             permissions: $this->permissions(),
             documentSecurity: false,
         ));
-        $database->createDocument('scores', new Document([Document::ID => 'tiny', 'score' => 1.0E-21]));
-        $database->createDocument('scores', new Document([Document::ID => 'none', 'score' => -1.0]));
+        foreach (['tiny' => 1.0E-21, 'large' => 1.5, 'negative' => -1.0] as $id => $score) {
+            $database->createDocument('scores', new Document([Document::ID => $id, 'score' => $score]));
+        }
         $filter = Query::greaterThan('score', 1.0E-20);
 
         $found = \array_map(static fn (Document $document): string => $document->getId(), $database->find('scores', [$filter]));
-        $count = $database->deleteDocuments('scores', [$filter]);
+        \sort($found);
+        $this->assertSame($expected, $found);
+
+        $deleted = [];
+        $count = $database->deleteDocuments('scores', [$filter], onNext: function (Document $document) use (&$deleted): void {
+            $deleted[] = $document->getId();
+        });
+        \sort($deleted);
 
         $this->assertSame(\count($found), $count, 'The delete binds a float as the find does');
+        $this->assertSame($found, $deleted);
         $remaining = \array_map(static fn (Document $document): string => $document->getId(), $database->find('scores'));
         $this->assertSame([], \array_values(\array_intersect($found, $remaining)));
-        $this->assertContains('none', $remaining);
+        $this->assertContains('negative', $remaining);
+    }
+
+    public function testAPoolSubclassThatWrapsDeleteDocumentsRunsForAFilteredBatch(): void
+    {
+        $engine = new Memory();
+        $pool = new AuditingPool(new UtopiaPool(new Stack(), 'race', 2, static fn (): Memory => $engine, timeout: 0.0));
+        [$database] = $this->database($pool);
+        $this->seed($database, ['a' => self::EXPIRED, 'b' => self::EXPIRED, 'c' => self::EXPIRED, 'd' => self::REFRESHED]);
+        $engine->afterFind = $this->refreshOnce($database, 'b');
+
+        $count = $database->deleteDocuments(self::COLLECTION, [$this->expired()]);
+
+        $this->assertSame(1, $pool->deletes, 'The pool\'s override of deleteDocuments() runs');
+        $this->assertSame(2, $count);
+        $this->assertSame(['b', 'd'], $this->stored($database), 'The pooled adapter is handed the filters');
+    }
+
+    /**
+     * @return iterable<string, array{Closure(int, array<string>): int}>
+     */
+    public static function miscounts(): iterable
+    {
+        yield 'none' => [static fn (int $deleted, array $permissionIds): int => 0];
+        yield 'permission rows too' => [static fn (int $deleted, array $permissionIds): int => $deleted + \count($permissionIds)];
+    }
+
+    /**
+     * @param  Closure(int, array<string>): int  $report
+     */
+    #[DataProvider('miscounts')]
+    public function testACountTheAdapterGetsWrongDoesNotFailADeleteWithoutARace(Closure $report): void
+    {
+        [$database] = $this->database(new Miscounting($report));
+        $this->seed($database, ['a' => self::EXPIRED, 'b' => self::EXPIRED, 'c' => self::EXPIRED, 'd' => self::REFRESHED]);
+
+        $deleted = [];
+        $count = $database->deleteDocuments(self::COLLECTION, [$this->expired()], batchSize: 2, onNext: function (Document $document) use (&$deleted): void {
+            $deleted[] = $document->getId();
+        });
+
+        $this->assertSame(3, $count);
+        $this->assertSame(['a', 'b', 'c'], $deleted);
+        $this->assertSame(['d'], $this->stored($database));
     }
 
     /**
@@ -340,12 +407,12 @@ final class DeleteDocumentsRaceTest extends TestCase
     }
 
     /**
-     * @template T of Memory|SQLite|Standalone
+     * @template T of Adapter
      *
      * @param  T  $adapter
      * @return array{Database, T}
      */
-    private function database(Memory|SQLite|Standalone $adapter): array
+    private function database(Adapter $adapter): array
     {
         $authorization = new Authorization();
         $authorization->addRole(self::OWNER);

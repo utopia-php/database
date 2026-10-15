@@ -26,7 +26,7 @@ class Spatial extends Validator
      */
     protected function validatePoint(array $value): bool
     {
-        if (count($value) !== 2) {
+        if (count($value) !== 2 || ! array_is_list($value)) {
             $this->message = 'Point must be an array of two numeric values [x, y]';
 
             return false;
@@ -55,7 +55,7 @@ class Spatial extends Validator
         }
 
         foreach ($value as $pointIndex => $point) {
-            if (! is_array($point) || count($point) !== 2) {
+            if (! is_array($point) || count($point) !== 2 || ! array_is_list($point)) {
                 $this->message = 'Each point in LineString must be an array of two values [x, y]';
 
                 return false;
@@ -91,7 +91,7 @@ class Spatial extends Validator
         }
 
         $isSingleRing = isset($value[0]) && is_array($value[0]) &&
-            count($value[0]) === 2 &&
+            count($value[0]) === 2 && array_is_list($value[0]) &&
             is_numeric($value[0][0]) &&
             is_numeric($value[0][1]);
 
@@ -100,7 +100,7 @@ class Spatial extends Validator
         }
 
         foreach ($value as $ringIndex => $ring) {
-            if (! is_array($ring) || empty($ring)) {
+            if (! is_array($ring) || empty($ring) || ! array_is_list($ring)) {
                 $this->message = "Ring #{$ringIndex} must be an array of points";
 
                 return false;
@@ -113,7 +113,7 @@ class Spatial extends Validator
             }
 
             foreach ($ring as $pointIndex => $point) {
-                if (! is_array($point) || count($point) !== 2) {
+                if (! is_array($point) || count($point) !== 2 || ! array_is_list($point)) {
                     $this->message = "Point #{$pointIndex} in ring #{$ringIndex} must be an array of two values [x, y]";
 
                     return false;

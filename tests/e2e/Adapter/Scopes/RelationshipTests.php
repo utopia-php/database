@@ -3536,7 +3536,7 @@ trait RelationshipTests
             [-73.99, 40.76],
         ];
         $restaurants = $database->find('restaurantsSpatial', [
-            Query::intersects('supplier.deliveryRoute', [$testLine]),
+            Query::intersects('supplier.deliveryRoute', $testLine),
         ]);
         // Verify query executes (result count depends on DB spatial implementation)
         $this->assertGreaterThanOrEqual(0, count($restaurants));
@@ -3547,7 +3547,7 @@ trait RelationshipTests
             [-73.95, 40.80],
         ];
         $restaurants = $database->find('restaurantsSpatial', [
-            Query::crosses('supplier.deliveryRoute', [$crossingLine]),
+            Query::crosses('supplier.deliveryRoute', $crossingLine),
         ]);
         // Result depends on actual geometry intersection
 

@@ -1069,7 +1069,7 @@ trait SpatialTests
             // Test failure case: rectangle should NOT contain distant point
             if ($this->spatialIncludesBoundaries()) {
                 $distantPoint = $database->find($collectionName, [
-                    Query::covers('rectangle', [[100, 100]]), // Point far outside rectangle
+                    Query::covers('rectangle', [[100, 80]]), // Point far outside rectangle
                 ], PermissionType::Read);
                 $this->assertEmpty($distantPoint);
             }
@@ -1171,7 +1171,7 @@ trait SpatialTests
             // Test failure case: square should NOT contain distant point
             if ($this->spatialIncludesBoundaries()) {
                 $distantPointSquare = $database->find($collectionName, [
-                    Query::covers('square', [[100, 100]]), // Point far outside square
+                    Query::covers('square', [[100, 80]]), // Point far outside square
                 ], PermissionType::Read);
                 $this->assertEmpty($distantPointSquare);
             }
@@ -1223,7 +1223,7 @@ trait SpatialTests
             // Test failure case: triangle should NOT contain distant point
             if ($this->spatialIncludesBoundaries()) {
                 $distantPointTriangle = $database->find($collectionName, [
-                    Query::covers('triangle', [[100, 100]]), // Point far outside triangle
+                    Query::covers('triangle', [[100, 80]]), // Point far outside triangle
                 ], PermissionType::Read);
                 $this->assertEmpty($distantPointTriangle);
             }
@@ -1268,7 +1268,7 @@ trait SpatialTests
             // Test failure case: L-shaped polygon should NOT contain distant point
             if ($this->spatialIncludesBoundaries()) {
                 $distantPointLShape = $database->find($collectionName, [
-                    Query::covers('complex_polygon', [[100, 100]]), // Point far outside L-shape
+                    Query::covers('complex_polygon', [[100, 80]]), // Point far outside L-shape
                 ], PermissionType::Read);
                 $this->assertEmpty($distantPointLShape);
             }
@@ -1293,7 +1293,7 @@ trait SpatialTests
             // Test failure case: T-shaped polygon should NOT contain distant point
             if ($this->spatialIncludesBoundaries()) {
                 $distantPointTShape = $database->find($collectionName, [
-                    Query::covers('complex_polygon', [[100, 100]]), // Point far outside T-shape
+                    Query::covers('complex_polygon', [[100, 80]]), // Point far outside T-shape
                 ], PermissionType::Read);
                 $this->assertEmpty($distantPointTShape);
             }

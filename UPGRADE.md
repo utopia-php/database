@@ -1,18 +1,18 @@
 # Upgrading from 8.1.3 to 8.1.4
 
-8.1.4 is a patch release. `deleteDocuments()` keeps its signature and now deletes only the documents that still match
-its filters when they are deleted; see [CHANGELOG.md](CHANGELOG.md#814).
+8.1.4 is a patch release and needs no code change. `Database::deleteDocuments()` keeps its signature and now deletes
+only the documents that still match its filters when they are deleted; see [CHANGELOG.md](CHANGELOG.md#814).
 
-A custom adapter that extends `Adapter` and implements `deleteDocuments()`, or a subclass of a bundled adapter or
-`Pool` that overrides it, adds the new last parameter, as PHP refuses an override that drops it:
+`Adapter::deleteDocuments()` keeps its signature. A batch with filters reaches the adapter through the new
+`Adapter::deleteDocumentsMatching()`, which calls `deleteDocuments()` with the filters readable through
+`$this->deletionFilters()`, so an override of `deleteDocuments()` in a subclass of a bundled adapter still runs and,
+when it calls its parent, deletes only the rows that match. A custom adapter that extends `Adapter` directly deletes
+every row it is handed, as in 8.1.3; to keep a document another write changed after it was found, delete only the
+rows that match every query of `deletionFilters()` (filter queries, as `find()` is handed them), keep the permission
+rows of a row kept, and return the number of rows deleted.
 
-```php
-public function deleteDocuments(Document $collection, array $sequences, array $permissionIds, array $queries = []): int
-```
-
-Delete only the rows of `$sequences` that match every query in `$queries` (filter queries, as `find()` is handed them),
-remove the permission rows of `$permissionIds` but those of a row kept because it no longer matches, and return the
-number of rows deleted. An override that delegates passes `$queries` on to its parent.
+`deleteDocuments()` can now throw `Exception\Contention` when documents keep changing between the check and the delete
+of a batch. Inside a transaction begun with `startTransaction()`, roll it back and run it again.
 
 # Upgrading from 8.1.2 to 8.1.3
 

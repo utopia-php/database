@@ -114,8 +114,8 @@ final class FullOuterJoinAggregateVisibilityTest extends TestCase
 
         $this->assertSame($totals, $this->totals($rows), 'Direct reads must return the readable documents of the selected tenant');
         $this->assertSame($totals, $this->readTotals($database), 'count() and sum() over the join');
-        $this->assertSame($this->groupCounts($rows, 'genre'), $this->readGroupCounts($database, self::GENRE, 'genre'), 'counts grouped by a joined attribute');
-        $this->assertSame($this->groupCounts($rows, self::TEAM), $this->readGroupCounts($database, self::TEAM, self::TEAM), 'counts grouped by a main attribute');
+        $this->assertSame($this->groupCounts($rows, 'genre'), $this->readGroupCounts($database, self::GENRE), 'counts grouped by a joined attribute');
+        $this->assertSame($this->groupCounts($rows, self::TEAM), $this->readGroupCounts($database, self::TEAM), 'counts grouped by a main attribute');
     }
 
     private function database(bool $native, bool $sharedTables, bool $grantAuthors, bool $grantBooks): Database
@@ -312,15 +312,15 @@ final class FullOuterJoinAggregateVisibilityTest extends TestCase
     }
 
     /**
-     * A group comes back under the grouped attribute's own name, without the join alias.
+     * A group comes back under the name the queries group it by, a joined one qualified by its join alias.
      *
      * @return list<array{?string, int}>
      */
-    private function readGroupCounts(Database $database, string $attribute, string $key): array
+    private function readGroupCounts(Database $database, string $attribute): array
     {
         $counts = \array_map(
             fn (array $group): array => [
-                $this->stringOrNull($group[$key] ?? null),
+                $this->stringOrNull($group[$attribute] ?? null),
                 $this->integerOrNull($group['rows'] ?? null) ?? -1,
             ],
             $database->aggregate(self::AUTHORS, [$this->join(), Query::groupBy([$attribute]), Query::count('*', 'rows')]),

@@ -2411,9 +2411,9 @@ trait AggregationTests
                 'full outer join' => [Query::fullOuterJoin($collection, 'product', [Query::on('product_uid', '$id')]), [3, 3, 5]],
             ] as $type => [$product, $totals]) {
                 $groups = $database->aggregate($orders, [$product, Query::count('*', 'total'), Query::groupBy(['product.category']), Query::select(['product.category']), Query::orderAsc('product.category')]);
-                $this->assertSame(['books', 'clothing', 'electronics'], \array_map(fn (array $group): mixed => $group['category'], $groups), $type);
+                $this->assertSame(['books', 'clothing', 'electronics'], \array_map(fn (array $group): mixed => $group['product.category'], $groups), $type);
                 $this->assertSame($totals, \array_map(fn (array $group): int => $this->intAttribute($group, 'total'), $groups), $type);
-                $this->assertSame(['category', 'total'], $this->sortedAttributeNames($groups[0]), $type);
+                $this->assertSame(['product.category', 'total'], $this->sortedAttributeNames($groups[0]), $type);
             }
 
             $database->deleteCollection($orders);
@@ -2825,6 +2825,89 @@ trait AggregationTests
         }
 
         return $documents;
+    }
+
+    public function testAggregateRowsAreTypedNamedAndDecodedAsAReadReturnsThem(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'agg_typed_rows'.$this->getAggSuffix();
+        $database->createCollection(Collection::create(
+            id: $collection,
+            attributes: [
+                Attribute::string(key: 'label', size: 16, required: true),
+                Attribute::integer(key: 'quantity', required: true),
+                Attribute::double(key: 'price', required: true),
+                Attribute::boolean(key: 'active', required: true),
+                Attribute::datetime(key: 'shippedAt', required: true),
+            ],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+        foreach ([
+            ['first', 'a', 1, 1.5, true, '2023-06-01T00:00:00.000+00:00'],
+            ['second', 'a', 2, 2.5, false, '2023-06-02T00:00:00.000+00:00'],
+            ['third', 'b', 4, 3.5, true, '2023-06-01T00:00:00.000+00:00'],
+        ] as [$id, $label, $quantity, $price, $active, $shippedAt]) {
+            $database->createDocument($collection, new Document([
+                '$id' => $id,
+                'label' => $label,
+                'quantity' => $quantity,
+                'price' => $price,
+                'active' => $active,
+                'shippedAt' => $shippedAt,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
+
+        $totals = $database->aggregate($collection, [
+            Query::count('*', 'rows'),
+            Query::countDistinct('label', 'labels'),
+            Query::sum('quantity', 'units'),
+            Query::sum('price', 'revenue'),
+            Query::avg('quantity', 'mean'),
+            Query::min('quantity', 'fewest'),
+            Query::max('price', 'dearest'),
+            Query::min('shippedAt', 'firstShipped'),
+        ]);
+        $this->assertCount(1, $totals);
+        $this->assertIsFloat($totals[0]['mean']);
+        $this->assertEqualsWithDelta(7 / 3, $totals[0]['mean'], 0.0001);
+        $this->assertSame([
+            'rows' => 3,
+            'labels' => 2,
+            'units' => 7,
+            'revenue' => 7.5,
+            'mean' => $totals[0]['mean'],
+            'fewest' => 1,
+            'dearest' => 3.5,
+            'firstShipped' => '2023-06-01T00:00:00.000+00:00',
+        ], $totals[0]);
+
+        $this->assertSame(
+            [
+                ['rows' => 1, 'active' => false, 'quantity' => 2, '$id' => 'second'],
+                ['rows' => 1, 'active' => true, 'quantity' => 1, '$id' => 'first'],
+                ['rows' => 1, 'active' => true, 'quantity' => 4, '$id' => 'third'],
+            ],
+            $database->aggregate($collection, [
+                Query::count('*', 'rows'),
+                Query::groupBy(['active', 'quantity', '$id']),
+                Query::orderAsc('active'),
+                Query::orderAsc('quantity'),
+            ]),
+        );
+
+        $this->assertSame(
+            [['count' => 2, 'sum_quantity' => 3, 'label' => 'a'], ['count' => 1, 'sum_quantity' => 4, 'label' => 'b']],
+            $database->aggregate($collection, [Query::count('*'), Query::sum('quantity'), Query::groupBy(['label']), Query::orderAsc('label')]),
+        );
+
+        $database->deleteCollection($collection);
     }
 
     public function testCountMatchesTheRowsOfGroupedDistinctAndAggregateReads(): void

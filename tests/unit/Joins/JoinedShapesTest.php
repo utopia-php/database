@@ -100,12 +100,12 @@ final class JoinedShapesTest extends TestCase
             );
             $this->assertSame(['o2', 'o1', 'o3'], $this->ids($database->find('orders', [$item, Query::orderDesc('price'), Query::orderAsc('$id')])), $case);
             $this->assertSame(
-                [['orders' => 1, 'code' => 'b'], ['orders' => 2, 'code' => 'a']],
+                [['orders' => 1, 'it.code' => 'b'], ['orders' => 2, 'it.code' => 'a']],
                 $database->aggregate('orders', [$item, Query::count('*', 'orders'), Query::groupBy(['code']), Query::orderDesc('code')]),
-                $case.': a group only the join declares, named bare',
+                $case.': a group only the join declares, named bare, comes back qualified',
             );
             $this->assertSame(
-                [['orders' => 1, 'code' => 'b'], ['orders' => 2, 'code' => 'a']],
+                [['orders' => 1, 'it.code' => 'b'], ['orders' => 2, 'it.code' => 'a']],
                 $database->aggregate('orders', [$item, Query::count('*', 'orders'), Query::groupBy(['it.code']), Query::orderDesc('code')]),
                 $case.': a group named by its alias',
             );

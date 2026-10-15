@@ -12,6 +12,7 @@ use Utopia\Console;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\ReadWritePool;
+use Utopia\Database\Aggregation;
 use Utopia\Database\Attribute;
 use Utopia\Database\Cache\Epoch;
 use Utopia\Database\Cache\Owners;
@@ -4209,6 +4210,8 @@ trait Documents
      * @param  array<Query>|null  $adapterQueries  Receives the queries as the adapter's find() was handed them, or
      *                                             null when they can match no document and the adapter is not read
      * @param-out array<Query>|null  $adapterQueries
+     * @param  array<string, Document>  $joinedByAlias  Receives the collection each join reads, keyed by join alias
+     * @param-out array<string, Document>  $joinedByAlias
      * @return array<Document>
      *
      * @throws DatabaseException
@@ -4216,9 +4219,10 @@ trait Documents
      * @throws TimeoutException
      * @throws Exception
      */
-    private function fetch(Collection $collection, array $queries, PermissionType $forPermission, bool $aggregate, ?array &$adapterQueries = null): array
+    private function fetch(Collection $collection, array $queries, PermissionType $forPermission, bool $aggregate, ?array &$adapterQueries = null, array &$joinedByAlias = []): array
     {
         $adapterQueries = null;
+        $joinedByAlias = [];
 
         $queryCacheQueries = $queries;
 
@@ -5084,6 +5088,10 @@ trait Documents
      * Run aggregation queries (count, sum, avg, min, max, groupBy) and return one row per group. An aggregate without
      * an alias comes back under `<method>_<attribute>`, or `<method>` for count('*').
      *
+     * Counts and bitwise aggregates are integers, averages, deviations and variances floats, and a sum an integer over
+     * an integer attribute and a float otherwise; min() and max() are typed as their attribute. Each group is named as
+     * a read names its attribute, a joined one qualified by its join alias, and typed and decoded as a read returns it.
+     *
      * @param  array<Query>  $queries  At least one aggregate or groupBy query
      * @return list<array<string, mixed>>
      *
@@ -5097,13 +5105,18 @@ trait Documents
         $queries = self::aliasAggregates($this->rewriteQueries(Event::DocumentAggregate, $definition, $queries));
 
         $floating = self::floatingAggregates($queries);
+        $adapterQueries = null;
+        $joinedByAlias = [];
+        $results = $this->fetch($definition, $queries, PermissionType::Read, true, $adapterQueries, $joinedByAlias);
+        $aggregation = Aggregation::from($this, $definition, $joinedByAlias, $queries);
+
         $rows = [];
-        foreach ($this->fetch($definition, $queries, PermissionType::Read, true) as $row) {
+        foreach ($results as $row) {
             $row = $row->getArrayCopy();
             foreach ($floating as $alias) {
                 self::assertFinite($row[$alias] ?? null);
             }
-            $rows[] = $row;
+            $rows[] = $aggregation->decode($row);
         }
 
         $listeners = $this->listens(Event::DocumentAggregate);
@@ -5178,8 +5191,7 @@ trait Documents
             }
 
             $attribute = $query->getAttribute();
-            $alias = $attribute === '*' || $attribute === '' ? $method->value : $method->value.'_'.$attribute;
-            $alias = \substr((string) \preg_replace('/[^A-Za-z0-9_]/', '_', $alias), 0, Aggregate::MAX_ALIAS_LENGTH);
+            $alias = Aggregation::alias($query);
 
             if (isset($taken[$alias])) {
                 throw new QueryException("The default aggregate alias '{$alias}' is used by more than one aggregate; give each of them an explicit alias");

@@ -143,12 +143,12 @@ final class AggregateMinorsTest extends TestCase
                 $case.': a having on the qualified group',
             );
             $this->assertSame(
-                [['orders' => 2, 'name' => 'apple'], ['orders' => 1, 'name' => 'banana']],
+                [['orders' => 2, 'it.name' => 'apple'], ['orders' => 1, 'it.name' => 'banana']],
                 $database->aggregate('orders', [$item, Query::count('*', 'orders'), Query::groupBy(['it.name']), Query::orderAsc('it.name')]),
-                $case.': a joined group alone keeps its bare name',
+                $case.': a joined group alone keeps its qualified name',
             );
             $this->assertSame(
-                [['orders' => 2, 'code' => 'a'], ['orders' => 1, 'code' => 'b']],
+                [['orders' => 2, 'it.code' => 'a'], ['orders' => 1, 'it.code' => 'b']],
                 $database->aggregate('orders', [$item, Query::count('*', 'orders'), Query::groupBy(['code']), Query::orderAsc('it.code')]),
                 $case.': a bare name only the join declares',
             );

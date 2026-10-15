@@ -1420,27 +1420,6 @@ trait Documents
     }
 
     /**
-     * @throws AuthorizationException
-     * @throws DatabaseException
-     * @throws StructureException
-     */
-    /**
-     * A row's permissions may not name a column.
-     *
-     * No column list on purpose, and no exemption: a column-scoped permission belongs to a
-     * collection, and a row naming one would be stored where nothing enforces it. It is also
-     * what every read gate matches against -- the `_perms` side table, Postgres' JSONB
-     * containment, Mongo's `$in` -- so a column stored here hides the row from the role it was
-     * granted to, while getDocument() still returns it.
-     *
-     * Every path that writes permissions calls this. It used to live inline in
-     * prepareDocument(), which only createDocument() reaches, so the rule held on one entry
-     * point out of six and a batch create, an update or an upsert stored the grant happily.
-     *
-     * @throws DatabaseException
-     * @throws StructureException
-     */
-    /**
      * The columns the caller may reach on this collection, or null when nothing narrows them.
      *
      * Grants only ever add: a grant naming no column reaches every column, one naming a column
@@ -1715,6 +1694,22 @@ trait Documents
         return \array_values(\array_unique($columns));
     }
 
+    /**
+     * A row's permissions may not name a column.
+     *
+     * No column list on purpose, and no exemption: a column-scoped permission belongs to a
+     * collection, and a row naming one would be stored where nothing enforces it. It is also
+     * what every read gate matches against -- the `_perms` side table, Postgres' JSONB
+     * containment, Mongo's `$in` -- so a column stored here hides the row from the role it was
+     * granted to, while getDocument() still returns it.
+     *
+     * Every path that writes permissions calls this. It used to live inline in
+     * prepareDocument(), which only createDocument() reaches, so the rule held on one entry
+     * point out of six and a batch create, an update or an upsert stored the grant happily.
+     *
+     * @throws DatabaseException
+     * @throws StructureException
+     */
     private function assertRowPermissions(Document $document): void
     {
         if (! $this->validation()->get()) {

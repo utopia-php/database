@@ -1,5 +1,66 @@
 # Changelog
 
+## 8.2.0
+
+8.2.0 lets a collection's permission name one of its columns, so `read("any", "name")` grants that column alone. It
+is off until asked for and changes nothing for a collection that uses none; see
+[Upgrading from 8.1.4 to 8.2.0](UPGRADE.md#upgrading-from-814-to-820) for the one schema change it needs.
+
+Grants only ever add. A grant naming no column reaches every column, as every grant always has; one naming a column
+reaches that column alone; and a caller reaches the union over the grants whose role they hold. Nothing is restricted
+by default and no grant takes access away -- a column is unreachable until something grants it, and a role holding
+one whole-row grant is never narrowed by a column-scoped grant beside it.
+
+### Added
+
+- `Permission::read()`, `create()` and `update()` take an optional column: `Permission::read(Role::any(), 'name')`
+  renders `read("any", "name")`, and `Permission::parse()` reads it back. `delete()` and `write()` reject a column,
+  because a delete removes the whole row and a write aggregates to create, update and delete. The column must be a
+  column of the collection; `"*"` and an empty column are refused, since omitting the argument already means every
+  column.
+- `Permission::getColumn(): string` and `Permission::isForAllColumns(): bool` report what one parsed permission
+  names. `Permission::hasColumns(array $permissions): bool` and `Permission::withoutColumns(array $permissions):
+  array` answer for a list. `Permission::aggregate()` carries a column through the permissions it expands.
+- `Database::withColumnPermissions(callable $callback): mixed` runs `$callback` with column-scoped permissions
+  allowed, and `Database::hasColumnPermissions(): bool` reports whether they are. `createCollection()` and
+  `updateCollection()` throw `Exception` with `Column-scoped permissions are not enabled` for a permission naming a
+  column outside the scope, so a caller opts in once where it means to. The scope is captured by `getSnapshot()` and
+  restored by `withToggles()`, and `Mirror::withColumnPermissions()` opens it on the mirror, its source and its
+  destination.
+- `Collection::declaredPermissions(): ?array` returns a collection's permissions as they were written, column-scoped
+  ones included. `getPermissions()` keeps returning what the read gate matches, which is the same grants with every
+  column dropped. Use `declaredPermissions()` to report or replay a collection's grants and `getPermissions()` for
+  the gate.
+- `_metadata` holds a `columnPermissions` column, a JSON list of the collection's permissions as they were written,
+  stored only when one of them names a column and cleared when the last one is dropped. `Collection::setPermissions()`
+  writes it and `$permissions` together, so the two cannot drift.
+
+### Changed
+
+- A read answers with the columns the caller was granted. A query naming a column the caller may not read is refused
+  with `Exception\Authorization` (`Missing "read" permission for column "salary"`) -- filters, ordering, `select()`,
+  `count()`, `sum()` and the aggregates of `aggregate()` alike, since an aggregate over a column discloses it as
+  surely as reading it. Asking for everything is not naming anything, so a bare read and `select(['*'])` are answered
+  rather than refused: the columns the caller was not granted are removed from the document, keys and all, by
+  `getDocument()`, `find()`, `findOne()`, `cursor()`, every write that returns a document, and the documents a bulk
+  write reports through `onNext`. A related document is shaped by the grants of its own collection. The key is
+  removed rather than nulled, because a null would be indistinguishable from a column that genuinely holds null.
+- A write touching a column the caller may not change is refused whole, with `Exception\Authorization`
+  (`Missing "update" permission for column "salary"`). Applying the granted part and dropping the rest would store a
+  document neither the caller nor the collection asked for.
+- A join is refused with `Exception\Query` (`Join queries are not supported while a column-scoped permission
+  applies`) when a column restriction applies to the base collection or to any collection it joins, nested joins
+  included. A join returns the joined columns under an alias, which neither the query gate nor the masking resolves,
+  so it would judge them against the wrong collection's grants and return them unshaped. A role holding a whole-row
+  grant on every collection in the join is not narrowed and joins as before.
+- A row's permissions may not name a column, on every path that writes them: `createDocument()`,
+  `createDocuments()`, `updateDocument()`, `updateDocuments()`, `upsertDocument()` and `upsertDocuments()`. Column
+  permissions belong to a collection; stored on a row they would sit where nothing enforces them, and a column in
+  that list is what every read gate matches against -- the `_perms` side table, PostgreSQL's JSONB containment,
+  MongoDB's `$in` -- so the row would be hidden from the very role it was granted to.
+- Enforcement does not depend on the scope. `withColumnPermissions()` governs only whether a column-scoped grant may
+  be written; once a collection holds one, every read and write is gated and shaped by it.
+
 ## 8.1.4
 
 8.1.4 fixes `deleteDocuments()` deleting documents that stopped matching its queries after they were found. It needs

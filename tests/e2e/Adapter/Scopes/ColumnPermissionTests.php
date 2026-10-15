@@ -17,6 +17,7 @@ use Utopia\Database\Mirror;
 use Utopia\Database\Permission;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
+use Utopia\Database\Relationship;
 use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
 
@@ -1157,6 +1158,95 @@ trait ColumnPermissionTests
 
             // Without the join the open collection reads as it always did.
             $this->assertCount(1, $database->find('columnGrantsJoinOpen'));
+        });
+    }
+
+    /**
+     * A related document is shaped by its own collection's grants.
+     *
+     * Population reads the related collection through the same find() and getDocument() the
+     * caller would, so the mask reaches it and the grants that apply are the related
+     * collection's own, not the parent's. Pinned because a population that ever read rows
+     * directly from the adapter would hand back everything and nothing else would notice.
+     */
+    public function testARelatedDocumentIsMaskedByItsOwnCollectionsGrants(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->hasFeature(Feature\Relationships::class)) {
+            $this->markTestSkipped('Adapter does not support relationships');
+        }
+
+        $authorization = $database->getAuthorization();
+
+        // The parent names no column, so nothing of its own is withheld.
+        $database->createCollection(Collection::create(
+            id: 'columnGrantsParent',
+            attributes: [Attribute::string(key: 'label', size: 64)],
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+                // asRole() replaces the role list, so exec holds nothing that "any" would cover.
+                Permission::read(Role::team('exec')),
+            ],
+        ));
+
+        $database->withColumnPermissions(fn () => $database->createCollection(Collection::create(
+            id: 'columnGrantsRelated',
+            attributes: [
+                Attribute::string(key: 'name', size: 64),
+                Attribute::integer(key: 'salary'),
+            ],
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any(), 'name'),
+                Permission::read(Role::team('exec')),
+            ],
+        )));
+
+        $database->createRelationship(
+            'columnGrantsParent',
+            Relationship::oneToOne(relatedCollection: 'columnGrantsRelated', key: 'related'),
+        );
+
+        $authorization->skip(function () use ($database): void {
+            $database->createDocument('columnGrantsRelated', new Document([
+                '$id' => 'r1',
+                'name' => 'Ada',
+                'salary' => 120000,
+            ]));
+            $database->createDocument('columnGrantsParent', new Document([
+                '$id' => 'p1',
+                'label' => 'row',
+                'related' => 'r1',
+            ]));
+        });
+
+        $this->asRole($authorization, Role::any()->toString(), function () use ($database): void {
+            foreach ([
+                'getDocument' => $database->getDocument('columnGrantsParent', 'p1'),
+                'find' => $database->find('columnGrantsParent')[0],
+            ] as $what => $parent) {
+                // The parent is untouched: it carries no column grant of its own.
+                $this->assertSame('row', $parent->getAttribute('label'), $what);
+
+                $related = $parent->getAttribute('related');
+                $this->assertInstanceOf(Document::class, $related, $what);
+                $this->assertSame('Ada', $related->getAttribute('name'), $what);
+                $this->assertFalse(
+                    $related->offsetExists('salary'),
+                    $what.'() returned an ungranted column of the related collection',
+                );
+            }
+        });
+
+        // A whole-row grant on the related collection withholds nothing from it.
+        $this->asRole($authorization, Role::team('exec')->toString(), function () use ($database): void {
+            $related = $database->getDocument('columnGrantsParent', 'p1')->getAttribute('related');
+
+            $this->assertInstanceOf(Document::class, $related);
+            $this->assertSame(120000, $related->getAttribute('salary'));
         });
     }
 

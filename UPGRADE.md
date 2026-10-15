@@ -1,3 +1,79 @@
+# Upgrading from 8.1.4 to 8.2.0
+
+8.2.0 adds column-scoped collection permissions. It needs no code change and no adapter change, and a database that
+uses none behaves as in 8.1.4. It does need one column added to the metadata table; see
+[CHANGELOG.md](CHANGELOG.md#820) for the feature itself.
+
+- [The `columnPermissions` column](#the-columnpermissions-column)
+- [Reading a collection's permissions](#reading-a-collections-permissions)
+- [Granting a column](#granting-a-column)
+- [Joins](#joins)
+
+## The `columnPermissions` column
+
+`_metadata` holds a new `columnPermissions` column: a JSON list, defaulting to `[]`. The metadata table is described
+in code rather than by a row of its own, so `createAttribute()` cannot add it and an existing database needs the
+column created directly, before any code of 8.2.0 reads the table. Create it nullable, or with `[]` as its default,
+so the collections already stored keep working unchanged.
+
+On a host with shared tables the column belongs to the shared table, so add it once per table, not once per tenant.
+Adding it while a tenant is set gives its row that tenant and leaves the column missing for every other tenant on
+the host.
+
+Running 8.2.0 before the column exists degrades in one direction only, so an upgrade that cannot add it in the same
+step is not left broken: reading is unaffected, and changing the schema fails until it is there.
+
+| | Without the column |
+|---|---|
+| `getCollection()`, `getDocument()`, `find()` and the rest of the reads | work, since they select every column rather than naming them |
+| `createDocument()` and the other document writes | work |
+| `createCollection()` | fails with `Failed to create collection metadata for '<id>': Attribute not found` |
+| `updateCollection()` | fails with `Exception\NotFound` (`Attribute not found`) |
+
+Add the column first and deploy second. Deploying first leaves an application that serves reads and document writes
+but cannot create or change a collection until the column is added, at which point it recovers with no restart.
+
+## Reading a collection's permissions
+
+`Collection::getPermissions()` keeps its meaning: the grants as the read gate matches them, which is every grant with
+its column dropped. That is what the gate must see -- the `_perms` side table, PostgreSQL's JSONB containment and
+MongoDB's `$in` all match the stored form, so a column left in it would hide the collection from the role it was
+granted to.
+
+Code that reports a collection's permissions back to a caller, or replays them onto another collection, wants
+`Collection::declaredPermissions()` instead, which returns them as they were written. For a collection with no
+column-scoped grant the two return the same list, so this only matters once a column is granted.
+
+## Granting a column
+
+A column-scoped grant is refused unless the call asks for one:
+
+```php
+$database->withColumnPermissions(fn () => $database->createCollection(Collection::create(
+    id: 'employees',
+    attributes: [Attribute::string(key: 'name', size: 64), Attribute::integer(key: 'salary')],
+    permissions: [
+        Permission::read(Role::any(), 'name'),
+        Permission::read(Role::team('hr')),
+    ],
+)));
+```
+
+Grants add rather than restrict: `any` reaches `name` alone, `hr` holds a whole-row grant and reaches everything. A
+caller reaches the union over the grants whose role they hold, so a whole-row grant is never narrowed by a
+column-scoped one beside it.
+
+Once a collection holds such a grant it is enforced on every read and write, with or without the scope: a query
+naming an ungranted column throws `Exception\Authorization`, a write touching one is refused whole, and a read that
+names nothing comes back holding only the granted columns. A row's own permissions may never name a column.
+
+## Joins
+
+A join is refused with `Exception\Query` while a column restriction applies to the base collection or to any
+collection it joins. A join returns the joined columns under an alias, which the query gate and the masking do not
+resolve, so allowing it would judge those columns against the wrong collection's grants and return them unshaped. A
+role holding a whole-row grant on every collection in the join is unrestricted and joins as in 8.1.4.
+
 # Upgrading from 8.1.3 to 8.1.4
 
 8.1.4 is a patch release and needs no code change. `Database::deleteDocuments()` keeps its signature and now deletes

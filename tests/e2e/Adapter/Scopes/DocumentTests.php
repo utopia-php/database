@@ -8326,6 +8326,46 @@ trait DocumentTests
         $database->deleteCollection($collectionId);
     }
 
+    public function testDeleteBulkDocumentsWithAFloatFilterDeletesWhatTheFindMatched(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $collectionId = 'bulk_delete_float_filter';
+        $filter = Query::greaterThan('score', 1.0E-20);
+
+        $database->createCollection(Collection::create(id: $collectionId, attributes: [
+            Attribute::float(key: 'score', required: true),
+        ], permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::delete(Role::any()),
+        ], documentSecurity: false));
+
+        foreach (['tiny' => 1.0E-21, 'large' => 1.5, 'negative' => -1.0] as $id => $score) {
+            $database->createDocument($collectionId, new Document([
+                '$id' => $id,
+                '$permissions' => [Permission::read(Role::any())],
+                'score' => $score,
+            ]));
+        }
+
+        $found = \array_map(static fn (Document $document): string => $document->getId(), $database->find($collectionId, [$filter]));
+        $deleted = [];
+        $count = $database->deleteDocuments($collectionId, [$filter], onNext: function (Document $document) use (&$deleted): void {
+            $deleted[] = $document->getId();
+        });
+
+        \sort($found);
+        \sort($deleted);
+        $this->assertSame(\count($found), $count);
+        $this->assertSame($found, $deleted);
+        $remaining = \array_map(static fn (Document $document): string => $document->getId(), $database->find($collectionId));
+        $this->assertSame([], \array_values(\array_intersect($found, $remaining)));
+        $this->assertContains('negative', $remaining);
+
+        $database->deleteCollection($collectionId);
+    }
+
     public function testDeleteBulkDocumentsWithCallbackSupport(): void
     {
         /** @var Database $database */

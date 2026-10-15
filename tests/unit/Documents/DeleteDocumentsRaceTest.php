@@ -8,13 +8,17 @@ use PHPUnit\Framework\TestCase;
 use Tests\Unit\Documents\Interleaving\Memory;
 use Tests\Unit\Documents\Interleaving\Refresh;
 use Tests\Unit\Documents\Interleaving\SQLite;
+use Tests\Unit\Documents\Interleaving\Standalone;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Event\Document\BatchDeleted;
+use Utopia\Database\Event\Domain;
 use Utopia\Database\Exception\Contention as ContentionException;
+use Utopia\Database\Hook\Lifecycle;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Permission;
@@ -152,7 +156,122 @@ final class DeleteDocumentsRaceTest extends TestCase
 
         $this->assertSame(3, $engine->deletes, 'The batch is tried again before it fails');
         $this->assertSame(['a', 'b', 'c'], $this->stored($database), 'Nothing of the failed batch is stored');
-        $this->assertSame(self::EXPIRED, $this->expiry($database, 'b'));
+    }
+
+    public function testADocumentChangedRightBeforeTheDeleteIsKeptWhenTheRetryReadsItAgain(): void
+    {
+        $engine = new Memory();
+        [$database] = $this->database($engine);
+        $this->seed($database, ['a' => self::EXPIRED, 'b' => self::EXPIRED, 'c' => self::EXPIRED]);
+        $engine->beforeDelete = function (Document $collection) use ($database, $engine): void {
+            if ($collection->getId() === self::COLLECTION && $engine->deletes === 1) {
+                $engine->detached(fn (): Document => $database->updateDocument(self::COLLECTION, 'b', new Document(['expiresAt' => self::REFRESHED])));
+            }
+        };
+
+        $deleted = [];
+        $count = $database->deleteDocuments(self::COLLECTION, [$this->expired()], onNext: function (Document $document) use (&$deleted): void {
+            $deleted[] = $document->getId();
+        });
+
+        $this->assertSame(2, $engine->deletes, 'The batch is rolled back once and deleted on the retry');
+        $this->assertSame(2, $count, 'Only the retry that committed is counted');
+        $this->assertSame(['a', 'c'], $deleted, 'Each deleted document is handed to $onNext once');
+        $this->assertSame(['b'], $this->stored($database));
+        $this->assertSame(self::REFRESHED, $this->expiry($database, 'b'));
+    }
+
+    public function testAContentionInALaterBatchReportsTheBatchesAlreadyDeleted(): void
+    {
+        [$database, $engine] = $this->database(new Memory());
+        $this->seed($database, ['a' => self::EXPIRED, 'b' => self::EXPIRED, 'c' => self::EXPIRED, 'd' => self::EXPIRED]);
+        $engine->beforeDelete = function (Document $collection) use ($database, $engine): void {
+            if ($collection->getId() === self::COLLECTION && $engine->deletes > 1) {
+                $database->updateDocument(self::COLLECTION, 'd', new Document(['expiresAt' => self::REFRESHED]));
+            }
+        };
+        $events = $this->batchEvents($database);
+
+        $deleted = [];
+        try {
+            $database->deleteDocuments(self::COLLECTION, [$this->expired()], batchSize: 2, onNext: function (Document $document) use (&$deleted): void {
+                $deleted[] = $document->getId();
+            });
+            $this->fail('The second batch must fail with a contention');
+        } catch (ContentionException) {
+        }
+
+        $this->assertSame(['a', 'b'], $deleted);
+        $this->assertSame(['c', 'd'], $this->stored($database), 'The first batch stays deleted');
+        $this->assertSame([2], $events->counts, 'The deleted batch is reported');
+    }
+
+    public function testWithoutATransactionADocumentChangedRightBeforeTheDeleteIsKeptAndTheRestReported(): void
+    {
+        [$database, $engine] = $this->database(new Standalone());
+        $this->seed($database, ['a' => self::EXPIRED, 'b' => self::EXPIRED, 'c' => self::EXPIRED, 'd' => self::EXPIRED, 'e' => self::REFRESHED]);
+        $engine->beforeDelete = function (Document $collection) use ($database, $engine): void {
+            if ($collection->getId() === self::COLLECTION && $engine->deletes === 1) {
+                $database->updateDocument(self::COLLECTION, 'b', new Document(['expiresAt' => self::REFRESHED]));
+            }
+        };
+        $events = $this->batchEvents($database);
+
+        $deleted = [];
+        $count = $database->deleteDocuments(self::COLLECTION, [$this->expired()], batchSize: 2, onNext: function (Document $document) use (&$deleted): void {
+            $deleted[] = $document->getId();
+        });
+
+        $this->assertSame(3, $count, 'The document kept is not counted, and the next batch is still deleted');
+        $this->assertSame(['a', 'c', 'd'], $deleted, 'Every deleted document is handed to $onNext');
+        $this->assertSame([3], $events->counts);
+        $this->assertSame(['b', 'e'], $this->stored($database));
+        $this->assertSame(['b', 'e'], \array_map(static fn (Document $document): string => $document->getId(), $database->find(self::COLLECTION)), 'The kept document keeps its permission rows');
+    }
+
+    /**
+     * @param  Closure(): (Memory|SQLite)  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testAFloatFilterDeletesTheDocumentsTheFindMatched(Closure $adapter): void
+    {
+        [$database] = $this->database($adapter());
+        $database->createCollection(Collection::create(
+            id: 'scores',
+            attributes: [Attribute::float(key: 'score')],
+            permissions: $this->permissions(),
+            documentSecurity: false,
+        ));
+        $database->createDocument('scores', new Document([Document::ID => 'tiny', 'score' => 1.0E-21]));
+        $database->createDocument('scores', new Document([Document::ID => 'none', 'score' => -1.0]));
+        $filter = Query::greaterThan('score', 1.0E-20);
+
+        $found = \array_map(static fn (Document $document): string => $document->getId(), $database->find('scores', [$filter]));
+        $count = $database->deleteDocuments('scores', [$filter]);
+
+        $this->assertSame(\count($found), $count, 'The delete binds a float as the find does');
+        $remaining = \array_map(static fn (Document $document): string => $document->getId(), $database->find('scores'));
+        $this->assertSame([], \array_values(\array_intersect($found, $remaining)));
+        $this->assertContains('none', $remaining);
+    }
+
+    /**
+     * @param  Closure(): (Memory|SQLite)  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testABatchFilteredOnlyOnTheSequenceIsNotReadAgain(Closure $adapter): void
+    {
+        [$database, $engine] = $this->database($adapter());
+        $this->seed($database, ['a' => self::EXPIRED, 'b' => self::REFRESHED, 'c' => self::EXPIRED]);
+        $sequences = $database->getAuthorization()->skip(fn (): array => \array_map(
+            static fn (Document $document): string => (string) $document->getSequence(),
+            $database->find(self::COLLECTION, [Query::equal(Document::ID, ['a', 'c'])]),
+        ));
+        $finds = $engine->finds;
+
+        $this->assertSame(2, $database->deleteDocuments(self::COLLECTION, [Query::equal(Document::SEQUENCE, $sequences)], batchSize: 2));
+        $this->assertSame(2, $engine->finds - $finds, 'Each batch is found once and not read again');
+        $this->assertSame(['b'], $this->stored($database));
     }
 
     /**
@@ -212,16 +331,21 @@ final class DeleteDocumentsRaceTest extends TestCase
     {
         [$database, $engine] = $this->database($adapter());
         $this->seed($database, ['a' => self::EXPIRED, 'b' => self::REFRESHED, 'c' => self::EXPIRED]);
+        $finds = $engine->finds;
 
         $this->assertSame(3, $database->deleteDocuments(self::COLLECTION, batchSize: 2));
+        $this->assertSame(2, $engine->finds - $finds, 'Each batch is found once and not read again');
         $this->assertSame([], $this->stored($database));
         $this->assertSame(2, $engine->deletes);
     }
 
     /**
-     * @return array{Database, Memory|SQLite}
+     * @template T of Memory|SQLite|Standalone
+     *
+     * @param  T  $adapter
+     * @return array{Database, T}
      */
-    private function database(Memory|SQLite $adapter): array
+    private function database(Memory|SQLite|Standalone $adapter): array
     {
         $authorization = new Authorization();
         $authorization->addRole(self::OWNER);
@@ -243,6 +367,28 @@ final class DeleteDocumentsRaceTest extends TestCase
         ));
 
         return [$database, $adapter];
+    }
+
+    /**
+     * @return object{counts: list<int>}
+     */
+    private function batchEvents(Database $database): object
+    {
+        $events = new class () implements Lifecycle {
+            /** @var list<int> */
+            public array $counts = [];
+
+            #[\Override]
+            public function handle(Domain $event): void
+            {
+                if ($event instanceof BatchDeleted) {
+                    $this->counts[] = $event->count;
+                }
+            }
+        };
+        $database->addHook($events);
+
+        return $events;
     }
 
     /**

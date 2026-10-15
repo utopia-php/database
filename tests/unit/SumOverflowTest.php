@@ -86,6 +86,18 @@ final class SumOverflowTest extends TestCase
      * @param  Closure(): Adapter  $adapter
      */
     #[DataProvider('adapters')]
+    public function testANegativeSumThatOverflowsIsRefused(Closure $adapter): void
+    {
+        $database = $this->database($adapter, [-1e308, -1e308]);
+
+        $this->expectException(LimitException::class);
+        $database->sum(self::COLLECTION, 'reading');
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
     public function testASumThatOverflowsUnderFiltersIsRefused(Closure $adapter): void
     {
         $database = $this->database($adapter, [1e308, 1e308, -1.0]);

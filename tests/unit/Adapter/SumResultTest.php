@@ -27,10 +27,24 @@ final class SumResultTest extends TestCase
         yield 'negative double with an exponent' => ['-1.5e300', -1.5e300];
         yield 'decimal past the range of an integer' => ['18446744073709551614', 18446744073709551614.0];
         yield 'no rows' => [null, 0];
+        yield 'infinity' => ['INF', \INF];
+        yield 'negative infinity' => ['-INF', -\INF];
+        yield 'infinity in another case' => ['Inf', \INF];
+        yield 'not a number word' => ['overflow', 0];
     }
 
     #[DataProvider('sums')]
     public function testASumIsReadAsTheNumberTheEngineSent(?string $sent, int|float $expected): void
+    {
+        $this->assertSame($expected, $this->sumOf($sent));
+    }
+
+    public function testANotANumberSumIsReadAsNan(): void
+    {
+        $this->assertNan($this->sumOf('NAN'));
+    }
+
+    private function sumOf(?string $sent): int|float
     {
         $pdo = $this->createStub(PDO::class);
         $pdo->method('prepare')->willReturnCallback(function () use ($sent): PDOStatement {
@@ -47,6 +61,6 @@ final class SumResultTest extends TestCase
         $adapter->setNamespace('namespace');
         $adapter->setAuthorization(new Authorization());
 
-        $this->assertSame($expected, $adapter->sum(Collection::create(id: 'readings'), 'reading'));
+        return $adapter->sum(Collection::create(id: 'readings'), 'reading');
     }
 }

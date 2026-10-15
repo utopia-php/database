@@ -1583,7 +1583,7 @@ trait AggregationTests
             ],
             permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
         ));
-        foreach ([['huge', 1e308], ['huge', 1e308], ['spread', 1e308], ['spread', -1e308], ['spread', 0.0], ['single', 1e308]] as [$series, $reading]) {
+        foreach ([['huge', 1e308], ['huge', 1e308], ['sunk', -1e308], ['sunk', -1e308], ['spread', 1e308], ['spread', -1e308], ['spread', 0.0], ['single', 1e308]] as [$series, $reading]) {
             $database->createDocument($collection, new Document([
                 'series' => $series,
                 'reading' => $reading,
@@ -1594,6 +1594,8 @@ trait AggregationTests
         $overflows = [
             [Query::equal('series', ['huge']), Query::sum('reading', 'result')],
             [Query::equal('series', ['huge']), Query::avg('reading', 'result')],
+            [Query::equal('series', ['sunk']), Query::sum('reading', 'result')],
+            [Query::equal('series', ['sunk']), Query::avg('reading', 'result')],
             [Query::sum('reading', 'result'), Query::groupBy(['series'])],
         ];
         if (! $database->getAdapter() instanceof SQLite) {

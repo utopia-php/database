@@ -1485,7 +1485,8 @@ trait Documents
      * this role. A role holding a whole-row grant on both sides is unrestricted and joins as it
      * always did.
      *
-     * @param  array<mixed>  $queries
+     * @param  array<Query>  $queries
+     * @param  array<string, Document>|null  $joinedCollections  The collection each join names, by its id
      *
      * @throws QueryException
      * @throws DatabaseException
@@ -1496,6 +1497,13 @@ trait Documents
         $joined = self::joinedBy($queries);
 
         if ($joined === []) {
+            return;
+        }
+
+        // An adapter that cannot join at all refuses the join further down, for a better
+        // reason than this one. Stepping aside leaves that error to it, and a join that can
+        // never run leaks nothing in the meantime.
+        if (! $this->adapter->supports(Capability::Joins)) {
             return;
         }
 
@@ -1628,6 +1636,7 @@ trait Documents
      * names a column is settled here, before the adapter sees it.
      *
      * @param  array<Query>  $queries
+     * @param  array<string, Document>|null  $joinedCollections  The collection each join names, by its id
      *
      * @throws AuthorizationException
      * @throws DatabaseException

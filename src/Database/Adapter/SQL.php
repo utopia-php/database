@@ -20,6 +20,7 @@ use Utopia\Database\Adapter\SQL\Hook\Permission;
 use Utopia\Database\Adapter\SQL\Hook\Tenant;
 use Utopia\Database\Adapter\SQL\Hook\WriteContext;
 use Utopia\Database\Adapter\SQL\JoinAlias;
+use Utopia\Database\Adapter\SQL\Plan;
 use Utopia\Database\Adapter\SQL\Scope\Filter as FilterScope;
 use Utopia\Database\Adapter\SQL\Scope\Raw as RawScope;
 use Utopia\Database\Attribute;
@@ -1560,70 +1561,16 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             return $documents;
         }
 
-        // Single pass partitioning: pull vector queries out for ORDER BY and
-        // detect aggregation/join shape in the same walk. Each Method::value
-        // is checked once per query rather than three times.
-        // Defer the defensive `clone` until we know the query path will mutate
-        // the Query objects (joins or aggregations-with-joins). The vast
-        // majority of finds take neither path and don't need a per-query
-        // clone allocation.
-        $vectorQueries = [];
-        $otherQueries = [];
-        $adapterFilterQueries = [];
-        $hasAggregation = false;
-        $hasJoins = false;
-        $hasDistinct = false;
-
-        foreach ($queries as $query) {
-            $method = $query->getMethod();
-
-            if ($method->isVector()) {
-                $vectorQueries[] = $query;
-
-                continue;
-            }
-
-            if ($this->isAdapterFilterQuery($query)) {
-                $adapterFilterQueries[] = $query;
-
-                continue;
-            }
-
-            $otherQueries[] = $query;
-
-            if ($method->isAggregate() || $method === Method::GroupBy) {
-                $hasAggregation = true;
-            }
-            if ($method->isJoin()) {
-                $hasJoins = true;
-            }
-            if ($method === Method::Distinct) {
-                $hasDistinct = true;
-            }
-        }
-
-        $queries = $otherQueries;
-
-        if ($hasJoins) {
-            $queries = \array_map(static fn ($query) => clone $query, $queries);
-        }
-
-        $joinTablePrefixes = [];
-        if ($hasJoins) {
-            $joinTablePrefixes = $this->remapJoinQueries($queries);
-        }
-        $unindexed = $this->unindexedJoins($collectionDoc, $queries, $joinTablePrefixes);
-
-        $hasPreservingOuterJoin = false;
-        if ($hasJoins) {
-            foreach ($queries as $query) {
-                $method = $query->getMethod();
-                if ($method === Method::RightJoin || $method === Method::FullOuterJoin) {
-                    $hasPreservingOuterJoin = true;
-                    break;
-                }
-            }
-        }
+        $plan = $this->plan($collectionDoc, $queries);
+        $queries = $plan->queries;
+        $vectorQueries = $plan->vectorQueries;
+        $adapterFilterQueries = $plan->adapterFilterQueries;
+        $joinTablePrefixes = $plan->joinTablePrefixes;
+        $unindexed = $plan->unindexed;
+        $hasAggregation = $plan->hasAggregation;
+        $hasJoins = $plan->hasJoins;
+        $hasDistinct = $plan->hasDistinct;
+        $hasPreservingOuterJoin = $plan->hasPreservingOuterJoin;
 
         if ($joinTablePrefixes !== []) {
             [$orderAttributes, $cursor] = $this->qualifyJoinedOrders($orderAttributes, $cursor, $collectionDoc, $joinTablePrefixes);
@@ -1636,10 +1583,8 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 ??= $this->qualifyOrderAttribute($attribute, $joinAliases);
         };
 
-        $emulatesFullOuterJoin = $this->needsFullOuterJoinEmulation($this->dialectBuilder(), $queries);
-
-        if ($emulatesFullOuterJoin && $hasAggregation) {
-            $results = $this->findFullOuterJoinAggregate(
+        if ($plan->emulatesFullOuterJoin && $hasAggregation) {
+            [$aggregation, $columns, $qualifiedGroups] = $this->fullOuterJoinAggregation(
                 $collectionDoc,
                 $queries,
                 $joinTablePrefixes,
@@ -1657,89 +1602,13 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 $cursorDirection,
                 $resolveInternalKey,
             );
-        } elseif ($emulatesFullOuterJoin) {
-            if ($hasDistinct) {
-                $this->assertDistinctOrderIsSelected($queries, $orderAttributes, $orderTypes, $joinAliases);
-            }
-
-            [$leftQueries, $rightQueries] = $this->emulateFullOuterJoin($queries, $alias);
-            $leftPreserving = $this->keepsUnmatchedRows($leftQueries);
-
-            $left = $this->newBuilder($name, $alias, $leftPreserving, unindexed: $unindexed);
-            $leftProjected = $this->configureFindBuilder(
-                $left,
-                $collectionDoc,
-                $leftQueries,
-                $joinTablePrefixes,
-                $hasAggregation,
-                $hasDistinct,
-                $adapterFilterQueries,
+            $results = $this->fullOuterJoinResultNames($this->executeSelect($aggregation, Event::DocumentFind, $name), $columns, $qualifiedGroups);
+        } elseif ($plan->emulatesFullOuterJoin) {
+            $results = $this->executeSelect(
+                $this->fullOuterJoinUnion($collectionDoc, $plan, $name, $alias, $roles, $forPermission, $orderAttributes, $orderTypes, $limit, $offset, $cursor, $cursorDirection, $resolveInternalKey),
+                Event::DocumentFind,
                 $name,
-                $alias,
-                $roles,
-                $forPermission,
-                orderAttributes: $orderAttributes,
             );
-            $this->applyFullOuterJoinOrderProjection(
-                $left,
-                $collectionDoc,
-                $alias,
-                $orderAttributes,
-                $orderTypes,
-                $leftProjected,
-                $joinTablePrefixes,
-            );
-            $this->applyFindCursor(
-                $left,
-                $orderAttributes,
-                $orderTypes,
-                $cursor,
-                $cursorDirection,
-                $resolveInternalKey,
-                nullable: true,
-            );
-
-            $right = $this->newBuilder($name, $alias, true, unindexed: $unindexed);
-            $rightProjected = $this->configureFindBuilder(
-                $right,
-                $collectionDoc,
-                $rightQueries,
-                $joinTablePrefixes,
-                $hasAggregation,
-                $hasDistinct,
-                $adapterFilterQueries,
-                $name,
-                $alias,
-                $roles,
-                $forPermission,
-                orderAttributes: $orderAttributes,
-            );
-            $this->applyFullOuterJoinOrderProjection(
-                $right,
-                $collectionDoc,
-                $alias,
-                $orderAttributes,
-                $orderTypes,
-                $rightProjected,
-                $joinTablePrefixes,
-            );
-            $this->applyFindCursor(
-                $right,
-                $orderAttributes,
-                $orderTypes,
-                $cursor,
-                $cursorDirection,
-                $resolveInternalKey,
-                nullable: true,
-            );
-
-            if ($hasDistinct) {
-                $left->union($right);
-            } else {
-                $left->unionAll($right);
-            }
-            $this->applyFindPage($left, $orderAttributes, $orderTypes, $limit, $offset, $cursorDirection, afterUnion: true);
-            $results = $this->executeSelect($left, Event::DocumentFind, $name);
         } else {
             $bound = $hasJoins && ! $hasAggregation && ! $hasDistinct && $vectorQueries === [] && $this->boundsJoinedSort()
                 ? $this->boundedPage($collectionDoc, $queries, $adapterFilterQueries, $joinTablePrefixes, $orderAttributes, $orderTypes, $limit, $offset, $cursor)
@@ -1761,16 +1630,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 orderAttributes: $orderAttributes,
             );
 
-            $vectorDistance = null;
-            $vectorQuery = $vectorQueries[0] ?? null;
-            if ($vectorQuery !== null) {
-                $vectorDistance = $this->getVectorOrderRaw($vectorQuery, $alias);
-            }
-
-            if ($vectorDistance !== null && $vectorQuery !== null) {
-                $vectorAttribute = $this->quote($this->filter($vectorQuery->getAttribute()));
-                $builder->whereRaw($this->quote($alias).".{$vectorAttribute} IS NOT NULL");
-            }
+            $vectorDistance = $this->vectorDistance($builder, $vectorQueries[0] ?? null, $alias);
 
             if (! empty($cursor) && $vectorDistance !== null && ! $hasDistinct) {
                 $distance = $cursor[Document::DISTANCE] ?? null;
@@ -1869,6 +1729,102 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
+     * Split the queries of a find() or a row count by how the statement reads them. Join queries are cloned before
+     * their columns are qualified, so the caller's queries are left as they were.
+     *
+     * @param  array<Query>  $queries
+     *
+     * @throws QueryException
+     */
+    private function plan(Document $collection, array $queries): Plan
+    {
+        $vectorQueries = [];
+        $otherQueries = [];
+        $adapterFilterQueries = [];
+        $hasAggregation = false;
+        $hasJoins = false;
+        $hasDistinct = false;
+
+        foreach ($queries as $query) {
+            $method = $query->getMethod();
+
+            if ($method->isVector()) {
+                $vectorQueries[] = $query;
+
+                continue;
+            }
+
+            if ($this->isAdapterFilterQuery($query)) {
+                $adapterFilterQueries[] = $query;
+
+                continue;
+            }
+
+            $otherQueries[] = $query;
+
+            if ($method->isAggregate() || $method === Method::GroupBy) {
+                $hasAggregation = true;
+            }
+            if ($method->isJoin()) {
+                $hasJoins = true;
+            }
+            if ($method === Method::Distinct) {
+                $hasDistinct = true;
+            }
+        }
+
+        $queries = $otherQueries;
+
+        $joinTablePrefixes = [];
+        if ($hasJoins) {
+            $queries = \array_map(static fn ($query) => clone $query, $queries);
+            $joinTablePrefixes = $this->remapJoinQueries($queries);
+        }
+        $unindexed = $this->unindexedJoins($collection, $queries, $joinTablePrefixes);
+
+        $hasPreservingOuterJoin = false;
+        if ($hasJoins) {
+            foreach ($queries as $query) {
+                $method = $query->getMethod();
+                if ($method === Method::RightJoin || $method === Method::FullOuterJoin) {
+                    $hasPreservingOuterJoin = true;
+                    break;
+                }
+            }
+        }
+
+        return new Plan(
+            queries: $queries,
+            vectorQueries: $vectorQueries,
+            adapterFilterQueries: $adapterFilterQueries,
+            joinTablePrefixes: $joinTablePrefixes,
+            unindexed: $unindexed,
+            hasAggregation: $hasAggregation,
+            hasJoins: $hasJoins,
+            hasDistinct: $hasDistinct,
+            hasPreservingOuterJoin: $hasPreservingOuterJoin,
+            emulatesFullOuterJoin: $this->needsFullOuterJoinEmulation($this->dialectBuilder(), $queries),
+        );
+    }
+
+    /**
+     * Keep the rows a vector query can rank, those with a vector, and return the distance it ranks them by.
+     */
+    private function vectorDistance(SQLBuilder $builder, ?Query $vectorQuery, string $alias): ?Expression
+    {
+        if ($vectorQuery === null) {
+            return null;
+        }
+
+        $distance = $this->getVectorOrderRaw($vectorQuery, $alias);
+        if ($distance !== null) {
+            $builder->whereRaw($this->quote($alias).'.'.$this->quote($this->filter($vectorQuery->getAttribute())).' IS NOT NULL');
+        }
+
+        return $distance;
+    }
+
+    /**
      * @param array<mixed> $bindings
      * @return array<Document>
      *
@@ -1913,6 +1869,10 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         $name = $this->filter($collection);
         $roles = $this->authorization->getRoles();
         $alias = Query::DEFAULT_ALIAS;
+
+        if ($this->shapesRows($queries)) {
+            return $this->executeWrappedCount($this->rowsBuilder($collectionDoc, $this->plan($collectionDoc, $queries), $name, $alias, $roles, $max), $name);
+        }
 
         $otherQueries = [];
         $hasJoins = false;
@@ -1986,6 +1946,17 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         $roles = $this->authorization->getRoles();
         $alias = Query::DEFAULT_ALIAS;
 
+        if ($this->shapesRows($queries)) {
+            $plan = $this->plan($collectionDoc, $queries);
+            $column = $this->rowsColumn($attribute, $queries, $plan->hasAggregation);
+
+            $outerBuilder = $this->dialectBuilder();
+            $outerBuilder->fromSub($this->rowsBuilder($collectionDoc, $plan, $name, $alias, $roles, $max), 'table_count');
+            $outerBuilder->selectRaw($this->rangeChecked('SUM('.$this->quote($column).')').' AS '.$this->quote('sum'));
+
+            return $this->sumOf($this->fetchAggregateRow($outerBuilder, Event::DocumentSum, $name));
+        }
+
         $otherQueries = [];
         $hasJoins = false;
         foreach ($queries as $query) {
@@ -2046,6 +2017,117 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         }
 
         return $this->executeWrappedSum($builder, $attribute, $name);
+    }
+
+    /**
+     * Whether the queries read rows other than one per matching document: groups, aggregates or distinct values.
+     *
+     * @param  array<Query>  $queries
+     */
+    private function shapesRows(array $queries): bool
+    {
+        foreach ($queries as $query) {
+            $method = $query->getMethod();
+            if ($method->isAggregate() || $method === Method::GroupBy || $method === Method::Distinct) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * The column grouped rows hold a groupBy attribute in, or distinct rows hold a selected attribute in.
+     *
+     * @param  array<Query>  $queries
+     *
+     * @throws QueryException When the attribute is not one of the groups or selections
+     */
+    private function rowsColumn(string $attribute, array $queries, bool $grouped): string
+    {
+        foreach ($queries as $query) {
+            $method = $query->getMethod();
+            if ($method !== ($grouped ? Method::GroupBy : Method::Select)) {
+                continue;
+            }
+
+            /** @var array<string> $values */
+            $values = $query->getValues();
+            $index = \array_search($attribute, $values, true);
+            if ($index === false) {
+                continue;
+            }
+
+            $dot = \strpos($attribute, '.');
+            $column = $this->filter($this->getInternalKeyForAttribute($dot === false ? $attribute : \substr($attribute, $dot + 1)));
+
+            if ($grouped) {
+                return $this->qualifiedGroupNames($values)[$index] ?? $column;
+            }
+
+            return $dot === false ? $column : \substr($attribute, 0, $dot).'.'.$column;
+        }
+
+        throw new QueryException('Invalid query: sum() over '.($grouped ? 'grouped' : 'distinct').' rows adds up one of their '.($grouped ? 'groupBy' : 'selected').' attributes, and '.$attribute.' is not one of them');
+    }
+
+    /**
+     * The statement find() reads for the plan, unordered and unpaged, bounded to the first $max rows.
+     *
+     * @param  array<string>  $roles
+     *
+     * @throws DatabaseException
+     */
+    private function rowsBuilder(Document $collection, Plan $plan, string $name, string $alias, array $roles, ?int $max): SQLBuilder
+    {
+        $joinAliases = \array_column($plan->joinTablePrefixes, 'alias');
+        $resolveInternalKey = fn (string $attribute): string => $this->qualifyOrderAttribute($attribute, $joinAliases);
+
+        if ($plan->emulatesFullOuterJoin && $plan->hasAggregation) {
+            [$aggregation] = $this->fullOuterJoinAggregation(
+                $collection,
+                $plan->queries,
+                $plan->joinTablePrefixes,
+                $plan->hasDistinct,
+                $plan->adapterFilterQueries,
+                $name,
+                $alias,
+                $roles,
+                PermissionType::Read,
+                [],
+                [],
+                $max,
+                null,
+                [],
+                CursorDirection::After,
+                $resolveInternalKey,
+            );
+
+            return $aggregation;
+        }
+
+        if ($plan->emulatesFullOuterJoin) {
+            return $this->fullOuterJoinUnion($collection, $plan, $name, $alias, $roles, PermissionType::Read, [], [], $max, null, [], CursorDirection::After, $resolveInternalKey);
+        }
+
+        $builder = $this->newBuilder($name, $alias, $plan->hasPreservingOuterJoin, unindexed: $plan->unindexed);
+        $this->configureFindBuilder(
+            $builder,
+            $collection,
+            $plan->queries,
+            $plan->joinTablePrefixes,
+            $plan->hasAggregation,
+            $plan->hasDistinct,
+            $plan->adapterFilterQueries,
+            $name,
+            $alias,
+            $roles,
+            PermissionType::Read,
+        );
+        $this->vectorDistance($builder, $plan->vectorQueries[0] ?? null, $alias);
+        $this->applyFindPage($builder, [], [], $max, null, joinAliases: $joinAliases);
+
+        return $builder;
     }
 
     /**
@@ -3374,6 +3456,15 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * statements scope it with the tenants they read, or use it as it is where they name no collection.
      */
     abstract protected function dialectBuilder(): SQLBuilder&Scoping;
+
+    /**
+     * A floating expression the engine raises an error for when it overflows a double, rather than answer a wrong
+     * number. The dialect builder checks the aggregates it compiles the same way.
+     */
+    protected function rangeChecked(string $expression): string
+    {
+        return $expression;
+    }
 
     #[\Override]
     public function schema(): MySQLSchema|PostgresSchema
@@ -5105,6 +5196,118 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
+     * The rows of an emulated full outer join: its left and right halves, each filtered, projected and past the
+     * cursor, as one union, ordered and paged.
+     *
+     * @param  array<string>  $roles
+     * @param  array<string>  $orderAttributes
+     * @param  array<OrderDirection>  $orderTypes
+     * @param  array<string, mixed>  $cursor
+     * @param  callable(string): string  $resolveInternalKey
+     *
+     * @throws DatabaseException
+     */
+    private function fullOuterJoinUnion(
+        Document $collectionDoc,
+        Plan $plan,
+        string $name,
+        string $alias,
+        array $roles,
+        PermissionType $forPermission,
+        array $orderAttributes,
+        array $orderTypes,
+        ?int $limit,
+        ?int $offset,
+        array $cursor,
+        CursorDirection $cursorDirection,
+        callable $resolveInternalKey,
+    ): SQLBuilder {
+        if ($plan->hasDistinct) {
+            $this->assertDistinctOrderIsSelected($plan->queries, $orderAttributes, $orderTypes, \array_column($plan->joinTablePrefixes, 'alias'));
+        }
+
+        [$leftQueries, $rightQueries] = $this->emulateFullOuterJoin($plan->queries, $alias);
+        $leftPreserving = $this->keepsUnmatchedRows($leftQueries);
+
+        $left = $this->newBuilder($name, $alias, $leftPreserving, unindexed: $plan->unindexed);
+        $leftProjected = $this->configureFindBuilder(
+            $left,
+            $collectionDoc,
+            $leftQueries,
+            $plan->joinTablePrefixes,
+            $plan->hasAggregation,
+            $plan->hasDistinct,
+            $plan->adapterFilterQueries,
+            $name,
+            $alias,
+            $roles,
+            $forPermission,
+            orderAttributes: $orderAttributes,
+        );
+        $this->applyFullOuterJoinOrderProjection(
+            $left,
+            $collectionDoc,
+            $alias,
+            $orderAttributes,
+            $orderTypes,
+            $leftProjected,
+            $plan->joinTablePrefixes,
+        );
+        $this->applyFindCursor(
+            $left,
+            $orderAttributes,
+            $orderTypes,
+            $cursor,
+            $cursorDirection,
+            $resolveInternalKey,
+            nullable: true,
+        );
+
+        $right = $this->newBuilder($name, $alias, true, unindexed: $plan->unindexed);
+        $rightProjected = $this->configureFindBuilder(
+            $right,
+            $collectionDoc,
+            $rightQueries,
+            $plan->joinTablePrefixes,
+            $plan->hasAggregation,
+            $plan->hasDistinct,
+            $plan->adapterFilterQueries,
+            $name,
+            $alias,
+            $roles,
+            $forPermission,
+            orderAttributes: $orderAttributes,
+        );
+        $this->applyFullOuterJoinOrderProjection(
+            $right,
+            $collectionDoc,
+            $alias,
+            $orderAttributes,
+            $orderTypes,
+            $rightProjected,
+            $plan->joinTablePrefixes,
+        );
+        $this->applyFindCursor(
+            $right,
+            $orderAttributes,
+            $orderTypes,
+            $cursor,
+            $cursorDirection,
+            $resolveInternalKey,
+            nullable: true,
+        );
+
+        if ($plan->hasDistinct) {
+            $left->union($right);
+        } else {
+            $left->unionAll($right);
+        }
+        $this->applyFindPage($left, $orderAttributes, $orderTypes, $limit, $offset, $cursorDirection, afterUnion: true);
+
+        return $left;
+    }
+
+    /**
      * Aggregate an emulated full outer join once, over the rows of both halves. Each half keeps its own
      * joins, filters, tenant and permission conditions and projects the columns the aggregation reads;
      * their UNION ALL is read as one derived table, and the aggregates, groups, having, distinct(), order
@@ -5118,11 +5321,13 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * @param  array<OrderDirection>  $orderTypes
      * @param  array<string, mixed>  $cursor
      * @param  callable(string): string  $resolveInternalKey
-     * @return array<int, array<string, mixed>>
+     * @return array{SQLBuilder, array<string, string>, array<string, string>} The aggregation, the columns the halves
+     *                                                                         project and the joined groups qualified
+     *                                                                         by alias (see fullOuterJoinResultNames())
      *
      * @throws DatabaseException
      */
-    private function findFullOuterJoinAggregate(
+    private function fullOuterJoinAggregation(
         Document $collection,
         array $queries,
         array $joinTablePrefixes,
@@ -5213,7 +5418,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             }
         }
 
-        return $this->fullOuterJoinResultNames($this->executeSelect($aggregation, Event::DocumentFind, $name), $columns, $qualifiedGroups);
+        return [$aggregation, $columns, $qualifiedGroups];
     }
 
     private function shapesAggregatedRows(Method $method): bool

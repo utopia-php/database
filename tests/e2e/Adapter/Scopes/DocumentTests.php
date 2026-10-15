@@ -2868,6 +2868,34 @@ trait DocumentTests
         $database->deleteCollection($collection);
     }
 
+    public function testNegativeSumOverflowIsRefused(): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'sum_underflow_'.\substr(\uniqid(), -6);
+        $database->createCollection(Collection::create(
+            id: $collection,
+            attributes: [Attribute::double(key: 'reading', required: true)],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+        foreach ([-1e308, -1e308] as $reading) {
+            $database->createDocument($collection, new Document([
+                'reading' => $reading,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
+
+        foreach ([[[], null], [[], 5], [[Query::lessThan('reading', 0)], null]] as [$queries, $max]) {
+            try {
+                $database->sum($collection, 'reading', $queries, $max);
+                $this->fail('A sum that overflows below the range of a double is refused');
+            } catch (LimitException) {
+                $this->addToAssertionCount(1);
+            }
+        }
+
+        $database->deleteCollection($collection);
+    }
+
     public function testUpdateDocument(): void
     {
         $document = $this->initDocumentsFixture();
@@ -2946,6 +2974,38 @@ trait DocumentTests
         $new->setAttribute('$id', $id);
         $new = $this->getDatabase()->updateDocument($new->getCollection(), $newId, $new);
         $this->assertEquals($id, $new->getId());
+    }
+
+    public function testDocumentRecreatedWithItsSequenceInAFreshSessionKeepsIt(): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'own_sequence_'.\substr(\uniqid(), -6);
+        $database->createCollection(Collection::create(
+            id: $collection,
+            attributes: [Attribute::string(key: 'name', size: 20, required: true)],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::delete(Role::any())],
+        ));
+
+        $document = $database->createDocument($collection, new Document([
+            '$id' => 'own',
+            'name' => 'first',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->deleteDocument($collection, 'own');
+
+        $adapter = $database->getAdapter();
+        if ($adapter instanceof Postgres) {
+            $driver = $adapter->getDriver();
+            $this->assertInstanceOf(DatabasePDO::class, $driver);
+            $driver->exec('DISCARD SEQUENCES');
+        }
+
+        $recreated = $database->createDocument($collection, $document);
+
+        $this->assertSame($document->getSequence(), $recreated->getSequence());
+        $this->assertSame($document->getSequence(), $database->getDocument($collection, 'own')->getSequence());
+
+        $database->deleteCollection($collection);
     }
 
     public function testDeleteDocument(): void

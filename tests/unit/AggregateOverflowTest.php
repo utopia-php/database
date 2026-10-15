@@ -78,6 +78,15 @@ final class AggregateOverflowTest extends TestCase
         $database->aggregate(self::COLLECTION, [$aggregate]);
     }
 
+    #[DataProvider('overflows')]
+    public function testAnAggregateThatOverflowsBelowTheRangeIsRefused(bool $stringify, Query $aggregate): void
+    {
+        $database = $this->database($stringify, [-1e308, -1e308]);
+
+        $this->expectException(LimitException::class);
+        $database->aggregate(self::COLLECTION, [$aggregate]);
+    }
+
     public function testAnAggregateThatOverflowsInOneGroupIsRefused(): void
     {
         $database = $this->database(false, [1e308, 1e308, 1.0]);

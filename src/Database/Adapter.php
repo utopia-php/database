@@ -776,6 +776,9 @@ abstract class Adapter
     /**
      * @param  array<string>  $sequences
      * @param  array<string>  $permissionIds
+     * @return int The number of document rows deleted. Database::deleteDocuments() takes it as a hint: a count below
+     *             the sequences given makes it check which of the documents are still stored, and a higher one is
+     *             ignored.
      */
     abstract public function deleteDocuments(Document $collection, array $sequences, array $permissionIds): int;
 

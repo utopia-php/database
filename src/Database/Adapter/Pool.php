@@ -864,19 +864,19 @@ class Pool extends Adapter implements Feature\Timeouts
         return $result;
     }
 
+    /**
+     * Hands the pooled adapter the deletionFilters() through its deleteDocumentsMatching(), as they are scoped to
+     * this pool, so that an override of this method still runs for a filtered batch.
+     */
     #[\Override]
     public function deleteDocuments(Document $collection, array $sequences, array $permissionIds): int
     {
-        /** @var int $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
-        return $result;
-    }
+        $filters = $this->deletionFilters();
 
-    #[\Override]
-    public function deleteDocumentsMatching(Document $collection, array $sequences, array $permissionIds, array $queries): int
-    {
         /** @var int $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        $result = $filters === []
+            ? $this->delegate(__FUNCTION__, [$collection, $sequences, $permissionIds])
+            : $this->delegate('deleteDocumentsMatching', [$collection, $sequences, $permissionIds, $filters]);
         return $result;
     }
 

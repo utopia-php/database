@@ -2307,14 +2307,14 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         $filters = $this->buildFilters([new Query(Method::Equal, Storage::SEQUENCE, $sequences)]);
         $filters = $this->applyTenantFilter($filters, $collectionId);
 
-        $filters = $this->replaceInternalIdsKeys($filters, '$', '_', $this->operators);
-
         $queries = \array_map(static fn (Query $query): Query => clone $query, $this->deletionFilters());
         $this->escapeQueryAttributes($collection, $queries);
         $matching = $this->buildFilters($queries);
         if ($matching !== []) {
             $filters = ['$and' => [$filters, $matching]];
         }
+
+        $filters = $this->replaceInternalIdsKeys($filters, '$', '_', $this->operators);
 
         $options = $this->getTransactionOptions();
 

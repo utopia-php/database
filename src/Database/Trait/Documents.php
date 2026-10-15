@@ -3062,13 +3062,14 @@ trait Documents
      * changed after it was found, so that it no longer matches, is kept, and is neither counted, handed to $onNext nor
      * cascaded. A limit counts the documents found, kept ones included. Without a transaction, as on a standalone
      * MongoDB server, a document changed between the check and the delete is kept the same way, but its cascade may
-     * already have run.
+     * already have run, and a document another deleter removed meanwhile is counted as deleted by this call.
      *
      * Each batch commits on its own, so a batch that fails leaves the batches before it deleted; they were handed to
      * $onNext and Event::DocumentsDelete reports them when the failure is a contention. In a transaction begun with
      * startTransaction(), a batch that fails with a contention is retried in its savepoint, which on MySQL and MariaDB
-     * reads the transaction's snapshot again and fails the same way, so roll the whole transaction back and run it
-     * again.
+     * reads the transaction's snapshot again and fails the same way; a MongoDB replica set has no savepoints, so the
+     * batch is not retried and its partial delete stays in the transaction. Either way, roll the whole transaction
+     * back and run it again.
      *
      * @param  string  $collection  The collection identifier
      * @param  array<Query>  $queries  Queries to filter documents for deletion
@@ -3210,10 +3211,11 @@ trait Documents
      * caller runs it in, and return them.
      *
      * A document whose filters are all on its immutable sequence still matches, so such a batch is not read again.
-     * When the adapter deletes fewer rows than it was handed, a document changed between the read and the delete: in a
-     * transaction the batch fails with a contention the transaction retries, and without one, as on a standalone
-     * MongoDB server, the documents still stored are left out. A cascade then has already run for them, so without a
-     * transaction cascades are best-effort.
+     * The adapter's count is only a hint: when it is short, the batch's documents still stored are read, and one that
+     * is still stored changed between the read and the delete. In a transaction the batch then fails with a
+     * contention the transaction retries; without one, as on a standalone MongoDB server, the documents still stored
+     * are left out, a document another deleter removed meanwhile is reported as deleted by this call, and a cascade
+     * that already ran for a kept document stays, so cascades are best-effort there.
      *
      * @param  array<Document>  $batch
      * @return array<Document>
@@ -3251,8 +3253,8 @@ trait Documents
 
             try {
                 $oldUpdatedAt = new PhpDateTime($document->getUpdatedAt() ?? 'now');
-            } catch (Exception $e) {
-                throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
+            } catch (Exception $error) {
+                throw new DatabaseException($error->getMessage(), $error->getCode(), $error);
             }
 
             $requestTimestamp = $this->requestTimestamp()->get();
@@ -3267,12 +3269,15 @@ trait Documents
 
         if ($filters === []) {
             $this->adapter->deleteDocuments($collection, $sequences, $permissionIds);
-        } elseif ($this->adapter->deleteDocumentsMatching($collection, $sequences, $permissionIds, $filters) !== \count($sequences)) {
-            if ($this->adapter->inTransaction()) {
-                throw new ContentionException('Documents were changed while they were being deleted');
-            }
+        } elseif ($this->adapter->deleteDocumentsMatching($collection, $sequences, $permissionIds, $filters) < \count($sequences)) {
+            $removed = $this->withoutStored($collection, $documents);
+            if (\count($removed) < \count($documents)) {
+                if ($this->adapter->inTransaction()) {
+                    throw new ContentionException('Documents were changed while they were being deleted');
+                }
 
-            $documents = $this->withoutStored($collection, $documents);
+                $documents = $removed;
+            }
         }
 
         foreach ($documents as $document) {
@@ -3310,8 +3315,6 @@ trait Documents
     }
 
     /**
-     * The documents given that are no longer stored, whatever their permissions.
-     *
      * @param  array<Document>  $documents
      * @return list<Document>
      *
@@ -3331,7 +3334,7 @@ trait Documents
 
         /** @var array<Document> $stored */
         $stored = $this->silent(fn () => $this->skipQueryHooks(fn () => $this->skipValidation(fn () => $this->skipRelationships(
-            fn () => $this->authorization->skip(fn () => $this->fetch($collection, $queries, PermissionType::Read, false))
+            fn () => $this->authorization->skip(fn () => $this->fetch($collection, $queries, PermissionType::Delete, false))
         ))));
 
         $storedSequences = [];

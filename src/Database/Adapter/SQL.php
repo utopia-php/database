@@ -1320,8 +1320,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
-     * The document ids given whose row is no longer stored.
-     *
      * @param  array<string>  $documentIds
      * @return array<string>
      *

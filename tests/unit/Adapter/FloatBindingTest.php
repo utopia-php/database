@@ -34,7 +34,7 @@ final class FloatBindingTest extends TestCase
             'sum' => [0.1 + 0.2, '0.30000000000000004'],
             'pi' => [M_PI, '3.141592653589793'],
             'seventeen digits' => [123456789.12345679, '123456789.12345679'],
-            'denormal' => [5e-324, '4.94065645841247E-324'],
+            'denormal' => [5e-324, '4.9406564584125E-324'],
             'tiny' => [1e-300, '1.0E-300'],
             'negative' => [-2.5e-20, '-2.5E-20'],
             'max' => [1.7976931348623157e308, '1.7976931348623157E+308'],
@@ -74,7 +74,7 @@ final class FloatBindingTest extends TestCase
      * @param  class-string<SQL>  $class
      */
     #[DataProvider('adaptersAndFloats')]
-    public function testACreateBindsTheShortestStringThatRoundTrips(string $class, float $value, string $bound): void
+    public function testACreateBindsADecimalThatRoundTrips(string $class, float $value, string $bound): void
     {
         $this->adapter($class)->createDocument($this->collection(), new Document(['$id' => 'one', '$permissions' => [], 'f' => $value]));
 
@@ -85,7 +85,7 @@ final class FloatBindingTest extends TestCase
      * @param  class-string<SQL>  $class
      */
     #[DataProvider('adaptersAndFloats')]
-    public function testAnUpdateBindsTheShortestStringThatRoundTrips(string $class, float $value, string $bound): void
+    public function testAnUpdateBindsADecimalThatRoundTrips(string $class, float $value, string $bound): void
     {
         $collection = $this->collection();
         $this->adapter($class)->updateDocuments($collection, new Document(['f' => $value]), [new Document(['$id' => 'one', '$sequence' => '1', '$permissions' => []])]);
@@ -97,7 +97,7 @@ final class FloatBindingTest extends TestCase
      * @param  class-string<SQL>  $class
      */
     #[DataProvider('adaptersAndFloats')]
-    public function testAnIncrementBindsTheShortestStringThatRoundTrips(string $class, float $value, string $bound): void
+    public function testAnIncrementBindsADecimalThatRoundTrips(string $class, float $value, string $bound): void
     {
         $this->adapter($class)->increaseDocumentAttribute($this->collection(), 'one', 'f', $value, '2026-01-01 00:00:00.000');
 
@@ -108,7 +108,7 @@ final class FloatBindingTest extends TestCase
      * @param  class-string<SQL>  $class
      */
     #[DataProvider('adaptersAndFloats')]
-    public function testAnIncrementOperatorBindsTheShortestStringThatRoundTrips(string $class, float $value, string $bound): void
+    public function testAnIncrementOperatorBindsADecimalThatRoundTrips(string $class, float $value, string $bound): void
     {
         $collection = $this->collection();
         $this->adapter($class)->updateDocuments($collection, new Document(['f' => Operator::increment($value)]), [new Document(['$id' => 'one', '$sequence' => '1', '$permissions' => []])]);

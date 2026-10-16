@@ -124,8 +124,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
     private const int UNPAIRED_JOINED_ROWS = 4;
 
-    private const array SHORT_FLOAT_FORMATS = ['%.15H', '%.16H'];
-
     private const string ROUND_TRIP_PRECISION = '-1';
 
     protected object $pdo;
@@ -208,19 +206,19 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
-     * The shortest decimal that reads back as exactly this double. `%H` ignores the locale, and a double needs at
-     * most 17 significant digits to round-trip.
+     * A decimal that reads back as exactly this double, in as few digits as PHP writes it when they suffice. Casts
+     * and `%H` ignore the locale, and a double needs at most 17 significant digits to round-trip.
      */
     protected function formatFloat(float $value): string
     {
-        foreach (self::SHORT_FLOAT_FORMATS as $format) {
-            $formatted = \sprintf($format, $value);
-            if ((float) $formatted === $value) {
-                return $formatted;
-            }
+        $formatted = (string) $value;
+        if ((float) $formatted === $value) {
+            return $formatted;
         }
 
-        return \sprintf('%.17H', $value);
+        $formatted = \sprintf('%.16H', $value);
+
+        return (float) $formatted === $value ? $formatted : \sprintf('%.17H', $value);
     }
 
     /**

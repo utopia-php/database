@@ -3016,7 +3016,6 @@ trait DocumentTests
 
         $nonFinite = ['infinity' => INF, 'negative infinity' => -INF, 'overflow' => \json_decode('1e400'), 'not a number' => NAN];
         foreach ($nonFinite as $name => $value) {
-            $this->assertIsFloat($value);
             foreach ([
                 'find equal' => fn () => $database->find($collection, [Query::equal('f', [$value])]),
                 'find less than' => fn () => $database->find($collection, [Query::lessThan('f', $value)]),

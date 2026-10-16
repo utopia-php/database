@@ -2030,6 +2030,69 @@ trait AggregationTests
         $database->deleteCollection($collection);
     }
 
+    /**
+     * `$permissions` is stored as a JSON list, so min() and max() of it compared the encoded text and answered `[]`,
+     * where they refuse an array attribute. Each aggregate treats it as the array attribute it is: min(), max() and the
+     * numeric aggregates are refused, count() and countDistinct() count it.
+     */
+    public function testPermissionsAreAggregatedAsAnArrayAttribute(): void
+    {
+        $database = static::getDatabase();
+        $collection = 'agg_permissions'.$this->getAggSuffix();
+        $database->createCollection(Collection::create(
+            id: $collection,
+            attributes: [Attribute::string(key: 'tags', size: 20, array: true)],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+            documentSecurity: true,
+        ));
+        foreach ([[Role::any()], [Role::any()], [Role::any(), Role::users()]] as $roles) {
+            $database->createDocument($collection, new Document([
+                'tags' => ['a'],
+                '$permissions' => \array_map(static fn (Role $role): string => Permission::read($role), $roles),
+            ]));
+        }
+
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            foreach ([Query::min('$permissions', 'result'), Query::max('$permissions', 'result'), Query::count('$permissions', 'rows')] as $query) {
+                try {
+                    $database->aggregate($collection, [$query]);
+                    $this->fail('An adapter without aggregations refuses an aggregate');
+                } catch (QueryException) {
+                    $this->addToAssertionCount(1);
+                }
+            }
+            $database->deleteCollection($collection);
+
+            return;
+        }
+
+        foreach (['tags', '$permissions'] as $attribute) {
+            foreach (['min' => Query::min($attribute, 'result'), 'max' => Query::max($attribute, 'result')] as $method => $query) {
+                $this->assertRejectedAsQueryShape(
+                    fn () => $database->aggregate($collection, [$query]),
+                    'Invalid query: Aggregate '.$method.' requires an attribute whose values are ordered, not an array, object, boolean, spatial or vector one: '.$attribute,
+                );
+            }
+            foreach (['sum' => Query::sum($attribute, 'result'), 'avg' => Query::avg($attribute, 'result')] as $method => $query) {
+                $this->assertRejectedAsQueryShape(
+                    fn () => $database->aggregate($collection, [$query]),
+                    'Invalid query: Aggregate '.$method.' requires a numeric attribute that is not an array: '.$attribute,
+                );
+            }
+        }
+
+        $joined = [Query::join($collection, 'other', [Query::on('$id', '$id')])];
+        $this->assertRejectedAsQueryShape(
+            fn () => $database->aggregate($collection, [...$joined, Query::max('other.$permissions', 'result')]),
+            'Invalid query: Aggregate max requires an attribute whose values are ordered, not an array, object, boolean, spatial or vector one: other.$permissions',
+        );
+
+        $counts = $database->aggregate($collection, [Query::count('$permissions', 'rows'), Query::countDistinct('$permissions', 'sets')]);
+        $this->assertSame([['rows' => 3, 'sets' => 2]], $counts);
+
+        $database->deleteCollection($collection);
+    }
+
     public function testEmptySetAggregatesAreZeroForCountsAndNullOtherwise(): void
     {
         $database = static::getDatabase();

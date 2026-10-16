@@ -2748,6 +2748,9 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
             }
             /** @var mixed $sumTotal */
             $sumTotal = $sumFirstResult->total;
+            if (\is_float($sumTotal) && $this->sumsIntegers($collection, $attribute)) {
+                throw new LimitException('Value out of range');
+            }
             if (\is_int($sumTotal) || \is_float($sumTotal)) {
                 return $sumTotal;
             }
@@ -2756,6 +2759,21 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         } catch (MongoException $e) {
             throw $this->processException($e);
         }
+    }
+
+    /**
+     * MongoDB sums integers into a long, and into a double only when the sum does not fit one.
+     */
+    private function sumsIntegers(Document $collection, string $attribute): bool
+    {
+        $definitions = $collection->getAttribute('attributes', []);
+        foreach (\is_array($definitions) ? $definitions : [] as $definition) {
+            if ($definition instanceof Document && $definition->getId() === $attribute) {
+                return \in_array($definition->getAttribute('type'), [Attribute::storedType(ColumnType::Integer), Attribute::storedType(ColumnType::BigInteger)], true);
+            }
+        }
+
+        return false;
     }
 
     /**

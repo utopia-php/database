@@ -16,6 +16,29 @@ final class BigIntTest extends TestCase
         $this->assertSame(ColumnType::BigInteger->value, (new BigInt(false))->getType());
     }
 
+    /**
+     * @return iterable<string, array{string, ?string}>
+     */
+    public static function wholeNumbers(): iterable
+    {
+        yield 'integer' => ['18446744073709551614', '18446744073709551614'];
+        yield 'negative integer' => ['-9223372036854775809', '-9223372036854775809'];
+        yield 'decimal with a zero fraction' => ['7.0000', '7'];
+        yield 'negative decimal with a zero fraction' => ['-7.0', '-7'];
+        yield 'decimal with an empty fraction' => ['7.', '7'];
+        yield 'decimal with a fraction' => ['7.0500', null];
+        yield 'exponent' => ['1.8446744073709552e19', null];
+        yield 'infinity' => ['INF', null];
+        yield 'empty' => ['', null];
+        yield 'fraction alone' => ['.0', null];
+    }
+
+    #[DataProvider('wholeNumbers')]
+    public function testWholeReadsTheIntegerAWholeDecimalNames(string $value, ?string $whole): void
+    {
+        $this->assertSame($whole, BigInt::whole($value));
+    }
+
     public function testNegatingZeroGivesTheIntegerZero(): void
     {
         $this->assertSame(0, BigInt::negate(0));

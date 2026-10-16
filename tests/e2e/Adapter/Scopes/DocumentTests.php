@@ -2896,6 +2896,51 @@ trait DocumentTests
         $database->deleteCollection($collection);
     }
 
+    /**
+     * An integer sum past the range of a 64-bit integer came back as an inexact float, or on Memory and Redis as a
+     * wrapped integer. It is refused on every adapter, and one that fits is answered exactly.
+     */
+    public function testIntegerSumOverflowIsRefused(): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'sum_int_overflow_'.\substr(\uniqid(), -6);
+        $database->createCollection(Collection::create(
+            id: $collection,
+            attributes: [
+                Attribute::string(key: 'series', size: 20, required: true),
+                Attribute::bigInteger(key: 'amount', required: true),
+            ],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+        $rows = [
+            ['above', PHP_INT_MAX], ['above', PHP_INT_MAX],
+            ['below', PHP_INT_MIN], ['below', -1],
+            ['top', PHP_INT_MAX - 1], ['top', 1],
+            ['bottom', PHP_INT_MIN + 1], ['bottom', -1],
+        ];
+        foreach ($rows as [$series, $amount]) {
+            $database->createDocument($collection, new Document([
+                'series' => $series,
+                'amount' => $amount,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
+
+        foreach ([[[Query::equal('series', ['above'])], null], [[Query::equal('series', ['above'])], 5], [[Query::equal('series', ['below'])], null]] as [$queries, $max]) {
+            try {
+                $sum = $database->sum($collection, 'amount', $queries, $max);
+                $this->fail('An integer sum past the range of a 64-bit integer is refused, got '.\var_export($sum, true));
+            } catch (LimitException) {
+                $this->addToAssertionCount(1);
+            }
+        }
+
+        $this->assertSame(PHP_INT_MAX, $database->sum($collection, 'amount', [Query::equal('series', ['top'])]));
+        $this->assertSame(PHP_INT_MIN, $database->sum($collection, 'amount', [Query::equal('series', ['bottom'])]));
+
+        $database->deleteCollection($collection);
+    }
+
     public function testUpdateDocument(): void
     {
         $document = $this->initDocumentsFixture();

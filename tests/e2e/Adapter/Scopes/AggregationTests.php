@@ -1736,6 +1736,176 @@ trait AggregationTests
         $database->deleteCollection('bit_xor');
     }
 
+    /**
+     * MariaDB and MySQL answer BIT_AND, BIT_OR and BIT_XOR as BIGINT UNSIGNED, so a result with the sign bit set came
+     * back as a float past PHP_INT_MAX where PostgreSQL answered the signed integer. Every engine answers the signed
+     * 64-bit result; SQLite has no bitwise aggregates and refuses them.
+     */
+    public function testBitwiseAggregatesAreSigned64BitIntegers(): void
+    {
+        $database = static::getDatabase();
+
+        $collection = 'agg_bitwise_sign'.$this->getAggSuffix();
+        $database->createCollection(Collection::create(
+            id: $collection,
+            attributes: [
+                Attribute::string(key: 'series', size: 20, required: true),
+                Attribute::bigInteger(key: 'amount'),
+            ],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+        $rows = [
+            ['positive', 10], ['positive', 3],
+            ['negative', -5], ['negative', -12],
+            ['mixed', 10], ['mixed', -5],
+            ['extremes', PHP_INT_MAX], ['extremes', PHP_INT_MIN],
+            ['nulls', null], ['nulls', null],
+        ];
+        foreach ($rows as [$series, $amount]) {
+            $database->createDocument($collection, new Document([
+                'series' => $series,
+                'amount' => $amount,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
+
+        $bitwise = [Query::bitAnd('amount', 'all_bits'), Query::bitOr('amount', 'any_bits'), Query::bitXor('amount', 'odd_bits')];
+
+        if ($this->refusesAggregation($database, $collection, $bitwise)) {
+            return;
+        }
+
+        if ($database->getAdapter() instanceof SQLite) {
+            try {
+                $database->aggregate($collection, $bitwise);
+                $this->fail('SQLite has no bitwise aggregates');
+            } catch (QueryException $exception) {
+                $this->assertSame('Aggregate bitAnd is not supported by this adapter', $exception->getMessage());
+            }
+            $database->deleteCollection($collection);
+
+            return;
+        }
+
+        $expected = [
+            'extremes' => ['all_bits' => 0, 'any_bits' => -1, 'odd_bits' => -1],
+            'mixed' => ['all_bits' => 10, 'any_bits' => -5, 'odd_bits' => -15],
+            'negative' => ['all_bits' => -16, 'any_bits' => -1, 'odd_bits' => 15],
+            'nulls' => ['all_bits' => null, 'any_bits' => null, 'odd_bits' => null],
+            'positive' => ['all_bits' => 2, 'any_bits' => 11, 'odd_bits' => 9],
+        ];
+        foreach ($expected as $series => $results) {
+            $rows = $database->aggregate($collection, [Query::equal('series', [$series]), ...$bitwise]);
+            $this->assertCount(1, $rows);
+            foreach ($results as $alias => $result) {
+                $this->assertSame($result, $rows[0][$alias], "{$alias} of the {$series} series");
+            }
+        }
+
+        $empty = $database->aggregate($collection, [Query::equal('series', ['none']), ...$bitwise]);
+        $this->assertSame(['all_bits' => null, 'any_bits' => null, 'odd_bits' => null], $empty[0]);
+
+        $grouped = $database->aggregate($collection, [...$bitwise, Query::groupBy(['series']), Query::orderAsc('series')]);
+        $this->assertSame(\array_keys($expected), \array_column($grouped, 'series'));
+        foreach ($grouped as $row) {
+            $series = $row['series'];
+            $this->assertIsString($series);
+            foreach ($expected[$series] as $alias => $result) {
+                $this->assertSame($result, $row[$alias], "{$alias} of the {$series} group");
+            }
+        }
+
+        $database->deleteCollection($collection);
+    }
+
+    /**
+     * MariaDB, MySQL and PostgreSQL sum integers exactly past the range of a 64-bit integer, which came back as an
+     * inexact float: two of PHP_INT_MAX summed to 1.8446744073709552E+19. An integer sum that does not fit is refused
+     * on every engine, as a sum past the range of a double is, and one that fits is answered exactly.
+     */
+    public function testIntegerAggregateSumOverflowIsRefused(): void
+    {
+        $database = static::getDatabase();
+
+        $collection = 'agg_int_overflow'.$this->getAggSuffix();
+        $database->createCollection(Collection::create(
+            id: $collection,
+            attributes: [
+                Attribute::string(key: 'series', size: 20, required: true),
+                Attribute::bigInteger(key: 'amount', required: true),
+            ],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+        $rows = [
+            ['above', PHP_INT_MAX], ['above', PHP_INT_MAX],
+            ['below', PHP_INT_MIN], ['below', -1],
+            ['top', PHP_INT_MAX - 1], ['top', 1],
+            ['bottom', PHP_INT_MIN + 1], ['bottom', -1],
+        ];
+        foreach ($rows as [$series, $amount]) {
+            $database->createDocument($collection, new Document([
+                'series' => $series,
+                'amount' => $amount,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
+
+        if ($this->refusesAggregation($database, $collection, [Query::sum('amount', 'total')])) {
+            return;
+        }
+
+        $overflows = [
+            [Query::equal('series', ['above']), Query::sum('amount', 'total')],
+            [Query::equal('series', ['below']), Query::sum('amount', 'total')],
+            [Query::sum('amount', 'total'), Query::groupBy(['series'])],
+        ];
+        foreach ($overflows as $queries) {
+            try {
+                $database->aggregate($collection, $queries);
+                $this->fail('An integer sum past the range of a 64-bit integer is refused');
+            } catch (LimitException) {
+                $this->addToAssertionCount(1);
+            }
+        }
+
+        $top = $database->aggregate($collection, [Query::equal('series', ['top']), Query::sum('amount', 'total')]);
+        $this->assertSame(PHP_INT_MAX, $top[0]['total']);
+        $bottom = $database->aggregate($collection, [Query::equal('series', ['bottom']), Query::sum('amount', 'total')]);
+        $this->assertSame(PHP_INT_MIN, $bottom[0]['total']);
+
+        $grouped = $database->aggregate($collection, [
+            Query::equal('series', ['top', 'bottom']),
+            Query::sum('amount', 'total'),
+            Query::groupBy(['series']),
+            Query::orderAsc('series'),
+        ]);
+        $this->assertSame([['total' => PHP_INT_MIN, 'series' => 'bottom'], ['total' => PHP_INT_MAX, 'series' => 'top']], $grouped);
+
+        $database->deleteCollection($collection);
+    }
+
+    /**
+     * An adapter without aggregations refuses the queries as an invalid query, and the collection is dropped.
+     *
+     * @param  array<Query>  $queries
+     */
+    private function refusesAggregation(Database $database, string $collection, array $queries): bool
+    {
+        if ($database->getAdapter()->supports(Capability::Aggregations)) {
+            return false;
+        }
+
+        try {
+            $database->aggregate($collection, $queries);
+            $this->fail('An adapter without aggregations refuses an aggregate');
+        } catch (QueryException) {
+            $this->addToAssertionCount(1);
+        }
+        $database->deleteCollection($collection);
+
+        return true;
+    }
+
     private function assertRejectedAsQueryShape(callable $call, string $message): void
     {
         $error = null;

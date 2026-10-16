@@ -1536,22 +1536,31 @@ class Redis extends Adapter implements
                 $documents = \array_slice($documents, 0, $max);
             }
 
-            $sum = 0;
+            $integers = 0;
+            $floats = 0.0;
             $isFloat = false;
             foreach ($documents as $document) {
                 $value = $this->resolveDocumentAttribute($document, $attribute);
-                if ($value === null) {
+                if ($value === null || ! \is_numeric($value)) {
                     continue;
                 }
-                if (\is_float($value)) {
+                if (\is_int($value) || (\is_string($value) && BigInt::isIntegerString($value))) {
+                    $integers = BigInt::add($integers, $value);
+                } else {
                     $isFloat = true;
-                }
-                if (\is_numeric($value)) {
-                    $sum += $value;
+                    $floats += (float) $value;
                 }
             }
 
-            return $isFloat ? (float) $sum : (int) $sum;
+            if ($isFloat) {
+                return $floats + (float) $integers;
+            }
+
+            if (\is_string($integers)) {
+                throw new LimitException('Value out of range');
+            }
+
+            return $integers;
         });
     }
 

@@ -18,11 +18,14 @@ use Utopia\Database\Validator\Authorization;
  * An aggregate over no input values is null, except a count, which is zero, on every engine.
  *
  * The statement the adapter builds is answered the way MySQL and MariaDB answer it: BIT_AND over
- * no input values has every bit set and BIT_OR / BIT_XOR are zero, where PostgreSQL answers null.
+ * no input values has every bit set, -1 once cast to SIGNED, and BIT_OR / BIT_XOR are zero, where
+ * PostgreSQL answers null.
  */
 final class EmptySetAggregateContractTest extends TestCase
 {
     private const string EVERY_BIT = '18446744073709551615';
+
+    private const string EVERY_SIGNED_BIT = '-1';
 
     /**
      * @return iterable<string, array{class-string<SQL>}>
@@ -71,7 +74,7 @@ final class EmptySetAggregateContractTest extends TestCase
         ]);
 
         $this->assertSame([[
-            'all_bits' => self::EVERY_BIT,
+            'all_bits' => $adapter === Postgres::class ? self::EVERY_BIT : self::EVERY_SIGNED_BIT,
             'any_bits' => '0',
             'odd_bits' => '0',
         ]], $rows);
@@ -151,14 +154,14 @@ final class EmptySetAggregateContractTest extends TestCase
      */
     private function answer(string $sql, int $inputs): array
     {
-        \preg_match_all('/([A-Z_]+)\((?:DISTINCT )?[^()]*\)(?: \+ 0)? AS [`"]([^`"]+)[`"]/', $sql, $matches, PREG_SET_ORDER);
+        \preg_match_all('/(CAST\()?([A-Z_]+)\((?:DISTINCT )?[^()]*\)(?: \+ 0| AS SIGNED\))? AS [`"]([^`"]+)[`"]/', $sql, $matches, PREG_SET_ORDER);
         $this->assertNotSame([], $matches, 'no aggregate in: '.$sql);
 
         $row = [];
-        foreach ($matches as [, $function, $alias]) {
+        foreach ($matches as [, $cast, $function, $alias]) {
             $row[$alias] = match ($function) {
                 'COUNT' => (string) $inputs,
-                'BIT_AND' => self::EVERY_BIT,
+                'BIT_AND' => $cast === '' ? self::EVERY_BIT : self::EVERY_SIGNED_BIT,
                 'BIT_OR', 'BIT_XOR' => '0',
                 default => $inputs === 0 ? null : '1',
             };

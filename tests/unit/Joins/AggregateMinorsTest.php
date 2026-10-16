@@ -29,7 +29,8 @@ use Utopia\Database\Validator\Authorization;
 final class AggregateMinorsTest extends TestCase
 {
     /**
-     * MariaDB and MySQL answer BIT_AND over no values with every bit set and BIT_OR/BIT_XOR with 0.
+     * MariaDB and MySQL answer BIT_AND over no values with every bit set, -1 once cast to SIGNED, and BIT_OR/BIT_XOR
+     * with 0.
      * The contract is null for both, aliased or not.
      */
     public function testUnaliasedBitwiseAggregateOfAnEmptySetFollowsTheContract(): void
@@ -57,7 +58,7 @@ final class AggregateMinorsTest extends TestCase
         );
 
         $this->assertSame(
-            [['BIT_AND(`flags`)' => '18446744073709551615', 'BIT_OR(`mask`)' => null, 'BIT_XOR(`_id`)' => '0']],
+            [['BIT_AND(`flags`)' => '-1', 'BIT_OR(`mask`)' => null, 'BIT_XOR(`_id`)' => '0']],
             $rows,
         );
     }
@@ -183,16 +184,16 @@ final class AggregateMinorsTest extends TestCase
         $statement->method('execute')->willReturn(true);
         $statement->method('closeCursor')->willReturn(true);
         $statement->method('fetchAll')->willReturnCallback(function () use (&$sql, $inputs): array {
-            \preg_match_all('/([A-Z_]+)\(`([^`]+)`\)(?: AS `([^`]+)`)?/', $sql, $matches, PREG_SET_ORDER);
+            \preg_match_all('/(CAST\()?(([A-Z_]+)\(`([^`]+)`\))(?: AS SIGNED\))?(?: AS `((?:[^`]|``)+)`)?/', $sql, $matches, PREG_SET_ORDER);
             $this->assertNotSame([], $matches, 'no aggregate in: '.$sql);
 
             $row = [];
             foreach ($matches as $match) {
-                [$expression, $function, $column] = $match;
-                $name = $match[3] ?? $expression;
+                [, $cast, $expression, $function, $column] = $match;
+                $name = isset($match[5]) ? \str_replace('``', '`', $match[5]) : $expression;
                 $row[$name] = match ($function) {
                     'COUNT' => (string) ($inputs[$column] ?? 0),
-                    'BIT_AND' => '18446744073709551615',
+                    'BIT_AND' => $cast === '' ? '18446744073709551615' : '-1',
                     default => '0',
                 };
             }

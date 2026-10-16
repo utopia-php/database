@@ -132,12 +132,18 @@ final readonly class Index
      */
     public static function fromDocument(Document $document): self
     {
-        return self::hydrate(
-            self::storedKey($document),
-            $document->getAttribute(self::TYPE, IndexType::Key->value),
+        [$attributes, $lengths, $orders] = self::withoutDroppedAttributes(
             $document->getAttribute(self::ATTRIBUTES, []),
             $document->getAttribute(self::LENGTHS, []),
             $document->getAttribute(self::ORDERS, []),
+        );
+
+        return self::hydrate(
+            self::storedKey($document),
+            $document->getAttribute(self::TYPE, IndexType::Key->value),
+            $attributes,
+            $lengths,
+            $orders,
             $document->getAttribute(self::TTL),
         );
     }
@@ -174,6 +180,27 @@ final readonly class Index
         $id = $document->getId();
 
         return \is_string($key) && $id === '_'.$key && \str_starts_with($id, '_index_') ? $id : $key;
+    }
+
+    /**
+     * 7.x left null in a stored index's attributes when an attribute it covered was deleted, while the engine dropped
+     * that column from the index. Such an index is read as covering the attributes it still has, with the lengths and
+     * orders at their positions.
+     *
+     * @return array{mixed, mixed, mixed}
+     */
+    private static function withoutDroppedAttributes(mixed $attributes, mixed $lengths, mixed $orders): array
+    {
+        if (! \is_array($attributes) || ! \in_array(null, $attributes, true)) {
+            return [$attributes, $lengths, $orders];
+        }
+
+        $kept = \array_flip(\array_keys(\array_filter($attributes, static fn (mixed $attribute): bool => $attribute !== null)));
+        $alongside = static fn (mixed $values): mixed => \is_array($values) && \count($values) === \count($attributes)
+            ? \array_values(\array_intersect_key($values, $kept))
+            : $values;
+
+        return [\array_values(\array_intersect_key($attributes, $kept)), $alongside($lengths), $alongside($orders)];
     }
 
     /**

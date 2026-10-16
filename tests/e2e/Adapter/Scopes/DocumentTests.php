@@ -1609,6 +1609,74 @@ trait DocumentTests
         $this->assertEquals('Works', $document->getAttribute('with-dash'));
     }
 
+    /**
+     * A query parsed from JSON takes an object for its values as readily as a list. Filter read such values by
+     * position and raised "Undefined array key 0" before refusing them. Every adapter refuses them as an invalid
+     * query, for find() and count(), without a warning.
+     */
+    public function testFilterValuesThatAreNotAListAreAnInvalidQuery(): void
+    {
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+        $spatial = $adapter->hasFeature(Feature\Spatial::class);
+        $vectors = $adapter->supports(Capability::Vectors);
+        $collection = 'object_values_'.\substr(\uniqid(), -6);
+        $database->createCollection(Collection::create(
+            id: $collection,
+            attributes: [
+                Attribute::string(key: 'name', size: 20),
+                Attribute::string(key: 'tags', size: 20, array: true),
+                Attribute::integer(key: 'rank'),
+                ...($spatial ? [Attribute::point(key: 'location')] : []),
+                ...($vectors ? [Attribute::vector(key: 'embedding', dimensions: 2)] : []),
+            ],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+        $database->createDocument($collection, new Document([
+            'name' => 'a',
+            'tags' => ['a'],
+            'rank' => 1,
+            ...($spatial ? ['location' => [1.0, 2.0]] : []),
+            ...($vectors ? ['embedding' => [1.0, 0.0]] : []),
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+
+        $queries = [
+            '{"method":"equal","attribute":"name","values":{"value":"a"}}',
+            '{"method":"equal","attribute":"name","values":{"1":"a"}}',
+            '{"method":"notEqual","attribute":"name","values":{"value":"a"}}',
+            '{"method":"contains","attribute":"tags","values":{"tag":"a"}}',
+            '{"method":"lessThan","attribute":"rank","values":{"bound":5}}',
+            '{"method":"between","attribute":"rank","values":{"from":0,"to":5}}',
+            '{"method":"startsWith","attribute":"name","values":{"prefix":"a"}}',
+            '{"method":"exists","attribute":"","values":{"attribute":"name"}}',
+        ];
+        if ($spatial) {
+            $queries[] = '{"method":"intersects","attribute":"location","values":{"type":"Point","coordinates":[1,2]}}';
+            $queries[] = '{"method":"distanceLessThan","attribute":"location","values":{"geometry":[[1,2],10,false]}}';
+            $queries[] = '{"method":"distanceLessThan","attribute":"location","values":[{"geometry":[1,2],"distance":10,"meters":false}]}';
+        }
+        if ($vectors) {
+            $queries[] = '{"method":"vectorDot","attribute":"embedding","values":{"vector":[1,0]}}';
+        }
+
+        foreach ($queries as $json) {
+            $query = Query::parse($json);
+            foreach (['find' => fn () => $database->find($collection, [$query]), 'count' => fn () => $database->count($collection, [$query])] as $read => $call) {
+                try {
+                    $call();
+                    $this->fail("{$read}() refuses {$json}");
+                } catch (QueryException $e) {
+                    $this->assertStringStartsWith('Invalid query: ', $e->getMessage(), "{$read}() of {$json}");
+                }
+            }
+        }
+
+        $this->assertCount(1, $database->find($collection, [Query::parse('{"method":"equal","attribute":"name","values":["a"]}')]));
+
+        $database->deleteCollection($collection);
+    }
+
     public function testFind(): void
     {
         $this->initMoviesFixture();

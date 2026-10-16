@@ -85,6 +85,15 @@ trait Documents
         Method::VarSamp,
     ];
 
+    private const array UNCOMPARABLE_TYPES = [
+        ColumnType::Json,
+        ColumnType::Object,
+        ColumnType::Point,
+        ColumnType::Linestring,
+        ColumnType::Polygon,
+        ColumnType::Vector,
+    ];
+
     private const string DOCUMENT_CACHE_ACTIVE_PREFIX = 'active:';
 
     private const string DOCUMENT_CACHE_BLOCKED_PREFIX = 'blocked:';
@@ -4298,6 +4307,8 @@ trait Documents
                 throw new QueryException('Cursor pagination is not supported with aggregation queries');
             }
 
+            $this->assertCursorOrdersAreComparable($collection, $orderAttributes, $joinedCollections);
+
             if ($joins === [] && ! $distinct && $this->validation()->get() && $cursor->getId() === '') {
                 throw new QueryException('Invalid query: Invalid cursor: '.(new UID($this->adapter->limits()->uidLength))->getDescription());
             }
@@ -5430,6 +5441,31 @@ trait Documents
         }
 
         return [$orderAttributes, $cursor];
+    }
+
+    /**
+     * A cursor pages along the values of a read's order, which the engine compares with the cursor's: an array, object,
+     * spatial or vector attribute holds no value it can compare, so a read ordered by one cannot be paged by a cursor.
+     *
+     * @param  array<string>  $orderAttributes
+     * @param  array<string, Document>  $joinedCollections  The collection each join reads, by its alias
+     *
+     * @throws QueryException
+     */
+    private function assertCursorOrdersAreComparable(Document $collection, array $orderAttributes, array $joinedCollections): void
+    {
+        foreach ($orderAttributes as $order) {
+            $dot = \strpos($order, '.');
+            $alias = $dot === false ? null : \substr($order, 0, $dot);
+            $owner = $alias === null ? $collection : ($joinedCollections[$alias] ?? null);
+            $key = $alias === null ? $order : \substr($order, $dot + 1);
+
+            foreach ($owner === null ? [] : Collection::fromDocument($owner)->attributes() as $attribute) {
+                if ($attribute->key === $key && ($attribute->array || \in_array($attribute->type, self::UNCOMPARABLE_TYPES, true))) {
+                    throw new QueryException("Cannot page with a cursor along the order of '{$order}': an array, object, spatial or vector attribute has no value a cursor can compare");
+                }
+            }
+        }
     }
 
     /**

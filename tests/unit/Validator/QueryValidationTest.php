@@ -281,6 +281,9 @@ final class QueryValidationTest extends TestCase
         yield 'max of a joined boolean' => [[$join, Query::max('it.featured', 'most')], 'max', 'it.featured'];
         yield 'min of a joined array' => [[$join, Query::min('it.labels', 'least')], 'min', 'it.labels'];
         yield 'max of a bare joined boolean' => [[$join, Query::max('featured', 'most')], 'max', 'featured'];
+        yield 'max of the permissions list' => [[Query::max('$permissions', 'most')], 'max', '$permissions'];
+        yield 'min of the permissions list' => [[Query::min('$permissions', 'least')], 'min', '$permissions'];
+        yield 'max of a joined permissions list' => [[$join, Query::max('it.$permissions', 'most')], 'max', 'it.$permissions'];
     }
 
     /**
@@ -337,12 +340,20 @@ final class QueryValidationTest extends TestCase
             $definition('born', ColumnType::Datetime),
         ]);
 
-        foreach (['meta', 'place', 'route', 'area', 'embedding', 'flag', 'codes'] as $attribute) {
+        foreach (['meta', 'place', 'route', 'area', 'embedding', 'flag', 'codes', '$permissions'] as $attribute) {
             foreach ([Query::min($attribute), Query::max($attribute)] as $query) {
                 $this->assertFalse($validator->isValid($query), $attribute);
                 $this->assertStringEndsWith(': '.$attribute, $validator->getDescription());
             }
             $this->assertTrue($validator->isValid(Query::count($attribute)), $attribute.': count needs no order');
+            $this->assertTrue($validator->isValid(Query::countDistinct($attribute)), $attribute.': countDistinct needs no order');
+        }
+
+        foreach (['codes', '$permissions'] as $attribute) {
+            foreach ([Query::sum($attribute), Query::avg($attribute), Query::bitOr($attribute)] as $query) {
+                $this->assertFalse($validator->isValid($query), $attribute);
+                $this->assertStringEndsWith('that is not an array: '.$attribute, $validator->getDescription());
+            }
         }
 
         foreach (['name', 'size', 'ratio', 'born', '$id', '$createdAt'] as $attribute) {

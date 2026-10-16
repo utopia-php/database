@@ -11545,9 +11545,16 @@ trait DocumentTests
             ],
             permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
         ));
-        foreach ([['a', 1], ['a', 1], ['b', 2], [null, null]] as [$k, $n]) {
-            $database->createDocument($collection, new Document(['k' => $k, 'n' => $n, '$permissions' => [Permission::read(Role::any())]]));
-        }
+        $database->withPreserveDates(true, function () use ($database, $collection): void {
+            foreach ([['a', 1], ['a', 1], ['b', 2], [null, null]] as $second => [$k, $n]) {
+                $database->createDocument($collection, new Document([
+                    'k' => $k,
+                    'n' => $n,
+                    '$createdAt' => '2026-01-01T00:00:0'.$second.'.000+00:00',
+                    '$permissions' => [Permission::read(Role::any())],
+                ]));
+            }
+        });
 
         $roundTrip = function (array $rows, string $case): void {
             foreach ($rows as $row) {
